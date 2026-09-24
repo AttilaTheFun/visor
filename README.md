@@ -69,6 +69,37 @@ Pull requests into `main`. Read AGENTS.md for the rules the code keeps.
 Apple it points at nothing (the system framework); a build that carries
 the client to another platform sets it to its own SwiftUI.
 
+## Security
+
+Visor gives whoever connects to it the run of your Mac. Read this before
+you install it.
+
+- **What access means.** A connected client starts agents in any folder,
+  and they run without permission prompts by default. It can also read
+  and write any file your user account can, through the API, and install
+  an app bundle over the menu bar app. Treat access to Visor like an SSH
+  login to your Mac.
+- **Who can reach it.** The server listens on this Mac's loopback address
+  only. The one way in from the network is Tailscale Serve on port 443,
+  which is reachable from your tailnet, never the public internet.
+  Serve names the Tailscale user behind each request, and your own
+  devices are let in on that. Every other device needs the password.
+- **The password and the connection code.** The connection code, and the
+  QR code that carries it, holds the password in plain base64. Share it
+  only with your own devices. The password is stored unencrypted in the
+  menu bar app's preferences.
+- **On a shared tailnet, use a long password.** The generated password,
+  four words from a short list, is easy to type rather than strong, and
+  wrong guesses are not rate-limited. Anyone on a tailnet you share with
+  others can reach port 443 and try.
+- **Revoking access.** Changing the password stops new logins. Clients
+  that are already connected keep their session until you quit and
+  reopen the menu bar app.
+- **Agents.** Claude Code, Codex and `openrouter` run as your user with
+  your credentials, configured outside Visor. Visor holds no API keys.
+
+Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+
 ## License
 
 Apache 2.0.
