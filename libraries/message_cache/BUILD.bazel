@@ -1,0 +1,25 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The message cache: a session's rows, where they came from, and how far
+# they were synced — the same on the server (from the agents' own files)
+# and on a client (from the server). SQLite where there is one; in memory
+# elsewhere (the browser), where a reload starts over from the server.
+swift_library(
+    name = "message_cache",
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "MessageCache",
+    defines = select({
+        "@platforms//os:ios": ["MESSAGE_CACHE_SQLITE"],
+        "@platforms//os:macos": ["MESSAGE_CACHE_SQLITE"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//libraries/visor_protocol",
+    ] + select({
+        "@platforms//os:ios": ["@swiftpkg_sqlite.swift//:SQLite"],
+        "@platforms//os:macos": ["@swiftpkg_sqlite.swift//:SQLite"],
+        "//conditions:default": [],
+    }),
+)

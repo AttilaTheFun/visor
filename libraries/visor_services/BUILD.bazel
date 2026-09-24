@@ -1,0 +1,23 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# What a host gives the client: a socket, HTTP and settings. The protocols
+# are portable; the Apple implementations (URLSession, UserDefaults) sit
+# beside them and are what the iOS and Mac apps install.
+swift_library(
+    name = "visor_services",
+    srcs = glob(["Sources/*.swift"]) + select({
+        "@platforms//os:ios": glob(["native/*.swift"]),
+        "@platforms//os:macos": glob(["native/*.swift"]),
+        "//conditions:default": [],
+    }),
+    module_name = "VisorServices",
+)
+
+# The Apple implementations as sources, for a host that compiles them for
+# another Foundation (Linux, Windows) into a module of its own.
+filegroup(
+    name = "native_srcs",
+    srcs = glob(["native/*.swift"]),
+)

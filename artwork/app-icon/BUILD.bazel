@@ -1,0 +1,16 @@
+package(default_visibility = ["//visibility:public"])
+
+# The Icon Composer document: what the iOS, macOS and menu bar apps compile
+# through `app_icons` (the platform shape and material treatment come from
+# the OS).
+filegroup(
+    name = "app_icon",
+    srcs = glob(["Visor.icon/**"]),
+)
+
+# The compiled macOS .icns (bundled in the Mac apps for anything that wants
+# a flat icon file) and the 1024 px PNG (the web's favicon and touch icon).
+exports_files([
+    "Visor.icns",
+    "Visor-1024.png",
+])

@@ -1,0 +1,5 @@
+bazel-*
+.build/
+# Generated: bazel run //:xcodeproj
+*.xcodeproj
+.DS_Store
