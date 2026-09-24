@@ -101,15 +101,6 @@ extension View {
         #endif
     }
 
-    /// A grouped row's selection: a tinted row background when selected.
-    @ViewBuilder func groupedRowSelection(_ selected: Bool) -> some View {
-        #if canImport(UIKit) || canImport(AppKit)
-        listRowBackground(selected ? Color.secondary.opacity(0.2) : nil)
-        #else
-        self
-        #endif
-    }
-
     /// A section header as written, not upper-cased.
     @ViewBuilder func noHeaderCase() -> some View {
         #if canImport(UIKit) || canImport(AppKit)
@@ -118,21 +109,6 @@ extension View {
         self
         #endif
     }
-
-    /// A sidebar row with nothing of the list's own around it — no
-    /// separator, no background, 0pt above and below, 12pt either side —
-    /// so the row's own selection fill is what shows. The portable list
-    /// draws none of those to begin with.
-    @ViewBuilder func sidebarRowChrome() -> some View {
-        #if canImport(UIKit) || canImport(AppKit)
-        self.listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
-            .listRowBackground(Color.clear)
-        #else
-        self.listRowSeparator(.hidden)
-        #endif
-    }
-
 }
 
 /// What the system pasteboard holds as text, where there is one.
