@@ -1,0 +1,13 @@
+load("@rules_swift//swift:swift.bzl", "swift_test")
+
+swift_test(
+    name = "visor_server_tests",
+    srcs = glob(["*.swift"]),
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        "//libraries/claude_transcript",
+        "//libraries/message_cache",
+        "//libraries/visor_protocol",
+        "//libraries/visor_server",
+    ],
+)

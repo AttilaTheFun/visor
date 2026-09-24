@@ -1,0 +1,23 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+swift_library(
+    name = "visor_ui",
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorUI",
+    deps = [
+        "//:swift_ui",
+        "//libraries/visor_client",
+        "//libraries/visor_protocol",
+        "//libraries/visor_services",
+        "@swiftpkg_agent_ui//:AgentUI",
+        "@swiftpkg_agent_ui//:NavigationUI",
+    ] + select({
+        # The terminal: Apple's SwiftTerm where it runs; another host draws
+        # its own (the web its xterm.js).
+        "@platforms//os:ios": ["@swiftpkg_swiftterm//:SwiftTerm"],
+        "@platforms//os:macos": ["@swiftpkg_swiftterm//:SwiftTerm"],
+        "//conditions:default": [],
+    }),
+)

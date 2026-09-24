@@ -1,0 +1,41 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load(
+    "@rules_xcodeproj//xcodeproj:defs.bzl",
+    "top_level_target",
+    "xcodeproj",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+# Where `import SwiftUI` comes from. On Apple it is the system framework and
+# this points at nothing; a host that carries the client elsewhere (a
+# browser, Android, Linux, Windows) sets the flag to its own SwiftUI:
+#   --@visor//:swift_ui=@universal_ui//:swift_ui
+label_flag(
+    name = "swift_ui",
+    build_setting_default = ":system_swift_ui",
+)
+
+# The system SwiftUI: nothing to link, the import is implicit.
+swift_library(
+    name = "system_swift_ui",
+    srcs = ["SystemSwiftUI.swift"],
+    module_name = "VisorSystemSwiftUI",
+)
+
+xcodeproj(
+    name = "xcodeproj",
+    project_name = "Visor",
+    tags = ["manual"],
+    top_level_targets = [
+        top_level_target(
+            "//applications/visor_ios",
+            target_environments = [
+                "device",
+                "simulator",
+            ],
+        ),
+        "//applications/visor_macos",
+        "//applications/visor_menubar",
+    ],
+)

@@ -1,0 +1,4 @@
+common --enable_bzlmod
+build --apple_platform_type=macos
+build --macos_minimum_os=14.0
+build --ios_minimum_os=17.0

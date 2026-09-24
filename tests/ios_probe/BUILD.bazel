@@ -1,0 +1,35 @@
+load("@rules_apple//apple:ios.bzl", "ios_ui_test")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+# Simulator probe for the client against a running menu bar app on this Mac
+# through its Tailscale Serve endpoint (VISOR_PROBE_HOST, the Mac's tailnet
+# name): connects with the password in VISOR_PROBE_PASSWORD, starts a Claude
+# Code session in VISOR_PROBE_CWD, waits
+# for the reply, sends a follow-up that runs a shell command, and writes
+# screenshots to /private/tmp/visor_probe (run with --spawn_strategy=local so
+# the sandbox allows the write). Manual:
+#   bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
+#     --test_arg=--destination=platform=ios_simulator,id=<booted sim udid> \
+#     --spawn_strategy=local --nocache_test_results --test_output=all \
+#     --test_env=VISOR_PROBE_PASSWORD=<password> --test_env=VISOR_PROBE_CWD=<dir>
+# (always target the one booted simulator; device/version flags boot a NEW
+# simulator per run and leak it).
+
+swift_library(
+    name = "probe_lib",
+    testonly = True,
+    srcs = ["VisorProbe.swift"],
+    module_name = "VisorProbe",
+    tags = ["manual"],
+)
+
+ios_ui_test(
+    name = "visor_probe",
+    minimum_os_version = "17.0",
+    tags = ["manual"],
+    test_host = "//applications/visor_ios",
+    # The test runs in about a minute; xcodebuild's teardown sometimes hangs
+    # well past that, and Bazel's default 300s would report a pass as a timeout.
+    timeout = "long",
+    deps = [":probe_lib"],
+)
