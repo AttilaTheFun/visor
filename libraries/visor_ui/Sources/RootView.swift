@@ -214,7 +214,7 @@ public struct VisorRootView: View {
         ForEach(cards) { card in
             let which = SessionSelection(hostID: host.id, sessionID: card.session.id)
             SessionCardRow(host: host, project: card.project, session: card.session)
-                .tag(ContentSelection?.some(.session(which)))
+                .tag(ContentSelection.session(which))
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
                         .tint(.orange)
@@ -231,7 +231,7 @@ public struct VisorRootView: View {
                 Spacer()
                 Text("\(entry.project.archived.count)").foregroundColor(.secondary)
             }
-            .tag(ContentSelection?.some(which))
+            .tag(which)
             .contextMenu { projectMenu(entry) }
             .accessibilityIdentifier("archived-" + entry.project.name)
         }
@@ -242,7 +242,7 @@ public struct VisorRootView: View {
             Text("Computer Settings")
             Spacer()
         }
-        .tag(ContentSelection?.some(settings))
+        .tag(settings)
         .accessibilityIdentifier("computer-settings-" + host.config.name)
     }
 
