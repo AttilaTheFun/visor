@@ -182,7 +182,7 @@ public struct VisorRootView: View {
     /// removed. The last section adds a computer. Search narrows the rows
     /// in every section at once.
     private var outline: some View {
-        List {
+        List(selection: $selection) {
             ForEach(store.hosts) { host in
                 HostSection(host: host) { host in hostRows(host) }
             }
@@ -213,39 +213,36 @@ public struct VisorRootView: View {
         }
         ForEach(cards) { card in
             let which = SessionSelection(hostID: host.id, sessionID: card.session.id)
-            GroupedRow(selected: selection == .session(which), select: { selection = .session(which) }) {
-                SessionCardRow(host: host, project: card.project, session: card.session)
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
-                    .tint(.orange)
-            }
-            .contextMenu { sessionMenu(card) }
+            SessionCardRow(host: host, project: card.project, session: card.session)
+                .tag(ContentSelection?.some(.session(which)))
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
+                        .tint(.orange)
+                }
+                .contextMenu { sessionMenu(card) }
         }
         // Each folder's archive: one row, however many ended sessions it holds.
         ForEach(archives) { entry in
             let which = ContentSelection.archived(hostID: host.id, cwd: entry.project.cwd)
-            GroupedRow(selected: selection == which, select: { selection = which }) {
-                HStack(spacing: OutlineMetrics.gap) {
-                    Image(systemName: "archivebox").foregroundColor(.secondary)
-                        .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
-                    Text("Archived · \(entry.project.name)").lineLimit(1)
-                    Spacer()
-                    Text("\(entry.project.archived.count)").foregroundColor(.secondary)
-                }
+            HStack(spacing: OutlineMetrics.gap) {
+                Image(systemName: "archivebox").foregroundColor(.secondary)
+                    .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
+                Text("Archived · \(entry.project.name)").lineLimit(1)
+                Spacer()
+                Text("\(entry.project.archived.count)").foregroundColor(.secondary)
             }
+            .tag(ContentSelection?.some(which))
             .contextMenu { projectMenu(entry) }
             .accessibilityIdentifier("archived-" + entry.project.name)
         }
         let settings = ContentSelection.computer(hostID: host.id)
-        GroupedRow(selected: selection == settings, select: { selection = settings }) {
-            HStack(spacing: OutlineMetrics.gap) {
-                Image(systemName: "gearshape").foregroundColor(.secondary)
-                    .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
-                Text("Computer Settings")
-                Spacer()
-            }
+        HStack(spacing: OutlineMetrics.gap) {
+            Image(systemName: "gearshape").foregroundColor(.secondary)
+                .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
+            Text("Computer Settings")
+            Spacer()
         }
+        .tag(ContentSelection?.some(settings))
         .accessibilityIdentifier("computer-settings-" + host.config.name)
     }
 
@@ -410,32 +407,6 @@ public struct SessionSelection: Hashable {
     public var sessionID: String
 }
 
-/// One row of the sidebar, drawing its own selection — a rounded secondary
-/// fill 12pt in from either edge, flush top and bottom — so it looks the
-/// same on every platform.
-struct SidebarRow<Content: View>: View {
-    let selected: Bool
-    let select: () -> Void
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        Button(action: select) {
-            content()
-                .padding(.leading, OutlineMetrics.gap)
-                .padding(.trailing, OutlineMetrics.gap)
-                .padding(.vertical, OutlineMetrics.gap)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(selected ? Color.secondary.opacity(0.18) : Color.clear)
-                )
-        }
-        .buttonStyle(.plain)
-        .sidebarRowChrome()
-    }
-}
-
 /// A computer's section: observes the computer, so its rows and its
 /// header follow the connection and the sessions as they change.
 @MainActor
@@ -464,24 +435,6 @@ struct HostSection<Rows: View>: View {
             .noHeaderCase()
             .accessibilityIdentifier("computer-" + host.config.name)
         }
-    }
-}
-
-/// A row of the grouped sidebar: the whole row taps, and the selected one
-/// is lit.
-struct GroupedRow<Content: View>: View {
-    let selected: Bool
-    let select: () -> Void
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        Button(action: select) {
-            content()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .groupedRowSelection(selected)
     }
 }
 
