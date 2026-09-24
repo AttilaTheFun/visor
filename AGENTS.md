@@ -4,10 +4,16 @@ Read README.md for the parts, docs/protocol.md for the wire format, and
 docs/DEVELOPMENT.md for the setup, the architecture as built, the deploy
 loop, probes, gotchas and open items.
 
+## Changes
+
+This repo is public. Every change to `main` goes through a pull request:
+`main` is protected, direct pushes are rejected, and the CI check (the
+tests) must pass before a pull request can merge. Keep each pull request
+to one focused change, and say in it how the change was verified.
+
 ## Rules
 
-- Changes go through pull requests into `main`, one focused change each;
-  no attribution lines in commits.
+- No attribution lines in commits.
 - Dependencies: BCR versions in MODULE.bazel; agent_ui by revision in
   third_party/swift_packages/Package.swift + Package.resolved (re-resolve
   with `swift package resolve`, delete `.build`).

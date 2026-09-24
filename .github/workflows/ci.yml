@@ -1,0 +1,17 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: >
+          bazel test --test_output=errors
+          //tests/visor_server_tests
+          //tests/visor_client_tests
+          //tests/message_cache_tests
+          //tests/claude_transcript_tests
