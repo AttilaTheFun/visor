@@ -33,10 +33,15 @@ public protocol VisorHTTPService {
 public extension VisorHTTPService {
     /// A host whose errors read "HTTP <status>: …" needs nothing more.
     func status(of error: Error) -> Int? {
-        let text = "\(error)"
-        guard let range = text.range(of: "HTTP ") else { return nil }
-        let digits = text[range.upperBound...].prefix { $0.isNumber }
-        return Int(digits)
+        // The standard library alone: this builds for the browser, whose
+        // Foundation has no `range(of:)`.
+        let text = Array("\(error)")
+        let marker = Array("HTTP ")
+        guard text.count >= marker.count else { return nil }
+        for start in 0...(text.count - marker.count) where Array(text[start..<start + marker.count]) == marker {
+            return Int(String(text[(start + marker.count)...].prefix { $0.isNumber }))
+        }
+        return nil
     }
 }
 
