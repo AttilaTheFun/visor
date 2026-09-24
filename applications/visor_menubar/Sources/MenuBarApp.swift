@@ -103,6 +103,9 @@ struct MenuContent: View {
             Button("Quit Visor") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         }
+        // Asked again each time the menu opens: at login Tailscale may not
+        // have been up when the app started.
+        .onAppear { tailnetName = server.exposure.address() }
     }
 
     private func copy(_ text: String) {

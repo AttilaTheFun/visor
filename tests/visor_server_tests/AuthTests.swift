@@ -112,6 +112,13 @@ final class AuthTests: XCTestCase {
         XCTAssertEqual(server.route(request("/api/hello", login: "owner@example.com")).status, 200)
     }
 
+    func testTailscaleCLIRunsAsTheCLIWithoutATerminal() {
+        // Started at login there is no terminal: the CLI must be told.
+        XCTAssertEqual(TailscaleExposure.cliEnvironment(["HOME": "/Users/me"])["TERM"], "dumb")
+        // A terminal's own TERM is left alone.
+        XCTAssertEqual(TailscaleExposure.cliEnvironment(["TERM": "xterm-256color"])["TERM"], "xterm-256color")
+    }
+
     func testConnectionCodeCarriesAddressAndPassword() async {
         XCTAssertNil(server.connectionCode)
         server.password = "pearl-grove"
