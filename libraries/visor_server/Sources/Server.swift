@@ -720,6 +720,10 @@ public final class VisorServer: ObservableObject {
     /// The network user this Mac belongs to, as the exposure reports it;
     /// requests the road names as theirs need no password.
     @Published public private(set) var hostLogin: String?
+    /// This Mac's name on the network ("my-mac.tail1234.ts.net"), once the
+    /// exposure has said it; learned with the owner, so the menu shows it
+    /// even when Tailscale came up after the app did.
+    @Published public private(set) var address: String?
     /// What went wrong putting the front in place, or nil.
     @Published public private(set) var serveError: String?
     private var claudeModelsTimer: Timer?
@@ -1113,6 +1117,7 @@ public final class VisorServer: ObservableObject {
         Task.detached { [weak self] in
             var message: String?
             let identity = exposure.identity()
+            let address = exposure.address()
             if identity == nil {
                 message = "waiting for \(exposure.title)"
             } else if !exposure.fronts(port: port) {
@@ -1125,6 +1130,7 @@ public final class VisorServer: ObservableObject {
                 guard let self else { return }
                 self.fronting = false
                 if let identity { self.hostLogin = identity }
+                if let address { self.address = address }
                 self.serveError = message
                 guard message != nil else { self.frontAttempts = 0; return }
                 self.frontAttempts += 1
