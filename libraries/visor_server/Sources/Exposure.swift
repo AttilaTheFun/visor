@@ -89,11 +89,24 @@ public final class TailscaleExposure: ServerExposure {
         return output
     }
 
+    /// The environment the CLI is run with. The CLI is the Tailscale
+    /// app's own executable, and it acts as the command-line tool only
+    /// when it looks run from a terminal (TERM, TERM_PROGRAM or SHLVL set);
+    /// otherwise it tries to start the app, which is already running, and
+    /// fails ("The Tailscale GUI failed to start"). A menu bar app started
+    /// at login has none of them.
+    static func cliEnvironment(_ base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
+        var environment = base
+        if environment["TERM"] == nil { environment["TERM"] = "dumb" }
+        return environment
+    }
+
     private func run(_ arguments: [String], quiet: Bool) -> String {
         guard installed else { return "Tailscale is not installed" }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: Self.cli)
         p.arguments = arguments
+        p.environment = Self.cliEnvironment()
         let out = Pipe()
         p.standardOutput = out
         p.standardError = quiet ? FileHandle.nullDevice : out
