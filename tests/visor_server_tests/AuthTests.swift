@@ -109,6 +109,8 @@ final class AuthTests: XCTestCase {
         server.front()
         for _ in 0..<50 where server.hostLogin == nil { try? await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertEqual(server.hostLogin, "owner@example.com")
+        // The name the menu shows is learned with it.
+        XCTAssertEqual(server.address, "this-mac.example.ts.net")
         XCTAssertEqual(server.route(request("/api/hello", login: "owner@example.com")).status, 200)
     }
 

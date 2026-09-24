@@ -50,7 +50,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct MenuContent: View {
     @ObservedObject var server: VisorServer
-    @State private var tailnetName = VisorServer.shared.exposure.address()
 
     var body: some View {
         Group {
@@ -63,7 +62,7 @@ struct MenuContent: View {
             if let error = server.lastError { Text(error) }
             // What a client types: the tailnet name (clients connect over
             // TLS on 443, through Tailscale Serve, always).
-            if let tailnetName {
+            if let tailnetName = server.address {
                 Button("\(tailnetName)") { copy(tailnetName) }
                 if let serveError = server.serveError {
                     Text("HTTPS: \(serveError)")
@@ -103,9 +102,6 @@ struct MenuContent: View {
             Button("Quit Visor") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         }
-        // Asked again each time the menu opens: at login Tailscale may not
-        // have been up when the app started.
-        .onAppear { tailnetName = server.exposure.address() }
     }
 
     private func copy(_ text: String) {
