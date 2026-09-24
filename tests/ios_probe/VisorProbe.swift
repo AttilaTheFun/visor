@@ -177,6 +177,37 @@ final class VisorProbe: XCTestCase {
     /// already lists and photographs the chat, which is the only way to
     /// see the composer's own layout from here: the Mac refuses both
     /// screen recording and accessibility to this process.
+    /// Tapping a session in the sidebar opens it: the row for the session
+    /// named by VISOR_SELECT_SESSION (its id) is tapped, and the chat's
+    /// composer must appear.
+    func testSelectSession() throws {
+        let env = ProcessInfo.processInfo.environment
+        let id = env["VISOR_SELECT_SESSION"] ?? ""
+        XCTAssertFalse(id.isEmpty, "VISOR_SELECT_SESSION is required")
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launch()
+        let row = app.descendants(matching: .any).matching(identifier: "session-" + id).firstMatch
+        if !row.waitForExistence(timeout: 15) {
+            // No computer yet: add the host by name (the simulator shares
+            // this Mac's Tailscale identity, so no password).
+            let add = app.buttons["add-computer"].firstMatch
+            XCTAssertTrue(add.waitForExistence(timeout: 10), "no Add Computer row")
+            add.tap()
+            let host = app.textFields["host"].firstMatch
+            XCTAssertTrue(host.waitForExistence(timeout: 10), "no connect form")
+            host.tap(); host.typeText(env["VISOR_PROBE_HOST"] ?? "my-mac.example.ts.net")
+            app.buttons["connect"].firstMatch.tap()
+        }
+        XCTAssertTrue(row.waitForExistence(timeout: 30), "the session's row did not appear")
+        shot(app, "select-1-sidebar")
+        row.tap()
+        let composer = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 15), "tapping the session did not open it")
+        shot(app, "select-2-opened")
+    }
+
     /// A message shows the instant it is sent, marked Sending, above the
     /// reply, and settles into the transcript without moving. The session
     /// is a throwaway named by VISOR_LOOK_SESSION.
