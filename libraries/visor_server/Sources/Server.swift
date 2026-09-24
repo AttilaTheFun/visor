@@ -723,6 +723,9 @@ public final class VisorServer: ObservableObject {
     /// What went wrong putting the front in place, or nil.
     @Published public private(set) var serveError: String?
     private var claudeModelsTimer: Timer?
+    /// A `front()` is under way; and how many have found Tailscale not ready.
+    private var fronting = false
+    private var frontAttempts = 0
     /// Tokens handed out by `hello` to clients the road (or the password)
     /// let in, for the socket's login; new each launch.
     private var tokens: [String] = []
@@ -758,6 +761,19 @@ public final class VisorServer: ObservableObject {
         if let login = exposure.requester(headers: request.headers), let mine = hostLogin, login == mine { return true }
         guard let bearer = request.authorization, !bearer.isEmpty else { return false }
         return bearer == password || tokens.contains(bearer)
+    }
+
+    /// The answer to a request that is not let in. A request the road
+    /// names a user for, while this Mac does not yet know its own user
+    /// (Tailscale still starting at login), is told to come back rather
+    /// than refused: a refusal reads as "wants a password", and a client
+    /// stops trying.
+    func refusal(_ request: HTTPRequest) -> HTTPResponse {
+        if hostLogin == nil, exposure.requester(headers: request.headers) != nil {
+            front()
+            return HTTPResponse(503, "{\"error\":\"starting\"}")
+        }
+        return HTTPResponse(401, "{\"error\":\"wrong password\"}")
     }
 
     /// A token for the socket's login, for a client that `hello` let in.
@@ -1084,21 +1100,37 @@ public final class VisorServer: ObservableObject {
 
     /// The front on 443, put in place whenever it is not: there is no
     /// switch for it. What goes wrong is shown in the menu.
+    /// At login the menu bar app and Tailscale start together, so the
+    /// first try often finds Tailscale not yet up: no owner and no front.
+    /// It tries again — every few seconds at first, then every minute —
+    /// until both are known.
     public func front() {
+        guard !fronting else { return }
         let exposure = self.exposure
         let port = self.port
         guard exposure.installed else { serveError = "\(exposure.title) is not installed"; return }
+        fronting = true
         Task.detached { [weak self] in
             var message: String?
             let identity = exposure.identity()
-            await MainActor.run { [weak self] in self?.hostLogin = identity }
-            if !exposure.fronts(port: port) {
+            if identity == nil {
+                message = "waiting for \(exposure.title)"
+            } else if !exposure.fronts(port: port) {
                 let output = exposure.front(port: port).lowercased()
                 if output.contains("error") || output.contains("not enabled") || output.contains("not allowed") {
                     message = output.split(separator: "\n").first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }).map(String.init) ?? output
                 }
             }
-            await MainActor.run { [weak self] in self?.serveError = message }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.fronting = false
+                if let identity { self.hostLogin = identity }
+                self.serveError = message
+                guard message != nil else { self.frontAttempts = 0; return }
+                self.frontAttempts += 1
+                let wait: TimeInterval = self.frontAttempts < 24 ? 5 : 60
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in self?.front() }
+            }
         }
     }
 
@@ -1206,7 +1238,7 @@ public final class VisorServer: ObservableObject {
     }
 
     func route(_ request: HTTPRequest) -> HTTPResponse {
-        guard authorized(request) else { return HTTPResponse(401, "{\"error\":\"wrong password\"}") }
+        guard authorized(request) else { return refusal(request) }
         var path = request.path.split(separator: "?").first.map(String.init) ?? request.path
         if path.hasPrefix("/api") { path = String(path.dropFirst(4)) }
         let parts = path.split(separator: "/").map(String.init)

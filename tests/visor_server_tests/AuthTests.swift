@@ -93,6 +93,25 @@ final class AuthTests: XCTestCase {
         XCTAssertEqual(server.route(request("/api/hello", login: "someone@else.com")).status, 401)
     }
 
+    func testOwnerIsToldToWaitWhileTailscaleStarts() async {
+        // At login Tailscale may not have said whose this Mac is yet.
+        exposure.owner = nil
+        server.password = "pearl-grove"
+        for _ in 0..<50 where server.serveError == nil { try? await Task.sleep(nanoseconds: 50_000_000) }
+        XCTAssertEqual(server.serveError, "waiting for Fake")
+        // The owner's device is told to come back, not to bring a password.
+        XCTAssertEqual(server.route(request("/api/hello", login: "owner@example.com")).status, 503)
+        // A request with no identity is still simply refused.
+        XCTAssertEqual(server.route(request("/api/hello")).status, 401)
+
+        // Tailscale answers; the next try learns the owner.
+        exposure.owner = "owner@example.com"
+        server.front()
+        for _ in 0..<50 where server.hostLogin == nil { try? await Task.sleep(nanoseconds: 50_000_000) }
+        XCTAssertEqual(server.hostLogin, "owner@example.com")
+        XCTAssertEqual(server.route(request("/api/hello", login: "owner@example.com")).status, 200)
+    }
+
     func testConnectionCodeCarriesAddressAndPassword() async {
         XCTAssertNil(server.connectionCode)
         server.password = "pearl-grove"
