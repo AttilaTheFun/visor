@@ -296,6 +296,8 @@ a detached relauncher and resumes named sessions with a nudge
 
 ## 7. Open items
 
+Bugs seen and not yet fixed are in docs/KNOWN_ISSUES.md.
+
 - Search has no client UI (`/api/search` works).
 - The web client's cache is in memory (an IndexedDB `MessageStorage`
   would persist it).
