@@ -177,6 +177,34 @@ final class VisorProbe: XCTestCase {
     /// already lists and photographs the chat, which is the only way to
     /// see the composer's own layout from here: the Mac refuses both
     /// screen recording and accessibility to this process.
+    /// Swiping an archived session part-way, and holding it there, as a
+    /// person does before deciding: the session named by
+    /// VISOR_SWIPE_SESSION must be archived on the computer. Three slow
+    /// swipes, each held, so a profiler watching the app sees the moment
+    /// the actions first appear.
+    func testArchivedSwipe() throws {
+        let env = ProcessInfo.processInfo.environment
+        let id = env["VISOR_SWIPE_SESSION"] ?? ""
+        XCTAssertFalse(id.isEmpty, "VISOR_SWIPE_SESSION is required")
+        let app = XCUIApplication()
+        app.launch()
+        let archive = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'archived-'")).firstMatch
+        XCTAssertTrue(archive.waitForExistence(timeout: 30), "no Archived row")
+        archive.tap()
+        let row = app.descendants(matching: .any).matching(identifier: "archived-session-" + id).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "the archived session is not listed")
+        Thread.sleep(forTimeInterval: 2)
+        NSLog("VISOR_SWIPE begin")
+        for _ in 0..<3 {
+            let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+            let end = row.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 1.5)
+            Thread.sleep(forTimeInterval: 1.5)
+        }
+        NSLog("VISOR_SWIPE end")
+        shot(app, "swipe-1")
+    }
+
     /// Tapping a session in the sidebar opens it: the row for the session
     /// named by VISOR_SELECT_SESSION (its id) is tapped, and the chat's
     /// composer must appear.
