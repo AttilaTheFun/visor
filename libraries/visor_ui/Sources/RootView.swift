@@ -205,8 +205,8 @@ public struct VisorRootView: View {
         let projects = entries(for: host)
         let cards = projects.flatMap { entry in entry.project.sessions.map { SessionCard(host: host, project: entry.project, session: $0) } }
             .sorted { $0.updated > $1.updated }
-        let archives = projects.filter { !$0.project.archived.isEmpty }
-        if cards.isEmpty && archives.isEmpty {
+        let archived = projects.flatMap(\.project.archived)
+        if cards.isEmpty && archived.isEmpty {
             Text(searching ? "Nothing matches “\(search.trimmed)”." : "No sessions yet — tap compose to start one.")
                 .foregroundColor(.secondary)
                 .font(.footnote)
@@ -221,19 +221,18 @@ public struct VisorRootView: View {
                 }
                 .contextMenu { sessionMenu(card) }
         }
-        // Each folder's archive: one row, however many ended sessions it holds.
-        ForEach(archives) { entry in
-            let which = ContentSelection.archived(hostID: host.id, cwd: entry.project.cwd)
+        // The computer's archive: one row, however many ended sessions it
+        // holds, wherever they ran.
+        if !archived.isEmpty {
             HStack(spacing: OutlineMetrics.gap) {
                 Image(systemName: "archivebox").foregroundColor(.secondary)
                     .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
-                Text("Archived · \(entry.project.name)").lineLimit(1)
+                Text("Archived").lineLimit(1)
                 Spacer()
-                Text("\(entry.project.archived.count)").foregroundColor(.secondary)
+                Text("\(archived.count)").foregroundColor(.secondary)
             }
-            .tag(which)
-            .contextMenu { projectMenu(entry) }
-            .accessibilityIdentifier("archived-" + entry.project.name)
+            .tag(ContentSelection.hostArchive(hostID: host.id))
+            .accessibilityIdentifier("archived-" + host.config.name)
         }
         let settings = ContentSelection.computer(hostID: host.id)
         HStack(spacing: OutlineMetrics.gap) {
@@ -244,22 +243,6 @@ public struct VisorRootView: View {
         }
         .tag(settings)
         .accessibilityIdentifier("computer-settings-" + host.config.name)
-    }
-
-    @ViewBuilder private func projectMenu(_ entry: ProjectEntry) -> some View {
-        Button { selection = .project(hostID: entry.host.id, cwd: entry.project.cwd) } label: {
-            Label("Project Settings", systemImage: "gearshape")
-        }
-        Button { nameDraft = entry.project.alias ?? ""; renamingProject = entry.target } label: {
-            Label("Rename Project", systemImage: "pencil")
-        }
-        Button { copyToPasteboard(entry.project.cwd) } label: { Label("Copy folder path", systemImage: "doc.on.doc") }
-        if entry.project.missing {
-            Button { troubled = entry.target } label: { Label("Locate…", systemImage: "questionmark.folder") }
-        }
-        if entry.project.isEmpty {
-            Button(role: .destructive) { removingProject = entry.target } label: { Label("Remove Project", systemImage: "trash") }
-        }
     }
 
     @ViewBuilder private func sessionMenu(_ card: SessionCard) -> some View {
@@ -331,8 +314,11 @@ public struct VisorRootView: View {
                                     remove: { removingProject = ProjectTarget(host: host, project: project) })
                     .id(hostID + "|" + cwd + "|settings")
             } else if case .archived(let hostID, let cwd) = selection, let host = store.host(for: hostID) {
-                ArchivedList(host: host, cwd: cwd)
+                ArchivedList(host: host, cwd: cwd, openProject: { selection = .project(hostID: hostID, cwd: $0) })
                     .id(hostID + "|" + cwd)
+            } else if case .hostArchive(let hostID) = selection, let host = store.host(for: hostID) {
+                ArchivedList(host: host, cwd: nil, openProject: { selection = .project(hostID: hostID, cwd: $0) })
+                    .id(hostID + "|archive")
             } else if let which = selection?.session, let host = store.host(for: which.hostID) {
                 AgentScreen(host: host, sessionID: which.sessionID)
                     .id(which)
@@ -389,6 +375,8 @@ public enum ContentSelection: Hashable {
     case session(SessionSelection)
     /// A project's archive, by the computer and the folder it runs in.
     case archived(hostID: String, cwd: String)
+    /// Everything archived on a computer, whichever folder it ran in.
+    case hostArchive(hostID: String)
 
     var session: SessionSelection? { if case .session(let value) = self { value } else { nil } }
     var hostID: String? {
@@ -397,6 +385,7 @@ public enum ContentSelection: Hashable {
         case .project(let hostID, _): hostID
         case .session(let value): value.hostID
         case .archived(let hostID, _): hostID
+        case .hostArchive(let hostID): hostID
         }
     }
 }
@@ -438,39 +427,48 @@ struct HostSection<Rows: View>: View {
     }
 }
 
-/// One project's archive, in the detail column: its ended sessions. A
-/// session comes back or goes for good; it is not read here.
+/// An archive in the detail column: a computer's ended sessions, newest
+/// first, or one project's. A session comes back or goes for good; it is
+/// not read here.
 @MainActor
 struct ArchivedList: View {
     @ObservedObject var host: HostConnection
-    let cwd: String
+    /// One project's folder, or nil for everything on the computer.
+    let cwd: String?
+    let openProject: (String) -> Void
     @State private var deleting: SessionInfo?
 
-    private var project: HostConnection.Project? { host.projects.first { $0.cwd == cwd } }
-
     var body: some View {
+        // Worked out once per change of the computer's sessions — which,
+        // with an agent at work on it, is several times a second — and
+        // each row redraws only when its own session changed, so a swipe
+        // held part-way is not redrawn under the finger.
+        let sessions = host.archivedSessions
+            .filter { cwd == nil || $0.cwd == cwd }
+            .sorted { ($0.updated ?? $0.created) > ($1.updated ?? $1.created) }
         List {
-            if project?.archived.isEmpty ?? true {
-                Text("Nothing archived in this project.").foregroundColor(.secondary).font(.footnote)
+            if sessions.isEmpty {
+                Text(cwd == nil ? "Nothing archived on this computer." : "Nothing archived in this project.")
+                    .foregroundColor(.secondary).font(.footnote)
             }
-            if let project {
-                    ForEach(project.archived) { session in
-                        ArchivedRow(session: session)
-                            .listRowSeparator(.hidden)
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button { host.unarchive(session.id) } label: { Label("Unarchive", systemImage: "tray.and.arrow.up") }
-                                    .tint(.green)
-                            }
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) { deleting = session } label: { Label("Remove", systemImage: "trash") }
-                            }
-                            .contextMenu {
-                                Button { host.unarchive(session.id) } label: { Label("Unarchive", systemImage: "tray.and.arrow.up") }
-                                if let command = session.resumeCommand {
-                                    Button { copyToPasteboard(command) } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
-                                }
-                                Button(role: .destructive) { deleting = session } label: { Label("Remove", systemImage: "trash") }
-                            }
+            ForEach(sessions) { session in
+                ArchivedRow(session: session)
+                    .equatable()
+                    .listRowSeparator(.hidden)
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button { host.unarchive(session.id) } label: { Label("Unarchive", systemImage: "tray.and.arrow.up") }
+                            .tint(.green)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { deleting = session } label: { Label("Remove", systemImage: "trash") }
+                    }
+                    .contextMenu {
+                        Button { host.unarchive(session.id) } label: { Label("Unarchive", systemImage: "tray.and.arrow.up") }
+                        if let command = session.resumeCommand {
+                            Button { copyToPasteboard(command) } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
+                        }
+                        Button { openProject(session.cwd) } label: { Label("Project Settings", systemImage: "folder") }
+                        Button(role: .destructive) { deleting = session } label: { Label("Remove", systemImage: "trash") }
                     }
             }
         }
@@ -489,11 +487,16 @@ struct ArchivedList: View {
     }
 }
 
-/// An archived session under its project: the title, dimmed, with the
-/// command that resumes the agent's own session beneath it.
+/// An archived session: the title, dimmed, with the full path of the
+/// folder it ran in beneath it.
 @MainActor
-struct ArchivedRow: View {
+struct ArchivedRow: View, Equatable {
     let session: SessionInfo
+
+    nonisolated static func == (a: ArchivedRow, b: ArchivedRow) -> Bool {
+        a.session.id == b.session.id && a.session.title == b.session.title && a.session.cwd == b.session.cwd
+            && a.session.agent == b.session.agent
+    }
 
     var body: some View {
         HStack(spacing: OutlineMetrics.gap) {
@@ -503,12 +506,10 @@ struct ArchivedRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title.isEmpty ? session.agent.title : session.title)
                     .lineLimit(1)
-                if let command = session.resumeCommand {
-                    Text(command)
-                        .font(.caption.monospaced())
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+                Text(session.cwd)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -526,7 +527,7 @@ struct SessionCard: Identifiable {
     var updated: Double { session.updated ?? session.created }
 }
 
-/// A session in the sidebar: its name, its project, the first lines of
+/// A session in the sidebar: its name, the full path of its folder, the first lines of
 /// the latest message; and at the trailing edge what is happening — a
 /// spinner while the agent works, a raised hand while it waits to be
 /// allowed something. Whether the computer answers is its section's.
@@ -542,10 +543,11 @@ struct SessionCardRow: View {
                 Text(session.title.isEmpty ? session.agent.title : session.title)
                     .font(.headline)
                     .lineLimit(1)
-                Text(project.name)
+                Text(session.cwd)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                 Text(session.preview ?? "No messages yet")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
