@@ -454,13 +454,20 @@ struct ArchivedList: View {
             ForEach(sessions) { session in
                 ArchivedRow(session: session)
                     .equatable()
+                    .accessibilityIdentifier("archived-session-" + session.id)
                     .listRowSeparator(.hidden)
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
                         Button { host.unarchive(session.id) } label: { Label("Unarchive", systemImage: "tray.and.arrow.up") }
                             .tint(.green)
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) { deleting = session } label: { Label("Remove", systemImage: "trash") }
+                        // An ordinary button tinted red, not the destructive
+                        // role: that role readies SwiftUI's row-removal
+                        // animation as the action appears, which stalled the
+                        // swipe on a phone. The alert asks before anything
+                        // is removed either way.
+                        Button { deleting = session } label: { Label("Remove", systemImage: "trash") }
+                            .tint(.red)
                     }
                     .contextMenu {
                         Button { host.unarchive(session.id) } label: { Label("Unarchive", systemImage: "tray.and.arrow.up") }
