@@ -419,10 +419,9 @@ public final class SessionRecord: ObservableObject {
 
     /// The on-disk copy of this session.
     var stored: StoredSession {
-        // What waits to be sent lives here and on the socket, not on disk.
-        var kept = info
-        kept.queued = []
-        return StoredSession(info: kept, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice)
+        // The outbox is written down with the session: what waits to be
+        // sent, and the files it carries, survive a restart of the app.
+        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages)
     }
 
     /// The session's resume command, refreshed from the process (the id is
@@ -555,20 +554,34 @@ public final class SessionRecord: ObservableObject {
 
     func markEnded() { info.ended = true; info.busy = false }
 
-    /// Holds what the user said during a turn.
-    func enqueue(_ text: String) { info.queued.append(text) }
+    /// The outbox: what the user said during a turn, waiting for it to
+    /// end — the words in `info.queued` (which clients see), and beside
+    /// each the files it came with (already on this Mac, uploaded before
+    /// the message was sent). Written down with the session.
+    var queuedImages: [[String]] = []
 
-    /// Takes the queue, leaving it empty.
-    func takeQueue() -> [String] {
-        let waiting = info.queued
-        info.queued = []
-        return waiting
+    /// Holds a message, and its files, until the turn ends.
+    func enqueue(_ text: String, images: [String] = []) {
+        info.queued.append(text)
+        queuedImages.append(images)
     }
 
-    /// Drops one queued message, or all of them.
+    /// Takes the outbox, leaving it empty: everything said, in order, as
+    /// one message, with every file it carried.
+    func takeQueue() -> (text: String, images: [String]) {
+        let text = info.queued.filter { !$0.isEmpty }.joined(separator: "\n\n")
+        let images = queuedImages.flatMap { $0 }
+        info.queued = []
+        queuedImages = []
+        return (text, images)
+    }
+
+    /// Drops one queued message and its files, or all of them.
     func unqueue(_ text: String?) {
-        guard let text else { info.queued = []; return }
-        if let index = info.queued.firstIndex(of: text) { info.queued.remove(at: index) }
+        guard let text else { info.queued = []; queuedImages = []; return }
+        guard let index = info.queued.firstIndex(of: text) else { return }
+        info.queued.remove(at: index)
+        if index < queuedImages.count { queuedImages.remove(at: index) }
     }
 
     /// The folder the session runs in, after the project moved.
@@ -668,10 +681,13 @@ struct StoredSession: Codable {
     var shownPrompts: [String]?
     /// A notice the user has not yet acknowledged.
     var notice: String?
+    /// The files beside each queued message (`info.queued`).
+    var queuedImages: [[String]]?
     static let currentShape = 2
 
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
-         interrupted: Bool? = nil, agentPID: Int32? = nil, shownPrompts: [String]? = nil, notice: String? = nil) {
+         interrupted: Bool? = nil, agentPID: Int32? = nil, shownPrompts: [String]? = nil, notice: String? = nil,
+         queuedImages: [[String]]? = nil) {
         self.info = info
         self.entries = entries
         self.resumeID = resumeID
@@ -680,6 +696,7 @@ struct StoredSession: Codable {
         self.agentPID = agentPID
         self.shownPrompts = shownPrompts
         self.notice = notice
+        self.queuedImages = queuedImages
     }
 
     /// Every field but the session itself is optional, so a file written
@@ -694,6 +711,7 @@ struct StoredSession: Codable {
         agentPID = try c.decodeIfPresent(Int32.self, forKey: .agentPID)
         shownPrompts = try c.decodeIfPresent([String].self, forKey: .shownPrompts)
         notice = try c.decodeIfPresent(String.self, forKey: .notice)
+        queuedImages = try c.decodeIfPresent([[String]].self, forKey: .queuedImages)
     }
 }
 
@@ -888,6 +906,10 @@ public final class VisorServer: ObservableObject {
             record.process.seed(history: entries)
             record.refreshResume()
             record.interrupted = item.interrupted ?? false
+            // The outbox, lined up with its words (a file from before it was
+            // kept has words and no files).
+            let files = item.queuedImages ?? []
+            record.queuedImages = info.queued.indices.map { $0 < files.count ? files[$0] : [] }
             record.primePreview()
             sessions.append(record)
         }
@@ -1149,6 +1171,12 @@ public final class VisorServer: ObservableObject {
         for id in ids {
             guard let record = session(id), !record.info.archived else { continue }
             deliver(Self.resumeNudge, to: record)
+        }
+        // What was waiting when the app went away goes now; behind a nudge
+        // it waits for that turn to end, as any queued message does.
+        for record in sessions where !record.info.archived && !record.info.queued.isEmpty && !record.info.busy {
+            let waiting = record.takeQueue()
+            deliver(waiting.text, to: record, images: waiting.images)
         }
         if !ids.isEmpty { broadcastSessions() }
     }
@@ -1624,7 +1652,7 @@ public final class VisorServer: ObservableObject {
         // allow this tool?) is not at its input box: typed text would answer
         // the prompt with its default. The message waits until it is.
         if record.info.busy || (record.terminal.map { !$0.ready } ?? false) {
-            record.enqueue(text)
+            record.enqueue(text, images: images)
             saveArchive()
             broadcastSessions()
             return
@@ -1721,7 +1749,7 @@ public final class VisorServer: ObservableObject {
                         // turn, in the order it was said.
                         let waiting = record.takeQueue()
                         self.broadcastSessions()
-                        self.deliver(waiting.joined(separator: "\n\n"), to: record)
+                        self.deliver(waiting.text, to: record, images: waiting.images)
                     }
                     if !busy, record.restartWhenIdle {
                         record.restartWhenIdle = false
@@ -1736,7 +1764,7 @@ public final class VisorServer: ObservableObject {
                         if !record.info.queued.isEmpty {
                             let waiting = record.takeQueue()
                             self.broadcastSessions()
-                            self.deliver(waiting.joined(separator: "\n\n"), to: record)
+                            self.deliver(waiting.text, to: record, images: waiting.images)
                         }
                     }
                 }
