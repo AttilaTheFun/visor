@@ -439,10 +439,7 @@ struct ArchivedList: View {
     @State private var deleting: SessionInfo?
 
     var body: some View {
-        // Worked out once per change of the computer's sessions — which,
-        // with an agent at work on it, is several times a second — and
-        // each row redraws only when its own session changed, so a swipe
-        // held part-way is not redrawn under the finger.
+        // Worked out once per change of the computer's sessions.
         let sessions = host.archivedSessions
             .filter { cwd == nil || $0.cwd == cwd }
             .sorted { ($0.updated ?? $0.created) > ($1.updated ?? $1.created) }
@@ -453,9 +450,7 @@ struct ArchivedList: View {
             }
             ForEach(sessions) { session in
                 ArchivedRow(session: session)
-                    .equatable()
                     .accessibilityIdentifier("archived-session-" + session.id)
-                    .listRowSeparator(.hidden)
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
                         Button { host.unarchive(session.id) } label: { Label("Unarchive", systemImage: "tray.and.arrow.up") }
                             .tint(.green)
@@ -479,7 +474,8 @@ struct ArchivedList: View {
                     }
             }
         }
-        .groupedRows()
+        // The sidebar's own list style, whose swipes are smooth.
+        .insetGroupedList()
         .navigationTitle("Archived Sessions")
         .toolbarTitleDisplayMode(.inline)
         .alert("Remove this session?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
@@ -497,13 +493,8 @@ struct ArchivedList: View {
 /// An archived session: the title, dimmed, with the full path of the
 /// folder it ran in beneath it.
 @MainActor
-struct ArchivedRow: View, Equatable {
+struct ArchivedRow: View {
     let session: SessionInfo
-
-    nonisolated static func == (a: ArchivedRow, b: ArchivedRow) -> Bool {
-        a.session.id == b.session.id && a.session.title == b.session.title && a.session.cwd == b.session.cwd
-            && a.session.agent == b.session.agent
-    }
 
     var body: some View {
         HStack(spacing: OutlineMetrics.gap) {
