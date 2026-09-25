@@ -144,10 +144,17 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
     }
 
     /// Claude Code's `models` as the catalog's: each model's value (what
-    /// `--model` takes) as its id, "Opus 5.5" from its description as its
-    /// title and the rest as the subtitle; the "default" entry is not a
-    /// model of its own but says which one is the default.
+    /// `--model` takes) as its id, its name ("Opus 5.5") as its title and
+    /// its tagline as the subtitle; the "default" entry is not a model of
+    /// its own but says which one is the default.
+    ///
+    /// Claude Code has written this two ways: the name first in the
+    /// description ("Opus 5.5 with 1M context · Best for…") with a loose
+    /// display name ("Opus (1M context)"), and now the name as the display
+    /// name ("Opus 5.5") with only the tagline in the description. The
+    /// title is whichever carries a version, else one made from the model.
     static func parse(models list: [[String: Any]]) -> (models: [AgentModel], defaultModel: String?)? {
+        func versioned(_ text: String) -> Bool { text.contains { $0.isNumber } }
         var models: [AgentModel] = []
         var resolved: [String: String] = [:]
         var defaultResolved: String?
@@ -155,17 +162,24 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
             guard let value = entry["value"] as? String else { continue }
             let target = entry["resolvedModel"] as? String
             if value == "default" { defaultResolved = target; continue }
-            let description = entry["description"] as? String ?? ""
-            let parts = description.components(separatedBy: " · ")
-            var title = parts.first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-            var notes = Array(parts.dropFirst())
-            if title.hasSuffix(" with 1M context") {
-                title = String(title.dropLast(" with 1M context".count))
-                notes.append("1M context")
+            let description = (entry["description"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+            let display = (entry["displayName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+            var parts = description.components(separatedBy: " · ").map { $0.trimmingCharacters(in: .whitespaces) }
+            var notes: [String] = []
+            var title: String
+            if parts.count > 1, versioned(parts[0]) {
+                title = parts.removeFirst()
+            } else if versioned(display) {
+                title = display
+            } else {
+                title = AgentCatalog.prettyModelName(target ?? value)
             }
-            if title.isEmpty { title = entry["displayName"] as? String ?? value }
+            if title.hasSuffix(" with 1M context") { title = String(title.dropLast(" with 1M context".count)); notes.append("1M context") }
+            if (value.contains("[1m]") || display.contains("1M")) && !notes.contains("1M context") { notes.append("1M context") }
+            let tagline = parts.filter { !$0.isEmpty && $0 != title }
             let efforts = entry["supportedEffortLevels"] as? [String] ?? []
-            models.append(AgentModel(id: value, title: title, subtitle: notes.isEmpty ? nil : notes.joined(separator: " · "), efforts: efforts))
+            let subtitle = (tagline + notes).joined(separator: " · ")
+            models.append(AgentModel(id: value, title: title, subtitle: subtitle.isEmpty ? nil : subtitle, efforts: efforts))
             if let target, resolved[target] == nil { resolved[target] = value }
         }
         let defaultModel = defaultResolved.flatMap { resolved[$0] }
