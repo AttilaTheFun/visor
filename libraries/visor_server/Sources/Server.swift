@@ -297,15 +297,20 @@ public final class SessionRecord: ObservableObject {
     /// Rows read from the file replace what was kept, except the rows the
     /// server made for words the file has not written yet (a turn in
     /// flight), which stay at the end.
-    private func merged(fileRows: [TranscriptEntry], into kept: [TranscriptEntry]) -> [TranscriptEntry] {
+    func merged(fileRows: [TranscriptEntry], into kept: [TranscriptEntry]) -> [TranscriptEntry] {
         // Only the rows after the last one the file has: a turn in flight.
         // Anything the server made earlier that the file does not carry
         // was never sent, and is not history.
-        let fileUserTexts = fileRows.filter { $0.role == .user }.map(\.text)
+        // A row is written when the file has more messages in its words
+        // than were already settled: the same words sent again ("go on")
+        // are a new message, not the old one.
+        func count(_ rows: [TranscriptEntry], _ text: String, settled: Bool) -> Int {
+            rows.filter { $0.role == .user && (!settled || $0.id.hasPrefix("user-file-")) && Self.sameWords($0.text, text) }.count
+        }
         var pending: [TranscriptEntry] = []
         for row in kept.reversed() {
             guard row.role == .user, row.id.hasPrefix("user-"), !row.id.hasPrefix("user-file-") else { break }
-            if fileUserTexts.contains(where: { Self.sameWords($0, row.text) }) { break }
+            if count(fileRows, row.text, settled: false) > count(kept, row.text, settled: true) { break }
             pending.insert(row, at: 0)
         }
         return fileRows + pending
@@ -319,8 +324,8 @@ public final class SessionRecord: ObservableObject {
         // around it, and a message typed on a phone often ends in a space.
         let file = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
         let row = rowText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return file == row || (!row.isEmpty && file.hasPrefix(row + "\n\nAttached image"))
-            || (row.isEmpty && file.hasPrefix("Attached image"))
+        return file == row || (!row.isEmpty && file.hasPrefix(row + "\n\nAttached "))
+            || (row.isEmpty && file.hasPrefix("Attached "))
     }
 
     /// Puts one row from the file into the transcript; false when it is
@@ -720,7 +725,7 @@ public final class VisorServer: ObservableObject {
     /// The one server of the menu bar app.
     public static let shared = VisorServer()
 
-    @Published public private(set) var sessions: [SessionRecord] = []
+    @Published public internal(set) var sessions: [SessionRecord] = []
     @Published public private(set) var clientCount = 0
     @Published public private(set) var listening = false
     @Published public private(set) var lastError: String?
@@ -747,6 +752,8 @@ public final class VisorServer: ObservableObject {
     private var claudeModelsTimer: Timer?
     /// A `front()` is under way; and how many have found Tailscale not ready.
     private var fronting = false
+    /// Asked for while an attempt ran: run again once it ends.
+    private var frontAgain = false
     private var frontAttempts = 0
     /// Tokens handed out by `hello` to clients the road (or the password)
     /// let in, for the socket's login; new each launch.
@@ -759,7 +766,7 @@ public final class VisorServer: ObservableObject {
     /// The REST side, beside the WebSocket: `port + 1`.
     public var apiPort: UInt16 { port + 1 }
     /// What the permission shim presents instead of the password; new per launch.
-    private let agentToken = UUID().uuidString
+    let agentToken = UUID().uuidString
     /// Sessions this launch was asked to bring back into a running state:
     /// they were mid-turn when the app went away, and were named on the
     /// command line (or in VISOR_RESUME). Nudged once the listener is up.
@@ -1131,7 +1138,9 @@ public final class VisorServer: ObservableObject {
     /// It tries again — every few seconds at first, then every minute —
     /// until both are known.
     public func front() {
-        guard !fronting else { return }
+        // One attempt at a time; one asked for meanwhile runs after it, as
+        // it may know something the running one did not.
+        guard !fronting else { frontAgain = true; return }
         let exposure = self.exposure
         let port = self.port
         guard exposure.installed else { serveError = "\(exposure.title) is not installed"; return }
@@ -1151,6 +1160,11 @@ public final class VisorServer: ObservableObject {
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.fronting = false
+                if self.frontAgain {
+                    self.frontAgain = false
+                    self.front()
+                    return
+                }
                 if let identity { self.hostLogin = identity }
                 if let address { self.address = address }
                 self.serveError = message
@@ -1420,6 +1434,13 @@ public final class VisorServer: ObservableObject {
             broadcastSessions()
             return
         }
+        // Sessions talking to each other, through the Visor MCP server each
+        // agent runs: one request per connection, answered at once.
+        if envelope.type == "agent" {
+            client.send(agentReply(envelope))
+            client.close(after: 0.2)
+            return
+        }
         if !client.authenticated {
             guard envelope.type == "login" else { client.send(.error("Log in first")); return }
             let token = envelope.token ?? ""
@@ -1644,6 +1665,57 @@ public final class VisorServer: ObservableObject {
         saveArchive()
     }
 
+    /// What an agent asked of the other sessions, answered: `mode` is the
+    /// ask, `client` the asking session, `session` the one it is about.
+    /// Only the agents this server started hold the token.
+    func agentReply(_ envelope: Envelope) -> Envelope {
+        var reply = Envelope(type: "agent_result")
+        reply.id = envelope.id
+        guard envelope.token == agentToken, let caller = session(envelope.client) else {
+            reply.error = "Not an agent of this computer"
+            return reply
+        }
+        let others = sessions.filter { $0.info.id != caller.info.id && !$0.info.ended && !$0.info.archived }
+        switch envelope.mode {
+        case "sessions":
+            reply.text = others.isEmpty ? "No other sessions." : others.map { record in
+                let info = record.info
+                return "\(info.id) — \(info.title.isEmpty ? info.agent.title : info.title) (\(info.agent.title), \(info.busy ? "working" : "idle")) in \(info.cwd)"
+            }.joined(separator: "\n")
+        case "send":
+            guard let target = others.first(where: { $0.info.id == envelope.session }) else {
+                reply.error = "No other session with that id; list_sessions names them."
+                return reply
+            }
+            guard let text = envelope.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+                reply.error = "Nothing to send."
+                return reply
+            }
+            let name = caller.info.title.isEmpty ? caller.info.agent.title : caller.info.title
+            // Marked as another agent's, so it is not taken for the user's.
+            let marked = "[Message from the Visor session “\(name)” (\(caller.info.id)), not from the user. "
+                + "To answer, use send_message to that session.]\n\n" + text
+            let busy = target.info.busy
+            deliver(marked, to: target)
+            let targetName = target.info.title.isEmpty ? target.info.agent.title : target.info.title
+            reply.text = busy ? "Queued for \(targetName): it is working and takes it when its turn ends." : "Sent to \(targetName)."
+        case "read":
+            guard let target = others.first(where: { $0.info.id == envelope.session }) else {
+                reply.error = "No other session with that id; list_sessions names them."
+                return reply
+            }
+            let count = max(1, min(envelope.rows ?? 10, 50))
+            reply.text = target.entries.suffix(count).map { row in
+                let words = row.text.count > 2000 ? String(row.text.prefix(2000)) + "…" : row.text
+                let calls = row.activities.isEmpty ? "" : " [" + row.activities.joined(separator: "; ") + "]"
+                return "\(row.role.rawValue): \(words)\(calls)"
+            }.joined(separator: "\n\n")
+        default:
+            reply.error = "Unknown request"
+        }
+        return reply
+    }
+
     private func deliver(_ text: String, to record: SessionRecord, images: [String] = []) {
         // A turn in flight is left alone. What the user says now waits its
         // turn and goes over as soon as the agent falls idle — interrupting
@@ -1670,7 +1742,11 @@ public final class VisorServer: ObservableObject {
         var forAgent = text
         if !images.isEmpty {
             let list = images.map { "- " + $0 }.joined(separator: "\n")
-            let heading = images.count == 1 ? "Attached image:" : "Attached images:"
+            // Pictures by that name; with a video among them, files — the
+            // agent reads a video by the tools it has, not as a picture.
+            let pictures = images.allSatisfy { AgentImages.pixelSize(path: $0) != nil }
+            let heading = pictures ? (images.count == 1 ? "Attached image:" : "Attached images:")
+                                   : (images.count == 1 ? "Attached file:" : "Attached files:")
             forAgent = (text.isEmpty ? "" : text + "\n\n") + heading + "\n" + list
         }
         do {

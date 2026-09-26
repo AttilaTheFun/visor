@@ -87,7 +87,7 @@ and `subscribe` and stream the rest.
 | `error` | `message` | Rejected (before or after login). |
 | `sessions` | `sessions` | The session list changed (a start, an end, busy flipped). |
 | `transcript` | `session`, `entries`, `streaming`, `activity`, `busy`, `error` | The whole state, on subscribe. |
-| `delta` | `session`, `text` | More of the reply being written. |
+| `delta` | `session`, `id`, `text` | More of the reply being written; `id` is the message's, which its first row on the record also has. |
 | `entry` | `session`, `entry` | A finished entry, or a replacement for the entry with the same id (an assistant message grows as its tool calls arrive). An assistant entry clears `streaming`. |
 | `activity` | `session`, `activity` | What the agent is doing ("Bash: ls"), or null. |
 | `busy` | `session`, `busy` | The turn started / ended. |
@@ -129,8 +129,8 @@ tool's output; the transcript view hides them, the assistant's
 ## Approvals (manual mode)
 
 In manual mode Claude runs with `--permission-mode acceptEdits` and
-`--permission-prompt-tool mcp__visor__approve`, an MCP server the menu bar
-app bundles (`visor_approve_mcp.js`, run with node). Each permission request
+`--permission-prompt-tool mcp__visor__approve`, a tool of the MCP server the
+menu bar app bundles (`visor_mcp.js`, run with node). Each permission request
 becomes a WebSocket connection from the shim to the app carrying
 `{"type":"approval_request","token":<agent token>,"session":…,"id":…,"text":<tool>,"prompt":<summary>}`;
 the app shows it to subscribers as `approval` and lists the session as
@@ -139,3 +139,18 @@ waiting; the client's `approve` is answered back to the shim as
 Claude's allow/deny. The token is generated per app launch and is not the
 password. Codex's headless runs never ask; its manual mode is the
 workspace-write sandbox.
+
+## Sessions messaging each other
+
+Every Claude and Codex session the menu bar app starts gets the same MCP
+server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`), with
+three tools: `list_sessions`, `send_message(session, text)` and
+`read_messages(session, count)`. Each call is a WebSocket connection from the
+script to the app carrying
+`{"type":"agent","token":<agent token>,"client":<calling session>,"mode":"sessions"|"send"|"read","session":<other session>,"text":…,"rows":<count>,"id":…}`,
+answered with `{"type":"agent_result","id":…,"text":…}` or `…,"error":…}`.
+A session is never offered itself, nor ended or archived ones. A message is
+delivered as a new turn (queued while the other session works), prefixed
+`[Message from the Visor session "<title>" (<id>), not from the user. …]`.
+Only sessions on the same computer are reachable. Node must be on the PATH
+(as it already is for approvals).

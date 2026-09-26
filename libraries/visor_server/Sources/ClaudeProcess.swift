@@ -58,11 +58,6 @@ public final class ClaudeProcess: AgentProcess {
         self.tool = tool
     }
 
-    /// The permission shim, bundled with the menu bar app.
-    static var approvalShim: String? {
-        Bundle.main.url(forResource: "visor_approve_mcp", withExtension: "js")?.path
-    }
-
     static func quoted(_ path: String) -> String {
         path.contains(" ") ? "'\(path)'" : path
     }
@@ -164,18 +159,16 @@ public final class ClaudeProcess: AgentProcess {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: executable)
         var args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+        // Visor's MCP server: the other sessions, and in manual mode the
+        // permission prompt answered from the client.
+        let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: !skipPermissions)
+        if let mcp { args += ["--mcp-config", mcp] }
         if skipPermissions {
             args += ["--permission-mode", "bypassPermissions"]
         } else {
-            // Manual: edits are accepted, everything else asks the user
-            // through the permission MCP shim, answered from the client.
+            // Manual: edits are accepted, everything else asks the user.
             args += ["--permission-mode", "acceptEdits"]
-            if let shim = Self.approvalShim, let node = ToolPath.resolve("node"), !approvalEnvironment.isEmpty {
-                let config: [String: Any] = ["mcpServers": ["visor": ["command": node, "args": [shim], "env": approvalEnvironment]]]
-                if let data = try? JSONSerialization.data(withJSONObject: config), let json = String(data: data, encoding: .utf8) {
-                    args += ["--mcp-config", json, "--permission-prompt-tool", "mcp__visor__approve"]
-                }
-            }
+            if mcp != nil { args += ["--permission-prompt-tool", "mcp__visor__approve"] }
         }
         if let model, !model.isEmpty { args += ["--model", model] }
         if let effort, !effort.isEmpty { args += ["--effort", effort] }

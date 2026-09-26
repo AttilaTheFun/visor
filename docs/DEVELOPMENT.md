@@ -299,6 +299,11 @@ a detached relauncher and resumes named sessions with a nudge
 Bugs seen and not yet fixed are in docs/KNOWN_ISSUES.md.
 
 - Search has no client UI (`/api/search` works).
+- Slash commands pass through to the agent but the composer offers no
+  picker. Claude's `system/init` lists the commands it takes
+  (`slash_commands`) and `system/commands_changed` sends them with
+  descriptions; typing `/` could offer them. `/remote-control` is not one:
+  headless Claude answers that it "isn't available in this environment".
 - The web client's cache is in memory (an IndexedDB `MessageStorage`
   would persist it).
 - Codex plan updates are not mapped to the tasks checklist.

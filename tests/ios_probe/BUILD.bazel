@@ -25,7 +25,7 @@ swift_library(
 
 ios_ui_test(
     name = "visor_probe",
-    minimum_os_version = "17.0",
+    minimum_os_version = "18.0",
     tags = ["manual"],
     test_host = "//applications/visor_ios",
     # The test runs in about a minute; xcodebuild's teardown sometimes hangs

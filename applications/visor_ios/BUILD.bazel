@@ -57,7 +57,7 @@ ios_application(
         "ipad",
     ],
     infoplists = ["Info.plist"],
-    minimum_os_version = "17.0",
+    minimum_os_version = "18.0",
     provisioning_profile = select({
         "@apple_support//constraints:device": ":xcode_managed_profile",
         "//conditions:default": None,
