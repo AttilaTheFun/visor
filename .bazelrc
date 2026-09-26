@@ -2,3 +2,5 @@ common --enable_bzlmod
 build --apple_platform_type=macos
 build --macos_minimum_os=15.0
 build --ios_minimum_os=18.0
+# Your own settings, such as the signing team (tools/signing).
+try-import %workspace%/.bazelrc.user

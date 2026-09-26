@@ -304,6 +304,19 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//tools/signing:extension.bzl%signing": {
+      "general": {
+        "bzlTransitiveDigest": "9iMl/x5uGTLwIPJ+BF7duI1h0f5fqIeHsYNMuzqOZzQ=",
+        "usagesDigest": "QHkQJwMaiaxt1b5Sh2GOwPDZovr6ohS+KPXkg8za0vA=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "visor_signing": {
+            "repoRuleId": "@@//tools/signing:extension.bzl%_signing",
+            "attributes": {}
+          }
+        }
+      }
+    },
     "@@cgrindel_bazel_starlib+//tools/git:extensions.bzl%local_git_ext": {
       "general": {
         "bzlTransitiveDigest": "Q/NQyKFI2DljjsevKbLpWlOrT/bOsP3m/A8uvcXQb40=",

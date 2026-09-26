@@ -53,9 +53,9 @@ through rules_swift_package_manager from third_party/swift_packages.
     bazel test //tests/...
     bazel run //:xcodeproj     # generates Visor.xcodeproj for Xcode (not committed)
 
-Needs Xcode 27 and Bazelisk. The bundle ids and the Apple team id are
-constants at the top of each app's BUILD.bazel: set your own before
-signing for a device. The agents are configured on their own — `claude`,
+Needs Xcode 27 and Bazelisk. The bundle ids are constants at the top of
+each app's BUILD.bazel; your Apple team id goes in a `.bazelrc.user` you
+keep (`common --repo_env=VISOR_TEAM_ID=<team>`), for signing for a device. The agents are configured on their own — `claude`,
 `codex login`, and [`openrouter`](https://github.com/AttilaTheFun/open_router_cli)
 `auth login` — and Tailscale must be running with HTTPS certificates
 enabled. docs/DEVELOPMENT.md has the full setup, the architecture, and

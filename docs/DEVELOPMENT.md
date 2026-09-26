@@ -56,15 +56,19 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
    Clients add a Mac with its connection code: the menu bar's "Copy
    Connection Code", or the QR code in its Settings scanned with a
    phone's camera (opens `visor://connect?code=…`).
-   **Signing.** The bundle ids and the Apple team id are constants at the
-   top of applications/visor_ios/BUILD.bazel (and the bundle ids in the
-   other two apps' BUILD files): change them to your own. For a phone,
+   **Signing.** The bundle ids are constants at the top of each app's
+   BUILD.bazel: change them to your own. Your Apple team id is not in
+   the repository: put it in `.bazelrc.user` at the workspace root (not
+   checked in), `common --repo_env=VISOR_TEAM_ID=<team>`; without it
+   device builds use the placeholder `YOUR_TEAM_ID` (tools/signing). No
+   team id, certificate or profile belongs in the repository. For a phone,
    Xcode must be signed into your Apple ID (Settings → Accounts); then,
    with the phone plugged in, `tools/mint_profile/mint_profile.sh
    <bundle id> <team id> <UDID>` makes the development certificate and
    the "iOS Team Provisioning Profile: <bundle id>" rules_apple looks for
-   (`xcrun devicectl list devices` gives the UDID). Free-team profiles
-   last 7 days: re-run it when installs start failing. After one install
+   (`xcrun devicectl list devices` gives the UDID). A paid team's
+   profiles last a year and list the team's registered devices; a free
+   team's last 7 days: re-run it when installs start failing. After one install
    over USB the phone is paired, and `devicectl` reaches it over Wi-Fi on
    the same LAN when unplugged.
 6. Xcode: `bazel run //:xcodeproj` generates Visor.xcodeproj
