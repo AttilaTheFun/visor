@@ -37,6 +37,15 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(records[5].kind, .title("probe title"))
     }
 
+    func testAMessageSentMidTurnIsTheUsers() {
+        let line = #"{"type":"attachment","uuid":"m1","parentUuid":"a3","attachment":{"type":"queued_command","prompt":[{"text":"It was a dialog I approved","type":"text"}],"commandMode":"prompt"}}"#
+        let parsed = ClaudeTranscriptParser.lines(in: Data(line.utf8))
+        XCTAssertEqual(parsed.first?.record?.kind, .user(text: "It was a dialog I approved", images: []))
+        XCTAssertEqual(parsed.first?.isPrompt, true)
+        // Other attachments are not conversation.
+        XCTAssertNil(ClaudeTranscriptParser.lines(in: Data(#"{"type":"attachment","uuid":"x","attachment":{"type":"file"}}"#.utf8)).first?.record)
+    }
+
     func testProjectDirectoryName() {
         XCTAssertEqual(ClaudeSessionFiles.projectDirectoryName(for: "/Users/me/Developer/my_app"), "-Users-me-Developer-my-app")
         // A symlinked folder is named by where it really is.
