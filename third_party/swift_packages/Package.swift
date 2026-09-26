@@ -9,14 +9,14 @@ import PackageDescription
 
 let package = Package(
     name: "visor_swift_packages",
-    platforms: [.iOS(.v17), .macOS(.v14)],
+    platforms: [.iOS("18.0"), .macOS("15.0")],
     dependencies: [
         // SwiftTerm 1.11+ generates its build info with an SPM plugin, which
         // rules_swift_package_manager does not run; 1.10.1 is the last without.
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.10.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            revision: "ba127a7250b8d4e38fe8f247a6fadf86e8e1c50a"
+            revision: "c63ba106acf221830c5691bcdaebe09652403a3c"
         ),
         // The transcript cache: indexed, searchable rows of every session's
         // file, kept by the server off the main thread.

@@ -95,10 +95,11 @@ struct AgentScreen: View {
 
     private var chat: some View {
         AgentView(
-            messages: transcript.entries.filter { !transcript.shadowed.contains($0.id) }.map { TranscriptMessage($0, host: host.id) } + queuedMessages + sendingMessages,
-            streams: transcript.streams.map { StreamedMessage(id: $0.id, text: $0.text) },
+            messages: rows,
+            // The road to the computer, when it is down, says more than
+            // what the turn was last heard doing.
+            status: connectionStatus == nil ? transcript.turnStatus.map(ActivityItem.init) : [],
             activity: connectionStatus ?? transcript.activity,
-            status: transcript.turnStatus.map(ActivityItem.init),
             error: transcript.error,
             emptyTitle: transcript.loaded ? (info?.archived == true ? "Archived" : "What should we do?") : "Loading…",
             emptyBody: transcript.loaded
@@ -107,6 +108,7 @@ struct AgentScreen: View {
             draft: $draft,
             placeholder: "Message \(info?.agent.title ?? "the agent")…",
             busy: transcript.busy,
+            sending: !transcript.sending.isEmpty,
             attachmentCount: attachments.count,
             send: send,
             stop: { host.stop(sessionID) },
@@ -169,7 +171,22 @@ struct AgentScreen: View {
         } attachments: {
             ForEach(attachments) { picked in
                 AgentAttachmentTile(remove: { attachments.removeAll { $0.id == picked.id } }) {
-                    Base64Image(base64: picked.base64)
+                    if picked.isVideo {
+                        // A frame of it, marked as a video.
+                        ZStack {
+                            if let thumbnail = picked.thumbnail {
+                                Base64Image(base64: thumbnail)
+                            } else {
+                                Color.secondary.opacity(0.15)
+                            }
+                            Image(systemName: "play.circle.fill")
+                                .font(.title3)
+                                .foregroundColor(.white)
+                                .shadow(radius: 2)
+                        }
+                    } else {
+                        Base64Image(base64: picked.base64)
+                    }
                 }
             }
         }
@@ -214,7 +231,7 @@ struct AgentScreen: View {
     /// agent's terminal: what it has said, and the two ways in.
     private var watching: some View {
         VStack(spacing: 0) {
-            TranscriptView(messages: transcript.entries.filter { !transcript.shadowed.contains($0.id) }.map { TranscriptMessage($0, host: host.id) },
+            TranscriptView(messages: rows,
                            activity: connectionStatus, error: transcript.error,
                            emptyTitle: "Nothing said yet",
                            emptyBody: "The agent's own terminal has this session.",
@@ -253,28 +270,9 @@ struct AgentScreen: View {
         }
     }
 
-    /// What is waiting to be said, at the end of the thread so the order
-    /// reads true: the turn in flight, then what follows it.
-    /// Sent from here and not yet on the record: shown at once as the
-    /// most recent thing in the thread, in a sending state.
-    private var sendingMessages: [TranscriptMessage] {
-        transcript.sending.map { out in
-            var message = TranscriptMessage(out.entry, host: host.id)
-            message.sending = true
-            return message
-        }
-    }
-
-    /// The server's view of what is queued, for every client. On the
-    /// client that sent them these are already shown as its own outgoing
-    /// rows (kept last until the record has them), so they are not shown
-    /// twice.
-    private var queuedMessages: [TranscriptMessage] {
-        let mine = Set(transcript.sending.map { $0.entry.text })
-        return (info?.queued ?? []).enumerated().compactMap { index, text in
-            guard !mine.contains(text) else { return nil }
-            return TranscriptMessage(id: "queued-\(index)", role: .user, text: text, pending: true)
-        }
+    /// The record's rows, each under the id it keeps through its copies.
+    private var rows: [TranscriptMessage] {
+        transcript.entries.map { TranscriptMessage($0, host: host.id, id: transcript.displayID(of: $0)) }
     }
 
     /// The session's name, as the sidebar lists it.
@@ -320,16 +318,27 @@ struct ApprovalControls: View {
 extension TranscriptMessage {
     /// `host` because a picture is a file on that computer: the reference
     /// carries which one, so the transcript's image hook knows where to ask.
-    init(_ entry: TranscriptEntry, host: String = "") {
+    /// `id`: the id to show it under (the transcript's display id), when
+    /// not the row's own.
+    init(_ entry: TranscriptEntry, host: String = "", id: String? = nil) {
         let role: TranscriptMessage.Role
         switch entry.role {
         case .user: role = .user
         case .assistant: role = .assistant
         case .tool: role = .tool
         }
-        self.init(id: entry.id, role: role, text: entry.text, activities: entry.activities, toolName: entry.toolName,
-                  imageURLs: entry.images.map { host + "|" + $0 },
-                  imageSizes: entry.imageSizes.map { CGSize(width: CGFloat($0.width), height: CGFloat($0.height)) })
+        // Pictures are shown; a video is named under the words, as the
+        // transcript has no player.
+        let pictures = entry.images.indices.filter { !AttachmentKind.isVideo(entry.images[$0]) }
+        let videos = entry.images.filter(AttachmentKind.isVideo).map { "Video: " + ($0 as NSString).lastPathComponent }
+        let text = ([entry.text] + videos).filter { !$0.isEmpty }.joined(separator: "\n")
+        self.init(id: id ?? entry.id, role: role, text: text, activities: entry.activities, toolName: entry.toolName,
+                  imageURLs: pictures.map { host + "|" + entry.images[$0] },
+                  imageSizes: pictures.map { index in
+                      index < entry.imageSizes.count
+                          ? CGSize(width: CGFloat(entry.imageSizes[index].width), height: CGFloat(entry.imageSizes[index].height))
+                          : nil
+                  })
     }
 }
 

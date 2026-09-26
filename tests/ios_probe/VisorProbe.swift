@@ -177,6 +177,49 @@ final class VisorProbe: XCTestCase {
     /// already lists and photographs the chat, which is the only way to
     /// see the composer's own layout from here: the Mac refuses both
     /// screen recording and accessibility to this process.
+    /// The send, as a person does it, for a screen recording to be taken
+    /// of: the session named by VISOR_FRAMES_SESSION is opened, the
+    /// composer tapped (the on-screen keyboard comes up), a message typed
+    /// and sent, and the reply waited for. Marks go to the log with times.
+    func testSendFrames() throws {
+        let env = ProcessInfo.processInfo.environment
+        let id = env["VISOR_FRAMES_SESSION"] ?? ""
+        XCTAssertFalse(id.isEmpty, "VISOR_FRAMES_SESSION is required")
+        let app = XCUIApplication()
+        app.launch()
+        let row = app.descendants(matching: .any).matching(identifier: "session-" + id).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 30), "the session's row did not appear")
+        row.tap()
+        let composer = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 15), "no composer")
+        Thread.sleep(forTimeInterval: 3)
+        NSLog("VISOR_FRAMES tap-composer")
+        composer.tap()
+        Thread.sleep(forTimeInterval: 2)
+        NSLog("VISOR_FRAMES type")
+        composer.typeText(env["VISOR_FRAMES_TEXT"] ?? "Reply with exactly the word banana")
+        Thread.sleep(forTimeInterval: 1)
+        NSLog("VISOR_FRAMES send")
+        app.buttons["Send"].firstMatch.tap()
+        if env["VISOR_FRAMES_SCROLL"] == "1" {
+            // Away from the status row and back while the agent works.
+            Thread.sleep(forTimeInterval: 4)
+            let thread = app.scrollViews.firstMatch.exists ? app.scrollViews.firstMatch : app.collectionViews.firstMatch
+            NSLog("VISOR_FRAMES scroll-away")
+            thread.swipeDown(velocity: .fast)
+            thread.swipeDown(velocity: .fast)
+            Thread.sleep(forTimeInterval: 2)
+            NSLog("VISOR_FRAMES scroll-back")
+            thread.swipeUp(velocity: .fast)
+            thread.swipeUp(velocity: .fast)
+            thread.swipeUp(velocity: .fast)
+            Thread.sleep(forTimeInterval: 3)
+            NSLog("VISOR_FRAMES back")
+        }
+        Thread.sleep(forTimeInterval: 20)
+        NSLog("VISOR_FRAMES end")
+    }
+
     /// Swiping an archived session part-way, and holding it there, as a
     /// person does before deciding: the session named by
     /// VISOR_SWIPE_SESSION must be archived on the computer. Three slow

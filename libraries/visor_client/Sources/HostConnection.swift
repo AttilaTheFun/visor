@@ -59,44 +59,102 @@ public struct HostConfig: Identifiable, Hashable, Sendable {
 }
 
 /// A session's transcript as the client sees it.
+///
+/// Views are told of changes a frame at a time, not one by one: sending a
+/// message sets off a burst — the message shown, the computer's copy of
+/// it, the agent's own record of it, thinking, the reply starting — and a
+/// view redrawn for each, each redraw scrolling and animating, jumps.
+/// The first change after a quiet frame is told at once; the rest of a
+/// frame's changes are told together at its end.
 @MainActor
 public final class SessionTranscript: ObservableObject {
-    @Published public var entries: [TranscriptEntry] = []
-    /// A streamed assistant message: its own row, by the message's id.
-    public struct Stream: Identifiable, Equatable {
-        public let id: String
-        public var text: String
+    /// How often, at most, views are told of changes (nanoseconds).
+    public nonisolated(unsafe) static var frame: UInt64 = 500_000_000
+    /// A frame is running: changes wait for its end.
+    private var framing = false
+    /// Something changed since views were last told.
+    private var dirty = false
+    /// How many times views have been told, for tests.
+    private(set) var announced = 0
+    /// Whether a frame is running, for tests.
+    var inFrame: Bool { framing }
+
+    /// Every change comes here.
+    private func changed() {
+        if framing { dirty = true; return }
+        announce()
+        startFrame()
     }
-    /// What is streaming, or has streamed and is not yet on the record —
-    /// kept, complete, until the transcript carries a row with its id, so
-    /// a reply is never lost between the stream's end and the sync.
-    @Published public var streams: [Stream] = []
-    /// One string of it, for anything that still wants that.
-    public var streaming: String { streams.map(\.text).joined(separator: "\n\n") }
-    @Published public var activity: String?
-    @Published public var busy = false
-    @Published public var error: String?
+
+    private func announce() {
+        dirty = false
+        announced += 1
+        objectWillChange.send()
+    }
+
+    private func startFrame() {
+        framing = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: SessionTranscript.frame)
+            guard let self else { return }
+            if self.dirty { self.announce(); self.startFrame() } else { self.framing = false }
+        }
+    }
+
+    /// Tells views now, whatever the frame: for what the user just did.
+    public func flush() {
+        guard dirty else { return }
+        announce()
+    }
+
+    /// The id a row is shown under. A message keeps one identity through
+    /// its copies — the one sent from here, the computer's copy, the
+    /// agent's own record of it — so the view sees one row that changes,
+    /// not one removed and another inserted.
+    private var displayIDs: [String: String] = [:]
+    public func displayID(of entry: TranscriptEntry) -> String { displayIDs[entry.id] ?? entry.id }
+
+    /// A rebuilt set of rows: a row that is new here and has the same role
+    /// and words as one that went takes that one's display id.
+    private func carryDisplayIDs(from old: [TranscriptEntry], to new: [TranscriptEntry]) {
+        let kept = Set(new.map(\.id))
+        var gone: [String: [String]] = [:]
+        for row in old where !kept.contains(row.id) { gone[Self.likeness(row), default: []].append(displayID(of: row)) }
+        guard !gone.isEmpty else { return }
+        let before = Set(old.map(\.id))
+        for row in new where displayIDs[row.id] == nil && !before.contains(row.id) {
+            let key = Self.likeness(row)
+            guard var ids = gone[key], !ids.isEmpty else { continue }
+            displayIDs[row.id] = ids.removeFirst()
+            gone[key] = ids
+        }
+    }
+
+    static func likeness(_ entry: TranscriptEntry) -> String {
+        entry.role.rawValue + "|" + HostConnection.trimmed(entry.text)
+    }
+
+    /// The record's rows, as synced: all the thread shows. What streams
+    /// is not kept or drawn — the sync answers as soon as the record moves.
+    public var entries: [TranscriptEntry] = [] { didSet { changed() } }
+    public var activity: String? { didSet { changed() } }
+    public var busy = false { didSet { changed() } }
+    public var error: String? { didSet { changed() } }
     /// A tool call waiting for Allow or Deny.
-    @Published public var pendingApproval: ApprovalRequest?
+    public var pendingApproval: ApprovalRequest? { didSet { changed() } }
     /// The transcript has been replayed once; before that the view shows a spinner.
-    @Published public var loaded = false
+    public var loaded = false { didSet { changed() } }
     /// The revision of the rows held, from the last sync; what the next
     /// sync asks to go past.
     public var revision = 0
     /// Whether the thread goes back further than what has been sent.
-    @Published public var hasEarlier = false
+    public var hasEarlier = false { didSet { changed() } }
     /// Something to tell the user about the session, until they
     /// acknowledge it: that it was forked elsewhere and the chat now
     /// follows the newer branch.
-    @Published public var notice: String?
-    /// A message sent from here and not yet on the record: shown at once
-    /// as the most recent thing in the thread, in a sending state, and
-    /// dropped when the transcript's own row for the same words arrives
-    /// (or the words turn up in the queue the agent was too busy to take).
-    /// A message sent from here, kept as the last row until the transcript
-    /// syncs an identical message at a revision past when this was sent —
-    /// so it never jumps: it stays last until it is confirmed on the
-    /// record, then the record's own row takes its place.
+    public var notice: String? { didSet { changed() } }
+    /// A message sent from here and not yet on the record: the composer
+    /// shows it as sending until the synced record carries it.
     public struct Outgoing: Identifiable, Equatable {
         public let id: String
         public let entry: TranscriptEntry
@@ -104,18 +162,11 @@ public final class SessionTranscript: ObservableObject {
         /// message must arrive after it, so an identical message from
         /// before does not settle it.
         public let sinceRevision: Int
-        /// The replies still streaming when this was sent. Until their
-        /// rows are on the record, the record's row for this message would
-        /// show above them; this stands in for it a moment longer.
-        public var awaiting: Set<String> = []
     }
-    @Published public var sending: [Outgoing] = []
-    /// Rows of the record that an outgoing message still stands in for:
-    /// not shown, so the message is not shown twice.
-    @Published public var shadowed: Set<String> = []
+    public var sending: [Outgoing] = [] { didSet { changed() } }
 
     /// Takes the record's rows as synced: the truth, replacing what was
-    /// held; the streams and outgoing messages it now carries go.
+    /// held; the outgoing messages it now carries go.
     /// The generation of the rows held; a different one in an answer means
     /// the rows were rebuilt and the answer is the whole, not a delta.
     public var generation = -1
@@ -137,6 +188,7 @@ public final class SessionTranscript: ObservableObject {
             }
         } else {
             whole = true
+            carryDisplayIDs(from: entries, to: rows)
             entries = rows
             generation = envelope.generation ?? generation
         }
@@ -145,41 +197,23 @@ public final class SessionTranscript: ObservableObject {
         if envelope.entries?.contains(where: { $0.role == .user }) == true { error = nil }
         loaded = true
         keep?(whole, rows, SyncState(revision: revision, generation: generation))
-        settleStreams()
         settleSending()
     }
 
-    /// Drops the streams the record now carries: a row whose id is the
-    /// message's id, or that id with a segment suffix.
-    func settleStreams() {
-        guard !streams.isEmpty else { return }
-        let carried = Set(entries.filter { $0.role == .assistant }.map { $0.id.split(separator: "#").first.map(String.init) ?? $0.id })
-        streams.removeAll { carried.contains($0.id) }
-        settleSending()
-    }
-
-    /// Drops the outgoing messages the record (or the queue) now carries.
     /// Drops an outgoing message once the transcript has moved past when
-    /// it was sent AND now carries an identical message: it was confirmed
-    /// received and is on the record, so the record's row stands in its
-    /// place. Until then it stays the last row, whatever else arrives.
+    /// it was sent and carries an identical message: it is on the record.
     func settleSending() {
-        guard !sending.isEmpty else { if !shadowed.isEmpty { shadowed = [] }; return }
+        guard !sending.isEmpty else { return }
         func matched(_ text: String, _ recorded: String) -> Bool {
-            recorded == text || recorded.hasPrefix(text + "\n\nAttached image") || (text.isEmpty && recorded.hasPrefix("Attached image"))
+            recorded == text || recorded.hasPrefix(text + "\n\nAttached ") || (text.isEmpty && recorded.hasPrefix("Attached "))
         }
-        let live = Set(streams.map(\.id))
-        var shadow: Set<String> = []
         sending.removeAll { out in
             guard revision > out.sinceRevision,
                   let row = entries.last(where: { $0.role == .user && matched(out.entry.text, $0.text) }) else { return false }
-            // On the record. A reply that was streaming when this was sent
-            // and is not on the record yet would sit under the record's
-            // row: this stands in for that row until the reply lands.
-            if !out.awaiting.isDisjoint(with: live) { shadow.insert(row.id); return false }
+            // The record's row is this message: shown under its id.
+            if displayIDs[row.id] == nil { displayIDs[row.id] = out.id }
             return true
         }
-        if shadowed != shadow { shadowed = shadow }
     }
     /// What the terminal has shown, base64 a chunk, for a terminal view
     /// that attaches later; and the view attached now, told each chunk.
@@ -191,14 +225,11 @@ public final class SessionTranscript: ObservableObject {
     /// The newest status label, and the wait before it is shown.
     private var latestActivity: String?
     private var activityFlush: Task<Void, Never>?
-    /// After a turn ends, the wait before an unsettled stream is dropped
-    /// as belonging to a turn that was cut short.
-    private var streamGrace: Task<Void, Never>?
     /// Everything streamed as status this turn that is not part of the
     /// record — the tool calls, subagents, shells and thinking as they
     /// were announced — in order, for the footer under the thread. Cleared
     /// when the turn ends: the record's rows carry what was done.
-    @Published public var turnStatus: [StatusItem] = []
+    public var turnStatus: [StatusItem] = [] { didSet { changed() } }
 
     /// Status labels come in bursts — a tool call a moment — and a row
     /// redrawn for each one flickers, its spinner with it. The first label
@@ -240,24 +271,17 @@ public final class SessionTranscript: ObservableObject {
             keepEarlier?(older)
         case "ephemeral":
             // Everything that is not the record, on subscribing.
-            streams = (envelope.streams ?? []).map { Stream(id: $0.id, text: $0.text) }
             turnStatus = envelope.status ?? []
             activity = envelope.activity
             latestActivity = envelope.activity
             busy = envelope.busy ?? false
             pendingApproval = envelope.approval
             notice = envelope.notice
-            settleStreams()
         case "status":
             turnStatus = envelope.status ?? []
-        case "delta":
-            let id = envelope.id ?? "stream"
-            // A message the record already carries is finished; words
-            // for it arriving after its row would only stand as a stream
-            // nothing settles.
-            if entries.contains(where: { $0.role == .assistant && ($0.id == id || $0.id.hasPrefix(id + "#")) }) { break }
-            if let last = streams.indices.last, streams[last].id == id { streams[last].text += envelope.text ?? "" }
-            else { streams.append(Stream(id: id, text: envelope.text ?? "")) }
+        case "delta", "streamEnd":
+            // A reply being written: not drawn. Its row comes with the sync.
+            break
         case "entry":
             // Rows come from the record, over HTTP; the socket's copy is
             // not taken, so there is one source of them.
@@ -266,25 +290,7 @@ public final class SessionTranscript: ObservableObject {
             setActivity(envelope.activity)
         case "busy":
             busy = envelope.busy ?? false
-            // The streams stay a moment past the turn: the record's row
-            // for a reply reaches the sync just after the turn ends, and
-            // the stream holds its place until it does. What has not
-            // settled by then was a turn cut short (a restart, an error)
-            // whose row is never coming, so it is dropped rather than left
-            // to sit under newer messages.
-            if !busy {
-                pendingApproval = nil
-                                streamGrace?.cancel()
-                streamGrace = Task { @MainActor [weak self] in
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    guard let self, !Task.isCancelled else { return }
-                    self.settleStreams()
-                    self.streams.removeAll()
-                    self.settleSending()
-                }
-            } else {
-                streamGrace?.cancel(); streamGrace = nil
-            }
+            if !busy { pendingApproval = nil }
         case "failure":
             error = envelope.message
             // What was on its way did not arrive.
@@ -415,7 +421,7 @@ public final class HostConnection: ObservableObject, Identifiable {
         return data
     }
 
-    /// Puts a picture on the computer and returns where it landed, which
+    /// Puts a picture or a video on the computer and returns where it landed, which
     /// is what the agent is then pointed at.
     public func upload(base64: String, name: String) async throws -> String {
         var body = Envelope(type: "file")
@@ -889,8 +895,8 @@ public final class HostConnection: ObservableObject, Identifiable {
         let text = Self.trimmed(text)
         let session = transcript(for: sessionID)
         let entry = TranscriptEntry(id: "sending-" + HostConfig.newID(), role: .user, text: text, images: images)
-        session.sending.append(SessionTranscript.Outgoing(id: entry.id, entry: entry, sinceRevision: session.revision,
-                                                          awaiting: Set(session.streams.map(\.id))))
+        defer { session.flush() }
+        session.sending.append(SessionTranscript.Outgoing(id: entry.id, entry: entry, sinceRevision: session.revision))
         api("POST", "/sessions/\(sessionID)/send", .send(session: sessionID, text: text, images: images))
     }
 

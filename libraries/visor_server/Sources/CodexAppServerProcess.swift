@@ -153,7 +153,8 @@ public final class CodexAppServerProcess: AgentProcess, @unchecked Sendable {
         guard let executable = ToolPath.resolve("codex") else { throw AgentProcessError.toolMissing("codex") }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: executable)
-        p.arguments = ["app-server"]
+        // Visor's MCP server: the other sessions.
+        p.arguments = ["app-server"] + VisorMCP.codexArguments(approvalEnvironment)
         p.currentDirectoryURL = URL(fileURLWithPath: (cwd as NSString).expandingTildeInPath)
         p.environment = ToolPath.environment()
         for (key, value) in approvalEnvironment { p.environment?[key] = value }

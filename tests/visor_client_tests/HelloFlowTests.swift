@@ -3,6 +3,7 @@
 // the socket, logged in with the token hello gave. A 401 is the computer
 // asking for a password, shown as such and not retried.
 
+import Foundation
 @testable import VisorClient
 import VisorProtocol
 import VisorServices
@@ -33,7 +34,14 @@ final class ScriptedTransport: HostTransport, @unchecked Sendable {
 
     func disconnect() {}
 
+    /// The calls made, by path, after hello. Calls come from concurrent
+    /// tasks, so the list is kept under a lock.
+    private var made: [String] = []
+    private let lock = NSLock()
+    var calls: [String] { lock.withLock { made } }
+
     func call(_ method: String, _ path: String, body: String, config: HostConfig) async throws -> String {
+        if path != "/hello" { lock.withLock { made.append(path) } }
         if path == "/hello" { return try hello.get() }
         return Envelope(type: "reply").encoded()
     }

@@ -24,10 +24,10 @@ macos_application(
     app_icons = ["//artwork/app-icon:app_icon"],
     bundle_id = BUNDLE_ID,
     infoplists = ["Info.plist"],
-    minimum_os_version = "14.0",
+    minimum_os_version = "15.0",
     resources = [
         # Claude's permission prompt tool for manual mode (docs/protocol.md).
-        "Resources/visor_approve_mcp.js",
+        "Resources/visor_mcp.js",
         # The flat icon, beside the compiled app icon.
         "//artwork/app-icon:Visor.icns",
     ],
