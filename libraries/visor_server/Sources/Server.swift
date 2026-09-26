@@ -192,10 +192,10 @@ public final class SessionRecord: ObservableObject {
     /// row. Called once the agent has a session id, and again after a
     /// restart (the watcher is replaced).
     func followFile() {
-        guard info.agent == .claude, let id = process.resumeID else { return }
+        guard let id = process.resumeID else { return }
         indexer?.stop()
         indexer = nil
-        guard let url = ClaudeSessionFiles.locate(sessionID: id, cwd: info.cwd) else {
+        guard let log = AgentLog.locate(agent: info.agent, id: id, cwd: info.cwd) else {
             // Not written yet (the agent announces its id before its first
             // record): look again shortly, for as long as a first turn
             // could take.
@@ -211,7 +211,7 @@ public final class SessionRecord: ObservableObject {
         fileRetries = 0
         // The cache catches up with the file off the main thread and hands
         // over the window to show; then each line as the agent writes it.
-        let indexer = SessionIndexer(store: ServerCache.shared, sessionID: info.id, url: url, window: Self.servedRows)
+        let indexer = SessionIndexer(store: ServerCache.shared, sessionID: info.id, url: log.url, window: Self.servedRows, parser: log.parser)
         indexer.start(onLoaded: { [weak self] loaded in
             Task { @MainActor in self?.apply(loaded: loaded) }
         }, onLines: { [weak self] lines in
@@ -484,12 +484,9 @@ public final class SessionRecord: ObservableObject {
             if let last = streams.indices.last, streams[last].id == id { streams[last].text += text }
             else { streams.append((id: id, text: text)) }
             return .delta(session: info.id, message: id, text: text)
-        case .entry(let entry):
-            if entry.role == .assistant { dropStream(carriedBy: entry.id) }
-            if let index = entries.firstIndex(where: { $0.id == entry.id }) { entries[index] = entry } else { entries.append(entry) }
-            noteLatest()
-            ServerCache.keep(entry, in: info.id)
-            return .entry(session: info.id, entry)
+        case .entry:
+            // Rows come from the agent's log, and only from there.
+            return nil
         case .activity(let label):
             activity = label
             return .activity(session: info.id, label)
@@ -510,7 +507,7 @@ public final class SessionRecord: ObservableObject {
                 // A stream is not cleared by the turn ending: it stays
                 // until the record carries its row. Only an agent whose
                 // rows never come from a file lets the turn's end clear it.
-                if info.agent != .claude || indexer == nil { streams = [] }
+                if indexer == nil { streams = [] }
                 // What the record carries by now has served.
                 streams.removeAll { carries(messageID: $0.id) }
             }
@@ -558,28 +555,18 @@ public final class SessionRecord: ObservableObject {
         }
     }
 
-    /// The user's words, handed to the agent. Claude writes them to its
-    /// log, which is the transcript: they are remembered as sent until the
-    /// log has them, and are no row until then. Any other agent keeps no
-    /// log of its own, and its record is this: the row goes on now.
-    func appendUser(_ text: String, images: [String] = []) -> Envelope? {
+    /// The user's words, handed to the agent. Every agent writes them to
+    /// its log, which is the transcript: they are remembered as sent until
+    /// the log has them, and are no row until then.
+    func appendUser(_ text: String, images: [String] = []) {
         error = nil
-        if info.agent == .claude {
-            unwritten.append((text: text, seen: userRows(entries, saying: text)))
-            // The session's summary is the latest thing said, already.
-            if let preview = Self.preview(of: TranscriptEntry(id: "", role: .user, text: text)), preview != info.preview {
-                info.preview = preview
-                info.updated = Date().timeIntervalSince1970
-                onInfoChanged?()
-            }
-            return nil
+        unwritten.append((text: text, seen: userRows(entries, saying: text)))
+        // The session's summary is the latest thing said, already.
+        if let preview = Self.preview(of: TranscriptEntry(id: "", role: .user, text: text)), preview != info.preview {
+            info.preview = preview
+            info.updated = Date().timeIntervalSince1970
+            onInfoChanged?()
         }
-        let entry = TranscriptEntry(id: "user-\(entries.count)-\(UUID().uuidString.prefix(6))", role: .user,
-                                    text: text, images: images, imageSizes: AgentImages.pixelSizes(paths: images))
-        entries.append(entry)
-        noteLatest()
-        ServerCache.keep(entry, in: info.id)
-        return .entry(session: info.id, entry)
     }
 
 
@@ -1770,7 +1757,7 @@ public final class VisorServer: ObservableObject {
             broadcastSessions()
             return
         }
-        if let sent = record.appendUser(text, images: images) { broadcast(sent, session: record) }
+        record.appendUser(text, images: images)
         // Written down before the turn runs: if the app is killed while the
         // agent is working, the message the user sent is still here when it
         // comes back (the store is otherwise written at the end of a turn),

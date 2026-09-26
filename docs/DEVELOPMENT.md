@@ -101,9 +101,14 @@ The **record** is the transcript in memory (`entries`, a window of 600
 rows served) plus the ephemeral state. Every change bumps `revision`;
 each row is stamped with the revision it last changed or moved at, and a
 removed row is remembered (a tombstone) with the revision it went at.
-What the user sends to Claude is no row until Claude's log writes it (the
-server remembers the words as sent; the composer shows them, sending, until
-then), so the transcript is only ever the log and rows are never renamed;
+Every agent's transcript is its own log, followed as it is written:
+Claude Code's session JSONL, Codex's rollout
+(`~/.codex/sessions/<y>/<m>/<d>/rollout-*-<thread>.jsonl`) and the openrouter
+CLI's `~/.openrouter/sessions/<id>.jsonl` are each read into lines of Claude's
+shape (`AgentLog.swift`) and go through the one indexer, cache and assembler.
+Rows the agent processes report are not taken. What the user sends is no row
+until the log writes it (the server remembers the words as sent; the
+composer shows them, sending, until then), so rows are never renamed;
 Codex's and OpenRouter's records get the row when it is handed over. Clients
 sync over HTTP long-poll
 `GET /api/sessions/<id>/transcript?since=<revision>&generation=<generation>`

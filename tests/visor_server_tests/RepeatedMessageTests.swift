@@ -1,4 +1,4 @@
-// What the user sends to Claude is no row until Claude's log writes it:
+// What the user sends is no row until the agent's log writes it:
 // the server remembers the words as sent, and the same words sent again
 // are a new message, not the one already written.
 
@@ -16,7 +16,7 @@ final class RepeatedMessageTests: XCTestCase {
         r.replaceEntriesForTesting([first, reply])
 
         // Sent: no row, remembered.
-        XCTAssertNil(r.appendUser("go on"))
+        r.appendUser("go on")
         XCTAssertEqual(r.entries.map(\.id), ["user-file-a", "msg_1"])
         XCTAssertEqual(r.unwritten.count, 1)
 
@@ -29,10 +29,14 @@ final class RepeatedMessageTests: XCTestCase {
         XCTAssertTrue(r.unwritten.isEmpty)
     }
 
-    func testOtherAgentsKeepTheirOwnRow() {
+    func testEveryAgentWaitsForItsLog() {
         let info = SessionInfo(id: "c", agent: .codex, cwd: "/tmp", title: "t", created: 0)
         let r = SessionRecord(info: info, process: CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil))
-        XCTAssertNotNil(r.appendUser("Build it"))
-        XCTAssertEqual(r.entries.map(\.text), ["Build it"])
+        r.appendUser("Build it")
+        XCTAssertTrue(r.entries.isEmpty)
+        XCTAssertEqual(r.unwritten.map(\.text), ["Build it"])
+        // A row the process reports is not the record: the log is.
+        XCTAssertNil(r.apply(.entry(TranscriptEntry(id: "x", role: .assistant, text: "Built."))))
+        XCTAssertTrue(r.entries.isEmpty)
     }
 }

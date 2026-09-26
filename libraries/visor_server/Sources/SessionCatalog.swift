@@ -166,6 +166,12 @@ enum SessionCatalog {
     /// The CLI's messages as rows: the user's words, the assistant's with
     /// its tool calls as activities, and the tool results (hidden rows).
     private static func openrouterTranscript(id: String) -> [TranscriptEntry] {
+        // The CLI's log, read as the live session reads it, where there is
+        // one; a session from before the log, from its saved messages.
+        let log = openrouterRoot.appendingPathComponent("sessions/\(id).jsonl")
+        if let data = try? Data(contentsOf: log) {
+            return TranscriptAssembler.rows(in: OpenRouterLogParser().lines(in: data).compactMap(\.record))
+        }
         guard let object = openrouterSession(id: id), let messages = object["messages"] as? [[String: Any]] else { return [] }
         var rows: [TranscriptEntry] = []
         for (index, message) in messages.enumerated() {
@@ -280,7 +286,7 @@ enum SessionCatalog {
     }
 
     /// The rollout file of a Codex thread.
-    private static func codexRollout(id: String) -> URL? {
+    static func codexRollout(id: String) -> URL? {
         let root = home.appendingPathComponent(".codex/sessions")
         guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return nil }
         for case let candidate as URL in enumerator where candidate.pathExtension == "jsonl" && candidate.lastPathComponent.contains(id) {
@@ -289,53 +295,16 @@ enum SessionCatalog {
         return nil
     }
 
+    /// A Codex thread's rollout, read as the live session reads it, so its
+    /// rows have the ids they will keep.
     private static func codexTranscript(id: String) -> [TranscriptEntry] {
-        let root = home.appendingPathComponent(".codex/sessions")
-        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return [] }
-        var file: URL?
-        for case let candidate as URL in enumerator where candidate.pathExtension == "jsonl" && candidate.lastPathComponent.contains(id) {
-            file = candidate
-            break
-        }
-        guard let file, let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
-        var entries: [TranscriptEntry] = []
-        var index = 0
-        for line in text.split(separator: "\n") {
-            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-                  object["type"] as? String == "response_item",
-                  let payload = object["payload"] as? [String: Any] else { continue }
-            index += 1
-            switch payload["type"] as? String {
-            case "message":
-                let role = payload["role"] as? String
-                let parts = payload["content"] as? [[String: Any]] ?? []
-                let text = parts.compactMap { part -> String? in
-                    let kind = part["type"] as? String
-                    return kind == "input_text" || kind == "output_text" ? part["text"] as? String : nil
-                }.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-                if text.isEmpty || text.hasPrefix("<") { continue }
-                // Each message is its own entry: text and tool calls keep their order.
-                if role == "user" { entries.append(TranscriptEntry(id: "past-\(index)", role: .user, text: text)) }
-                else if role == "assistant" { entries.append(TranscriptEntry(id: "past-\(index)", role: .assistant, text: text)) }
-            case "function_call", "local_shell_call", "custom_tool_call":
-                let label = codexCallLabel(payload)
-                // A call after words opens its own entry, so the order of
-                // what was said and what ran survives.
-                if let last = entries.indices.last, entries[last].role == .assistant, entries[last].text.isEmpty {
-                    entries[last].activities.append(label)
-                } else {
-                    entries.append(TranscriptEntry(id: "past-\(index)", role: .assistant, text: "", activities: [label]))
-                }
-            default:
-                continue
-            }
-        }
-        return entries
+        guard let file = codexRollout(id: id), let data = try? Data(contentsOf: file) else { return [] }
+        return TranscriptAssembler.rows(in: CodexRolloutParser().lines(in: data).compactMap(\.record))
     }
 
     /// A rollout tool call as the live adapter would label it: web searches
     /// by their first query, shell commands by their first line.
-    private static func codexCallLabel(_ payload: [String: Any]) -> String {
+    static func codexCallLabel(_ payload: [String: Any]) -> String {
         let name = payload["name"] as? String ?? "tool"
         let input = (payload["arguments"] as? String ?? payload["input"] as? String ?? "")
         if input.contains("web__run") {

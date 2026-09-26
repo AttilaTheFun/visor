@@ -109,22 +109,23 @@ tool's output; the transcript view hides them, the assistant's
   bypassPermissions|acceptEdits [--resume <id>]`, one process per session,
   a `{"type":"user","message":{…}}` line per turn on stdin. `system/init`
   gives the session id; `stream_event` text deltas become `delta`;
-  `assistant` messages (one event per content block, same message id)
-  become one growing `entry`; `tool_use` blocks become activity labels
-  (`Name: first line of the input`); `user` tool results become tool
-  entries; `result` ends the turn.
+  `tool_use` blocks become activity labels (`Name: first line of the
+  input`); `result` ends the turn. The rows themselves come from Claude
+  Code's session file, followed as it is written — as every agent's do
+  from its own log (the transcript sync, in DEVELOPMENT.md).
 - **OpenRouter**: the `openrouter` CLI (github.com/AttilaTheFun/open_router_cli)
   speaks Claude Code's stream-json protocol, so it is driven exactly as
   Claude is (`openrouter -p --input-format stream-json …`, `--resume`),
-  with its own sessions under `~/.openrouter/sessions`. Its key is its
-  own (`openrouter auth login`); Visor never holds one.
-- **Codex**: `codex exec --json --skip-git-repo-check -C <cwd>
-  [--dangerously-bypass-approvals-and-sandbox | -s workspace-write] -` per
-  turn (`codex exec resume <thread> …` after the first), the prompt on
-  stdin. `thread.started` gives the thread id; `item.*` events with
-  `agent_message`, `command_execution`, `file_change`, `web_search`,
-  `mcp_tool_call` items become the turn's entry and activities;
-  `turn.completed` / `turn.failed` end the turn.
+  with its own sessions under `~/.openrouter/sessions`, where it also keeps
+  `<id>.jsonl`, a line per message appended as it lands, which Visor
+  follows. Its key is its own (`openrouter auth login`); Visor never holds
+  one.
+- **Codex**: `codex app-server`, one per session, a thread started or
+  resumed by id and each message a turn. Its events give the thread id,
+  the reply's words as they stream, and what is running; the rows come
+  from the thread's rollout
+  (`~/.codex/sessions/<y>/<m>/<d>/rollout-*-<thread>.jsonl`), followed as
+  Codex writes it.
 
 ## Approvals (manual mode)
 
