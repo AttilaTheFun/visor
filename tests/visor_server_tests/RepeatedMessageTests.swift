@@ -15,8 +15,9 @@ final class RepeatedMessageTests: XCTestCase {
         let again = TranscriptEntry(id: "user-3-x", role: .user, text: "go on")
         // The file has only the first: the second is still on its way.
         XCTAssertEqual(r.merged(fileRows: [first, reply], into: [first, reply, again]).map(\.id), ["user-file-a", "msg_1", "user-3-x"])
-        // The file has both: the second is written.
+        // The file has both: the second is written, once, and keeps the id
+        // it was shown under.
         let written = TranscriptEntry(id: "user-file-b", role: .user, text: "go on")
-        XCTAssertEqual(r.merged(fileRows: [first, reply, written], into: [first, reply, again]).map(\.id), ["user-file-a", "msg_1", "user-file-b"])
+        XCTAssertEqual(r.merged(fileRows: [first, reply, written], into: [first, reply, again]).map(\.id), ["user-file-a", "msg_1", "user-3-x"])
     }
 }

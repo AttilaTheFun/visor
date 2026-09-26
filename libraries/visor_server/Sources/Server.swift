@@ -337,7 +337,7 @@ public final class SessionRecord: ObservableObject {
     /// flight), which stay at the end.
     func merged(fileRows: [TranscriptEntry], into kept: [TranscriptEntry]) -> [TranscriptEntry] {
         // A message already settled keeps the id it was shown under.
-        let fileRows = fileRows.map { row in
+        var rows = fileRows.map { row in
             guard let id = settledIDs[row.id] else { return row }
             var kept = row
             kept.id = id
@@ -353,12 +353,24 @@ public final class SessionRecord: ObservableObject {
             rows.filter { $0.role == .user && (!settled || !isPending($0)) && Self.sameWords($0.text, text) }.count
         }
         var pending: [TranscriptEntry] = []
+        var written: [TranscriptEntry] = []
         for row in kept.reversed() {
             guard isPending(row) else { break }
-            if count(fileRows, row.text, settled: false) > count(kept, row.text, settled: true) { break }
+            if count(rows, row.text, settled: false) > count(kept, row.text, settled: true) {
+                written.insert(row, at: 0)
+                continue
+            }
             pending.insert(row, at: 0)
         }
-        return fileRows + pending
+        // A message the file now has keeps the id it was shown under: the
+        // latest of the file's copies of its words not already taken.
+        for row in written.reversed() {
+            guard let index = rows.lastIndex(where: { $0.role == .user && !settledIDs.keys.contains($0.id)
+                && !settledIDs.values.contains($0.id) && Self.sameWords($0.text, row.text) }) else { continue }
+            settledIDs[rows[index].id] = row.id
+            rows[index].id = row.id
+        }
+        return rows + pending
     }
 
     /// Whether the file's copy of a user message is the server's: the
