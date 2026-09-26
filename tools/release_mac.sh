@@ -33,6 +33,9 @@ release_app() {
   local bundle; bundle="$(plutil -extract CFBundleIdentifier raw -o - "$plist")"
   [ "$(plutil -extract CFBundleShortVersionString raw -o - "$plist")" = "$VERSION" ] \
     || { echo "$name's CFBundleShortVersionString is not $VERSION" >&2; exit 1; }
+  # Signed first with the hardened runtime, which Xcode's Developer ID
+  # export requires the app to have already.
+  tools/sign_mac_app.sh "$app" >/dev/null
   # An archive as Xcode would make it, so Xcode can export it.
   cat > "$archive/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
