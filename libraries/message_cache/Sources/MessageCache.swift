@@ -73,6 +73,9 @@ public protocol MessageStorage: AnyObject, Sendable {
     func nodes(_ session: String) -> [SourceNode]
     /// Writes a row at `seq`; a row already there by id keeps its place.
     func upsertMessage(_ session: String, _ message: TranscriptEntry, seq: Int, sourceKey: String?) throws
+    /// Writes a row known not to be there (the session's rows were just
+    /// deleted): nothing is looked up first.
+    func insertMessage(_ session: String, _ message: TranscriptEntry, seq: Int) throws
     func deleteMessages(_ session: String, sourceKeys: Set<String>) throws
     func deleteMessages(_ session: String) throws
     func messages(_ session: String, limit: Int, before: Int?) -> (messages: [TranscriptEntry], more: Bool)
@@ -140,7 +143,7 @@ public final class MessageCache: @unchecked Sendable {
     public func replace(_ session: String, with messages: [TranscriptEntry]) throws {
         try storage.transaction {
             try storage.deleteMessages(session)
-            for (index, message) in messages.enumerated() { try storage.upsertMessage(session, message, seq: index, sourceKey: nil) }
+            for (index, message) in messages.enumerated() { try storage.insertMessage(session, message, seq: index) }
         }
     }
 

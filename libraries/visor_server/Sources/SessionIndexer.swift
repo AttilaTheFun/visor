@@ -43,8 +43,11 @@ final class SessionIndexer: @unchecked Sendable {
     private var state: SourceState
     private var watcher: ClaudeSessionWatcher?
     private var stopped = false
+    /// The agent's log format, read into lines of Claude's shape.
+    private let parser: AgentLogParser
 
-    init(store: MessageCache, sessionID: String, url: URL, window: Int) {
+    init(store: MessageCache, sessionID: String, url: URL, window: Int, parser: AgentLogParser = ClaudeLogParser()) {
+        self.parser = parser
         self.store = store
         self.sessionID = sessionID
         self.url = url
@@ -60,7 +63,8 @@ final class SessionIndexer: @unchecked Sendable {
             guard !stopped else { return }
             catchUp()
             onLoaded(loaded())
-            let watcher = ClaudeSessionWatcher(url: url, startingAt: state.bytes, queue: queue) { [weak self] lines in
+            let parser = self.parser
+            let watcher = ClaudeSessionWatcher(url: url, startingAt: state.bytes, queue: queue, parse: { parser.lines(in: $0) }) { [weak self] lines in
                 guard let self, !self.stopped else { return }
                 let taken = self.take(lines)
                 if !taken.isEmpty { onLines(taken) }
@@ -94,6 +98,9 @@ final class SessionIndexer: @unchecked Sendable {
         let identity = String(facts.inode)
         if let kept = store.sourceState(of: sessionID), kept.path == url.path, kept.identity == identity, kept.bytes <= facts.size {
             state = kept
+            // Reading on from where the cache stopped: a log that is a list
+            // links its next line to the last one kept.
+            parser.resume(after: store.nodes(in: sessionID).last?.key)
         } else {
             state = SourceState(path: url.path, identity: identity, bytes: 0, nextSeq: 0)
             do { try store.resetSource(sessionID, state: state) } catch { log.error("reset \(self.sessionID, privacy: .public): \(String(describing: error), privacy: .public)") }
@@ -103,7 +110,7 @@ final class SessionIndexer: @unchecked Sendable {
         try? handle.seek(toOffset: state.bytes)
         guard let data = try? handle.readToEnd(), let last = data.lastIndex(of: 0x0A) else { return }
         let whole = data[..<last]
-        let lines = ClaudeTranscriptParser.lines(in: Data(whole))
+        let lines = parser.lines(in: Data(whole))
         var lineRecords: [SourceNode] = []
         var rowRecords: [PlacedMessage] = []
         for line in lines {
