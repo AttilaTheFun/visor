@@ -33,6 +33,10 @@ public final class MemoryStorage: MessageStorage, @unchecked Sendable {
         rows[session, default: [:]][message.id] = Row(seq: kept ?? seq, message: message, sourceKey: sourceKey)
     }
 
+    public func insertMessage(_ session: String, _ message: TranscriptEntry, seq: Int) throws {
+        rows[session, default: [:]][message.id] = Row(seq: seq, message: message, sourceKey: nil)
+    }
+
     public func deleteMessages(_ session: String, sourceKeys: Set<String>) throws {
         rows[session] = rows[session]?.filter { $0.value.sourceKey.map { !sourceKeys.contains($0) } ?? true }
     }

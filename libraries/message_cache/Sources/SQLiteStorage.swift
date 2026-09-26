@@ -113,6 +113,14 @@ public final class SQLiteStorage: MessageStorage, @unchecked Sendable {
         }
     }
 
+    public func insertMessage(_ s: String, _ message: TranscriptEntry, seq position: Int) throws {
+        try db.run(messages.insert(or: .replace, session <- s, seq <- position, id <- message.id, role <- message.role.rawValue,
+                                   text <- message.text, sourceKey <- nil, json <- message.json.encoded()))
+        if !message.text.isEmpty {
+            try db.run("INSERT INTO messages_fts (session, id, role, text) VALUES (?, ?, ?, ?)", s, message.id, message.role.rawValue, message.text)
+        }
+    }
+
     public func deleteMessages(_ s: String, sourceKeys: Set<String>) throws {
         for chunk in stride(from: 0, to: sourceKeys.count, by: 500).map({ Array(Array(sourceKeys)[$0..<Swift.min($0 + 500, sourceKeys.count)]) }) {
             let ids = try db.prepare(messages.select(id).filter(session == s && chunk.contains(sourceKey))).map { $0[id] }

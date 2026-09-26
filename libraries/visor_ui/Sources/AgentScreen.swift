@@ -220,7 +220,7 @@ struct AgentScreen: View {
         switch host.state {
         case .connected: nil
         case .connecting: host.config.everConnected ? "Reconnecting…" : "Connecting…"
-        case .offline: "Offline — reconnecting…"
+        case .offline: "Reconnecting…"
         case .failed(let reason): "Connection failed: \(reason)"
         case .needsPassword: "The computer wants its password — see Computer Settings"
         case .disconnected: "Not connected"
