@@ -41,6 +41,28 @@ final class SmoothSendTests: XCTestCase {
         XCTAssertEqual(t.displayID(of: t.entries[0]), "u-old")
     }
 
+    func testADeltaPlacesRemovesAndMovesRows() {
+        let t = SessionTranscript()
+        t.sync(transcript([user("a", "one"), user("b", "two"), user("c", "three")], revision: 1, generation: 7))
+        // b goes, x comes after a, and c (now after x) moves with it.
+        var e = transcript([user("x", "new"), user("c", "three")], revision: 2, generation: 7)
+        e.after = ["a", "x"]
+        e.removed = ["b"]
+        t.sync(e)
+        XCTAssertEqual(t.entries.map(\.id), ["a", "x", "c"])
+
+        // A row appended at the end, and one changed in place.
+        var more = transcript([user("a", "one, edited"), user("d", "four")], revision: 3, generation: 7)
+        more.after = ["", "c"]
+        t.sync(more)
+        XCTAssertEqual(t.entries.map(\.id), ["a", "x", "c", "d"])
+        XCTAssertEqual(t.entries[0].text, "one, edited")
+
+        // Another generation: the rows as a whole.
+        t.sync(transcript([user("z", "fresh")], revision: 1, generation: 8))
+        XCTAssertEqual(t.entries.map(\.id), ["z"])
+    }
+
     /// Waits, up to five seconds, for a condition.
     private func until(_ condition: () -> Bool) async {
         for _ in 0..<500 where !condition() { try? await Task.sleep(nanoseconds: 10_000_000) }

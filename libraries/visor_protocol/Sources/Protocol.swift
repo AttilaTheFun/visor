@@ -497,10 +497,16 @@ public struct Envelope: Codable, Sendable {
     /// rows. A client syncing over HTTP asks for the rows past the
     /// revision it has; the answer waits until there is one.
     public var revision: Int?
-    /// The transcript's generation: counts up when the rows were rebuilt
-    /// as a whole (the file re-read, a branch changed), which is when a
-    /// client must take the answer as the full set, not a delta.
+    /// The transcript's generation: a different one means the client's
+    /// revision can no longer be caught up by a delta (the server started
+    /// again, or let go of what it removed), and the answer is the rows as
+    /// a whole.
     public var generation: Int?
+    /// In a delta, for each row of `entries`, the row it follows ("" for
+    /// the first): new rows go there, and rows that moved move there.
+    public var after: [String]?
+    /// In a delta, the rows removed since the revision asked about.
+    public var removed: [String]?
     /// The turn's status lines so far — tool calls, subagents, shells,
     /// thinking — as the computer keeps them.
     public var status: [StatusItem]?

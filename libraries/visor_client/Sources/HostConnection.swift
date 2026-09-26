@@ -179,13 +179,41 @@ public final class SessionTranscript: ObservableObject {
     func sync(_ envelope: Envelope) {
         let rows = envelope.entries ?? []
         let whole: Bool
+        var kept = rows
         if let generation = envelope.generation, generation == self.generation, loaded {
-            whole = false
-            // A delta: rows new or changed since the revision held, in
-            // order; a new row goes on the end, a changed one in its place.
-            for row in rows {
-                if let index = entries.firstIndex(where: { $0.id == row.id }) { entries[index] = row } else { entries.append(row) }
+            // A delta: the rows removed since the revision held go; each
+            // row new, changed or moved since goes after the row it follows
+            // on the computer. Only rows appended at the end, or changed in
+            // place, leave the cache's copy right as it is; otherwise it
+            // takes the rows as a whole.
+            var next = entries
+            var structural = false
+            if let removed = envelope.removed, !removed.isEmpty {
+                let gone = Set(removed)
+                next.removeAll { gone.contains($0.id) }
+                structural = true
             }
+            let after = envelope.after ?? []
+            for (offset, row) in rows.enumerated() {
+                let anchor = offset < after.count ? after[offset] : nil
+                if let index = next.firstIndex(where: { $0.id == row.id }) {
+                    let before = index > 0 ? next[index - 1].id : ""
+                    if anchor == nil || anchor == before { next[index] = row; continue }
+                    next.remove(at: index)
+                }
+                if let anchor, anchor.isEmpty {
+                    next.insert(row, at: 0)
+                    structural = true
+                } else if let anchor, let index = next.firstIndex(where: { $0.id == anchor }) {
+                    if index != next.index(before: next.endIndex) { structural = true }
+                    next.insert(row, at: index + 1)
+                } else {
+                    next.append(row)
+                }
+            }
+            whole = structural
+            if structural { kept = next }
+            entries = next
         } else {
             whole = true
             carryDisplayIDs(from: entries, to: rows)
@@ -196,7 +224,7 @@ public final class SessionTranscript: ObservableObject {
         hasEarlier = envelope.more ?? false
         if envelope.entries?.contains(where: { $0.role == .user }) == true { error = nil }
         loaded = true
-        keep?(whole, rows, SyncState(revision: revision, generation: generation))
+        keep?(whole, kept, SyncState(revision: revision, generation: generation))
         settleSending()
     }
 
@@ -653,7 +681,7 @@ public final class HostConnection: ObservableObject, Identifiable {
                 let config = self.config
                 let revision = transcript.revision
                 do {
-                    let text = try await transport.call("GET", "/sessions/\(sessionID)/transcript?since=\(revision)", body: "", config: config)
+                    let text = try await transport.call("GET", "/sessions/\(sessionID)/transcript?since=\(revision)&generation=\(transcript.generation)", body: "", config: config)
                     guard let envelope = Envelope.decode(text, defaultType: "transcript") else { continue }
                     if (envelope.revision ?? -1) != revision || !transcript.loaded { transcript.sync(envelope) }
                 } catch {

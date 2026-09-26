@@ -37,34 +37,61 @@ public final class SessionRecord: ObservableObject {
     /// Counts up with every change to the rows; what a client syncing
     /// over HTTP compares to.
     public private(set) var revision = 0
-    /// Counts up when the rows were rebuilt as a whole — a row went, or
-    /// the order changed — which a client cannot take as a delta.
-    public private(set) var generation = 0
-    /// The revision at which each row last changed, so a client is given
-    /// only the rows past the revision it holds.
+    /// Counts up when a client holding an older revision can no longer be
+    /// brought up to date by a delta (the record of removed rows was let
+    /// go): it takes the rows as a whole.
+    /// Starts somewhere new with each run of the server, so a client that
+    /// synced with an earlier run takes the rows as a whole.
+    public private(set) var generation = Int.random(in: 1...Int(Int32.max))
+    /// The revision at which each row last changed or moved, so a client is
+    /// given only the rows past the revision it holds.
     private var rowSeq: [String: Int] = [:]
+    /// Rows that went, and the revision they went at.
+    private var removedAt: [String: Int] = [:]
+    /// How many removals are remembered before the record starts again.
+    static let rememberedRemovals = 2000
 
-    /// After the rows changed: which rows are new or different since
-    /// `old`, stamped with this revision; or, if any row went or moved,
-    /// a new generation with every row stamped.
+    /// After the rows changed: which rows are new, different or in a new
+    /// place (after a different row) since `old`, stamped with this
+    /// revision; and which went. A client can take any change as a delta.
     private func stamp(from old: [TranscriptEntry]) {
         let oldByID = Dictionary(old.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let newIDs = entries.map(\.id)
-        let kept = newIDs.filter { oldByID[$0] != nil }
-        let oldOrder = old.map(\.id).filter { id in newIDs.contains(id) }
-        if kept.count != old.count || kept != oldOrder {
-            generation += 1
-            rowSeq = Dictionary(newIDs.map { ($0, revision) }, uniquingKeysWith: { a, _ in a })
-            return
+        var oldBefore: [String: String] = [:]
+        for index in old.indices.dropFirst() { oldBefore[old[index].id] = old[index - 1].id }
+        var present = Set<String>()
+        for (index, row) in entries.enumerated() {
+            present.insert(row.id)
+            removedAt[row.id] = nil
+            let before = index > 0 ? entries[index - 1].id : nil
+            if oldByID[row.id] != row || oldBefore[row.id] != before { rowSeq[row.id] = revision }
         }
-        for row in entries where oldByID[row.id] != row { rowSeq[row.id] = revision }
+        for row in old where !present.contains(row.id) {
+            rowSeq[row.id] = nil
+            removedAt[row.id] = revision
+        }
+        if removedAt.count > Self.rememberedRemovals {
+            removedAt = [:]
+            generation += 1
+        }
     }
 
-    /// The rows changed since a revision — every row, for one before the
-    /// generation began.
-    func rows(since: Int) -> [TranscriptEntry] {
-        let served = entries.suffix(Self.servedRows)
-        return served.filter { (rowSeq[$0.id] ?? revision) > since }
+    /// Sets the rows as a change would, for tests.
+    func replaceEntriesForTesting(_ rows: [TranscriptEntry]) { entries = rows }
+
+    /// The rows changed since a revision, each with the row it follows
+    /// ("" for the first), and the rows removed since — or every row, for
+    /// a revision from before the generation began.
+    func rows(since: Int) -> (rows: [TranscriptEntry], after: [String], removed: [String]) {
+        let start = max(0, entries.count - Self.servedRows)
+        var rows: [TranscriptEntry] = []
+        var after: [String] = []
+        // A row never stamped came with the record, before any revision.
+        for index in start..<entries.count where (rowSeq[entries[index].id] ?? 0) > since {
+            rows.append(entries[index])
+            after.append(index > 0 ? entries[index - 1].id : "")
+        }
+        let removed = removedAt.filter { $0.value > since }.map(\.key)
+        return (rows, after, removed)
     }
 
     /// The turn's status lines so far — tool calls, subagents, shells,
@@ -241,6 +268,17 @@ public final class SessionRecord: ObservableObject {
     /// fork left behind.
     static let rememberedPrompts = 200
 
+    /// The file's rows for messages this server sent, by the file's id, and
+    /// the id the row kept: a message keeps the id it was shown under when
+    /// its copy is written down, so a client sees one row that changes.
+    private var settledIDs: [String: String] = [:]
+
+    /// A row this server made for words the file has not written yet.
+    private func isPending(_ row: TranscriptEntry) -> Bool {
+        row.role == .user && row.id.hasPrefix("user-") && !row.id.hasPrefix("user-file-")
+            && !settledIDs.values.contains(row.id)
+    }
+
     /// Whether a prompt in the file is one this server sent — the words of
     /// a row waiting to be settled — or one the agent fed itself (a
     /// command's expansion, a reminder). A terminal's prompts are all the
@@ -250,7 +288,7 @@ public final class SessionRecord: ObservableObject {
         guard case .user(let text, _)? = record?.kind else { return true }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty || trimmed.hasPrefix("<") { return true }
-        return entries.contains { $0.role == .user && $0.id.hasPrefix("user-") && !$0.id.hasPrefix("user-file-") && Self.sameWords(trimmed, $0.text) }
+        return entries.contains { isPending($0) && Self.sameWords(trimmed, $0.text) }
     }
 
     /// Where the last screen begins in these bytes: the start of the
@@ -298,6 +336,13 @@ public final class SessionRecord: ObservableObject {
     /// server made for words the file has not written yet (a turn in
     /// flight), which stay at the end.
     func merged(fileRows: [TranscriptEntry], into kept: [TranscriptEntry]) -> [TranscriptEntry] {
+        // A message already settled keeps the id it was shown under.
+        let fileRows = fileRows.map { row in
+            guard let id = settledIDs[row.id] else { return row }
+            var kept = row
+            kept.id = id
+            return kept
+        }
         // Only the rows after the last one the file has: a turn in flight.
         // Anything the server made earlier that the file does not carry
         // was never sent, and is not history.
@@ -305,11 +350,11 @@ public final class SessionRecord: ObservableObject {
         // than were already settled: the same words sent again ("go on")
         // are a new message, not the old one.
         func count(_ rows: [TranscriptEntry], _ text: String, settled: Bool) -> Int {
-            rows.filter { $0.role == .user && (!settled || $0.id.hasPrefix("user-file-")) && Self.sameWords($0.text, text) }.count
+            rows.filter { $0.role == .user && (!settled || !isPending($0)) && Self.sameWords($0.text, text) }.count
         }
         var pending: [TranscriptEntry] = []
         for row in kept.reversed() {
-            guard row.role == .user, row.id.hasPrefix("user-"), !row.id.hasPrefix("user-file-") else { break }
+            guard isPending(row) else { break }
             if count(fileRows, row.text, settled: false) > count(kept, row.text, settled: true) { break }
             pending.insert(row, at: 0)
         }
@@ -331,11 +376,13 @@ public final class SessionRecord: ObservableObject {
     /// Puts one row from the file into the transcript; false when it is
     /// the file's copy of words the server already has a row for.
     private func take(fileRow row: TranscriptEntry) -> Bool {
+        if row.role == .user, settledIDs[row.id] != nil { return false }
         if row.role == .user,
-           let index = entries.lastIndex(where: { $0.role == .user && $0.id.hasPrefix("user-") && !$0.id.hasPrefix("user-file-") && Self.sameWords(row.text, $0.text) }) {
-            // The same words, now on the record: keep the row, take the id.
+           let index = entries.lastIndex(where: { isPending($0) && Self.sameWords(row.text, $0.text) }) {
+            // The same words, now on the record: the row keeps its id and
+            // takes the file's pictures; the file's id is remembered.
             var settled = entries[index]
-            settled.id = row.id
+            settledIDs[row.id] = settled.id
             settled.images = row.images.isEmpty ? settled.images : row.images
             settled.imageSizes = row.imageSizes.isEmpty ? settled.imageSizes : row.imageSizes
             entries[index] = settled
@@ -353,8 +400,7 @@ public final class SessionRecord: ObservableObject {
     /// sent in that beat is still later than the reply.
     private var fileInsertionIndex: Int {
         var index = entries.endIndex
-        while index > entries.startIndex, entries[index - 1].role == .user,
-              entries[index - 1].id.hasPrefix("user-"), !entries[index - 1].id.hasPrefix("user-file-") { index -= 1 }
+        while index > entries.startIndex, isPending(entries[index - 1]) { index -= 1 }
         return index
     }
 
@@ -627,9 +673,13 @@ public final class SessionRecord: ObservableObject {
     /// holds — with the generation, so the client knows whether it may
     /// merge these as a delta or must take them as the whole.
     func transcriptEnvelope(since: Int?) -> Envelope {
-        let rows = since.map { rows(since: $0) } ?? Array(entries.suffix(Self.servedRows))
-        var e = Envelope.transcript(session: info.id, entries: rows, streaming: streaming,
+        let delta = since.map { rows(since: $0) }
+        var e = Envelope.transcript(session: info.id, entries: delta?.rows ?? Array(entries.suffix(Self.servedRows)), streaming: streaming,
                                     activity: activity, busy: info.busy, error: error)
+        if let delta {
+            e.after = delta.after
+            e.removed = delta.removed
+        }
         e.more = moreBefore || entries.count > Self.servedRows
         e.notice = notice
         e.revision = revision
@@ -1242,7 +1292,7 @@ public final class VisorServer: ObservableObject {
     /// revision it has, and the answer waits — up to a while — until the
     /// rows change, so a client is never told nothing new when there is.
     /// The transcript is the record; the socket carries only what streams.
-    private var transcriptWaiters: [String: [(revision: Int, respond: (HTTPResponse) -> Void)]] = [:]
+    private var transcriptWaiters: [String: [(revision: Int, generation: Int, respond: (HTTPResponse) -> Void)]] = [:]
     static let transcriptHold: TimeInterval = 25
 
     private func transcriptJSON(_ record: SessionRecord, since: Int?) -> HTTPResponse {
@@ -1253,7 +1303,10 @@ public final class VisorServer: ObservableObject {
     /// rows changed since the revision each holds.
     private func answerTranscriptWaiters(for record: SessionRecord) {
         guard let waiting = transcriptWaiters.removeValue(forKey: record.info.id), !waiting.isEmpty else { return }
-        for waiter in waiting { waiter.respond(transcriptJSON(record, since: waiter.revision)) }
+        // A delta while the generation holds; the whole if it moved on.
+        for waiter in waiting {
+            waiter.respond(transcriptJSON(record, since: waiter.generation == record.generation ? waiter.revision : nil))
+        }
     }
 
     func route(_ request: HTTPRequest, respond: @escaping (HTTPResponse) -> Void) {
@@ -1268,12 +1321,17 @@ public final class VisorServer: ObservableObject {
             } }
             let query = Self.query(request.path)
             let had = (query["since"] ?? query["revision"]).flatMap(Int.init)
-            // Held only while the client has exactly what there is; a
-            // client from before a restart, holding a higher number, is
-            // answered at once with the whole (its generation will not
-            // match, so it takes it as such).
-            guard had == record.revision else { return respond(transcriptJSON(record, since: had.map { $0 > record.revision ? -1 : $0 })) }
-            transcriptWaiters[record.info.id, default: []].append((revision: record.revision, respond: respond))
+            // A delta only for a client of this generation; any other (a
+            // first sync, a client from before a restart) gets the whole.
+            // (A client that does not say its generation is taken to be
+            // current, as before, rather than answered at once with the
+            // whole over and over.)
+            let current = query["generation"].flatMap(Int.init).map { $0 == record.generation } ?? true
+            // Held only while the client has exactly what there is.
+            guard current, had == record.revision else {
+                return respond(transcriptJSON(record, since: current ? had.map { $0 > record.revision ? -1 : $0 } : nil))
+            }
+            transcriptWaiters[record.info.id, default: []].append((revision: record.revision, generation: record.generation, respond: respond))
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.transcriptHold) { [weak self, weak record] in
                 guard let self, let record else { return }
                 // Still waiting after the hold: answered with what there
