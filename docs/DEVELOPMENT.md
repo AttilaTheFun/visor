@@ -49,8 +49,9 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
    22+ for the probes.
 5. Build and install the server: `tools/deploy_server.sh` needs a running
    server; the first time, `bazel build //applications/visor_menubar`,
-   unzip the bundle from `bazel cquery --output=files`, copy it to
-   `/Applications/Visor Menu Bar.app`, open it: Settings opens on its
+   unzip the bundle from `bazel cquery --output=files`, sign it
+   (`tools/sign_mac_app.sh`), copy it to `/Applications/Visor Server.app`,
+   open it: Settings opens on its
    own and a password MUST be saved before it serves (a generated one is
    offered). Then the clients: `tools/deploy_clients.sh [iPhone UDID]`.
    Clients add a Mac with its connection code: the menu bar's "Copy
@@ -74,7 +75,7 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 6. Xcode: `bazel run //:xcodeproj` generates Visor.xcodeproj
    (rules_xcodeproj); it is not committed.
 7. Keeping the server up: a LaunchAgent with RunAtLoad that runs
-   `open -a "/Applications/Visor Menu Bar.app"` starts it at login (no
+   `open -a "/Applications/Visor Server.app"` starts it at login (no
    KeepAlive — the server's relauncher owns restarts).
 
 ## 3. Architecture, as built
@@ -149,10 +150,10 @@ API over a `MessageStorage` — `SQLiteStorage` (SQLite.swift; defines
 `MemoryStorage` (web). Tables: sources (path, identity=inode, bytes,
 nextSeq), syncs (revision, generation), nodes (the source tree), messages
 (seq, id, role, text, source key, JSON of the row), messages_fts (FTS5).
-Server cache: `~/Library/Application Support/com.LoganShire.Visor.MenuBar/
-messages.sqlite`, keyed by Visor session id; Codex/OpenRouter rows are
-written from `apply(.entry)`/`appendUser`. Client cache: `…/com.LoganShire.
-Visor.macOS/messages.sqlite` (iOS in its container), keyed
+Server cache: `~/Library/Application Support/com.LoganShire.VisorServer.macOS/
+messages.sqlite`, keyed by Visor session id; every agent's rows are
+written by the indexer from its log. Client cache: `…/com.LoganShire.
+VisorClient.macOS/messages.sqlite` (iOS in its container), keyed
 `<host id>/<session id>`; a session opens from it synchronously
 (`HostConnection.transcript(for:)`, called from `AgentScreen.init`) and
 syncs only what moved. Both are disposable: client rebuilds from server,
@@ -277,14 +278,15 @@ a detached relauncher and resumes named sessions with a nudge
   Stale streams here = a bug.
 - `node tools/probes/earlier.mjs <visor session id>` — pages earlier rows.
 - REST locally is plain HTTP: `http://127.0.0.1:7434/api/...` with
-  `Authorization: Bearer <password>` (`defaults read
-  com.LoganShire.Visor.MenuBar visor.password`). Node's http needs an
+  `Authorization: Bearer <password>` (`security find-generic-password -s
+  com.LoganShire.VisorServer.macOS -a password -w`), or, inside a Visor
+  session, its `$VISOR_TOKEN`. Node's http needs an
   explicit Content-Length on POST bodies (the server ignores chunked).
 - The indexer logs to the unified log: `log show --predicate 'subsystem ==
   "com.LoganShire.Visor"' --last 10m`. `lsof -p <server pid> | grep jsonl`
   shows which files are being tailed.
-- Caches: `sqlite3 "~/Library/Application Support/com.LoganShire.Visor.
-  MenuBar/messages.sqlite"` — output is `|`-separated. `pragma user_version`
+- Caches: `sqlite3 "~/Library/Application Support/com.LoganShire.
+  VisorServer.macOS/messages.sqlite"` — output is `|`-separated. `pragma user_version`
   is the schema version (`MessageCache.schemaVersion`; bump to rebuild).
 - `osascript`/System Events hang from a headless agent; no UI automation.
   Screenshots of the apps are not available this way. The iOS simulator

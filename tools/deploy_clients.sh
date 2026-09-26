@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds and installs the Mac client (relaunching it) and, when a device
+# Builds, signs (tools/sign_mac_app.sh) and installs the Mac client (relaunching it) and, when a device
 # UDID is given, the iPhone client. The web client is published from the
 # universal_visor repo (tools/publish_web.sh there) after bumping its visor pin.
 #
@@ -9,8 +9,9 @@ cd "$(dirname "$0")/.."
 bazel build -c opt //applications/visor_macos
 ZIP="$(bazel cquery -c opt --output=files //applications/visor_macos 2>/dev/null | head -1)"
 rm -rf /tmp/vmac && mkdir -p /tmp/vmac && unzip -qo "$ZIP" -d /tmp/vmac
-pkill -x visor_macos || true; sleep 1
-rm -rf /Applications/Visor.app && cp -R /tmp/vmac/visor_macos.app /Applications/Visor.app
+tools/sign_mac_app.sh /tmp/vmac/Visor.app
+pkill -x Visor || true; pkill -x visor_macos || true; sleep 1
+rm -rf /Applications/Visor.app && cp -R /tmp/vmac/Visor.app /Applications/Visor.app
 open -a /Applications/Visor.app
 echo "Mac client installed and relaunched"
 UDID="${1:-${VISOR_IPHONE_UDID:-}}"

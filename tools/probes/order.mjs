@@ -2,7 +2,7 @@
 // generation) and socket events around two sends, then ends the session.
 import http from 'node:http';
 import { execSync } from 'node:child_process';
-const PW = execSync('defaults read com.LoganShire.Visor.MenuBar visor.password').toString().trim();
+const PW = process.env.VISOR_TOKEN || execSync('security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w').toString().trim();
 const id = crypto.randomUUID().toUpperCase();
 const AGENT = process.env.AGENT ?? 'claude';
 const t0 = Date.now();

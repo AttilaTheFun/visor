@@ -118,6 +118,22 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertEqual(host.state, .connected)
     }
 
+    func testPasswordsAreKeptAsSecrets() {
+        let settings = MemorySettings()
+        VisorHost.settings = settings
+        // Saved as an earlier build did: the password inside the config.
+        settings.values["hosts"] = #"[{"id":"h1","name":"Mini","host":"mini.example","password":"pearl-grove","backend":"scripted"}]"#
+        let store = VisorStore()
+        XCTAssertEqual(store.hosts.first?.config.password, "pearl-grove")
+        // Moved out of the config into the secrets, and read from there.
+        XCTAssertFalse(settings.values["hosts"]?.contains("pearl-grove") ?? true)
+        XCTAssertEqual(settings.secret(key: "password.h1"), "pearl-grove")
+        XCTAssertEqual(VisorStore().hosts.first?.config.password, "pearl-grove")
+        // Removing the computer forgets its password.
+        store.remove(store.hosts[0])
+        XCTAssertEqual(settings.secret(key: "password.h1"), "")
+    }
+
     func testAConnectionCodeAddsTheComputer() async {
         let store = VisorStore()
         let code = ConnectionCode(name: "Studio Mac", host: "mini.example", password: "pearl-grove")

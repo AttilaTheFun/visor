@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-const PW = execSync('defaults read com.LoganShire.Visor.MenuBar visor.password').toString().trim();
+const PW = process.env.VISOR_TOKEN || execSync('security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w').toString().trim();
 const id = process.argv[2]; if (!id) { console.error('usage: node ephemeral.mjs <visor session id>'); process.exit(2); }
 const ws = new WebSocket('ws://127.0.0.1:7433');
 ws.onopen = () => ws.send(JSON.stringify({ type: 'login', password: PW, client: 'probe-eph' }));

@@ -10,7 +10,7 @@ package(default_visibility = ["//visibility:public"])
 # (`common --repo_env=VISOR_TEAM_ID=<team>`, see tools/signing), which is
 # not checked in. The provisioning profile is the one Xcode makes for the
 # bundle id; tools/mint_profile makes it on a new Mac.
-BUNDLE_ID = "com.LoganShire.Visor"
+BUNDLE_ID = "com.LoganShire.VisorClient.iOS"
 
 # The client on a phone: compiled Swift, real SwiftUI, the shared VisorUI
 # screens. The host sources are shared with the Mac client (a filegroup);
@@ -31,12 +31,12 @@ swift_library(
     ],
 )
 
-# Device signing: the Xcode-managed development profile for the bundle id
-# (a paid team's lasts a year and lists the team's registered devices; a
-# free team's lasts 7 days). Simulator builds ignore it.
+# Device signing: the team's Xcode-managed wildcard development profile (a
+# year long, listing the team's registered devices; tools/mint_profile makes
+# it). Simulator builds ignore it.
 local_provisioning_profile(
     name = "local_profile",
-    profile_name = "iOS Team Provisioning Profile: " + BUNDLE_ID,
+    profile_name = "iOS Team Provisioning Profile: *",
     tags = ["manual"],
     team_id = TEAM_ID,
 )

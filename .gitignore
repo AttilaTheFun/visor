@@ -5,3 +5,5 @@ bazel-*
 # Generated: bazel run //:xcodeproj
 *.xcodeproj
 .DS_Store
+# Release disk images (tools/release_mac.sh).
+dist/

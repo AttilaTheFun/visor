@@ -1,7 +1,7 @@
 // The saved computers and their live connections. Configs persist through
 // the host's settings service (UserDefaults on Apple, localStorage on the
-// web; the password with them: the host is the user's own machine on their
-// own network); connections are made on launch.
+// web), each password apart from them as a secret (the keychain on Apple);
+// connections are made on launch.
 //
 // A computer is added in one step: its connection code (pasted, or a
 // scanned QR code's `visor://connect?code=` link) carries its name,
@@ -24,7 +24,18 @@ public final class VisorStore: ObservableObject {
     public init() {
         let saved = VisorHost.settings?.get(key: key) ?? ""
         if !saved.isEmpty, let configs = parseJSON(saved)?.array?.compactMap(HostConfig.init(json:)) {
-            hosts = configs.map(HostConnection.init)
+            var carried = false
+            hosts = configs.map { config in
+                var config = config
+                if config.password.isEmpty {
+                    config.password = VisorHost.settings?.secret(key: Self.passwordKey(config.id)) ?? ""
+                } else {
+                    // Saved with its password, from before secrets: moved.
+                    carried = true
+                }
+                return HostConnection(config: config)
+            }
+            if carried { save() }
         }
         for host in hosts { observe(host); host.connect() }
     }
@@ -62,8 +73,12 @@ public final class VisorStore: ObservableObject {
     public func remove(_ host: HostConnection) {
         host.disconnect()
         hosts.removeAll { $0 === host }
+        VisorHost.settings?.setSecret(key: Self.passwordKey(host.id), value: "")
         save()
     }
+
+    /// Where a computer's password is kept, apart from its config.
+    static func passwordKey(_ id: String) -> String { "password." + id }
 
     public func host(for id: String) -> HostConnection? { hosts.first { $0.id == id } }
 
@@ -79,6 +94,13 @@ public final class VisorStore: ObservableObject {
     }
 
     private func save() {
-        VisorHost.settings?.set(key: key, value: JSONValue.array(hosts.map(\.config.json)).encoded())
+        // The configs without their passwords; each password as a secret.
+        let configs = hosts.map { host -> JSONValue in
+            var config = host.config
+            VisorHost.settings?.setSecret(key: Self.passwordKey(config.id), value: config.password)
+            config.password = ""
+            return config.json
+        }
+        VisorHost.settings?.set(key: key, value: JSONValue.array(configs).encoded())
     }
 }
