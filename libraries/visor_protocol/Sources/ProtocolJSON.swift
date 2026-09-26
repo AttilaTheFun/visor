@@ -55,6 +55,7 @@ extension Envelope {
         e.generation = value["generation"].double.map(Int.init)
         e.after = value["after"].array?.compactMap(\.string)
         e.removed = value["removed"].array?.compactMap(\.string)
+        e.reset = value["reset"].bool
         e.status = value["status"].array?.compactMap(StatusItem.init(json:))
         e.streams = value["streams"].array?.compactMap { item in
             guard let id = item["id"].string, let text = item["text"].string else { return nil }
@@ -97,6 +98,7 @@ extension Envelope {
         if let generation { o["generation"] = .number(Double(generation)) }
         if let after { o["after"] = .array(after.map(JSONValue.string)) }
         if let removed, !removed.isEmpty { o["removed"] = .array(removed.map(JSONValue.string)) }
+        putBool("reset", reset)
         if let status { o["status"] = .array(status.map(\.json)) }
         if let streams { o["streams"] = .array(streams.map { .object(["id": .string($0.id), "text": .string($0.text)]) }) }
         if let images, !images.isEmpty { o["images"] = .array(images.map(JSONValue.string)) }

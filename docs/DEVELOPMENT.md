@@ -100,17 +100,21 @@ OpenRouter itself). Backends are injectable
 The **record** is the transcript in memory (`entries`, a window of 600
 rows served) plus the ephemeral state. Every change bumps `revision`;
 each row is stamped with the revision it last changed or moved at, and a
-removed row is remembered (a tombstone) with the revision it went at. A
-message sent keeps its id when the agent's log writes it down (the log's id
-is mapped to it), so a turn changes rows rather than renaming them. Clients
+removed row is remembered (a tombstone) with the revision it went at.
+What the user sends to Claude is no row until Claude's log writes it (the
+server remembers the words as sent; the composer shows them, sending, until
+then), so the transcript is only ever the log and rows are never renamed;
+Codex's and OpenRouter's records get the row when it is handed over. Clients
 sync over HTTP long-poll
 `GET /api/sessions/<id>/transcript?since=<revision>&generation=<generation>`
 (held ≤25 s, released on change) and are answered with a delta: the rows
 new, changed or moved past `since`, each with the id of the row it follows
-(`after`), and the ids `removed` since. The whole window is sent only to a
-client of another generation: a first sync, a server that started again
-(each run starts at a random generation), or one that let go of its
-tombstones (after 2000). Clients get the ephemeral state over the WebSocket (`ephemeral`
+(`after`), and the ids `removed` since. The whole window, marked `reset`
+(the client replaces its rows and cache), is sent only to a client of
+another generation: a first sync, a server that started again (each run
+starts at a random generation), a fork found in the log (a new branch,
+with a notice to the user), or a server that let go of its tombstones
+(after 2000). Clients get the ephemeral state over the WebSocket (`ephemeral`
 snapshot on subscribe: streams, status items, activity, busy, approval,
 queue, notice; then `delta`, `status`, `activity`, `busy`, … envelopes).
 The archive `~/Library/Application Support/Visor/sessions.json` keeps the

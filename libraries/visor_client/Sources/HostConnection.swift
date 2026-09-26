@@ -180,7 +180,7 @@ public final class SessionTranscript: ObservableObject {
         let rows = envelope.entries ?? []
         let whole: Bool
         var kept = rows
-        if let generation = envelope.generation, generation == self.generation, loaded {
+        if envelope.reset != true, let generation = envelope.generation, generation == self.generation, loaded {
             // A delta: the rows removed since the revision held go; each
             // row new, changed or moved since goes after the row it follows
             // on the computer. Only rows appended at the end, or changed in

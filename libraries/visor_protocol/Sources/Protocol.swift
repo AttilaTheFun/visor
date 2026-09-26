@@ -507,6 +507,9 @@ public struct Envelope: Codable, Sendable {
     public var after: [String]?
     /// In a delta, the rows removed since the revision asked about.
     public var removed: [String]?
+    /// The rows are the whole, not a delta: the client replaces what it
+    /// holds (its cache too) and draws the thread again.
+    public var reset: Bool?
     /// The turn's status lines so far — tool calls, subagents, shells,
     /// thinking — as the computer keeps them.
     public var status: [StatusItem]?
