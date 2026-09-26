@@ -1,16 +1,16 @@
 #!/bin/bash
-# Mints the free-team development certificate and provisioning profile for
+# Mints the development certificate and provisioning profile for
 # a bundle id (the phone client's) on a Mac
 # that has never signed it: builds a throwaway one-file app with automatic
 # signing, so Xcode (signed into the Apple ID, Settings → Accounts) makes
-# both. Plug the iPhone in first — free-team profiles embed device UDIDs.
+# both. Plug the iPhone in first, so it is registered with the team.
 # rules_apple then finds "iOS Team Provisioning Profile: <bundle id>".
 #
 #   tools/mint_profile/mint_profile.sh <bundle id> <team id> [device UDID]
-# (the values in applications/visor_ios/BUILD.bazel)
+# (the bundle id in applications/visor_ios/BUILD.bazel, the team in .bazelrc.user)
 set -euo pipefail
 BUNDLE="${1:?bundle id, as BUNDLE_ID in applications/visor_ios/BUILD.bazel}"
-TEAM="${2:?Apple team id, as TEAM_ID in applications/visor_ios/BUILD.bazel}"
+TEAM="${2:?Apple team id, as VISOR_TEAM_ID in .bazelrc.user}"
 DEVICE="${3:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(mktemp -d)"

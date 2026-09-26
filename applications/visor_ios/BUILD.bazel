@@ -2,15 +2,15 @@ load("@rules_apple//apple:apple.bzl", "local_provisioning_profile")
 load("@rules_apple//apple:ios.bzl", "ios_application")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 load("@rules_xcodeproj//xcodeproj:defs.bzl", "xcode_provisioning_profile")
+load("@visor_signing//:signing.bzl", "TEAM_ID")
 
 package(default_visibility = ["//visibility:public"])
 
-# Signing: change these to your own bundle id and Apple team id (Xcode →
-# Settings → Accounts shows the team). The provisioning profile is the one
-# Xcode makes for the bundle id; tools/mint_profile makes it on a new Mac.
+# Signing: the bundle id here, and your Apple team id in .bazelrc.user
+# (`common --repo_env=VISOR_TEAM_ID=<team>`, see tools/signing), which is
+# not checked in. The provisioning profile is the one Xcode makes for the
+# bundle id; tools/mint_profile makes it on a new Mac.
 BUNDLE_ID = "com.LoganShire.Visor"
-
-TEAM_ID = "9CLW2BBDAG"
 
 # The client on a phone: compiled Swift, real SwiftUI, the shared VisorUI
 # screens. The host sources are shared with the Mac client (a filegroup);
@@ -32,8 +32,8 @@ swift_library(
 )
 
 # Device signing: the Xcode-managed development profile for the bundle id
-# (free-team profiles last 7 days and embed the connected phone's UDID).
-# Simulator builds ignore it.
+# (a paid team's lasts a year and lists the team's registered devices; a
+# free team's lasts 7 days). Simulator builds ignore it.
 local_provisioning_profile(
     name = "local_profile",
     profile_name = "iOS Team Provisioning Profile: " + BUNDLE_ID,

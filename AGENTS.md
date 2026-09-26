@@ -14,6 +14,9 @@ to one focused change, and say in it how the change was verified.
 ## Rules
 
 - No attribution lines in commits.
+- No Apple team ids, certificates, provisioning profiles or device UDIDs in
+  the repository: the team comes from the builder's own `.bazelrc.user`
+  (tools/signing), which is not checked in.
 - Dependencies: BCR versions in MODULE.bazel; agent_ui by revision in
   third_party/swift_packages/Package.swift + Package.resolved (re-resolve
   with `swift package resolve`, delete `.build`).

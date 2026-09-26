@@ -1,4 +1,6 @@
 bazel-*
+# Your own signing values (tools/signing).
+.bazelrc.user
 .build/
 # Generated: bazel run //:xcodeproj
 *.xcodeproj
