@@ -4,7 +4,7 @@ load("@rules_swift//swift:swift.bzl", "swift_library")
 package(default_visibility = ["//visibility:public"])
 
 # Change to your own bundle id.
-BUNDLE_ID = "com.LoganShire.Visor.macOS"
+BUNDLE_ID = "com.LoganShire.VisorClient.macOS"
 
 # The client on the Mac: the same compiled Swift + real SwiftUI the iOS app
 # builds, on the shared host sources (the iOS @main is guarded by os(); the
@@ -24,6 +24,7 @@ macos_application(
     name = "visor_macos",
     app_icons = ["//artwork/app-icon:app_icon"],
     bundle_id = BUNDLE_ID,
+    bundle_name = "Visor",
     infoplists = ["Info.plist"],
     minimum_os_version = "15.0",
     resources = [

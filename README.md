@@ -1,6 +1,6 @@
 # Visor
 
-Remote agent sessions: a Mac menu bar app runs Claude Code, Codex and the
+Remote agent sessions: Visor Server, a Mac menu bar app, runs Claude Code, Codex and the
 openrouter CLI as subprocesses on the host and exposes them over
 Tailscale; a SwiftUI client for iPhone, iPad and Mac adds a Mac from its
 connection code, starts sessions, chats with them and watches their
@@ -8,7 +8,8 @@ progress.
 
 ## Parts
 
-- **applications/visor_menubar** — the host. A menu bar app (`LSUIElement`)
+- **applications/visor_menubar** — the host, Visor Server
+  (`com.LoganShire.VisorServer.macOS`). A menu bar app (`LSUIElement`)
   running `VisorServer`: a WebSocket listener (port 7433) and a REST side
   (7434), both on loopback; Tailscale Serve is put in front on 443 at
   launch (`/api` to REST, `/` to the WebSocket) and is the one road in.
@@ -77,7 +78,7 @@ you install it.
 - **What access means.** A connected client starts agents in any folder,
   and they run without permission prompts by default. It can also read
   and write any file your user account can, through the API, and install
-  an app bundle over the menu bar app. Treat access to Visor like an SSH
+  an app bundle over Visor Server. Treat access to Visor like an SSH
   login to your Mac.
 - **Who can reach it.** The server listens on this Mac's loopback address
   only. The one way in from the network is Tailscale Serve on port 443,
@@ -86,15 +87,16 @@ you install it.
   devices are let in on that. Every other device needs the password.
 - **The password and the connection code.** The connection code, and the
   QR code that carries it, holds the password in plain base64. Share it
-  only with your own devices. The password is stored unencrypted in the
-  menu bar app's preferences.
+  only with your own devices. The password is kept in the keychain, by
+  Visor Server and by each client that saves it; the apps are signed so
+  that each build reads its own items without a prompt.
 - **On a shared tailnet, use a long password.** The generated password,
   four words from a short list, is easy to type rather than strong, and
   wrong guesses are not rate-limited. Anyone on a tailnet you share with
   others can reach port 443 and try.
 - **Revoking access.** Changing the password stops new logins. Clients
   that are already connected keep their session until you quit and
-  reopen the menu bar app.
+  reopen Visor Server.
 - **Agents.** Claude Code, Codex and `openrouter` run as your user with
   your credentials, configured outside Visor. Visor holds no API keys.
 

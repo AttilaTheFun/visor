@@ -16,6 +16,8 @@ final class AgentMessagingTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-agent-tests-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
+        // Never the real keychain.
+        VisorServer.secrets = MemorySecrets()
         server = VisorServer(port: 7996)
     }
 

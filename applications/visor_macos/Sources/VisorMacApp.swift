@@ -11,10 +11,32 @@ struct VisorMacApp: App {
     @StateObject private var store: VisorStore
 
     init() {
+        Self.adoptFormerApp()
         // The host's services first: the store connects through them.
         installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService())
         _store = StateObject(wrappedValue: VisorStore())
         WindowShot.startIfAsked()
+    }
+
+    /// The bundle id this app had before: its saved computers and its
+    /// cache are taken over the first time this build runs.
+    static let formerBundleID = "com.LoganShire.Visor.macOS"
+
+    static func adoptFormerApp() {
+        guard Bundle.main.bundleIdentifier != formerBundleID,
+              UserDefaults.standard.string(forKey: "visor.hosts") == nil,
+              let former = UserDefaults(suiteName: formerBundleID) else { return }
+        for (key, value) in former.dictionaryRepresentation() where key.hasPrefix("visor.") {
+            UserDefaults.standard.set(value, forKey: key)
+        }
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        if let current = Bundle.main.bundleIdentifier {
+            let target = base.appendingPathComponent(current)
+            let source = base.appendingPathComponent(formerBundleID)
+            if !FileManager.default.fileExists(atPath: target.path), FileManager.default.fileExists(atPath: source.path) {
+                try? FileManager.default.moveItem(at: source, to: target)
+            }
+        }
     }
 
     var body: some Scene {

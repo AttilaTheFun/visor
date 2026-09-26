@@ -32,6 +32,8 @@ final class AuthTests: XCTestCase {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         UserDefaults.standard.removeObject(forKey: "visor.password")
+        // Never the real keychain.
+        VisorServer.secrets = MemorySecrets()
         server = VisorServer(port: 7997)
         exposure = FakeExposure()
         server.exposure = exposure

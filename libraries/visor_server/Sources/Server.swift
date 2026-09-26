@@ -756,9 +756,44 @@ public final class VisorServer: ObservableObject {
     /// network, or a tool on this Mac.
     @Published public var password: String {
         didSet {
-            UserDefaults.standard.set(password, forKey: "visor.password")
+            Self.secrets.set("password", password)
             if listener == nil, !password.isEmpty { start() }
         }
+    }
+    /// Where the password is kept: the keychain; tests swap in their own.
+    static var secrets: SecretStore = KeychainSecrets()
+    /// The bundle ids this app had before, whose settings it takes over.
+    static let formerBundleIDs = ["com.LoganShire.Visor.MenuBar"]
+
+    /// The folder an earlier build kept its cache in (Application Support,
+    /// by bundle id), taken over the first time this build runs.
+    private static func adoptFormerFolders() {
+        guard storeRoot == nil, let current = Bundle.main.bundleIdentifier, !formerBundleIDs.contains(current) else { return }
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let target = base.appendingPathComponent(current)
+        guard !FileManager.default.fileExists(atPath: target.path) else { return }
+        for former in formerBundleIDs {
+            let source = base.appendingPathComponent(former)
+            if FileManager.default.fileExists(atPath: source.path) {
+                try? FileManager.default.moveItem(at: source, to: target)
+                return
+            }
+        }
+    }
+
+    /// The password as kept — the keychain — or, the first time, as an
+    /// earlier build kept it (in its settings), moved into the keychain.
+    private static func keptPassword() -> String {
+        if let kept = secrets.get("password"), !kept.isEmpty { return kept }
+        let earlier = [UserDefaults.standard] + formerBundleIDs.compactMap { UserDefaults(suiteName: $0) }
+        for defaults in earlier {
+            if let old = defaults.string(forKey: "visor.password"), !old.isEmpty {
+                secrets.set("password", old)
+                for place in earlier { place.removeObject(forKey: "visor.password") }
+                return old
+            }
+        }
+        return ""
     }
     /// The network user this Mac belongs to, as the exposure reports it;
     /// requests the road names as theirs need no password.
@@ -794,7 +829,8 @@ public final class VisorServer: ObservableObject {
 
     public init(port: UInt16 = Envelope.defaultPort) {
         self.port = port
-        password = UserDefaults.standard.string(forKey: "visor.password") ?? ""
+        Self.adoptFormerFolders()
+        password = Self.keptPassword()
         loadSessions()
     }
 
@@ -809,7 +845,9 @@ public final class VisorServer: ObservableObject {
     func authorized(_ request: HTTPRequest) -> Bool {
         if let login = exposure.requester(headers: request.headers), let mine = hostLogin, login == mine { return true }
         guard let bearer = request.authorization, !bearer.isEmpty else { return false }
-        return bearer == password || tokens.contains(bearer)
+        // The agent token too: the agents this server started (and the
+        // tools they run, such as a deploy) hold it, and no one else.
+        return bearer == password || tokens.contains(bearer) || bearer == agentToken
     }
 
     /// The answer to a request that is not let in. A request the road
@@ -857,8 +895,8 @@ public final class VisorServer: ObservableObject {
     /// Which sessions this launch carries on with. Whatever was running
     /// when the app went away comes back running — that is the default and
     /// needs no argument. The launch list only narrows it:
-    ///     open -a "Visor Menu Bar" --args --resume-sessions <id>,<id>
-    ///     VISOR_RESUME=none "…/Visor Menu Bar.app/Contents/MacOS/visor_menubar"
+    ///     open -a "Visor Server" --args --resume-sessions <id>,<id>
+    ///     VISOR_RESUME=none "…/Visor Server.app/Contents/MacOS/Visor Server"
     /// ("all" is the default; "none" brings everything back idle instead.)
     static func requestedResumes() -> Set<String> {
         var raw = ProcessInfo.processInfo.environment["VISOR_RESUME"] ?? ""
@@ -1923,19 +1961,38 @@ public final class VisorServer: ObservableObject {
     /// us still being here.
     @discardableResult
     public func relaunch(installing bundle: String?, carrying: [String]) -> String? {
-        let destination = Bundle.main.bundlePath
+        var destination = Bundle.main.bundlePath
         var install = ""
         if let bundle, !bundle.isEmpty {
             let source = (bundle as NSString).expandingTildeInPath
             guard FileManager.default.fileExists(atPath: source + "/Contents/MacOS") else {
                 return "No app bundle at \(source)"
             }
-            let identifier = (Bundle(path: source)?.bundleIdentifier ?? "")
-            guard identifier == Bundle.main.bundleIdentifier else {
+            let incoming = Bundle(path: source)
+            let identifier = incoming?.bundleIdentifier ?? ""
+            let replaces = incoming?.object(forInfoDictionaryKey: "VisorReplaces") as? [String] ?? []
+            if identifier == Bundle.main.bundleIdentifier {
+                if source != destination {
+                    install = "rm -rf \(Self.shellQuoted(destination)) && cp -R \(Self.shellQuoted(source)) \(Self.shellQuoted(destination)) || exit 1\n"
+                }
+            } else if let current = Bundle.main.bundleIdentifier, replaces.contains(current) {
+                // The app that takes over from this one: installed beside it
+                // under its own name, this one removed, and anything that
+                // opened this one at login (a LaunchAgent) pointed at it.
+                let replacement = ((destination as NSString).deletingLastPathComponent as NSString)
+                    .appendingPathComponent((source as NSString).lastPathComponent)
+                let agents = (NSHomeDirectory() as NSString).appendingPathComponent("Library/LaunchAgents")
+                install = """
+                rm -rf \(Self.shellQuoted(replacement)) && cp -R \(Self.shellQuoted(source)) \(Self.shellQuoted(replacement)) || exit 1
+                rm -rf \(Self.shellQuoted(destination))
+                for f in \(Self.shellQuoted(agents))/*.plist; do
+                  grep -qF \(Self.shellQuoted(destination)) "$f" 2>/dev/null && sed -i '' "s#\(destination)#\(replacement)#g" "$f"
+                done
+
+                """
+                destination = replacement
+            } else {
                 return "\(source) is \(identifier.isEmpty ? "not an app" : identifier), not \(Bundle.main.bundleIdentifier ?? "this app")"
-            }
-            if source != destination {
-                install = "rm -rf \(Self.shellQuoted(destination)) && cp -R \(Self.shellQuoted(source)) \(Self.shellQuoted(destination)) || exit 1\n"
             }
         }
         // The sessions that are mid-turn are written down as such: the flag
