@@ -94,10 +94,16 @@ final class ForkNoticeTests: XCTestCase {
             line("user", "p4", "a3", "Also DATE"), line("assistant", "a4", "p4", "OK-DATE"),
         ])
         let record = record(shownPrompts: ["p1", "p2"])
+        let generation = record.generation
         record.followFile()
         await record.waitForFile(past: 0)
         XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also CHERRY", "OK-CHERRY", "Also DATE", "OK-DATE"])
         XCTAssertEqual(record.notice?.contains("One message shown here"), true)
+        // Clients start again from the new branch: a new generation, and
+        // any answer from before it is the whole, marked to reset.
+        XCTAssertNotEqual(record.generation, generation)
+        XCTAssertEqual(record.transcriptEnvelope(since: nil).reset, true)
+        XCTAssertNil(record.transcriptEnvelope(since: record.revision).reset)
         XCTAssertEqual(record.stored.notice, record.notice)
         XCTAssertEqual(record.stored.shownPrompts, ["p1", "p3", "p4"])
     }

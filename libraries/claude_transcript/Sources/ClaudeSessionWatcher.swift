@@ -10,6 +10,9 @@ public final class ClaudeSessionWatcher: @unchecked Sendable {
     public let url: URL
     private let queue: DispatchQueue
     private let onLines: ([ClaudeLine]) -> Void
+    /// Whole lines' bytes into lines: Claude Code's by default; another
+    /// agent's log, read as the same shape of line, by its own parser.
+    private let parse: (Data) -> [ClaudeLine]
     private var offset: UInt64
     private var partial = Data()
     /// Where the lines handed over so far end: the byte after the last
@@ -22,8 +25,10 @@ public final class ClaudeSessionWatcher: @unchecked Sendable {
     /// - Parameter offset: where to start reading; the file's current size
     ///   to follow from here on, 0 to read everything first.
     public init(url: URL, startingAt offset: UInt64 = 0, queue: DispatchQueue = DispatchQueue(label: "claude.transcript.watch"),
+                parse: @escaping (Data) -> [ClaudeLine] = ClaudeTranscriptParser.lines(in:),
                 onLines: @escaping ([ClaudeLine]) -> Void) {
         self.url = url
+        self.parse = parse
         self.offset = offset
         self.position = offset
         self.queue = queue
@@ -95,7 +100,7 @@ public final class ClaudeSessionWatcher: @unchecked Sendable {
         partial = Data(buffer[buffer.index(after: last)...])
         position = offset - UInt64(partial.count)
         buffer = Data(buffer[..<last])
-        let lines = ClaudeTranscriptParser.lines(in: buffer)
+        let lines = parse(buffer)
         if !lines.isEmpty { onLines(lines) }
     }
 }
