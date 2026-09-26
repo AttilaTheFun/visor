@@ -76,6 +76,23 @@ public enum ClaudeTranscriptParser {
         case "custom-title", "ai-title":
             guard let title = (object["customTitle"] ?? object["aiTitle"] ?? object["title"]) as? String, !title.isEmpty else { return nil }
             return ClaudeRecord(uuid: uuid, kind: .title(title.replacingOccurrences(of: "-", with: " ")), timestamp: timestamp)
+        case "attachment":
+            // A message the user sent while the agent was working: Claude
+            // Code takes it into the turn and records it as a queued
+            // command, not as a user line. It is what the user said.
+            guard let attachment = object["attachment"] as? [String: Any],
+                  attachment["type"] as? String == "queued_command",
+                  (attachment["commandMode"] as? String ?? "prompt") == "prompt" else { return nil }
+            let text: String
+            if let prompt = attachment["prompt"] as? String {
+                text = prompt
+            } else if let parts = attachment["prompt"] as? [[String: Any]] {
+                text = parts.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: "\n")
+            } else {
+                return nil
+            }
+            guard !text.isEmpty else { return nil }
+            return ClaudeRecord(uuid: uuid, kind: .user(text: text, images: []), timestamp: timestamp)
         case "user":
             guard let message = object["message"] as? [String: Any] else { return nil }
             if let text = message["content"] as? String {
