@@ -1,91 +1,73 @@
 #!/bin/bash
 # Builds the Mac apps for anyone to install, and optionally publishes them:
 # Visor Server and the Visor client, each signed with the builder's
-# "Developer ID Application" certificate, notarized by Apple and stapled,
-# in a disk image. Xcode does the signing and the notarizing (it must be
-# signed into the team's account, Settings → Accounts); the team is
-# VISOR_TEAM_ID in .bazelrc.user.
+# "Developer ID Application" certificate (tools/sign_mac_app.sh), notarized
+# by Apple and stapled, in a disk image that is signed, notarized and
+# stapled too. Notarization uses a notarytool keychain profile, stored once:
+#
+#   xcrun notarytool store-credentials visor-notary --apple-id <you> --team-id <team>
+#
+# (an app-specific password; VISOR_NOTARY_PROFILE names another profile).
+# The team is VISOR_TEAM_ID in .bazelrc.user. Xcode's sign-in is not needed.
 #
 #   tools/release_mac.sh <version>               # the .dmgs in dist/
 #   tools/release_mac.sh <version> --publish     # and a GitHub release v<version>
 set -euo pipefail
 VERSION="${1:?version, e.g. 0.1}"
 PUBLISH="${2:-}"
+PROFILE="${VISOR_NOTARY_PROFILE:-visor-notary}"
 cd "$(dirname "$0")/.."
 TEAM="$(sed -n 's/.*VISOR_TEAM_ID=\([A-Z0-9]*\).*/\1/p' .bazelrc.user 2>/dev/null | head -1)"
 [ -n "$TEAM" ] || { echo "No VISOR_TEAM_ID in .bazelrc.user (tools/signing)" >&2; exit 1; }
-security find-identity -v -p codesigning | grep -q "Developer ID Application: .*($TEAM)" \
+IDENTITY="$(security find-identity -v -p codesigning | sed -n "s/.*\([0-9A-F]\{40\}\) \"Developer ID Application: .*($TEAM)\"/\1/p" | head -1)"
+[ -n "$IDENTITY" ] \
   || { echo "No Developer ID Application certificate for the team in the keychain (Xcode → Settings → Accounts → Manage Certificates)" >&2; exit 1; }
+xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1 \
+  || { echo "No notarytool profile \"$PROFILE\" (see the top of this script)" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p dist
 
+# Sends a file for notarization and waits; fails unless Apple accepts it.
+notarize() {
+  local file="$1" log="$WORK/notary-$(basename "$1").json"
+  xcrun notarytool submit "$file" --keychain-profile "$PROFILE" --wait --output-format json >"$log"
+  grep -q '"status" *: *"Accepted"' "$log" || { cat "$log" >&2; exit 1; }
+}
+
 release_app() {
   local target="$1" name="$2"
   bazel build -c opt "//applications/$target" >/dev/null
   local zip; zip="$(bazel cquery -c opt --output=files "//applications/$target" 2>/dev/null | grep '\.zip$' | head -1)"
-  local archive="$WORK/$target.xcarchive"
-  mkdir -p "$archive/Products/Applications"
-  ditto -x -k "$zip" "$archive/Products/Applications/"
-  local app="$archive/Products/Applications/$name.app"
-  local plist="$app/Contents/Info.plist"
-  local bundle; bundle="$(plutil -extract CFBundleIdentifier raw -o - "$plist")"
-  [ "$(plutil -extract CFBundleShortVersionString raw -o - "$plist")" = "$VERSION" ] \
+  mkdir -p "$WORK/$target"
+  ditto -x -k "$zip" "$WORK/$target/"
+  local app="$WORK/$target/$name.app"
+  [ "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "$VERSION" ] \
     || { echo "$name's CFBundleShortVersionString is not $VERSION" >&2; exit 1; }
-  # Signed first with the hardened runtime, which Xcode's Developer ID
-  # export requires the app to have already.
   tools/sign_mac_app.sh "$app" >/dev/null
-  # An archive as Xcode would make it, so Xcode can export it.
-  cat > "$archive/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>ApplicationProperties</key><dict>
-<key>ApplicationPath</key><string>Applications/$name.app</string>
-<key>CFBundleIdentifier</key><string>$bundle</string>
-<key>CFBundleShortVersionString</key><string>$VERSION</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>SigningIdentity</key><string>-</string>
-<key>Team</key><string>$TEAM</string>
-</dict>
-<key>ArchiveVersion</key><integer>2</integer>
-<key>CreationDate</key><date>$(date -u +%Y-%m-%dT%H:%M:%SZ)</date>
-<key>Name</key><string>$name</string>
-<key>SchemeName</key><string>$name</string>
-</dict></plist>
-PLIST
-  cat > "$WORK/$target-options.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>method</key><string>developer-id</string>
-<key>signingStyle</key><string>automatic</string>
-<key>teamID</key><string>$TEAM</string>
-<key>destination</key><string>upload</string>
-</dict></plist>
-PLIST
-  echo "$name: signing and sending for notarization…"
-  xcodebuild -exportArchive -archivePath "$archive" -exportOptionsPlist "$WORK/$target-options.plist" \
-    -exportPath "$WORK/$target-upload" -allowProvisioningUpdates >"$WORK/$target-upload.log" 2>&1 \
-    || { tail -20 "$WORK/$target-upload.log" >&2; exit 1; }
-  # Notarized and stapled: Apple takes a few minutes.
-  local out="$WORK/$target-notarized"
-  for _ in $(seq 1 90); do
-    if xcodebuild -exportNotarizedApp -archivePath "$archive" -exportPath "$out" >"$WORK/$target-notarized.log" 2>&1; then break; fi
-    sleep 20
-  done
-  [ -d "$out/$name.app" ] || { tail -20 "$WORK/$target-notarized.log" >&2; exit 1; }
-  xcrun stapler validate "$out/$name.app" >/dev/null
-  spctl --assess --type execute "$out/$name.app"
-  # The disk image: the app and a link to Applications, to drag it onto.
+  local signature; signature="$(codesign -dvv "$app" 2>&1)"
+  [[ "$signature" == *"Authority=Developer ID Application"* ]] \
+    || { echo "$name was not signed with Developer ID" >&2; exit 1; }
+  echo "$name: notarizing the app…"
+  ditto -c -k --keepParent "$app" "$WORK/$target.zip"
+  notarize "$WORK/$target.zip"
+  xcrun stapler staple -q "$app"
+  spctl --assess --type execute "$app"
+  # The disk image: the app and a link to Applications, to drag it onto;
+  # signed and notarized in its own right, so the download checks out too.
   local stage="$WORK/$target-dmg"
   mkdir -p "$stage"
-  cp -R "$out/$name.app" "$stage/"
+  cp -R "$app" "$stage/"
   ln -s /Applications "$stage/Applications"
   local dmg="dist/$(echo "$name" | tr ' ' '-')-$VERSION.dmg"
   rm -f "$dmg"
   hdiutil create -quiet -volname "$name" -srcfolder "$stage" -format UDZO "$dmg"
+  codesign --sign "$IDENTITY" --timestamp "$dmg"
+  echo "$name: notarizing the disk image…"
+  notarize "$dmg"
+  xcrun stapler staple -q "$dmg"
+  spctl --assess --type open --context context:primary-signature "$dmg"
   echo "$name: $dmg"
 }
 
