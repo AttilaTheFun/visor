@@ -107,7 +107,21 @@ enum AttachmentKind {
     static let videoExtensions: Set<String> = ["mov", "mp4", "m4v", "avi", "webm", "mkv"]
 
     static func isVideo(_ name: String) -> Bool {
-        videoExtensions.contains((name as NSString).pathExtension.lowercased())
+        videoExtensions.contains(pathExtension(of: name).lowercased())
+    }
+
+    /// The last component of a path. The standard library alone: this
+    /// builds for the browser, whose Foundation has no NSString.
+    static func fileName(_ path: String) -> String {
+        guard let slash = path.lastIndex(of: "/") else { return path }
+        return String(path[path.index(after: slash)...])
+    }
+
+    /// The extension of a path's last component, without the dot.
+    static func pathExtension(of path: String) -> String {
+        let name = fileName(path)
+        guard let dot = name.lastIndex(of: "."), dot != name.startIndex else { return "" }
+        return String(name[name.index(after: dot)...])
     }
 }
 

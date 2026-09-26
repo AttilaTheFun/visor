@@ -330,7 +330,7 @@ extension TranscriptMessage {
         // Pictures are shown; a video is named under the words, as the
         // transcript has no player.
         let pictures = entry.images.indices.filter { !AttachmentKind.isVideo(entry.images[$0]) }
-        let videos = entry.images.filter(AttachmentKind.isVideo).map { "Video: " + ($0 as NSString).lastPathComponent }
+        let videos = entry.images.filter(AttachmentKind.isVideo).map { "Video: " + AttachmentKind.fileName($0) }
         let text = ([entry.text] + videos).filter { !$0.isEmpty }.joined(separator: "\n")
         self.init(id: id ?? entry.id, role: role, text: text, activities: entry.activities, toolName: entry.toolName,
                   imageURLs: pictures.map { host + "|" + entry.images[$0] },
