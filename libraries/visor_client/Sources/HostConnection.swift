@@ -471,6 +471,28 @@ public final class HostConnection: ObservableObject, Identifiable {
         return path
     }
 
+    /// A message that matched a search: where it is and a snippet of it.
+    public struct SearchHit: Identifiable, Hashable, Sendable {
+        public var id: String { session + "/" + message }
+        public let session: String
+        public let message: String
+        public let role: String
+        public let snippet: String
+        public let title: String
+        public let cwd: String
+    }
+
+    /// The messages on this computer whose words match, across every
+    /// session, best first.
+    public func search(_ query: String) async throws -> [SearchHit] {
+        let text = try await transport.call("GET", "/search?q=" + HostConnection.escape(query), body: "", config: config)
+        return (parseJSON(text)?["hits"].array ?? []).compactMap { hit in
+            guard let session = hit["session"].string, let message = hit["id"].string else { return nil }
+            return SearchHit(session: session, message: message, role: hit["role"].string ?? "", snippet: hit["snippet"].string ?? "",
+                             title: hit["title"].string ?? "", cwd: hit["cwd"].string ?? "")
+        }
+    }
+
     /// The slash commands a session's agent takes, as the computer knows
     /// them (none for an agent that lists none).
     public func commands(for sessionID: String) async throws -> [SlashCommand] {
