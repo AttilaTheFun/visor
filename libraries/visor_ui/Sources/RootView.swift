@@ -439,16 +439,13 @@ struct HostSection<Rows: View>: View {
                 Text(host.config.name.isEmpty ? host.config.host : host.config.name)
                     .lineLimit(1)
                 Spacer()
-                // The dot says "connected"; words only for what it cannot
-                // (offline and why, a password wanted, an error).
-                if host.state != .connected {
-                    Text(host.state.label)
-                        .lineLimit(1)
-                        .foregroundColor(.secondary)
-                }
             }
             .font(.subheadline)
             .noHeaderCase()
+            // The dot is the state (why it is red is in the computer's
+            // settings); VoiceOver reads it out.
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(host.state.label)
             .accessibilityIdentifier("computer-" + host.config.name)
         }
     }
