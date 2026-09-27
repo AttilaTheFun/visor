@@ -39,6 +39,7 @@ libraries/visor_protocol; the apps register the `visor` URL scheme).
 |---|---|---|
 | `GET /hello` | | `hello`: `host`, `login`, `token` — or 401 |
 | `GET /sessions` | | the `welcome` envelope: `host`, `sessions`, `catalogs` |
+| `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript) | `sessions` with the new one |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
 | `POST /sessions/{id}/stop` `…/archive` `…/unarchive` | | same |

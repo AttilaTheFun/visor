@@ -45,11 +45,12 @@ struct AgentScreen: View {
         guard let typed = Self.commandPrefix(draft) else { return [] }
         if commands == nil { loadCommands() }
         let all = commands ?? []
-        let starting = all.filter { $0.name.lowercased().hasPrefix(typed) }
-        let holding = typed.isEmpty ? [] : all.filter { !$0.name.lowercased().hasPrefix(typed) && $0.name.lowercased().contains(typed) }
+        let sorted = all.sorted { $0.name.lowercased() < $1.name.lowercased() }
+        let starting = sorted.filter { $0.name.lowercased().hasPrefix(typed) }
+        let holding = typed.isEmpty ? [] : sorted.filter { !$0.name.lowercased().hasPrefix(typed) && $0.name.lowercased().contains(typed) }
         return (starting + holding).prefix(40).map { command in
-            AgentSuggestion(text: "/\(command.name) ", title: "/" + command.name + (command.argumentHint.isEmpty ? "" : " " + command.argumentHint),
-                            detail: command.description)
+            AgentSuggestion(text: "/\(command.name) ", title: "/" + command.name,
+                            detail: command.description.isEmpty ? command.argumentHint : command.description)
         }
     }
 

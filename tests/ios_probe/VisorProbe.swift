@@ -392,6 +392,13 @@ final class VisorProbe: XCTestCase {
             field.tap()
             Thread.sleep(forTimeInterval: 3)
             shot(app, "look-3-keyboard")
+            // What the composer offers for words typed (VISOR_LOOK_TYPE,
+            // e.g. "/co" for the slash commands); nothing is sent.
+            if let typed = ProcessInfo.processInfo.environment["VISOR_LOOK_TYPE"], !typed.isEmpty {
+                field.typeText(typed)
+                Thread.sleep(forTimeInterval: 3)
+                shot(app, "look-4-typed")
+            }
         }
     }
 
