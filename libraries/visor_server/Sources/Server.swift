@@ -804,6 +804,8 @@ public final class VisorServer: ObservableObject {
     @Published public private(set) var address: String?
     /// What went wrong putting the front in place, or nil.
     @Published public private(set) var serveError: String?
+    /// The other computers' servers this one's agents reach (Links.swift).
+    @Published public internal(set) var links: [ConnectionCode] = []
     private var claudeModelsTimer: Timer?
     /// A `front()` is under way; and how many have found Tailscale not ready.
     private var fronting = false
@@ -831,6 +833,7 @@ public final class VisorServer: ObservableObject {
         self.port = port
         Self.adoptFormerFolders()
         password = Self.keptPassword()
+        links = Self.keptLinks()
         loadSessions()
     }
 
@@ -1432,6 +1435,16 @@ public final class VisorServer: ObservableObject {
             var e = Envelope(type: "sessions")
             e.sessions = moved.map(\.info)
             return .json(e.encoded())
+        case ("POST", 1, "agent"):
+            // An agent on a linked computer asking about the sessions here.
+            return .json(linkedAgentReply(body).encoded())
+        case ("POST", 1, "link"):
+            // A computer this one's code was pasted into, linking back.
+            guard let code = body.text.flatMap(ConnectionCode.init(parsing:)) else {
+                return HTTPResponse(400, Envelope.error("A connection code is required").encoded())
+            }
+            if code.host != exposure.address() { adopt(code) }
+            return .json(Envelope(type: "link").encoded())
         case ("POST", 1, "restart"):
             // The one call an agent can make to replace the server it runs
             // under: `path` is the new bundle (omit it for a plain restart),
@@ -1503,8 +1516,10 @@ public final class VisorServer: ObservableObject {
         // Sessions talking to each other, through the Visor MCP server each
         // agent runs: one request per connection, answered at once.
         if envelope.type == "agent" {
-            client.send(agentReply(envelope))
-            client.close(after: 0.2)
+            answerAgent(envelope) { reply in
+                client.send(reply)
+                client.close(after: 0.2)
+            }
             return
         }
         if !client.authenticated {
@@ -1735,13 +1750,33 @@ public final class VisorServer: ObservableObject {
     /// ask, `client` the asking session, `session` the one it is about.
     /// Only the agents this server started hold the token.
     func agentReply(_ envelope: Envelope) -> Envelope {
-        var reply = Envelope(type: "agent_result")
-        reply.id = envelope.id
         guard envelope.token == agentToken, let caller = session(envelope.client) else {
+            var reply = Envelope(type: "agent_result")
+            reply.id = envelope.id
             reply.error = "Not an agent of this computer"
             return reply
         }
-        let others = sessions.filter { $0.info.id != caller.info.id && !$0.info.ended && !$0.info.archived }
+        let name = caller.info.title.isEmpty ? caller.info.agent.title : caller.info.title
+        return answer(envelope, from: caller.info.id, named: name, on: nil)
+    }
+
+    /// The same asks from an agent on a linked computer, which that
+    /// computer's server forwards (`POST /api/agent`): `client` is the
+    /// caller as `<computer>/<id>`, `title` its name, `host` the computer.
+    func linkedAgentReply(_ envelope: Envelope) -> Envelope {
+        guard let caller = envelope.client, caller.contains("/") else {
+            var reply = Envelope(type: "agent_result")
+            reply.id = envelope.id
+            reply.error = "Not an agent of a linked computer"
+            return reply
+        }
+        return answer(envelope, from: caller, named: envelope.title ?? caller, on: envelope.host)
+    }
+
+    private func answer(_ envelope: Envelope, from caller: String, named name: String, on computer: String?) -> Envelope {
+        var reply = Envelope(type: "agent_result")
+        reply.id = envelope.id
+        let others = sessions.filter { $0.info.id != caller && !$0.info.ended && !$0.info.archived }
         switch envelope.mode {
         case "sessions":
             reply.text = others.isEmpty ? "No other sessions." : others.map { record in
@@ -1757,9 +1792,8 @@ public final class VisorServer: ObservableObject {
                 reply.error = "Nothing to send."
                 return reply
             }
-            let name = caller.info.title.isEmpty ? caller.info.agent.title : caller.info.title
             // Marked as another agent's, so it is not taken for the user's.
-            let marked = "[Message from the Visor session “\(name)” (\(caller.info.id)), not from the user. "
+            let marked = "[Message from the Visor session “\(name)” (\(caller))\(computer.map { " on \($0)" } ?? ""), not from the user. "
                 + "To answer, use send_message to that session.]\n\n" + text
             let busy = target.info.busy
             deliver(marked, to: target)
@@ -1914,7 +1948,7 @@ public final class VisorServer: ObservableObject {
         }
     }
 
-    private func session(_ id: String?) -> SessionRecord? {
+    func session(_ id: String?) -> SessionRecord? {
         sessions.first { $0.info.id == id }
     }
 

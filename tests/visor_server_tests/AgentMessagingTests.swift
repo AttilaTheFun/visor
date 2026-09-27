@@ -71,3 +71,99 @@ final class AgentMessagingTests: XCTestCase {
         XCTAssertNotNil(ask("send", from: "A", about: "B", text: "  ").error, "not nothing")
     }
 }
+
+/// Sessions on linked computers: two servers, each with its own REST side
+/// on this Mac, linked by a code whose host is the other's base address.
+@MainActor
+final class LinkedMessagingTests: XCTestCase {
+    private var here: VisorServer!
+    private var there: VisorServer!
+
+    override func setUp() {
+        super.setUp()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-link-tests-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        here = VisorServer(port: 7980)
+        there = VisorServer(port: 7982)
+        here.exposure = FakeExposure()
+        let road = FakeExposure()
+        road.name = "other-mac.example.ts.net"
+        there.exposure = road
+        there.password = "there-password"
+    }
+
+    override func tearDown() {
+        here.stop()
+        there.stop()
+        super.tearDown()
+    }
+
+    private func record(_ id: String, _ title: String, busy: Bool = false) -> SessionRecord {
+        var info = SessionInfo(id: id, agent: .claude, cwd: "/tmp", title: title, created: 0)
+        info.busy = busy
+        return SessionRecord(info: info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil),
+                             entries: [TranscriptEntry(id: "u1", role: .user, text: "Ship it")])
+    }
+
+    private func ask(_ mode: String, about target: String? = nil, text: String? = nil) async -> Envelope {
+        var e = Envelope(type: "agent")
+        e.token = here.agentToken
+        e.client = "A"
+        e.mode = mode
+        e.session = target
+        e.text = text
+        e.id = "r1"
+        return await withCheckedContinuation { done in here.answerAgent(e) { done.resume(returning: $0) } }
+    }
+
+    func testAgentsReachSessionsOnALinkedComputer() async throws {
+        here.sessions = [record("A", "Mini work")]
+        there.sessions = [record("B", "Laptop work", busy: true)]
+        for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
+        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.apiPort)", password: "there-password"))
+
+        let list = await ask("sessions")
+        XCTAssertTrue(list.text?.contains("On this computer: none.") == true, list.text ?? "")
+        XCTAssertTrue(list.text?.contains("other-mac/B — Laptop work") == true, list.text ?? "")
+
+        let read = await ask("read", about: "other-mac/B")
+        XCTAssertEqual(read.text, "user: Ship it")
+
+        let sent = await ask("send", about: "other-mac/B", text: "Is the client done?")
+        XCTAssertNil(sent.error)
+        XCTAssertTrue(sent.text?.hasPrefix("Queued") == true)
+        let queued = try XCTUnwrap(there.sessions.first?.info.queued.first)
+        XCTAssertTrue(queued.contains("“Mini work” (\(here.slug)/A) on \(here.hostName)"), queued)
+        XCTAssertTrue(queued.hasSuffix("Is the client done?"))
+
+        let nowhere = await ask("read", about: "nowhere/B")
+        XCTAssertNotNil(nowhere.error, "an unlinked computer")
+    }
+
+    func testAWrongPasswordIsSaid() async {
+        here.sessions = [record("A", "Mini work")]
+        for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
+        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.apiPort)", password: "wrong"))
+        let read = await ask("read", about: "other-mac/B")
+        XCTAssertTrue(read.error?.contains("wrong password") == true, read.error ?? "")
+    }
+
+    func testLinksAreKeptAndTheLinkGoesBothWays() async {
+        for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
+        here.password = "here-password"
+        let code = ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.apiPort)", password: "there-password")
+        let result = await here.link(code.encoded)
+        XCTAssertNil(result)
+        XCTAssertEqual(here.links.map(\.host), [code.host])
+        // The other computer took this one's code back.
+        XCTAssertEqual(there.links.map(\.host), ["this-mac.example.ts.net"])
+        XCTAssertEqual(VisorServer.slug("Logan’s MacBook Pro"), "logan-s-macbook-pro")
+        let nonsense = await here.link("nonsense")
+        XCTAssertEqual(nonsense, "That is not a connection code.")
+        here.unlink(host: code.host)
+        XCTAssertTrue(here.links.isEmpty)
+        XCTAssertTrue(VisorServer.keptLinks().isEmpty, "kept as unlinked")
+    }
+}
