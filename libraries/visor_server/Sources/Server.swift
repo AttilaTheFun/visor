@@ -1438,6 +1438,14 @@ public final class VisorServer: ObservableObject {
         case ("POST", 1, "agent"):
             // An agent on a linked computer asking about the sessions here.
             return .json(linkedAgentReply(body).encoded())
+        case ("GET", 1, "code"):
+            // This computer's connection code, for a client that holds
+            // several to link them (it is let in already, so the password
+            // the code carries is no news to it).
+            guard let code = connectionCode else { return HTTPResponse(503, Envelope.error("No connection code yet").encoded()) }
+            var e = Envelope(type: "code")
+            e.text = code.encoded
+            return .json(e.encoded())
         case ("POST", 1, "link"):
             // A computer this one's code was pasted into, linking back.
             guard let code = body.text.flatMap(ConnectionCode.init(parsing:)) else {

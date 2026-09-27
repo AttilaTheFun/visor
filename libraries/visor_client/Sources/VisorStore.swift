@@ -82,6 +82,32 @@ public final class VisorStore: ObservableObject {
 
     public func host(for id: String) -> HostConnection? { hosts.first { $0.id == id } }
 
+    /// Links the servers of every connected computer to one another, so
+    /// the agents on each reach the sessions on the others: each gives
+    /// its connection code, and each is handed the others'. Nil when all
+    /// are linked; otherwise what went wrong, per computer.
+    public func linkComputers() async -> String? {
+        let connected = hosts.filter { $0.state == .connected }
+        guard connected.count > 1 else { return "Connect to two or more computers first." }
+        var codes: [(host: HostConnection, code: String)] = []
+        var problems: [String] = []
+        for host in connected {
+            do { codes.append((host, try await host.connectionCode())) } catch { problems.append("\(host.config.name): \(Self.describe(error))") }
+        }
+        for (host, _) in codes {
+            for (other, code) in codes where other !== host {
+                do { try await host.link(code: code) } catch { problems.append("\(host.config.name) → \(other.config.name): \(Self.describe(error))") }
+            }
+        }
+        return problems.isEmpty ? nil : problems.joined(separator: "\n")
+    }
+
+    private static func describe(_ error: Error) -> String {
+        if let error = error as? HostConnection.LinkError { return error.message }
+        if let status = VisorHost.http?.status(of: error) { return status == 404 ? "its Visor Server is too old to link" : "it answered \(status)" }
+        return "not reachable"
+    }
+
     /// The computers answering now: where a new session can go.
     public var connectedHosts: [HostConnection] { hosts.filter { $0.state == .connected } }
 

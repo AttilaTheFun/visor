@@ -460,6 +460,24 @@ public final class HostConnection: ObservableObject, Identifiable {
         return path
     }
 
+    /// The computer's connection code, as its server gives it.
+    public func connectionCode() async throws -> String {
+        let reply = try await fetch("GET", "/code")
+        guard let code = reply.text, !code.isEmpty else { throw HostError.noHTTP }
+        return code
+    }
+
+    /// Links another computer's server to this one's, so the agents here
+    /// reach its sessions (the server keeps its code).
+    public func link(code: String) async throws {
+        var body = Envelope(type: "link")
+        body.text = code
+        let reply = try await fetch("POST", "/link", body)
+        if let error = reply.error { throw LinkError(message: error) }
+    }
+
+    public struct LinkError: Error { public let message: String }
+
     /// Creates the folder (and its parents) on the host.
     public func makeFolder(_ path: String) async throws -> String {
         var body = Envelope(type: "mkdir"); body.path = path
