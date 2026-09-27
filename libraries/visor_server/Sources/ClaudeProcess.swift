@@ -209,6 +209,14 @@ public final class ClaudeProcess: AgentProcess {
         guard let object = JSON.object(line), let type = object["type"] as? String else { return }
         switch type {
         case "system":
+            // The commands it takes, with what each does: at the start of
+            // a run, and again whenever they change (a skill installed).
+            if object["subtype"] as? String == "commands_changed", let list = object["commands"] as? [[String: Any]] {
+                onEvent?(.commands(list.compactMap { item in
+                    guard let name = item["name"] as? String, !name.isEmpty else { return nil }
+                    return SlashCommand(name: name, description: item["description"] as? String ?? "", argumentHint: item["argumentHint"] as? String ?? "")
+                }))
+            }
             if object["subtype"] as? String == "init" {
                 if let id = object["session_id"] as? String {
                     sessionID = id

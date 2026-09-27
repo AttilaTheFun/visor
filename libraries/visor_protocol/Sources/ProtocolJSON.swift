@@ -64,6 +64,9 @@ extension Envelope {
         e.images = value["images"].array?.compactMap(\.string)
         e.folders = value["folders"].array?.compactMap(\.string)
         e.resumable = value["resumable"].array?.compactMap(ResumableSession.init(json:))
+        e.commands = value["commands"].array?.compactMap { item in
+            item["name"].string.map { SlashCommand(name: $0, description: item["description"].string ?? "", argumentHint: item["argumentHint"].string ?? "") }
+        }
         return e
     }
 
@@ -104,6 +107,9 @@ extension Envelope {
         if let images, !images.isEmpty { o["images"] = .array(images.map(JSONValue.string)) }
         if let folders { o["folders"] = .array(folders.map(JSONValue.string)) }
         if let resumable { o["resumable"] = .array(resumable.map(\.json)) }
+        if let commands {
+            o["commands"] = .array(commands.map { .object(["name": .string($0.name), "description": .string($0.description), "argumentHint": .string($0.argumentHint)]) })
+        }
         return .object(o)
     }
 }

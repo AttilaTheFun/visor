@@ -15,6 +15,9 @@ struct AgentScreen: View {
     let sessionID: String
     @ObservedObject private var transcript: SessionTranscript
     @State private var draft = ""
+    /// The slash commands the agent takes, fetched when the user first
+    /// types "/" here.
+    @State private var commands: [SlashCommand]?
     @State private var showModels = false
     /// Pictures chosen for the next message, already on the computer.
     @State private var attachments: [PickedImage] = []
@@ -34,6 +37,36 @@ struct AgentScreen: View {
     }
 
     private var info: SessionInfo? { host.sessions.first { $0.id == sessionID } }
+
+    /// While the draft is a slash and the start of a command's name, the
+    /// commands it could be, best first: names that begin with what is
+    /// typed, then names that hold it.
+    private var suggestions: [AgentSuggestion] {
+        guard let typed = Self.commandPrefix(draft) else { return [] }
+        if commands == nil { loadCommands() }
+        let all = commands ?? []
+        let starting = all.filter { $0.name.lowercased().hasPrefix(typed) }
+        let holding = typed.isEmpty ? [] : all.filter { !$0.name.lowercased().hasPrefix(typed) && $0.name.lowercased().contains(typed) }
+        return (starting + holding).prefix(40).map { command in
+            AgentSuggestion(text: "/\(command.name) ", title: "/" + command.name + (command.argumentHint.isEmpty ? "" : " " + command.argumentHint),
+                            detail: command.description)
+        }
+    }
+
+    /// What follows the slash of a draft that is only a slash command's
+    /// name so far ("/co" → "co"), in lower case; nil otherwise.
+    static func commandPrefix(_ draft: String) -> String? {
+        guard draft.hasPrefix("/"), !draft.contains(where: \.isWhitespace) else { return nil }
+        return String(draft.dropFirst()).lowercased()
+    }
+
+    private func loadCommands() {
+        // Once: an empty list stands for "asked" until the answer comes.
+        Task { @MainActor in
+            commands = []
+            commands = (try? await host.commands(for: sessionID)) ?? []
+        }
+    }
 
     /// The terminal is drawn only for the window it was taken with.
     private var controlsTerminal: Bool { info.map(host.controlsTerminal) ?? false }
@@ -119,7 +152,9 @@ struct AgentScreen: View {
                 send()
                 host.stop(sessionID)
             },
-            loadEarlier: transcript.hasEarlier ? { host.loadEarlier(sessionID) } : nil
+            loadEarlier: transcript.hasEarlier ? { host.loadEarlier(sessionID) } : nil,
+            suggestions: suggestions,
+            pick: { draft = $0.text }
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval,

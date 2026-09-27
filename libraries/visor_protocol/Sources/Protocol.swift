@@ -62,6 +62,21 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable {
     public var tool: String { rawValue }
 }
 
+/// A slash command an agent takes ("/compact"), as it describes it.
+public struct SlashCommand: Codable, Hashable, Sendable {
+    /// Without the slash: "compact".
+    public var name: String
+    public var description: String
+    /// What goes after it, as the agent hints ("[instructions]"), if anything.
+    public var argumentHint: String
+
+    public init(name: String, description: String = "", argumentHint: String = "") {
+        self.name = name
+        self.description = description
+        self.argumentHint = argumentHint
+    }
+}
+
 /// A session in an agent's own store on the host, resumable here.
 public struct ResumableSession: Codable, Identifiable, Hashable, Sendable {
     public var id: String
@@ -518,6 +533,8 @@ public struct Envelope: Codable, Sendable {
     public var streams: [StreamChunk]?
     public var folders: [String]?
     public var resumable: [ResumableSession]?
+    /// The slash commands a session's agent takes (`commands`).
+    public var commands: [SlashCommand]?
 
     public init(type: String) { self.type = type }
 
