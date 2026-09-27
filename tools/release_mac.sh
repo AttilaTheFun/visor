@@ -3,11 +3,13 @@
 # Visor Server and the Visor client, each signed with the builder's
 # "Developer ID Application" certificate (tools/sign_mac_app.sh), notarized
 # by Apple and stapled, in a disk image that is signed, notarized and
-# stapled too. Notarization uses a notarytool keychain profile, stored once:
+# stapled too. Notarization uses a notarytool keychain profile, stored once
+# in a keychain of its own by
 #
-#   xcrun notarytool store-credentials visor-notary --apple-id <you> --team-id <team>
+#   tools/store_notary_credentials.sh <Apple ID email>
 #
 # (an app-specific password; VISOR_NOTARY_PROFILE names another profile).
+# Without that keychain, the profile is looked for in the login keychain.
 # The team is VISOR_TEAM_ID in .bazelrc.user. Xcode's sign-in is not needed.
 #
 #   tools/release_mac.sh <version>               # the .dmgs in dist/
@@ -22,8 +24,15 @@ TEAM="$(sed -n 's/.*VISOR_TEAM_ID=\([A-Z0-9]*\).*/\1/p' .bazelrc.user 2>/dev/nul
 IDENTITY="$(security find-identity -v -p codesigning | sed -n "s/.*\([0-9A-F]\{40\}\) \"Developer ID Application: .*($TEAM)\"/\1/p" | head -1)"
 [ -n "$IDENTITY" ] \
   || { echo "No Developer ID Application certificate for the team in the keychain (Xcode → Settings → Accounts → Manage Certificates)" >&2; exit 1; }
-xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1 \
-  || { echo "No notarytool profile \"$PROFILE\" (see the top of this script)" >&2; exit 1; }
+KEYCHAIN="$HOME/Library/Keychains/visor-notary.keychain-db"
+PASSFILE="$HOME/.visor/notary-keychain-password"
+NOTARY=(--keychain-profile "$PROFILE")
+if [ -f "$KEYCHAIN" ] && [ -s "$PASSFILE" ]; then
+  security unlock-keychain -p "$(cat "$PASSFILE")" "$KEYCHAIN"
+  NOTARY+=(--keychain "$KEYCHAIN")
+fi
+xcrun notarytool history "${NOTARY[@]}" >/dev/null 2>&1 \
+  || { echo "No notarytool profile \"$PROFILE\": run tools/store_notary_credentials.sh <Apple ID email>" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -32,7 +41,7 @@ mkdir -p dist
 # Sends a file for notarization and waits; fails unless Apple accepts it.
 notarize() {
   local file="$1" log="$WORK/notary-$(basename "$1").json"
-  xcrun notarytool submit "$file" --keychain-profile "$PROFILE" --wait --output-format json >"$log"
+  xcrun notarytool submit "$file" "${NOTARY[@]}" --wait --output-format json >"$log"
   grep -q '"status" *: *"Accepted"' "$log" || { cat "$log" >&2; exit 1; }
 }
 
