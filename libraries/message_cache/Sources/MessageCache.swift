@@ -88,7 +88,7 @@ public protocol MessageStorage: AnyObject, Sendable {
 public final class MessageCache: @unchecked Sendable {
     /// Bumped when what is kept, or how, changes: a cache of another
     /// version is dropped and rebuilt.
-    public static let schemaVersion = 4
+    public static let schemaVersion = 5
 
     private let storage: MessageStorage
 

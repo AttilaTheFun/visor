@@ -77,11 +77,17 @@ public enum ClaudeTranscriptParser {
             guard let title = (object["customTitle"] ?? object["aiTitle"] ?? object["title"]) as? String, !title.isEmpty else { return nil }
             return ClaudeRecord(uuid: uuid, kind: .title(title.replacingOccurrences(of: "-", with: " ")), timestamp: timestamp)
         case "attachment":
+            guard let attachment = object["attachment"] as? [String: Any] else { return nil }
+            // The goal's state: set (Claude keeps working until it is
+            // met), or met, with why.
+            if attachment["type"] as? String == "goal_status", let condition = attachment["condition"] as? String {
+                return ClaudeRecord(uuid: uuid, kind: .goal(condition: condition, met: attachment["met"] as? Bool == true,
+                                                            reason: attachment["reason"] as? String), timestamp: timestamp)
+            }
             // A message the user sent while the agent was working: Claude
             // Code takes it into the turn and records it as a queued
             // command, not as a user line. It is what the user said.
-            guard let attachment = object["attachment"] as? [String: Any],
-                  attachment["type"] as? String == "queued_command",
+            guard attachment["type"] as? String == "queued_command",
                   (attachment["commandMode"] as? String ?? "prompt") == "prompt" else { return nil }
             let text: String
             if let prompt = attachment["prompt"] as? String {
@@ -96,7 +102,12 @@ public enum ClaudeTranscriptParser {
         case "user":
             guard let message = object["message"] as? [String: Any] else { return nil }
             if let text = message["content"] as? String {
-                return ClaudeRecord(uuid: uuid, kind: .user(text: text, images: []), timestamp: timestamp)
+                // An earlier Claude Code wrote the goal as a notice in the
+                // user's place.
+                if let condition = goalNotice(text) {
+                    return ClaudeRecord(uuid: uuid, kind: .goal(condition: condition, met: false, reason: nil), timestamp: timestamp)
+                }
+                return ClaudeRecord(uuid: uuid, kind: .user(text: command(text) ?? text, images: []), timestamp: timestamp)
             }
             guard let parts = message["content"] as? [[String: Any]] else { return nil }
             // Tool results ride along as user messages; they are not the
@@ -133,6 +144,34 @@ public enum ClaudeTranscriptParser {
             // whatever comes next: bookkeeping, not conversation.
             return nil
         }
+    }
+
+    /// A slash command the user typed, as Claude Code records it
+    /// (`<command-name>/goal</command-name>…<command-args>…</command-args>`),
+    /// back as they typed it: "/goal …". Nil for anything else.
+    public static func command(_ text: String) -> String? {
+        func tag(_ name: String) -> String? {
+            guard let open = text.range(of: "<\(name)>"), let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex) else { return nil }
+            return String(text[open.upperBound..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<command-"), let name = tag("command-name"), !name.isEmpty else { return nil }
+        let slashed = name.hasPrefix("/") ? name : "/" + name
+        let args = tag("command-args") ?? ""
+        return args.isEmpty ? slashed : slashed + " " + args
+    }
+
+    /// The condition of a goal an earlier Claude Code announced in the
+    /// user's place ("A session-scoped Stop hook is now active with
+    /// condition: …"), or nil.
+    public static func goalNotice(_ text: String) -> String? {
+        let notice = "A session-scoped Stop hook is now active with condition:"
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(notice) else { return nil }
+        var condition = trimmed.dropFirst(notice.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        if condition.count > 1, condition.hasPrefix("\""), let end = condition.dropFirst().firstIndex(of: "\"") {
+            condition = String(condition[condition.index(after: condition.startIndex)..<end])
+        }
+        return condition
     }
 
     /// The text and pictures of a content value: a string, or blocks.

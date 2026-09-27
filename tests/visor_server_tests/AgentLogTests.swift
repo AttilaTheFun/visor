@@ -2,6 +2,7 @@
 // openrouter CLI's log are read as lines of Claude's shape — a list, each
 // line after the last — and assembled the way Claude's are.
 
+import ClaudeTranscript
 @testable import VisorServer
 import XCTest
 
@@ -64,5 +65,19 @@ final class AgentLogTests: XCTestCase {
         XCTAssertEqual(rows[1].activities, ["bash: ls"])
         XCTAssertEqual(rows.map(\.id).first, "user-file-u1")
         XCTAssertEqual(rows[3].text, "Done.")
+    }
+}
+
+/// A goal's records are shown as the goal's rows: set, then met.
+final class GoalRowTests: XCTestCase {
+    func testGoalsBecomeTheirOwnRows() {
+        let rows = TranscriptAssembler.rows(in: [
+            ClaudeRecord(uuid: "g1", kind: .user(text: "/goal Ship it", images: []), timestamp: nil),
+            ClaudeRecord(uuid: "g2", kind: .goal(condition: "Ship it", met: false, reason: nil), timestamp: nil),
+            ClaudeRecord(uuid: "g3", kind: .goal(condition: "Ship it", met: true, reason: "Shipped."), timestamp: nil),
+        ])
+        XCTAssertEqual(rows.map(\.role), [.user, .tool, .tool])
+        XCTAssertEqual(rows.map(\.text), ["/goal Ship it", "Ship it", "Shipped."])
+        XCTAssertEqual(rows.map(\.toolName), [nil, "goal", "goal-met"])
     }
 }
