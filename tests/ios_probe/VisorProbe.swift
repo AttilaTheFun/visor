@@ -370,6 +370,16 @@ final class VisorProbe: XCTestCase {
             Thread.sleep(forTimeInterval: 4)
         }
         shot(app, "look-1-sidebar")
+        // A search of the sidebar (VISOR_LOOK_SEARCH), and no further.
+        if let words = ProcessInfo.processInfo.environment["VISOR_LOOK_SEARCH"], !words.isEmpty {
+            let field = app.searchFields.firstMatch
+            XCTAssertTrue(field.waitForExistence(timeout: 10), "no search field")
+            field.tap()
+            field.typeText(words)
+            Thread.sleep(forTimeInterval: 5)
+            shot(app, "look-1-search")
+            return
+        }
         // A session row: the first cell that is not a computer or a folder.
         // A name no folder shares, or the folder row above it takes the tap.
         let wanted = ProcessInfo.processInfo.environment["VISOR_LOOK_SESSION"] ?? "Android Emulator on iOS"

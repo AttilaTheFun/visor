@@ -37,6 +37,8 @@ public struct VisorRootView: View {
     /// What the sidebar has selected: a session, or a project's archive.
     @State private var selection: ContentSelection?
     @State private var search = ""
+    /// Messages matching the search, from every computer connected.
+    @State private var messageHits: [(host: HostConnection, hit: HostConnection.SearchHit)] = []
     @State private var linking = false
     @State private var linkResult: String?
 
@@ -188,6 +190,17 @@ public struct VisorRootView: View {
             ForEach(store.hosts) { host in
                 HostSection(host: host) { host in hostRows(host) }
             }
+            // What was said, as well as what the sessions are called.
+            if searching, !messageHits.isEmpty {
+                Section {
+                    ForEach(messageHits, id: \.hit.id) { item in
+                        MessageHitRow(hit: item.hit, computer: store.hosts.count > 1 ? item.host.config.name : nil)
+                            .tag(ContentSelection.session(SessionSelection(hostID: item.host.id, sessionID: item.hit.session)))
+                    }
+                } header: {
+                    Text("Messages").noHeaderCase()
+                }
+            }
             // Always last: where another computer comes from.
             Section {
                 Button { store.addingComputer = true } label: {
@@ -208,6 +221,7 @@ public struct VisorRootView: View {
             }
         }
         .insetGroupedList()
+        .task(id: search.trimmed) { await searchMessages(search.trimmed) }
         .alert("Link These Computers", isPresented: presenting($linkResult)) {
             Button("OK") { linkResult = nil }
         } message: {
@@ -215,6 +229,21 @@ public struct VisorRootView: View {
         }
         .navigationTitle("Sessions")
         .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 440)
+    }
+
+    /// Asks every connected computer for the messages that match, a
+    /// moment after the typing stops (a new search cancels this one).
+    private func searchMessages(_ query: String) async {
+        guard query.count > 1 else { messageHits = []; return }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        guard !Task.isCancelled else { return }
+        var found: [(host: HostConnection, hit: HostConnection.SearchHit)] = []
+        for host in store.hosts where host.state == .connected {
+            let hits = (try? await host.search(query)) ?? []
+            found += hits.prefix(30).map { (host: host, hit: $0) }
+        }
+        guard !Task.isCancelled else { return }
+        messageHits = found
     }
 
     private func linkComputers() {
@@ -233,7 +262,9 @@ public struct VisorRootView: View {
         let cards = projects.flatMap { entry in entry.project.sessions.map { SessionCard(host: host, project: entry.project, session: $0) } }
             .sorted { $0.updated > $1.updated }
         let archived = projects.flatMap(\.project.archived)
-        if cards.isEmpty && archived.isEmpty {
+        // While messages match the search below, a computer with no
+        // session named so says nothing.
+        if cards.isEmpty && archived.isEmpty && !(searching && messageHits.contains { $0.host === host }) {
             Text(searching ? "Nothing matches “\(search.trimmed)”." : "No sessions yet — tap compose to start one.")
                 .foregroundColor(.secondary)
                 .font(.footnote)
@@ -605,4 +636,27 @@ extension HostConnection.Badge {
 enum OutlineMetrics {
     static let glyph: CGFloat = 16
     static let gap: CGFloat = 8
+}
+
+/// A message that matched the search: its words, and whose they are.
+@MainActor
+struct MessageHitRow: View {
+    let hit: HostConnection.SearchHit
+    /// The computer's name, when there is more than one to tell apart.
+    let computer: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(hit.snippet)
+                .lineLimit(2)
+            Text(([hit.role == "user" ? "You" : hit.role == "assistant" ? "Agent" : "Tool",
+                   hit.title.isEmpty ? AttachmentKind.fileName(hit.cwd) : hit.title] + (computer.map { [$0] } ?? []))
+                .joined(separator: " · "))
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 2)
+        .accessibilityIdentifier("message-hit")
+    }
 }

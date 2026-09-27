@@ -328,7 +328,6 @@ a detached relauncher and resumes named sessions with a nudge
 
 Bugs seen and not yet fixed are in docs/KNOWN_ISSUES.md.
 
-- Search has no client UI (`/api/search` works).
 - Slash commands are offered for Claude only (its `system/commands_changed`
   lists them with descriptions); Codex and the openrouter CLI list none.
   `/remote-control` is not one: headless Claude answers that it "isn't
