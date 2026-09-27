@@ -176,6 +176,17 @@ public final class SessionTranscript: ObservableObject {
     /// Told rows that came from before the first shown.
     var keepEarlier: (([TranscriptEntry]) -> Void)?
 
+    /// Whether a sync's answer brings anything: the first answer, rows
+    /// past the revision held, or the rows as a whole in another
+    /// generation. A session just started or resumed from here is shown
+    /// as loaded at revision 0 before its first answer, and its rows (a
+    /// resumed conversation's, imported by the computer) may come at
+    /// revision 0 too: they come whole, in the computer's generation.
+    func takes(_ envelope: Envelope) -> Bool {
+        !loaded || (envelope.revision ?? -1) != revision || envelope.reset == true
+            || (envelope.generation.map { $0 != generation } ?? false)
+    }
+
     func sync(_ envelope: Envelope) {
         let rows = envelope.entries ?? []
         let whole: Bool
@@ -701,7 +712,7 @@ public final class HostConnection: ObservableObject, Identifiable {
                 do {
                     let text = try await transport.call("GET", "/sessions/\(sessionID)/transcript?since=\(revision)&generation=\(transcript.generation)", body: "", config: config)
                     guard let envelope = Envelope.decode(text, defaultType: "transcript") else { continue }
-                    if (envelope.revision ?? -1) != revision || !transcript.loaded { transcript.sync(envelope) }
+                    if transcript.takes(envelope) { transcript.sync(envelope) }
                 } catch {
                     // The computer is away, or a hold timed out on the way:
                     // ask again shortly.
