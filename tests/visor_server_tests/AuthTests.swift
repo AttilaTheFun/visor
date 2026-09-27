@@ -13,7 +13,8 @@ final class FakeExposure: ServerExposure {
     let installed = true
     var owner: String? = "owner@example.com"
     var fronted = false
-    func address() -> String? { "this-mac.example.ts.net" }
+    var name = "this-mac.example.ts.net"
+    func address() -> String? { name }
     func identity() -> String? { owner }
     func requester(headers: [String: String]) -> String? { headers["x-fake-login"] }
     func fronts(port: UInt16) -> Bool { fronted }

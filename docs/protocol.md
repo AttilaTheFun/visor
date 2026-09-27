@@ -153,5 +153,18 @@ answered with `{"type":"agent_result","id":…,"text":…}` or `…,"error":…}
 A session is never offered itself, nor ended or archived ones. A message is
 delivered as a new turn (queued while the other session works), prefixed
 `[Message from the Visor session "<title>" (<id>), not from the user. …]`.
-Only sessions on the same computer are reachable. Node must be on the PATH
-(as it already is for approvals).
+Node must be on the PATH (as it already is for approvals).
+
+Sessions on other computers are reachable once the computers are linked:
+Visor Server's Settings → Linked computers takes the other computer's
+connection code, keeps it in the keychain, and sends this computer's code to
+the other's `POST /api/link` (`{"type":"link","text":<code>}`), so the link
+goes both ways. `list_sessions` then lists each linked computer's sessions as
+`<computer>/<id>`, the computer's name in lower case with dashes
+(`logans-macbook-pro/1tzn…`). Asks about such a session are forwarded to that
+computer's `POST /api/agent`, over HTTPS with its password, as the same
+envelope with `client` set to the caller as `<computer>/<id>`, `title` its
+name and `host` its computer; the answer is the `agent_result`. Messages from
+another computer are prefixed `[Message from the Visor session "<title>"
+(<computer>/<id>) on <computer name>, not from the user. …]`, and are
+answered with `send_message` to that id.

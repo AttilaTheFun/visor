@@ -114,6 +114,9 @@ struct SettingsPane: View {
     @ObservedObject var server: VisorServer
     @State private var draft = ""
     @State private var message: String?
+    @State private var linkDraft = ""
+    @State private var linkMessage: String?
+    @State private var linking = false
 
     var body: some View {
         Form {
@@ -184,6 +187,28 @@ struct SettingsPane: View {
             } header: {
                 Text("Network")
             }
+            Section {
+                ForEach(server.links, id: \.host) { link in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(link.name)
+                            Text(link.host).font(.caption).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Button("Unlink") { server.unlink(host: link.host) }
+                    }
+                }
+                HStack {
+                    TextField("Another computer's connection code", text: $linkDraft)
+                    Button("Link") { link() }
+                        .disabled(linking || linkDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                Text("The agents here can list, message and read the sessions on linked computers, and theirs the ones here. Paste the code on either computer: the link goes both ways.")
+                    .font(.caption).foregroundColor(.secondary)
+                if let linkMessage { Text(linkMessage).font(.caption).foregroundColor(.red) }
+            } header: {
+                Text("Linked computers")
+            }
             Section("Addresses") {
                 if let name = server.exposure.address() { Text(name) }
                 ForEach(VisorServer.addresses(), id: \.address) { entry in
@@ -193,9 +218,20 @@ struct SettingsPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 680)
+        .frame(width: 520, height: 760)
         .onAppear {
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
+        }
+    }
+
+    private func link() {
+        linking = true
+        linkMessage = nil
+        Task {
+            linkMessage = await server.link(linkDraft)
+            // Kept here, even if the other did not link back: the code is done with.
+            if let code = ConnectionCode(parsing: linkDraft), server.links.contains(where: { $0.host == code.host }) { linkDraft = "" }
+            linking = false
         }
     }
 

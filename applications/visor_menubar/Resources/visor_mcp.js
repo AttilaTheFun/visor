@@ -1,6 +1,6 @@
 // Visor's MCP server, run by every agent session the menu bar app starts.
-// Its tools let a session see the other sessions on this computer, message
-// them, and read what they said. In manual mode Claude also calls
+// Its tools let a session see the other sessions on this computer and on
+// the computers linked to it, message them, and read what they said. In manual mode Claude also calls
 // `approve` (--permission-prompt-tool mcp__visor__approve) whenever a tool
 // needs permission, which the phone shows until the user taps Allow or
 // Deny. Every call goes to the menu bar app over its WebSocket.
@@ -15,7 +15,7 @@ const approvals = process.env.VISOR_APPROVALS === "1";
 const tools = [
   {
     name: "list_sessions",
-    description: "Lists the other agent sessions Visor runs on this computer: id, title, agent, whether it is working, and its folder.",
+    description: "Lists the other agent sessions Visor runs on this computer and on the computers linked to it (in Visor Server's Settings): id, title, agent, whether it is working, and its folder. A session on another computer has an id of the form computer/id.",
     inputSchema: { type: "object", properties: {} },
   },
   {
