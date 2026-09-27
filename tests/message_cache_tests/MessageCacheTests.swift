@@ -60,3 +60,17 @@ final class MessageCacheTests: XCTestCase {
     func testMemoryStorage() throws { try exercise(MessageCache.inMemory()) }
     func testSQLiteStorage() throws { try exercise(try MessageCache.sqliteInMemory()) }
 }
+
+/// A host that supplies its own storage gets it from `open(named:)`.
+final class StorageProviderTests: XCTestCase {
+    func testOpenUsesTheSuppliedStorage() {
+        let supplied = MemoryStorage()
+        var asked: [String] = []
+        MessageCache.storageProvider = { name in asked.append(name); return name == "mine" ? supplied : nil }
+        defer { MessageCache.storageProvider = nil }
+        let cache = MessageCache.open(named: "mine")
+        try? cache.append("s", [TranscriptEntry(id: "a", role: .user, text: "hi")])
+        XCTAssertEqual(supplied.messages("s", limit: 10, before: nil).messages.map(\.id), ["a"])
+        XCTAssertEqual(asked, ["mine"])
+    }
+}
