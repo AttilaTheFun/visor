@@ -52,6 +52,9 @@ public struct ClaudeRecord: Sendable, Equatable {
         case toolResult(toolUseID: String?, text: String, images: [ClaudeImage], isError: Bool)
         /// A title the user gave the session, or Claude Code did.
         case title(String)
+        /// A goal the user set (`/goal`): Claude keeps working until it is
+        /// met. Set, or met with the reason Claude Code judged it so.
+        case goal(condition: String, met: Bool, reason: String?)
     }
 
     public let uuid: String

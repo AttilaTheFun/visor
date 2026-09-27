@@ -340,7 +340,7 @@ public final class SessionRecord: ObservableObject {
         switch record.kind {
         case .user, .toolResult: true
         case .assistant(_, _, let stop, _, _): stop == "tool_use" ? true : (stop == nil ? nil : false)
-        case .title: nil
+        case .title, .goal: nil
         }
     }
 

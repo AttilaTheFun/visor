@@ -46,6 +46,28 @@ final class ParserTests: XCTestCase {
         XCTAssertNil(ClaudeTranscriptParser.lines(in: Data(#"{"type":"attachment","uuid":"x","attachment":{"type":"file"}}"#.utf8)).first?.record)
     }
 
+    /// A goal (`/goal`): the command as the user typed it, the goal set,
+    /// and the goal met with why — as Claude Code records them.
+    func testAGoalIsTheUsersCommandThenItsState() {
+        let command = #"{"type":"user","uuid":"g1","parentUuid":"a1","message":{"role":"user","content":"<command-name>/goal</command-name>\n            <command-message>goal</command-message>\n            <command-args>No jumps when sending</command-args>"}}"#
+        let set = #"{"type":"attachment","uuid":"g2","parentUuid":"g1","attachment":{"type":"goal_status","met":false,"sentinel":true,"condition":"No jumps when sending"}}"#
+        let met = #"{"type":"attachment","uuid":"g3","parentUuid":"a9","attachment":{"type":"goal_status","met":true,"condition":"No jumps when sending","reason":"Recorded without a jump."}}"#
+        let parsed = ClaudeTranscriptParser.lines(in: Data([command, set, met].joined(separator: "\n").utf8))
+        XCTAssertEqual(parsed.map(\.record?.kind), [
+            .user(text: "/goal No jumps when sending", images: []),
+            .goal(condition: "No jumps when sending", met: false, reason: nil),
+            .goal(condition: "No jumps when sending", met: true, reason: "Recorded without a jump."),
+        ])
+        XCTAssertEqual(parsed.first?.isPrompt, true)
+        // A command without arguments.
+        XCTAssertEqual(ClaudeTranscriptParser.command("<command-name>/compact</command-name><command-args></command-args>"), "/compact")
+        XCTAssertNil(ClaudeTranscriptParser.command("Plain words"))
+        // An earlier Claude Code's notice of the goal, in the user's place.
+        let notice = #"{"type":"user","uuid":"n1","message":{"role":"user","content":"A session-scoped Stop hook is now active with condition: \"In convo, messages sync\""}}"#
+        XCTAssertEqual(ClaudeTranscriptParser.lines(in: Data(notice.utf8)).first?.record?.kind,
+                       .goal(condition: "In convo, messages sync", met: false, reason: nil))
+    }
+
     func testProjectDirectoryName() {
         XCTAssertEqual(ClaudeSessionFiles.projectDirectoryName(for: "/Users/me/Developer/my_app"), "-Users-me-Developer-my-app")
         // A symlinked folder is named by where it really is.

@@ -56,6 +56,11 @@ struct TranscriptAssembler {
                                     toolName: "tool_result", images: paths, imageSizes: AgentImages.pixelSizes(paths: paths))]
         case .title:
             return []
+        case .goal(let condition, let met, let reason):
+            // A row the transcript shows as the goal's card: set, with
+            // what it asks; met, with why it is.
+            return [TranscriptEntry(id: "goal-file-" + record.uuid, role: .tool, text: met ? (reason ?? condition) : condition,
+                                    toolName: met ? "goal-met" : "goal")]
         }
     }
 
