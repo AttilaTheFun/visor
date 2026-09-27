@@ -168,3 +168,8 @@ name and `host` its computer; the answer is the `agent_result`. Messages from
 another computer are prefixed `[Message from the Visor session "<title>"
 (<computer>/<id>) on <computer name>, not from the user. …]`, and are
 answered with `send_message` to that id.
+
+A client connected to several computers links them all in one step (Link
+These Computers, in the sidebar): it takes each server's code from
+`GET /api/code` (`{"type":"code","text":<code>}`, for a client already let
+in) and gives each server the others' codes through `POST /api/link`.

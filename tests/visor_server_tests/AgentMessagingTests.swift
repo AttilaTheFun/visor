@@ -150,6 +150,31 @@ final class LinkedMessagingTests: XCTestCase {
         XCTAssertTrue(read.error?.contains("wrong password") == true, read.error ?? "")
     }
 
+    /// What a client connected to both does to link them: asks each for
+    /// its code, and gives each the other's.
+    func testAClientLinksTheComputersItHolds() {
+        here.password = "here-password"
+        func request(_ method: String, _ path: String, _ password: String, body: String = "") -> HTTPRequest {
+            HTTPRequest(method: method, path: path, headers: ["authorization": "Bearer " + password], body: body)
+        }
+        var codes: [String] = []
+        for server in [here!, there!] {
+            let answer = server.route(request("GET", "/api/code", server.password))
+            XCTAssertEqual(answer.status, 200)
+            codes.append(Envelope.decode(answer.body)?.text ?? "")
+        }
+        var link = Envelope(type: "link")
+        link.text = codes[1]
+        XCTAssertEqual(here.route(request("POST", "/api/link", "here-password", body: link.encoded())).status, 200)
+        link.text = codes[0]
+        XCTAssertEqual(there.route(request("POST", "/api/link", "there-password", body: link.encoded())).status, 200)
+        XCTAssertEqual(here.links.map(\.host), ["other-mac.example.ts.net"])
+        XCTAssertEqual(there.links.map(\.host), ["this-mac.example.ts.net"])
+        XCTAssertEqual(there.links.first?.password, "here-password")
+        // A stranger gets no code.
+        XCTAssertEqual(here.route(HTTPRequest(method: "GET", path: "/api/code", headers: [:], body: "")).status, 401)
+    }
+
     func testLinksAreKeptAndTheLinkGoesBothWays() async {
         for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
         here.password = "here-password"

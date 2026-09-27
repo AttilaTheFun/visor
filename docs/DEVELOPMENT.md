@@ -252,6 +252,14 @@ a detached relauncher and resumes named sessions with a nudge
   carry on from there. Verify with `shasum` of the installed binary vs
   the staged one and exactly one `claude -p` per session. Never `pkill`
   the menu bar app (endAll kills every agent).
+- Upgrade to a released build from inside a session the same way: copy
+  `Visor Server.app` out of the disk image to a staging folder and
+  `POST /api/restart {path, session}` with it (bearer `$VISOR_TOKEN`).
+  Never quit the server from a script an agent runs: quitting ends the
+  agent and everything it started, the script included, and the server
+  stays quit. A server started from the disk image, or from a quarantined
+  copy (App Translocation), cannot install over itself: run it from
+  /Applications.
 - Deploy clients: `tools/deploy_clients.sh <UDID>`. A running Mac
   client keeps old code until relaunched (the script relaunches it).
 - agent_ui changes: commit+push there, put the revision in
