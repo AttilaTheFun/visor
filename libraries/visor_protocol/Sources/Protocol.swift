@@ -158,6 +158,14 @@ public struct AgentCatalog: Codable, Hashable, Sendable {
 
     /// A model id as a name: the catalog's title, or the id tidied up
     /// ("claude-haiku-4-5-20251001" → "Haiku 4.5").
+    /// The model a turn ran on instead of the one chosen (nil: the
+    /// default), when the agent fell back (a model busy or rate-limited);
+    /// nil when it ran on the chosen one, or either is unknown here.
+    public func fallback(from chosen: String?, to reported: String?) -> AgentModel? {
+        guard let reported, let ran = model(matching: reported), let wanted = model(matching: chosen) else { return nil }
+        return ran.id == wanted.id ? nil : ran
+    }
+
     public func title(for id: String?) -> String? {
         if let model = model(matching: id) { return model.title }
         guard let id else { return nil }

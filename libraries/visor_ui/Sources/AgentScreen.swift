@@ -171,16 +171,25 @@ struct AgentScreen: View {
                         .accessibilityIdentifier("attach")
                 }
                 // The model, as the Claude app's pill: tap to change it or the effort.
+                let fallback = host.fallbackModel(for: info)
                 Button { showModels = true } label: {
                     // "Opus 5 High": the model, then how hard it is being
-                    // asked to think, in grey so the two read apart.
-                    Text(host.modelTitle(for: info))
-                        + Text(info.effort.map { " " + AgentCatalog.effortTitle($0) } ?? "")
-                            .foregroundColor(.secondary)
+                    // asked to think, in grey so the two read apart. After
+                    // a fallback, the model the turn ran on, marked.
+                    if let fallback {
+                        Text(Image(systemName: "arrow.down.circle.fill")).foregroundColor(.orange)
+                            + Text(" " + fallback.title)
+                            + Text(info.effort.map { " " + AgentCatalog.effortTitle($0) } ?? "")
+                                .foregroundColor(.secondary)
+                    } else {
+                        Text(host.modelTitle(for: info))
+                            + Text(info.effort.map { " " + AgentCatalog.effortTitle($0) } ?? "")
+                                .foregroundColor(.secondary)
+                    }
                 }
                 .lineLimit(1)
                 .agentPillButton()
-                .accessibilityLabel("Model")
+                .accessibilityLabel(fallback.map { "Model: fell back to \($0.title) from \(host.modelTitle(for: info))" } ?? "Model")
                 .accessibilityIdentifier("model")
                 // What the user has said while the agent works. It goes
                 // over when the turn ends; this is how to jump the queue

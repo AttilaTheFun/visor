@@ -337,8 +337,6 @@ Bugs seen and not yet fixed are in docs/KNOWN_ISSUES.md.
 - Codex plan updates are not mapped to the tasks checklist.
 - The openrouter CLI runs its tools without asking (no manual mode); its
   `--permission-mode` is accepted and ignored.
-- A model fallback (Fable → Opus under rate limits) is recorded as
-  `reportedModel` but not surfaced in the UI.
 - The first "earlier" page after a resume can be short (in-memory rows
   before the window), then 600 a page.
 - A 212 MB session file indexes in ~9 s on first build (off the main

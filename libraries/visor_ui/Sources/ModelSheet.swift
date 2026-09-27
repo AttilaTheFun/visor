@@ -28,6 +28,17 @@ struct ModelSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                // The last turn ran on another model than the one chosen.
+                if let fallback = host.fallbackModel(for: session) {
+                    Section {
+                        Label {
+                            Text("The last turn ran on \(fallback.title), not \(host.modelTitle(for: session)): the agent fell back, as it does when a model is busy or rate-limited. \(host.modelTitle(for: session)) stays chosen, so later turns try it again.")
+                                .font(.footnote)
+                        } icon: {
+                            Image(systemName: "arrow.down.circle.fill").foregroundColor(.orange)
+                        }
+                    }
+                }
                 Section {
                     ApprovalChoice(title: "Auto Approve",
                                    detail: "The agent runs without asking. Nobody is at the computer to answer, so this is how a session starts.",
