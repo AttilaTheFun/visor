@@ -41,6 +41,23 @@ final class SmoothSendTests: XCTestCase {
         XCTAssertEqual(t.displayID(of: t.entries[0]), "u-old")
     }
 
+    /// A session resumed from here is shown as loaded, at revision 0,
+    /// before the computer answers; the computer's first answer carries the
+    /// resumed conversation whole, and may be at revision 0 as well.
+    func testAResumedSessionTakesItsImportedRows() {
+        let t = SessionTranscript()
+        t.loaded = true
+        var whole = transcript([user("a", "from the terminal")], revision: 0, generation: 42)
+        whole.reset = true
+        XCTAssertTrue(t.takes(whole))
+        t.sync(whole)
+        XCTAssertEqual(t.entries.map(\.id), ["a"])
+        // Then the same answer again (the hold timed out) brings nothing.
+        var same = transcript([], revision: 0, generation: 42)
+        same.after = []
+        XCTAssertFalse(t.takes(same))
+    }
+
     func testADeltaPlacesRemovesAndMovesRows() {
         let t = SessionTranscript()
         t.sync(transcript([user("a", "one"), user("b", "two"), user("c", "three")], revision: 1, generation: 7))
