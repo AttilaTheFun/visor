@@ -471,6 +471,12 @@ public final class HostConnection: ObservableObject, Identifiable {
         return path
     }
 
+    /// The slash commands a session's agent takes, as the computer knows
+    /// them (none for an agent that lists none).
+    public func commands(for sessionID: String) async throws -> [SlashCommand] {
+        try await fetch("GET", "/sessions/\(sessionID)/commands").commands ?? []
+    }
+
     /// The computer's connection code, as its server gives it.
     public func connectionCode() async throws -> String {
         let reply = try await fetch("GET", "/code")

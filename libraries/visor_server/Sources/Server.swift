@@ -102,6 +102,8 @@ public final class SessionRecord: ObservableObject {
     /// thinking — as announced, kept here so a client that subscribes
     /// mid-turn gets all of them. Cleared when the turn ends.
     private var turn = TurnStatus()
+    /// The slash commands the agent listed when it last ran here.
+    var commands: [SlashCommand] = []
     var turnStatus: [StatusItem] { turn.items }
     /// The rows changed: whoever is waiting on a revision is answered.
     var onRevision: (() -> Void)?
@@ -524,6 +526,9 @@ public final class SessionRecord: ObservableObject {
             refreshResume()
             followFile()
             return .sessions([])
+        case .commands(let list):
+            commands = list
+            return .sessions([])
         case .tty(let data):
             // A window that attaches later is given these bytes to build
             // the screen from, so they must begin where a screen begins.
@@ -806,6 +811,8 @@ public final class VisorServer: ObservableObject {
     @Published public private(set) var serveError: String?
     /// The other computers' servers this one's agents reach (Links.swift).
     @Published public internal(set) var links: [ConnectionCode] = []
+    /// The slash commands each agent listed when it last ran (Commands.swift).
+    var knownCommands: [AgentKind: [SlashCommand]] = [:]
     private var claudeModelsTimer: Timer?
     /// A `front()` is under way; and how many have found Tailscale not ready.
     private var fronting = false
@@ -894,6 +901,9 @@ public final class VisorServer: ObservableObject {
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("sessions.json")
     }
+
+    /// Beside the sessions: the slash commands each agent last listed.
+    static var commandsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("commands.json") }
 
     /// Which sessions this launch carries on with. Whatever was running
     /// when the app went away comes back running — that is the default and
@@ -1323,6 +1333,13 @@ public final class VisorServer: ObservableObject {
     func route(_ request: HTTPRequest, respond: @escaping (HTTPResponse) -> Void) {
         let path = (request.path.split(separator: "?").first.map(String.init) ?? request.path).replacingOccurrences(of: "/api", with: "", options: .anchored)
         let parts = path.split(separator: "/").map(String.init)
+        if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "commands", authorized(request) {
+            guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
+            var e = Envelope(type: "commands")
+            e.session = record.info.id
+            e.commands = commands(for: record)
+            return respond(.json(e.encoded()))
+        }
         if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "transcript", authorized(request) {
             guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
             record.followFileIfNeeded()
@@ -1915,6 +1932,7 @@ public final class VisorServer: ObservableObject {
                 // not the empty list that stood in for "nothing", which
                 // wiped every client's sessions with each chunk.
                 else if case .tty = event {}
+                else if case .commands(let list) = event { self.keepCommands(list, for: record.info.agent) }
                 else { self.broadcast(out, session: record) }
                 // The turn's status lines, whole, whenever they change.
                 if case .busy(false) = event { self.broadcast(.status(session: record.info.id, items: []), session: record) }

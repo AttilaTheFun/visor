@@ -32,6 +32,8 @@ public enum AgentEvent: Sendable {
     case session(String)
     /// Bytes a terminal produced.
     case tty(Data)
+    /// The slash commands the agent takes, as it lists them.
+    case commands([SlashCommand])
 }
 
 /// A process on a PTY: it takes what the user types and can be resized.
