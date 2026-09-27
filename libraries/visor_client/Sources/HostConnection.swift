@@ -1016,6 +1016,12 @@ public final class HostConnection: ObservableObject, Identifiable {
             ?? session.agent.title
     }
 
+    /// The model a session's last turn fell back to, when it is not the
+    /// one chosen: shown in place of it, marked.
+    public func fallbackModel(for session: SessionInfo) -> AgentModel? {
+        catalog(for: session.agent)?.fallback(from: session.model, to: session.reportedModel)
+    }
+
     public func approve(_ sessionID: String, id: String, allow: Bool) {
         api("POST", "/sessions/\(sessionID)/approve", .approve(session: sessionID, id: id, allow: allow))
     }
