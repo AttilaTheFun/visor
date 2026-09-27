@@ -110,6 +110,12 @@ enum SessionCatalog {
                 if trimmed.isEmpty || trimmed.hasPrefix("<") { continue }
                 spoken = trimmed
             }
+            // Claude Code writes the titles again and again as the session
+            // goes on: the latest are at the end, where a renamed session's
+            // new name is too.
+            let (latestNamed, latestWritten) = titles(atEndOf: file)
+            named = latestNamed ?? named
+            written = latestWritten ?? written
             let id = file.deletingPathExtension().lastPathComponent
             if !byDirectory, let cwd, let sessionCWD, sessionCWD != cwd { continue }
             // A long conversation's first records can be one enormous line
@@ -327,6 +333,26 @@ enum SessionCatalog {
     }
 
     /// The first 256 KB of a session file as text: enough for the first prompt.
+    /// The last title the owner gave a Claude session, and the last one
+    /// Claude wrote for it, from the end of its file.
+    static func titles(atEndOf file: URL, bytes: UInt64 = 262_144) -> (named: String?, written: String?) {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return (nil, nil) }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        try? handle.seek(toOffset: size > bytes ? size - bytes : 0)
+        guard let data = try? handle.readToEnd() else { return (nil, nil) }
+        var named: String?
+        var written: String?
+        // Whole lines only: a read that began mid-line drops that line.
+        for line in data.split(separator: 0x0A).dropFirst(size > bytes ? 1 : 0) {
+            // Only the small title lines are parsed.
+            guard line.count < 4096, let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else { continue }
+            if let t = object["customTitle"] as? String, !t.isEmpty { named = t }
+            if let t = object["aiTitle"] as? String, !t.isEmpty { written = t.replacingOccurrences(of: "-", with: " ") }
+        }
+        return (named, written)
+    }
+
     private static func head(of file: URL) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
         defer { try? handle.close() }
