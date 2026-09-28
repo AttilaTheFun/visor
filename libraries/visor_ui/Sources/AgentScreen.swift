@@ -21,7 +21,8 @@ struct AgentScreen: View {
     @State private var showModels = false
     /// Pictures chosen for the next message, already on the computer.
     @State private var attachments: [PickedImage] = []
-    @State private var picking = false
+    /// The attach source open (files, the photo library, the camera).
+    @State private var attachSource: AttachSource?
     @State private var taking = false
     @State private var returning = false
     @State private var showInspector = false
@@ -164,11 +165,29 @@ struct AgentScreen: View {
             } else if let info {
                 // Pictures, before anything else in the row: what you are
                 // about to say, then how it is being said.
-                if Self.canPickImages {
-                    Button { picking = true } label: { Image(systemName: "plus") }
+                if Self.canPickFiles {
+                    // A phone asks where from; a Mac goes straight to files.
+                    if Self.offersAttachMenu {
+                        Menu {
+                            #if os(iOS)
+                            if CameraCapture.available {
+                                Button("Camera", systemImage: "camera") { attachSource = .camera }
+                            }
+                            #endif
+                            Button("Photo Library", systemImage: "photo.on.rectangle") { attachSource = .library }
+                            Button("Files", systemImage: "folder") { attachSource = .files }
+                        } label: {
+                            Image(systemName: "plus")
+                        }
                         .agentSoftCircleButton()
-                        .accessibilityLabel("Attach an image")
+                        .accessibilityLabel("Attach")
                         .accessibilityIdentifier("attach")
+                    } else {
+                        Button { attachSource = .files } label: { Image(systemName: "plus") }
+                            .agentSoftCircleButton()
+                            .accessibilityLabel("Attach files")
+                            .accessibilityIdentifier("attach")
+                    }
                 }
                 // The model, as the Claude app's pill: tap to change it or the effort.
                 let fallback = host.fallbackModel(for: info)
@@ -229,22 +248,24 @@ struct AgentScreen: View {
                                 .foregroundColor(.white)
                                 .shadow(radius: 2)
                         }
-                    } else {
+                    } else if AttachmentKind.isImage(picked.name) {
                         Base64Image(base64: picked.base64)
+                    } else {
+                        // Any other file: what it is called.
+                        VStack(spacing: 4) {
+                            Image(systemName: "doc").font(.title3).foregroundColor(.secondary)
+                            Text(picked.name).font(.caption2).lineLimit(2).multilineTextAlignment(.center)
+                        }
+                        .padding(4)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.secondary.opacity(0.12))
                     }
                 }
             }
         }
-        .imagePicker(isPresented: $picking) { picked in
-            // Put on the computer as they are chosen: by the time the
-            // message goes, the agent already has somewhere to look.
-            Task {
-                for var image in picked {
-                    image.path = try? await host.upload(base64: image.base64, name: image.name)
-                    if image.path != nil { attachments.append(image) }
-                }
-            }
-        }
+        .attachmentPickers($attachSource, onPick: attach)
+        // Files dropped on the chat are attached, as if picked.
+        .attachmentDrop(onPick: attach)
         .sheet(isPresented: $showModels) {
             if let info { ModelSheet(host: host, session: info) }
         }
@@ -325,6 +346,17 @@ struct AgentScreen: View {
         info.map { $0.title.isEmpty ? $0.agent.title : $0.title } ?? "Session"
     }
 
+    /// Puts what was picked on the computer as it is chosen: by the time
+    /// the message goes, the agent already has somewhere to look.
+    private func attach(_ picked: [PickedImage]) {
+        Task {
+            for var file in picked {
+                file.path = try? await host.upload(base64: file.base64, name: file.name)
+                if file.path != nil { attachments.append(file) }
+            }
+        }
+    }
+
     private func send() {
         let text = draft.trimmed
         let paths = attachments.compactMap(\.path)
@@ -374,8 +406,9 @@ extension TranscriptMessage {
         }
         // Pictures are shown; a video is named under the words, as the
         // transcript has no player.
-        let pictures = entry.images.indices.filter { !AttachmentKind.isVideo(entry.images[$0]) }
-        let videos = entry.images.filter(AttachmentKind.isVideo).map { "Video: " + AttachmentKind.fileName($0) }
+        let pictures = entry.images.indices.filter { AttachmentKind.isImage(entry.images[$0]) }
+        let videos = entry.images.filter { !AttachmentKind.isImage($0) }
+            .map { (AttachmentKind.isVideo($0) ? "Video: " : "File: ") + AttachmentKind.fileName($0) }
         let text = ([entry.text] + videos).filter { !$0.isEmpty }.joined(separator: "\n")
         self.init(id: id ?? entry.id, role: role, text: text, activities: entry.activities, toolName: entry.toolName,
                   imageURLs: pictures.map { host + "|" + entry.images[$0] },

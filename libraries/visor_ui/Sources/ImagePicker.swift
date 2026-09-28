@@ -1,14 +1,12 @@
-// Picking a picture or a video to send. A phone opens its photo library, a Mac
-// opens a panel; the portable SwiftUI has neither, so the button that
-// leads here is not offered there. What comes back is the bytes and a
-// name — the upload and the path are the caller's business.
+// Picking something to send: files anywhere, and on a phone the photo
+// library and the camera; or files dropped on the chat. The portable
+// SwiftUI has none of these yet, so the button that leads here is not
+// offered there. What comes back is the bytes and a name — the upload
+// and the path are the caller's business.
 
 import SwiftUI
 #if os(iOS)
 import PhotosUI
-import UIKit
-#elseif os(macOS)
-import AppKit
 #endif
 #if os(iOS) || os(macOS)
 import AVFoundation
@@ -36,9 +34,15 @@ struct PickedImage: Identifiable, Equatable {
     }
 }
 
+/// Where an attachment comes from.
+enum AttachSource: Identifiable {
+    case camera, library, files
+    var id: Self { self }
+}
+
 extension View {
-    /// Whether this host can pick a picture at all.
-    static var canPickImages: Bool {
+    /// Whether this host can pick files at all.
+    static var canPickFiles: Bool {
         #if os(iOS) || os(macOS)
         true
         #else
@@ -46,23 +50,33 @@ extension View {
         #endif
     }
 
-    @ViewBuilder func imagePicker(isPresented: Binding<Bool>, onPick: @escaping ([PickedImage]) -> Void) -> some View {
+    /// Whether this host offers a choice of camera, photo library and
+    /// files (a phone), rather than going straight to files (a Mac).
+    static var offersAttachMenu: Bool {
         #if os(iOS)
-        modifier(PhotoPickerModifier(isPresented: isPresented, onPick: onPick))
-        #elseif os(macOS)
-        onChange(of: isPresented.wrappedValue) { open in
-            guard open else { return }
-            isPresented.wrappedValue = false
-            let panel = NSOpenPanel()
-            panel.allowsMultipleSelection = true
-            panel.canChooseDirectories = false
-            panel.allowedContentTypes = [.png, .jpeg, .gif, .webP, .heic, .tiff, .movie]
-            guard panel.runModal() == .OK else { return }
-            let picked = panel.urls.compactMap { url -> PickedImage? in
-                guard let data = try? Data(contentsOf: url) else { return nil }
-                return PickedImage(name: url.lastPathComponent, base64: data.base64EncodedString())
-            }
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// The pickers behind the attach button, one per source; `source` is
+    /// the one open, and goes back to nil when it closes.
+    @ViewBuilder func attachmentPickers(_ source: Binding<AttachSource?>, onPick: @escaping ([PickedImage]) -> Void) -> some View {
+        #if os(iOS) || os(macOS)
+        modifier(AttachmentPickers(source: source, onPick: onPick))
+        #else
+        self
+        #endif
+    }
+
+    /// Files dropped here are attached as if picked.
+    @ViewBuilder func attachmentDrop(onPick: @escaping ([PickedImage]) -> Void) -> some View {
+        #if os(iOS) || os(macOS)
+        dropDestination(for: URL.self) { urls, _ in
+            let picked = PickedImage.read(urls)
             if !picked.isEmpty { onPick(picked) }
+            return !picked.isEmpty
         }
         #else
         self
@@ -70,16 +84,40 @@ extension View {
     }
 }
 
-#if os(iOS)
-/// The photo library, and the wait for the bytes behind each choice.
-private struct PhotoPickerModifier: ViewModifier {
-    @Binding var isPresented: Bool
+#if os(iOS) || os(macOS)
+extension PickedImage {
+    /// The files behind some URLs, read (with the access a picker or a
+    /// drop grants a file outside the app's own).
+    static func read(_ urls: [URL]) -> [PickedImage] {
+        urls.compactMap { url in
+            let granted = url.startAccessingSecurityScopedResource()
+            defer { if granted { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return PickedImage(name: url.lastPathComponent, base64: data.base64EncodedString())
+        }
+    }
+}
+
+/// Files everywhere; on a phone the photo library and the camera too.
+private struct AttachmentPickers: ViewModifier {
+    @Binding var source: AttachSource?
     let onPick: ([PickedImage]) -> Void
+    #if os(iOS)
     @State private var selection: [PhotosPickerItem] = []
+    #endif
+
+    private func open(_ which: AttachSource) -> Binding<Bool> {
+        Binding(get: { source == which }, set: { if !$0, source == which { source = nil } })
+    }
 
     func body(content: Content) -> some View {
         content
-            .photosPicker(isPresented: $isPresented, selection: $selection, maxSelectionCount: 4,
+            .fileImporter(isPresented: open(.files), allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+                let picked = PickedImage.read((try? result.get()) ?? [])
+                if !picked.isEmpty { onPick(picked) }
+            }
+            #if os(iOS)
+            .photosPicker(isPresented: open(.library), selection: $selection, maxSelectionCount: 4,
                           matching: .any(of: [.images, .videos]))
             .onChange(of: selection) { items in
                 guard !items.isEmpty else { return }
@@ -98,6 +136,14 @@ private struct PhotoPickerModifier: ViewModifier {
                     if !picked.isEmpty { onPick(picked) }
                 }
             }
+            .fullScreenCover(isPresented: open(.camera)) {
+                CameraCapture { data in
+                    source = nil
+                    if let data { onPick([PickedImage(name: "photo.jpg", base64: data.base64EncodedString())]) }
+                }
+                .ignoresSafeArea()
+            }
+            #endif
     }
 }
 #endif
@@ -105,6 +151,14 @@ private struct PhotoPickerModifier: ViewModifier {
 /// What an attachment is, by its name.
 enum AttachmentKind {
     static let videoExtensions: Set<String> = ["mov", "mp4", "m4v", "avi", "webm", "mkv"]
+
+    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tiff", "tif", "bmp"]
+
+    /// A picture, shown as one; anything else that is not a video is a
+    /// file, shown by its name.
+    static func isImage(_ name: String) -> Bool {
+        imageExtensions.contains(pathExtension(of: name).lowercased())
+    }
 
     static func isVideo(_ name: String) -> Bool {
         videoExtensions.contains(pathExtension(of: name).lowercased())
