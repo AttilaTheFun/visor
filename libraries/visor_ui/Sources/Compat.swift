@@ -133,19 +133,21 @@ func copyToPasteboard(_ text: String) {
 }
 
 extension View {
+    /// A sheet's heights on a phone (and on the portable SwiftUI, whose
+    /// sheets are a phone's); a window's size on the Mac.
     @ViewBuilder func presentationDetentsLarge() -> some View {
-        #if os(iOS)
-        presentationDetents([.large])
-        #else
+        #if os(macOS)
         frame(minWidth: 520, minHeight: 560)
+        #else
+        presentationDetents([.large])
         #endif
     }
 
     @ViewBuilder func presentationDetentsMediumLarge() -> some View {
-        #if os(iOS)
-        presentationDetents([.medium, .large])
-        #else
+        #if os(macOS)
         frame(minWidth: 440, minHeight: 380)
+        #else
+        presentationDetents([.medium, .large])
         #endif
     }
 }

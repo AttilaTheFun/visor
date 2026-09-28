@@ -27,7 +27,8 @@ struct ModelSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            // Grouped like the inspector: cards of settings under a pinned bar.
+            Form {
                 // The last turn ran on another model than the one chosen.
                 if let fallback = host.fallbackModel(for: session) {
                     Section {
@@ -157,6 +158,7 @@ struct ModelSheet: View {
                     }
                 }
             }
+            .insetGroupedForm()
             .navigationTitle(session.agent.title)
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
