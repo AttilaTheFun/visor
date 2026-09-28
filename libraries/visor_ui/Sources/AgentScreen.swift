@@ -165,29 +165,26 @@ struct AgentScreen: View {
             } else if let info {
                 // Pictures, before anything else in the row: what you are
                 // about to say, then how it is being said.
-                if Self.canPickFiles {
-                    // A phone asks where from; a Mac goes straight to files.
-                    if Self.offersAttachMenu {
-                        Menu {
-                            #if os(iOS)
-                            if CameraCapture.available {
-                                Button("Camera", systemImage: "camera") { attachSource = .camera }
-                            }
-                            #endif
-                            Button("Photo Library", systemImage: "photo.on.rectangle") { attachSource = .library }
-                            Button("Files", systemImage: "folder") { attachSource = .files }
-                        } label: {
-                            Image(systemName: "plus")
+                // A phone asks where from; a Mac or a browser goes
+                // straight to files.
+                if Self.offersAttachMenu {
+                    Menu {
+                        if Self.canTakePhotos {
+                            Button("Camera", systemImage: "camera") { attachSource = .camera }
                         }
-                        .agentSoftCircleButton()
-                        .accessibilityLabel("Attach")
-                        .accessibilityIdentifier("attach")
-                    } else {
-                        Button { attachSource = .files } label: { Image(systemName: "plus") }
-                            .agentSoftCircleButton()
-                            .accessibilityLabel("Attach files")
-                            .accessibilityIdentifier("attach")
+                        Button("Photo Library", systemImage: "photo.on.rectangle") { attachSource = .library }
+                        Button("Files", systemImage: "folder") { attachSource = .files }
+                    } label: {
+                        Image(systemName: "plus")
                     }
+                    .agentSoftCircleButton()
+                    .accessibilityLabel("Attach")
+                    .accessibilityIdentifier("attach")
+                } else {
+                    Button { attachSource = .files } label: { Image(systemName: "plus") }
+                        .agentSoftCircleButton()
+                        .accessibilityLabel("Attach files")
+                        .accessibilityIdentifier("attach")
                 }
                 // The model, as the Claude app's pill: tap to change it or the effort.
                 let fallback = host.fallbackModel(for: info)
