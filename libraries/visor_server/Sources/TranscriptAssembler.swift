@@ -20,8 +20,12 @@ struct TranscriptAssembler {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             // Nothing the user typed: a system prompt Claude Code fed in.
             if trimmed.isEmpty || trimmed.hasPrefix("<") { return [] }
-            let paths = images.compactMap { AgentImages.save(base64: $0.base64, mediaType: $0.mediaType) }
-            return [TranscriptEntry(id: "user-file-" + record.uuid, role: .user, text: trimmed,
+            // What the user attached reaches the agent as a list of paths
+            // under the words (Server.deliver); the row shows them as the
+            // pictures they are again.
+            let (words, attached) = Self.attachments(in: trimmed)
+            let paths = images.compactMap { AgentImages.save(base64: $0.base64, mediaType: $0.mediaType) } + attached
+            return [TranscriptEntry(id: "user-file-" + record.uuid, role: .user, text: words,
                                     images: paths, imageSizes: AgentImages.pixelSizes(paths: paths))]
         case .assistant(let messageID, let blocks, _, _, _):
             if assembling?.id != messageID { assembling = (messageID, [(text: "", activities: [])]) }
@@ -62,6 +66,28 @@ struct TranscriptAssembler {
             return [TranscriptEntry(id: "goal-file-" + record.uuid, role: .tool, text: met ? (reason ?? condition) : condition,
                                     toolName: met ? "goal-met" : "goal")]
         }
+    }
+
+    /// A user's words and the files attached to them, from the text the
+    /// agent was given: the words, then "Attached image:" (or images,
+    /// file, files) and a "- path" line for each.
+    static func attachments(in text: String) -> (text: String, paths: [String]) {
+        for heading in ["Attached images:", "Attached image:", "Attached files:", "Attached file:"] {
+            let marker: String
+            if text.hasPrefix(heading + "\n") {
+                marker = heading + "\n"
+            } else if text.contains("\n\n" + heading + "\n") {
+                marker = "\n\n" + heading + "\n"
+            } else {
+                continue
+            }
+            guard let range = text.range(of: marker, options: .backwards) else { continue }
+            let lines = text[range.upperBound...].split(separator: "\n", omittingEmptySubsequences: true)
+            // Only a list of paths, to the end: anything else is words.
+            guard !lines.isEmpty, lines.allSatisfy({ $0.hasPrefix("- /") }) else { continue }
+            return (String(text[..<range.lowerBound]), lines.map { String($0.dropFirst(2)) })
+        }
+        return (text, [])
     }
 
     /// A whole file as rows.
