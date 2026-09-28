@@ -122,13 +122,14 @@ extension View {
     #endif
 }
 
-/// The system pasteboard, where there is one.
+/// The system pasteboard: AppKit's on the Mac, UIKit's everywhere else
+/// (which the portable SwiftUI has too: the browser's clipboard, Android's).
 func copyToPasteboard(_ text: String) {
-    #if os(iOS)
-    UIPasteboard.general.string = text
-    #elseif os(macOS)
+    #if os(macOS)
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
+    #else
+    UIPasteboard.general.string = text
     #endif
 }
 
