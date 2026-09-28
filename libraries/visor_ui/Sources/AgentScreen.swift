@@ -118,12 +118,13 @@ struct AgentScreen: View {
         .onAppear {
             host.subscribe(sessionID)
             // Screenshot tests: the inspector or the model picker, open —
-            // once the screen has arrived, as a sheet asked for while the
-            // screen is still being pushed does not come.
+            // once the screen has arrived and the thread has settled on
+            // its last row (its second scroll comes 0.3 s after the rows),
+            // so the chat behind a sheet is the same every run.
             let screen = VisorFixture.screen
             if screen == "inspector" || screen == "models" {
                 Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
                     var still = Transaction()
                     still.disablesAnimations = true
                     withTransaction(still) {
