@@ -319,7 +319,9 @@ store then holds only "Snapshot Mac", keeps its rows in memory, and saves
 nothing over the real computers. A `fixture` backend's transport answers
 the hello, the socket's login and subscribe, the transcript's sync,
 commands, files and search from fixed data, so everything above the
-transport runs as usual. The busy session shows a static glyph instead of
+transport runs as usual. The inspector and model sheets open 1.5 s after the chat, once
+the thread has settled; take screenshots at least 4 s after launch (8 s
+lets every sheet's glass finish easing in). The busy session shows a static glyph instead of
 a spinner. Pin the simulator's status bar (`xcrun simctl status_bar booted
 override --time 9:41 …`) and the same screen gives the same pixels every
 run. The iOS probe's `testFixtureScreens` takes all six.
