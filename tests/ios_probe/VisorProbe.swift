@@ -396,6 +396,21 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 6)
         Thread.sleep(forTimeInterval: 4)
         shot(app, "look-2-chat")
+        // The attach button's menu (VISOR_LOOK_ATTACH), and no further.
+        if ProcessInfo.processInfo.environment["VISOR_LOOK_ATTACH"] != nil {
+            let attach = app.buttons["attach"].firstMatch
+            XCTAssertTrue(attach.waitForExistence(timeout: 10), "no attach button")
+            attach.tap()
+            Thread.sleep(forTimeInterval: 2)
+            shot(app, "look-2-attach")
+            let files = app.buttons["Files"].firstMatch
+            if files.waitForExistence(timeout: 5) {
+                files.tap()
+                Thread.sleep(forTimeInterval: 3)
+                shot(app, "look-2-files")
+            }
+            return
+        }
         // A picture in the thread, opened (VISOR_LOOK_IMAGE), and no further.
         if ProcessInfo.processInfo.environment["VISOR_LOOK_IMAGE"] != nil {
             let picture = app.buttons["Open the picture"].firstMatch
