@@ -215,6 +215,22 @@ struct Base64Image: View {
 #if os(iOS)
 import UIKit
 
+extension View {
+    /// The camera, as universal_ui spells it on the portable SwiftUI (which
+    /// has its own): a photo taken, as a file, or nil when cancelled.
+    func cameraCapture(isPresented: Binding<Bool>, onCapture: @escaping (URL?) -> Void) -> some View {
+        fullScreenCover(isPresented: isPresented) {
+            CameraCapture { data in
+                isPresented.wrappedValue = false
+                guard let data else { return onCapture(nil) }
+                let file = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("photo-\(UUID().uuidString.prefix(8)).jpg")
+                onCapture((try? data.write(to: file)) != nil ? file : nil)
+            }
+            .ignoresSafeArea()
+        }
+    }
+}
+
 /// The camera, for a photo to attach. SwiftUI has no camera of its own,
 /// so this is the one place the app reaches for UIKit's picker. Hands
 /// back the photo as JPEG, or nil when cancelled.

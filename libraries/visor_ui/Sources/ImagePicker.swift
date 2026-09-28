@@ -1,17 +1,21 @@
 // Picking something to send: files anywhere, and on a phone the photo
-// library and the camera; or files dropped on the chat. The portable
-// SwiftUI has none of these yet, so the button that leads here is not
-// offered there. What comes back is the bytes and a name — the upload
-// and the path are the caller's business.
+// library and the camera; or files dropped on the chat. All standard
+// SwiftUI, which the portable SwiftUI implements too; only the camera,
+// which SwiftUI has none of, is a helper (Compat.swift on iOS,
+// universal_ui's own elsewhere). What comes back is the bytes and a
+// name — the upload and the path are the caller's business.
 
+import Foundation
 import SwiftUI
-#if os(iOS)
+#if canImport(PhotosUI)
 import PhotosUI
+#endif
+#if canImport(UniformTypeIdentifiers)
+import UniformTypeIdentifiers
 #endif
 #if os(iOS) || os(macOS)
 import AVFoundation
 import ImageIO
-import UniformTypeIdentifiers
 #endif
 
 /// A picture or video chosen but not yet sent: the bytes, the name to
@@ -41,50 +45,44 @@ enum AttachSource: Identifiable {
 }
 
 extension View {
-    /// Whether this host can pick files at all.
-    static var canPickFiles: Bool {
-        #if os(iOS) || os(macOS)
-        true
-        #else
+    /// Whether this host offers a choice of camera, photo library and
+    /// files (a phone), rather than going straight to files (a Mac, a
+    /// browser).
+    static var offersAttachMenu: Bool {
+        #if os(macOS) || arch(wasm32)
         false
+        #else
+        true
         #endif
     }
 
-    /// Whether this host offers a choice of camera, photo library and
-    /// files (a phone), rather than going straight to files (a Mac).
-    static var offersAttachMenu: Bool {
+    /// Whether there is a camera to take a photo with.
+    static var canTakePhotos: Bool {
         #if os(iOS)
-        true
-        #else
+        CameraCapture.available
+        #elseif os(macOS)
         false
+        #else
+        true
         #endif
     }
 
     /// The pickers behind the attach button, one per source; `source` is
     /// the one open, and goes back to nil when it closes.
-    @ViewBuilder func attachmentPickers(_ source: Binding<AttachSource?>, onPick: @escaping ([PickedImage]) -> Void) -> some View {
-        #if os(iOS) || os(macOS)
+    func attachmentPickers(_ source: Binding<AttachSource?>, onPick: @escaping ([PickedImage]) -> Void) -> some View {
         modifier(AttachmentPickers(source: source, onPick: onPick))
-        #else
-        self
-        #endif
     }
 
     /// Files dropped here are attached as if picked.
-    @ViewBuilder func attachmentDrop(onPick: @escaping ([PickedImage]) -> Void) -> some View {
-        #if os(iOS) || os(macOS)
+    func attachmentDrop(onPick: @escaping ([PickedImage]) -> Void) -> some View {
         dropDestination(for: URL.self) { urls, _ in
             let picked = PickedImage.read(urls)
             if !picked.isEmpty { onPick(picked) }
             return !picked.isEmpty
         }
-        #else
-        self
-        #endif
     }
 }
 
-#if os(iOS) || os(macOS)
 extension PickedImage {
     /// The files behind some URLs, read (with the access a picker or a
     /// drop grants a file outside the app's own).
@@ -98,11 +96,12 @@ extension PickedImage {
     }
 }
 
-/// Files everywhere; on a phone the photo library and the camera too.
+/// Files everywhere; the photo library and the camera where there are
+/// such things.
 private struct AttachmentPickers: ViewModifier {
     @Binding var source: AttachSource?
     let onPick: ([PickedImage]) -> Void
-    #if os(iOS)
+    #if !os(macOS)
     @State private var selection: [PhotosPickerItem] = []
     #endif
 
@@ -116,7 +115,7 @@ private struct AttachmentPickers: ViewModifier {
                 let picked = PickedImage.read((try? result.get()) ?? [])
                 if !picked.isEmpty { onPick(picked) }
             }
-            #if os(iOS)
+            #if !os(macOS)
             .photosPicker(isPresented: open(.library), selection: $selection, maxSelectionCount: 4,
                           matching: .any(of: [.images, .videos]))
             .onChange(of: selection) { items in
@@ -125,28 +124,36 @@ private struct AttachmentPickers: ViewModifier {
                     var picked: [PickedImage] = []
                     for (index, item) in items.enumerated() {
                         guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-                        // A video keeps its own kind; a picture goes as a PNG name.
-                        let movie = item.supportedContentTypes.first { $0.conforms(to: .movie) }
-                        let ext = movie.map { $0.preferredFilenameExtension ?? "mov" } ?? "png"
-                        let name = (item.itemIdentifier ?? (movie == nil ? "image-\(index)" : "video-\(index)"))
-                            .replacingOccurrences(of: "/", with: "-") + "." + ext
-                        picked.append(PickedImage(name: name, base64: data.base64EncodedString()))
+                        picked.append(PickedImage(name: Self.name(of: item, index: index), base64: data.base64EncodedString()))
                     }
                     selection = []
                     if !picked.isEmpty { onPick(picked) }
                 }
             }
-            .fullScreenCover(isPresented: open(.camera)) {
-                CameraCapture { data in
-                    source = nil
-                    if let data { onPick([PickedImage(name: "photo.jpg", base64: data.base64EncodedString())]) }
-                }
-                .ignoresSafeArea()
+            .cameraCapture(isPresented: open(.camera)) { url in
+                source = nil
+                if let url { onPick(PickedImage.read([url])) }
             }
             #endif
     }
+
+    #if !os(macOS)
+    /// What to call a photo or video from the library on the computer.
+    private static func name(of item: PhotosPickerItem, index: Int) -> String {
+        #if os(iOS)
+        // The library's own id is no file name: a video keeps its own
+        // kind, a picture goes as a PNG name.
+        let movie = item.supportedContentTypes.first { $0.conforms(to: .movie) }
+        let ext = movie.map { $0.preferredFilenameExtension ?? "mov" } ?? "png"
+        return (item.itemIdentifier ?? (movie == nil ? "image-\(index)" : "video-\(index)"))
+            .replacingOccurrences(of: "/", with: "-") + "." + ext
+        #else
+        // The portable picker names the item as its file.
+        return item.itemIdentifier ?? "image-\(index).png"
+        #endif
+    }
+    #endif
 }
-#endif
 
 /// What an attachment is, by its name.
 enum AttachmentKind {
