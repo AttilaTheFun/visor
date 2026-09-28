@@ -396,6 +396,15 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 6)
         Thread.sleep(forTimeInterval: 4)
         shot(app, "look-2-chat")
+        // A picture in the thread, opened (VISOR_LOOK_IMAGE), and no further.
+        if ProcessInfo.processInfo.environment["VISOR_LOOK_IMAGE"] != nil {
+            let picture = app.buttons["Open the picture"].firstMatch
+            XCTAssertTrue(picture.waitForExistence(timeout: 10), "no picture in the thread")
+            picture.tap()
+            Thread.sleep(forTimeInterval: 4)
+            shot(app, "look-2-image")
+            return
+        }
         // And with the keyboard up, where the composer moves to the edges.
         let field = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
         if field.waitForExistence(timeout: 10) {
