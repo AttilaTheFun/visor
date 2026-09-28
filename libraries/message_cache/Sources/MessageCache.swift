@@ -88,7 +88,7 @@ public protocol MessageStorage: AnyObject, Sendable {
 public final class MessageCache: @unchecked Sendable {
     /// Bumped when what is kept, or how, changes: a cache of another
     /// version is dropped and rebuilt.
-    public static let schemaVersion = 5
+    public static let schemaVersion = 6
 
     /// Makes the storage `open(named:)` uses, when a host supplies its own
     /// (the browser's IndexedDB); nil, or a nil answer, for the default.

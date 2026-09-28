@@ -81,3 +81,23 @@ final class GoalRowTests: XCTestCase {
         XCTAssertEqual(rows.map(\.toolName), [nil, "goal", "goal-met"])
     }
 }
+
+/// What the user attached comes back from the agent's log as a list of
+/// paths under the words; the row shows the words and the pictures.
+final class AttachedPictureTests: XCTestCase {
+    func testAttachedPathsAreThePictures() {
+        let words = TranscriptAssembler.attachments(in: "Look at this\n\nAttached image:\n- /tmp/a.png")
+        XCTAssertEqual(words.text, "Look at this")
+        XCTAssertEqual(words.paths, ["/tmp/a.png"])
+        let only = TranscriptAssembler.attachments(in: "Attached files:\n- /tmp/a.png\n- /tmp/b.mov")
+        XCTAssertEqual(only.text, "")
+        XCTAssertEqual(only.paths, ["/tmp/a.png", "/tmp/b.mov"])
+        // Words that merely mention it are words.
+        let prose = TranscriptAssembler.attachments(in: "What does\n\nAttached image:\nmean here?")
+        XCTAssertEqual(prose.text, "What does\n\nAttached image:\nmean here?")
+        XCTAssertEqual(prose.paths, [])
+        let rows = TranscriptAssembler.rows(in: [ClaudeRecord(uuid: "u", kind: .user(text: "See\n\nAttached image:\n- /tmp/a.png", images: []), timestamp: nil)])
+        XCTAssertEqual(rows.first?.text, "See")
+        XCTAssertEqual(rows.first?.images, ["/tmp/a.png"])
+    }
+}
