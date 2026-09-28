@@ -141,6 +141,7 @@ public struct VisorRootView: View {
             Text("\(troubled?.host.config.name ?? "The computer") can no longer find \(troubled?.cwd ?? "this folder"). Locate it if it was renamed or moved, or delete the project and the \(troubled?.sessionCount ?? 0) session\(troubled?.sessionCount == 1 ? "" : "s") in it if it is gone for good.")
         }
         .onAppear {
+            openFixtureScreen()
             // The transcript's image hook is one closure for the whole
             // app, so it is given the store and told which computer to ask
             // by the reference each picture carries.
@@ -162,6 +163,26 @@ public struct VisorRootView: View {
         // open, so it is no longer lit, and tapping it opens it again.
         .onChange(of: compactColumn) { column in
             if compact, column == .sidebar, selection != nil { selection = nil }
+        }
+    }
+
+    /// Screenshot tests: straight to the screen asked for, without the
+    /// animation of getting there (VisorFixture).
+    private func openFixtureScreen() {
+        let screen = VisorFixture.screen
+        guard !screen.isEmpty else { return }
+        var still = Transaction()
+        still.disablesAnimations = true
+        withTransaction(still) {
+            switch screen {
+            case "chat", "inspector", "models":
+                selection = .session(SessionSelection(hostID: VisorFixture.hostID, sessionID: VisorFixture.chatSession))
+                if compact { compactColumn = .detail }
+            case "search":
+                search = VisorFixture.searchQuery
+            default:
+                break
+            }
         }
     }
 
@@ -608,8 +629,14 @@ struct SessionCardRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if session.busy {
-                ProgressView().controlSize(.small)
-                    .accessibilityLabel("Working")
+                // Screenshot tests want the same pixels every run.
+                if VisorFixture.active {
+                    Image(systemName: "ellipsis.circle.fill").foregroundColor(.secondary)
+                        .accessibilityLabel("Working")
+                } else {
+                    ProgressView().controlSize(.small)
+                        .accessibilityLabel("Working")
+                }
             } else if session.pendingApproval != nil {
                 Image(systemName: "hand.raised.fill").foregroundColor(.yellow)
                     .accessibilityLabel("Waiting for approval")

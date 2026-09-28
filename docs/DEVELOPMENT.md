@@ -306,6 +306,24 @@ a detached relauncher and resumes named sessions with a nudge
   simulator shares its Tailscale identity. The other cases (`*Look`)
   expect particular sessions on the host and fail elsewhere.
 
+### Snapshot fixture
+
+For screenshot tests, the client can show a canned computer instead of
+real ones (`libraries/visor_client/Sources/Fixture.swift`). The setting
+`fixture` = `snapshot` turns it on; `fixture.screen` opens a screen:
+`sessions`, `chat`, `inspector`, `models`, `search` or `connect`. On Apple
+these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so
+launch arguments set them: `-visor.fixture snapshot -visor.fixture.screen
+chat`. The web and Android set them through their settings services. The
+store then holds only "Snapshot Mac", keeps its rows in memory, and saves
+nothing over the real computers. A `fixture` backend's transport answers
+the hello, the socket's login and subscribe, the transcript's sync,
+commands, files and search from fixed data, so everything above the
+transport runs as usual. The busy session shows a static glyph instead of
+a spinner. Pin the simulator's status bar (`xcrun simctl status_bar booted
+override --time 9:41 …`) and the same screen gives the same pixels every
+run. The iOS probe's `testFixtureScreens` takes all six.
+
 ## 6. Gotchas that cost time
 
 - A subagent's plain `sleep` is blocked by the harness; use
