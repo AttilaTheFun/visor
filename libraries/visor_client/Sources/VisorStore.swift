@@ -7,6 +7,7 @@
 // scanned QR code's `visor://connect?code=` link) carries its name,
 // address and password. A bare Tailscale name works too.
 
+import MessageCache
 import SwiftUI
 import VisorProtocol
 import VisorServices
@@ -22,6 +23,16 @@ public final class VisorStore: ObservableObject {
     private let key = "hosts"
 
     public init() {
+        // Screenshot tests: only the canned computer, its rows in memory,
+        // and nothing of the real ones read or written.
+        if VisorFixture.active {
+            Backends.register(FixtureBackend())
+            MessageCache.storageProvider = { _ in MemoryStorage() }
+            hosts = [HostConnection(config: VisorFixture.config)]
+            for host in hosts { observe(host); host.connect() }
+            addingComputer = VisorFixture.screen == "connect"
+            return
+        }
         let saved = VisorHost.settings?.get(key: key) ?? ""
         if !saved.isEmpty, let configs = parseJSON(saved)?.array?.compactMap(HostConfig.init(json:)) {
             var carried = false
@@ -120,6 +131,8 @@ public final class VisorStore: ObservableObject {
     }
 
     private func save() {
+        // The canned computer is never saved over the real ones.
+        guard !VisorFixture.active else { return }
         // The configs without their passwords; each password as a secret.
         let configs = hosts.map { host -> JSONValue in
             var config = host.config

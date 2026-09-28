@@ -936,6 +936,8 @@ public final class HostConnection: ObservableObject, Identifiable {
     /// a second later. Every session reads as not-connected until the
     /// computer answers, which is what the yellow dot says.
     func loadCachedSessions() {
+        // The canned computer keeps nothing: every run starts the same.
+        guard !VisorFixture.active else { return }
         let saved = VisorHost.settings?.get(key: "sessions." + id) ?? ""
         guard !saved.isEmpty, let list = parseJSON(saved)?.array?.compactMap(SessionInfo.init(json:)) else { return }
         sessions = list.map { info in
@@ -948,10 +950,14 @@ public final class HostConnection: ObservableObject, Identifiable {
     }
 
     private func saveCachedSessions() {
+        // The canned computer keeps nothing: every run starts the same.
+        guard !VisorFixture.active else { return }
         VisorHost.settings?.set(key: "sessions." + id, value: JSONValue.array(sessions.map(\.json)).encoded())
     }
 
     func loadProjects() {
+        // The canned computer keeps nothing: every run starts the same.
+        guard !VisorFixture.active else { return }
         let saved = VisorHost.settings?.get(key: "projects." + id) ?? ""
         knownProjects = parseJSON(saved)?.array?.compactMap(\.string) ?? []
         let names = VisorHost.settings?.get(key: "projectNames." + id) ?? ""
@@ -964,6 +970,8 @@ public final class HostConnection: ObservableObject, Identifiable {
     }
 
     private func saveProjects() {
+        // The canned computer keeps nothing: every run starts the same.
+        guard !VisorFixture.active else { return }
         VisorHost.settings?.set(key: "projects." + id, value: JSONValue.array(knownProjects.map(JSONValue.string)).encoded())
         let names = projectAliases.keys.sorted().map { cwd in
             JSONValue.object(["cwd": .string(cwd), "name": .string(projectAliases[cwd] ?? "")])

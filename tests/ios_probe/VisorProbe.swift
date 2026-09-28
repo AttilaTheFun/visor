@@ -332,6 +332,21 @@ final class VisorProbe: XCTestCase {
         shot(app, "send-3-settled")
     }
 
+    /// Every fixture screen (VisorFixture), each from a fresh launch with
+    /// the canned computer: the same pixels every run is the point.
+    func testFixtureScreens() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        for screen in ["sessions", "chat", "inspector", "models", "search", "connect"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", screen]
+            app.launch()
+            Thread.sleep(forTimeInterval: 4)
+            shot(app, "fixture-" + screen)
+            app.terminate()
+        }
+    }
+
     func testComposerLook() throws {
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         XCUIDevice.shared.orientation = .portrait

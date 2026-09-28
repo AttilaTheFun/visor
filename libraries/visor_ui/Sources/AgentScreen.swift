@@ -115,7 +115,23 @@ struct AgentScreen: View {
         // legible only in the dark palette.
         .terminalBarScheme(controlsTerminal)
         .toolbarTitleDisplayMode(.inline)
-        .onAppear { host.subscribe(sessionID) }
+        .onAppear {
+            host.subscribe(sessionID)
+            // Screenshot tests: the inspector or the model picker, open —
+            // once the screen has arrived, as a sheet asked for while the
+            // screen is still being pushed does not come.
+            let screen = VisorFixture.screen
+            if screen == "inspector" || screen == "models" {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    var still = Transaction()
+                    still.disablesAnimations = true
+                    withTransaction(still) {
+                        if screen == "inspector" { showInspector = true } else { showModels = true }
+                    }
+                }
+            }
+        }
         // Whatever changed the mode, the inspector does not outlive the
         // screen it was opened over.
         .onChange(of: info?.mode) { _ in showInspector = false }
