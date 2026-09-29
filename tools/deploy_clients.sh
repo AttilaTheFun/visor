@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds, signs (tools/sign_mac_app.sh) and installs the Mac client (relaunching it) and, when a device
 # UDID is given, the iPhone client. The web client is published from the
-# universal_visor repo (tools/publish_web.sh there) after bumping its visor pin.
+# visor_isomer repo (tools/publish_web.sh there) after bumping its visor pin.
 #
 #   tools/deploy_clients.sh [iPhone UDID]      (or set VISOR_IPHONE_UDID)
 set -euo pipefail
