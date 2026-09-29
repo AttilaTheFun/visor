@@ -432,6 +432,10 @@ public final class HostConnection: ObservableObject, Identifiable {
     /// menu bar app — the WebSocket at its root, the REST API under /api.
     public var url: String { "wss://\(config.host)" }
     public var apiURL: String { "https://\(config.host)/api" }
+    /// Told when the computer sends a new list of its sessions (the store
+    /// keeps the home screen's widget up to date by it).
+    var onSessionsChange: (() -> Void)?
+
     /// The last command that failed, for the UI.
     @Published public var commandError: String?
 
@@ -692,6 +696,7 @@ public final class HostConnection: ObservableObject, Identifiable {
             if !config.everConnected { config.everConnected = true }
             sessions = envelope.sessions ?? []
             saveCachedSessions()
+            onSessionsChange?()
             catalogs = envelope.catalogs ?? []
             // Re-subscribe to whatever was open before the drop.
             for id in pendingSubscriptions.union(transcripts.keys) { send(.subscribe(session: id)) }
@@ -711,6 +716,7 @@ public final class HostConnection: ObservableObject, Identifiable {
             let before = sessions
             sessions = envelope.sessions ?? []
             if state == .connected { notifyChanges(from: before, to: sessions) }
+            onSessionsChange?()
             saveCachedSessions()
             // Words sent while the agent was busy come back in its queue.
             for session in sessions { transcripts[session.id]?.settleSending() }

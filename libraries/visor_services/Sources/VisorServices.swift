@@ -71,6 +71,13 @@ public protocol VisorNotificationService {
     func notify(id: String, title: String, body: String)
 }
 
+/// Somewhere outside the app that shows the latest sessions: the home
+/// screen's widget on iOS. Given the latest as JSON whenever it changes; a
+/// host without one installs none.
+public protocol VisorWidgetService {
+    func publish(_ json: String)
+}
+
 /// Where the client reads the injected services — resolved lazily, once,
 /// from the dependency dictionary. Absent services are nil.
 public enum VisorHost {
@@ -78,15 +85,17 @@ public enum VisorHost {
     public nonisolated(unsafe) static var http: (any VisorHTTPService)?
     public nonisolated(unsafe) static var settings: (any VisorSettingsService)?
     public nonisolated(unsafe) static var notifications: (any VisorNotificationService)?
+    public nonisolated(unsafe) static var widget: (any VisorWidgetService)?
 }
 
 /// Hands the client its services. An app calls this once, before it makes
 /// a store; a host that carries the client somewhere else (a browser, an
 /// Android app) installs its own.
 public func installVisorServices(socket: any VisorSocketService, http: any VisorHTTPService, settings: any VisorSettingsService,
-                                 notifications: (any VisorNotificationService)? = nil) {
+                                 notifications: (any VisorNotificationService)? = nil, widget: (any VisorWidgetService)? = nil) {
     VisorHost.socket = socket
     VisorHost.http = http
     VisorHost.settings = settings
     VisorHost.notifications = notifications
+    VisorHost.widget = widget
 }

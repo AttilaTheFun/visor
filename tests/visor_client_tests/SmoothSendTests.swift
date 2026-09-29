@@ -194,3 +194,23 @@ final class NotificationTests: XCTestCase {
         XCTAssertEqual(told.said.count, count)
     }
 }
+
+/// What the home screen's widget is given: the live sessions, latest
+/// first, each with its state.
+@MainActor
+final class WidgetFeedTests: XCTestCase {
+    func testTheLatestLiveSessionsWithTheirState() {
+        var working = SessionInfo(id: "a", agent: .claude, cwd: "/tmp", title: "Sync", busy: true, created: 0)
+        working.updated = 30
+        var waiting = SessionInfo(id: "b", agent: .codex, cwd: "/tmp", title: "", created: 0)
+        waiting.updated = 20
+        waiting.pendingApproval = ApprovalRequest(id: "x", tool: "Bash", summary: "ls")
+        var ended = SessionInfo(id: "c", agent: .claude, cwd: "/tmp", title: "Old", ended: true, created: 0)
+        ended.updated = 40
+        let json = parseJSON(VisorStore.widgetJSON([("Mini", waiting), ("Mini", ended), ("Book", working)]))
+        let rows = json?["sessions"].array ?? []
+        XCTAssertEqual(rows.map { $0["title"].string }, ["Sync", "Codex"], "latest first; ended left out; an untitled one by its agent")
+        XCTAssertEqual(rows.map { $0["state"].string }, ["working", "waiting"])
+        XCTAssertEqual(rows.first?["computer"].string, "Book")
+    }
+}
