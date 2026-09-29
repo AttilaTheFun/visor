@@ -497,6 +497,28 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
     }
 
+    /// Tells the user (where the host can) what changed in a session while
+    /// they may not be looking: a turn finished, an agent waiting for
+    /// approval, a goal done. Only for a change the computer announced:
+    /// the first list after connecting says what is, not what happened.
+    func notifyChanges(from before: [SessionInfo], to after: [SessionInfo]) {
+        guard let notifications = VisorHost.notifications else { return }
+        for new in after {
+            guard let old = before.first(where: { $0.id == new.id }), !new.archived, !new.ended else { continue }
+            let title = new.title.isEmpty ? new.agent.title : new.title
+            let key = config.id + "/" + new.id
+            if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval {
+                notifications.notify(id: key + "/approval", title: "\(title) is waiting",
+                                     body: "Allow \(approval.tool)? " + approval.summary)
+            }
+            if let goal = old.goal, new.goal == nil {
+                notifications.notify(id: key + "/goal", title: "\(title): goal done", body: goal)
+            } else if old.busy, !new.busy {
+                notifications.notify(id: key + "/turn", title: "\(title) finished", body: new.preview ?? "")
+            }
+        }
+    }
+
     /// The slash commands a session's agent takes, as the computer knows
     /// them (none for an agent that lists none).
     public func commands(for sessionID: String) async throws -> [SlashCommand] {
@@ -686,13 +708,22 @@ public final class HostConnection: ObservableObject, Identifiable {
                 state = .failed(envelope.message ?? "Rejected")
             }
         case "sessions":
+            let before = sessions
             sessions = envelope.sessions ?? []
+            if state == .connected { notifyChanges(from: before, to: sessions) }
             saveCachedSessions()
             // Words sent while the agent was busy come back in its queue.
             for session in sessions { transcripts[session.id]?.settleSending() }
         default:
             guard let id = envelope.session else { return }
             transcript(for: id).apply(envelope)
+            // Working or not, as the session itself says it: the list shows
+            // the same at once, rather than whatever the last list said (a
+            // reply from before the turn began can arrive after it).
+            if envelope.type == "busy" || envelope.type == "ephemeral", let busy = envelope.busy,
+               let index = sessions.firstIndex(where: { $0.id == id }), sessions[index].busy != busy {
+                sessions[index].busy = busy
+            }
         }
     }
 
