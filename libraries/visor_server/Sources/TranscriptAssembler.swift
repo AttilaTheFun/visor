@@ -15,10 +15,29 @@ struct TranscriptAssembler {
     /// it is set (its state, and a notice in the user's place), and it is
     /// one card.
     private var openGoal: String?
+    /// A goal's card waiting for the command that set it: Claude Code
+    /// writes the goal's state just before the user's `/goal`, and the
+    /// card reads after it.
+    private var pendingGoal: TranscriptEntry?
 
     /// The rows a record adds or changes. An assistant record returns every
     /// row of its message (the same ids as before, updated in place).
     mutating func rows(for record: ClaudeRecord) -> [TranscriptEntry] {
+        // A card held back goes in after the command that set it, or
+        // before anything else that comes first.
+        if let card = pendingGoal {
+            if case .goal(let condition, false, _) = record.kind, condition == openGoal { pendingGoal = nil; return [card] }
+            if case .user(let text, _) = record.kind, text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/goal") {
+                pendingGoal = nil
+                return rowsWithoutPending(for: record) + [card]
+            }
+            pendingGoal = nil
+            return [card] + rowsWithoutPending(for: record)
+        }
+        return rowsWithoutPending(for: record)
+    }
+
+    private mutating func rowsWithoutPending(for record: ClaudeRecord) -> [TranscriptEntry] {
         switch record.kind {
         case .user(let text, let images):
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -79,8 +98,11 @@ struct TranscriptAssembler {
             openGoal = met ? nil : condition
             // A row the transcript shows as the goal's card: set, with
             // what it asks; met, with why it is.
-            return [TranscriptEntry(id: "goal-file-" + record.uuid, role: .tool, text: met ? (reason ?? condition) : condition,
-                                    toolName: met ? "goal-met" : "goal")]
+            let card = TranscriptEntry(id: "goal-file-" + record.uuid, role: .tool, text: met ? (reason ?? condition) : condition,
+                                       toolName: met ? "goal-met" : "goal")
+            // Set: held until the command that set it has gone in.
+            if !met { pendingGoal = card; return [] }
+            return [card]
         }
     }
 

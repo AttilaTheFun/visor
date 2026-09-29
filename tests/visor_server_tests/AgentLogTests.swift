@@ -73,8 +73,9 @@ final class AgentLogTests: XCTestCase {
 final class GoalRowTests: XCTestCase {
     func testGoalsBecomeTheirOwnRows() {
         let rows = TranscriptAssembler.rows(in: [
-            ClaudeRecord(uuid: "g1", kind: .user(text: "/goal Ship it", images: []), timestamp: nil),
+            // As Claude Code writes it: the goal's state, then the command.
             ClaudeRecord(uuid: "g2", kind: .goal(condition: "Ship it", met: false, reason: nil), timestamp: nil),
+            ClaudeRecord(uuid: "g1", kind: .user(text: "/goal Ship it", images: []), timestamp: nil),
             ClaudeRecord(uuid: "g3", kind: .goal(condition: "Ship it", met: true, reason: "Shipped."), timestamp: nil),
         ])
         XCTAssertEqual(rows.map(\.role), [.user, .tool, .tool])
