@@ -115,3 +115,38 @@ final class SmoothSendTests: XCTestCase {
         XCTAssertEqual(t.announced - start, 4)
     }
 }
+
+/// A message sent to an idle agent is in the thread at once, and its copy
+/// in the record takes its place under the same id; a slash command after
+/// some words goes as its own message.
+@MainActor
+final class OptimisticSendTests: XCTestCase {
+    func testTheRecordsCopyTakesTheSentRowsPlace() {
+        let t = SessionTranscript()
+        var whole = Envelope(type: "transcript")
+        whole.entries = [TranscriptEntry(id: "a", role: .assistant, text: "Earlier")]
+        whole.revision = 1; whole.generation = 1; whole.reset = true
+        t.sync(whole)
+        let sent = TranscriptEntry(id: "sending-1", role: .user, text: "Run the tests")
+        var out = SessionTranscript.Outgoing(id: sent.id, entry: sent, sinceRevision: t.revision)
+        out.shown = true
+        t.sending.append(out)
+        var delta = Envelope(type: "transcript")
+        delta.entries = [TranscriptEntry(id: "user-file-9", role: .user, text: "Run the tests")]
+        delta.after = ["a"]
+        delta.revision = 2; delta.generation = 1
+        t.sync(delta)
+        XCTAssertTrue(t.sending.isEmpty)
+        XCTAssertEqual(t.displayID(of: t.entries.last!), "sending-1", "shown under the sent row's id")
+    }
+
+    func testACommandAfterWordsIsItsOwnMessage() {
+        let names: Set<String> = ["goal", "compact"]
+        XCTAssertEqual(HostConnection.split("Here's the context.\n/goal Ship it\nwith tests", commands: names),
+                       ["Here's the context.", "/goal Ship it\nwith tests"])
+        XCTAssertEqual(HostConnection.split("/goal Ship it", commands: names), ["/goal Ship it"])
+        // Not a command it knows, or not on a line of its own: words.
+        XCTAssertEqual(HostConnection.split("See\n/usr/bin/env", commands: names), ["See\n/usr/bin/env"])
+        XCTAssertEqual(HostConnection.split("Use /goal later", commands: names), ["Use /goal later"])
+    }
+}

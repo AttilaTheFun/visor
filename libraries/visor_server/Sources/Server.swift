@@ -1931,6 +1931,10 @@ public final class VisorServer: ObservableObject {
             // only now — and it is what finds this agent again if we are
             // killed outright.
             saveArchive()
+            // Working from now, not from when the agent says so: what the
+            // user sends next (a command after its words, split by the
+            // client) waits for this turn rather than landing inside it.
+            if !record.info.busy { broadcast(record.apply(.busy(true)), session: record) }
         } catch {
             broadcast(record.apply(.failure(error.localizedDescription)), session: record)
             broadcast(record.apply(.busy(false)), session: record)
