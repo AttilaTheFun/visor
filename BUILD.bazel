@@ -10,7 +10,7 @@ package(default_visibility = ["//visibility:public"])
 # Where `import SwiftUI` comes from. On Apple it is the system framework and
 # this points at nothing; a host that carries the client elsewhere (a
 # browser, Android, Linux, Windows) sets the flag to its own SwiftUI:
-#   --@visor//:swift_ui=@universal_ui//:swift_ui
+#   --@visor//:swift_ui=@isomer//:swift_ui
 label_flag(
     name = "swift_ui",
     build_setting_default = ":system_swift_ui",

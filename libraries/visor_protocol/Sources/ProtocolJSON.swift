@@ -1,4 +1,4 @@
-// The wire encoding, by hand over universal_ui's JSONValue: Foundation's
+// The wire encoding, by hand over Isomer's JSONValue: Foundation's
 // JSONEncoder is not on the portable stack (wasm, Android), and the same
 // bytes must come out of every host. Optional fields are omitted when nil.
 
