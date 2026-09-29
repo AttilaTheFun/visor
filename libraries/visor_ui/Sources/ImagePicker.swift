@@ -2,7 +2,7 @@
 // library and the camera; or files dropped on the chat. All standard
 // SwiftUI, which the portable SwiftUI implements too; only the camera,
 // which SwiftUI has none of, is a helper (Compat.swift on iOS,
-// universal_ui's own elsewhere). What comes back is the bytes and a
+// Isomer's own elsewhere). What comes back is the bytes and a
 // name — the upload and the path are the caller's business.
 
 import Foundation

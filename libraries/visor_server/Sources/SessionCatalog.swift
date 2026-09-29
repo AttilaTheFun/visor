@@ -23,7 +23,7 @@ enum SessionCatalog {
     private static let home = FileManager.default.homeDirectoryForCurrentUser
 
     /// Claude's directory per project: the path with every "/", "." and
-    /// "_" turned into "-" (universal_ui → universal-ui). Miss the
+    /// "_" turned into "-" (swift_proto_sql → swift-proto-sql). Miss the
     /// underscore and the folder is simply not found.
     static func projectDirectory(for cwd: String) -> String {
         var name = (cwd as NSString).expandingTildeInPath

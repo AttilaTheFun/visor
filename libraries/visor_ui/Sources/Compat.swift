@@ -1,4 +1,4 @@
-// What Apple's SwiftUI has and universal_ui's does not yet: item-driven
+// What Apple's SwiftUI has and Isomer's does not yet: item-driven
 // sheets (built on the isPresented form), a secure field, and the
 // inset-grouped form style on the Mac.
 
@@ -217,7 +217,7 @@ struct Base64Image: View {
 import UIKit
 
 extension View {
-    /// The camera, as universal_ui spells it on the portable SwiftUI (which
+    /// The camera, as Isomer spells it on the portable SwiftUI (which
     /// has its own): a photo taken, as a file, or nil when cancelled.
     func cameraCapture(isPresented: Binding<Bool>, onCapture: @escaping (URL?) -> Void) -> some View {
         fullScreenCover(isPresented: isPresented) {

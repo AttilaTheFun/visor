@@ -1,5 +1,5 @@
 // The services a host injects into the client (docs/wasm_di.md in swift_ffi,
-// the same shape as universal_ui's platform services): a WebSocket the
+// the same shape as Isomer's platform services): a WebSocket the
 // client drives by id, and a settings store for the saved computers.
 // Nothing else crosses the boundary; async methods suspend in the guest
 // and the host answers when it has something.
