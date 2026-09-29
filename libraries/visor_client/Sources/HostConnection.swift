@@ -162,6 +162,10 @@ public final class SessionTranscript: ObservableObject {
         /// message must arrive after it, so an identical message from
         /// before does not settle it.
         public let sinceRevision: Int
+        /// Shown in the thread at once, as its last row, until the record
+        /// carries it (it went to an idle agent); a message that waits for
+        /// the turn to end is shown in the composer's queue instead.
+        public var shown = false
     }
     public var sending: [Outgoing] = [] { didSet { changed() } }
 
@@ -980,17 +984,77 @@ public final class HostConnection: ObservableObject, Identifiable {
     }
 
     public func sendMessage(_ sessionID: String, text: String, images: [String] = []) {
-        // On screen before it is on the record: the last row, and it stays
-        // last until the transcript syncs an identical message sent after
-        // this one — never removed by a sync from before it was received.
         // Without the whitespace around it, which is how the record keeps
         // it (and a phone's keyboard leaves a space after the last word).
         let text = Self.trimmed(text)
+        // A slash command on a line of its own after some words: Claude
+        // Code takes it as the command only at the start of a message, so
+        // the words go first and the command after them, as the terminal
+        // treats it.
+        if text.contains("\n/") {
+            Task { [weak self] in
+                guard let self else { return }
+                let names = await self.commandNames(for: sessionID)
+                let parts = Self.split(text, commands: names)
+                // One after the other: the command must reach the computer
+                // after the words, to wait for their turn to end.
+                for (index, part) in parts.enumerated() {
+                    await self.sendOne(sessionID, text: part, images: index == 0 ? images : [])
+                }
+            }
+            return
+        }
+        Task { await sendOne(sessionID, text: text, images: images) }
+    }
+
+    /// One message on its way. On screen before it is on the record: sent
+    /// to an idle agent, the thread's last row until the transcript syncs
+    /// an identical message sent after this one; to a working one, in the
+    /// composer's queue.
+    private func sendOne(_ sessionID: String, text: String, images: [String]) async {
         let session = transcript(for: sessionID)
+        let info = sessions.first { $0.id == sessionID }
+        let idle = !session.busy && !(info?.busy ?? false) && (info?.queued.isEmpty ?? true) && session.sending.isEmpty
         let entry = TranscriptEntry(id: "sending-" + HostConfig.newID(), role: .user, text: text, images: images)
-        defer { session.flush() }
-        session.sending.append(SessionTranscript.Outgoing(id: entry.id, entry: entry, sinceRevision: session.revision))
-        api("POST", "/sessions/\(sessionID)/send", .send(session: sessionID, text: text, images: images))
+        var outgoing = SessionTranscript.Outgoing(id: entry.id, entry: entry, sinceRevision: session.revision)
+        outgoing.shown = idle
+        session.sending.append(outgoing)
+        session.flush()
+        do {
+            let reply = try await fetch("POST", "/sessions/\(sessionID)/send", .send(session: sessionID, text: text, images: images))
+            for info in reply.sessions ?? [] {
+                if let index = sessions.firstIndex(where: { $0.id == info.id }) { sessions[index] = info } else { sessions.append(info) }
+            }
+            commandError = nil
+        } catch {
+            commandError = "\(error)"
+        }
+    }
+
+    /// The names of the slash commands a session's agent takes, asked once.
+    private var knownCommands: [String: Set<String>] = [:]
+    private func commandNames(for sessionID: String) async -> Set<String> {
+        if let known = knownCommands[sessionID] { return known }
+        let names = Set(((try? await commands(for: sessionID)) ?? []).map(\.name))
+        knownCommands[sessionID] = names
+        return names
+    }
+
+    /// A message split at the first line that is a known slash command: the
+    /// words before it, then the command with everything after it (its
+    /// arguments). One part when there is no such line.
+    static func split(_ text: String, commands: Set<String>) -> [String] {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        for index in lines.indices.dropFirst() {
+            let line = lines[index].drop { $0 == " " || $0 == "\t" }
+            guard line.hasPrefix("/") else { continue }
+            let name = String(line.dropFirst().prefix { !$0.isWhitespace })
+            guard commands.contains(name) else { continue }
+            let before = trimmed(lines[..<index].joined(separator: "\n"))
+            let command = trimmed(lines[index...].joined(separator: "\n"))
+            return before.isEmpty ? [command] : [before, command]
+        }
+        return [text]
     }
 
     public func stop(_ sessionID: String) { api("POST", "/sessions/\(sessionID)/stop") }
