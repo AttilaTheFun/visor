@@ -130,12 +130,16 @@ public struct AgentCatalog: Codable, Hashable, Sendable {
     public var defaultModel: String?
     /// The tool is installed on the host.
     public var available: Bool
+    /// Something to tell whoever picks a model: that the tool is not
+    /// logged in on this computer, say.
+    public var note: String?
 
-    public init(agent: AgentKind, models: [AgentModel], defaultModel: String? = nil, available: Bool = true) {
+    public init(agent: AgentKind, models: [AgentModel], defaultModel: String? = nil, available: Bool = true, note: String? = nil) {
         self.agent = agent
         self.models = models
         self.defaultModel = defaultModel
         self.available = available
+        self.note = note
     }
 
     /// The model a session runs: its own, else the provider's default.

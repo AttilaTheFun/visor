@@ -369,8 +369,13 @@ public final class OpenRouterBackend: AgentBackend, @unchecked Sendable {
     /// no list on disk yet, a few known models stand in.
     public func catalog() -> AgentCatalog {
         let configured = SessionCatalog.openrouterDefaultModel()
+        // Without a key the list still shows (it is public), but a session
+        // would fail at its first turn: said where the model is picked.
+        let note = available && !SessionCatalog.openrouterHasKey()
+            ? "The openrouter CLI is not logged in on this computer: run `openrouter auth login` in a terminal there." : nil
         guard let cached = Self.cachedModels(), !cached.isEmpty else {
-            return AgentCatalog(agent: kind, models: Self.fallback, defaultModel: configured ?? Self.cliDefault, available: available)
+            return AgentCatalog(agent: kind, models: Self.fallback, defaultModel: configured ?? Self.cliDefault, available: available,
+                                note: note ?? "OpenRouter's model list has not been fetched on this computer yet; these are stand-ins.")
         }
         // What the CLI runs when no model is named: its config's, else
         // its own default.
@@ -390,7 +395,7 @@ public final class OpenRouterBackend: AgentBackend, @unchecked Sendable {
             default: return (a.group ?? "", a.title) < (b.group ?? "", b.title)
             }
         }
-        return AgentCatalog(agent: kind, models: models, defaultModel: runs, available: available)
+        return AgentCatalog(agent: kind, models: models, defaultModel: runs, available: available, note: note)
     }
 
     /// The openrouter CLI's own default model (`ORConfig.defaultModel`).

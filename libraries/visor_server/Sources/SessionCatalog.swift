@@ -138,6 +138,17 @@ enum SessionCatalog {
     }
 
     /// The default model the CLI is configured with, if any.
+    /// Whether the openrouter CLI has a key: in the environment it runs
+    /// with, else in its config (`openrouter auth login`).
+    static func openrouterHasKey() -> Bool {
+        let environment = ToolPath.environment()
+        for name in ["OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY"] where !(environment[name] ?? "").isEmpty { return true }
+        guard let data = try? Data(contentsOf: openrouterRoot.appendingPathComponent("config.json")),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let key = object["apiKey"] as? String else { return false }
+        return !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     static func openrouterDefaultModel() -> String? {
         guard let data = try? Data(contentsOf: openrouterRoot.appendingPathComponent("config.json")),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
