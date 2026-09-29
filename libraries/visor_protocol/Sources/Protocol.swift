@@ -330,6 +330,13 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// When the latest message arrived, seconds since 1970; nil before
     /// anything is said (the list falls back to `created`).
     public var updated: Double?
+    /// The goal the agent is working toward (`/goal`), until it is met or
+    /// cleared.
+    public var goal: String?
+    /// A loop the agent set itself (`/loop`): the next time it wakes,
+    /// seconds since 1970, or the cron schedule it repeats on.
+    public var loopWake: Double?
+    public var loopCron: String?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -377,6 +384,9 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         mode = try c.decodeIfPresent(SessionMode.self, forKey: .mode) ?? .chat
         preview = try c.decodeIfPresent(String.self, forKey: .preview)
         updated = try c.decodeIfPresent(Double.self, forKey: .updated)
+        goal = try c.decodeIfPresent(String.self, forKey: .goal)
+        loopWake = try c.decodeIfPresent(Double.self, forKey: .loopWake)
+        loopCron = try c.decodeIfPresent(String.self, forKey: .loopCron)
     }
 }
 

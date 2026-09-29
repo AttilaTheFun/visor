@@ -154,6 +154,16 @@ public final class SQLiteStorage: MessageStorage, @unchecked Sendable {
 
     public func count(_ s: String) -> Int { (try? db.scalar(messages.filter(session == s).count)) ?? 0 }
 
+    public func lastMessage(_ s: String, idPrefixes: [String], userTexts: [String]) -> TranscriptEntry? {
+        var matches: SQLite.Expression<Bool>?
+        func or(_ e: SQLite.Expression<Bool>) { matches = matches.map { $0 || e } ?? e }
+        for prefix in idPrefixes { or(id.like(prefix + "%")) }
+        for words in userTexts { or(role == "user" && text.like(words + "%")) }
+        guard let matches else { return nil }
+        let row = try? db.pluck(messages.select(json).filter(session == s && matches).order(seq.desc))
+        return row.flatMap { parseJSON($0[json]).flatMap(TranscriptEntry.init(json:)) }
+    }
+
     public func search(_ terms: [String], limit: Int) -> [MessageHit] {
         let match = terms.map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }.joined(separator: " ")
         let statement = try? db.prepare("SELECT session, id, role, snippet(messages_fts, 3, '', '', '…', 16) FROM messages_fts WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?", match, limit)

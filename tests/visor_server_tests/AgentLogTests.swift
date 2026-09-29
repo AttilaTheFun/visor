@@ -3,6 +3,7 @@
 // line after the last — and assembled the way Claude's are.
 
 import ClaudeTranscript
+import VisorProtocol
 @testable import VisorServer
 import XCTest
 
@@ -72,8 +73,9 @@ final class AgentLogTests: XCTestCase {
 final class GoalRowTests: XCTestCase {
     func testGoalsBecomeTheirOwnRows() {
         let rows = TranscriptAssembler.rows(in: [
-            ClaudeRecord(uuid: "g1", kind: .user(text: "/goal Ship it", images: []), timestamp: nil),
+            // As Claude Code writes it: the goal's state, then the command.
             ClaudeRecord(uuid: "g2", kind: .goal(condition: "Ship it", met: false, reason: nil), timestamp: nil),
+            ClaudeRecord(uuid: "g1", kind: .user(text: "/goal Ship it", images: []), timestamp: nil),
             ClaudeRecord(uuid: "g3", kind: .goal(condition: "Ship it", met: true, reason: "Shipped."), timestamp: nil),
         ])
         XCTAssertEqual(rows.map(\.role), [.user, .tool, .tool])
@@ -99,5 +101,41 @@ final class AttachedPictureTests: XCTestCase {
         let rows = TranscriptAssembler.rows(in: [ClaudeRecord(uuid: "u", kind: .user(text: "See\n\nAttached image:\n- /tmp/a.png", images: []), timestamp: nil)])
         XCTAssertEqual(rows.first?.text, "See")
         XCTAssertEqual(rows.first?.images, ["/tmp/a.png"])
+    }
+}
+
+/// A goal and a loop the agent keeps: one card for the goal as it is set
+/// (its state and its notice), marks for the loop, and the session's
+/// info following the latest of each.
+@MainActor
+final class GoalAndLoopTests: XCTestCase {
+    func testAGoalIsOneCardAndLoopsAreMarked() {
+        let rows = TranscriptAssembler.rows(in: [
+            ClaudeRecord(uuid: "g1", kind: .goal(condition: "Ship it", met: false, reason: nil), timestamp: nil),
+            ClaudeRecord(uuid: "g2", kind: .goal(condition: "Ship it", met: false, reason: nil), timestamp: nil),
+            ClaudeRecord(uuid: "a1", kind: .assistant(messageID: "m1", blocks: [.toolUse(id: "t1", name: "ScheduleWakeup", inputJSON: #"{"delaySeconds":600,"prompt":"x"}"#)],
+                                                   stopReason: nil, model: nil, usage: nil), timestamp: "2026-09-28T10:00:00.000Z"),
+            ClaudeRecord(uuid: "a2", kind: .assistant(messageID: "m2", blocks: [.toolUse(id: "t2", name: "CronCreate", inputJSON: #"{"cron":"*/5 * * * *","prompt":"x"}"#)],
+                                                   stopReason: nil, model: nil, usage: nil), timestamp: nil),
+        ])
+        XCTAssertEqual(rows.filter { $0.toolName == "goal" }.count, 1, "the goal's notice is not a second card")
+        let marks = rows.filter { $0.toolName == "loop" }.map(\.text)
+        XCTAssertEqual(marks, ["wake \(Int(1_790_589_600 + 600))", "cron */5 * * * *"])
+    }
+
+    func testTheSessionFollowsTheLatestMarks() {
+        let record = SessionRecord(info: SessionInfo(id: "S", agent: .claude, cwd: "/tmp", title: "", created: 0),
+                                   process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
+        record.replaceEntriesForTesting([TranscriptEntry(id: "goal-file-1", role: .tool, text: "Ship it", toolName: "goal"),
+                                         TranscriptEntry(id: "loop-file-1", role: .tool, text: "wake 1790000600", toolName: "loop")])
+        XCTAssertEqual(record.info.goal, "Ship it")
+        XCTAssertEqual(record.info.loopWake, 1_790_000_600)
+        record.replaceEntriesForTesting(record.entries + [TranscriptEntry(id: "u1", role: .user, text: "/goal clear"),
+                                                          TranscriptEntry(id: "loop-file-2", role: .tool, text: "stop", toolName: "loop")])
+        XCTAssertNil(record.info.goal, "cleared")
+        XCTAssertNil(record.info.loopWake, "stopped")
+        record.replaceEntriesForTesting(record.entries + [TranscriptEntry(id: "goal-file-2", role: .tool, text: "Again", toolName: "goal"),
+                                                          TranscriptEntry(id: "goal-file-3", role: .tool, text: "Done.", toolName: "goal-met")])
+        XCTAssertNil(record.info.goal, "met")
     }
 }

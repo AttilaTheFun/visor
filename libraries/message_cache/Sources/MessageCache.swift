@@ -83,12 +83,21 @@ public protocol MessageStorage: AnyObject, Sendable {
     func seqRange(_ session: String) -> ClosedRange<Int>?
     func count(_ session: String) -> Int
     func search(_ terms: [String], limit: Int) -> [MessageHit]
+    /// The latest row whose id begins with one of `idPrefixes`, or a
+    /// user's row whose words begin with one of `userTexts`.
+    func lastMessage(_ session: String, idPrefixes: [String], userTexts: [String]) -> TranscriptEntry?
+}
+
+extension MessageStorage {
+    /// A storage that cannot look: nothing found, and the rows at hand are
+    /// all there is to go by.
+    public func lastMessage(_ session: String, idPrefixes: [String], userTexts: [String]) -> TranscriptEntry? { nil }
 }
 
 public final class MessageCache: @unchecked Sendable {
     /// Bumped when what is kept, or how, changes: a cache of another
     /// version is dropped and rebuilt.
-    public static let schemaVersion = 6
+    public static let schemaVersion = 7
 
     /// Makes the storage `open(named:)` uses, when a host supplies its own
     /// (the browser's IndexedDB); nil, or a nil answer, for the default.
@@ -143,6 +152,12 @@ public final class MessageCache: @unchecked Sendable {
 
     public func seq(of messageID: String, in session: String) -> Int? { storage.seq(session, of: messageID) }
     public func count(in session: String) -> Int { storage.count(session) }
+
+    /// The latest row whose id begins with one of `idPrefixes`, or a
+    /// user's row whose words begin with one of `userTexts`.
+    public func lastMessage(in session: String, idPrefixes: [String], userTexts: [String] = []) -> TranscriptEntry? {
+        storage.lastMessage(session, idPrefixes: idPrefixes, userTexts: userTexts)
+    }
 
     /// The rows as a whole, in this order, in place of whatever was kept.
     public func replace(_ session: String, with messages: [TranscriptEntry]) throws {

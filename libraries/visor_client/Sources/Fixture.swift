@@ -42,9 +42,11 @@ public enum VisorFixture {
             info.contextLimit = 200_000
             return info
         }
+        var chat = session(chatSession, .claude, "/Users/visor/Developer/weather", "Offline sync",
+                           model: "opus", preview: "Rows now sync in the background; waiting for your approval to run the tests.", age: 60)
+        chat.goal = "Rows written offline are all on the server after reconnecting"
         return [
-            session(chatSession, .claude, "/Users/visor/Developer/weather", "Offline sync",
-                    model: "opus", preview: "Rows now sync in the background; waiting for your approval to run the tests.", age: 60),
+            chat,
             session("fixture-busy", .codex, "/Users/visor/Developer/weather", "Widget layout",
                     model: "gpt-5.5", preview: "Laying out the medium widget.", busy: true, age: 300),
             session("fixture-docs", .claude, "/Users/visor/Developer/handbook", "Release notes",

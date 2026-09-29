@@ -31,6 +31,7 @@ public final class SessionRecord: ObservableObject {
         didSet {
             revision += 1
             stamp(from: oldValue)
+            noteMarks(lookingBack: false)
             onRevision?()
         }
     }
@@ -240,6 +241,8 @@ public final class SessionRecord: ObservableObject {
             entries = loaded.rows
             settle(in: entries)
         }
+        // A goal or loop set before the rows shown: the cache has it.
+        noteMarks(lookingBack: true)
         // Forked elsewhere: the thread is another branch. Clients start
         // again from it (a new generation, answered whole, with `reset`)
         // and are told why (the notice).
@@ -376,6 +379,48 @@ public final class SessionRecord: ObservableObject {
 
     /// Keeps the session's summary — the start of its latest message and
     /// when it came — after the transcript changed at its end.
+    /// The session's goal and loop, as the latest of their marks says:
+    /// among the rows held, or (`lookingBack`, on loading) in the cache
+    /// for the rows before them.
+    private func noteMarks(lookingBack: Bool) {
+        let goalPrefixes = ["goal-file-"], loopPrefixes = ["loop-file-"], goalClear = ["/goal clear"]
+        var goalMark = entries.reversed().lazy.compactMap(Self.goal(of:)).first
+        var loopMark = entries.reversed().lazy.compactMap(Self.loop(of:)).first
+        if lookingBack {
+            if goalMark == nil {
+                goalMark = ServerCache.shared.lastMessage(in: info.id, idPrefixes: goalPrefixes, userTexts: goalClear).flatMap(Self.goal(of:))
+            }
+            if loopMark == nil {
+                loopMark = ServerCache.shared.lastMessage(in: info.id, idPrefixes: loopPrefixes).flatMap(Self.loop(of:))
+            }
+        }
+        var next = info
+        if let goalMark { next.goal = goalMark }
+        if let loopMark { next.loopWake = loopMark.wake; next.loopCron = loopMark.cron }
+        guard next.goal != info.goal || next.loopWake != info.loopWake || next.loopCron != info.loopCron else { return }
+        info = next
+        onInfoChanged?()
+    }
+
+    /// The goal a row says the session has now (nil: none), if it is a goal's.
+    static func goal(of row: TranscriptEntry) -> String?? {
+        if row.role == .user, row.text == "/goal clear" || row.text.hasPrefix("/goal clear ") { return .some(nil) }
+        guard row.role == .tool else { return nil }
+        switch row.toolName {
+        case "goal": return .some(row.text)
+        case "goal-met": return .some(nil)
+        default: return nil
+        }
+    }
+
+    /// The loop a row says the session has now, if it is a loop's mark.
+    static func loop(of row: TranscriptEntry) -> (wake: Double?, cron: String?)? {
+        guard row.role == .tool, row.toolName == "loop" else { return nil }
+        if row.text.hasPrefix("wake "), let time = Double(row.text.dropFirst(5)) { return (time, nil) }
+        if row.text.hasPrefix("cron ") { return (nil, String(row.text.dropFirst(5))) }
+        return (nil, nil)
+    }
+
     private func noteLatest(at time: Double = Date().timeIntervalSince1970) {
         guard let preview = entries.reversed().lazy.compactMap(Self.preview(of:)).first else { return }
         guard preview != info.preview else { return }
@@ -503,6 +548,12 @@ public final class SessionRecord: ObservableObject {
             return .status(session: info.id, items: turn.items)
         case .busy(let value):
             info.busy = value
+            // A wake-up that has come and gone with no next one set: the
+            // loop is over.
+            if !value, let wake = info.loopWake, wake < Date().timeIntervalSince1970 {
+                info.loopWake = nil
+                onInfoChanged?()
+            }
             if !value {
                 info.pendingApproval = nil
                 turn.clear()
