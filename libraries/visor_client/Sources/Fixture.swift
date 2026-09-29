@@ -13,13 +13,17 @@ import VisorServices
 public enum VisorFixture {
     /// Whether the app is showing the canned computer.
     public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
-    /// The screen to open on: sessions, chat, inspector, models, search or
-    /// connect ("" for the app's own first screen).
+    /// The screen to open on: sessions, chat, goal, inspector, models,
+    /// search or connect ("" for the app's own first screen).
     public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
 
     public static let hostID = "fixture"
     /// The session a screen that shows one opens.
     public static let chatSession = "fixture-chat"
+    /// The session the `goal` screen opens: working toward a goal and
+    /// looping, with nothing waiting for approval, so the composer shows
+    /// both pills.
+    public static let goalSession = "fixture-docs"
     /// The words the search screen searches for.
     public static let searchQuery = "sync"
 
@@ -37,7 +41,8 @@ public enum VisorFixture {
             var info = SessionInfo(id: id, agent: agent, cwd: cwd, title: title, busy: busy, model: model, created: now - age - 3600)
             info.preview = preview
             info.updated = now - age
-            info.reportedModel = agent == .claude ? "claude-opus-5-5" : nil
+            // What ran is what was chosen: no fallback shown.
+            info.reportedModel = nil
             info.contextUsed = 48_000
             info.contextLimit = 200_000
             return info
@@ -45,12 +50,15 @@ public enum VisorFixture {
         var chat = session(chatSession, .claude, "/Users/visor/Developer/weather", "Offline sync",
                            model: "opus", preview: "Rows now sync in the background; waiting for your approval to run the tests.", age: 60)
         chat.goal = "Rows written offline are all on the server after reconnecting"
+        var docs = session("fixture-docs", .claude, "/Users/visor/Developer/handbook", "Release notes",
+                           model: "sonnet", preview: "Drafted the notes for 2.4 with the three fixes.", age: 7200)
+        docs.goal = "The release notes cover every change since 2.3"
+        docs.loopCron = "*/30 * * * *"
         return [
             chat,
             session("fixture-busy", .codex, "/Users/visor/Developer/weather", "Widget layout",
                     model: "gpt-5.5", preview: "Laying out the medium widget.", busy: true, age: 300),
-            session("fixture-docs", .claude, "/Users/visor/Developer/handbook", "Release notes",
-                    model: "sonnet", preview: "Drafted the notes for 2.4 with the three fixes.", age: 7200),
+            docs,
             session("fixture-api", .codex, "/Users/visor/Developer/api", "Rate limits",
                     model: "gpt-5.5", preview: "The limiter now allows bursts of 20 per minute.", age: 86_400),
         ]

@@ -231,8 +231,10 @@ struct AgentScreen: View {
                 // What the agent keeps working toward, or wakes itself for:
                 // there for as long as it lasts.
                 if let goal = info.goal {
+                    // A glyph, not words: the row is a phone's width, and the
+                    // model's name needs it more. Tapped, it says what it is.
                     Button { goalShown = goal } label: {
-                        Label("Goal", systemImage: "flag.fill").labelStyle(.titleAndIcon)
+                        Image(systemName: "flag.fill")
                     }
                     .foregroundColor(.accentColor)
                     .lineLimit(1)
@@ -242,7 +244,7 @@ struct AgentScreen: View {
                 }
                 if info.loopWake != nil || info.loopCron != nil {
                     Button { loopShown = true } label: {
-                        Label("Loop", systemImage: "arrow.triangle.2.circlepath").labelStyle(.titleAndIcon)
+                        Image(systemName: "arrow.triangle.2.circlepath")
                     }
                     .foregroundColor(.accentColor)
                     .lineLimit(1)
