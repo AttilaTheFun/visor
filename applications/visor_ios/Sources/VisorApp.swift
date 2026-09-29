@@ -13,7 +13,12 @@ struct VisorApp: App {
 
     init() {
         // The host's services first: the store connects through them.
-        installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService())
+        installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService(),
+                             notifications: NativeVisorNotificationService())
+        // Asked once, at first launch: turns finished, goals done, agents
+        // waiting for approval.
+        // (Not for screenshot tests, which a prompt would cover.)
+        if !VisorFixture.active { VisorHost.notifications?.requestPermission() }
         _store = StateObject(wrappedValue: VisorStore())
     }
 

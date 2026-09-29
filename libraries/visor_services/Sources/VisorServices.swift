@@ -61,19 +61,32 @@ public extension VisorSettingsService {
     func setSecret(key: String, value: String) { set(key: "secret." + key, value: value) }
 }
 
+/// Tells the user something happened: local notifications where the host
+/// has them (iOS). A host without them installs none, and nothing is said.
+public protocol VisorNotificationService {
+    /// Asks, once, whether the app may notify the user.
+    func requestPermission()
+    /// Says something now. A later notification with the same `id`
+    /// replaces this one.
+    func notify(id: String, title: String, body: String)
+}
+
 /// Where the client reads the injected services — resolved lazily, once,
 /// from the dependency dictionary. Absent services are nil.
 public enum VisorHost {
     public nonisolated(unsafe) static var socket: (any VisorSocketService)?
     public nonisolated(unsafe) static var http: (any VisorHTTPService)?
     public nonisolated(unsafe) static var settings: (any VisorSettingsService)?
+    public nonisolated(unsafe) static var notifications: (any VisorNotificationService)?
 }
 
 /// Hands the client its services. An app calls this once, before it makes
 /// a store; a host that carries the client somewhere else (a browser, an
 /// Android app) installs its own.
-public func installVisorServices(socket: any VisorSocketService, http: any VisorHTTPService, settings: any VisorSettingsService) {
+public func installVisorServices(socket: any VisorSocketService, http: any VisorHTTPService, settings: any VisorSettingsService,
+                                 notifications: (any VisorNotificationService)? = nil) {
     VisorHost.socket = socket
     VisorHost.http = http
     VisorHost.settings = settings
+    VisorHost.notifications = notifications
 }

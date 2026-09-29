@@ -6,6 +6,7 @@
 import MessageCache
 @testable import VisorClient
 import VisorProtocol
+import VisorServices
 import XCTest
 
 @MainActor
@@ -148,5 +149,48 @@ final class OptimisticSendTests: XCTestCase {
         // Not a command it knows, or not on a line of its own: words.
         XCTAssertEqual(HostConnection.split("See\n/usr/bin/env", commands: names), ["See\n/usr/bin/env"])
         XCTAssertEqual(HostConnection.split("Use /goal later", commands: names), ["Use /goal later"])
+    }
+}
+
+/// What a session's changes tell the user: a turn finished, an agent
+/// waiting for approval, a goal done.
+@MainActor
+final class NotificationTests: XCTestCase {
+    final class Told: VisorNotificationService {
+        var said: [(id: String, title: String, body: String)] = []
+        func requestPermission() {}
+        func notify(id: String, title: String, body: String) { said.append((id, title, body)) }
+    }
+
+    func testChangesThatAreTold() {
+        let told = Told()
+        VisorHost.notifications = told
+        defer { VisorHost.notifications = nil }
+        let host = HostConnection(config: HostConfig(id: "h", name: "Mac", host: "mac.local", password: ""))
+        var working = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "Sync", busy: true, created: 0)
+        working.goal = "Ship it"
+        var done = working
+        done.busy = false
+        done.goal = nil
+        done.preview = "Shipped."
+        host.notifyChanges(from: [working], to: [done])
+        XCTAssertEqual(told.said.map(\.title), ["Sync: goal done"], "a goal done says so, not also the turn")
+        var waiting = done
+        waiting.goal = nil
+        waiting.pendingApproval = ApprovalRequest(id: "a", tool: "Bash", summary: "rm -rf build")
+        var idle = done
+        idle.goal = nil
+        host.notifyChanges(from: [idle], to: [waiting])
+        XCTAssertEqual(told.said.last?.title, "Sync is waiting")
+        XCTAssertEqual(told.said.last?.body, "Allow Bash? rm -rf build")
+        var busy = idle
+        busy.busy = true
+        host.notifyChanges(from: [busy], to: [idle])
+        XCTAssertEqual(told.said.last?.title, "Sync finished")
+        XCTAssertEqual(told.said.last?.id, "h/s/turn")
+        // A session seen for the first time is not news.
+        let count = told.said.count
+        host.notifyChanges(from: [], to: [idle])
+        XCTAssertEqual(told.said.count, count)
     }
 }
