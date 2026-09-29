@@ -40,6 +40,17 @@ struct ModelSheet: View {
                         }
                     }
                 }
+                // Something about the agent on this computer the choice
+                // depends on: not logged in, say.
+                if let note = catalog?.note {
+                    Section {
+                        Label {
+                            Text(note).font(.footnote)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                        }
+                    }
+                }
                 Section {
                     ApprovalChoice(title: "Auto Approve",
                                    detail: "The agent runs without asking. Nobody is at the computer to answer, so this is how a session starts.",

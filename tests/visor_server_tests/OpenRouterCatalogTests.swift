@@ -184,3 +184,20 @@ final class CodexModelsTests: XCTestCase {
         XCTAssertEqual(parsed.defaultModel, "gpt-6-astra")
     }
 }
+
+/// The catalog says when the CLI has no key: the list still shows, and the
+/// picker says why a session would fail.
+final class OpenRouterLoginTests: XCTestCase {
+    func testALoggedOutCLIIsSaid() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("visor-or-login-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        setenv("OPENROUTER_HOME", home.path, 1)
+        defer { unsetenv("OPENROUTER_HOME"); try? FileManager.default.removeItem(at: home) }
+        let saved = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"]
+        unsetenv("OPENROUTER_API_KEY")
+        defer { if let saved { setenv("OPENROUTER_API_KEY", saved, 1) } }
+        XCTAssertFalse(SessionCatalog.openrouterHasKey())
+        try Data(#"{"apiKey":"sk-test"}"#.utf8).write(to: home.appendingPathComponent("config.json"))
+        XCTAssertTrue(SessionCatalog.openrouterHasKey())
+    }
+}
