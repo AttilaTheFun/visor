@@ -19,6 +19,9 @@ struct AgentScreen: View {
     /// types "/" here.
     @State private var commands: [SlashCommand]?
     @State private var showModels = false
+    /// The goal whose words are being shown, with a way to clear it.
+    @State private var goalShown: String?
+    @State private var loopShown = false
     /// Pictures chosen for the next message, already on the computer.
     @State private var attachments: [PickedImage] = []
     /// The attach source open (files, the photo library, the camera).
@@ -224,6 +227,28 @@ struct AgentScreen: View {
                 .agentPillButton()
                 .accessibilityLabel(fallback.map { "Model: fell back to \($0.title) from \(host.modelTitle(for: info))" } ?? "Model")
                 .accessibilityIdentifier("model")
+                // What the agent keeps working toward, or wakes itself for:
+                // there for as long as it lasts.
+                if let goal = info.goal {
+                    Button { goalShown = goal } label: {
+                        Label("Goal", systemImage: "flag.fill").labelStyle(.titleAndIcon)
+                    }
+                    .foregroundColor(.accentColor)
+                    .lineLimit(1)
+                    .agentPillButton()
+                    .accessibilityLabel("Goal: " + goal)
+                    .accessibilityIdentifier("goal")
+                }
+                if info.loopWake != nil || info.loopCron != nil {
+                    Button { loopShown = true } label: {
+                        Label("Loop", systemImage: "arrow.triangle.2.circlepath").labelStyle(.titleAndIcon)
+                    }
+                    .foregroundColor(.accentColor)
+                    .lineLimit(1)
+                    .agentPillButton()
+                    .accessibilityLabel("Looping")
+                    .accessibilityIdentifier("loop")
+                }
                 // What the user has said while the agent works. It goes
                 // over when the turn ends; this is how to jump the queue
                 // or think better of it.
@@ -280,6 +305,18 @@ struct AgentScreen: View {
         .attachmentPickers($attachSource, onPick: attach)
         // Files dropped on the chat are attached, as if picked.
         .attachmentDrop(onPick: attach)
+        .alert("Goal", isPresented: Binding(get: { goalShown != nil }, set: { if !$0 { goalShown = nil } })) {
+            Button("Clear Goal", role: .destructive) { host.sendMessage(sessionID, text: "/goal clear") }
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text((goalShown ?? "") + "\n\nThe agent keeps working until this is met.")
+        }
+        .alert("Loop", isPresented: $loopShown) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(info?.loopCron.map { "The agent runs again on the schedule \($0)." }
+                 ?? "The agent has set itself to wake and carry on.")
+        }
         .sheet(isPresented: $showModels) {
             if let info { ModelSheet(host: host, session: info) }
         }

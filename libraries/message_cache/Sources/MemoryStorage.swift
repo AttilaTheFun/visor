@@ -54,6 +54,13 @@ public final class MemoryStorage: MessageStorage, @unchecked Sendable {
 
     public func seq(_ session: String, of messageID: String) -> Int? { rows[session]?[messageID]?.seq }
 
+    public func lastMessage(_ session: String, idPrefixes: [String], userTexts: [String]) -> TranscriptEntry? {
+        ordered(session).reversed().first { row in
+            idPrefixes.contains { row.message.id.hasPrefix($0) }
+                || (row.message.role == .user && userTexts.contains { row.message.text.hasPrefix($0) })
+        }?.message
+    }
+
     public func seqRange(_ session: String) -> ClosedRange<Int>? {
         let seqs = rows[session]?.values.map(\.seq) ?? []
         guard let low = seqs.min(), let high = seqs.max() else { return nil }

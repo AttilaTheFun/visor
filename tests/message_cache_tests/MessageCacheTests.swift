@@ -74,3 +74,18 @@ final class StorageProviderTests: XCTestCase {
         XCTAssertEqual(asked, ["mine"])
     }
 }
+
+/// The latest mark a session's state is kept by, found in the cache.
+final class LastMessageTests: XCTestCase {
+    func testTheLatestMatchingRow() throws {
+        for cache in [try MessageCache.sqliteInMemory(), MessageCache(storage: MemoryStorage())] {
+            try cache.append("s", [TranscriptEntry(id: "goal-file-1", role: .tool, text: "One", toolName: "goal"),
+                                   TranscriptEntry(id: "a", role: .assistant, text: "Working"),
+                                   TranscriptEntry(id: "u", role: .user, text: "/goal clear"),
+                                   TranscriptEntry(id: "b", role: .assistant, text: "Done")])
+            XCTAssertEqual(cache.lastMessage(in: "s", idPrefixes: ["goal-file-"])?.id, "goal-file-1")
+            XCTAssertEqual(cache.lastMessage(in: "s", idPrefixes: ["goal-file-"], userTexts: ["/goal clear"])?.id, "u")
+            XCTAssertNil(cache.lastMessage(in: "s", idPrefixes: ["loop-file-"]))
+        }
+    }
+}

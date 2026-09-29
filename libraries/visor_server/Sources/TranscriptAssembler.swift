@@ -11,6 +11,10 @@ import VisorProtocol
 struct TranscriptAssembler {
     /// The assistant message being assembled, as ordered segments.
     private var assembling: (id: String, segments: [(text: String, activities: [String])])?
+    /// The goal set and not yet met: Claude Code records a goal twice as
+    /// it is set (its state, and a notice in the user's place), and it is
+    /// one card.
+    private var openGoal: String?
 
     /// The rows a record adds or changes. An assistant record returns every
     /// row of its message (the same ids as before, updated in place).
@@ -23,12 +27,21 @@ struct TranscriptAssembler {
             // What the user attached reaches the agent as a list of paths
             // under the words (Server.deliver); the row shows them as the
             // pictures they are again.
+            if trimmed == "/goal clear" || trimmed.hasPrefix("/goal clear ") { openGoal = nil }
             let (words, attached) = Self.attachments(in: trimmed)
             let paths = images.compactMap { AgentImages.save(base64: $0.base64, mediaType: $0.mediaType) } + attached
             return [TranscriptEntry(id: "user-file-" + record.uuid, role: .user, text: words,
                                     images: paths, imageSizes: AgentImages.pixelSizes(paths: paths))]
         case .assistant(let messageID, let blocks, _, _, _):
             if assembling?.id != messageID { assembling = (messageID, [(text: "", activities: [])]) }
+            // A loop the agent sets itself: a mark the server keeps the
+            // session's loop by (no row a transcript draws).
+            var marks: [TranscriptEntry] = []
+            for case .toolUse(_, let name, let inputJSON) in blocks {
+                if let mark = Self.loopMark(tool: name, inputJSON: inputJSON, at: record.timestamp) {
+                    marks.append(TranscriptEntry(id: "loop-file-" + record.uuid, role: .tool, text: mark, toolName: "loop"))
+                }
+            }
             for block in blocks {
                 switch block {
                 case .text(let text):
@@ -48,12 +61,12 @@ struct TranscriptAssembler {
                     continue
                 }
             }
-            guard let assembling else { return [] }
+            guard let assembling else { return marks }
             return assembling.segments.enumerated().compactMap { index, segment in
                 guard !segment.text.isEmpty || !segment.activities.isEmpty else { return nil }
                 return TranscriptEntry(id: index == 0 ? assembling.id : "\(assembling.id)#\(index)", role: .assistant,
                                        text: segment.text, activities: segment.activities)
-            }
+            } + marks
         case .toolResult(_, let text, let images, _):
             let paths = images.compactMap { AgentImages.save(base64: $0.base64, mediaType: $0.mediaType) }
             return [TranscriptEntry(id: "tool-file-" + record.uuid, role: .tool, text: String(text.prefix(400)),
@@ -61,11 +74,41 @@ struct TranscriptAssembler {
         case .title:
             return []
         case .goal(let condition, let met, let reason):
+            // The same goal again, as it is set: the one card.
+            if !met, openGoal == condition { return [] }
+            openGoal = met ? nil : condition
             // A row the transcript shows as the goal's card: set, with
             // what it asks; met, with why it is.
             return [TranscriptEntry(id: "goal-file-" + record.uuid, role: .tool, text: met ? (reason ?? condition) : condition,
                                     toolName: met ? "goal-met" : "goal")]
         }
+    }
+
+    /// The loop a tool call sets: "wake <seconds since 1970>" for a
+    /// wake-up (`ScheduleWakeup`), "cron <schedule>" for a repeating job
+    /// (`CronCreate`), "stop" for either ended; nil for any other call.
+    static func loopMark(tool: String, inputJSON: String, at timestamp: String?) -> String? {
+        let input = JSON.object(inputJSON) ?? [:]
+        switch tool {
+        case "ScheduleWakeup":
+            if input["stop"] as? Bool == true { return "stop" }
+            guard let delay = (input["delaySeconds"] as? NSNumber)?.doubleValue else { return nil }
+            let start = timestamp.flatMap(Self.date(from:)) ?? Date()
+            return "wake \(Int(start.timeIntervalSince1970 + delay))"
+        case "CronCreate":
+            guard let cron = input["cron"] as? String, !cron.isEmpty else { return nil }
+            return input["recurring"] as? Bool == false ? nil : "cron " + cron
+        case "CronDelete":
+            return "stop"
+        default:
+            return nil
+        }
+    }
+
+    private static func date(from text: String) -> Date? {
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return withFraction.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 
     /// A user's words and the files attached to them, from the text the
