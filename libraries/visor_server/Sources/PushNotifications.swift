@@ -103,11 +103,15 @@ extension VisorServer {
         if let data = try? JSONEncoder().encode(pushDevices) { try? data.write(to: Self.pushDevicesURL, options: .atomic) }
     }
 
-    /// A device's token, kept (again, when it registers again).
+    /// A device's token, kept (again, when it registers again). Any
+    /// platform may register; an Apple device's token is hex and names its
+    /// app, which APNs needs. Only Apple devices are sent pushes so far.
     func registerPush(_ envelope: Envelope) -> Bool {
-        guard let token = envelope.deviceToken, !token.isEmpty, token.allSatisfy(\.isHexDigit),
-              let topic = envelope.pushTopic, !topic.isEmpty else { return false }
-        let device = PushDevice(token: token, platform: envelope.platform ?? "", environment: envelope.pushEnvironment ?? "production",
+        guard let token = envelope.deviceToken, !token.isEmpty else { return false }
+        let platform = envelope.platform ?? ""
+        let topic = envelope.pushTopic ?? ""
+        if Self.apnsPlatforms.contains(platform), !token.allSatisfy(\.isHexDigit) || topic.isEmpty { return false }
+        let device = PushDevice(token: token, platform: platform, environment: envelope.pushEnvironment ?? "",
                                 topic: topic, registered: Date().timeIntervalSince1970)
         pushDevices.removeAll { $0.token == token }
         pushDevices.append(device)
@@ -189,11 +193,14 @@ extension VisorServer {
         return hours > 0 ? "\(hours)h\(String(format: "%02d", minutes))m" : "\(minutes)m"
     }
 
+    /// The platforms APNs reaches.
+    static let apnsPlatforms: Set<String> = ["ios", "macos"]
+
     /// Says one thing to every device that asked, as a push.
     func push(_ title: String, _ body: String, session: String, kind: String) {
         onPush?(title, body, session, kind)
-        guard let key = storedAPNsKey, !pushDevices.isEmpty else { return }
-        let devices = pushDevices
+        let devices = pushDevices.filter { Self.apnsPlatforms.contains($0.platform) }
+        guard let key = storedAPNsKey, !devices.isEmpty else { return }
         let data = ["computer": pushComputer, "session": session]
         let sender = apnsSender
         Task { [weak self] in
@@ -216,7 +223,9 @@ extension VisorServer {
     /// A test, from Settings: to every device, now.
     public func sendTestPush() -> String? {
         guard storedAPNsKey != nil else { return "Set the APNs key first." }
-        guard !pushDevices.isEmpty else { return "No device has asked for notifications yet: open Visor on the phone." }
+        guard pushDevices.contains(where: { Self.apnsPlatforms.contains($0.platform) }) else {
+            return "No device has asked for notifications yet: open Visor on the phone."
+        }
         push(hostName, "Notifications from this computer work", session: "", kind: "test")
         return nil
     }
