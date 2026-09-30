@@ -92,7 +92,12 @@ final class PushTests: XCTestCase {
         XCTAssertTrue(server.registerPush(e), "again: replaced, not added")
         XCTAssertEqual(VisorServer.keptPushDevices().map(\.token), ["ab12"])
         e.deviceToken = "not hex!"
-        XCTAssertFalse(server.registerPush(e))
+        XCTAssertFalse(server.registerPush(e), "an Apple token is hex")
+        // Another platform registers with its own token and nothing of APNs's.
+        var android = Envelope(type: "push")
+        android.deviceToken = "fcm:token-1"; android.platform = "android"
+        XCTAssertTrue(server.registerPush(android))
+        XCTAssertEqual(VisorServer.keptPushDevices().count, 2)
         XCTAssertEqual(VisorServer.duration(40), "40s")
         XCTAssertEqual(VisorServer.duration(12 * 60), "12m")
     }
