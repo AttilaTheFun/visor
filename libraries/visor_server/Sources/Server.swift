@@ -402,6 +402,13 @@ public final class SessionRecord: ObservableObject {
         onInfoChanged?()
     }
 
+    /// Whether the goal just gone was met, not cleared: the latest goal row
+    /// is a met one.
+    func goalWasMet(_ goal: String) -> Bool {
+        guard let row = entries.reversed().first(where: { Self.goal(of: $0) != nil }) else { return false }
+        return row.toolName == "goal-met"
+    }
+
     /// The goal a row says the session has now (nil: none), if it is a goal's.
     static func goal(of row: TranscriptEntry) -> String?? {
         if row.role == .user, row.text == "/goal clear" || row.text.hasPrefix("/goal clear ") { return .some(nil) }
@@ -864,6 +871,13 @@ public final class VisorServer: ObservableObject {
     @Published public internal(set) var links: [ConnectionCode] = []
     /// The slash commands each agent listed when it last ran (Commands.swift).
     var knownCommands: [AgentKind: [SlashCommand]] = [:]
+    /// The devices that asked for pushes, what each session last looked like,
+    /// and what sends them (PushNotifications.swift).
+    var pushDevices: [PushDevice] = VisorServer.keptPushDevices()
+    var pushStates: [String: PushState] = [:]
+    let apnsSender = APNsSender()
+    /// Told each push as it is decided, before anything is sent (tests).
+    var onPush: ((_ title: String, _ body: String, _ session: String, _ kind: String) -> Void)?
     private var claudeModelsTimer: Timer?
     /// A `front()` is under way; and how many have found Tailscale not ready.
     private var fronting = false
@@ -947,7 +961,7 @@ public final class VisorServer: ObservableObject {
     /// Tests point this at a scratch folder: a server built over the real
     /// archive ends the agents it records as orphans of a previous life.
     static var storeRoot: URL?
-    private static var storeURL: URL {
+    static var storeURL: URL {
         let base = storeRoot ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("sessions.json")
@@ -1514,6 +1528,11 @@ public final class VisorServer: ObservableObject {
             var e = Envelope(type: "code")
             e.text = code.encoded
             return .json(e.encoded())
+        case ("POST", 1, "push"):
+            // A device that wants to hear, with the app closed, when a turn
+            // ends or an agent waits.
+            guard registerPush(body) else { return HTTPResponse(400, Envelope.error("A push token and its app are required").encoded()) }
+            return .json(Envelope(type: "push").encoded())
         case ("POST", 1, "link"):
             // A computer this one's code was pasted into, linking back.
             guard let code = body.text.flatMap(ConnectionCode.init(parsing:)) else {
@@ -2046,6 +2065,7 @@ public final class VisorServer: ObservableObject {
     private func broadcastSessions() {
         let envelope = Envelope.sessions(sessions.map(\.info))
         for connection in connections.values where connection.authenticated { connection.send(envelope) }
+        notifyPushes()
     }
 
     /// What agents are on offer, after that changed (a key was entered).
