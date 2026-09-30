@@ -512,19 +512,30 @@ public final class HostConnection: ObservableObject, Identifiable {
         e.platform = handler.platform
         e.pushEnvironment = handler.environment
         e.pushTopic = handler.topic
-        api("POST", "/push", e)
+        Task { [weak self] in
+            // Whether the computer sends pushes (it has an APNs key): then
+            // it says what happened, and this device does not say it too.
+            let reply = try? await self?.fetch("POST", "/push", e)
+            self?.computerPushes = reply?.exists ?? false
+        }
     }
+
+    /// The computer sends this device pushes: local notifications would
+    /// say the same thing twice.
+    var computerPushes = false
 
     /// Tells the user (where the host can) what changed in a session while
     /// they may not be looking: a turn finished, an agent waiting for
     /// approval, a goal done. Only for a change the computer announced:
     /// the first list after connecting says what is, not what happened.
     func notifyChanges(from before: [SessionInfo], to after: [SessionInfo]) {
-        guard let notifications = VisorHost.notifications else { return }
+        guard let notifications = VisorHost.notifications, !computerPushes else { return }
         for new in after {
             guard let old = before.first(where: { $0.id == new.id }), !new.archived, !new.ended else { continue }
             let title = new.title.isEmpty ? new.agent.title : new.title
-            let key = config.id + "/" + new.id
+            // "<computer>/<session>/<kind>": the id replaces an older one,
+            // and says where to go when the notification is opened.
+            let key = config.host + "/" + new.id
             if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval {
                 notifications.notify(id: key + "/approval", title: "\(title) is waiting",
                                      body: "Allow \(approval.tool)? " + approval.summary)

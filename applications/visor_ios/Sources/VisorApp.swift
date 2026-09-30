@@ -10,6 +10,9 @@ import VisorUI
 @main
 struct VisorApp: App {
     @StateObject private var store: VisorStore
+    /// Where the system hands over the push token and the notification
+    /// the user opened (PushDelegate).
+    @UIApplicationDelegateAdaptor(PushDelegate.self) private var pushDelegate
 
     init() {
         // The host's services first: the store connects through them.
@@ -18,7 +21,11 @@ struct VisorApp: App {
         // Asked once, at first launch: turns finished, goals done, agents
         // waiting for approval.
         // (Not for screenshot tests, which a prompt would cover.)
-        if !VisorFixture.active { VisorHost.notifications?.requestPermission() }
+        if !VisorFixture.active {
+            VisorHost.notifications?.requestPermission()
+            // A token for pushes, which each computer is given.
+            VisorHost.notifications?.registerForRemoteNotifications()
+        }
         _store = StateObject(wrappedValue: VisorStore())
     }
 

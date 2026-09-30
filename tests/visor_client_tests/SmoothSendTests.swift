@@ -187,7 +187,7 @@ final class NotificationTests: XCTestCase {
         busy.busy = true
         host.notifyChanges(from: [busy], to: [idle])
         XCTAssertEqual(told.said.last?.title, "Sync finished")
-        XCTAssertEqual(told.said.last?.id, "h/s/turn")
+        XCTAssertEqual(told.said.last?.id, "mac.local/s/turn")
         // A session seen for the first time is not news.
         let count = told.said.count
         host.notifyChanges(from: [], to: [idle])

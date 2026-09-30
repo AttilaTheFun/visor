@@ -6,17 +6,26 @@
 # both. Plug the iPhone in first, so it is registered with the team.
 # rules_apple then finds "iOS Team Provisioning Profile: <bundle id>".
 #
-#   tools/mint_profile/mint_profile.sh <bundle id> <team id> [device UDID]
-# (the bundle id in applications/visor_ios/BUILD.bazel, the team in .bazelrc.user)
+#   tools/mint_profile/mint_profile.sh <bundle id> <team id> [device UDID] [entitlements]
+# (the bundle id in applications/visor_ios/BUILD.bazel, the team in .bazelrc.user).
+# With an entitlements file (the app's own, e.g. applications/visor_ios/
+# app.entitlements), the App ID gets those capabilities (push) and the
+# profile carries them: what the wildcard profile cannot.
 set -euo pipefail
 BUNDLE="${1:?bundle id, as BUNDLE_ID in applications/visor_ios/BUILD.bazel}"
 TEAM="${2:?Apple team id, as VISOR_TEAM_ID in .bazelrc.user}"
 DEVICE="${3:-}"
+ENTITLEMENTS="${4:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/Mint.xcodeproj" "$WORK/Mint"
 cp "$HERE/MintProfile/App.swift" "$WORK/Mint/App.swift"
+ENTITLEMENTS_SETTING=""
+if [ -n "$ENTITLEMENTS" ]; then
+    cp "$ENTITLEMENTS" "$WORK/Mint/Mint.entitlements"
+    ENTITLEMENTS_SETTING="CODE_SIGN_ENTITLEMENTS = Mint/Mint.entitlements;"
+fi
 # The project is written here rather than kept: *.xcodeproj is ignored.
 cat > "$WORK/Mint.xcodeproj/project.pbxproj" <<PBX
 // !\$*UTF8*\$!
@@ -35,7 +44,7 @@ cat > "$WORK/Mint.xcodeproj/project.pbxproj" <<PBX
 		A0000000000000000000008 = {isa = PBXNativeTarget; buildConfigurationList = A0000000000000000000009; buildPhases = (A0000000000000000000007); buildRules = (); dependencies = (); name = Mint; productName = Mint; productReference = A0000000000000000000003; productType = "com.apple.product-type.application"; };
 		A0000000000000000000009 = {isa = XCConfigurationList; buildConfigurations = (A000000000000000000000A); defaultConfigurationName = Debug; };
 		A000000000000000000000A = {isa = XCBuildConfiguration; buildSettings = {
-			CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = $TEAM; PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE;
+			CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = $TEAM; PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE; $ENTITLEMENTS_SETTING
 			PRODUCT_NAME = Mint; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0;
 			GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; TARGETED_DEVICE_FAMILY = "1,2";
 		}; name = Debug; };

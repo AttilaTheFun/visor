@@ -4,6 +4,7 @@
 // when the app is next opened.
 
 #if os(iOS)
+import UIKit
 import UserNotifications
 
 public final class NativeVisorNotificationService: VisorNotificationService, @unchecked Sendable {
@@ -13,12 +14,19 @@ public final class NativeVisorNotificationService: VisorNotificationService, @un
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
+    public func registerForRemoteNotifications() {
+        Task { @MainActor in UIApplication.shared.registerForRemoteNotifications() }
+    }
+
     public func notify(id: String, title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
-        content.threadIdentifier = String(id.split(separator: "/").prefix(2).joined(separator: "/"))
+        let parts = id.split(separator: "/").map(String.init)
+        content.threadIdentifier = parts.prefix(2).joined(separator: "/")
+        // Where to go when it is opened, as a push says it.
+        if parts.count >= 2 { content.userInfo = ["computer": parts[0], "session": parts[1]] }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }
 }
