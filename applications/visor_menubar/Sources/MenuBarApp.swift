@@ -117,6 +117,11 @@ struct SettingsPane: View {
     @State private var linkDraft = ""
     @State private var linkMessage: String?
     @State private var linking = false
+    @State private var choosingKey = false
+    @State private var keyPEM = ""
+    @State private var keyID = ""
+    @State private var teamID = ""
+    @State private var pushMessage: String?
 
     var body: some View {
         Form {
@@ -209,6 +214,41 @@ struct SettingsPane: View {
             } header: {
                 Text("Linked computers")
             }
+            Section {
+                let current = server.apnsKey
+                Text(current.configured
+                     ? "Key \(current.keyID) is set; \(server.pushDeviceCount) device\(server.pushDeviceCount == 1 ? "" : "s") asked for notifications."
+                     : "Not set up: phones hear of finished turns only while Visor is open.")
+                    .font(.caption).foregroundColor(.secondary)
+                HStack {
+                    Button(keyPEM.isEmpty ? "Choose APNs Key (.p8)…" : "Key chosen") { choosingKey = true }
+                    Spacer()
+                    Button("Send Test") { pushMessage = server.sendTestPush() ?? "Sent." }
+                        .disabled(!current.configured)
+                }
+                TextField("Key ID", text: $keyID)
+                TextField("Team ID", text: $teamID)
+                Button("Save Key") {
+                    pushMessage = server.setAPNsKey(pem: keyPEM, keyID: keyID.trimmingCharacters(in: .whitespaces),
+                                                    teamID: teamID.trimmingCharacters(in: .whitespaces)) ?? "Saved."
+                    if pushMessage == "Saved." { keyPEM = "" }
+                }
+                .disabled(keyPEM.isEmpty || keyID.isEmpty || teamID.isEmpty)
+                Text("An APNs key from your Apple developer account (Keys → Apple Push Notifications service). It stays in this Mac's keychain. A push says only the session's name and what happened: \"Isomer: Goal achieved in 1h45m\".")
+                    .font(.caption).foregroundColor(.secondary)
+                if let pushMessage { Text(pushMessage).font(.caption) }
+            } header: {
+                Text("Push Notifications")
+            }
+            .fileImporter(isPresented: $choosingKey, allowedContentTypes: [.item]) { result in
+                guard let url = try? result.get() else { return }
+                let granted = url.startAccessingSecurityScopedResource()
+                defer { if granted { url.stopAccessingSecurityScopedResource() } }
+                keyPEM = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                // Apple names the file AuthKey_<key id>.p8.
+                let name = url.deletingPathExtension().lastPathComponent
+                if name.hasPrefix("AuthKey_") { keyID = String(name.dropFirst(8)) }
+            }
             Section("Addresses") {
                 if let name = server.exposure.address() { Text(name) }
                 ForEach(VisorServer.addresses(), id: \.address) { entry in
@@ -220,6 +260,8 @@ struct SettingsPane: View {
         .formStyle(.grouped)
         .frame(width: 520, height: 760)
         .onAppear {
+            keyID = server.apnsKey.keyID
+            teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
         }
     }
