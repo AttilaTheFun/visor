@@ -159,6 +159,13 @@ public struct VisorRootView: View {
         .onChange(of: selection) { value in
             if compact { compactColumn = value == nil ? .sidebar : .detail }
         }
+        // A notification the user opened: its session, on its computer.
+        .onChange(of: store.opening) { target in
+            guard let target, let host = store.host(named: target.computer) else { return }
+            store.opening = nil
+            selection = .session(SessionSelection(hostID: host.id, sessionID: target.session))
+            if compact { compactColumn = .detail }
+        }
         // Backing out on a phone is deselecting: the row is no longer
         // open, so it is no longer lit, and tapping it opens it again.
         .onChange(of: compactColumn) { column in

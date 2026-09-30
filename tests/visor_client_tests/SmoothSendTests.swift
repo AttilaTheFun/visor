@@ -214,3 +214,25 @@ final class WidgetFeedTests: XCTestCase {
         XCTAssertEqual(rows.first?["computer"].string, "Book")
     }
 }
+
+/// What the system says about notifications, relayed: a token kept with
+/// its kind, service and app; a notification opened, even before anyone
+/// listens (a tap that launched the app).
+final class NotificationHandlerTests: XCTestCase {
+    func testTokensAndOpenedNotifications() {
+        let handler = VisorNotificationHandler()
+        var told = 0
+        handler.onToken = { told += 1 }
+        handler.didRegister(token: "ab12", platform: "ios", environment: "sandbox", topic: "com.example.app")
+        XCTAssertEqual(told, 1)
+        XCTAssertEqual(handler.token, "ab12")
+        XCTAssertEqual(handler.topic, "com.example.app")
+
+        handler.didOpen(["computer": "mini.example.ts.net", "session": "s1"])
+        var opened: NotificationTarget?
+        handler.onOpen = { opened = $0 }
+        XCTAssertEqual(opened, NotificationTarget(computer: "mini.example.ts.net", session: "s1"), "kept until someone listens")
+        handler.didOpen(["session": "s2"])
+        XCTAssertEqual(opened?.session, "s1", "without its computer, nothing to open")
+    }
+}
