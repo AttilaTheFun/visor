@@ -557,6 +557,13 @@ public struct Envelope: Codable, Sendable {
     public var resumable: [ResumableSession]?
     /// The slash commands a session's agent takes (`commands`).
     public var commands: [SlashCommand]?
+    /// A device's push token, hex (`push`), with its kind ("ios", "macos")
+    /// and service ("sandbox", "production").
+    public var deviceToken: String?
+    public var platform: String?
+    public var pushEnvironment: String?
+    /// The app a push token is for: its bundle id.
+    public var pushTopic: String?
 
     public init(type: String) { self.type = type }
 

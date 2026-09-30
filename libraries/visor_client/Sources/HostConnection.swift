@@ -501,6 +501,20 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
     }
 
+    /// Gives the computer this device's push token, so its server can say
+    /// when a turn ends or an agent waits, with the app closed. Again on
+    /// each connect: the server keeps the latest.
+    public func registerForPush() {
+        let handler = VisorNotificationHandler.shared
+        guard state == .connected, let token = handler.token else { return }
+        var e = Envelope(type: "push")
+        e.deviceToken = token
+        e.platform = handler.platform
+        e.pushEnvironment = handler.environment
+        e.pushTopic = handler.topic
+        api("POST", "/push", e)
+    }
+
     /// Tells the user (where the host can) what changed in a session while
     /// they may not be looking: a turn finished, an agent waiting for
     /// approval, a goal done. Only for a change the computer announced:
@@ -703,6 +717,7 @@ public final class HostConnection: ObservableObject, Identifiable {
             pendingSubscriptions.removeAll()
             // A folder may have been renamed or moved while we were away.
             Task { await refreshMissing() }
+            registerForPush()
         case "catalogs":
             catalogs = envelope.catalogs ?? []
         case "error":

@@ -69,6 +69,71 @@ public protocol VisorNotificationService {
     /// Says something now. A later notification with the same `id`
     /// replaces this one.
     func notify(id: String, title: String, body: String)
+    /// Asks the system for this device's push token: it comes back through
+    /// `VisorNotificationHandler.shared.didRegister`.
+    func registerForRemoteNotifications()
+}
+
+public extension VisorNotificationService {
+    /// A host without pushes: nothing to register.
+    func registerForRemoteNotifications() {}
+}
+
+/// A notification the user opened: which session, on which computer (by
+/// the address the client knows it at).
+public struct NotificationTarget: Sendable, Equatable {
+    public let computer: String
+    public let session: String
+    public init(computer: String, session: String) {
+        self.computer = computer
+        self.session = session
+    }
+}
+
+/// Where a host relays what its system says about notifications — the push
+/// token it was given, a notification the user opened — and where the
+/// client hears it. One for the app; the host calls in, the client
+/// listens.
+public final class VisorNotificationHandler: @unchecked Sendable {
+    public static let shared = VisorNotificationHandler()
+
+    /// The device's push token, hex, once the system has given one.
+    public private(set) var token: String?
+    /// Which kind of device the token is for: "ios", "macos".
+    public private(set) var platform = ""
+    /// Which push service the token belongs to: "sandbox" for development
+    /// builds, "production" for release ones.
+    public private(set) var environment = ""
+    /// The app the token is for (its bundle id: APNs's topic).
+    public private(set) var topic = ""
+    /// Told when a token arrives (the client hands it to each computer).
+    public var onToken: (() -> Void)?
+    /// Told which session a notification the user opened is about. A tap
+    /// that launched the app waits here until someone listens.
+    public var onOpen: ((NotificationTarget) -> Void)? {
+        didSet {
+            if let pending, let onOpen { self.pending = nil; onOpen(pending) }
+        }
+    }
+    private var pending: NotificationTarget?
+
+    public init() {}
+
+    public func didRegister(token: String, platform: String, environment: String, topic: String) {
+        self.token = token
+        self.platform = platform
+        self.environment = environment
+        self.topic = topic
+        onToken?()
+    }
+
+    /// A notification the user opened, by the data it carried: "computer"
+    /// and "session". Anything else is ignored.
+    public func didOpen(_ data: [String: String]) {
+        guard let computer = data["computer"], let session = data["session"] else { return }
+        let target = NotificationTarget(computer: computer, session: session)
+        if let onOpen { onOpen(target) } else { pending = target }
+    }
 }
 
 /// Somewhere outside the app that shows the latest sessions: the home

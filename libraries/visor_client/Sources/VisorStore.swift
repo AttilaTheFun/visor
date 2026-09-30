@@ -18,6 +18,9 @@ public final class VisorStore: ObservableObject {
     /// The connect sheet is open. Held here because the Mac opens it from
     /// its menu bar, which is a scene away from the view.
     @Published public var addingComputer = false
+    /// A session a notification the user opened is about, for the view to
+    /// open; cleared once it has.
+    @Published public var opening: NotificationTarget?
     /// Bumped when a host's config changes, so views of the store refresh.
     @Published private var revision = 0
     private let key = "hosts"
@@ -49,6 +52,23 @@ public final class VisorStore: ObservableObject {
             if carried { save() }
         }
         for host in hosts { observe(host); host.connect() }
+        listenForNotifications()
+    }
+
+    /// A push token arriving goes to every computer; a notification the
+    /// user opens names a session to open.
+    private func listenForNotifications() {
+        VisorNotificationHandler.shared.onToken = { [weak self] in
+            Task { @MainActor in self?.hosts.forEach { $0.registerForPush() } }
+        }
+        VisorNotificationHandler.shared.onOpen = { [weak self] target in
+            Task { @MainActor in self?.opening = target }
+        }
+    }
+
+    /// The computer a notification names, by the address it goes by.
+    public func host(named computer: String) -> HostConnection? {
+        hosts.first { $0.config.host == computer } ?? hosts.first { $0.config.name == computer }
     }
 
     /// Adds (or updates, by address) a computer and connects to it.
