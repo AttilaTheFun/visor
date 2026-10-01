@@ -113,7 +113,6 @@ public struct FixtureBackend: Backend {
     public let hostFieldTitle = "Host"
     public let hostPlaceholder = "snapshot.local"
     public let passwordFieldTitle = "Password"
-    public let help = "Canned data for screenshot tests."
     public init() {}
     public func makeTransport() -> any HostTransport { FixtureTransport() }
 }

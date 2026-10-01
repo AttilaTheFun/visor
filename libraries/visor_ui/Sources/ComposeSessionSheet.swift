@@ -2,7 +2,7 @@
 // exists — which computer, which folder, which harness, and what to call
 // it. The folder is picked from the computer's projects or browsed for.
 // Sessions start in auto mode (no permission prompts — nobody is at the
-// computer to answer them); the chat's permissions pill switches to manual.
+// computer to answer them); the chat's model sheet switches to manual.
 
 import NavigationUI
 import SwiftUI
@@ -179,12 +179,6 @@ struct ComposeSessionSheet: View {
             guard let resolved = try? await host.folders(at: "~").path, !resolved.isEmpty, cwd == "~" else { return }
             cwd = resolved
         }
-    }
-
-    private func folderName(_ path: String) -> String {
-        let trimmed = path.hasSuffix("/") && path.count > 1 ? String(path.dropLast()) : path
-        if trimmed == "~" || trimmed.isEmpty { return "Home" }
-        return trimmed.split(separator: "/").last.map(String.init) ?? trimmed
     }
 
     private func loadResumable() {

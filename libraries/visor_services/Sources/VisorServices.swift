@@ -1,11 +1,9 @@
 // The services a host injects into the client (docs/wasm_di.md in swift_ffi,
-// the same shape as Isomer's platform services): a WebSocket the
-// client drives by id, and a settings store for the saved computers.
+// the same shape as Isomer's platform services): a WebSocket the client
+// drives by id, HTTP requests, a settings store for the saved computers,
+// and — where the host has them — notifications and a home screen widget.
 // Nothing else crosses the boundary; async methods suspend in the guest
 // and the host answers when it has something.
-
-
-/// The keys of the host-injected dependency dictionary.
 
 /// A WebSocket per connection, by id. `next` suspends until the socket
 /// has an event and returns it as one line: "open", "message <text>",
@@ -154,8 +152,8 @@ public protocol VisorWidgetService {
     func publish(_ json: String)
 }
 
-/// Where the client reads the injected services — resolved lazily, once,
-/// from the dependency dictionary. Absent services are nil.
+/// Where the client reads the services its host installed
+/// (`installVisorServices`). Absent services are nil.
 public enum VisorHost {
     public nonisolated(unsafe) static var socket: (any VisorSocketService)?
     public nonisolated(unsafe) static var http: (any VisorHTTPService)?

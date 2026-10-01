@@ -39,12 +39,6 @@ struct TerminalPane: View {
     @ObservedObject var host: HostConnection
     let sessionID: String
 
-    #if canImport(UIKit)
-    /// How much of the pane the keyboard covers, kept out from under it.
-    /// A UIKit view inside SwiftUI gets no keyboard avoidance of its own.
-    @State private var keyboardInset: CGFloat = 0
-    #endif
-
     var body: some View {
         #if canImport(SwiftTerm)
         TerminalHostView(host: host, sessionID: sessionID, transcript: host.transcript(for: sessionID))

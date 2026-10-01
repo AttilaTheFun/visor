@@ -66,29 +66,6 @@ extension View {
         frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
     }
 
-    /// A section heading's own inset. The Mac's sidebar list runs its
-    /// headers to the column's edge, so an accessory at the trailing edge
-    /// needs the room the rows have.
-    @ViewBuilder func headingInset() -> some View {
-        #if os(macOS)
-        padding(.trailing, 6)
-        #else
-        self
-        #endif
-    }
-
-    /// A plain list without lines between the rows, the same everywhere:
-    /// the sidebar groups itself, so it wants no help from a list style.
-    @ViewBuilder func groupedRows() -> some View {
-        #if canImport(UIKit) || canImport(AppKit)
-        // Rows as tall as what is in them: Apple's List otherwise pads
-        // every row to a minimum of 44pt.
-        listStyle(.plain).listRowSeparator(.hidden).environment(\.defaultMinListRowHeight, 0)
-        #else
-        listStyle(.plain).listRowSeparator(.hidden)
-        #endif
-    }
-
     /// The sidebar's list: inset grouped on a phone, the sidebar style on
     /// the Mac, plain where neither exists.
     @ViewBuilder func insetGroupedList() -> some View {

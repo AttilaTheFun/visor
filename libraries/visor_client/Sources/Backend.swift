@@ -42,8 +42,6 @@ public protocol Backend: Sendable {
     var hostFieldTitle: String { get }
     var hostPlaceholder: String { get }
     var passwordFieldTitle: String { get }
-    /// A sentence under the form.
-    var help: String { get }
     func makeTransport() -> any HostTransport
 }
 
@@ -78,7 +76,6 @@ public struct TailscaleBackend: Backend {
     public let hostFieldTitle = "Tailscale name"
     public let hostPlaceholder = "my-mac.tail1234.ts.net"
     public let passwordFieldTitle = "Password (if asked)"
-    public let help = "The Visor menu bar app on the Mac gives a connection code to copy, and a QR code to scan, holding its Tailscale name and password. Connections are HTTPS through Tailscale."
     public init() {}
     public func makeTransport() -> any HostTransport { TailscaleTransport() }
 }
