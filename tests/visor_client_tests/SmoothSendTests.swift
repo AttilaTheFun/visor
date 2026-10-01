@@ -234,5 +234,13 @@ final class NotificationHandlerTests: XCTestCase {
         XCTAssertEqual(opened, NotificationTarget(computer: "mini.example.ts.net", session: "s1"), "kept until someone listens")
         handler.didOpen(["session": "s2"])
         XCTAssertEqual(opened?.session, "s1", "without its computer, nothing to open")
+
+        // With the app in front: shown, unless it is about the session on screen.
+        handler.viewing = NotificationTarget(computer: "mini.example.ts.net", session: "s1")
+        XCTAssertFalse(handler.presents(["computer": "mini.example.ts.net", "session": "s1"]))
+        XCTAssertTrue(handler.presents(["computer": "mini.example.ts.net", "session": "s2"]))
+        XCTAssertTrue(handler.presents(["computer": "book.example.ts.net", "session": "s1"]))
+        handler.viewing = nil
+        XCTAssertTrue(handler.presents(["computer": "mini.example.ts.net", "session": "s1"]))
     }
 }

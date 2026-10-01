@@ -66,6 +66,16 @@ public final class VisorStore: ObservableObject {
         }
     }
 
+    /// The session on screen, if any: a notification about it, with the app
+    /// in front, is not shown over it.
+    public func noteViewing(hostID: String?, sessionID: String?) {
+        guard let hostID, let sessionID, let host = host(for: hostID) else {
+            VisorNotificationHandler.shared.viewing = nil
+            return
+        }
+        VisorNotificationHandler.shared.viewing = NotificationTarget(computer: host.config.host, session: sessionID)
+    }
+
     /// The computer a notification names, by the address it goes by.
     public func host(named computer: String) -> HostConnection? {
         hosts.first { $0.config.host == computer } ?? hosts.first { $0.config.name == computer }

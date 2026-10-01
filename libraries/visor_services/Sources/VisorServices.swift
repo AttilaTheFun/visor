@@ -108,6 +108,17 @@ public final class VisorNotificationHandler: @unchecked Sendable {
     public private(set) var topic = ""
     /// Told when a token arrives (the client hands it to each computer).
     public var onToken: (() -> Void)?
+    /// The session on screen, if any: a notification about it, arriving
+    /// while the app is in front, is not shown (the thread says it).
+    public var viewing: NotificationTarget?
+
+    /// Whether a notification arriving with the app in front is shown: yes,
+    /// unless it is about the session on screen.
+    public func presents(_ data: [String: String]) -> Bool {
+        guard let viewing else { return true }
+        return !(data["computer"] == viewing.computer && data["session"] == viewing.session)
+    }
+
     /// Told which session a notification the user opened is about. A tap
     /// that launched the app waits here until someone listens.
     public var onOpen: ((NotificationTarget) -> Void)? {

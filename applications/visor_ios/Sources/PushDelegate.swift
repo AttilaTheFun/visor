@@ -27,15 +27,23 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
 
     /// The user opened a notification: its session, on its computer.
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        var data: [String: String] = [:]
-        for (key, value) in response.notification.request.content.userInfo {
-            if let key = key as? String, let value = value as? String { data[key] = value }
-        }
-        VisorNotificationHandler.shared.didOpen(data)
+        VisorNotificationHandler.shared.didOpen(Self.data(of: response.notification))
     }
 
-    /// With the app in front, the thread itself says what happened: no banner.
+    /// With the app in front: shown as a banner, which opens its session
+    /// when tapped — unless it is about the session on screen, whose thread
+    /// already says it.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
-        -> UNNotificationPresentationOptions { [] }
+        -> UNNotificationPresentationOptions {
+        VisorNotificationHandler.shared.presents(Self.data(of: notification)) ? [.banner, .list, .sound] : []
+    }
+
+    static func data(of notification: UNNotification) -> [String: String] {
+        var data: [String: String] = [:]
+        for (key, value) in notification.request.content.userInfo {
+            if let key = key as? String, let value = value as? String { data[key] = value }
+        }
+        return data
+    }
 }
 #endif
