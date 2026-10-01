@@ -11,9 +11,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.10</string>
+    <string>0.11</string>
     <key>CFBundleVersion</key>
-    <string>10</string>
+    <string>11</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <!-- The host is a ws:// WebSocket on the tailnet (a 100.x address or a
