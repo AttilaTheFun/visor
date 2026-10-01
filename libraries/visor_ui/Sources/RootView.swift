@@ -158,6 +158,9 @@ public struct VisorRootView: View {
         }
         .onChange(of: selection) { value in
             if compact { compactColumn = value == nil ? .sidebar : .detail }
+            // Which session is on screen, so a notification about it, with
+            // the app in front, is not shown over it.
+            store.noteViewing(hostID: value?.session?.hostID, sessionID: value?.session?.sessionID)
         }
         // A notification the user opened: its session, on its computer.
         .onChange(of: store.opening) { target in
