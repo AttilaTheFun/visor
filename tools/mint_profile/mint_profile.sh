@@ -11,11 +11,21 @@
 # With an entitlements file (the app's own, e.g. applications/visor_ios/
 # app.entitlements), the App ID gets those capabilities (push) and the
 # profile carries them: what the wildcard profile cannot.
+#
+# Xcode's own sign-in (Settings → Accounts) is not needed when an App Store
+# Connect API key is set: VISOR_ASC_KEY_PATH, VISOR_ASC_KEY_ID and
+# VISOR_ASC_ISSUER_ID, in the environment or in ~/.appstoreconnect/visor.env
+# (local to the Mac; never in a repository).
 set -euo pipefail
 BUNDLE="${1:?bundle id, as BUNDLE_ID in applications/visor_ios/BUILD.bazel}"
 TEAM="${2:?Apple team id, as VISOR_TEAM_ID in .bazelrc.user}"
 DEVICE="${3:-}"
 ENTITLEMENTS="${4:-}"
+[ -f "$HOME/.appstoreconnect/visor.env" ] && . "$HOME/.appstoreconnect/visor.env"
+AUTH=()
+if [ -n "${VISOR_ASC_KEY_PATH:-}" ] && [ -n "${VISOR_ASC_KEY_ID:-}" ] && [ -n "${VISOR_ASC_ISSUER_ID:-}" ]; then
+    AUTH=(-authenticationKeyPath "$VISOR_ASC_KEY_PATH" -authenticationKeyID "$VISOR_ASC_KEY_ID" -authenticationKeyIssuerID "$VISOR_ASC_ISSUER_ID")
+fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -58,7 +68,7 @@ PBX
 DESTINATION="generic/platform=iOS"
 [ -n "$DEVICE" ] && DESTINATION="id=$DEVICE"
 cd "$WORK"
-xcodebuild -project Mint.xcodeproj -scheme Mint -destination "$DESTINATION" -allowProvisioningUpdates \
+xcodebuild -project Mint.xcodeproj -scheme Mint -destination "$DESTINATION" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} \
     -allowProvisioningDeviceRegistration build 2>&1 | grep -E "error|Signing Identity|Provisioning Profile|BUILD" || true
 echo "--- profiles on disk for $BUNDLE:"
 for f in ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision; do
