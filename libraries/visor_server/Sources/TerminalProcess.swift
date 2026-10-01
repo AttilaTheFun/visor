@@ -43,7 +43,6 @@ public final class TerminalProcess: AgentProcess, TerminalCapable {
     private var recent = ""
     private var isReady = false
     public var ready: Bool { queue.sync { isReady } }
-    public var size: (cols: Int, rows: Int) { queue.sync { (cols, rows) } }
 
     public init(agent: AgentKind, cwd: String, skipPermissions: Bool, resume: String?) {
         self.agent = agent

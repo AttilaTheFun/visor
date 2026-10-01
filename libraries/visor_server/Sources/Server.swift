@@ -15,12 +15,6 @@ import VisorProtocol
 /// Tests point `shared` at a cache of their own.
 public enum ServerCache {
     nonisolated(unsafe) public static var shared: MessageCache = .open(named: "messages")
-    private static let queue = DispatchQueue(label: "visor.cache", qos: .utility)
-
-    /// Keeps a row an agent's event produced, after the rows before it.
-    static func keep(_ entry: TranscriptEntry, in session: String) {
-        queue.async { try? shared.append(session, [entry]) }
-    }
 }
 
 /// One agent session on the host: its process, its transcript, who watches it.
@@ -516,8 +510,6 @@ public final class SessionRecord: ObservableObject {
         streams.removeAll { $0.id == base }
     }
 
-    var busy: Bool { info.busy }
-
     /// Whether the record carries a message: a row with its id, or that
     /// id with a segment suffix.
     func carries(messageID id: String) -> Bool {
@@ -538,9 +530,6 @@ public final class SessionRecord: ObservableObject {
             if let last = streams.indices.last, streams[last].id == id { streams[last].text += text }
             else { streams.append((id: id, text: text)) }
             return .delta(session: info.id, message: id, text: text)
-        case .entry:
-            // Rows come from the agent's log, and only from there.
-            return nil
         case .activity(let label):
             activity = label
             return .activity(session: info.id, label)
@@ -1046,7 +1035,6 @@ public final class VisorServer: ObservableObject {
             }
             let record = SessionRecord(info: info, process: makeProcess(info, resume: item.resumeID), entries: entries,
                                        shownPrompts: item.shownPrompts ?? [], notice: item.notice)
-            record.process.seed(history: entries)
             record.refreshResume()
             record.interrupted = item.interrupted ?? false
             // The outbox, lined up with its words (a file from before it was
@@ -1151,7 +1139,6 @@ public final class VisorServer: ObservableObject {
             } else {
                 record.process.stop()
                 record.replaceProcess(makeProcess(record.info, resume: record.process.resumeID))
-                record.process.seed(history: record.entries)
             }
         }
         if !moved.isEmpty {
@@ -1828,12 +1815,6 @@ public final class VisorServer: ObservableObject {
         }
     }
 
-    /// A session's default name: its directory's last component ("~" for home).
-    static func directoryName(_ cwd: String) -> String {
-        let trimmed = cwd.hasSuffix("/") && cwd.count > 1 ? String(cwd.dropLast()) : cwd
-        if trimmed == "~" || trimmed.isEmpty { return "Home" }
-        return (trimmed as NSString).lastPathComponent
-    }
 
     /// Ends the agent and makes a new one on the same session, which
     /// picks the conversation up as the file stands. A terminal starts at
@@ -1845,7 +1826,6 @@ public final class VisorServer: ObservableObject {
         record.process.stop()
         record.process.stopAndWait(deadline: 3)
         record.replaceProcess(makeProcess(record.info, resume: record.process.resumeID))
-        record.process.seed(history: record.entries)
         if record.info.mode.isTUI { launchTerminal(record) }
         record.followFile()
     }

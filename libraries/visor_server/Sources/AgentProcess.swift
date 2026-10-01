@@ -10,8 +10,6 @@ public enum AgentEvent: Sendable {
     /// More of the reply being written.
     /// Words streamed for the assistant message with this id.
     case delta(message: String, text: String)
-    /// A finished entry, or a replacement for the entry with the same id.
-    case entry(TranscriptEntry)
     /// What the agent is doing now, or nothing (one line, for a list).
     case activity(String?)
     /// The model is thinking, or has stopped.
@@ -49,8 +47,6 @@ public protocol TerminalCapable: AnyObject {
     /// Whether the agent is at its input box, rather than a startup or
     /// permission prompt that typed text would answer with its default.
     var ready: Bool { get }
-    /// The terminal's size, in cells: what its output was drawn for.
-    var size: (cols: Int, rows: Int) { get }
     /// Launches it now; a terminal is live before anything is said.
     func start() throws
 }
@@ -97,18 +93,12 @@ public protocol AgentProcess: AnyObject {
     /// The running agent's pid, written down so a later launch can
     /// recognise one of ours that outlived us.
     var processID: Int32? { get }
-    /// Gives an agent the conversation so far, for one that keeps its own
-    /// context in memory rather than a file it can re-read (OpenRouter).
-    /// Called once, before the first turn of a resumed session.
-    func seed(history: [TranscriptEntry])
 }
 
 public extension AgentProcess {
     /// Without its own way to end a turn, an interrupt is a stop: the
     /// process goes, and the next message spawns another that resumes.
     func interrupt() { stop() }
-    /// Most agents re-read their own transcript; nothing to seed.
-    func seed(history: [TranscriptEntry]) {}
 }
 
 public enum AgentProcessError: LocalizedError {
@@ -204,11 +194,6 @@ enum JSON {
     static func object(_ line: String) -> [String: Any]? {
         guard let data = line.data(using: .utf8) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    }
-
-    static func string(_ any: Any?) -> String? {
-        if let s = any as? String { return s }
-        return nil
     }
 
     /// A short, one-line summary of a tool's input for an activity label.

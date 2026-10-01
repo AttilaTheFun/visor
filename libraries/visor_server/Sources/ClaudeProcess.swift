@@ -35,10 +35,6 @@ public final class ClaudeProcess: AgentProcess {
         return "cd \(ClaudeProcess.quoted(cwd)) && \(tool) --resume \(id)"
     }
     private let queue = DispatchQueue(label: "visor.claude")
-    /// The assistant message being assembled (its blocks arrive one event
-    /// each), as ordered segments: a text block after tool calls opens a new
-    /// one, so what the model said and what it ran stay interleaved.
-    private var assembling: (id: String, segments: [(text: String, activities: [String])])?
     private var counter = 0
     /// Set by `stop()`: the exit that follows is ours, not a failure.
     private var stopping = false
@@ -241,7 +237,7 @@ public final class ClaudeProcess: AgentProcess {
                 onEvent?(.thinking(thinking))
             }
         case "assistant":
-            guard let message = object["message"] as? [String: Any], let id = message["id"] as? String,
+            guard let message = object["message"] as? [String: Any],
                   let content = message["content"] as? [[String: Any]] else { return }
             if let model = message["model"] as? String, !model.isEmpty { onModel?(model) }
             // The request's own tokens: what the context holds right now.
@@ -253,76 +249,23 @@ public final class ClaudeProcess: AgentProcess {
                     onEvent?(.context(used: used, limit: Self.contextWindow(for: message["model"] as? String)))
                 }
             }
-            if assembling?.id != id { assembling = (id, [(text: "", activities: [])]) }
-            for block in content {
-                switch block["type"] as? String {
-                case "text":
-                    guard let text = block["text"] as? String, !text.isEmpty, var segments = assembling?.segments else { break }
-                    if let last = segments.indices.last, segments[last].activities.isEmpty, segments[last].text.isEmpty {
-                        segments[last].text = text
-                    } else if let last = segments.indices.last, segments[last].activities.isEmpty {
-                        segments[last].text += "\n\n" + text
-                    } else {
-                        segments.append((text: text, activities: []))
-                    }
-                    assembling?.segments = segments
-                case "tool_use":
-                    let name = block["name"] as? String ?? "tool"
-                    let label = "\(name): \(JSON.summary(block["input"]))"
-                    if let last = assembling?.segments.indices.last { assembling?.segments[last].activities.append(label) }
-                    onEvent?(.activity(label))
-                    counter += 1
-                    onEvent?(.toolStarted(id: block["id"] as? String ?? "tool-\(counter)", name: name, label: label,
-                                          tasks: TurnStatus.tasks(named: name, input: block["input"] as? [String: Any])))
-                default: break
-                }
-            }
-            // Claude Code's own session file is the transcript of record
-            // (the server follows it); the rows are announced from here
-            // only for a tool that speaks the protocol without the file.
-            if let assembling, tool != "claude" {
-                for (index, segment) in assembling.segments.enumerated() {
-                    onEvent?(.entry(TranscriptEntry(id: index == 0 ? assembling.id : "\(assembling.id)#\(index)", role: .assistant,
-                                                    text: segment.text, activities: segment.activities)))
-                }
+            for block in content where block["type"] as? String == "tool_use" {
+                let name = block["name"] as? String ?? "tool"
+                let label = "\(name): \(JSON.summary(block["input"]))"
+                onEvent?(.activity(label))
+                counter += 1
+                onEvent?(.toolStarted(id: block["id"] as? String ?? "tool-\(counter)", name: name, label: label,
+                                      tasks: TurnStatus.tasks(named: name, input: block["input"] as? [String: Any])))
             }
         case "user":
-            // A tool result: the tool finished; the transcript hides these rows.
+            // A tool result: the tool finished. (Its row comes from the log.)
             guard let message = object["message"] as? [String: Any], let content = message["content"] as? [[String: Any]] else { return }
-            let recordUUID = object["uuid"] as? String
             for block in content where block["type"] as? String == "tool_result" {
                 if let id = block["tool_use_id"] as? String { onEvent?(.toolFinished(id: id)) }
-            }
-            for block in content where block["type"] as? String == "tool_result" && tool != "claude" {
-                counter += 1
-                let text: String
-                var images: [String] = []
-                if let s = block["content"] as? String { text = s }
-                else if let parts = block["content"] as? [[String: Any]] {
-                    text = parts.compactMap { $0["text"] as? String }.joined(separator: "\n")
-                    // A screenshot the agent took, or an image it read: the
-                    // bytes arrive inline and are far too big to keep in a
-                    // transcript, so they are put down on disk and the row
-                    // carries the path.
-                    for part in parts where part["type"] as? String == "image" {
-                        guard let source = part["source"] as? [String: Any],
-                              let data = source["data"] as? String else { continue }
-                        if let path = AgentImages.save(base64: data, mediaType: source["media_type"] as? String) {
-                            images.append(path)
-                        }
-                    }
-                } else { text = "" }
-                // The id the file assembler gives this same record, so a
-                // stream row and the file's row are one row, not two.
-                let id = recordUUID.map { "tool-file-" + $0 } ?? "tool-\(counter)-\(UUID().uuidString.prefix(6))"
-                onEvent?(.entry(TranscriptEntry(id: id, role: .tool,
-                                                text: String(text.prefix(400)), toolName: "tool_result", images: images,
-                                                imageSizes: AgentImages.pixelSizes(paths: images))))
             }
             onEvent?(.activity("Thinking…"))
             onEvent?(.thinking(true))
         case "result":
-            assembling = nil
             // An interrupt ends the turn with an error result of its own
             // (error_during_execution); that is the stop the user asked
             // for, not something to show as a failure.

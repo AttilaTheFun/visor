@@ -5,11 +5,6 @@
 import Foundation
 
 public enum ClaudeTranscriptParser {
-    /// Every conversation record in a file, in order.
-    public static func records(contentsOf url: URL) -> [ClaudeRecord] {
-        lines(contentsOf: url).compactMap(\.record)
-    }
-
     /// Every conversation record in some bytes of the file (whole lines).
     public static func records(in data: Data) -> [ClaudeRecord] {
         lines(in: data).compactMap(\.record)
@@ -45,14 +40,6 @@ public enum ClaudeTranscriptParser {
             if let parsed = self.line(from: Data(line)) { out.append(parsed) }
         }
         return out
-    }
-
-    public static func record(from line: String) -> ClaudeRecord? {
-        record(from: Data(line.utf8))
-    }
-
-    public static func record(from line: Data) -> ClaudeRecord? {
-        self.line(from: line)?.record
     }
 
     /// A line as a node of the tree: nil only for a line that is not a
