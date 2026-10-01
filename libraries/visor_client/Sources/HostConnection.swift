@@ -166,6 +166,10 @@ public final class SessionTranscript: ObservableObject {
         /// carries it (it went to an idle agent); a message that waits for
         /// the turn to end is shown in the composer's queue instead.
         public var shown = false
+        /// The user's rows already on the record when this was sent: none
+        /// of them is this message, whatever its words (the same thing
+        /// said twice is two messages).
+        public var had: Set<String> = []
     }
     public var sending: [Outgoing] = [] { didSet { changed() } }
 
@@ -252,7 +256,8 @@ public final class SessionTranscript: ObservableObject {
         }
         sending.removeAll { out in
             guard revision > out.sinceRevision,
-                  let row = entries.last(where: { $0.role == .user && matched(out.entry.text, $0.text) }) else { return false }
+                  let row = entries.last(where: { $0.role == .user && !out.had.contains($0.id) && matched(out.entry.text, $0.text) })
+            else { return false }
             // The record's row is this message: shown under its id.
             if displayIDs[row.id] == nil { displayIDs[row.id] = out.id }
             return true
@@ -820,6 +825,9 @@ public final class HostConnection: ObservableObject, Identifiable {
     /// Opens a session's transcript: replays it, then streams.
     public func subscribe(_ sessionID: String) {
         _ = transcript(for: sessionID)
+        // The agent's commands, known before a message is sent: a message
+        // with a command after some words is split where it is typed.
+        if knownCommands[sessionID] == nil { Task { [weak self] in _ = await self?.commandNames(for: sessionID) } }
         if state == .connected { send(.subscribe(session: sessionID)) } else { pendingSubscriptions.insert(sessionID) }
     }
 
@@ -1053,36 +1061,55 @@ public final class HostConnection: ObservableObject, Identifiable {
         // A slash command on a line of its own after some words: Claude
         // Code takes it as the command only at the start of a message, so
         // the words go first and the command after them, as the terminal
-        // treats it.
-        if text.contains("\n/") {
+        // treats it. The agent's commands are known from when the session
+        // was opened; where they are not yet, they are asked for first.
+        if text.contains("\n/"), knownCommands[sessionID] == nil {
             Task { [weak self] in
                 guard let self else { return }
-                let names = await self.commandNames(for: sessionID)
-                let parts = Self.split(text, commands: names)
-                // One after the other: the command must reach the computer
-                // after the words, to wait for their turn to end.
-                for (index, part) in parts.enumerated() {
-                    await self.sendOne(sessionID, text: part, images: index == 0 ? images : [])
-                }
+                _ = await self.commandNames(for: sessionID)
+                self.sendParts(sessionID, text: text, images: images)
             }
             return
         }
-        Task { await sendOne(sessionID, text: text, images: images) }
+        sendParts(sessionID, text: text, images: images)
     }
 
-    /// One message on its way. On screen before it is on the record: sent
-    /// to an idle agent, the thread's last row until the transcript syncs
-    /// an identical message sent after this one; to a working one, in the
-    /// composer's queue.
-    private func sendOne(_ sessionID: String, text: String, images: [String]) async {
+    /// Puts a message — or its words and then its command — in the thread
+    /// now, in the same update as the draft it came from clearing (a frame
+    /// later and the thread has already moved for the composer's lines),
+    /// and then posts each part in order.
+    private func sendParts(_ sessionID: String, text: String, images: [String]) {
+        let parts = text.contains("\n/") ? Self.split(text, commands: knownCommands[sessionID] ?? []) : [text]
         let session = transcript(for: sessionID)
+        var posts: [(text: String, images: [String])] = []
+        for (index, part) in parts.enumerated() {
+            let attached = index == 0 ? images : []
+            session.sending.append(outgoing(part, images: attached, in: sessionID, session))
+            posts.append((part, attached))
+        }
+        session.flush()
+        Task { [weak self] in
+            // One after the other: a command must reach the computer after
+            // its words, to wait for their turn to end.
+            for post in posts { await self?.post(sessionID, text: post.text, images: post.images) }
+        }
+    }
+
+    /// One message on its way, as the thread shows it before it is on the
+    /// record: sent to an idle agent, the thread's last row until the
+    /// transcript syncs an identical message sent after this one; to a
+    /// working one, in the composer's queue.
+    private func outgoing(_ text: String, images: [String], in sessionID: String, _ session: SessionTranscript) -> SessionTranscript.Outgoing {
         let info = sessions.first { $0.id == sessionID }
         let idle = !session.busy && !(info?.busy ?? false) && (info?.queued.isEmpty ?? true) && session.sending.isEmpty
         let entry = TranscriptEntry(id: "sending-" + HostConfig.newID(), role: .user, text: text, images: images)
         var outgoing = SessionTranscript.Outgoing(id: entry.id, entry: entry, sinceRevision: session.revision)
         outgoing.shown = idle
-        session.sending.append(outgoing)
-        session.flush()
+        outgoing.had = Set(session.entries.lazy.filter { $0.role == .user }.map(\.id))
+        return outgoing
+    }
+
+    private func post(_ sessionID: String, text: String, images: [String]) async {
         do {
             let reply = try await fetch("POST", "/sessions/\(sessionID)/send", .send(session: sessionID, text: text, images: images))
             for info in reply.sessions ?? [] {
@@ -1095,7 +1122,7 @@ public final class HostConnection: ObservableObject, Identifiable {
     }
 
     /// The names of the slash commands a session's agent takes, asked once.
-    private var knownCommands: [String: Set<String>] = [:]
+    var knownCommands: [String: Set<String>] = [:]
     private func commandNames(for sessionID: String) async -> Set<String> {
         if let known = knownCommands[sessionID] { return known }
         let names = Set(((try? await commands(for: sessionID)) ?? []).map(\.name))
