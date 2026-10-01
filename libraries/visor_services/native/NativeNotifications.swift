@@ -1,10 +1,14 @@
-// Local notifications on iOS: a turn finished, a goal done, an agent
+// Notifications on iOS and the Mac: a turn finished, a goal done, an agent
 // waiting for approval. Said while the app runs or has just gone to the
 // background; iOS suspends it soon after, and what happens then is told
 // when the app is next opened.
 
+#if os(iOS) || os(macOS)
 #if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 import UserNotifications
 
 public final class NativeVisorNotificationService: VisorNotificationService, @unchecked Sendable {
@@ -15,7 +19,11 @@ public final class NativeVisorNotificationService: VisorNotificationService, @un
     }
 
     public func registerForRemoteNotifications() {
+        #if os(iOS)
         Task { @MainActor in UIApplication.shared.registerForRemoteNotifications() }
+        #else
+        Task { @MainActor in NSApplication.shared.registerForRemoteNotifications() }
+        #endif
     }
 
     public func notify(id: String, title: String, body: String) {

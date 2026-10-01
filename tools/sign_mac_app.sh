@@ -39,6 +39,46 @@ PY
 # team's other certificate, or a renewed one, is still the same app.
 BUNDLE="$(plutil -extract CFBundleIdentifier raw -o - "$APP/Contents/Info.plist")"
 REQUIREMENT="designated => identifier \"$BUNDLE\" and anchor apple generic and certificate leaf[subject.OU] = \"$TEAM\""
-codesign --force --options runtime --timestamp --sign "$IDENTITY" -r="$REQUIREMENT" "$APP"
+# A capability (push) comes with a provisioning profile for the app, made
+# for the kind of certificate signing it (tools/mint_profile): embedded, and
+# the app signed with what it grants. An app with none (the server) is
+# signed as it is.
+ENTITLEMENTS=()
+PROFILE="$(python3 - "$BUNDLE" "$TEAM" "$IDENTITY" <<'PY'
+import glob, os, plistlib, subprocess, sys
+bundle, team, identity = sys.argv[1:4]
+name = subprocess.run(["security", "find-identity", "-v", "-p", "codesigning"], capture_output=True, text=True).stdout
+developer_id = any(identity in line and "Developer ID Application" in line for line in name.splitlines())
+best = None
+for path in glob.glob(os.path.expanduser("~/Library/Developer/Xcode/UserData/Provisioning Profiles/*.provisionprofile")):
+    raw = subprocess.run(["security", "cms", "-D", "-i", path], capture_output=True).stdout
+    try:
+        profile = plistlib.loads(raw)
+    except Exception:
+        continue
+    entitlements = profile.get("Entitlements", {})
+    if entitlements.get("com.apple.application-identifier") != f"{team}.{bundle}":
+        continue
+    if bool(profile.get("ProvisionsAllDevices")) != developer_id:
+        continue
+    if best is None or profile.get("CreationDate") > best[1]:
+        best = (path, profile.get("CreationDate"))
+print(best[0] if best else "")
+PY
+)"
+if [ -n "$PROFILE" ]; then
+    cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
+    WANTED="$(mktemp -t visor-entitlements).plist"
+    python3 - "$PROFILE" "$WANTED" <<'PY'
+import plistlib, subprocess, sys
+profile = plistlib.loads(subprocess.run(["security", "cms", "-D", "-i", sys.argv[1]], capture_output=True).stdout)
+granted = profile.get("Entitlements", {})
+keep = ["com.apple.application-identifier", "com.apple.developer.team-identifier", "com.apple.developer.aps-environment"]
+with open(sys.argv[2], "wb") as f:
+    plistlib.dump({k: granted[k] for k in keep if k in granted}, f)
+PY
+    ENTITLEMENTS=(--entitlements "$WANTED")
+fi
+codesign --force --options runtime --timestamp --sign "$IDENTITY" ${ENTITLEMENTS[@]+"${ENTITLEMENTS[@]}"} -r="$REQUIREMENT" "$APP"
 codesign --verify --strict "$APP"
 echo "Signed $(basename "$APP") with $(security find-identity -v -p codesigning | grep "$IDENTITY" | sed 's/.*"\(.*\)".*/\1/' | head -1)"

@@ -9,11 +9,19 @@ import VisorUI
 @main
 struct VisorMacApp: App {
     @StateObject private var store: VisorStore
+    /// Where the system hands over the push token and the notification
+    /// the user opened (MacPushDelegate).
+    @NSApplicationDelegateAdaptor(MacPushDelegate.self) private var pushDelegate
 
     init() {
         Self.adoptFormerApp()
         // The host's services first: the store connects through them.
-        installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService())
+        installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService(),
+                             notifications: NativeVisorNotificationService())
+        if !VisorFixture.active {
+            VisorHost.notifications?.requestPermission()
+            VisorHost.notifications?.registerForRemoteNotifications()
+        }
         _store = StateObject(wrappedValue: VisorStore())
         WindowShot.startIfAsked()
     }
