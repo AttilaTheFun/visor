@@ -58,7 +58,6 @@ struct ScriptedBackend: Backend {
     let hostFieldTitle = "Host"
     let hostPlaceholder = ""
     let passwordFieldTitle = "Password"
-    let help = ""
     nonisolated(unsafe) static var transport = ScriptedTransport()
     func makeTransport() -> any HostTransport { Self.transport }
 }

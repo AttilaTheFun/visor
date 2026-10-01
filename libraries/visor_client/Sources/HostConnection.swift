@@ -173,8 +173,6 @@ public final class SessionTranscript: ObservableObject {
     }
     public var sending: [Outgoing] = [] { didSet { changed() } }
 
-    /// Takes the record's rows as synced: the truth, replacing what was
-    /// held; the outgoing messages it now carries go.
     /// The generation of the rows held; a different one in an answer means
     /// the rows were rebuilt and the answer is the whole, not a delta.
     public var generation = -1
@@ -386,7 +384,6 @@ public final class HostConnection: ObservableObject, Identifiable {
             }
         }
 
-        public var isError: Bool { if case .failed = self { true } else { false } }
         public var wantsPassword: Bool { if case .needsPassword = self { true } else { false } }
     }
 
@@ -433,10 +430,6 @@ public final class HostConnection: ObservableObject, Identifiable {
         loadCachedSessions()
     }
 
-    /// Always TLS on 443: the Mac's Tailscale Serve endpoint in front of the
-    /// menu bar app — the WebSocket at its root, the REST API under /api.
-    public var url: String { "wss://\(config.host)" }
-    public var apiURL: String { "https://\(config.host)/api" }
     /// Told when the computer sends a new list of its sessions (the store
     /// keeps the home screen's widget up to date by it).
     var onSessionsChange: (() -> Void)?
@@ -822,7 +815,8 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
     }
 
-    /// Opens a session's transcript: replays it, then streams.
+    /// Opens a session's transcript: its rows sync, and its state (working,
+    /// status lines, an approval asked for) follows over the socket.
     public func subscribe(_ sessionID: String) {
         _ = transcript(for: sessionID)
         // The agent's commands, known before a message is sent: a message
@@ -835,7 +829,7 @@ public final class HostConnection: ObservableObject, Identifiable {
         let id = HostConfig.newID()
         let transcript = transcript(for: id)
         transcript.loaded = true
-        // Subscribe once the host has the session (the stream is the socket's).
+        // Subscribe once the computer has the session.
         api("POST", "/sessions", .start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions,
                                         resume: resume)) { [weak self] in
             self?.subscribe(id)

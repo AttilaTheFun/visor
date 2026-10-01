@@ -1,7 +1,7 @@
-// A session's page: AgentUI's AgentView over the transcript the host
-// streams. The composer's pills name the agent and switch its permission
-// mode (auto: no prompts; manual: the agent's guarded mode); Stop
-// interrupts the turn on the host.
+// A session's page: AgentUI's AgentView over the session's transcript, as
+// synced from the computer's record. The composer's pills attach files,
+// open the model sheet (model, effort, approval mode) and show a goal, a
+// loop or queued messages; Stop interrupts the turn on the computer.
 
 import AgentUI
 import NavigationUI

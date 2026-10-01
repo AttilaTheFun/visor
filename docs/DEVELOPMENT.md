@@ -296,15 +296,16 @@ a detached relauncher and resumes named sessions with a nudge
 - Caches: `sqlite3 "~/Library/Application Support/com.LoganShire.
   VisorServer.macOS/messages.sqlite"` — output is `|`-separated. `pragma user_version`
   is the schema version (`MessageCache.schemaVersion`; bump to rebuild).
-- `osascript`/System Events hang from a headless agent; no UI automation.
-  Screenshots of the apps are not available this way. The iOS simulator
-  probe (`tests/ios_probe`) exists for UI checks. rules_apple 5's runner
-  makes its own simulator (`--ios_simulator_device="iPhone 17"
-  --ios_simulator_version=27.0`; `--destination` is NOT accepted).
-  `--test_filter=VisorProbe/testClaudeSession` is the connect-and-chat
-  run; an empty `VISOR_PROBE_PASSWORD` works on the host Mac because the
-  simulator shares its Tailscale identity. The other cases (`*Look`)
-  expect particular sessions on the host and fail elsewhere.
+- `osascript`/System Events hang from a headless agent; no UI automation
+  of the Mac apps. `screencapture -x` works from a session once Visor
+  Server has Screen Recording (Privacy & Security), which is how the Mac
+  apps are looked at. The iOS simulator probe (`tests/ios_probe`) drives
+  the phone client. rules_apple 5's runner makes its own simulator
+  (`--ios_simulator_device="iPhone 17" --ios_simulator_version=27.0`;
+  `--destination` is NOT accepted). The simulator shares the host Mac's
+  Tailscale identity, so no password is needed. The `*Look` cases expect
+  a session on the host (`VISOR_LOOK_SESSION` names it); the fixture and
+  send-frames cases bring or are given their own.
 
 ### Snapshot fixture
 
