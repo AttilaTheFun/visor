@@ -6,11 +6,15 @@
 #if os(macOS)
 import AppKit
 import UserNotifications
+import VisorClient
 import VisorServices
 
 final class MacPushDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
+        // Once launched, when AppKit delivers the token to this delegate:
+        // asked any earlier, the answer can go nowhere.
+        if !VisorFixture.active { NSApplication.shared.registerForRemoteNotifications() }
     }
 
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
@@ -21,7 +25,9 @@ final class MacPushDelegate: NSObject, NSApplicationDelegate, UNUserNotification
                                                     topic: Bundle.main.bundleIdentifier ?? "")
     }
 
-    func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {}
+    func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NSLog("Visor: no push token: %@", String(describing: error))
+    }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         VisorNotificationHandler.shared.didOpen(Self.data(of: response.notification))

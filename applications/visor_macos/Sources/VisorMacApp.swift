@@ -19,8 +19,8 @@ struct VisorMacApp: App {
         installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService(),
                              notifications: NativeVisorNotificationService())
         if !VisorFixture.active {
+            // (The push token is asked for once launched: MacPushDelegate.)
             VisorHost.notifications?.requestPermission()
-            VisorHost.notifications?.registerForRemoteNotifications()
         }
         _store = StateObject(wrappedValue: VisorStore())
         WindowShot.startIfAsked()
