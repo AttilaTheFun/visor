@@ -201,3 +201,20 @@ final class OpenRouterLoginTests: XCTestCase {
         XCTAssertTrue(SessionCatalog.openrouterHasKey())
     }
 }
+
+/// Claude Code's list of models is replaced at once only by one that keeps
+/// every model held (a new one may be added); one that drops models waits
+/// for a second answer.
+final class ClaudeModelListTests: XCTestCase {
+    private func model(_ id: String) -> AgentModel { AgentModel(id: id, title: id, efforts: []) }
+
+    func testAShorterListWaitsToBeConfirmed() {
+        let full = ["opus", "claude-fable-5-1", "sonnet", "haiku"].map(model)
+        let base = ["sonnet", "haiku"].map(model)
+        XCTAssertTrue(ClaudeBackend.accepts(full, over: nil), "the first list is taken")
+        XCTAssertTrue(ClaudeBackend.accepts(full, over: base), "a list that grows is taken at once")
+        XCTAssertTrue(ClaudeBackend.accepts(full + [model("claude-opus-5-9")], over: full), "so is one that adds a model")
+        XCTAssertFalse(ClaudeBackend.accepts(base, over: full), "a list that loses Opus and Fable waits")
+        XCTAssertTrue(ClaudeBackend.accepts(full, over: full))
+    }
+}

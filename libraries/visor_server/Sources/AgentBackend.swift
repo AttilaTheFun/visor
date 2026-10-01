@@ -97,11 +97,20 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
     /// What Claude Code last said of its models.
     static let asked = Locked<(models: [AgentModel], defaultModel: String?)?>(nil)
 
+    /// Whether a new list may replace the one held at once: when it keeps
+    /// every model the old one had (it may add some), or there was no old
+    /// one. A list that drops models waits to be confirmed.
+    static func accepts(_ new: [AgentModel], over old: [AgentModel]?) -> Bool {
+        guard let old else { return true }
+        let ids = Set(new.map(\.id))
+        return old.allSatisfy { ids.contains($0.id) }
+    }
+
     /// Asks Claude Code for its models: `claude -p` with stream-json, the
     /// SDK's `initialize` control request, the answer's `models`, then
     /// the process is ended — no turn is run. Calls `done` when the list
     /// changed.
-    public static func refreshModels(then done: @escaping @Sendable () -> Void) {
+    public static func refreshModels(confirming: Bool = false, then done: @escaping @Sendable () -> Void) {
         guard let executable = ToolPath.resolve("claude") else { return }
         DispatchQueue.global().async {
             let p = Process()
@@ -137,6 +146,16 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
             try? input.fileHandleForWriting.close()
             if p.isRunning { p.terminate() }
             guard let list = answer?["models"] as? [[String: Any]], let parsed = parse(models: list), !parsed.models.isEmpty else { return }
+            // Claude Code's answer is not always the whole list: while the
+            // account's access is in doubt (an organization setting briefly
+            // refusing, say) it offers the base models alone, and the
+            // server kept that for hours. A list that loses models is not
+            // taken at once but asked again in five minutes; taken if it
+            // still says so.
+            if !confirming, !accepts(parsed.models, over: asked.value?.models) {
+                DispatchQueue.global().asyncAfter(deadline: .now() + 5 * 60) { refreshModels(confirming: true, then: done) }
+                return
+            }
             let changed = asked.value.map { $0.models != parsed.models || $0.defaultModel != parsed.defaultModel } ?? true
             asked.value = parsed
             if changed { done() }

@@ -1255,6 +1255,9 @@ public final class VisorServer: ObservableObject {
         let refresh: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.broadcastCatalogs() } }
         ClaudeBackend.refreshModels(then: refresh)
         CodexBackend.refreshModels(then: refresh)
+        // Again a few minutes after launch: an answer given while the
+        // account was still being checked can be the base models alone.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5 * 60) { ClaudeBackend.refreshModels(then: refresh) }
         claudeModelsTimer?.invalidate()
         claudeModelsTimer = Timer.scheduledTimer(withTimeInterval: 6 * 60 * 60, repeats: true) { _ in
             ClaudeBackend.refreshModels(then: refresh)
