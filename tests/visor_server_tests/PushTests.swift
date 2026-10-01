@@ -58,7 +58,7 @@ final class PushTests: XCTestCase {
 
     func testTheRequestCarriesNothingOfTheConversation() throws {
         let device = PushDevice(token: "ab12", platform: "ios", environment: "sandbox", topic: "com.example.app", registered: 0)
-        let request = try XCTUnwrap(APNsSender.request(to: device, jwt: "J", title: "Isomer", body: "Turn finished",
+        let request = try XCTUnwrap(APNsSender.request(to: device, jwt: "J", title: "Isomer", subtitle: "Logan's Mac Mini", body: "Turn finished",
                                                        collapse: "s/turn", data: ["computer": "mini.ts.net", "session": "s"]))
         XCTAssertEqual(request.url?.absoluteString, "https://api.sandbox.push.apple.com/3/device/ab12")
         XCTAssertEqual(request.value(forHTTPHeaderField: "apns-topic"), "com.example.app")
@@ -66,7 +66,10 @@ final class PushTests: XCTestCase {
         let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])
         XCTAssertEqual(Set(payload.keys), ["aps", "computer", "session"])
         let alert = (payload["aps"] as? [String: Any])?["alert"] as? [String: String]
-        XCTAssertEqual(alert, ["title": "Isomer", "body": "Turn finished"])
+        XCTAssertEqual(alert, ["title": "Isomer", "subtitle": "Logan's Mac Mini", "body": "Turn finished"])
+        // What opens it: the session, on its computer.
+        XCTAssertEqual(payload["session"] as? String, "s")
+        XCTAssertEqual(payload["computer"] as? String, "mini.ts.net")
     }
 
     func testTheSigningTokenVerifies() throws {

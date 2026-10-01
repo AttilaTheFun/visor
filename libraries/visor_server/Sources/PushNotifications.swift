@@ -64,7 +64,7 @@ final class APNsSender: @unchecked Sendable {
 
     /// The whole request for one push: where it goes, how it is signed,
     /// what it says.
-    static func request(to device: PushDevice, jwt: String, title: String, body: String, collapse: String,
+    static func request(to device: PushDevice, jwt: String, title: String, subtitle: String, body: String, collapse: String,
                         data: [String: String]) -> URLRequest? {
         let host = device.environment == "production" ? "api.push.apple.com" : "api.sandbox.push.apple.com"
         guard let url = URL(string: "https://\(host)/3/device/\(device.token)") else { return nil }
@@ -75,7 +75,7 @@ final class APNsSender: @unchecked Sendable {
         request.setValue("alert", forHTTPHeaderField: "apns-push-type")
         request.setValue("10", forHTTPHeaderField: "apns-priority")
         request.setValue(String(collapse.prefix(64)), forHTTPHeaderField: "apns-collapse-id")
-        var payload: [String: Any] = ["aps": ["alert": ["title": title, "body": body], "sound": "default",
+        var payload: [String: Any] = ["aps": ["alert": ["title": title, "subtitle": subtitle, "body": body], "sound": "default",
                                               "thread-id": data["session"] ?? ""]]
         for (key, value) in data { payload[key] = value }
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
@@ -202,11 +202,14 @@ extension VisorServer {
         let devices = pushDevices.filter { Self.apnsPlatforms.contains($0.platform) }
         guard let key = storedAPNsKey, !devices.isEmpty else { return }
         let data = ["computer": pushComputer, "session": session]
+        // Which computer, under the session's name: a session is one
+        // computer's, and the same name can be on two.
+        let subtitle = hostName
         let sender = apnsSender
         Task { [weak self] in
             guard let jwt = try? sender.jwt(for: key) else { return }
             for device in devices {
-                guard let request = APNsSender.request(to: device, jwt: jwt, title: title, body: body,
+                guard let request = APNsSender.request(to: device, jwt: jwt, title: title, subtitle: subtitle, body: body,
                                                        collapse: session + "/" + kind, data: data) else { continue }
                 let status = await sender.send(request)
                 // Gone (the app deleted) or not a token APNs knows: forgotten.
@@ -226,7 +229,7 @@ extension VisorServer {
         guard pushDevices.contains(where: { Self.apnsPlatforms.contains($0.platform) }) else {
             return "No device has asked for notifications yet: open Visor on the phone."
         }
-        push(hostName, "Notifications from this computer work", session: "", kind: "test")
+        push("Visor Server", "Notifications from this computer work", session: "", kind: "test")
         return nil
     }
 
