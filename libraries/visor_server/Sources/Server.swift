@@ -1532,7 +1532,10 @@ public final class VisorServer: ObservableObject {
             // A device that wants to hear, with the app closed, when a turn
             // ends or an agent waits.
             guard registerPush(body) else { return HTTPResponse(400, Envelope.error("A push token and its app are required").encoded()) }
-            return .json(Envelope(type: "push").encoded())
+            // Whether pushes will come: the device then leaves them to us.
+            var reply = Envelope(type: "push")
+            reply.exists = apnsKey.configured
+            return .json(reply.encoded())
         case ("POST", 1, "link"):
             // A computer this one's code was pasted into, linking back.
             guard let code = body.text.flatMap(ConnectionCode.init(parsing:)) else {
