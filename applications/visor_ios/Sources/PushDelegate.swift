@@ -23,7 +23,9 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
                                                     topic: Bundle.main.bundleIdentifier ?? "")
     }
 
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {}
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NSLog("Visor: no push token: %@", String(describing: error))
+    }
 
     /// The user opened a notification: its session, on its computer.
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
