@@ -102,3 +102,32 @@ final class PushTests: XCTestCase {
         XCTAssertEqual(VisorServer.duration(12 * 60), "12m")
     }
 }
+
+/// The APNs key can be set over the REST side by whoever is let in, and
+/// is never answered back.
+@MainActor
+final class PushKeyRouteTests: XCTestCase {
+    func testTheKeyIsSetOverREST() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-pushkey-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7974)
+        server.exposure = FakeExposure()
+        server.password = "pw"
+        defer { server.stop() }
+        func post(_ path: String, _ body: String, bearer: String = "pw") -> HTTPResponse {
+            server.route(HTTPRequest(method: "POST", path: path, headers: ["authorization": "Bearer " + bearer], body: body))
+        }
+        let pem = P256.Signing.PrivateKey().pemRepresentation
+        let body = String(decoding: try! JSONSerialization.data(withJSONObject: ["key": pem, "keyID": "ABCDEFGHIJ", "teamID": "TEAMTEAM12"]), as: UTF8.self)
+        XCTAssertEqual(post("/api/push/key", body, bearer: "wrong").status, 401)
+        XCTAssertEqual(post("/api/push/key", #"{"key":"nonsense","keyID":"ABCDEFGHIJ","teamID":"TEAMTEAM12"}"#).status, 400)
+        let set = post("/api/push/key", body)
+        XCTAssertEqual(set.status, 200)
+        XCTAssertFalse(set.body.contains("PRIVATE KEY"), "the key is not answered back")
+        XCTAssertEqual(server.apnsKey.keyID, "ABCDEFGHIJ")
+        XCTAssertTrue(server.apnsKey.configured)
+        XCTAssertEqual(post("/api/push/test", "").status, 400, "no device yet")
+    }
+}

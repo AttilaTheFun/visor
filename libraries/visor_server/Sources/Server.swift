@@ -1528,6 +1528,19 @@ public final class VisorServer: ObservableObject {
             var e = Envelope(type: "code")
             e.text = code.encoded
             return .json(e.encoded())
+        case ("POST", 2, "push") where parts[1] == "key":
+            // The APNs key, set from this Mac (a tool, an agent) rather than
+            // in Settings: {"key": <the .p8's text>, "keyID": …, "teamID": …}.
+            // Written, never read back.
+            let fields = parseJSON(request.body)
+            if let problem = setAPNsKey(pem: fields?["key"].string ?? "", keyID: fields?["keyID"].string ?? "",
+                                        teamID: fields?["teamID"].string ?? "") {
+                return HTTPResponse(400, Envelope.error(problem).encoded())
+            }
+            return .json(Envelope(type: "push").encoded())
+        case ("POST", 2, "push") where parts[1] == "test":
+            if let problem = sendTestPush() { return HTTPResponse(400, Envelope.error(problem).encoded()) }
+            return .json(Envelope(type: "push").encoded())
         case ("POST", 1, "push"):
             // A device that wants to hear, with the app closed, when a turn
             // ends or an agent waits.
