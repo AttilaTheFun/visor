@@ -69,7 +69,7 @@ DESTINATION="generic/platform=iOS"
 [ -n "$DEVICE" ] && DESTINATION="id=$DEVICE"
 cd "$WORK"
 xcodebuild -project Mint.xcodeproj -scheme Mint -destination "$DESTINATION" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} \
-    -allowProvisioningDeviceRegistration build 2>&1 | grep -E "error|Signing Identity|Provisioning Profile|BUILD" || true
+    -allowProvisioningDeviceRegistration -derivedDataPath "$WORK/derived" build 2>&1 | grep -E "error|Signing Identity|Provisioning Profile|BUILD" || true
 echo "--- profiles on disk for $BUNDLE:"
 for f in ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision; do
     [ -f "$f" ] || continue

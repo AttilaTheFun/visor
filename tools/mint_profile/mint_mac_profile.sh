@@ -54,7 +54,7 @@ cat > "$WORK/Mint.xcodeproj/project.pbxproj" <<PBX
 }
 PBX
 cd "$WORK"
-xcodebuild -project Mint.xcodeproj -scheme Mint -configuration Debug -archivePath "$WORK/Mint.xcarchive" \
+xcodebuild -project Mint.xcodeproj -scheme Mint -configuration Debug -archivePath "$WORK/Mint.xcarchive" -derivedDataPath "$WORK/derived" \
     -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} archive 2>&1 | grep -E "error|BUILD|ARCHIVE" || true
 cat > "$WORK/export.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
