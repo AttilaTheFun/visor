@@ -244,3 +244,65 @@ final class NotificationHandlerTests: XCTestCase {
         XCTAssertTrue(handler.presents(["computer": "mini.example.ts.net", "session": "s1"]))
     }
 }
+
+/// A message is in the thread before `sendMessage` returns — in the same
+/// update as the draft it came from clearing. A frame later, and the
+/// thread has already dropped by the lines the composer gave up, then
+/// comes back up as the row goes in: the jump this guards against.
+@MainActor
+final class SendIsImmediateTests: XCTestCase {
+    private func host() -> HostConnection {
+        ScriptedBackend.transport = ScriptedTransport()
+        Backends.register(ScriptedBackend())
+        return HostConnection(config: HostConfig(name: "Mac", host: "mac.example", password: "", backend: "scripted"))
+    }
+
+    func testTheSentMessageIsInTheThreadBeforeSendReturns() {
+        let host = host()
+        let transcript = host.transcript(for: "s")
+        let told = transcript.announced
+        host.sendMessage("s", text: "A long message\nover two lines ")
+        // Nothing awaited between the send and these.
+        XCTAssertEqual(transcript.sending.map(\.entry.text), ["A long message\nover two lines"])
+        XCTAssertEqual(transcript.sending.map(\.shown), [true])
+        XCTAssertGreaterThan(transcript.announced, told, "and the views are told at once")
+    }
+
+    /// The same words as the message before: the earlier row is not this
+    /// one's confirmation, and the sent row stays until its own arrives.
+    func testARepeatedMessageWaitsForItsOwnRow() {
+        let host = host()
+        let transcript = host.transcript(for: "s")
+        var whole = Envelope(type: "transcript")
+        whole.entries = [TranscriptEntry(id: "user-file-1", role: .user, text: "continue"),
+                         TranscriptEntry(id: "a1", role: .assistant, text: "Done.")]
+        whole.revision = 1; whole.generation = 1; whole.reset = true
+        transcript.sync(whole)
+        host.sendMessage("s", text: "continue")
+        XCTAssertEqual(transcript.sending.count, 1)
+        // The record moves on without the new row (a reply's row changing).
+        var other = Envelope(type: "transcript")
+        other.entries = [TranscriptEntry(id: "a1", role: .assistant, text: "Done. And more.")]
+        other.after = ["user-file-1"]
+        other.revision = 2; other.generation = 1
+        transcript.sync(other)
+        XCTAssertEqual(transcript.sending.count, 1, "the earlier \"continue\" does not settle this one")
+        // Its own row arrives: settled, under the sent row's id.
+        var own = Envelope(type: "transcript")
+        own.entries = [TranscriptEntry(id: "user-file-2", role: .user, text: "continue")]
+        own.after = ["a1"]
+        own.revision = 3; own.generation = 1
+        transcript.sync(own)
+        XCTAssertTrue(transcript.sending.isEmpty)
+        XCTAssertTrue(transcript.displayID(of: transcript.entries.last!).hasPrefix("sending-"))
+    }
+
+    func testWordsAndTheirCommandAreBothThereAtOnce() {
+        let host = host()
+        host.knownCommands["s"] = ["goal"]
+        let transcript = host.transcript(for: "s")
+        host.sendMessage("s", text: "Here is the context.\n/goal Ship it")
+        XCTAssertEqual(transcript.sending.map(\.entry.text), ["Here is the context.", "/goal Ship it"])
+        XCTAssertEqual(transcript.sending.map(\.shown), [true, false], "the words in the thread, the command waiting its turn")
+    }
+}

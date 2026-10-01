@@ -326,6 +326,19 @@ a spinner. Pin the simulator's status bar (`xcrun simctl status_bar booted
 override --time 9:41 …`) and the same screen gives the same pixels every
 run. The iOS probe's `testFixtureScreens` takes all six.
 
+### Send motion check
+
+`tools/probes/frames/send_motion.sh` records the simulator while the iOS
+probe sends a message of several lines into a throwaway session, then
+measures how the thread moved frame by frame around the send
+(`motion.swift`) and fails if it ever steps down by more than 6 points. A
+send done right only moves the thread up, in small steps. Run it after
+touching the composer, the transcript's scrolling or how a sent message
+reaches the thread; it leaves contact sheets of the frames (`sheet.swift`)
+to look at. `SendIsImmediateTests` holds the client's half in CI: the sent
+message is in the thread before `sendMessage` returns, and a repeated
+message waits for its own row.
+
 ## 6. Gotchas that cost time
 
 - A subagent's plain `sleep` is blocked by the harness; use
