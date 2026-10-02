@@ -176,6 +176,35 @@ final class VisorProbe: XCTestCase {
         }
     }
 
+    /// What a row opens over its thread, in the fixture's chat: the run of
+    /// tool calls, and a picture. Each opens from a row, shows what it
+    /// should, and goes with Done.
+    func testFixtureSheets() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        let calls = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Made '")).firstMatch
+        XCTAssertTrue(calls.waitForExistence(timeout: 10), "no run of tool calls in the thread")
+        calls.tap()
+        XCTAssertTrue(app.navigationBars["Tool calls"].waitForExistence(timeout: 5), "the tool calls did not open")
+        shot(app, "sheet-1-calls")
+        app.buttons["Done"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Tool calls"].waitForNonExistence(timeout: 5), "the tool calls did not close")
+
+        let picture = app.buttons["Open the picture"].firstMatch
+        if !picture.isHittable { app.swipeDown() }
+        XCTAssertTrue(picture.waitForExistence(timeout: 5), "no picture in the thread")
+        picture.tap()
+        let done = app.buttons["Done"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "the picture did not open")
+        shot(app, "sheet-2-picture")
+        done.tap()
+        XCTAssertTrue(done.waitForNonExistence(timeout: 5), "the picture did not close")
+        app.terminate()
+    }
+
     /// A slash typed in the fixture's chat offers the agent's commands,
     /// which the connection asked for when the session was opened.
     func testFixtureSlashCommands() throws {
