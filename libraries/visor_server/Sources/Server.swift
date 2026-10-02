@@ -135,7 +135,8 @@ public final class SessionRecord: ObservableObject {
     /// only the ones the file does not carry.
     /// The file into the cache and to here, off the main thread.
     private var indexer: SessionIndexer?
-    private var fileRetries = 0
+    /// Finding the file, then hearing what the indexer says of it.
+    private var following: Task<Void, Never>?
     /// Whether the cache holds rows before the first one here.
     private var moreBefore = false
     /// How many times the file has been read in: what a test waits on.
@@ -195,34 +196,45 @@ public final class SessionRecord: ObservableObject {
     /// there. Rows the server made itself for what the user said stay
     /// where they are; the file's copy of the same words is not a second
     /// row. Called once the agent has a session id, and again after a
-    /// restart (the watcher is replaced).
+    /// restart (the file is found and read again).
     func followFile() {
         guard let id = process.resumeID else { return }
-        indexer?.stop()
-        indexer = nil
-        guard let log = AgentLog.locate(agent: info.agent, id: id, cwd: info.cwd) else {
+        stopFollowing()
+        let agent = info.agent, cwd = info.cwd, session = info.id
+        following = Task { [weak self] in
             // Not written yet (the agent announces its id before its first
-            // record): look again shortly, for as long as a first turn
-            // could take.
-            guard fileRetries < 240 else { return }
-            fileRetries += 1
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                guard let self, self.indexer == nil, self.process.resumeID == id else { return }
-                self.followFile()
+            // record): looked for again shortly, for as long as a first
+            // turn could take.
+            var log = AgentLog.locate(agent: agent, id: id, cwd: cwd)
+            var looks = 0
+            while log == nil, looks < 240 {
+                looks += 1
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                log = AgentLog.locate(agent: agent, id: id, cwd: cwd)
             }
-            return
+            guard let log, !Task.isCancelled else { return }
+            // The cache catches up with the file off the main actor and
+            // hands over the window to show; then each line as the agent
+            // writes it.
+            let indexer = SessionIndexer(store: ServerCache.shared, sessionID: session, url: log.url, window: Self.servedRows, format: log.format)
+            self?.indexer = indexer
+            for await event in indexer.events() {
+                guard let self else { return }
+                switch event {
+                case .loaded(let loaded): self.apply(loaded: loaded)
+                case .lines(let lines): self.apply(lines: lines)
+                }
+            }
         }
-        fileRetries = 0
-        // The cache catches up with the file off the main thread and hands
-        // over the window to show; then each line as the agent writes it.
-        let indexer = SessionIndexer(store: ServerCache.shared, sessionID: info.id, url: log.url, window: Self.servedRows, parser: log.parser)
-        indexer.start(onLoaded: { [weak self] loaded in
-            Task { @MainActor in self?.apply(loaded: loaded) }
-        }, onLines: { [weak self] lines in
-            Task { @MainActor in self?.apply(lines: lines) }
-        })
-        self.indexer = indexer
+    }
+
+    /// The file is no longer read: the session has ended, or is about to
+    /// be read again.
+    func stopFollowing() {
+        following?.cancel()
+        following = nil
+        indexer = nil
     }
 
     /// The file as read: the conversation is the branch that holds its
@@ -636,7 +648,12 @@ public final class SessionRecord: ObservableObject {
     }
 
 
-    func markEnded() { info.ended = true; info.busy = false }
+    func markEnded() {
+        info.ended = true
+        info.busy = false
+        stopFollowing()
+        stopListening()
+    }
 
     /// The outbox: what the user said during a turn, waiting for it to
     /// end — the words in `info.queued` (which clients see), and beside
@@ -742,7 +759,7 @@ public final class SessionRecord: ObservableObject {
 
     /// The rows before one the client has, oldest of them first; `more`
     /// says whether there are rows before those too.
-    func earlier(before id: String, completion: @escaping @Sendable (Envelope) -> Void) {
+    func earlier(before id: String) async -> Envelope {
         var e = Envelope(type: "earlier")
         e.session = info.id
         // From what is here first; the cache holds what is before that.
@@ -750,16 +767,17 @@ public final class SessionRecord: ObservableObject {
             let start = max(0, index - Self.servedRows)
             e.entries = Array(entries[start..<index])
             e.more = start > 0 || moreBefore
-            return completion(e)
+            return e
         }
-        guard let indexer, let first = entries.first?.id else { e.entries = []; e.more = false; return completion(e) }
-        let base = e
-        indexer.earlier(before: first, limit: Self.servedRows) { rows, more in
-            var reply = base
-            reply.entries = rows
-            reply.more = more
-            completion(reply)
+        guard let indexer, let first = entries.first?.id else {
+            e.entries = []
+            e.more = false
+            return e
         }
+        let page = await indexer.earlier(before: first, limit: Self.servedRows)
+        e.entries = page.rows
+        e.more = page.more
+        return e
     }
 }
 
@@ -1783,7 +1801,7 @@ public final class VisorServer: ObservableObject {
             // Rows before the first one the client shows, from what is
             // here or from the cache.
             guard let client, let record = session(envelope.session), let before = envelope.before else { return }
-            record.earlier(before: before) { reply in Task { @MainActor in client.send(reply) } }
+            Task { client.send(await record.earlier(before: before)) }
         case "subscribe":
             guard let client, let record = session(envelope.session) else { return }
             record.subscribers.insert(ObjectIdentifier(client))

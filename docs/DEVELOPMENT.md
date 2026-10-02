@@ -140,7 +140,7 @@ session list and a suffix of rows; the queue is NOT archived (ephemeral).
 **Claude's transcript comes from the file.** For tool "claude" the process
 emits deltas, status and busy only; rows come from Claude Code's own
 `~/.claude/projects/<cwd-slug>/<session>.jsonl`, read by a `SessionIndexer`
-(own serial queue) into the **message cache** and handed to the record.
+(an actor) into the **message cache**; the record reads its events in order.
 The file is a tree (uuid/parentUuid); `ClaudeBranch.current` picks the
 branch holding the last line; prompts off it are abandoned forks (the
 user gets a notice); a line with no parent that is not the first
@@ -374,7 +374,9 @@ message waits for its own row.
   checklist yet; the rendering is there for when it does.
 - rspm `use_repo` names keep the package identity's dot.
 - `SQLite.Expression` must be qualified (Foundation has `Expression` too).
-- An indexer/watcher not retained is gone (weak self in the callback).
+- A file is followed for as long as its stream is read (`FileTail.batches`,
+  `SessionIndexer.events()`): stop reading (cancel the task) and the
+  following stops with it.
 - `swift package resolve` in third_party/swift_packages must be re-run
   after editing a revision; delete `.build` if it argues.
 - Messages typed on a phone end in a space (autocorrect): every word
