@@ -3,6 +3,7 @@
 
 import MessageCache
 import VisorProtocol
+import Synchronization
 import XCTest
 
 final class MessageCacheTests: XCTestCase {
@@ -64,14 +65,19 @@ final class MessageCacheTests: XCTestCase {
 /// A host that supplies its own storage gets it from `open(named:)`.
 final class StorageProviderTests: XCTestCase {
     func testOpenUsesTheSuppliedStorage() {
-        let supplied = MemoryStorage()
-        var asked: [String] = []
-        MessageCache.storageProvider = { name in asked.append(name); return name == "mine" ? supplied : nil }
+        let asked = Mutex<[String]>([])
+        MessageCache.storageProvider = { name in
+            asked.withLock { $0.append(name) }
+            guard name == "mine" else { return nil }
+            // The host's own storage, with what it already holds.
+            let storage = MemoryStorage()
+            try? storage.insertMessage("s", TranscriptEntry(id: "kept", role: .user, text: "hi"), seq: 0)
+            return storage
+        }
         defer { MessageCache.storageProvider = nil }
         let cache = MessageCache.open(named: "mine")
-        try? cache.append("s", [TranscriptEntry(id: "a", role: .user, text: "hi")])
-        XCTAssertEqual(supplied.messages("s", limit: 10, before: nil).messages.map(\.id), ["a"])
-        XCTAssertEqual(asked, ["mine"])
+        XCTAssertEqual(cache.messages(in: "s", limit: 10).messages.map(\.id), ["kept"])
+        XCTAssertEqual(asked.withLock { $0 }, ["mine"])
     }
 }
 
