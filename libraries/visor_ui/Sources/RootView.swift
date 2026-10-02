@@ -400,7 +400,7 @@ public struct VisorRootView: View {
                 ArchivedList(host: host, cwd: nil, openProject: { selection = .project(hostID: hostID, cwd: $0) })
                     .id(hostID + "|archive")
             } else if let which = selection?.session, let host = store.host(for: which.hostID) {
-                AgentScreen(host: host, sessionID: which.sessionID)
+                AgentScreen(host: host, sessionID: which.sessionID, ended: { selection = nil })
                     .id(which)
             } else {
                 EmptyDetail(title: "Nothing selected",

@@ -15,9 +15,6 @@ struct AgentScreen: View {
     let sessionID: String
     @ObservedObject private var transcript: SessionTranscript
     @State private var draft = ""
-    /// The slash commands the agent takes, fetched when the user first
-    /// types "/" here.
-    @State private var commands: [SlashCommand]?
     @State private var showModels = false
     /// The goal whose words are being shown, with a way to clear it.
     @State private var goalShown: String?
@@ -34,9 +31,13 @@ struct AgentScreen: View {
     @State private var paneSize: CGSize = .zero
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    init(host: HostConnection, sessionID: String) {
+    /// The session was ended from here: the screen has nothing left to show.
+    let ended: () -> Void
+
+    init(host: HostConnection, sessionID: String, ended: @escaping () -> Void = {}) {
         self._host = ObservedObject(wrappedValue: host)
         self.sessionID = sessionID
+        self.ended = ended
         self._transcript = ObservedObject(wrappedValue: host.transcript(for: sessionID))
     }
 
@@ -47,9 +48,7 @@ struct AgentScreen: View {
     /// typed, then names that hold it.
     private var suggestions: [AgentSuggestion] {
         guard let typed = Self.commandPrefix(draft) else { return [] }
-        if commands == nil { loadCommands() }
-        let all = commands ?? []
-        let sorted = all.sorted { $0.name.lowercased() < $1.name.lowercased() }
+        let sorted = (host.sessionCommands[sessionID] ?? []).sorted { $0.name.lowercased() < $1.name.lowercased() }
         let starting = sorted.filter { $0.name.lowercased().hasPrefix(typed) }
         let holding = typed.isEmpty ? [] : sorted.filter { !$0.name.lowercased().hasPrefix(typed) && $0.name.lowercased().contains(typed) }
         return (starting + holding).prefix(40).map { command in
@@ -63,14 +62,6 @@ struct AgentScreen: View {
     static func commandPrefix(_ draft: String) -> String? {
         guard draft.hasPrefix("/"), !draft.contains(where: \.isWhitespace) else { return nil }
         return String(draft.dropFirst()).lowercased()
-    }
-
-    private func loadCommands() {
-        // Once: an empty list stands for "asked" until the answer comes.
-        Task { @MainActor in
-            commands = []
-            commands = (try? await host.commands(for: sessionID)) ?? []
-        }
     }
 
     /// The terminal is drawn only for the window it was taken with.
@@ -109,7 +100,7 @@ struct AgentScreen: View {
                                  takeControl: { cols, rows in host.assumeControl(sessionID, cols: cols, rows: rows) },
                                  close: { showInspector = false },
                                  archive: { showInspector = false; host.archive(sessionID) },
-                                 end: { showInspector = false; host.end(sessionID) })
+                                 end: { showInspector = false; host.end(sessionID); ended() })
             }
         }
         .navigationTitle(sessionTitle)
