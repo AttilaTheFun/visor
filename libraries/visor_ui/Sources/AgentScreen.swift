@@ -89,8 +89,7 @@ struct AgentScreen: View {
                     chat
                 }
             }
-            .onChange(of: geometry.size) { size in paneSize = size }
-            .onAppear { paneSize = geometry.size }
+            .onChange(of: geometry.size, initial: true) { _, size in paneSize = size }
         }
         // The title is the session's; the inspector opens from an explicit
         // button, a pane beside the chat where there is room, a sheet on a
@@ -138,7 +137,7 @@ struct AgentScreen: View {
         }
         // Whatever changed the mode, the inspector does not outlive the
         // screen it was opened over.
-        .onChange(of: info?.mode) { _ in showInspector = false }
+        .onChange(of: info?.mode) { showInspector = false }
         // The session was forked elsewhere and the chat moved to the newer
         // branch: not a choice, but not a surprise either.
         .alert("This session was forked", isPresented: Binding(get: { transcript.notice != nil }, set: { if !$0 { host.acknowledge(sessionID) } })) {
@@ -409,6 +408,7 @@ struct AgentScreen: View {
     private func attach(_ picked: [PickedImage]) {
         Task {
             for var file in picked {
+                if file.isVideo { file.thumbnail = await VideoThumbnail.png(videoBase64: file.base64, name: file.name) }
                 file.path = try? await host.upload(base64: file.base64, name: file.name)
                 if file.path != nil { attachments.append(file) }
             }

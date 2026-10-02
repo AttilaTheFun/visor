@@ -9,6 +9,24 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
+      # Every target compiles in the Swift 6 mode with warnings as errors
+      # (tools/swift), so building is a check of its own: the libraries,
+      # the staging server and the apps' own code for the Mac, then the
+      # views and the phone app's code for iOS. The app bundles themselves
+      # need a signing team and are not built here.
+      - name: Build (macOS)
+        run: >
+          bazel build
+          //libraries/...
+          //tools/staging_server
+          //applications/visor_macos:macos_lib
+          //applications/visor_menubar:menubar_lib
+      - name: Build (iOS)
+        run: >
+          bazel build --platforms=@apple_support//platforms:ios_sim_arm64
+          //libraries/visor_ui
+          //applications/visor_ios:ios_lib
+          //applications/visor_ios:widget_lib
       - name: Test
         run: >
           bazel test --test_output=errors

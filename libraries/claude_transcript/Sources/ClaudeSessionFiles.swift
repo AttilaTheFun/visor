@@ -4,10 +4,15 @@
 // folder moved is looked for everywhere before it is given up on.
 
 import Foundation
+import Synchronization
 
 public enum ClaudeSessionFiles {
     /// Whose home the sessions are under: the user's, unless a test says.
-    public static var home = FileManager.default.homeDirectoryForCurrentUser
+    public static var home: URL {
+        get { homeDirectory.withLock { $0 } }
+        set { homeDirectory.withLock { $0 = newValue } }
+    }
+    private static let homeDirectory = Mutex(FileManager.default.homeDirectoryForCurrentUser)
 
     public static func projectsRoot(home: URL = ClaudeSessionFiles.home) -> URL {
         home.appendingPathComponent(".claude/projects")

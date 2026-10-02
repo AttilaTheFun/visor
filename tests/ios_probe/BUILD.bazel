@@ -1,3 +1,4 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 load("@rules_apple//apple:ios.bzl", "ios_ui_test")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 
@@ -14,6 +15,7 @@ load("@rules_swift//swift:swift.bzl", "swift_library")
 
 swift_library(
     name = "probe_lib",
+    copts = STRICT_SWIFT,
     testonly = True,
     srcs = ["VisorProbe.swift"],
     module_name = "VisorProbe",

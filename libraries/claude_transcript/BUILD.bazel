@@ -1,3 +1,4 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,6 +8,7 @@ package(default_visibility = ["//visibility:public"])
 # as it lands. Foundation only, so any host can take it.
 swift_library(
     name = "claude_transcript",
+    copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "ClaudeTranscript",
 )

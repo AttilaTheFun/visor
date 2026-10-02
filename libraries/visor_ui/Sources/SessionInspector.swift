@@ -46,7 +46,7 @@ struct SessionInspector: View {
                             // Saved as it is typed (after a pause) and when
                             // the inspector goes, not only on Return: a
                             // sheet swiped away never submits.
-                            .onChange(of: title) { _ in
+                            .onChange(of: title) {
                                 titleSave?.cancel()
                                 titleSave = Task { @MainActor in
                                     try? await Task.sleep(nanoseconds: 800_000_000)
