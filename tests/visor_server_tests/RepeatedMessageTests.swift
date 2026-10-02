@@ -35,8 +35,5 @@ final class RepeatedMessageTests: XCTestCase {
         r.appendUser("Build it")
         XCTAssertTrue(r.entries.isEmpty)
         XCTAssertEqual(r.unwritten.map(\.text), ["Build it"])
-        // A row the process reports is not the record: the log is.
-        XCTAssertNil(r.apply(.entry(TranscriptEntry(id: "x", role: .assistant, text: "Built."))))
-        XCTAssertTrue(r.entries.isEmpty)
     }
 }

@@ -277,31 +277,6 @@ enum SessionCatalog {
         return TranscriptAssembler.rows(in: ClaudeBranch.current(of: ClaudeTranscriptParser.lines(contentsOf: file)).records)
     }
 
-    /// How full a Codex thread's context is: the tokens its last request
-    /// carried and the model's window, from the `token_count` the rollout
-    /// records after every turn.
-    static func codexContext(id: String) -> (used: Int, limit: Int?)? {
-        guard let file = codexRollout(id: id),
-              let handle = try? FileHandle(forReadingFrom: file) else { return nil }
-        defer { try? handle.close() }
-        // The tail is enough: the last record is the most recent turn's.
-        let size = (try? handle.seekToEnd()) ?? 0
-        try? handle.seek(toOffset: size > 65_536 ? size - 65_536 : 0)
-        let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
-        var found: (Int, Int?)?
-        for line in text.split(separator: "\n") {
-            guard line.contains("token_count"),
-                  let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-                  let payload = (object["payload"] as? [String: Any]) ?? (object["info"] as? [String: Any]),
-                  let info = (payload["info"] as? [String: Any]) ?? payload["last_token_usage"].map({ _ in payload }),
-                  let last = info["last_token_usage"] as? [String: Any] else { continue }
-            let used = (last["total_tokens"] as? Int)
-                ?? ((last["input_tokens"] as? Int ?? 0) + (last["output_tokens"] as? Int ?? 0))
-            found = (used, info["model_context_window"] as? Int)
-        }
-        return found
-    }
-
     /// The rollout file of a Codex thread.
     static func codexRollout(id: String) -> URL? {
         let root = home.appendingPathComponent(".codex/sessions")

@@ -611,10 +611,6 @@ extension Envelope {
         if !images.isEmpty { e.images = images }
         return e
     }
-    /// Tells a subscriber something about the session that waits to be read.
-    public static func notice(session: String, _ message: String) -> Envelope {
-        var e = Envelope(type: "notice"); e.session = session; e.notice = message; return e
-    }
     /// The user has read the session's notice.
     public static func acknowledge(session: String) -> Envelope {
         var e = Envelope(type: "acknowledge"); e.session = session; return e

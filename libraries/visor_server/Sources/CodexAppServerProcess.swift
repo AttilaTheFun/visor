@@ -253,27 +253,8 @@ public final class CodexAppServerProcess: AgentProcess, @unchecked Sendable {
         case "item/completed":
             guard let item = params["item"] as? [String: Any], let id = item["id"] as? String else { return }
             onEvent?(.toolFinished(id: id))
-            switch item["type"] as? String {
-            case "reasoning":
-                onEvent?(.thinking(false))
-            case "agentMessage":
-                // The finished message, under the id its deltas carried,
-                // so a client's streamed row settles into this one.
-                guard let text = item["text"] as? String, !text.isEmpty else { return }
-                onEvent?(.entry(TranscriptEntry(id: id, role: .assistant, text: text)))
-            case "commandExecution":
-                let output = item["aggregatedOutput"] as? String ?? ""
-                let command = Self.short(item["command"] as? String ?? "command")
-                onEvent?(.entry(TranscriptEntry(id: "codex-tool-" + id, role: .tool,
-                                                text: String(output.prefix(400)), activities: [command], toolName: "Bash")))
-            case "fileChange":
-                onEvent?(.entry(TranscriptEntry(id: "codex-tool-" + id, role: .tool, text: Self.changeSummary(item), toolName: "Edit")))
-            case "mcpToolCall":
-                let result = JSON.summary(item["result"], limit: 400)
-                onEvent?(.entry(TranscriptEntry(id: "codex-tool-" + id, role: .tool, text: result,
-                                                toolName: item["tool"] as? String ?? "tool")))
-            default: break
-            }
+            // (The item's row comes from the rollout, which the server follows.)
+            if item["type"] as? String == "reasoning" { onEvent?(.thinking(false)) }
         case "turn/completed":
             let turn = params["turn"] as? [String: Any] ?? [:]
             if let error = turn["error"] as? [String: Any], let message = error["message"] as? String, !message.isEmpty,
