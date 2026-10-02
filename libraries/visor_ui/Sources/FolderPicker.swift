@@ -16,6 +16,7 @@ struct FolderPicker: View {
     @Environment(\.dismiss) private var dismiss
     @State private var path = "~"
     @State private var folders: [String] = []
+    @State private var listing: Task<Void, Never>?
     @State private var loading = false
     @State private var error: String?
     @State private var newFolder = ""
@@ -96,12 +97,17 @@ struct FolderPicker: View {
         loading = true
         error = nil
         let wanted = path.trimmed.isEmpty ? "~" : path.trimmed
-        Task {
+        // One listing at a time: a folder opened while another was still
+        // being listed is the one shown.
+        listing?.cancel()
+        listing = Task {
             do {
                 let listing = try await host.folders(at: wanted)
+                guard !Task.isCancelled else { return }
                 path = listing.path
                 folders = listing.folders
             } catch {
+                guard !Task.isCancelled else { return }
                 self.error = "\(error)"
             }
             loading = false

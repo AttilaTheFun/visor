@@ -300,7 +300,7 @@ final class SendIsImmediateTests: XCTestCase {
 
     func testWordsAndTheirCommandAreBothThereAtOnce() {
         let host = host()
-        host.knownCommands["s"] = ["goal"]
+        host.sessionCommands["s"] = [SlashCommand(name: "goal", description: "", argumentHint: "")]
         let transcript = host.transcript(for: "s")
         host.sendMessage("s", text: "Here is the context.\n/goal Ship it")
         XCTAssertEqual(transcript.sending.map(\.entry.text), ["Here is the context.", "/goal Ship it"])

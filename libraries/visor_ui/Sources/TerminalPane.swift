@@ -84,15 +84,23 @@ private struct TerminalKeyboardInset: ViewModifier {
         content
             .padding(.bottom, inset)
             .ignoresSafeArea(.keyboard)
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
-                let info = note.userInfo ?? [:]
-                guard let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue,
-                      let screen = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first?.screen.bounds
-                else { return }
-                // The part of the screen the keyboard covers, from the bottom.
-                let covered = max(0, screen.maxY - end.minY)
-                let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
-                withAnimation(.easeOut(duration: duration)) { inset = covered }
+            .task {
+                // The keyboard's frames as it moves, read where each is
+                // announced; only the frame and its timing come here.
+                let endKey = UIResponder.keyboardFrameEndUserInfoKey
+                let durationKey = UIResponder.keyboardAnimationDurationUserInfoKey
+                let moves = NotificationCenter.default.notifications(named: UIResponder.keyboardWillChangeFrameNotification)
+                    .compactMap { note -> (end: CGRect, duration: Double)? in
+                        guard let end = (note.userInfo?[endKey] as? NSValue)?.cgRectValue else { return nil }
+                        return (end, (note.userInfo?[durationKey] as? Double) ?? 0.25)
+                    }
+                for await move in moves {
+                    guard let screen = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first?.screen.bounds
+                    else { continue }
+                    // The part of the screen the keyboard covers, from the bottom.
+                    let covered = max(0, screen.maxY - move.end.minY)
+                    withAnimation(.easeOut(duration: move.duration)) { inset = covered }
+                }
             }
     }
 }
@@ -132,6 +140,10 @@ struct TerminalHostView: PlatformViewRepresentable {
         return view
     }
 
+    /// SwiftTerm calls its delegate on the main thread: what is typed is
+    /// taken there as it comes, so it goes to the computer in the order
+    /// it was typed.
+    @MainActor
     final class Coordinator: NSObject, TerminalViewDelegate {
         let host: HostConnection
         let sessionID: String
@@ -139,23 +151,21 @@ struct TerminalHostView: PlatformViewRepresentable {
             self.host = host
             self.sessionID = sessionID
         }
-        func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        nonisolated func send(source: TerminalView, data: ArraySlice<UInt8>) {
             let base64 = Data(data).base64EncodedString()
-            let host = host, sessionID = sessionID
-            Task { @MainActor in host.sendInput(sessionID, data: base64) }
+            MainActor.assumeIsolated { host.sendInput(sessionID, data: base64) }
         }
-        func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+        nonisolated func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
             guard newCols > 0, newRows > 0 else { return }
-            let host = host, sessionID = sessionID
-            Task { @MainActor in host.resize(sessionID, cols: newCols, rows: newRows) }
+            MainActor.assumeIsolated { host.resize(sessionID, cols: newCols, rows: newRows) }
         }
-        func setTerminalTitle(source: TerminalView, title: String) {}
-        func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-        func scrolled(source: TerminalView, position: Double) {}
-        func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
-        func bell(source: TerminalView) {}
-        func clipboardCopy(source: TerminalView, content: Data) {}
-        func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+        nonisolated func setTerminalTitle(source: TerminalView, title: String) {}
+        nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+        nonisolated func scrolled(source: TerminalView, position: Double) {}
+        nonisolated func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
+        nonisolated func bell(source: TerminalView) {}
+        nonisolated func clipboardCopy(source: TerminalView, content: Data) {}
+        nonisolated func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
     }
 }
 

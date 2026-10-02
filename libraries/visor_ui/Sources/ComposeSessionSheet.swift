@@ -22,6 +22,7 @@ struct ComposeSessionSheet: View {
     @State private var browsing = false
     @State private var resuming = false
     @State private var resumable: [ResumableSession] = []
+    @State private var resumableLoad: Task<Void, Never>?
     @State private var loadingResumable = false
     @State private var resumeID = ""
 
@@ -181,11 +182,16 @@ struct ComposeSessionSheet: View {
         }
     }
 
+    /// The sessions to resume for the agent and folder as they stand: an
+    /// answer for an earlier choice is not shown over a later one.
     private func loadResumable() {
         guard let host, !cwd.trimmed.isEmpty else { return }
         loadingResumable = true
-        Task {
-            resumable = (try? await host.resumable(agent: agent, cwd: cwd)) ?? []
+        resumableLoad?.cancel()
+        resumableLoad = Task {
+            let found = (try? await host.resumable(agent: agent, cwd: cwd)) ?? []
+            guard !Task.isCancelled else { return }
+            resumable = found
             loadingResumable = false
         }
     }

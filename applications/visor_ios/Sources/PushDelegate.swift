@@ -17,10 +17,24 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        // A development build's token is for APNs's sandbox (the app is
-        // signed with a development profile: aps-environment development).
-        VisorNotificationHandler.shared.didRegister(token: token, platform: "ios", environment: "sandbox",
+        VisorNotificationHandler.shared.didRegister(token: token, platform: "ios", environment: Self.pushEnvironment,
                                                     topic: Bundle.main.bundleIdentifier ?? "")
+    }
+
+    /// Which of APNs's services the token is for, as the app was signed:
+    /// "sandbox" under a development profile (aps-environment development),
+    /// "production" under any other, and from the App Store, where no
+    /// profile is embedded.
+    static var pushEnvironment: String {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url) else { return "production" }
+        // The profile is a signed envelope around a property list; its
+        // entitlements are plain text inside.
+        let text = String(decoding: data, as: UTF8.self)
+        guard let key = text.range(of: "<key>aps-environment</key>"),
+              let open = text.range(of: "<string>", range: key.upperBound..<text.endIndex),
+              let close = text.range(of: "</string>", range: open.upperBound..<text.endIndex) else { return "production" }
+        return text[open.upperBound..<close.lowerBound] == "development" ? "sandbox" : "production"
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {

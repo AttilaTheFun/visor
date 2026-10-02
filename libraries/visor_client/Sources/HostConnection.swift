@@ -821,7 +821,7 @@ public final class HostConnection: ObservableObject, Identifiable {
         _ = transcript(for: sessionID)
         // The agent's commands, known before a message is sent: a message
         // with a command after some words is split where it is typed.
-        if knownCommands[sessionID] == nil { Task { [weak self] in _ = await self?.commandNames(for: sessionID) } }
+        if sessionCommands[sessionID] == nil { Task { [weak self] in _ = await self?.loadCommands(for: sessionID) } }
         if state == .connected { send(.subscribe(session: sessionID)) } else { pendingSubscriptions.insert(sessionID) }
     }
 
@@ -1057,10 +1057,10 @@ public final class HostConnection: ObservableObject, Identifiable {
         // the words go first and the command after them, as the terminal
         // treats it. The agent's commands are known from when the session
         // was opened; where they are not yet, they are asked for first.
-        if text.contains("\n/"), knownCommands[sessionID] == nil {
+        if text.contains("\n/"), sessionCommands[sessionID] == nil {
             Task { [weak self] in
                 guard let self else { return }
-                _ = await self.commandNames(for: sessionID)
+                _ = await self.loadCommands(for: sessionID)
                 self.sendParts(sessionID, text: text, images: images)
             }
             return
@@ -1073,7 +1073,7 @@ public final class HostConnection: ObservableObject, Identifiable {
     /// later and the thread has already moved for the composer's lines),
     /// and then posts each part in order.
     private func sendParts(_ sessionID: String, text: String, images: [String]) {
-        let parts = text.contains("\n/") ? Self.split(text, commands: knownCommands[sessionID] ?? []) : [text]
+        let parts = text.contains("\n/") ? Self.split(text, commands: Set((sessionCommands[sessionID] ?? []).map(\.name))) : [text]
         let session = transcript(for: sessionID)
         var posts: [(text: String, images: [String])] = []
         for (index, part) in parts.enumerated() {
@@ -1115,13 +1115,16 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
     }
 
-    /// The names of the slash commands a session's agent takes, asked once.
-    var knownCommands: [String: Set<String>] = [:]
-    private func commandNames(for sessionID: String) async -> Set<String> {
-        if let known = knownCommands[sessionID] { return known }
-        let names = Set(((try? await commands(for: sessionID)) ?? []).map(\.name))
-        knownCommands[sessionID] = names
-        return names
+    /// The slash commands each open session's agent takes, asked once,
+    /// when the session is opened: what a draft that begins with a slash
+    /// is completed from, and where a message is split at a command.
+    @Published public internal(set) var sessionCommands: [String: [SlashCommand]] = [:]
+
+    private func loadCommands(for sessionID: String) async -> [SlashCommand] {
+        if let known = sessionCommands[sessionID] { return known }
+        let commands = (try? await commands(for: sessionID)) ?? []
+        sessionCommands[sessionID] = commands
+        return commands
     }
 
     /// A message split at the first line that is a known slash command: the
