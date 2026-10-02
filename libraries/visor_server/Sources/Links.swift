@@ -38,7 +38,7 @@ extension VisorServer {
     /// went wrong. Linking again replaces the code (a new password).
     public func link(_ text: String) async -> String? {
         guard let code = ConnectionCode(parsing: text) else { return "That is not a connection code." }
-        if code.host == exposure.address() { return "That is this computer's own code." }
+        if code.host == address { return "That is this computer's own code." }
         adopt(code)
         guard let mine = connectionCode else { return nil }
         var e = Envelope(type: "link")

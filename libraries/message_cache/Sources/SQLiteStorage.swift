@@ -7,7 +7,7 @@ import Foundation
 import SQLite
 import VisorProtocol
 
-public final class SQLiteStorage: MessageStorage, @unchecked Sendable {
+public final class SQLiteStorage: MessageStorage {
     private typealias E<T> = SQLite.Expression<T>
     private let db: Connection
     private let sources = Table("sources")

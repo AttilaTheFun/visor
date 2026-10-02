@@ -4,21 +4,35 @@
 
 import VisorProtocol
 @testable import VisorServer
+import Synchronization
 import XCTest
 
 /// A road that names whoever the test says and records
 /// whether it was asked to front.
 final class FakeExposure: ServerExposure {
+    private struct State {
+        var owner: String? = "owner@example.com"
+        var fronted = false
+        var name = "this-mac.example.ts.net"
+    }
+    private let state = Mutex(State())
+
     let title = "Fake"
     let installed = true
-    var owner: String? = "owner@example.com"
-    var fronted = false
-    var name = "this-mac.example.ts.net"
-    func address() -> String? { name }
-    func identity() -> String? { owner }
+    var owner: String? {
+        get { state.withLock { $0.owner } }
+        set { state.withLock { $0.owner = newValue } }
+    }
+    var fronted: Bool { state.withLock { $0.fronted } }
+    var name: String {
+        get { state.withLock { $0.name } }
+        set { state.withLock { $0.name = newValue } }
+    }
+    func address() async -> String? { name }
+    func identity() async -> String? { owner }
     func requester(headers: [String: String]) -> String? { headers["x-fake-login"] }
-    func fronts(port: UInt16) -> Bool { fronted }
-    func front(port: UInt16) -> String { fronted = true; return "" }
+    func fronts(port: UInt16) async -> Bool { fronted }
+    func front(port: UInt16) async -> String { state.withLock { $0.fronted = true }; return "" }
 }
 
 @MainActor
@@ -26,8 +40,8 @@ final class AuthTests: XCTestCase {
     private var server: VisorServer!
     private var exposure: FakeExposure!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         // Never the real archive: loading it ends the agents it lists.
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-auth-tests-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -40,10 +54,10 @@ final class AuthTests: XCTestCase {
         server.exposure = exposure
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         server.stop()
         UserDefaults.standard.removeObject(forKey: "visor.password")
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func request(_ path: String, bearer: String? = nil, login: String? = nil) -> HTTPRequest {
@@ -127,6 +141,8 @@ final class AuthTests: XCTestCase {
     func testConnectionCodeCarriesAddressAndPassword() async {
         XCTAssertNil(server.connectionCode)
         server.password = "pearl-grove"
+        // The address is the road's to say, and it is asked in the background.
+        await server.fronted()
         let code = server.connectionCode
         XCTAssertEqual(code?.host, "this-mac.example.ts.net")
         XCTAssertEqual(code?.password, "pearl-grove")

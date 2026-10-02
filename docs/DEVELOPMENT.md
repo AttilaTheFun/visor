@@ -82,7 +82,14 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 
 **Server** (`libraries/visor_server`, `applications/visor_menubar`).
 `VisorServer` (@MainActor) holds `SessionRecord`s. Each record owns an
-`AgentProcess` made by an `AgentBackend` (`AgentBackends.standard`:
+`AgentProcess` — driven on the main actor; what the agent says is read
+and parsed off it (`ChildProcess.swift`) and reaches the record as one
+`AsyncStream` of `AgentEvent`s, in the order said. An agent is ended with
+`stop()` (asked, then made to, not waited for) or `await end(within:)`;
+one is never started on a session while the one before is still going
+(`SessionRecord.held`), and quitting waits for all of them
+(`applicationShouldTerminate` → `endAll`). Processes are made by an
+`AgentBackend` (`AgentBackends.standard`:
 `ClaudeBackend` → `ClaudeProcess` (`claude -p --input-format stream-json
 --output-format stream-json --include-partial-messages`, one process per
 session, `--resume`), `CodexBackend` → `CodexAppServerProcess` (`codex
@@ -133,7 +140,7 @@ session list and a suffix of rows; the queue is NOT archived (ephemeral).
 **Claude's transcript comes from the file.** For tool "claude" the process
 emits deltas, status and busy only; rows come from Claude Code's own
 `~/.claude/projects/<cwd-slug>/<session>.jsonl`, read by a `SessionIndexer`
-(own serial queue) into the **message cache** and handed to the record.
+(an actor) into the **message cache**; the record reads its events in order.
 The file is a tree (uuid/parentUuid); `ClaudeBranch.current` picks the
 branch holding the last line; prompts off it are abandoned forks (the
 user gets a notice); a line with no parent that is not the first
@@ -238,6 +245,14 @@ a detached relauncher and resumes named sessions with a nudge
 
 ## 4. The working loop
 
+- Every target compiles in the Swift 6 language mode with warnings as
+  errors (`STRICT_SWIFT`, tools/swift): a warning fails the build, here and
+  in CI. A closure handed to a dispatch source or another callback-on-its-
+  own-queue API from inside a `@MainActor` type is main-actor isolated
+  unless it is written in a `nonisolated` function, and is checked when it
+  runs: it compiles, and traps on the first callback
+  (`_dispatch_assert_queue_fail`). The staging server and the probes are
+  how that is found before a deploy.
 - Build: `bazel build //applications/visor_menubar //applications/visor_macos`
   (fastbuild). `bazel-bin` points at the LAST configuration built — always
   locate outputs with `bazel cquery [-c opt] --output=files <target>`.
@@ -247,6 +262,17 @@ a detached relauncher and resumes named sessions with a nudge
   scratch; a `VisorServer()` built over the real archive KILLS every agent
   it lists as an orphan (it has: "claude exited 143").
   `RealFileIndexTests` indexes a real file when `--test_env=VISOR_REAL_FILE=…`.
+- Try a server build against real agents without touching the installed
+  one: `bazel run //tools/staging_server -- [port] [password]` (7533,
+  `staging`) runs a `VisorServer` of its own — its own ports, a scratch
+  folder for what it keeps, the password in memory, loopback only, nothing
+  put in front of it — and the probes take its port:
+  `VISOR_PORT=7533 VISOR_TOKEN=staging node tools/probes/order.mjs`.
+  Ctrl-C ends it, its agents first. Its agents get Visor's MCP server
+  from the source tree (`VISOR_MCP_SCRIPT`, which the menu bar app has no
+  use for: its copy is in its bundle). Do this before deploying a change to
+  the agent processes: a deploy that cannot start agents cannot resume
+  the session that deployed it.
 - Deploy the server from inside a session: `tools/deploy_server.sh`. The
   current turn is cut; the new server resumes the session with the nudge;
   carry on from there. Verify with `shasum` of the installed binary vs
@@ -281,6 +307,17 @@ a detached relauncher and resumes named sessions with a nudge
   the final record and the ephemeral snapshot, and ends the session. The
   expected tail: `user | assistant ONE | user | assistant TWO`, streams
   empty. Try a trailing space on a message: that used to freeze the record.
+- `node tools/probes/lifecycle.mjs` (`AGENT=codex|openrouter`, `TUI=1` to
+  also switch to the terminal and back, `MCP=1` to also have the agent
+  call Visor's MCP `list_sessions` and, in a second session with manual
+  permissions, ask for a tool call's approval and be given it) — a throwaway session interrupted
+  mid-turn, carried on, optionally handed to its terminal and back, then
+  ended; the expected tail is `failures 0`, and a few seconds later the
+  server has no agent left as a child (`pgrep -lP <server pid>`).
+- The probes talk to the installed server unless `VISOR_PORT` names
+  another (a staging server). From inside a Visor session `VISOR_TOKEN`
+  is the agent token, which the REST side takes and the socket's login
+  does not: run them against a staging server, or with the password.
 - `node tools/probes/ephemeral.mjs <visor session id>` — the snapshot a
   subscribing client gets (busy, activity, status count, held streams).
   Stale streams here = a bug.
@@ -296,15 +333,16 @@ a detached relauncher and resumes named sessions with a nudge
 - Caches: `sqlite3 "~/Library/Application Support/com.LoganShire.
   VisorServer.macOS/messages.sqlite"` — output is `|`-separated. `pragma user_version`
   is the schema version (`MessageCache.schemaVersion`; bump to rebuild).
-- `osascript`/System Events hang from a headless agent; no UI automation.
-  Screenshots of the apps are not available this way. The iOS simulator
-  probe (`tests/ios_probe`) exists for UI checks. rules_apple 5's runner
-  makes its own simulator (`--ios_simulator_device="iPhone 17"
-  --ios_simulator_version=27.0`; `--destination` is NOT accepted).
-  `--test_filter=VisorProbe/testClaudeSession` is the connect-and-chat
-  run; an empty `VISOR_PROBE_PASSWORD` works on the host Mac because the
-  simulator shares its Tailscale identity. The other cases (`*Look`)
-  expect particular sessions on the host and fail elsewhere.
+- `osascript`/System Events hang from a headless agent; no UI automation
+  of the Mac apps. `screencapture -x` works from a session once Visor
+  Server has Screen Recording (Privacy & Security), which is how the Mac
+  apps are looked at. The iOS simulator probe (`tests/ios_probe`) drives
+  the phone client. rules_apple 5's runner makes its own simulator
+  (`--ios_simulator_device="iPhone 17" --ios_simulator_version=27.0`;
+  `--destination` is NOT accepted). The simulator shares the host Mac's
+  Tailscale identity, so no password is needed. The `*Look` cases expect
+  a session on the host (`VISOR_LOOK_SESSION` names it); the fixture and
+  send-frames cases bring or are given their own.
 
 ### Snapshot fixture
 
@@ -348,7 +386,9 @@ message waits for its own row.
   checklist yet; the rendering is there for when it does.
 - rspm `use_repo` names keep the package identity's dot.
 - `SQLite.Expression` must be qualified (Foundation has `Expression` too).
-- An indexer/watcher not retained is gone (weak self in the callback).
+- A file is followed for as long as its stream is read (`FileTail.batches`,
+  `SessionIndexer.events()`): stop reading (cancel the task) and the
+  following stops with it.
 - `swift package resolve` in third_party/swift_packages must be re-run
   after editing a revision; delete `.build` if it argues.
 - Messages typed on a phone end in a space (autocorrect): every word
@@ -369,11 +409,40 @@ Bugs seen and not yet fixed are in docs/KNOWN_ISSUES.md.
   would persist it).
 - Codex plan updates are not mapped to the tasks checklist.
 - The openrouter CLI runs its tools without asking (no manual mode); its
-  `--permission-mode` is accepted and ignored.
+  `--permission-mode` is accepted, said to do nothing, and ignored.
 - The first "earlier" page after a resume can be short (in-memory rows
   before the window), then 600 a page.
 - A 212 MB session file indexes in ~9 s on first build (off the main
   thread); resumes after that are lookups.
+
+From the code-quality pass of October 2026, found and left:
+
+- The wire reuses three `Envelope` fields for other meanings (`busy` for
+  an approval's allow, `folders` for the queue, `exists` for "the server
+  has an APNs key"). Giving each its own field is a protocol change every
+  client has to follow.
+- Marks in the transcript are strings by convention: goal and loop rows
+  by id prefix and text (`goal-file-…`, `wake N`), an attachment as prose
+  after the words (`Attached image:`), a picture reference as
+  `host|path`, a notification's target as `computer/session`.
+- `AgentScreen`'s initializer calls `host.transcript(for:)`, which starts
+  the session's sync: building the view is what subscribes it.
+- `SessionTranscript` throttles its own `objectWillChange` (one change
+  told per frame of `SessionTranscript.frame`); it is tied to the send
+  motion fix and measured by `send_motion.sh`.
+- `VisorServer` and `SessionRecord` are `ObservableObject`s. The server is
+  Apple-only and could use Observation; the client cannot until Isomer has
+  it.
+- AgentUI's `TranscriptActions` and `TranscriptImages` are
+  `nonisolated(unsafe)` statics, and its views are not marked
+  `@MainActor`, until Isomer's SwiftUI isolates views to the main actor.
+- The scripts in tools/ repeat how the team id is read, pass a keychain's
+  password as an argument to `security`, and filter `xcodebuild`'s output
+  through `grep … || true`, which hides why a profile was not made.
+- The terminal pane's keyboard inset and input order were changed without
+  a device to try them on (#79).
+- The openrouter CLI, signalled, leaves the command it was running; a
+  reply interrupted mid-stream is not kept in its session.
 
 ## 8. Working conventions
 

@@ -15,10 +15,12 @@ public enum TransportEvent: Sendable {
 }
 
 /// A live channel carrying the protocol's envelopes both ways, and one-shot
-/// calls to the computer's REST side. One transport per computer.
+/// calls to the computer's REST side. One transport per computer, driven
+/// from the main actor like the connection that owns it.
+@MainActor
 public protocol HostTransport: AnyObject {
-    /// Opens the live channel; events arrive on the main actor. A transport
-    /// that cannot open reports `.closed` with the reason.
+    /// Opens the live channel. A transport that cannot open reports
+    /// `.closed` with the reason.
     func connect(_ config: HostConfig, onEvent: @escaping @MainActor (TransportEvent) -> Void)
     func send(_ text: String)
     func disconnect()
@@ -42,15 +44,14 @@ public protocol Backend: Sendable {
     var hostFieldTitle: String { get }
     var hostPlaceholder: String { get }
     var passwordFieldTitle: String { get }
-    /// A sentence under the form.
-    var help: String { get }
-    func makeTransport() -> any HostTransport
+    @MainActor func makeTransport() -> any HostTransport
 }
 
 /// The backends this build knows. Tailscale is the one shipped; a fork
 /// registers its own at launch, before the store is made.
+@MainActor
 public enum Backends {
-    nonisolated(unsafe) private static var registry: [any Backend] = [TailscaleBackend()]
+    private static var registry: [any Backend] = [TailscaleBackend()]
 
     public static var all: [any Backend] { registry }
 
@@ -78,7 +79,6 @@ public struct TailscaleBackend: Backend {
     public let hostFieldTitle = "Tailscale name"
     public let hostPlaceholder = "my-mac.tail1234.ts.net"
     public let passwordFieldTitle = "Password (if asked)"
-    public let help = "The Visor menu bar app on the Mac gives a connection code to copy, and a QR code to scan, holding its Tailscale name and password. Connections are HTTPS through Tailscale."
     public init() {}
     public func makeTransport() -> any HostTransport { TailscaleTransport() }
 }
@@ -92,17 +92,19 @@ public final class TailscaleTransport: HostTransport {
 
     public func connect(_ config: HostConfig, onEvent: @escaping @MainActor (TransportEvent) -> Void) {
         disconnect()
+        // What went wrong is said after `connect` returns, as an event from
+        // the socket would be.
         guard let socket = VisorHost.socket else {
-            Task { @MainActor in onEvent(.closed("No socket service on this host")) }
+            Task { onEvent(.closed("No socket service on this host")) }
             return
         }
         let id = socket.open(url: "wss://\(config.host)")
         guard id >= 0 else {
-            Task { @MainActor in onEvent(.closed("Bad address")) }
+            Task { onEvent(.closed("Bad address")) }
             return
         }
         socketID = id
-        reader = Task { @MainActor [weak self] in
+        reader = Task { [weak self] in
             // Events arrive one at a time; the loop ends when the socket is gone.
             while !Task.isCancelled {
                 do {

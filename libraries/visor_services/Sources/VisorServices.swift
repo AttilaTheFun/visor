@@ -1,15 +1,18 @@
 // The services a host injects into the client (docs/wasm_di.md in swift_ffi,
-// the same shape as Isomer's platform services): a WebSocket the
-// client drives by id, and a settings store for the saved computers.
+// the same shape as Isomer's platform services): a WebSocket the client
+// drives by id, HTTP requests, a settings store for the saved computers,
+// and — where the host has them — notifications and a home screen widget.
 // Nothing else crosses the boundary; async methods suspend in the guest
 // and the host answers when it has something.
-
-
-/// The keys of the host-injected dependency dictionary.
+//
+// The client lives on the main actor, and so do the services it drives
+// from there. HTTP is the exception: a request is the same from anywhere,
+// and its answer is read off the main actor.
 
 /// A WebSocket per connection, by id. `next` suspends until the socket
 /// has an event and returns it as one line: "open", "message <text>",
 /// "close <reason>" or "error <reason>"; it throws once the socket is gone.
+@MainActor
 public protocol VisorSocketService {
     /// Opens a socket to `url` (ws:// or wss://) and returns its id.
     func open(url: String) -> Int32
@@ -23,7 +26,7 @@ public protocol VisorSocketService {
 
 /// One HTTPS request (the REST side of the protocol). Returns the body for
 /// a 2xx status; throws with the status and body otherwise.
-public protocol VisorHTTPService {
+public protocol VisorHTTPService: Sendable {
     func request(method: String, url: String, body: String, authorization: String) async throws -> String
     /// The HTTP status behind an error `request` threw, when it was one
     /// (a 401 is how a computer asks for a password).
@@ -49,6 +52,7 @@ public extension VisorHTTPService {
 /// web): `get` returns "" for an unset key. Secrets (a computer's password)
 /// go through `secret`/`setSecret`: the keychain on Apple; a host with no
 /// keychain keeps them with the rest.
+@MainActor
 public protocol VisorSettingsService {
     func get(key: String) -> String
     func set(key: String, value: String)
@@ -63,6 +67,7 @@ public extension VisorSettingsService {
 
 /// Tells the user something happened: local notifications where the host
 /// has them (iOS). A host without them installs none, and nothing is said.
+@MainActor
 public protocol VisorNotificationService {
     /// Asks, once, whether the app may notify the user.
     func requestPermission()
@@ -94,7 +99,8 @@ public struct NotificationTarget: Sendable, Equatable {
 /// token it was given, a notification the user opened — and where the
 /// client hears it. One for the app; the host calls in, the client
 /// listens.
-public final class VisorNotificationHandler: @unchecked Sendable {
+@MainActor
+public final class VisorNotificationHandler {
     public static let shared = VisorNotificationHandler()
 
     /// The device's push token, hex, once the system has given one.
@@ -150,23 +156,26 @@ public final class VisorNotificationHandler: @unchecked Sendable {
 /// Somewhere outside the app that shows the latest sessions: the home
 /// screen's widget on iOS. Given the latest as JSON whenever it changes; a
 /// host without one installs none.
+@MainActor
 public protocol VisorWidgetService {
     func publish(_ json: String)
 }
 
-/// Where the client reads the injected services — resolved lazily, once,
-/// from the dependency dictionary. Absent services are nil.
+/// Where the client reads the services its host installed
+/// (`installVisorServices`). Absent services are nil.
+@MainActor
 public enum VisorHost {
-    public nonisolated(unsafe) static var socket: (any VisorSocketService)?
-    public nonisolated(unsafe) static var http: (any VisorHTTPService)?
-    public nonisolated(unsafe) static var settings: (any VisorSettingsService)?
-    public nonisolated(unsafe) static var notifications: (any VisorNotificationService)?
-    public nonisolated(unsafe) static var widget: (any VisorWidgetService)?
+    public static var socket: (any VisorSocketService)?
+    public static var http: (any VisorHTTPService)?
+    public static var settings: (any VisorSettingsService)?
+    public static var notifications: (any VisorNotificationService)?
+    public static var widget: (any VisorWidgetService)?
 }
 
 /// Hands the client its services. An app calls this once, before it makes
 /// a store; a host that carries the client somewhere else (a browser, an
 /// Android app) installs its own.
+@MainActor
 public func installVisorServices(socket: any VisorSocketService, http: any VisorHTTPService, settings: any VisorSettingsService,
                                  notifications: (any VisorNotificationService)? = nil, widget: (any VisorWidgetService)? = nil) {
     VisorHost.socket = socket

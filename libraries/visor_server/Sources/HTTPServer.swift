@@ -35,9 +35,9 @@ public final class HTTPServer {
     private let port: UInt16
     /// Answers a request, now or later: a long poll holds its answer
     /// until there is something to say.
-    private let handler: (HTTPRequest, @escaping (HTTPResponse) -> Void) -> Void
+    private let handler: (HTTPRequest, @escaping @MainActor (HTTPResponse) -> Void) -> Void
 
-    public init(port: UInt16, handler: @escaping (HTTPRequest, @escaping (HTTPResponse) -> Void) -> Void) {
+    public init(port: UInt16, handler: @escaping (HTTPRequest, @escaping @MainActor (HTTPResponse) -> Void) -> Void) {
         self.port = port
         self.handler = handler
     }
@@ -49,8 +49,9 @@ public final class HTTPServer {
         params.allowLocalEndpointReuse = true
         params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
         let listener = try NWListener(using: params)
+        // The listener's queue is the main one.
         listener.newConnectionHandler = { [weak self] connection in
-            Task { @MainActor in self?.accept(connection) }
+            MainActor.assumeIsolated { self?.accept(connection) }
         }
         listener.start(queue: .main)
         self.listener = listener
@@ -63,29 +64,32 @@ public final class HTTPServer {
 
     private func accept(_ connection: NWConnection) {
         connection.start(queue: .main)
-        var buffer = Data()
-        func read() {
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
-                Task { @MainActor in
-                    guard let self else { return }
-                    if let data { buffer.append(data) }
-                    if let request = Self.parse(buffer) {
-                        if request.method == "OPTIONS" {
-                            self.write(HTTPResponse(204), to: connection)
-                        } else {
-                            self.handler(request) { [weak self] response in
-                                Task { @MainActor in self?.write(response, to: connection) }
-                            }
-                        }
-                    } else if error != nil || complete {
-                        connection.cancel()
+        read(connection, after: Data())
+    }
+
+    /// Reads on from what has been received until the request is whole,
+    /// then has it answered.
+    private func read(_ connection: NWConnection, after received: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
+            let failed = error != nil
+            // The connection's queue is the main one.
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                var buffer = received
+                if let data { buffer.append(data) }
+                if let request = Self.parse(buffer) {
+                    if request.method == "OPTIONS" {
+                        self.write(HTTPResponse(204), to: connection)
                     } else {
-                        read()
+                        self.handler(request) { [weak self] response in self?.write(response, to: connection) }
                     }
+                } else if failed || complete {
+                    connection.cancel()
+                } else {
+                    self.read(connection, after: buffer)
                 }
             }
         }
-        read()
     }
 
     /// A complete request from the bytes so far, or nil while more is needed.

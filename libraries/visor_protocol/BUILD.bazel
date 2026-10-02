@@ -1,3 +1,4 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -5,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 # The wire format and its JSON: no Foundation, so it is the same on every host.
 swift_library(
     name = "visor_protocol",
+    copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorProtocol",
 )

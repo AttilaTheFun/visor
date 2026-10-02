@@ -1,22 +1,21 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 load("@rules_apple//apple:ios.bzl", "ios_ui_test")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 
-# Simulator probe for the client against a running menu bar app on this Mac
-# through its Tailscale Serve endpoint (VISOR_PROBE_HOST, the Mac's tailnet
-# name): connects with the password in VISOR_PROBE_PASSWORD, starts a Claude
-# Code session in VISOR_PROBE_CWD, waits
-# for the reply, sends a follow-up that runs a shell command, and writes
-# screenshots to /private/tmp/visor_probe (run with --spawn_strategy=local so
-# the sandbox allows the write). Manual:
+# Simulator probe for the client against Visor Server on this Mac, through
+# its Tailscale Serve endpoint (VISOR_PROBE_HOST, the Mac's tailnet name):
+# looks at screens, records a send, photographs the snapshot fixture.
+# Screenshots go to /private/tmp/visor_probe (run with --spawn_strategy=local
+# so the sandbox allows the write). Manual, one case at a time:
 #   bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
-#     --test_arg=--destination=platform=ios_simulator,id=<booted sim udid> \
-#     --spawn_strategy=local --nocache_test_results --test_output=all \
-#     --test_env=VISOR_PROBE_PASSWORD=<password> --test_env=VISOR_PROBE_CWD=<dir>
-# (always target the one booted simulator; device/version flags boot a NEW
-# simulator per run and leak it).
+#     --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \
+#     --spawn_strategy=local --nocache_test_results --test_output=errors \
+#     --test_filter=VisorProbe/testFixtureScreens
+# (docs/DEVELOPMENT.md has what each case needs.)
 
 swift_library(
     name = "probe_lib",
+    copts = STRICT_SWIFT,
     testonly = True,
     srcs = ["VisorProbe.swift"],
     module_name = "VisorProbe",

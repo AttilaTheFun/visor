@@ -1,7 +1,9 @@
 import { execSync } from 'node:child_process';
+// The server's port: the installed one's, or a staging server's (VISOR_PORT).
+const PORT = Number(process.env.VISOR_PORT ?? 7433);
 const PW = process.env.VISOR_TOKEN || execSync('security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w').toString().trim();
 const id = process.argv[2]; if (!id) { console.error('usage: node ephemeral.mjs <visor session id>'); process.exit(2); }
-const ws = new WebSocket('ws://127.0.0.1:7433');
+const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
 ws.onopen = () => ws.send(JSON.stringify({ type: 'login', password: PW, client: 'probe-eph' }));
 ws.onmessage = ev => {
   const e = JSON.parse(ev.data);

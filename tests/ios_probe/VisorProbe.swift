@@ -1,182 +1,11 @@
 import XCTest
 
-/// Drives the phone client against the menu bar app on this Mac: connect,
-/// start a Claude Code session, read the reply, send a follow-up that runs
-/// a shell command, and see its activity row.
+/// Drives the phone client in the simulator, for looking at it and for
+/// recording it: a send (for the send-motion check), the composer, the
+/// archive list, the terminal, and the snapshot fixture's screens.
 final class VisorProbe: XCTestCase {
     private let outDir = "/private/tmp/visor_probe"
 
-    func testClaudeSession() throws {
-        let env = ProcessInfo.processInfo.environment
-        let password = env["VISOR_PROBE_PASSWORD"] ?? ""
-        let cwd = env["VISOR_PROBE_CWD"] ?? "~"
-        // The Mac's tailnet name: clients always connect over TLS (Tailscale Serve).
-        let hostName = env["VISOR_PROBE_HOST"] ?? "my-mac.example.ts.net"
-        NSLog("VISOR_PROBE typing host=%@ (env %@)", hostName, env["VISOR_PROBE_HOST"] ?? "unset")
-        // No password: the simulator shares this Mac's Tailscale, so the
-        // computer lets it in as its owner's device.
-        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
-
-        XCUIDevice.shared.orientation = .portrait
-        let app = XCUIApplication()
-        app.launch()
-
-        // The sessions list's last row adds a computer.
-        let addComputer = app.buttons["add-computer"].firstMatch
-        XCTAssertTrue(addComputer.waitForExistence(timeout: 20), "no Add Computer row")
-        addComputer.tap()
-        let host = app.textFields["host"].firstMatch
-        XCTAssertTrue(host.waitForExistence(timeout: 20), "connect form did not appear")
-        host.tap()
-        host.typeText(hostName)
-        if !password.isEmpty {
-            let secure = app.secureTextFields["password"].firstMatch
-            secure.tap()
-            secure.typeText(password)
-        }
-        shot(app, "1-connect")
-        app.buttons["connect"].firstMatch.tap()
-
-        // The computer's section shows once the host answered the login.
-        // The computer's rows appear with the login's answer; the header's
-        // symbol reads "Connected" once it is.
-        let connected = app.images.matching(NSPredicate(format: "label == 'Connected'")).firstMatch
-        XCTAssertTrue(connected.waitForExistence(timeout: 30), "host did not connect")
-        // New Project → the folder picker: type the folder's path, choose it.
-        let newProject = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'New Project'")).firstMatch
-        XCTAssertTrue(newProject.waitForExistence(timeout: 10), "no New Project row")
-        shot(app, "2-sidebar")
-        newProject.tap()
-        let pathField = app.textFields["folder-path"].firstMatch
-        XCTAssertTrue(pathField.waitForExistence(timeout: 10), "folder picker did not appear")
-        pathField.tap()
-        pathField.press(forDuration: 1.0)
-        app.menuItems["Select All"].firstMatch.tap()
-        pathField.typeText(cwd)
-        shot(app, "3-folder-picker")
-        app.buttons["choose-folder"].firstMatch.tap()
-
-        // The project's header row appears with its compose button, and the
-        // new session sheet opens on it.
-        let projectName = (cwd as NSString).lastPathComponent
-        let start = app.buttons["start"].firstMatch
-        XCTAssertTrue(start.waitForExistence(timeout: 10), "new session sheet did not appear")
-        shot(app, "3-new-session")
-        start.tap()
-
-        // The agent page opens empty; the first message goes in the composer.
-        let first = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
-        XCTAssertTrue(first.waitForExistence(timeout: 10), "composer missing")
-        first.tap()
-        first.typeText("Reply with exactly: hello there")
-        app.buttons["Send"].firstMatch.tap()
-
-        // The reply streams into the agent page.
-        // The assistant's bubble is exactly the reply (the user's bubble contains it too).
-        let reply = app.staticTexts.matching(NSPredicate(format: "label ==[c] 'hello there'")).firstMatch
-        XCTAssertTrue(reply.waitForExistence(timeout: 120), "no reply from the agent")
-        shot(app, "4-reply")
-
-        // A follow-up that makes the agent run a command: its activity row names it.
-        let composer = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
-        XCTAssertTrue(composer.waitForExistence(timeout: 10), "composer missing")
-        composer.tap()
-        composer.typeText("Run the shell command `echo visor-ok` and tell me its output.")
-        app.buttons["Send"].firstMatch.tap()
-        let activity = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Bash: echo visor-ok'")).firstMatch
-        XCTAssertTrue(activity.waitForExistence(timeout: 120), "the tool activity never showed")
-        // The turn ends: Send is back (Stop is shown while busy).
-        XCTAssertTrue(app.buttons["Send"].firstMatch.waitForExistence(timeout: 120), "the turn did not finish")
-        app.swipeDown()
-        sleep(1)
-        shot(app, "5-follow-up")
-
-        // Back to the sidebar: the session is listed under its project,
-        // named after the agent.
-        let back = app.navigationBars.buttons.element(boundBy: 0)
-        if back.exists { back.tap() }
-        let project = app.staticTexts.matching(NSPredicate(format: "label == %@", projectName)).firstMatch
-        XCTAssertTrue(project.waitForExistence(timeout: 10), "project header missing in the sidebar")
-        let row = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Claude Code'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 10), "session row missing in the sidebar")
-        shot(app, "6-sidebar-session")
-
-        // Swipe to archive: the row leaves the section, the archive row appears.
-        row.swipeLeft()
-        let archive = app.buttons["Archive"].firstMatch
-        XCTAssertTrue(archive.waitForExistence(timeout: 5), "no Archive swipe action")
-        archive.tap()
-        // The archived session stays under its project, with the command
-        // that resumes the agent's own session.
-        let resume = app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'claude --resume'")).firstMatch
-        XCTAssertTrue(resume.waitForExistence(timeout: 10), "the archived session is not listed under its project")
-        shot(app, "7-archived-row")
-        let archivedRow = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Claude Code'")).firstMatch
-        XCTAssertTrue(archivedRow.waitForExistence(timeout: 5), "the archived session lost its title")
-        shot(app, "8-archive-list")
-        archivedRow.swipeRight()
-        let unarchive = app.buttons["Unarchive"].firstMatch
-        XCTAssertTrue(unarchive.waitForExistence(timeout: 5), "no Unarchive swipe action")
-        unarchive.tap()
-        // Back in the section, resumable: a message gets a reply from the same session.
-        XCTAssertTrue(row.waitForExistence(timeout: 10), "the session did not return to the section")
-        row.tap()
-        let again = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
-        XCTAssertTrue(again.waitForExistence(timeout: 10))
-        again.tap()
-        again.typeText("Repeat your very first reply in this conversation, verbatim, nothing else.")
-        app.buttons["Send"].firstMatch.tap()
-        let recalled = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'hello there' AND NOT label CONTAINS 'exactly'")).element(boundBy: 1)
-        XCTAssertTrue(recalled.waitForExistence(timeout: 120), "the resumed session did not recall its first reply")
-        shot(app, "9-resumed")
-
-        // Manual mode: a command that needs permission waits for Allow.
-        app.buttons["Permissions"].firstMatch.tap()
-        let manual = app.buttons.containing(NSPredicate(format: "label BEGINSWITH 'Manual'")).firstMatch
-        XCTAssertTrue(manual.waitForExistence(timeout: 5), "no Manual option")
-        manual.tap()
-        sleep(3)
-        let stamp = Int(Date().timeIntervalSince1970)
-        again.tap()
-        again.typeText("Run the shell command `touch /tmp/visor-probe-\(stamp)` and say whether it worked, in one line.")
-        app.buttons["Send"].firstMatch.tap()
-        let allow = app.buttons["allow"].firstMatch
-        XCTAssertTrue(allow.waitForExistence(timeout: 120), "no approval request appeared")
-        shot(app, "10-approval")
-        allow.tap()
-        let worked = app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] 'worked' AND NOT label BEGINSWITH 'Run'")).firstMatch
-        XCTAssertTrue(worked.waitForExistence(timeout: 120), "no reply after allowing")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: "/tmp/visor-probe-\(stamp)"), "the allowed command did not run")
-        shot(app, "11-allowed")
-
-        // Resume: a second session in the project picks the first one's Claude
-        // session from the list and recalls it.
-        if back.exists { back.tap() }
-        let compose = app.buttons["compose-" + projectName].firstMatch
-        XCTAssertTrue(compose.waitForExistence(timeout: 10), "no compose button on the project")
-        compose.tap()
-        let resumeTab = app.buttons["Resume"].firstMatch
-        XCTAssertTrue(resumeTab.waitForExistence(timeout: 10), "no Resume mode")
-        resumeTab.tap()
-        let candidate = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Reply with exactly'")).firstMatch
-        XCTAssertTrue(candidate.waitForExistence(timeout: 30), "the earlier session is not listed for resuming")
-        candidate.tap()
-        shot(app, "12-resume-picker")
-        app.buttons["start"].firstMatch.tap()
-        let composer2 = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
-        XCTAssertTrue(composer2.waitForExistence(timeout: 10))
-        composer2.tap()
-        composer2.typeText("What two words did you reply with first in this conversation? Just them.")
-        app.buttons["Send"].firstMatch.tap()
-        let resumed = app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] 'hello there' AND NOT label CONTAINS 'exactly'")).firstMatch
-        XCTAssertTrue(resumed.waitForExistence(timeout: 120), "the resumed session did not recall the earlier conversation")
-        shot(app, "13-resumed-session")
-    }
-
-    /// Looks, and touches nothing. Opens whatever session the phone
-    /// already lists and photographs the chat, which is the only way to
-    /// see the composer's own layout from here: the Mac refuses both
-    /// screen recording and accessibility to this process.
     /// The send, as a person does it, for a screen recording to be taken
     /// of: the session named by VISOR_FRAMES_SESSION is opened, the
     /// composer tapped (the on-screen keyboard comes up), a message typed
@@ -347,6 +176,53 @@ final class VisorProbe: XCTestCase {
         }
     }
 
+    /// What a row opens over its thread, in the fixture's chat: the run of
+    /// tool calls, and a picture. Each opens from a row, shows what it
+    /// should, and goes with Done.
+    func testFixtureSheets() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        let calls = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Made '")).firstMatch
+        XCTAssertTrue(calls.waitForExistence(timeout: 10), "no run of tool calls in the thread")
+        calls.tap()
+        XCTAssertTrue(app.navigationBars["Tool calls"].waitForExistence(timeout: 5), "the tool calls did not open")
+        shot(app, "sheet-1-calls")
+        app.buttons["Done"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Tool calls"].waitForNonExistence(timeout: 5), "the tool calls did not close")
+
+        let picture = app.buttons["Open the picture"].firstMatch
+        if !picture.isHittable { app.swipeDown() }
+        XCTAssertTrue(picture.waitForExistence(timeout: 5), "no picture in the thread")
+        picture.tap()
+        let done = app.buttons["Done"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "the picture did not open")
+        shot(app, "sheet-2-picture")
+        done.tap()
+        XCTAssertTrue(done.waitForNonExistence(timeout: 5), "the picture did not close")
+        app.terminate()
+    }
+
+    /// A slash typed in the fixture's chat offers the agent's commands,
+    /// which the connection asked for when the session was opened.
+    func testFixtureSlashCommands() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        let field = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "no composer")
+        field.tap()
+        field.typeText("/comp")
+        XCTAssertTrue(app.staticTexts["/compact"].waitForExistence(timeout: 5), "the commands were not offered")
+        app.terminate()
+    }
+
+    /// Looks, and sends nothing: opens a session the phone already lists
+    /// and photographs the chat, the composer with the keyboard up, and
+    /// (by its environment) a search, the attach menu, a picture or what
+    /// the composer offers for words typed.
     func testComposerLook() throws {
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         XCUIDevice.shared.orientation = .portrait

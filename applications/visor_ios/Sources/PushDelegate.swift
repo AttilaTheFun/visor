@@ -17,10 +17,24 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        // A development build's token is for APNs's sandbox (the app is
-        // signed with a development profile: aps-environment development).
-        VisorNotificationHandler.shared.didRegister(token: token, platform: "ios", environment: "sandbox",
+        VisorNotificationHandler.shared.didRegister(token: token, platform: "ios", environment: Self.pushEnvironment,
                                                     topic: Bundle.main.bundleIdentifier ?? "")
+    }
+
+    /// Which of APNs's services the token is for, as the app was signed:
+    /// "sandbox" under a development profile (aps-environment development),
+    /// "production" under any other, and from the App Store, where no
+    /// profile is embedded.
+    static var pushEnvironment: String {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url) else { return "production" }
+        // The profile is a signed envelope around a property list; its
+        // entitlements are plain text inside.
+        let text = String(decoding: data, as: UTF8.self)
+        guard let key = text.range(of: "<key>aps-environment</key>"),
+              let open = text.range(of: "<string>", range: key.upperBound..<text.endIndex),
+              let close = text.range(of: "</string>", range: open.upperBound..<text.endIndex) else { return "production" }
+        return text[open.upperBound..<close.lowerBound] == "development" ? "sandbox" : "production"
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
@@ -28,19 +42,23 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
     }
 
     /// The user opened a notification: its session, on its computer.
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        VisorNotificationHandler.shared.didOpen(Self.data(of: response.notification))
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        let data = Self.data(of: response.notification)
+        await VisorNotificationHandler.shared.didOpen(data)
     }
 
     /// With the app in front: shown as a banner, which opens its session
     /// when tapped — unless it is about the session on screen, whose thread
     /// already says it.
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
-        VisorNotificationHandler.shared.presents(Self.data(of: notification)) ? [.banner, .list, .sound] : []
+        let data = Self.data(of: notification)
+        return await VisorNotificationHandler.shared.presents(data) ? [.banner, .list, .sound] : []
     }
 
-    static func data(of notification: UNNotification) -> [String: String] {
+    /// What a notification carries, as the handler takes it. The system
+    /// calls the delegate off the main actor; only this crosses to it.
+    nonisolated static func data(of notification: UNNotification) -> [String: String] {
         var data: [String: String] = [:]
         for (key, value) in notification.request.content.userInfo {
             if let key = key as? String, let value = value as? String { data[key] = value }

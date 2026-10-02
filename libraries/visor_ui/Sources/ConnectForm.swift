@@ -93,12 +93,4 @@ extension View {
         self
         #endif
     }
-
-    @ViewBuilder func keyboardTypeNumbers() -> some View {
-        #if os(iOS)
-        keyboardType(.numberPad)
-        #else
-        self
-        #endif
-    }
 }

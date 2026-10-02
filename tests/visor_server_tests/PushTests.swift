@@ -12,8 +12,8 @@ import XCTest
 final class PushTests: XCTestCase {
     private var server: VisorServer!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-push-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -67,6 +67,19 @@ final class PushTests: XCTestCase {
         XCTAssertEqual(Set(payload.keys), ["aps", "computer", "session"])
         let alert = (payload["aps"] as? [String: Any])?["alert"] as? [String: String]
         XCTAssertEqual(alert, ["title": "Isomer", "body": "Turn finished"])
+    }
+
+    /// A device is forgotten when APNs says its token is no good — not
+    /// when the request was refused for the server's own key or topic.
+    func testOnlyABadTokenForgetsTheDevice() {
+        XCTAssertTrue(APNsSender.forgets(status: 410, reason: "Unregistered"))
+        XCTAssertTrue(APNsSender.forgets(status: 400, reason: "BadDeviceToken"))
+        XCTAssertTrue(APNsSender.forgets(status: 400, reason: "DeviceTokenNotForTopic"))
+        XCTAssertFalse(APNsSender.forgets(status: 400, reason: "BadTopic"))
+        XCTAssertFalse(APNsSender.forgets(status: 400, reason: nil))
+        XCTAssertFalse(APNsSender.forgets(status: 403, reason: "InvalidProviderToken"))
+        XCTAssertFalse(APNsSender.forgets(status: 200, reason: nil))
+        XCTAssertFalse(APNsSender.forgets(status: 0, reason: nil))
     }
 
     func testTheSigningTokenVerifies() throws {

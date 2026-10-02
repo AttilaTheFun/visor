@@ -11,7 +11,8 @@ import VisorProtocol
 
 /// Reads a log's whole lines into lines of Claude's shape. Stateful: a log
 /// that is a plain list links each line to the one before, across reads.
-protocol AgentLogParser: AnyObject, Sendable {
+/// One parser reads one log, and belongs to whoever reads it.
+protocol AgentLogParser: AnyObject {
     func lines(in data: Data) -> [ClaudeLine]
     /// The last line already read (from the cache), when reading resumes
     /// part-way through the log.
@@ -19,14 +20,14 @@ protocol AgentLogParser: AnyObject, Sendable {
 }
 
 /// Claude Code's own session file: already a tree of lines.
-final class ClaudeLogParser: AgentLogParser, @unchecked Sendable {
+final class ClaudeLogParser: AgentLogParser {
     func lines(in data: Data) -> [ClaudeLine] { ClaudeTranscriptParser.lines(in: data) }
     func resume(after key: String?) {}
 }
 
 /// A log that is a list: each line follows the one before it. The
 /// assistant's items between two other kinds of line are one message.
-class LinearLogParser: @unchecked Sendable {
+class LinearLogParser {
     private var last: String?
     private var run: String?
     private var counter = 0
@@ -68,7 +69,7 @@ class LinearLogParser: @unchecked Sendable {
 /// Codex's rollout: `response_item`s are the conversation — the user's and
 /// the assistant's messages, tool calls and their outputs; everything else
 /// (events, context, token counts) is bookkeeping, kept as nodes only.
-final class CodexRolloutParser: LinearLogParser, AgentLogParser, @unchecked Sendable {
+final class CodexRolloutParser: LinearLogParser, AgentLogParser {
     func lines(in data: Data) -> [ClaudeLine] {
         Self.objects(in: data).map { object in
             let payload = object["payload"] as? [String: Any] ?? [:]
@@ -124,7 +125,7 @@ final class CodexRolloutParser: LinearLogParser, AgentLogParser, @unchecked Send
 
 /// The openrouter CLI's log: a line per message of the conversation, in
 /// the chat API's shape (user, assistant with tool calls, tool).
-final class OpenRouterLogParser: LinearLogParser, AgentLogParser, @unchecked Sendable {
+final class OpenRouterLogParser: LinearLogParser, AgentLogParser {
     func lines(in data: Data) -> [ClaudeLine] {
         Self.objects(in: data).map { object in
             let message = object["message"] as? [String: Any] ?? [:]
@@ -154,15 +155,28 @@ final class OpenRouterLogParser: LinearLogParser, AgentLogParser, @unchecked Sen
 
 /// Where each agent keeps a session's log, and how to read it.
 enum AgentLog {
-    static func locate(agent: AgentKind, id: String, cwd: String) -> (url: URL, parser: AgentLogParser)? {
+    /// The shape a log is written in: which parser reads it.
+    enum Format: Sendable {
+        case claude, codex, openrouter
+
+        func parser() -> any AgentLogParser {
+            switch self {
+            case .claude: ClaudeLogParser()
+            case .codex: CodexRolloutParser()
+            case .openrouter: OpenRouterLogParser()
+            }
+        }
+    }
+
+    static func locate(agent: AgentKind, id: String, cwd: String) -> (url: URL, format: Format)? {
         switch agent {
         case .claude:
-            return ClaudeSessionFiles.locate(sessionID: id, cwd: cwd).map { ($0, ClaudeLogParser()) }
+            return ClaudeSessionFiles.locate(sessionID: id, cwd: cwd).map { ($0, .claude) }
         case .codex:
-            return SessionCatalog.codexRollout(id: id).map { ($0, CodexRolloutParser()) }
+            return SessionCatalog.codexRollout(id: id).map { ($0, .codex) }
         case .openrouter:
             let url = SessionCatalog.openrouterRoot.appendingPathComponent("sessions/\(id).jsonl")
-            return FileManager.default.fileExists(atPath: url.path) ? (url, OpenRouterLogParser()) : nil
+            return FileManager.default.fileExists(atPath: url.path) ? (url, .openrouter) : nil
         }
     }
 }

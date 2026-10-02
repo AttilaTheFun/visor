@@ -7,18 +7,19 @@
 import Foundation
 import Security
 
-public final class NativeVisorSocketService: VisorSocketService, @unchecked Sendable {
+@MainActor
+public final class NativeVisorSocketService: VisorSocketService {
     private final class Socket {
         let task: URLSessionWebSocketTask
         var events: [String] = []
         var waiter: CheckedContinuation<String, Error>?
         var closed = false
+        var reader: Task<Void, Never>?
         init(task: URLSessionWebSocketTask) { self.task = task }
     }
 
     private var sockets: [Int32: Socket] = [:]
     private var nextID: Int32 = 1
-    private let lock = NSLock()
     private let session: URLSession
 
     public init() {
@@ -30,50 +31,57 @@ public final class NativeVisorSocketService: VisorSocketService, @unchecked Send
 
     public func open(url: String) -> Int32 {
         guard let target = URL(string: url) else { return -1 }
-        lock.lock()
         let id = nextID
         nextID += 1
         let task = session.webSocketTask(with: target)
         let socket = Socket(task: task)
         sockets[id] = socket
-        lock.unlock()
         task.resume()
-        // URLSession has no "open" callback on the task itself; a ping that
-        // answers means the handshake is done.
-        task.sendPing { [weak self] error in
-            if let error { self?.push(id, "error \(error.localizedDescription)"); self?.finish(id) }
-            else { self?.push(id, "open") }
+        // One reader per socket, on the main actor: its events are queued
+        // in the order they arrived.
+        socket.reader = Task { [weak self] in
+            do {
+                // URLSession has no "open" callback on the task itself; a
+                // ping that answers means the handshake is done.
+                try await Self.ping(task)
+            } catch {
+                self?.push(id, "error \(error.localizedDescription)")
+                self?.finish(id)
+                return
+            }
+            self?.push(id, "open")
+            do {
+                while true {
+                    switch try await task.receive() {
+                    case .string(let text): self?.push(id, "message " + text)
+                    case .data(let data): self?.push(id, "message " + (String(data: data, encoding: .utf8) ?? ""))
+                    @unknown default: break
+                    }
+                }
+            } catch {
+                self?.push(id, "close \(error.localizedDescription)")
+                self?.finish(id)
+            }
         }
-        receive(id, task)
         return id
     }
 
-    private func receive(_ id: Int32, _ task: URLSessionWebSocketTask) {
-        task.receive { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .success(let message):
-                switch message {
-                case .string(let text): self.push(id, "message " + text)
-                case .data(let data): self.push(id, "message " + (String(data: data, encoding: .utf8) ?? ""))
-                @unknown default: break
-                }
-                self.receive(id, task)
-            case .failure(let error):
-                self.push(id, "close \(error.localizedDescription)")
-                self.finish(id)
+    private nonisolated static func ping(_ task: URLSessionWebSocketTask) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            task.sendPing { error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
             }
         }
     }
 
     public func send(id: Int32, text: String) {
-        lock.lock(); let socket = sockets[id]; lock.unlock()
-        socket?.task.send(.string(text)) { _ in }
+        sockets[id]?.task.send(.string(text)) { _ in }
     }
 
     public func disconnect(id: Int32) {
-        lock.lock(); let socket = sockets[id]; lock.unlock()
-        socket?.task.cancel(with: .normalClosure, reason: nil)
+        guard let socket = sockets[id] else { return }
+        socket.reader?.cancel()
+        socket.task.cancel(with: .normalClosure, reason: nil)
         push(id, "close closed")
         finish(id)
     }
@@ -83,51 +91,36 @@ public final class NativeVisorSocketService: VisorSocketService, @unchecked Send
     }
 
     public func next(id: Int32) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            guard let socket = sockets[id] else {
-                lock.unlock()
-                continuation.resume(throwing: VisorSocketGone())
-                return
-            }
-            if !socket.events.isEmpty {
-                let event = socket.events.removeFirst()
-                if socket.closed && socket.events.isEmpty { sockets[id] = nil }
-                lock.unlock()
-                continuation.resume(returning: event)
-            } else if socket.closed {
-                sockets[id] = nil
-                lock.unlock()
-                continuation.resume(throwing: VisorSocketGone())
-            } else {
-                socket.waiter = continuation
-                lock.unlock()
-            }
+        guard let socket = sockets[id] else { throw VisorSocketGone() }
+        if !socket.events.isEmpty {
+            let event = socket.events.removeFirst()
+            if socket.closed && socket.events.isEmpty { sockets[id] = nil }
+            return event
         }
+        if socket.closed {
+            sockets[id] = nil
+            throw VisorSocketGone()
+        }
+        return try await withCheckedThrowingContinuation { socket.waiter = $0 }
     }
 
     private func push(_ id: Int32, _ event: String) {
-        lock.lock()
-        guard let socket = sockets[id], !socket.closed else { lock.unlock(); return }
+        guard let socket = sockets[id], !socket.closed else { return }
         if let waiter = socket.waiter {
             socket.waiter = nil
-            lock.unlock()
             waiter.resume(returning: event)
         } else {
             socket.events.append(event)
-            lock.unlock()
         }
     }
 
     /// No more events after what is queued; a waiting `next` is failed.
     private func finish(_ id: Int32) {
-        lock.lock()
-        guard let socket = sockets[id] else { lock.unlock(); return }
+        guard let socket = sockets[id] else { return }
         socket.closed = true
         let waiter = socket.waiter
         socket.waiter = nil
         if socket.events.isEmpty { sockets[id] = nil }
-        lock.unlock()
         waiter?.resume(throwing: VisorSocketGone())
     }
 }
@@ -180,6 +173,7 @@ public final class NativeVisorHTTPService: VisorHTTPService {
     }
 }
 
+@MainActor
 public final class NativeVisorSettingsService: VisorSettingsService {
     public init() {}
 

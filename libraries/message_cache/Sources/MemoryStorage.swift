@@ -3,7 +3,7 @@
 
 import VisorProtocol
 
-public final class MemoryStorage: MessageStorage, @unchecked Sendable {
+public final class MemoryStorage: MessageStorage {
     private struct Row { var seq: Int; var message: TranscriptEntry; var sourceKey: String? }
     private var sources: [String: SourceState] = [:]
     private var syncs: [String: SyncState] = [:]

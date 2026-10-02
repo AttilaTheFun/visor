@@ -1,0 +1,8 @@
+package(default_visibility = ["//visibility:public"])
+
+# Built against the system SwiftUI: an Apple build. A host that carries the
+# client elsewhere points //:swift_ui at its own.
+config_setting(
+    name = "system_swift_ui",
+    flag_values = {"//:swift_ui": "//:system_swift_ui"},
+)

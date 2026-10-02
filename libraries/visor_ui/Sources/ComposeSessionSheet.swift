@@ -2,7 +2,7 @@
 // exists — which computer, which folder, which harness, and what to call
 // it. The folder is picked from the computer's projects or browsed for.
 // Sessions start in auto mode (no permission prompts — nobody is at the
-// computer to answer them); the chat's permissions pill switches to manual.
+// computer to answer them); the chat's model sheet switches to manual.
 
 import NavigationUI
 import SwiftUI
@@ -22,6 +22,7 @@ struct ComposeSessionSheet: View {
     @State private var browsing = false
     @State private var resuming = false
     @State private var resumable: [ResumableSession] = []
+    @State private var resumableLoad: Task<Void, Never>?
     @State private var loadingResumable = false
     @State private var resumeID = ""
 
@@ -52,7 +53,7 @@ struct ComposeSessionSheet: View {
                     }
                     .pickerStyle(.menu)
                     .accessibilityIdentifier("computer")
-                    if let host {
+                    if host != nil {
                         // One row: the folder's path, which opens the
                         // folder browser.
                         Button { browsing = true } label: {
@@ -156,13 +157,13 @@ struct ComposeSessionSheet: View {
             if cwd.isEmpty { useHome() }
             if !available.contains(agent), let first = AgentKind.allCases.first(where: available.contains) { agent = first }
         }
-        .onChange(of: hostID) { _ in
+        .onChange(of: hostID) {
             useHome()
             resumable = []
         }
-        .onChange(of: resuming) { value in if value { loadResumable() } }
-        .onChange(of: agent) { _ in if resuming { loadResumable() } }
-        .onChange(of: cwd) { _ in if resuming { loadResumable() } }
+        .onChange(of: resuming) { if resuming { loadResumable() } }
+        .onChange(of: agent) { if resuming { loadResumable() } }
+        .onChange(of: cwd) { if resuming { loadResumable() } }
     }
 
     private var defaultTitle: String {
@@ -181,17 +182,16 @@ struct ComposeSessionSheet: View {
         }
     }
 
-    private func folderName(_ path: String) -> String {
-        let trimmed = path.hasSuffix("/") && path.count > 1 ? String(path.dropLast()) : path
-        if trimmed == "~" || trimmed.isEmpty { return "Home" }
-        return trimmed.split(separator: "/").last.map(String.init) ?? trimmed
-    }
-
+    /// The sessions to resume for the agent and folder as they stand: an
+    /// answer for an earlier choice is not shown over a later one.
     private func loadResumable() {
         guard let host, !cwd.trimmed.isEmpty else { return }
         loadingResumable = true
-        Task {
-            resumable = (try? await host.resumable(agent: agent, cwd: cwd)) ?? []
+        resumableLoad?.cancel()
+        resumableLoad = Task {
+            let found = (try? await host.resumable(agent: agent, cwd: cwd)) ?? []
+            guard !Task.isCancelled else { return }
+            resumable = found
             loadingResumable = false
         }
     }

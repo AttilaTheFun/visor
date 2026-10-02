@@ -59,10 +59,10 @@ public final class VisorStore: ObservableObject {
     /// user opens names a session to open.
     private func listenForNotifications() {
         VisorNotificationHandler.shared.onToken = { [weak self] in
-            Task { @MainActor in self?.hosts.forEach { $0.registerForPush() } }
+            Task { self?.hosts.forEach { $0.registerForPush() } }
         }
         VisorNotificationHandler.shared.onOpen = { [weak self] target in
-            Task { @MainActor in self?.opening = target }
+            Task { self?.opening = target }
         }
     }
 

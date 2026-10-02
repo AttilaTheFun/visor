@@ -1,0 +1,16 @@
+load("@rules_swift//swift:swift.bzl", "swift_binary")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# A server apart from the one the menu bar app runs: its own ports, its own
+# folder, no road from the network. For trying a build against real agents
+# (the probes in tools/probes) without touching the installed server or the
+# sessions it holds:
+#   bazel run //tools/staging_server -- [port] [password]
+swift_binary(
+    name = "staging_server",
+    srcs = ["StagingServer.swift"],
+    copts = STRICT_SWIFT,
+    module_name = "VisorStagingServer",
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = ["//libraries/visor_server"],
+)

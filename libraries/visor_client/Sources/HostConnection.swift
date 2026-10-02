@@ -35,7 +35,7 @@ public struct HostConfig: Identifiable, Hashable, Sendable {
     /// A random id without Foundation's UUID.
     /// This device, as the computers know it: kept, so a computer can
     /// tell whose window a terminal is drawn for across launches.
-    public static let clientID: String = {
+    @MainActor public static let clientID: String = {
         if let saved = VisorHost.settings?.get(key: "clientID"), !saved.isEmpty { return saved }
         let fresh = newID()
         VisorHost.settings?.set(key: "clientID", value: fresh)
@@ -69,7 +69,7 @@ public struct HostConfig: Identifiable, Hashable, Sendable {
 @MainActor
 public final class SessionTranscript: ObservableObject {
     /// How often, at most, views are told of changes (nanoseconds).
-    public nonisolated(unsafe) static var frame: UInt64 = 500_000_000
+    public static var frame: UInt64 = 500_000_000
     /// A frame is running: changes wait for its end.
     private var framing = false
     /// Something changed since views were last told.
@@ -94,7 +94,7 @@ public final class SessionTranscript: ObservableObject {
 
     private func startFrame() {
         framing = true
-        Task { @MainActor [weak self] in
+        Task { [weak self] in
             try? await Task.sleep(nanoseconds: SessionTranscript.frame)
             guard let self else { return }
             if self.dirty { self.announce(); self.startFrame() } else { self.framing = false }
@@ -173,8 +173,6 @@ public final class SessionTranscript: ObservableObject {
     }
     public var sending: [Outgoing] = [] { didSet { changed() } }
 
-    /// Takes the record's rows as synced: the truth, replacing what was
-    /// held; the outgoing messages it now carries go.
     /// The generation of the rows held; a different one in an answer means
     /// the rows were rebuilt and the answer is the whole, not a delta.
     public var generation = -1
@@ -292,7 +290,7 @@ public final class SessionTranscript: ObservableObject {
             return
         }
         guard activityFlush == nil else { return }
-        activityFlush = Task { @MainActor [weak self] in
+        activityFlush = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard let self, !Task.isCancelled else { return }
             self.activityFlush = nil
@@ -386,7 +384,6 @@ public final class HostConnection: ObservableObject, Identifiable {
             }
         }
 
-        public var isError: Bool { if case .failed = self { true } else { false } }
         public var wantsPassword: Bool { if case .needsPassword = self { true } else { false } }
     }
 
@@ -433,10 +430,6 @@ public final class HostConnection: ObservableObject, Identifiable {
         loadCachedSessions()
     }
 
-    /// Always TLS on 443: the Mac's Tailscale Serve endpoint in front of the
-    /// menu bar app — the WebSocket at its root, the REST API under /api.
-    public var url: String { "wss://\(config.host)" }
-    public var apiURL: String { "https://\(config.host)/api" }
     /// Told when the computer sends a new list of its sessions (the store
     /// keeps the home screen's widget up to date by it).
     var onSessionsChange: (() -> Void)?
@@ -767,7 +760,7 @@ public final class HostConnection: ObservableObject, Identifiable {
     /// The rows already seen, by host and session: on disk where there
     /// is SQLite, so a session opens as it was last seen and syncs only
     /// what changed since; in memory on the web.
-    nonisolated(unsafe) static var cache: MessageCache = .open(named: "messages")
+    static var cache: MessageCache = .open(named: "messages")
     private func cacheKey(_ sessionID: String) -> String { id + "/" + sessionID }
 
     public func transcript(for sessionID: String) -> SessionTranscript {
@@ -822,12 +815,13 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
     }
 
-    /// Opens a session's transcript: replays it, then streams.
+    /// Opens a session's transcript: its rows sync, and its state (working,
+    /// status lines, an approval asked for) follows over the socket.
     public func subscribe(_ sessionID: String) {
         _ = transcript(for: sessionID)
         // The agent's commands, known before a message is sent: a message
         // with a command after some words is split where it is typed.
-        if knownCommands[sessionID] == nil { Task { [weak self] in _ = await self?.commandNames(for: sessionID) } }
+        if sessionCommands[sessionID] == nil { Task { [weak self] in _ = await self?.loadCommands(for: sessionID) } }
         if state == .connected { send(.subscribe(session: sessionID)) } else { pendingSubscriptions.insert(sessionID) }
     }
 
@@ -835,7 +829,7 @@ public final class HostConnection: ObservableObject, Identifiable {
         let id = HostConfig.newID()
         let transcript = transcript(for: id)
         transcript.loaded = true
-        // Subscribe once the host has the session (the stream is the socket's).
+        // Subscribe once the computer has the session.
         api("POST", "/sessions", .start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions,
                                         resume: resume)) { [weak self] in
             self?.subscribe(id)
@@ -1063,10 +1057,10 @@ public final class HostConnection: ObservableObject, Identifiable {
         // the words go first and the command after them, as the terminal
         // treats it. The agent's commands are known from when the session
         // was opened; where they are not yet, they are asked for first.
-        if text.contains("\n/"), knownCommands[sessionID] == nil {
+        if text.contains("\n/"), sessionCommands[sessionID] == nil {
             Task { [weak self] in
                 guard let self else { return }
-                _ = await self.commandNames(for: sessionID)
+                _ = await self.loadCommands(for: sessionID)
                 self.sendParts(sessionID, text: text, images: images)
             }
             return
@@ -1079,7 +1073,7 @@ public final class HostConnection: ObservableObject, Identifiable {
     /// later and the thread has already moved for the composer's lines),
     /// and then posts each part in order.
     private func sendParts(_ sessionID: String, text: String, images: [String]) {
-        let parts = text.contains("\n/") ? Self.split(text, commands: knownCommands[sessionID] ?? []) : [text]
+        let parts = text.contains("\n/") ? Self.split(text, commands: Set((sessionCommands[sessionID] ?? []).map(\.name))) : [text]
         let session = transcript(for: sessionID)
         var posts: [(text: String, images: [String])] = []
         for (index, part) in parts.enumerated() {
@@ -1121,13 +1115,16 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
     }
 
-    /// The names of the slash commands a session's agent takes, asked once.
-    var knownCommands: [String: Set<String>] = [:]
-    private func commandNames(for sessionID: String) async -> Set<String> {
-        if let known = knownCommands[sessionID] { return known }
-        let names = Set(((try? await commands(for: sessionID)) ?? []).map(\.name))
-        knownCommands[sessionID] = names
-        return names
+    /// The slash commands each open session's agent takes, asked once,
+    /// when the session is opened: what a draft that begins with a slash
+    /// is completed from, and where a message is split at a command.
+    @Published public internal(set) var sessionCommands: [String: [SlashCommand]] = [:]
+
+    private func loadCommands(for sessionID: String) async -> [SlashCommand] {
+        if let known = sessionCommands[sessionID] { return known }
+        let commands = (try? await commands(for: sessionID)) ?? []
+        sessionCommands[sessionID] = commands
+        return commands
     }
 
     /// A message split at the first line that is a known slash command: the

@@ -1,6 +1,6 @@
 // A computer's settings: its address and password (editable, reconnecting
-// on save), its state in words, Reconnect, and Forget. The form is one
-// view; the sidebar shows it in the detail, or in a sheet.
+// on save), its state in words, Reconnect, and Forget, shown in the detail
+// column from the sidebar.
 
 import SwiftUI
 import VisorClient
@@ -10,8 +10,6 @@ import VisorProtocol
 struct ComputerSettingsForm: View {
     @ObservedObject var host: HostConnection
     let forget: () -> Void
-    /// Called after a save or a forget, for a container that then closes.
-    var done: () -> Void = {}
     @State private var name = ""
     @State private var address = ""
     @State private var password = ""
@@ -39,10 +37,7 @@ struct ComputerSettingsForm: View {
                 Button("Save and reconnect", action: save)
                     .disabled(address.trimmed.isEmpty)
                 Button("Reconnect") { host.connect() }
-                Button("Forget this computer", role: .destructive) {
-                    done()
-                    forget()
-                }
+                Button("Forget this computer", role: .destructive, action: forget)
             }
         }
         .insetGroupedForm()
@@ -61,7 +56,6 @@ struct ComputerSettingsForm: View {
             config.password = password
         }
         host.connect()
-        done()
     }
 }
 
@@ -74,25 +68,5 @@ struct ComputerSettingsView: View {
     var body: some View {
         ComputerSettingsForm(host: host, forget: forget)
             .navigationTitle(host.config.name.isEmpty ? "Computer" : host.config.name)
-    }
-}
-
-/// The same settings as a sheet, from the Computers list.
-@MainActor
-struct ComputerSettingsSheet: View {
-    @ObservedObject var host: HostConnection
-    let forget: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ComputerSettingsForm(host: host, forget: forget, done: { dismiss() })
-                .navigationTitle(host.config.name.isEmpty ? "Computer" : host.config.name)
-                .toolbarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-                }
-        }
-        .presentationDetentsMediumLarge()
     }
 }

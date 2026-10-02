@@ -11,11 +11,6 @@ import NavigationUI
 import SwiftUI
 import VisorClient
 import VisorProtocol
-#if os(iOS)
-import UIKit
-#elseif os(macOS)
-import AppKit
-#endif
 
 @MainActor
 public struct VisorRootView: View {
@@ -24,7 +19,6 @@ public struct VisorRootView: View {
     @State private var columns: NavigationSplitViewVisibility = .all
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var composing = false
-    @State private var settingsHost: HostConnection?
     @State private var renamingSession: SessionTarget?
     @State private var renamingProject: ProjectTarget?
     @State private var deletingSession: SessionTarget?
@@ -71,12 +65,6 @@ public struct VisorRootView: View {
                 selection = .session(SessionSelection(hostID: hostID, sessionID: id))
                 if compact { compactColumn = .detail }
             }
-        }
-        .itemSheet($settingsHost) { host in
-            ComputerSettingsSheet(host: host, forget: {
-                if selection?.hostID == host.id { selection = nil }
-                store.remove(host)
-            })
         }
         .itemSheet($locating) { target in
             FolderPicker(host: target.host) { cwd in
@@ -156,14 +144,14 @@ public struct VisorRootView: View {
             }
             #endif
         }
-        .onChange(of: selection) { value in
+        .onChange(of: selection) { _, value in
             if compact { compactColumn = value == nil ? .sidebar : .detail }
             // Which session is on screen, so a notification about it, with
             // the app in front, is not shown over it.
             store.noteViewing(hostID: value?.session?.hostID, sessionID: value?.session?.sessionID)
         }
         // A notification the user opened: its session, on its computer.
-        .onChange(of: store.opening) { target in
+        .onChange(of: store.opening) { _, target in
             guard let target, let host = store.host(named: target.computer) else { return }
             store.opening = nil
             selection = .session(SessionSelection(hostID: host.id, sessionID: target.session))
@@ -171,7 +159,7 @@ public struct VisorRootView: View {
         }
         // Backing out on a phone is deselecting: the row is no longer
         // open, so it is no longer lit, and tapping it opens it again.
-        .onChange(of: compactColumn) { column in
+        .onChange(of: compactColumn) { _, column in
             if compact, column == .sidebar, selection != nil { selection = nil }
         }
     }
@@ -305,7 +293,7 @@ public struct VisorRootView: View {
         }
         ForEach(cards) { card in
             let which = SessionSelection(hostID: host.id, sessionID: card.session.id)
-            SessionCardRow(host: host, project: card.project, session: card.session)
+            SessionCardRow(session: card.session)
                 .tag(ContentSelection.session(which))
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
@@ -412,7 +400,7 @@ public struct VisorRootView: View {
                 ArchivedList(host: host, cwd: nil, openProject: { selection = .project(hostID: hostID, cwd: $0) })
                     .id(hostID + "|archive")
             } else if let which = selection?.session, let host = store.host(for: which.hostID) {
-                AgentScreen(host: host, sessionID: which.sessionID)
+                AgentScreen(host: host, sessionID: which.sessionID, ended: { selection = nil })
                     .id(which)
             } else {
                 EmptyDetail(title: "Nothing selected",
@@ -439,7 +427,6 @@ struct ProjectEntry: Identifiable {
     let host: HostConnection
     let project: HostConnection.Project
     var id: String { host.id + "|" + project.cwd }
-    var target: ProjectTarget { ProjectTarget(host: host, project: project) }
 }
 
 /// A session an alert is about.
@@ -620,8 +607,6 @@ struct SessionCard: Identifiable {
 /// allowed something. Whether the computer answers is its section's.
 @MainActor
 struct SessionCardRow: View {
-    @ObservedObject var host: HostConnection
-    let project: HostConnection.Project
     let session: SessionInfo
 
     var body: some View {

@@ -1,7 +1,7 @@
-// A session's page: AgentUI's AgentView over the transcript the host
-// streams. The composer's pills name the agent and switch its permission
-// mode (auto: no prompts; manual: the agent's guarded mode); Stop
-// interrupts the turn on the host.
+// A session's page: AgentUI's AgentView over the session's transcript, as
+// synced from the computer's record. The composer's pills attach files,
+// open the model sheet (model, effort, approval mode) and show a goal, a
+// loop or queued messages; Stop interrupts the turn on the computer.
 
 import AgentUI
 import NavigationUI
@@ -15,9 +15,6 @@ struct AgentScreen: View {
     let sessionID: String
     @ObservedObject private var transcript: SessionTranscript
     @State private var draft = ""
-    /// The slash commands the agent takes, fetched when the user first
-    /// types "/" here.
-    @State private var commands: [SlashCommand]?
     @State private var showModels = false
     /// The goal whose words are being shown, with a way to clear it.
     @State private var goalShown: String?
@@ -34,9 +31,13 @@ struct AgentScreen: View {
     @State private var paneSize: CGSize = .zero
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    init(host: HostConnection, sessionID: String) {
+    /// The session was ended from here: the screen has nothing left to show.
+    let ended: () -> Void
+
+    init(host: HostConnection, sessionID: String, ended: @escaping () -> Void = {}) {
         self._host = ObservedObject(wrappedValue: host)
         self.sessionID = sessionID
+        self.ended = ended
         self._transcript = ObservedObject(wrappedValue: host.transcript(for: sessionID))
     }
 
@@ -47,9 +48,7 @@ struct AgentScreen: View {
     /// typed, then names that hold it.
     private var suggestions: [AgentSuggestion] {
         guard let typed = Self.commandPrefix(draft) else { return [] }
-        if commands == nil { loadCommands() }
-        let all = commands ?? []
-        let sorted = all.sorted { $0.name.lowercased() < $1.name.lowercased() }
+        let sorted = (host.sessionCommands[sessionID] ?? []).sorted { $0.name.lowercased() < $1.name.lowercased() }
         let starting = sorted.filter { $0.name.lowercased().hasPrefix(typed) }
         let holding = typed.isEmpty ? [] : sorted.filter { !$0.name.lowercased().hasPrefix(typed) && $0.name.lowercased().contains(typed) }
         return (starting + holding).prefix(40).map { command in
@@ -63,14 +62,6 @@ struct AgentScreen: View {
     static func commandPrefix(_ draft: String) -> String? {
         guard draft.hasPrefix("/"), !draft.contains(where: \.isWhitespace) else { return nil }
         return String(draft.dropFirst()).lowercased()
-    }
-
-    private func loadCommands() {
-        // Once: an empty list stands for "asked" until the answer comes.
-        Task { @MainActor in
-            commands = []
-            commands = (try? await host.commands(for: sessionID)) ?? []
-        }
     }
 
     /// The terminal is drawn only for the window it was taken with.
@@ -89,8 +80,7 @@ struct AgentScreen: View {
                     chat
                 }
             }
-            .onChange(of: geometry.size) { size in paneSize = size }
-            .onAppear { paneSize = geometry.size }
+            .onChange(of: geometry.size, initial: true) { _, size in paneSize = size }
         }
         // The title is the session's; the inspector opens from an explicit
         // button, a pane beside the chat where there is room, a sheet on a
@@ -110,7 +100,7 @@ struct AgentScreen: View {
                                  takeControl: { cols, rows in host.assumeControl(sessionID, cols: cols, rows: rows) },
                                  close: { showInspector = false },
                                  archive: { showInspector = false; host.archive(sessionID) },
-                                 end: { showInspector = false; host.end(sessionID) })
+                                 end: { showInspector = false; host.end(sessionID); ended() })
             }
         }
         .navigationTitle(sessionTitle)
@@ -138,7 +128,7 @@ struct AgentScreen: View {
         }
         // Whatever changed the mode, the inspector does not outlive the
         // screen it was opened over.
-        .onChange(of: info?.mode) { _ in showInspector = false }
+        .onChange(of: info?.mode) { showInspector = false }
         // The session was forked elsewhere and the chat moved to the newer
         // branch: not a choice, but not a surprise either.
         .alert("This session was forked", isPresented: Binding(get: { transcript.notice != nil }, set: { if !$0 { host.acknowledge(sessionID) } })) {
@@ -409,6 +399,7 @@ struct AgentScreen: View {
     private func attach(_ picked: [PickedImage]) {
         Task {
             for var file in picked {
+                if file.isVideo { file.thumbnail = await VideoThumbnail.png(videoBase64: file.base64, name: file.name) }
                 file.path = try? await host.upload(base64: file.base64, name: file.name)
                 if file.path != nil { attachments.append(file) }
             }
