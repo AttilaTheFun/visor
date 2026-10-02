@@ -140,7 +140,7 @@ session list and a suffix of rows; the queue is NOT archived (ephemeral).
 **Claude's transcript comes from the file.** For tool "claude" the process
 emits deltas, status and busy only; rows come from Claude Code's own
 `~/.claude/projects/<cwd-slug>/<session>.jsonl`, read by a `SessionIndexer`
-(own serial queue) into the **message cache** and handed to the record.
+(an actor) into the **message cache**; the record reads its events in order.
 The file is a tree (uuid/parentUuid); `ClaudeBranch.current` picks the
 branch holding the last line; prompts off it are abandoned forks (the
 user gets a notice); a line with no parent that is not the first
