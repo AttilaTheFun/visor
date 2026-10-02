@@ -9,13 +9,13 @@ import XCTest
 final class OpenRouterCatalogTests: XCTestCase {
     private var home: URL!
 
-    override func setUp() {
+    override func setUp() async throws {
         home = FileManager.default.temporaryDirectory.appendingPathComponent("visor-openrouter-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: home.appendingPathComponent("sessions"), withIntermediateDirectories: true)
         setenv("OPENROUTER_HOME", home.path, 1)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         unsetenv("OPENROUTER_HOME")
         try? FileManager.default.removeItem(at: home)
     }
@@ -104,6 +104,7 @@ final class OpenRouterCatalogTests: XCTestCase {
         XCTAssertEqual(decoded?.models.first { $0.id == "openai/gpt-old" }?.group, "OpenAI")
     }
 
+    @MainActor
     func testBackendDrivesTheCLIAsClaude() {
         let process = OpenRouterBackend().makeProcess(cwd: "/tmp", skipPermissions: true, resume: "abc")
         XCTAssertTrue(process is ClaudeProcess)

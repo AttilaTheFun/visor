@@ -29,6 +29,7 @@ struct VisorMenuBarApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The server runs from launch, whether or not the menu is ever
     /// opened — once it has a password. Without one, Settings opens.
@@ -37,8 +38,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if VisorServer.shared.password.isEmpty { Self.openSettings() }
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        VisorServer.shared.endAll()
+    /// The agents go before the app does: quitting waits for them.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task {
+            await VisorServer.shared.endAll()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     static func openSettings() {
@@ -250,7 +256,7 @@ struct SettingsPane: View {
                 if name.hasPrefix("AuthKey_") { keyID = String(name.dropFirst(8)) }
             }
             Section("Addresses") {
-                if let name = server.exposure.address() { Text(name) }
+                if let name = server.address { Text(name) }
                 ForEach(VisorServer.addresses(), id: \.address) { entry in
                     Text("\(entry.address)  \(entry.name)")
                 }

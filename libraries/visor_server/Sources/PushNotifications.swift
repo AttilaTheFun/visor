@@ -149,7 +149,7 @@ extension VisorServer {
     // MARK: What is said
 
     /// The address clients know this computer by, which a push's data names.
-    var pushComputer: String { exposure.address() ?? hostName }
+    var pushComputer: String { address ?? hostName }
 
     /// Pushes for what changed since the sessions were last looked at.
     func notifyPushes() {

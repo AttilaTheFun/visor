@@ -10,8 +10,8 @@ import XCTest
 final class CommandsTests: XCTestCase {
     private var server: VisorServer!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-commands-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -21,9 +21,9 @@ final class CommandsTests: XCTestCase {
         server.password = "pw"
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         server.stop()
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func record(_ id: String) -> SessionRecord {

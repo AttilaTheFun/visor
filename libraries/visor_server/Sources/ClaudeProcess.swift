@@ -13,8 +13,91 @@
 import Foundation
 import VisorProtocol
 
+/// What a line of Claude Code's output says, as far as the server cares:
+/// read off the main actor, so a long line (a tool's whole result) costs
+/// it nothing.
+enum ClaudeOutput: Sendable, Equatable {
+    struct Tool: Sendable, Equatable {
+        let id: String?
+        let name: String
+        let label: String
+        let tasks: [TaskItem]?
+    }
+
+    case commands([SlashCommand])
+    /// The run began: its session id and the model it runs.
+    case began(session: String?, model: String?)
+    /// A new assistant message is starting to stream.
+    case messageStarted(id: String?)
+    case text(String)
+    /// A block of the message began: thinking, or something else.
+    case blockStarted(thinking: Bool)
+    /// A whole assistant message: its model, the tokens its request
+    /// carried, the tools it calls.
+    case assistant(model: String?, tokens: Int, tools: [Tool])
+    case toolResults([String])
+    /// The turn ended; with what went wrong, if it failed.
+    case result(failure: String?)
+
+    static func parse(_ line: String) -> [ClaudeOutput] {
+        guard let object = JSON.object(line), let type = object["type"] as? String else { return [] }
+        switch type {
+        case "system":
+            var outputs: [ClaudeOutput] = []
+            // The commands it takes, with what each does: at the start of
+            // a run, and again whenever they change (a skill installed).
+            if object["subtype"] as? String == "commands_changed", let list = object["commands"] as? [[String: Any]] {
+                outputs.append(.commands(list.compactMap { item in
+                    guard let name = item["name"] as? String, !name.isEmpty else { return nil }
+                    return SlashCommand(name: name, description: item["description"] as? String ?? "", argumentHint: item["argumentHint"] as? String ?? "")
+                }))
+            }
+            if object["subtype"] as? String == "init" {
+                outputs.append(.began(session: object["session_id"] as? String, model: object["model"] as? String))
+            }
+            return outputs
+        case "stream_event":
+            guard let event = object["event"] as? [String: Any], let kind = event["type"] as? String else { return [] }
+            if kind == "message_start", let message = event["message"] as? [String: Any] {
+                return [.messageStarted(id: message["id"] as? String)]
+            } else if kind == "content_block_delta", let delta = event["delta"] as? [String: Any],
+                      delta["type"] as? String == "text_delta", let text = delta["text"] as? String {
+                return [.text(text)]
+            } else if kind == "content_block_start", let block = event["content_block"] as? [String: Any] {
+                return [.blockStarted(thinking: block["type"] as? String == "thinking")]
+            }
+            return []
+        case "assistant":
+            guard let message = object["message"] as? [String: Any],
+                  let content = message["content"] as? [[String: Any]] else { return [] }
+            // The request's own tokens: what the context holds right now.
+            let usage = message["usage"] as? [String: Any] ?? [:]
+            let tokens = (usage["input_tokens"] as? Int ?? 0)
+                + (usage["cache_creation_input_tokens"] as? Int ?? 0)
+                + (usage["cache_read_input_tokens"] as? Int ?? 0)
+            let tools = content.filter { $0["type"] as? String == "tool_use" }.map { block in
+                let name = block["name"] as? String ?? "tool"
+                return Tool(id: block["id"] as? String, name: name, label: "\(name): \(JSON.summary(block["input"]))",
+                            tasks: TurnStatus.tasks(named: name, input: block["input"] as? [String: Any]))
+            }
+            return [.assistant(model: message["model"] as? String, tokens: tokens, tools: tools)]
+        case "user":
+            // A tool result: the tool finished. (Its row comes from the log.)
+            guard let message = object["message"] as? [String: Any], let content = message["content"] as? [[String: Any]] else { return [] }
+            return [.toolResults(content.filter { $0["type"] as? String == "tool_result" }.compactMap { $0["tool_use_id"] as? String })]
+        case "result":
+            let failed = object["is_error"] as? Bool == true
+            return [.result(failure: failed ? (object["result"] as? String) ?? "The turn failed" : nil)]
+        default:
+            return []
+        }
+    }
+}
+
+@MainActor
 public final class ClaudeProcess: AgentProcess {
-    public var onEvent: (@Sendable (AgentEvent) -> Void)?
+    public let events: AsyncStream<AgentEvent>
+    private let emit: AsyncStream<AgentEvent>.Continuation
 
     private let cwd: String
     /// "claude", or another CLI speaking the same stream-json protocol ("ori").
@@ -22,22 +105,16 @@ public final class ClaudeProcess: AgentProcess {
     public var skipPermissions: Bool
     public var model: String?
     public var effort: String?
-    public var onModel: (@Sendable (String) -> Void)?
     public var approvalEnvironment: [String: String] = [:]
-    private var process: Process?
-    private var stdin: FileHandle?
-    private var reader: LineReader?
-    private var stderrReader: LineReader?
-    private var sessionID: String?
-    public var resumeID: String? { queue.sync { sessionID } }
+    /// The running agent. One that was stopped is no longer this, and what
+    /// it still says is not passed on.
+    private var child: PipedChild?
+    public private(set) var resumeID: String?
     public var resumeCommand: String? {
         guard let id = resumeID else { return nil }
         return "cd \(ClaudeProcess.quoted(cwd)) && \(tool) --resume \(id)"
     }
-    private let queue = DispatchQueue(label: "visor.claude")
     private var counter = 0
-    /// Set by `stop()`: the exit that follows is ours, not a failure.
-    private var stopping = false
     /// Set by `interrupt()`: the error result that follows is the turn
     /// ending on request, not a failure to show.
     private var interrupting = false
@@ -50,8 +127,9 @@ public final class ClaudeProcess: AgentProcess {
     public init(cwd: String, skipPermissions: Bool, resume: String? = nil, tool: String = "claude") {
         self.cwd = cwd
         self.skipPermissions = skipPermissions
-        self.sessionID = resume
+        self.resumeID = resume
         self.tool = tool
+        (events, emit) = AsyncStream.makeStream()
     }
 
     static func quoted(_ path: String) -> String {
@@ -59,18 +137,13 @@ public final class ClaudeProcess: AgentProcess {
     }
 
     public func send(_ text: String) throws {
-        try queue.sync {
-            if process == nil || process?.isRunning != true { try spawn() }
-            let message: [String: Any] = [
-                "type": "user",
-                "message": ["role": "user", "content": [["type": "text", "text": text]]],
-            ]
-            let data = try JSONSerialization.data(withJSONObject: message)
-            stdin?.write(data)
-            stdin?.write("\n".data(using: .utf8)!)
-            onEvent?(.busy(true))
-            onEvent?(.activity("Thinking…"))
-        }
+        let child = try running() ?? spawn()
+        child.write([
+            "type": "user",
+            "message": ["role": "user", "content": [["type": "text", "text": text]]],
+        ])
+        emit.yield(.busy(true))
+        emit.yield(.activity("Thinking…"))
     }
 
     /// A Claude model's context window, as Claude Code's own `/context`
@@ -82,78 +155,51 @@ public final class ClaudeProcess: AgentProcess {
         return 1_000_000
     }
 
-    public var processID: Int32? { queue.sync { process?.processIdentifier } }
+    public var processID: Int32? { running()?.pid }
 
-    /// Ends the agent and waits for it. A quitting app must not return
-    /// from this while the agent is alive: the moment we exit it is
-    /// reparented to launchd, still running, writing into a pipe whose
-    /// reader is gone — and the next launch, seeing an unfinished turn,
-    /// starts a SECOND agent on the same session.
-    public func stopAndWait(deadline: TimeInterval) {
-        let running: Process? = queue.sync {
-            guard let p = process else { return nil }
-            stopping = true
-            // End of input: claude finishes what it is doing and exits.
-            try? stdin?.close()
-            stdin = nil
-            process = nil
-            return p
-        }
-        guard let running, running.isRunning else { return }
-        let grace = Date().addingTimeInterval(max(0, deadline - 1))
-        while running.isRunning && Date() < grace { usleep(50_000) }
-        if running.isRunning { running.terminate() }
-        let limit = Date().addingTimeInterval(1)
-        while running.isRunning && Date() < limit { usleep(50_000) }
-        if running.isRunning {
-            kill(running.processIdentifier, SIGKILL)
-            running.waitUntilExit()
-        }
-        onEvent?(.activity(nil))
-        onEvent?(.busy(false))
+    private func running() -> PipedChild? {
+        guard let child, child.isRunning else { return nil }
+        return child
     }
 
     /// Ends the turn in flight without ending the process: a control
     /// message claude answers by aborting the turn (a result follows) and
     /// staying up, ready for the next message on the same stdin.
     public func interrupt() {
-        queue.sync {
-            guard process?.isRunning == true, let stdin else { return }
-            interrupting = true
-            let message: [String: Any] = [
-                "type": "control_request",
-                "request_id": "int-\(counter)",
-                "request": ["subtype": "interrupt"],
-            ]
-            counter += 1
-            if let data = try? JSONSerialization.data(withJSONObject: message) {
-                stdin.write(data)
-                stdin.write("\n".data(using: .utf8)!)
-            }
-        }
+        guard let child = running() else { return }
+        interrupting = true
+        child.write([
+            "type": "control_request",
+            "request_id": "int-\(counter)",
+            "request": ["subtype": "interrupt"],
+        ])
+        counter += 1
     }
 
+    /// Graceful first: end of input lets claude finish and exit on its
+    /// own; anything still running after a moment is terminated.
     public func stop() {
-        queue.sync {
-            guard let running = process else { return }
-            stopping = true
-            process = nil
-            // Graceful first: end of input lets claude finish and exit on its
-            // own; anything still running after a moment is terminated.
-            try? stdin?.close()
-            stdin = nil
-            queue.asyncAfter(deadline: .now() + 2) {
-                if running.isRunning { running.terminate() }
-            }
-            onEvent?(.activity(nil))
-            onEvent?(.busy(false))
-        }
+        guard let child = release() else { return }
+        Task { await child.end(grace: .seconds(2)) }
     }
 
-    private func spawn() throws {
+    public func end(within deadline: Duration) async {
+        guard let child = release() else { return }
+        await child.end(grace: max(.zero, deadline - .seconds(1)))
+    }
+
+    /// Lets go of the running agent, for whoever is ending it: from here
+    /// the session is idle, and the agent's exit is expected.
+    private func release() -> PipedChild? {
+        guard let child else { return nil }
+        self.child = nil
+        emit.yield(.activity(nil))
+        emit.yield(.busy(false))
+        return child
+    }
+
+    private func spawn() throws -> PipedChild {
         guard let executable = ToolPath.resolve(tool) else { throw AgentProcessError.toolMissing(tool) }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: executable)
         var args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
         // Visor's MCP server: the other sessions, and in manual mode the
         // permission prompt answered from the client.
@@ -168,116 +214,79 @@ public final class ClaudeProcess: AgentProcess {
         }
         if let model, !model.isEmpty { args += ["--model", model] }
         if let effort, !effort.isEmpty { args += ["--effort", effort] }
-        if let sessionID { args += ["--resume", sessionID] }
-        p.arguments = args
-        p.currentDirectoryURL = URL(fileURLWithPath: (cwd as NSString).expandingTildeInPath)
-        p.environment = ToolPath.environment()
+        if let resumeID { args += ["--resume", resumeID] }
         // The agent is told which session it is, so it can name itself
         // when it asks the server to restart (VISOR_SESSION).
-        for (key, value) in approvalEnvironment { p.environment?[key] = value }
-        let input = Pipe(), output = Pipe(), errors = Pipe()
-        p.standardInput = input
-        p.standardOutput = output
-        p.standardError = errors
-        reader = LineReader(handle: output.fileHandleForReading) { [weak self] line in self?.handle(line) }
-        stderrReader = LineReader(handle: errors.fileHandleForReading) { [weak self] line in
-            if line.contains("Error") || line.contains("error") { self?.onEvent?(.failure(line)) }
+        let environment = ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
+        let child = try PipedChild(executable: executable, arguments: args,
+                                   directory: (cwd as NSString).expandingTildeInPath, environment: environment)
+        self.child = child
+        interrupting = false
+        let tool = self.tool
+        // Everything it says, in order, and then how it ended.
+        Task { [weak self] in
+            for await output in child.output.lines({ ClaudeOutput.parse($0) }) {
+                guard let self else { return }
+                if self.child === child { self.take(output) }
+            }
+            let exit = await child.exit.value
+            guard let self, self.child === child else { return }
+            self.child = nil
+            self.emit.yield(.activity(nil))
+            self.emit.yield(.busy(false))
+            if exit.status != 0, !exit.signaled { self.emit.yield(.failure("\(tool) exited with status \(exit.status)")) }
         }
-        p.terminationHandler = { [weak self] proc in
-            guard let self else { return }
-            self.queue.async {
-                if self.process === proc { self.process = nil; self.stdin = nil }
-                let expected = self.stopping
-                self.stopping = false
-                self.onEvent?(.activity(nil))
-                self.onEvent?(.busy(false))
-                if !expected, proc.terminationStatus != 0, proc.terminationReason == .exit {
-                    self.onEvent?(.failure("\(self.tool) exited with status \(proc.terminationStatus)"))
-                }
+        Task { [weak self] in
+            for await line in child.errors.lines({ $0.contains("Error") || $0.contains("error") ? [$0] : [] }) {
+                guard let self else { return }
+                if self.child === child { self.emit.yield(.failure(line)) }
             }
         }
-        do { try p.run() } catch { throw AgentProcessError.spawnFailed("\(error)") }
-        process = p
-        stdin = input.fileHandleForWriting
+        return child
     }
 
-    private func handle(_ line: String) {
-        guard let object = JSON.object(line), let type = object["type"] as? String else { return }
-        switch type {
-        case "system":
-            // The commands it takes, with what each does: at the start of
-            // a run, and again whenever they change (a skill installed).
-            if object["subtype"] as? String == "commands_changed", let list = object["commands"] as? [[String: Any]] {
-                onEvent?(.commands(list.compactMap { item in
-                    guard let name = item["name"] as? String, !name.isEmpty else { return nil }
-                    return SlashCommand(name: name, description: item["description"] as? String ?? "", argumentHint: item["argumentHint"] as? String ?? "")
-                }))
+    private func take(_ output: ClaudeOutput) {
+        switch output {
+        case .commands(let list):
+            emit.yield(.commands(list))
+        case .began(let session, let model):
+            if let session {
+                resumeID = session
+                emit.yield(.session(session))
             }
-            if object["subtype"] as? String == "init" {
-                if let id = object["session_id"] as? String {
-                    sessionID = id
-                    onEvent?(.session(id))
-                }
-                if let model = object["model"] as? String, !model.isEmpty { onModel?(model) }
-            }
-        case "stream_event":
-            guard let event = object["event"] as? [String: Any], let kind = event["type"] as? String else { return }
-            if kind == "message_start", let message = event["message"] as? [String: Any] {
-                // A new message begins: its own row from here on, never
-                // run together with the one before (a tool call between
-                // two messages gives no separator).
-                streamCounter += 1
-                streamingMessageID = message["id"] as? String ?? "stream-\(streamCounter)"
-            } else if kind == "content_block_delta", let delta = event["delta"] as? [String: Any],
-               delta["type"] as? String == "text_delta", let text = delta["text"] as? String {
-                onEvent?(.delta(message: streamingMessageID, text: text))
-            } else if kind == "content_block_start", let block = event["content_block"] as? [String: Any] {
-                let thinking = block["type"] as? String == "thinking"
-                if thinking { onEvent?(.activity("Thinking…")) }
-                onEvent?(.thinking(thinking))
-            }
-        case "assistant":
-            guard let message = object["message"] as? [String: Any],
-                  let content = message["content"] as? [[String: Any]] else { return }
-            if let model = message["model"] as? String, !model.isEmpty { onModel?(model) }
-            // The request's own tokens: what the context holds right now.
-            if let usage = message["usage"] as? [String: Any] {
-                let used = (usage["input_tokens"] as? Int ?? 0)
-                    + (usage["cache_creation_input_tokens"] as? Int ?? 0)
-                    + (usage["cache_read_input_tokens"] as? Int ?? 0)
-                if used > 0 {
-                    onEvent?(.context(used: used, limit: Self.contextWindow(for: message["model"] as? String)))
-                }
-            }
-            for block in content where block["type"] as? String == "tool_use" {
-                let name = block["name"] as? String ?? "tool"
-                let label = "\(name): \(JSON.summary(block["input"]))"
-                onEvent?(.activity(label))
+            if let model, !model.isEmpty { emit.yield(.model(model)) }
+        case .messageStarted(let id):
+            // A new message begins: its own row from here on, never run
+            // together with the one before (a tool call between two
+            // messages gives no separator).
+            streamCounter += 1
+            streamingMessageID = id ?? "stream-\(streamCounter)"
+        case .text(let text):
+            emit.yield(.delta(message: streamingMessageID, text: text))
+        case .blockStarted(let thinking):
+            if thinking { emit.yield(.activity("Thinking…")) }
+            emit.yield(.thinking(thinking))
+        case .assistant(let model, let tokens, let tools):
+            if let model, !model.isEmpty { emit.yield(.model(model)) }
+            if tokens > 0 { emit.yield(.context(used: tokens, limit: Self.contextWindow(for: model))) }
+            for tool in tools {
+                emit.yield(.activity(tool.label))
                 counter += 1
-                onEvent?(.toolStarted(id: block["id"] as? String ?? "tool-\(counter)", name: name, label: label,
-                                      tasks: TurnStatus.tasks(named: name, input: block["input"] as? [String: Any])))
+                emit.yield(.toolStarted(id: tool.id ?? "tool-\(counter)", name: tool.name, label: tool.label, tasks: tool.tasks))
             }
-        case "user":
-            // A tool result: the tool finished. (Its row comes from the log.)
-            guard let message = object["message"] as? [String: Any], let content = message["content"] as? [[String: Any]] else { return }
-            for block in content where block["type"] as? String == "tool_result" {
-                if let id = block["tool_use_id"] as? String { onEvent?(.toolFinished(id: id)) }
-            }
-            onEvent?(.activity("Thinking…"))
-            onEvent?(.thinking(true))
-        case "result":
+        case .toolResults(let ids):
+            for id in ids { emit.yield(.toolFinished(id: id)) }
+            emit.yield(.activity("Thinking…"))
+            emit.yield(.thinking(true))
+        case .result(let failure):
             // An interrupt ends the turn with an error result of its own
             // (error_during_execution); that is the stop the user asked
             // for, not something to show as a failure.
             let wasInterrupt = interrupting
             interrupting = false
-            if !wasInterrupt, object["is_error"] as? Bool == true {
-                onEvent?(.failure((object["result"] as? String) ?? "The turn failed"))
-            }
-            onEvent?(.activity(nil))
-            onEvent?(.busy(false))
-        default:
-            break
+            if !wasInterrupt, let failure { emit.yield(.failure(failure)) }
+            emit.yield(.activity(nil))
+            emit.yield(.busy(false))
         }
     }
 }

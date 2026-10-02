@@ -2,6 +2,8 @@
 // generation) and socket events around two sends, then ends the session.
 import http from 'node:http';
 import { execSync } from 'node:child_process';
+// The server's port: the installed one's, or a staging server's (VISOR_PORT).
+const PORT = Number(process.env.VISOR_PORT ?? 7433);
 const PW = process.env.VISOR_TOKEN || execSync('security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w').toString().trim();
 const id = crypto.randomUUID().toUpperCase();
 const AGENT = process.env.AGENT ?? 'claude';
@@ -13,7 +15,7 @@ const M2 = process.argv[3] ?? 'Reply with exactly the word TWO and nothing else.
 function rest(method, path, body) {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : '';
-    const req = http.request({ host: '127.0.0.1', port: 7434, path: '/api' + path, method, agent: false,
+    const req = http.request({ host: '127.0.0.1', port: PORT + 1, path: '/api' + path, method, agent: false,
       headers: { Authorization: 'Bearer ' + PW, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } }, res => {
       let s = ''; res.on('data', d => s += d); res.on('end', () => resolve(s));
     });
@@ -23,7 +25,7 @@ function rest(method, path, body) {
 const rowsOf = e => (e.entries ?? []).map(r => `${r.role}:${r.id.slice(0, 14)}:${JSON.stringify((r.text ?? '').slice(0, 10))}`).join(' | ');
 
 let busy = null; let done = false;
-const ws = new WebSocket('ws://127.0.0.1:7433');
+const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
 const wsSend = o => ws.send(JSON.stringify(o));
 await new Promise(r => ws.onopen = r);
 wsSend({ type: 'login', password: PW, client: 'probe-order' });
@@ -61,7 +63,7 @@ await new Promise(r => setTimeout(r, 5000));
 const full = JSON.parse(await rest('GET', `/sessions/${id}/transcript?since=-1`));
 log('FINAL rev', full.revision, 'gen', full.generation, '[', rowsOf(full), ']');
 await new Promise((resolve) => {
-  const w2 = new WebSocket('ws://127.0.0.1:7433');
+  const w2 = new WebSocket(`ws://127.0.0.1:${PORT}`);
   w2.onopen = () => w2.send(JSON.stringify({ type: 'login', password: PW, client: 'probe-eph' }));
   w2.onmessage = ev => { const e = JSON.parse(ev.data);
     if (e.type === 'welcome') w2.send(JSON.stringify({ type: 'subscribe', session: id }));

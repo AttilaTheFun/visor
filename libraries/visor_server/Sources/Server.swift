@@ -114,6 +114,14 @@ public final class SessionRecord: ObservableObject {
     /// Not a `let`: a session whose folder moved is given a new agent,
     /// because the directory is fixed when the process spawns.
     private(set) var process: AgentProcess
+    /// The agent's events being handed to the server, one at a time and in
+    /// the order the agent gave them.
+    private var listening: Task<Void, Never>?
+    var isBound: Bool { listening != nil }
+    /// The agent that ran before this one has been told to go and is not
+    /// yet gone: what is said waits, so that two agents never hold the
+    /// session at once.
+    var held = false
     var subscribers: Set<ObjectIdentifier> = []
     /// The permission mode changed mid-turn: restart the process when the turn ends.
     var restartWhenIdle = false
@@ -568,14 +576,20 @@ public final class SessionRecord: ObservableObject {
             info.contextUsed = used
             if let limit { info.contextLimit = limit }
             // The sessions list carries it; the caller broadcasts that.
-            return .sessions([])
+            return nil
         case .session:
             refreshResume()
             followFile()
-            return .sessions([])
+            return nil
         case .commands(let list):
             commands = list
-            return .sessions([])
+            return nil
+        case .model(let model):
+            // What actually ran, for display only. The user's choice
+            // (info.model) is never changed here — a turn that fell back
+            // to another model must not make that model stick.
+            info.reportedModel = model
+            return nil
         case .tty(let data):
             // A window that attaches later is given these bytes to build
             // the screen from, so they must begin where a screen begins.
@@ -603,7 +617,7 @@ public final class SessionRecord: ObservableObject {
             }
             // Not broadcast: the terminal belongs to one window.
             onTerminalBytes?(.tty(session: info.id, data: data.base64EncodedString()))
-            return .sessions([])
+            return nil
         }
     }
 
@@ -659,9 +673,22 @@ public final class SessionRecord: ObservableObject {
 
     /// Swaps in an agent built for the new folder; the transcript stays.
     func replaceProcess(_ replacement: AgentProcess) {
-        process.onEvent = nil
-        process.onModel = nil
+        stopListening()
         process = replacement
+    }
+
+    /// Hands each of the agent's events to `handle`, in order, from now
+    /// until the agent is replaced.
+    func listen(_ handle: @escaping (AgentEvent) -> Void) {
+        let events = process.events
+        listening?.cancel()
+        listening = Task { for await event in events { handle(event) } }
+    }
+
+    /// What the agent says from here on is not heard.
+    func stopListening() {
+        listening?.cancel()
+        listening = nil
     }
 
     func setPermissions(skip: Bool) { info.skipPermissions = skip; process.skipPermissions = skip }
@@ -670,8 +697,6 @@ public final class SessionRecord: ObservableObject {
     var approvalWaiters: [String: ClientConnection] = [:]
 
     func setPendingApproval(_ request: ApprovalRequest?) { info.pendingApproval = request }
-
-    func setReportedModel(_ model: String) { info.reportedModel = model }
 
     func setTitle(_ title: String) { info.title = title }
 
@@ -868,8 +893,8 @@ public final class VisorServer: ObservableObject {
     /// Told each push as it is decided, before anything is sent (tests).
     var onPush: ((_ title: String, _ body: String, _ session: String, _ kind: String) -> Void)?
     private var claudeModelsTimer: Timer?
-    /// A `front()` is under way; and how many have found Tailscale not ready.
-    private var fronting = false
+    /// The `front()` under way; and how many have found Tailscale not ready.
+    private var fronting: Task<Void, Never>?
     /// Asked for while an attempt ran: run again once it ends.
     private var frontAgain = false
     private var frontAttempts = 0
@@ -896,6 +921,22 @@ public final class VisorServer: ObservableObject {
         password = Self.keptPassword()
         links = Self.keptLinks()
         loadSessions()
+    }
+
+    /// A server apart from the user's own: its own port, a folder of its
+    /// own for what it keeps, the password given and held in memory, and
+    /// no road from the network. For trying a build against real agents
+    /// without touching the installed server's sessions, its keychain or
+    /// its front (tools/staging_server).
+    public static func staging(port: UInt16, root: URL, password: String) -> VisorServer {
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        storeRoot = root
+        secrets = MemorySecrets()
+        ServerCache.shared = .inMemory()
+        let server = VisorServer(port: port)
+        server.exposure = NoExposure()
+        server.password = password
+        return server
     }
 
     // MARK: Exposure
@@ -939,7 +980,7 @@ public final class VisorServer: ObservableObject {
     /// step: its name, its address, the password. Nil until the address
     /// is known and a password is set.
     public var connectionCode: ConnectionCode? {
-        guard !password.isEmpty, let address = exposure.address() else { return nil }
+        guard !password.isEmpty, let address else { return nil }
         return ConnectionCode(name: hostName, host: address, password: password)
     }
 
@@ -1014,6 +1055,7 @@ public final class VisorServer: ObservableObject {
             }
         }
         let asked = Self.requestedResumes()
+        var orphans: [(session: String, pid: Int32, resume: String?)] = []
         for item in stored {
             var info = item.info
             info.busy = false
@@ -1023,7 +1065,7 @@ public final class VisorServer: ObservableObject {
             // An agent of ours that outlived the app (we were killed
             // outright, or quit before it went): it still holds the
             // session, so it goes before anything resumes into it.
-            if let pid = item.agentPID { Self.killOrphan(pid: pid, resume: item.resumeID) }
+            if let pid = item.agentPID { orphans.append((info.id, pid, item.resumeID)) }
             // Running when we went away, so running again now.
             if item.interrupted == true, !asked.contains("none"), asked.contains(info.id) || asked.contains("all") {
                 pendingResumes.append(info.id)
@@ -1042,33 +1084,33 @@ public final class VisorServer: ObservableObject {
             let files = item.queuedImages ?? []
             record.queuedImages = info.queued.indices.map { $0 < files.count ? files[$0] : [] }
             record.primePreview()
+            record.held = item.agentPID != nil
             sessions.append(record)
         }
         try? FileManager.default.removeItem(at: legacy)
         if !stored.isEmpty { saveArchive() }
+        guard !orphans.isEmpty else { return }
+        // Until its orphan is gone, what is said to a session waits.
+        Task {
+            for orphan in orphans {
+                await Self.endOrphan(pid: orphan.pid, resume: orphan.resume)
+                if let record = session(orphan.session) { release(record) }
+            }
+        }
     }
 
     /// Writes every session (the name is historical: it began as the archive).
     /// Ends an agent left over from a previous life of the app. The pid
     /// alone is not trusted — pids are reused — so the process must still
     /// look like the agent it claims to be.
-    static func killOrphan(pid: Int32, resume: String?) {
+    @concurrent
+    static func endOrphan(pid: Int32, resume: String?) async {
         guard pid > 1, kill(pid, 0) == 0 else { return }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/ps")
-        p.arguments = ["-p", String(pid), "-o", "command="]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = Pipe()
-        guard (try? p.run()) != nil else { return }
-        let command = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        p.waitUntilExit()
+        guard let command = await Command.output("/bin/ps", ["-p", String(pid), "-o", "command="])?.text else { return }
         guard command.contains("claude") || command.contains("codex") || command.contains("openrouter") else { return }
         if let resume, !resume.isEmpty, !command.contains(resume) { return }
         kill(pid, SIGTERM)
-        let limit = Date().addingTimeInterval(2)
-        while kill(pid, 0) == 0 && Date() < limit { usleep(50_000) }
-        if kill(pid, 0) == 0 { kill(pid, SIGKILL) }
+        if await !Command.exited(pid, within: .seconds(2)) { kill(pid, SIGKILL) }
     }
 
     /// False once a store failed to decode: nothing is written until the
@@ -1137,8 +1179,7 @@ public final class VisorServer: ObservableObject {
             if record.info.busy {
                 record.restartWhenIdle = true
             } else {
-                record.process.stop()
-                record.replaceProcess(makeProcess(record.info, resume: record.process.resumeID))
+                rebuild(record)
             }
         }
         if !moved.isEmpty {
@@ -1189,7 +1230,7 @@ public final class VisorServer: ObservableObject {
             guard let addr = ifa.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET) else { continue }
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             if getnameinfo(addr, socklen_t(addr.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
-                let address = String(cString: host)
+                let address = String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
                 let name = String(cString: ifa.ifa_name)
                 if address == "127.0.0.1" { continue }
                 result.append((name, address))
@@ -1204,6 +1245,15 @@ public final class VisorServer: ObservableObject {
     /// the front is the one way in from the network.
     public func start() {
         guard listener == nil, !password.isEmpty else { return }
+        // An agent that has gone leaves a pipe that cannot be written to:
+        // that is an error to the write, not a signal that ends the app.
+        signal(SIGPIPE, SIG_IGN)
+        // Where the agents' tools are, for those not in the usual places.
+        let tools = backends.all.map(\.tool) + ["node"]
+        Task {
+            await ToolPath.locate(tools)
+            broadcastCatalogs()
+        }
         let http = HTTPServer(port: apiPort) { [weak self] request, respond in
             guard let self else { return respond(HTTPResponse(500, "{\"error\":\"gone\"}")) }
             self.route(request, respond: respond)
@@ -1266,41 +1316,44 @@ public final class VisorServer: ObservableObject {
     public func front() {
         // One attempt at a time; one asked for meanwhile runs after it, as
         // it may know something the running one did not.
-        guard !fronting else { frontAgain = true; return }
+        guard fronting == nil else { frontAgain = true; return }
         let exposure = self.exposure
         let port = self.port
         guard exposure.installed else { serveError = "\(exposure.title) is not installed"; return }
-        fronting = true
-        Task.detached { [weak self] in
+        fronting = Task {
             var message: String?
-            let identity = exposure.identity()
-            let address = exposure.address()
+            let identity = await exposure.identity()
+            let address = await exposure.address()
             if identity == nil {
                 message = "waiting for \(exposure.title)"
-            } else if !exposure.fronts(port: port) {
-                let output = exposure.front(port: port).lowercased()
+            } else if await !exposure.fronts(port: port) {
+                let output = await exposure.front(port: port).lowercased()
                 if output.contains("error") || output.contains("not enabled") || output.contains("not allowed") {
                     message = output.split(separator: "\n").first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }).map(String.init) ?? output
                 }
             }
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.fronting = false
-                if self.frontAgain {
-                    self.frontAgain = false
-                    self.front()
-                    return
-                }
-                if let identity { self.hostLogin = identity }
-                if let address { self.address = address }
-                self.serveError = message
-                guard message != nil else { self.frontAttempts = 0; return }
-                self.frontAttempts += 1
-                let wait: TimeInterval = self.frontAttempts < 24 ? 5 : 60
-                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in self?.front() }
+            fronting = nil
+            if frontAgain {
+                frontAgain = false
+                front()
+                return
+            }
+            if let identity { hostLogin = identity }
+            if let address { self.address = address }
+            serveError = message
+            guard message != nil else { frontAttempts = 0; return }
+            frontAttempts += 1
+            let wait = frontAttempts < 24 ? 5 : 60
+            Task {
+                try? await Task.sleep(for: .seconds(wait))
+                front()
             }
         }
     }
+
+    /// Returns once the attempt under way, if there is one, has learned
+    /// what it could (tests).
+    func fronted() async { await fronting?.value }
 
     /// Carries on the turns that a restart interrupted. The agents are
     /// spawned by the send itself (resumed by their own id), so this is all
@@ -1544,7 +1597,7 @@ public final class VisorServer: ObservableObject {
             guard let code = body.text.flatMap(ConnectionCode.init(parsing:)) else {
                 return HTTPResponse(400, Envelope.error("A connection code is required").encoded())
             }
-            if code.host != exposure.address() { adopt(code) }
+            if code.host != address { adopt(code) }
             return .json(Envelope(type: "link").encoded())
         case ("POST", 1, "restart"):
             // The one call an agent can make to replace the server it runs
@@ -1681,7 +1734,7 @@ public final class VisorServer: ObservableObject {
             guard mode != record.info.mode else { return }
             // At once, as the confirmation said: a turn in flight is cut short.
             record.setMode(mode)
-            restart(record)
+            rebuild(record, rereading: true)
             saveArchive()
             broadcastSessions()
         case "input":
@@ -1730,7 +1783,7 @@ public final class VisorServer: ObservableObject {
             record.subscribers.insert(ObjectIdentifier(client))
             // Bound before any turn: what the file says reaches subscribers
             // whether or not an agent of ours has run.
-            if record.process.onEvent == nil { bind(record) }
+            if !record.isBound { bind(record) }
             record.followFileIfNeeded()
             client.send(record.transcriptEnvelope)
             // Everything that is not the record, in one piece, so a window
@@ -1817,22 +1870,43 @@ public final class VisorServer: ObservableObject {
 
 
     /// Ends the agent and makes a new one on the same session, which
-    /// picks the conversation up as the file stands. A terminal starts at
-    /// once; the chat's agent starts with the next message, which is when
-    /// resuming matters. The transcript is read again, since the file may
-    /// have moved on under another writer.
-    private func restart(_ record: SessionRecord) {
+    /// picks the conversation up as the file stands: one built for the
+    /// session as it is now (its folder, its mode). A turn in flight is
+    /// cut short. A terminal starts as soon as the old agent is gone; the
+    /// chat's agent starts with the next message, which is when resuming
+    /// matters. With `rereading`, the transcript is read again, since the
+    /// file may have moved on under another writer.
+    private func rebuild(_ record: SessionRecord, rereading: Bool = false) {
         record.restartWhenIdle = false
-        record.process.stop()
-        record.process.stopAndWait(deadline: 3)
-        record.replaceProcess(makeProcess(record.info, resume: record.process.resumeID))
-        if record.info.mode.isTUI { launchTerminal(record) }
-        record.followFile()
+        let old = record.process
+        record.replaceProcess(makeProcess(record.info, resume: old.resumeID))
+        // The old agent goes first: until it has, what is said waits.
+        record.held = true
+        // It is no longer heard, so its turn is ended here.
+        if record.info.busy {
+            broadcast(record.apply(.activity(nil)), session: record)
+            handle(.busy(false), from: record)
+        }
+        Task {
+            await old.end(within: .seconds(3))
+            if record.info.mode.isTUI { launchTerminal(record) }
+            if rereading { record.followFile() }
+            release(record)
+        }
+    }
+
+    /// The agent before this one is gone: what waited for that goes over.
+    private func release(_ record: SessionRecord) {
+        record.held = false
+        guard !record.info.archived, !record.info.busy, !record.info.queued.isEmpty else { return }
+        let waiting = record.takeQueue()
+        broadcastSessions()
+        deliver(waiting.text, to: record, images: waiting.images)
     }
 
     /// A terminal is live before anything is said: bound and started now.
     private func launchTerminal(_ record: SessionRecord) {
-        if record.process.onEvent == nil { bind(record) }
+        if !record.isBound { bind(record) }
         if let size = record.info.mode.terminalSize { record.terminal?.resize(cols: size.cols, rows: size.rows) }
         do { try record.terminal?.start() } catch {
             broadcast(record.apply(.failure(error.localizedDescription)), session: record)
@@ -1917,7 +1991,8 @@ public final class VisorServer: ObservableObject {
         // A terminal at a prompt (trust this folder? accept bypass mode?
         // allow this tool?) is not at its input box: typed text would answer
         // the prompt with its default. The message waits until it is.
-        if record.info.busy || (record.terminal.map { !$0.ready } ?? false) {
+        // Nor is anything said while the agent before this one is going.
+        if record.info.busy || record.held || (record.terminal.map { !$0.ready } ?? false) {
             record.enqueue(text, images: images)
             saveArchive()
             broadcastSessions()
@@ -1932,7 +2007,7 @@ public final class VisorServer: ObservableObject {
         saveArchive()
         // The adapter's events reach subscribers through the record; bound
         // once, the first time the session takes a turn.
-        if record.process.onEvent == nil { bind(record) }
+        if !record.isBound { bind(record) }
         var forAgent = text
         if !images.isEmpty {
             let list = images.map { "- " + $0 }.joined(separator: "\n")
@@ -1956,21 +2031,13 @@ public final class VisorServer: ObservableObject {
         } catch {
             broadcast(record.apply(.failure(error.localizedDescription)), session: record)
             broadcast(record.apply(.busy(false)), session: record)
+            // Not where the tools usually are: the login shell is asked,
+            // so the next try knows.
+            if case AgentProcessError.toolMissing(let tool) = error { Task { await ToolPath.locate([tool]) } }
         }
     }
 
     private func bind(_ record: SessionRecord) {
-        // The model Claude actually runs (its default, or the alias resolved).
-        record.process.onModel = { [weak self, weak record] model in
-            Task { @MainActor in
-                // What actually ran, for display only. The user's choice
-                // (info.model) is never changed here — a turn that fell
-                // back to another model must not make that model stick.
-                guard let self, let record, record.info.reportedModel != model else { return }
-                record.setReportedModel(model)
-                self.broadcastSessions()
-            }
-        }
         record.onTerminalBytes = { [weak self, weak record] envelope in
             guard let self, let record, let controller = record.info.mode.controller else { return }
             for key in record.subscribers where self.connections[key]?.clientID == controller {
@@ -1992,58 +2059,58 @@ public final class VisorServer: ObservableObject {
             self.broadcast(.busy(session: record.info.id, busy), session: record)
             self.broadcastSessions()
         }
-        record.process.onEvent = { [weak self, weak record] event in
-            Task { @MainActor in
-                guard let self, let record else { return }
-                let out = record.apply(event)
-                // The context and the session id land in the session list,
-                // not an envelope.
-                if case .context = event { self.broadcastSessions() }
-                else if case .session = event { self.broadcastSessions() }
-                // Terminal bytes went to the one window they are drawn for
-                // inside apply; nothing goes to everyone — and certainly
-                // not the empty list that stood in for "nothing", which
-                // wiped every client's sessions with each chunk.
-                else if case .tty = event {}
-                else if case .commands(let list) = event { self.keepCommands(list, for: record.info.agent) }
-                else { self.broadcast(out, session: record) }
-                // The turn's status lines, whole, whenever they change.
-                if case .busy(false) = event { self.broadcast(.status(session: record.info.id, items: []), session: record) }
-                if case .busy(let busy) = event {
-                    if !busy, !record.approvalWaiters.isEmpty {
-                        for waiter in record.approvalWaiters.values { waiter.close() }
-                        record.approvalWaiters.removeAll()
-                    }
-                    // The agent's own id appears with the first turn; the
-                    // transcript is written down whenever a turn ends.
-                    record.refreshResume()
-                    if !busy { record.interrupted = false; self.saveArchive() }
-                    self.broadcastSessions()
-                    if !busy, !record.info.queued.isEmpty, !record.restartWhenIdle {
-                        // Everything said during the turn goes over as one
-                        // turn, in the order it was said.
-                        let waiting = record.takeQueue()
-                        self.broadcastSessions()
-                        self.deliver(waiting.text, to: record, images: waiting.images)
-                    }
-                    if !busy, record.restartWhenIdle {
-                        record.restartWhenIdle = false
-                        record.process.stop()
-                        // Rebuilt rather than merely stopped: a flag the
-                        // agent takes at launch (its permission mode, its
-                        // model) survives a restart of the same object, but
-                        // its directory does not — that is fixed when the
-                        // process is made.
-                        record.replaceProcess(self.makeProcess(record.info, resume: record.process.resumeID))
-                        if record.info.mode.isTUI { self.launchTerminal(record) }
-                        if !record.info.queued.isEmpty {
-                            let waiting = record.takeQueue()
-                            self.broadcastSessions()
-                            self.deliver(waiting.text, to: record, images: waiting.images)
-                        }
-                    }
-                }
+        record.listen { [weak self, weak record] event in
+            guard let self, let record else { return }
+            self.handle(event, from: record)
+        }
+    }
+
+    /// One thing an agent did: applied to its session's record, and told
+    /// to whoever watches it.
+    private func handle(_ event: AgentEvent, from record: SessionRecord) {
+        let reported = record.info.reportedModel
+        // Nothing to say is nothing sent: terminal bytes went to the one
+        // window they are drawn for inside apply.
+        broadcast(record.apply(event), session: record)
+        switch event {
+        case .context, .session:
+            // These land in the session list, not an envelope.
+            broadcastSessions()
+        case .model:
+            if record.info.reportedModel != reported { broadcastSessions() }
+        case .commands(let list):
+            keepCommands(list, for: record.info.agent)
+        case .busy(let busy):
+            // The turn's status lines, whole, whenever they change.
+            if !busy { broadcast(.status(session: record.info.id, items: []), session: record) }
+            if !busy, !record.approvalWaiters.isEmpty {
+                for waiter in record.approvalWaiters.values { waiter.close() }
+                record.approvalWaiters.removeAll()
             }
+            // The agent's own id appears with the first turn; the
+            // transcript is written down whenever a turn ends.
+            record.refreshResume()
+            if !busy { record.interrupted = false; saveArchive() }
+            broadcastSessions()
+            // An archived session takes no turns, and one whose last
+            // agent is still going waits for it.
+            guard !busy, !record.info.archived, !record.held else { return }
+            if record.restartWhenIdle {
+                // Rebuilt rather than merely stopped: a flag the agent
+                // takes at launch (its permission mode, its model)
+                // survives a restart of the same object, but its
+                // directory does not — that is fixed when the process is
+                // made. What waited goes over once the old agent is gone.
+                rebuild(record)
+            } else if !record.info.queued.isEmpty {
+                // Everything said during the turn goes over as one turn,
+                // in the order it was said.
+                let waiting = record.takeQueue()
+                broadcastSessions()
+                deliver(waiting.text, to: record, images: waiting.images)
+            }
+        default:
+            break
         }
     }
 
@@ -2153,9 +2220,12 @@ public final class VisorServer: ObservableObject {
             p.standardError = log
         }
         do { try p.run() } catch { return "Could not start the relauncher: \(error.localizedDescription)" }
-        // endAll runs from applicationWillTerminate; the agents stop the
-        // same way they do for any quit.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { NSApplication.shared.terminate(nil) }
+        // Once the answer to whoever asked has gone out. Quitting waits
+        // for the agents (`endAll`), as any quit does.
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            NSApplication.shared.terminate(nil)
+        }
         return nil
     }
 
@@ -2192,13 +2262,17 @@ public final class VisorServer: ObservableObject {
     /// Ends every session (the app is quitting). What was running is
     /// written down as running, so the next launch can carry it on: this is
     /// the record of the shutdown, however the app was quit.
-    public func endAll() {
+    public func endAll() async {
         for record in sessions where record.info.busy { record.interrupted = true }
         saveArchive()
-        // Waited for, not merely asked: `stop` arms the force step on a
-        // timer, and we are gone long before it fires, which leaves the
-        // agent alive and parentless.
-        for session in sessions { session.process.stopAndWait(deadline: 4) }
+        // What the agents say as they go is not heard: the record of the
+        // shutdown is the one just written.
+        for record in sessions { record.stopListening() }
+        // Waited for, not merely asked: an agent that outlives the app
+        // runs on with nobody at the other end of its pipes.
+        // All at once: each has its own few seconds to go.
+        let ending = sessions.map { record in Task { await record.process.end(within: .seconds(4)) } }
+        for task in ending { await task.value }
     }
 }
 
