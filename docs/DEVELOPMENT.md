@@ -268,7 +268,9 @@ a detached relauncher and resumes named sessions with a nudge
   folder for what it keeps, the password in memory, loopback only, nothing
   put in front of it — and the probes take its port:
   `VISOR_PORT=7533 VISOR_TOKEN=staging node tools/probes/order.mjs`.
-  Ctrl-C ends it, its agents first. Do this before deploying a change to
+  Ctrl-C ends it, its agents first. Its agents get Visor's MCP server
+  from the source tree (`VISOR_MCP_SCRIPT`, which the menu bar app has no
+  use for: its copy is in its bundle). Do this before deploying a change to
   the agent processes: a deploy that cannot start agents cannot resume
   the session that deployed it.
 - Deploy the server from inside a session: `tools/deploy_server.sh`. The
@@ -306,7 +308,9 @@ a detached relauncher and resumes named sessions with a nudge
   expected tail: `user | assistant ONE | user | assistant TWO`, streams
   empty. Try a trailing space on a message: that used to freeze the record.
 - `node tools/probes/lifecycle.mjs` (`AGENT=codex|openrouter`, `TUI=1` to
-  also switch to the terminal and back) — a throwaway session interrupted
+  also switch to the terminal and back, `MCP=1` to also have the agent
+  call Visor's MCP `list_sessions` and, in a second session with manual
+  permissions, ask for a tool call's approval and be given it) — a throwaway session interrupted
   mid-turn, carried on, optionally handed to its terminal and back, then
   ended; the expected tail is `failures 0`, and a few seconds later the
   server has no agent left as a child (`pgrep -lP <server pid>`).
