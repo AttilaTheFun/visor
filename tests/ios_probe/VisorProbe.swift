@@ -176,6 +176,20 @@ final class VisorProbe: XCTestCase {
         }
     }
 
+    /// A slash typed in the fixture's chat offers the agent's commands,
+    /// which the connection asked for when the session was opened.
+    func testFixtureSlashCommands() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        let field = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "no composer")
+        field.tap()
+        field.typeText("/comp")
+        XCTAssertTrue(app.staticTexts["/compact"].waitForExistence(timeout: 5), "the commands were not offered")
+        app.terminate()
+    }
+
     /// Looks, and sends nothing: opens a session the phone already lists
     /// and photographs the chat, the composer with the keyboard up, and
     /// (by its environment) a search, the attach menu, a picture or what
