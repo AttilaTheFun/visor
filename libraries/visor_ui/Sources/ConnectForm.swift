@@ -74,23 +74,3 @@ struct ConnectForm: View {
         }
     }
 }
-
-extension String {
-    var trimmed: String {
-        var text = Substring(self)
-        while let first = text.first, first.isWhitespace || first.isNewline { text = text.dropFirst() }
-        while let last = text.last, last.isWhitespace || last.isNewline { text = text.dropLast() }
-        return String(text)
-    }
-}
-
-extension View {
-    /// The URL keyboard on a phone; nothing elsewhere.
-    @ViewBuilder func keyboardTypeURL() -> some View {
-        #if os(iOS)
-        keyboardType(.URL).textInputAutocapitalization(.never)
-        #else
-        self
-        #endif
-    }
-}

@@ -30,6 +30,11 @@ to one focused change, and say in it how the change was verified.
   truly is shared across threads sits in a `Mutex`. A callback the system
   makes on a queue of its own is built outside the main actor (a
   `nonisolated` function), or it traps when called.
+- One public or internal type per file, named after it; only nested types
+  (`Foo.Bar`) and `private`/`fileprivate` helpers share a file. What a
+  large type does is split by topic into `Type+Topic.swift` extensions,
+  and a long `switch` over routes or commands dispatches to one small
+  method per case.
 - Never use Combine; async/await only. The protocol encodes over its own
   `JSONValue` and the client reaches the host only through
   libraries/visor_services and a `HostTransport` — no Foundation

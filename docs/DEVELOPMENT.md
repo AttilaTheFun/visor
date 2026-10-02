@@ -80,10 +80,17 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 
 ## 3. Architecture, as built
 
-**Server** (`libraries/visor_server`, `applications/visor_menubar`).
+**Server** (`libraries/visor_server`, `applications/visor_menubar`). One
+type per file: `VisorServer.swift` is the class and its state, and what it
+does is in `VisorServer+<Topic>.swift` (Access, Persistence, Listening,
+REST, Messages, Agents, Broadcast, Lifecycle, Links, Commands, Push);
+`SessionRecord.swift` likewise, with `+File`, `+Events`, `+Revisions`,
+`+Marks`, `+Queue`. A REST route or a socket command is one small method
+(`restHello`, `performSend`), named in the dispatch table of `route` or
+`perform`.
 `VisorServer` (@MainActor) holds `SessionRecord`s. Each record owns an
 `AgentProcess` — driven on the main actor; what the agent says is read
-and parsed off it (`ChildProcess.swift`) and reaches the record as one
+and parsed off it (`PipedChild.swift`, `AsyncStream+Lines.swift`) and reaches the record as one
 `AsyncStream` of `AgentEvent`s, in the order said. An agent is ended with
 `stop()` (asked, then made to, not waited for) or `await end(within:)`;
 one is never started on a session while the one before is still going
@@ -117,7 +124,7 @@ Every agent's transcript is its own log, followed as it is written:
 Claude Code's session JSONL, Codex's rollout
 (`~/.codex/sessions/<y>/<m>/<d>/rollout-*-<thread>.jsonl`) and the openrouter
 CLI's `~/.openrouter/sessions/<id>.jsonl` are each read into lines of Claude's
-shape (`AgentLog.swift`) and go through the one indexer, cache and assembler.
+shape (`AgentLog.swift` and the parsers beside it) and go through the one indexer, cache and assembler.
 Rows the agent processes report are not taken. What the user sends is no row
 until the log writes it (the server remembers the words as sent; the
 composer shows them, sending, until then), so rows are never renamed;
@@ -347,7 +354,7 @@ a detached relauncher and resumes named sessions with a nudge
 ### Snapshot fixture
 
 For screenshot tests, the client can show a canned computer instead of
-real ones (`libraries/visor_client/Sources/Fixture.swift`). The setting
+real ones (`libraries/visor_client/Sources/VisorFixture.swift`). The setting
 `fixture` = `snapshot` turns it on; `fixture.screen` opens a screen:
 `sessions`, `chat`, `goal`, `inspector`, `models`, `search` or `connect`. On Apple
 these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so

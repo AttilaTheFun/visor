@@ -12,7 +12,7 @@ rm -rf /tmp/vmac && mkdir -p /tmp/vmac && unzip -qo "$ZIP" -d /tmp/vmac
 tools/sign_mac_app.sh /tmp/vmac/Visor.app
 pkill -x Visor || true; pkill -x visor_macos || true; sleep 1
 rm -rf /Applications/Visor.app && cp -R /tmp/vmac/Visor.app /Applications/Visor.app
-open -a /Applications/Visor.app
+open -g -a /Applications/Visor.app
 echo "Mac client installed and relaunched"
 UDID="${1:-${VISOR_IPHONE_UDID:-}}"
 if [ -n "$UDID" ]; then

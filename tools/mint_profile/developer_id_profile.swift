@@ -2,11 +2,14 @@
 // through the App Store Connect API, with the API key in
 // ~/.appstoreconnect/visor.env, and saves it where Xcode keeps profiles.
 // For when Xcode's own export cannot (its cloud signing wants an Admin key).
+// The profile names every Developer ID Application certificate of the team,
+// so each of the team's Macs can sign with it; one that already does is
+// fetched rather than replaced (`--replace` makes it anew).
 // The App ID must exist with its capabilities (mint_mac_profile.sh's archive
-// step registers it); the profile is for the team's Developer ID
-// Application certificate whose serial matches the one in this keychain.
+// step registers it).
 //
-//   swift tools/mint_profile/developer_id_profile.swift <bundle id>
+//   swiftc -parse-as-library tools/mint_profile/developer_id_profile.swift -o /tmp/developer_id_profile
+//   /tmp/developer_id_profile <bundle id> [--replace]
 
 import CryptoKit
 import Foundation
@@ -91,32 +94,55 @@ struct DeveloperIDProfile {
             (($0["attributes"] as? [String: Any])?["identifier"] as? String) == bundle })?["id"] as? String else {
             fatalError("No App ID \(bundle): run mint_mac_profile.sh first, which registers it")
         }
+        // Every Developer ID Application certificate the team has, not only
+        // this Mac's: a profile names the certificates it is good for, and a
+        // build signed on another of the team's Macs embeds the same profile.
         let certificates = try await call(jwt, "GET", "/v1/certificates?filter%5BcertificateType%5D=DEVELOPER_ID_APPLICATION&limit=50")
+        let team = (certificates["data"] as? [[String: Any]]) ?? []
+        let ids = Set(team.compactMap { $0["id"] as? String })
         let serials = localSerials()
-        guard let certificate = ((certificates["data"] as? [[String: Any]]) ?? []).first(where: {
-            serials.contains(normalized((($0["attributes"] as? [String: Any])?["serialNumber"] as? String) ?? ""))
-        })?["id"] as? String else { fatalError("None of the team's Developer ID certificates is in this keychain") }
+        let here = team.contains { serials.contains(normalized((($0["attributes"] as? [String: Any])?["serialNumber"] as? String) ?? "")) }
+        guard !ids.isEmpty else { fatalError("The team has no Developer ID Application certificate") }
+        if !here { print("Note: none of the team's \(ids.count) Developer ID certificates is in this keychain; this Mac cannot sign with the profile.") }
 
-        // One already made under this name is replaced: it may predate a capability.
-        let existing = try await call(jwt, "GET", "/v1/profiles?filter%5Bname%5D=" + (name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name))
+        // One already made under this name is kept when it names all of
+        // them (so the Macs share one profile and none replaces another's),
+        // and replaced when it does not, or when asked to (`--replace`: it
+        // may predate a capability).
+        let replace = CommandLine.arguments.contains("--replace")
+        let existing = try await call(jwt, "GET", "/v1/profiles?include=certificates&filter%5Bname%5D=" + (name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name))
         for profile in (existing["data"] as? [[String: Any]]) ?? [] {
-            if let id = profile["id"] as? String { _ = try? await call(jwt, "DELETE", "/v1/profiles/" + id) }
+            guard let id = profile["id"] as? String else { continue }
+            let named = Set(((((profile["relationships"] as? [String: Any])?["certificates"] as? [String: Any])?["data"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String })
+            let attributes = profile["attributes"] as? [String: Any] ?? [:]
+            if !replace, named.isSuperset(of: ids), attributes["profileState"] as? String == "ACTIVE" {
+                try save(attributes, named: name, note: "already names the team's \(ids.count) certificate\(ids.count == 1 ? "" : "s")")
+                return
+            }
+            _ = try? await call(jwt, "DELETE", "/v1/profiles/" + id)
         }
         let made = try await call(jwt, "POST", "/v1/profiles", ["data": [
             "type": "profiles",
             "attributes": ["name": name, "profileType": "MAC_APP_DIRECT"],
             "relationships": [
                 "bundleId": ["data": ["type": "bundleIds", "id": bundleID]],
-                "certificates": ["data": [["type": "certificates", "id": certificate]]],
+                "certificates": ["data": ids.sorted().map { ["type": "certificates", "id": $0] }],
             ],
         ]])
-        guard let attributes = (made["data"] as? [String: Any])?["attributes"] as? [String: Any],
-              let content = attributes["profileContent"] as? String, let data = Data(base64Encoded: content),
+        guard let attributes = (made["data"] as? [String: Any])?["attributes"] as? [String: Any] else {
+            fatalError("The profile came back without its attributes")
+        }
+        try save(attributes, named: name, note: "made for the team's \(ids.count) certificate\(ids.count == 1 ? "" : "s")")
+    }
+
+    /// Writes a profile's content where Xcode keeps profiles, under its UUID.
+    static func save(_ attributes: [String: Any], named name: String, note: String) throws {
+        guard let content = attributes["profileContent"] as? String, let data = Data(base64Encoded: content),
               let uuid = attributes["uuid"] as? String else { fatalError("The profile came back without its content") }
         let folder = NSHomeDirectory() + "/Library/Developer/Xcode/UserData/Provisioning Profiles"
         try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
         let path = folder + "/" + uuid + ".provisionprofile"
         try data.write(to: URL(fileURLWithPath: path))
-        print("Saved \"\(name)\" to \(path)")
+        print("Saved \"\(name)\" (\(note)) to \(path)")
     }
 }

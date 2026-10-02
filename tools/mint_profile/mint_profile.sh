@@ -21,55 +21,21 @@ BUNDLE="${1:?bundle id, as BUNDLE_ID in applications/visor_ios/BUILD.bazel}"
 TEAM="${2:?Apple team id, as VISOR_TEAM_ID in .bazelrc.user}"
 DEVICE="${3:-}"
 ENTITLEMENTS="${4:-}"
-[ -f "$HOME/.appstoreconnect/visor.env" ] && . "$HOME/.appstoreconnect/visor.env"
-AUTH=()
-if [ -n "${VISOR_ASC_KEY_PATH:-}" ] && [ -n "${VISOR_ASC_KEY_ID:-}" ] && [ -n "${VISOR_ASC_ISSUER_ID:-}" ]; then
-    AUTH=(-authenticationKeyPath "$VISOR_ASC_KEY_PATH" -authenticationKeyID "$VISOR_ASC_KEY_ID" -authenticationKeyIssuerID "$VISOR_ASC_ISSUER_ID")
-fi
-HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$(dirname "$0")/lib.sh"
+mint_auth
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-mkdir -p "$WORK/Mint.xcodeproj" "$WORK/Mint"
-cp "$HERE/MintProfile/App.swift" "$WORK/Mint/App.swift"
-ENTITLEMENTS_SETTING=""
-if [ -n "$ENTITLEMENTS" ]; then
-    cp "$ENTITLEMENTS" "$WORK/Mint/Mint.entitlements"
-    ENTITLEMENTS_SETTING="CODE_SIGN_ENTITLEMENTS = Mint/Mint.entitlements;"
-fi
-# The project is written here rather than kept: *.xcodeproj is ignored.
-cat > "$WORK/Mint.xcodeproj/project.pbxproj" <<PBX
-// !\$*UTF8*\$!
-{
-	archiveVersion = 1;
-	classes = {};
-	objectVersion = 56;
-	objects = {
-		A0000000000000000000001 = {isa = PBXBuildFile; fileRef = A0000000000000000000002; };
-		A0000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
-		A0000000000000000000003 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mint.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A0000000000000000000004 = {isa = PBXGroup; children = (A0000000000000000000005, A0000000000000000000006); sourceTree = "<group>"; };
-		A0000000000000000000005 = {isa = PBXGroup; children = (A0000000000000000000002); path = Mint; sourceTree = "<group>"; };
-		A0000000000000000000006 = {isa = PBXGroup; children = (A0000000000000000000003); name = Products; sourceTree = "<group>"; };
-		A0000000000000000000007 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A0000000000000000000001); runOnlyForDeploymentPostprocessing = 0; };
-		A0000000000000000000008 = {isa = PBXNativeTarget; buildConfigurationList = A0000000000000000000009; buildPhases = (A0000000000000000000007); buildRules = (); dependencies = (); name = Mint; productName = Mint; productReference = A0000000000000000000003; productType = "com.apple.product-type.application"; };
-		A0000000000000000000009 = {isa = XCConfigurationList; buildConfigurations = (A000000000000000000000A); defaultConfigurationName = Debug; };
-		A000000000000000000000A = {isa = XCBuildConfiguration; buildSettings = {
-			CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = $TEAM; PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE; $ENTITLEMENTS_SETTING
-			PRODUCT_NAME = Mint; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0;
-			GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; TARGETED_DEVICE_FAMILY = "1,2";
-		}; name = Debug; };
-		A000000000000000000000B = {isa = XCConfigurationList; buildConfigurations = (A000000000000000000000C); defaultConfigurationName = Debug; };
-		A000000000000000000000C = {isa = XCBuildConfiguration; buildSettings = {SDKROOT = iphoneos;}; name = Debug; };
-		A000000000000000000000D = {isa = PBXProject; buildConfigurationList = A000000000000000000000B; compatibilityVersion = "Xcode 14.0"; mainGroup = A0000000000000000000004; productRefGroup = A0000000000000000000006; projectDirPath = ""; projectRoot = ""; targets = (A0000000000000000000008); attributes = {TargetAttributes = {A0000000000000000000008 = {ProvisioningStyle = Automatic;};};}; };
-	};
-	rootObject = A000000000000000000000D;
-}
-PBX
+mint_project "$WORK" "$TEAM" "$BUNDLE" ios "$ENTITLEMENTS"
 DESTINATION="generic/platform=iOS"
 [ -n "$DEVICE" ] && DESTINATION="id=$DEVICE"
 cd "$WORK"
-xcodebuild -project Mint.xcodeproj -scheme Mint -destination "$DESTINATION" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} \
-    -allowProvisioningDeviceRegistration -derivedDataPath "$WORK/derived" build 2>&1 | grep -E "error|Signing Identity|Provisioning Profile|BUILD" || true
+# Xcode makes the certificate and the profile on the way to building; a
+# build that then fails for another reason has still made them, so what
+# is on disk afterwards is what counts.
+visor_xcodebuild "$WORK/xcodebuild.log" "error|Signing Identity|Provisioning Profile|BUILD" \
+    -project Mint.xcodeproj -scheme Mint -destination "$DESTINATION" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} \
+    -allowProvisioningDeviceRegistration -derivedDataPath "$WORK/derived" build \
+    || { cp "$WORK/xcodebuild.log" "${TMPDIR:-/tmp}/visor-mint-profile.log"; echo "(kept as ${TMPDIR:-/tmp}/visor-mint-profile.log)" >&2; }
 echo "--- profiles on disk for $BUNDLE:"
 for f in ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision; do
     [ -f "$f" ] || continue

@@ -156,11 +156,3 @@ struct SessionInspector: View {
         return "The session leaves the chat and carries on in the agent's own terminal at \(size), drawn for this window. A turn in flight is interrupted."
     }
 }
-
-extension View {
-    /// A navigation title, or none: a pane inside a window must not name
-    /// the window.
-    @ViewBuilder func titled(_ title: String, when show: Bool) -> some View {
-        if show { navigationTitle(title) } else { self }
-    }
-}

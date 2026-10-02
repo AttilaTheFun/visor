@@ -12,8 +12,8 @@
 set -euo pipefail
 APP="${1:?path to the .app}"
 cd "$(dirname "$0")/.."
-TEAM="$(sed -n 's/.*VISOR_TEAM_ID=\([A-Z0-9]*\).*/\1/p' .bazelrc.user 2>/dev/null | head -1)"
-[ -n "$TEAM" ] || { echo "No VISOR_TEAM_ID in .bazelrc.user (tools/signing)" >&2; exit 1; }
+. tools/lib.sh
+TEAM="$(visor_team)"
 IDENTITY="$(python3 - "$TEAM" <<'PY'
 import re, subprocess, sys
 team = sys.argv[1]

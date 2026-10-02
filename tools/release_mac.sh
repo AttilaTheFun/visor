@@ -19,8 +19,8 @@ VERSION="${1:?version, e.g. 0.1}"
 PUBLISH="${2:-}"
 PROFILE="${VISOR_NOTARY_PROFILE:-visor-notary}"
 cd "$(dirname "$0")/.."
-TEAM="$(sed -n 's/.*VISOR_TEAM_ID=\([A-Z0-9]*\).*/\1/p' .bazelrc.user 2>/dev/null | head -1)"
-[ -n "$TEAM" ] || { echo "No VISOR_TEAM_ID in .bazelrc.user (tools/signing)" >&2; exit 1; }
+. tools/lib.sh
+TEAM="$(visor_team)"
 IDENTITY="$(security find-identity -v -p codesigning | sed -n "s/.*\([0-9A-F]\{40\}\) \"Developer ID Application: .*($TEAM)\"/\1/p" | head -1)"
 [ -n "$IDENTITY" ] \
   || { echo "No Developer ID Application certificate for the team in the keychain (Xcode → Settings → Accounts → Manage Certificates)" >&2; exit 1; }
@@ -28,7 +28,7 @@ KEYCHAIN="$HOME/Library/Keychains/visor-notary.keychain-db"
 PASSFILE="$HOME/.visor/notary-keychain-password"
 NOTARY=(--keychain-profile "$PROFILE")
 if [ -f "$KEYCHAIN" ] && [ -s "$PASSFILE" ]; then
-  security unlock-keychain -p "$(cat "$PASSFILE")" "$KEYCHAIN"
+  visor_keychain unlock-keychain "$PASSFILE" "$KEYCHAIN"
   NOTARY+=(--keychain "$KEYCHAIN")
 fi
 xcrun notarytool history "${NOTARY[@]}" >/dev/null 2>&1 \

@@ -18,8 +18,8 @@ PROFILE="${VISOR_NOTARY_PROFILE:-visor-notary}"
 KEYCHAIN="$HOME/Library/Keychains/visor-notary.keychain-db"
 PASSFILE="$HOME/.visor/notary-keychain-password"
 cd "$(dirname "$0")/.."
-TEAM="$(sed -n 's/.*VISOR_TEAM_ID=\([A-Z0-9]*\).*/\1/p' .bazelrc.user 2>/dev/null | head -1)"
-[ -n "$TEAM" ] || { echo "No VISOR_TEAM_ID in .bazelrc.user (tools/signing)" >&2; exit 1; }
+. tools/lib.sh
+TEAM="$(visor_team)"
 
 if [ ! -s "$PASSFILE" ]; then
   mkdir -p "$(dirname "$PASSFILE")"
@@ -27,9 +27,9 @@ if [ ! -s "$PASSFILE" ]; then
   (umask 077; openssl rand -base64 24 >"$PASSFILE")
 fi
 if [ ! -f "$KEYCHAIN" ]; then
-  security create-keychain -p "$(cat "$PASSFILE")" "$KEYCHAIN"
+  visor_keychain create-keychain "$PASSFILE" "$KEYCHAIN"
 fi
-security unlock-keychain -p "$(cat "$PASSFILE")" "$KEYCHAIN"
+visor_keychain unlock-keychain "$PASSFILE" "$KEYCHAIN"
 # No lock after a timeout or on sleep.
 security set-keychain-settings "$KEYCHAIN"
 
