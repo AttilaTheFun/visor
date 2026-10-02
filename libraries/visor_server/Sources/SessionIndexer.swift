@@ -1,9 +1,9 @@
-// A session's file into the cache, off the main thread: what the file
+// A session's file into the cache, off the main actor: what the file
 // holds that the cache does not yet, then each line as it is written.
 // The conversation is the branch that holds the file's last line; lines
 // under a prompt abandoned by a fork are kept in the tree but make no
-// rows. The main actor is handed the window of rows to show, then the
-// lines of the conversation as they come.
+// rows. Whoever listens is given the window of rows to show, then the
+// lines of the conversation as they come, in order.
 
 import ClaudeTranscript
 import Foundation
@@ -13,7 +13,7 @@ import VisorProtocol
 
 private let log = Logger(subsystem: "com.LoganShire.Visor", category: "index")
 
-final class SessionIndexer: @unchecked Sendable {
+actor SessionIndexer {
     /// What a session looks like once the cache is up to date with its file.
     struct Loaded: Sendable {
         let rows: [TranscriptEntry]
@@ -32,54 +32,50 @@ final class SessionIndexer: @unchecked Sendable {
         let rows: [TranscriptEntry]
     }
 
+    /// What the indexer says, in order: the session as it stands once the
+    /// cache has caught up with the file, then what the file gains.
+    enum Event: Sendable {
+        case loaded(Loaded)
+        case lines([Line])
+    }
+
     let sessionID: String
     let url: URL
     private let store: MessageCache
     private let window: Int
-    private let queue: DispatchQueue
     private var assembler = TranscriptAssembler()
     private var members = Set<String>()
     private var abandoned = Set<String>()
     private var state: SourceState
-    private var watcher: ClaudeSessionWatcher?
-    private var stopped = false
     /// The agent's log format, read into lines of Claude's shape.
-    private let parser: AgentLogParser
+    private let parser: any AgentLogParser
 
-    init(store: MessageCache, sessionID: String, url: URL, window: Int, parser: AgentLogParser = ClaudeLogParser()) {
-        self.parser = parser
+    init(store: MessageCache, sessionID: String, url: URL, window: Int, format: AgentLog.Format = .claude) {
+        parser = format.parser()
         self.store = store
         self.sessionID = sessionID
         self.url = url
         self.window = window
-        queue = DispatchQueue(label: "visor.index." + sessionID.prefix(8), qos: .utility)
         state = SourceState(path: url.path, identity: "", bytes: 0, nextSeq: 0)
     }
 
-    /// Catches the cache up with the file, hands over what to show, then
-    /// follows the file. Both closures are called on the indexer's queue.
-    func start(onLoaded: @escaping @Sendable (Loaded) -> Void, onLines: @escaping @Sendable ([Line]) -> Void) {
-        queue.async { [self] in
-            guard !stopped else { return }
-            catchUp()
-            onLoaded(loaded())
-            let parser = self.parser
-            let watcher = ClaudeSessionWatcher(url: url, startingAt: state.bytes, queue: queue, parse: { parser.lines(in: $0) }) { [weak self] lines in
-                guard let self, !self.stopped else { return }
-                let taken = self.take(lines)
-                if !taken.isEmpty { onLines(taken) }
-            }
-            watcher.start()
-            self.watcher = watcher
+    /// Catches the cache up with the file, says what to show, then follows
+    /// the file for as long as anyone listens.
+    nonisolated func events() -> AsyncStream<Event> {
+        AsyncStream { continuation in
+            let indexing = Task { await self.index(into: continuation) }
+            continuation.onTermination = { _ in indexing.cancel() }
         }
     }
 
-    func stop() {
-        queue.async { [self] in
-            stopped = true
-            watcher?.stop()
-            watcher = nil
+    private func index(into continuation: AsyncStream<Event>.Continuation) async {
+        catchUp()
+        continuation.yield(.loaded(loaded()))
+        for await batch in FileTail.batches(of: url, startingAt: state.bytes) {
+            let taken = take(parser.lines(in: batch.data), endingAt: batch.position)
+            if !taken.isEmpty { continuation.yield(.lines(taken)) }
         }
+        continuation.finish()
     }
 
     // MARK: Catching up
@@ -142,7 +138,7 @@ final class SessionIndexer: @unchecked Sendable {
 
     /// Lines as the file grows: written down, and those on the
     /// conversation handed over with their rows.
-    private func take(_ lines: [ClaudeLine]) -> [Line] {
+    private func take(_ lines: [ClaudeLine], endingAt position: UInt64) -> [Line] {
         var lineRecords: [SourceNode] = []
         var rowRecords: [PlacedMessage] = []
         var taken: [Line] = []
@@ -165,7 +161,7 @@ final class SessionIndexer: @unchecked Sendable {
             }
             taken.append(Line(uuid: line.uuid, isPrompt: line.isPrompt, record: line.record, rows: rows))
         }
-        state.bytes = watcher?.position ?? state.bytes
+        state.bytes = position
         do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { log.error("follow \(self.sessionID, privacy: .public): \(String(describing: error), privacy: .public)") }
         return taken
     }
@@ -173,11 +169,9 @@ final class SessionIndexer: @unchecked Sendable {
     // MARK: Paging
 
     /// The rows before one, oldest first, and whether there are more.
-    func earlier(before rowID: String, limit: Int, completion: @escaping @Sendable ([TranscriptEntry], Bool) -> Void) {
-        queue.async { [self] in
-            guard let position = store.seq(of: rowID, in: sessionID) else { return completion([], false) }
-            let page = store.messages(in: sessionID, limit: limit, before: position)
-            completion(page.messages, page.more)
-        }
+    func earlier(before rowID: String, limit: Int) -> (rows: [TranscriptEntry], more: Bool) {
+        guard let position = store.seq(of: rowID, in: sessionID) else { return ([], false) }
+        let page = store.messages(in: sessionID, limit: limit, before: position)
+        return (page.messages, page.more)
     }
 }

@@ -81,29 +81,51 @@ final class ParserTests: XCTestCase {
         XCTAssertTrue(ClaudeSessionFiles.projectDirectoryName(for: link.path).hasSuffix("-real-folder"))
     }
 
-    func testWatcherFollowsAppends() throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("watch-\(UUID().uuidString).jsonl")
+    func testTailFollowsAppends() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("tail-\(UUID().uuidString).jsonl")
         try "".write(to: url, atomically: true, encoding: .utf8)
         let handle = try FileHandle(forWritingTo: url)
-        let seen = expectation(description: "records")
-        seen.expectedFulfillmentCount = 2
-        var got: [ClaudeRecord] = []
-        let lock = NSLock()
-        let watcher = ClaudeSessionWatcher(url: url) { lines in
-            let records = lines.compactMap(\.record)
-            lock.lock(); got += records; lock.unlock()
-            for _ in records { seen.fulfill() }
+        let writing = Task {
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data("{\"type\":\"user\",\"uuid\":\"u1\",\"message\":{\"content\":\"one\"}}\n{\"type\":\"user\",\"uuid\":\"u2\",\"message\":{\"content\":\"tw".utf8))
+            try await Task.sleep(for: .milliseconds(400))
+            // The line left half-written is finished: it is handed over whole.
+            try handle.write(contentsOf: Data("o\"}}\n".utf8))
         }
-        watcher.start()
-        handle.seekToEndOfFile()
-        handle.write(Data("{\"type\":\"user\",\"uuid\":\"u1\",\"message\":{\"content\":\"one\"}}\n{\"type\":\"user\",\"uuid\":\"u2\",\"message\":{\"content\":\"tw".utf8))
-        Thread.sleep(forTimeInterval: 0.4)
-        handle.write(Data("o\"}}\n".utf8))
-        wait(for: [seen], timeout: 5)
-        watcher.stop()
-        lock.lock(); defer { lock.unlock() }
+        var got: [ClaudeRecord] = []
+        var position: UInt64 = 0
+        for await batch in FileTail.batches(of: url) {
+            got += ClaudeTranscriptParser.records(in: batch.data)
+            position = batch.position
+            if got.count == 2 { break }
+        }
+        try await writing.value
         XCTAssertEqual(got.map(\.uuid), ["u1", "u2"])
         XCTAssertEqual(got.last?.kind, .user(text: "two", images: []))
+        XCTAssertEqual(position, try handle.seekToEnd(), "the place kept is the end of the last whole line")
+    }
+
+    func testTailWaitsForAFileAndFollowsItsPathWhenItIsReplaced() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("tail-\(UUID().uuidString).jsonl")
+        let writing = Task {
+            try await Task.sleep(for: .milliseconds(400))
+            try Data("first\n".utf8).write(to: url)
+            try await Task.sleep(for: .milliseconds(400))
+            // Written beside it and moved over it: another file at the
+            // path, which holds what the first did and more.
+            try Data("first\nsecond\n".utf8).write(to: url, options: .atomic)
+            try await Task.sleep(for: .milliseconds(400))
+            let handle = try FileHandle(forWritingTo: url)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data("third\n".utf8))
+        }
+        var lines: [String] = []
+        for await batch in FileTail.batches(of: url) {
+            lines += String(decoding: batch.data, as: UTF8.self).split(separator: "\n").map(String.init)
+            if lines.contains("third") { break }
+        }
+        try await writing.value
+        XCTAssertEqual(lines, ["first", "second", "third"])
     }
 
     // A file as two agents leave it: APPLE, then CHERRY from one and

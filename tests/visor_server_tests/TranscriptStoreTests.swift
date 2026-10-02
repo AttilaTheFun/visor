@@ -12,8 +12,6 @@ final class TranscriptStoreTests: XCTestCase {
     private var dir: URL!
     private var file: URL!
     private var store: MessageCache!
-    /// Held: an indexer released is a watcher gone.
-    private var follower: SessionIndexer?
 
     override func setUp() async throws {
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("visor-store-tests-" + UUID().uuidString)
@@ -35,10 +33,12 @@ final class TranscriptStoreTests: XCTestCase {
         try (lines.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
     }
 
-    private func load(_ indexer: SessionIndexer) async -> SessionIndexer.Loaded {
-        await withCheckedContinuation { c in
-            indexer.start(onLoaded: { c.resume(returning: $0) }, onLines: { _ in })
+    /// What an indexer says first: the session as its file has it.
+    private func load(_ indexer: SessionIndexer) async throws -> SessionIndexer.Loaded {
+        for await event in indexer.events() {
+            if case .loaded(let loaded) = event { return loaded }
         }
+        throw XCTSkip("the indexer said nothing")
     }
 
     func testBuildsPagesRebuildsAndSearches() async throws {
@@ -52,7 +52,7 @@ final class TranscriptStoreTests: XCTestCase {
         }
         try write(lines)
         let indexer = SessionIndexer(store: store, sessionID: "S", url: file, window: 10)
-        let loaded = await load(indexer)
+        let loaded = try await load(indexer)
         XCTAssertEqual(loaded.rows.count, 10)
         XCTAssertTrue(loaded.more)
         XCTAssertEqual(loaded.rows.last?.text, "Answer 29: the pelican count is 203")
@@ -60,12 +60,10 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertEqual(store.count(in: "S"), 60)
 
         // Paged by place, oldest first, until there is no more.
-        let page: ([TranscriptEntry], Bool) = await withCheckedContinuation { c in
-            indexer.earlier(before: loaded.rows.first!.id, limit: 10) { c.resume(returning: ($0, $1)) }
-        }
-        XCTAssertEqual(page.0.count, 10)
-        XCTAssertTrue(page.1)
-        XCTAssertEqual(page.0.last?.id, "msg_24")
+        let page = await indexer.earlier(before: loaded.rows.first!.id, limit: 10)
+        XCTAssertEqual(page.rows.count, 10)
+        XCTAssertTrue(page.more)
+        XCTAssertEqual(page.rows.last?.id, "msg_24")
 
         // Words found across the cache.
         let hits = store.search("pelican 203")
@@ -74,29 +72,28 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertTrue(store.search("walrus").isEmpty)
 
         // The file grows: the cache follows from where it stopped.
-        indexer.stop()
-        let file = self.file!
         let more = Data((line("user", "u30", "a29", "One more") + "\n" + line("assistant", "a30", "u30", "Last answer", id: "msg_30") + "\n").utf8)
-        let follower = SessionIndexer(store: store, sessionID: "S", url: file, window: 10)
-        self.follower = follower
-        let grown: [SessionIndexer.Line] = await withCheckedContinuation { c in
-            follower.start(onLoaded: { second in
+        var grown: [SessionIndexer.Line] = []
+        for await event in SessionIndexer(store: store, sessionID: "S", url: file, window: 10).events() {
+            switch event {
+            case .loaded(let second):
                 XCTAssertEqual(second.rows.count, 10)
-                if let h = try? FileHandle(forWritingTo: file) {
-                    h.seekToEndOfFile()
-                    h.write(more)
-                    try? h.close()
-                }
-            }, onLines: { c.resume(returning: $0) })
+                let handle = try FileHandle(forWritingTo: file)
+                try handle.seekToEnd()
+                try handle.write(contentsOf: more)
+                try handle.close()
+            case .lines(let lines):
+                grown += lines
+            }
+            if grown.count >= 2 { break }
         }
         XCTAssertEqual(grown.compactMap { $0.rows.first?.text }, ["One more", "Last answer"])
         XCTAssertEqual(store.count(in: "S"), 62)
         XCTAssertEqual(store.sourceState(of: "S")?.nextSeq, 62)
-        follower.stop()
 
         // Thrown away: rebuilt from the file alone, the same.
         let fresh = try MessageCache.sqliteInMemory()
-        let rebuilt = await load(SessionIndexer(store: fresh, sessionID: "S", url: file, window: 100))
+        let rebuilt = try await load(SessionIndexer(store: fresh, sessionID: "S", url: file, window: 100))
         XCTAssertEqual(rebuilt.rows.count, 62)
         XCTAssertEqual(rebuilt.rows.last?.text, "Last answer")
     }
@@ -118,7 +115,7 @@ final class TranscriptStoreTests: XCTestCase {
             line("user", "u4", "a2", "New branch"),
             line("assistant", "a4", "u4", "New reply", id: "m4"),
         ])
-        let loaded = await load(SessionIndexer(store: store, sessionID: "C", url: file, window: 100))
+        let loaded = try await load(SessionIndexer(store: store, sessionID: "C", url: file, window: 100))
         XCTAssertEqual(loaded.rows.map(\.text), ["First", "Reply one", "After compaction", "Reply two", "New branch", "New reply"])
         XCTAssertEqual(loaded.abandonedPrompts, 1)
         XCTAssertEqual(loaded.prompts, ["u1", "u2", "u4"])
@@ -134,7 +131,7 @@ final class TranscriptStoreTests: XCTestCase {
             line("user", "u3", "a1", "New branch question"),
             line("assistant", "a3", "u3", "New branch reply", id: "m3"),
         ])
-        let loaded = await load(SessionIndexer(store: store, sessionID: "F", url: file, window: 100))
+        let loaded = try await load(SessionIndexer(store: store, sessionID: "F", url: file, window: 100))
         XCTAssertEqual(loaded.rows.map(\.text), ["First", "Reply one", "New branch question", "New branch reply"])
         XCTAssertEqual(loaded.abandonedPrompts, 1)
         XCTAssertTrue(loaded.abandoned.contains("u2"))

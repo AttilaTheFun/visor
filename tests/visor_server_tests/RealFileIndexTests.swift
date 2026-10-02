@@ -13,12 +13,13 @@ final class RealFileIndexTests: XCTestCase {
         let store = MessageCache(storage: try SQLiteStorage(path: dbPath))
         let started = Date()
         let indexer = SessionIndexer(store: store, sessionID: "R", url: URL(fileURLWithPath: path), window: 600)
-        let loaded: SessionIndexer.Loaded = await withCheckedContinuation { c in
-            indexer.start(onLoaded: { c.resume(returning: $0) }, onLines: { _ in })
+        var first: SessionIndexer.Loaded?
+        for await event in indexer.events() {
+            if case .loaded(let loaded) = event { first = loaded; break }
         }
+        let loaded = try XCTUnwrap(first)
         let elapsed = Date().timeIntervalSince(started)
         print("REAL: \(String(format: "%.1f", elapsed))s, window \(loaded.rows.count), more \(loaded.more), prompts \(loaded.prompts.count), abandoned \(loaded.abandoned.count), rows in store \(store.count(in: "R")), state \(String(describing: store.sourceState(of: "R")))")
         XCTAssertGreaterThan(store.count(in: "R"), 0)
-        indexer.stop()
     }
 }

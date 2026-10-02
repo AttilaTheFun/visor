@@ -374,7 +374,9 @@ message waits for its own row.
   checklist yet; the rendering is there for when it does.
 - rspm `use_repo` names keep the package identity's dot.
 - `SQLite.Expression` must be qualified (Foundation has `Expression` too).
-- An indexer/watcher not retained is gone (weak self in the callback).
+- A file is followed for as long as its stream is read (`FileTail.batches`,
+  `SessionIndexer.events()`): stop reading (cancel the task) and the
+  following stops with it.
 - `swift package resolve` in third_party/swift_packages must be re-run
   after editing a revision; delete `.build` if it argues.
 - Messages typed on a phone end in a space (autocorrect): every word
