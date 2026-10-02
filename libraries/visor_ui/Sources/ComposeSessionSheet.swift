@@ -52,7 +52,7 @@ struct ComposeSessionSheet: View {
                     }
                     .pickerStyle(.menu)
                     .accessibilityIdentifier("computer")
-                    if let host {
+                    if host != nil {
                         // One row: the folder's path, which opens the
                         // folder browser.
                         Button { browsing = true } label: {
@@ -156,13 +156,13 @@ struct ComposeSessionSheet: View {
             if cwd.isEmpty { useHome() }
             if !available.contains(agent), let first = AgentKind.allCases.first(where: available.contains) { agent = first }
         }
-        .onChange(of: hostID) { _ in
+        .onChange(of: hostID) {
             useHome()
             resumable = []
         }
-        .onChange(of: resuming) { value in if value { loadResumable() } }
-        .onChange(of: agent) { _ in if resuming { loadResumable() } }
-        .onChange(of: cwd) { _ in if resuming { loadResumable() } }
+        .onChange(of: resuming) { if resuming { loadResumable() } }
+        .onChange(of: agent) { if resuming { loadResumable() } }
+        .onChange(of: cwd) { if resuming { loadResumable() } }
     }
 
     private var defaultTitle: String {

@@ -245,6 +245,14 @@ a detached relauncher and resumes named sessions with a nudge
 
 ## 4. The working loop
 
+- Every target compiles in the Swift 6 language mode with warnings as
+  errors (`STRICT_SWIFT`, tools/swift): a warning fails the build, here and
+  in CI. A closure handed to a dispatch source or another callback-on-its-
+  own-queue API from inside a `@MainActor` type is main-actor isolated
+  unless it is written in a `nonisolated` function, and is checked when it
+  runs: it compiles, and traps on the first callback
+  (`_dispatch_assert_queue_fail`). The staging server and the probes are
+  how that is found before a deploy.
 - Build: `bazel build //applications/visor_menubar //applications/visor_macos`
   (fastbuild). `bazel-bin` points at the LAST configuration built — always
   locate outputs with `bazel cquery [-c opt] --output=files <target>`.

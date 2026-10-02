@@ -10,7 +10,8 @@ import Security
 import VisorServices
 import WidgetKit
 
-final class WidgetFeed: VisorWidgetService, @unchecked Sendable {
+@MainActor
+final class WidgetFeed: VisorWidgetService {
     static let service = "com.LoganShire.VisorClient.widget"
     static let account = "sessions"
 

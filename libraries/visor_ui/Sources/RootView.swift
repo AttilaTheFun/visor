@@ -144,14 +144,14 @@ public struct VisorRootView: View {
             }
             #endif
         }
-        .onChange(of: selection) { value in
+        .onChange(of: selection) { _, value in
             if compact { compactColumn = value == nil ? .sidebar : .detail }
             // Which session is on screen, so a notification about it, with
             // the app in front, is not shown over it.
             store.noteViewing(hostID: value?.session?.hostID, sessionID: value?.session?.sessionID)
         }
         // A notification the user opened: its session, on its computer.
-        .onChange(of: store.opening) { target in
+        .onChange(of: store.opening) { _, target in
             guard let target, let host = store.host(named: target.computer) else { return }
             store.opening = nil
             selection = .session(SessionSelection(hostID: host.id, sessionID: target.session))
@@ -159,7 +159,7 @@ public struct VisorRootView: View {
         }
         // Backing out on a phone is deselecting: the row is no longer
         // open, so it is no longer lit, and tapping it opens it again.
-        .onChange(of: compactColumn) { column in
+        .onChange(of: compactColumn) { _, column in
             if compact, column == .sidebar, selection != nil { selection = nil }
         }
     }
