@@ -69,6 +69,19 @@ final class PushTests: XCTestCase {
         XCTAssertEqual(alert, ["title": "Isomer", "body": "Turn finished"])
     }
 
+    /// A device is forgotten when APNs says its token is no good — not
+    /// when the request was refused for the server's own key or topic.
+    func testOnlyABadTokenForgetsTheDevice() {
+        XCTAssertTrue(APNsSender.forgets(status: 410, reason: "Unregistered"))
+        XCTAssertTrue(APNsSender.forgets(status: 400, reason: "BadDeviceToken"))
+        XCTAssertTrue(APNsSender.forgets(status: 400, reason: "DeviceTokenNotForTopic"))
+        XCTAssertFalse(APNsSender.forgets(status: 400, reason: "BadTopic"))
+        XCTAssertFalse(APNsSender.forgets(status: 400, reason: nil))
+        XCTAssertFalse(APNsSender.forgets(status: 403, reason: "InvalidProviderToken"))
+        XCTAssertFalse(APNsSender.forgets(status: 200, reason: nil))
+        XCTAssertFalse(APNsSender.forgets(status: 0, reason: nil))
+    }
+
     func testTheSigningTokenVerifies() throws {
         let key = P256.Signing.PrivateKey()
         let jwt = try APNsSender().jwt(for: APNsKey(pem: key.pemRepresentation, keyID: "ABCDEFGHIJ", teamID: "TEAMTEAM12"))
