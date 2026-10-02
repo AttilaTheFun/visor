@@ -1139,15 +1139,29 @@ public final class VisorServer: ObservableObject {
     private func saveArchive() {
         guard storeIsReadable else { return }
         let stored = sessions.map(\.stored)
-        guard let data = try? JSONEncoder().encode(stored) else { return }
-        // Yesterday's file is kept beside today's. It costs nothing and it
-        // is the difference between a bad write and a lost afternoon.
-        let backup = Self.storeURL.deletingLastPathComponent().appendingPathComponent("sessions.previous.json")
-        if let existing = try? Data(contentsOf: Self.storeURL), existing.count > 2, existing != data {
-            try? existing.write(to: backup, options: .atomic)
+        do {
+            let data = try JSONEncoder().encode(stored)
+            // Yesterday's file is kept beside today's. It costs nothing and
+            // it is the difference between a bad write and a lost afternoon.
+            let backup = Self.storeURL.deletingLastPathComponent().appendingPathComponent("sessions.previous.json")
+            if let existing = try? Data(contentsOf: Self.storeURL), existing.count > 2, existing != data {
+                try? existing.write(to: backup, options: .atomic)
+            }
+            try data.write(to: Self.storeURL, options: .atomic)
+            if savingFailed {
+                savingFailed = false
+                lastError = nil
+            }
+        } catch {
+            // Said in the menu, not swallowed: sessions that are not being
+            // written down are lost at the next quit.
+            savingFailed = true
+            lastError = "Sessions are not being saved: \(error.localizedDescription)"
         }
-        try? data.write(to: Self.storeURL, options: .atomic)
     }
+
+    /// The last write of the sessions failed; cleared by the next that works.
+    private var savingFailed = false
 
     func makeProcess(_ info: SessionInfo, resume: String?) -> AgentProcess {
         // The one backend for this agent makes and manages its process;

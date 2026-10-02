@@ -22,15 +22,6 @@ enum SessionCatalog {
 
     private static let home = FileManager.default.homeDirectoryForCurrentUser
 
-    /// Claude's directory per project: the path with every "/", "." and
-    /// "_" turned into "-" (swift_proto_sql → swift-proto-sql). Miss the
-    /// underscore and the folder is simply not found.
-    static func projectDirectory(for cwd: String) -> String {
-        var name = (cwd as NSString).expandingTildeInPath
-        for character in ["/", ".", "_"] { name = name.replacingOccurrences(of: character, with: "-") }
-        return name
-    }
-
     /// Puts a session's history where its folder looks for it.
     ///
     /// Claude fixes a session's project directory when the session starts
@@ -50,7 +41,7 @@ enum SessionCatalog {
         guard agent != .codex, !id.isEmpty, !cwd.isEmpty else { return false }
         let files = FileManager.default
         let root = home.appendingPathComponent(".claude/projects")
-        let target = root.appendingPathComponent(projectDirectory(for: cwd))
+        let target = root.appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd))
         let wanted = target.appendingPathComponent(id + ".jsonl")
         guard !files.fileExists(atPath: wanted.path) else { return false }
         let elsewhere = (try? files.contentsOfDirectory(at: root, includingPropertiesForKeys: nil))?
@@ -73,7 +64,7 @@ enum SessionCatalog {
         // Claude keeps writing to the directory it opened with.
         let byDirectory = cwd != nil
         if let cwd {
-            directories = [root.appendingPathComponent(projectDirectory(for: cwd))]
+            directories = [root.appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd))]
         } else {
             directories = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
         }

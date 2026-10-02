@@ -44,8 +44,10 @@ enum AgentImages {
         return file.path
     }
 
-    /// The bytes of a file, base64 for the wire. Only files the computer
-    /// can read, and only the ones a transcript could plausibly name.
+    /// The bytes of a file a transcript names (a picture the agent made
+    /// or was shown, wherever it is; something the user attached), base64
+    /// for the wire. Whoever may ask is already let in to the computer's
+    /// sessions; the size is what is limited.
     static func read(path: String) -> String? {
         let resolved = (path as NSString).expandingTildeInPath
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: resolved)) else { return nil }
