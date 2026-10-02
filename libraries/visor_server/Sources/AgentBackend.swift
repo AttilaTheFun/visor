@@ -5,6 +5,7 @@
 // a different set of agents. A host swaps the registry to bring its own.
 
 import Foundation
+import Synchronization
 import VisorProtocol
 
 public protocol AgentBackend: AnyObject, Sendable {
@@ -44,7 +45,7 @@ public extension AgentBackend {
 /// The agents the server serves. Injectable: a host assigns its own before
 /// the server starts, and every seam — process, terminal, resumable list,
 /// transcript, models — goes through whatever is registered here.
-public final class AgentBackends: @unchecked Sendable {
+public final class AgentBackends: Sendable {
     private let byKind: [AgentKind: AgentBackend]
     public let all: [AgentBackend]
 
@@ -71,7 +72,7 @@ public final class AgentBackends: @unchecked Sendable {
 
 /// Claude Code, and anything that speaks its stream-json protocol under
 /// another tool name (Ori).
-public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
+public final class ClaudeBackend: AgentBackend {
     public static let efforts = ["low", "medium", "high", "xhigh", "max"]
     public let kind: AgentKind
     public let tool: String
@@ -87,15 +88,20 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
     /// names, effort levels and which is the default for this account);
     /// the fixed list until it has answered.
     public func catalog() -> AgentCatalog {
-        if tool == "claude", let asked = Self.asked.value {
+        if tool == "claude", let asked = Self.asked.withLock({ $0.taken }) {
             return AgentCatalog(agent: kind, models: asked.models, defaultModel: Self.configuredModel() ?? asked.defaultModel,
                                 available: available)
         }
         return AgentCatalog(agent: kind, models: models, defaultModel: Self.configuredModel(), available: available)
     }
 
-    /// What Claude Code last said of its models.
-    static let asked = Locked<(models: [AgentModel], defaultModel: String?)?>(nil)
+    /// What Claude Code said of its models: the list taken, and a shorter
+    /// one it has said once and not yet twice.
+    struct Asked: Sendable {
+        var taken: ModelList?
+        var doubted: [AgentModel]?
+    }
+    static let asked = Mutex(Asked())
 
     /// Whether a new list may replace the one held at once: when it keeps
     /// every model the old one had (it may add some), or there was no old
@@ -108,57 +114,35 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
 
     /// Asks Claude Code for its models: `claude -p` with stream-json, the
     /// SDK's `initialize` control request, the answer's `models`, then
-    /// the process is ended — no turn is run. Calls `done` when the list
-    /// changed.
-    public static func refreshModels(confirming: Bool = false, then done: @escaping @Sendable () -> Void) {
-        guard let executable = ToolPath.resolve("claude") else { return }
-        DispatchQueue.global().async {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: executable)
-            p.arguments = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
-            p.currentDirectoryURL = FileManager.default.temporaryDirectory
-            p.environment = ToolPath.environment()
-            let input = Pipe(), output = Pipe()
-            p.standardInput = input
-            p.standardOutput = output
-            p.standardError = FileHandle.nullDevice
-            guard (try? p.run()) != nil else { return }
-            let request = "{\"type\":\"control_request\",\"request_id\":\"visor-models\",\"request\":{\"subtype\":\"initialize\"}}\n"
-            input.fileHandleForWriting.write(Data(request.utf8))
-            // Never waits long: a Claude that does not answer is ended.
-            DispatchQueue.global().asyncAfter(deadline: .now() + 20) { if p.isRunning { p.terminate() } }
-            var buffer = Data()
-            var answer: [String: Any]?
-            while answer == nil {
-                let chunk = output.fileHandleForReading.availableData
-                if chunk.isEmpty { break }
-                buffer.append(chunk)
-                while let newline = buffer.firstIndex(of: 0x0A) {
-                    let line = buffer[buffer.startIndex..<newline]
-                    buffer.removeSubrange(buffer.startIndex...newline)
-                    guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                          object["type"] as? String == "control_response",
-                          let response = object["response"] as? [String: Any] else { continue }
-                    answer = (response["response"] as? [String: Any]) ?? response
-                    break
-                }
+    /// the process is ended — no turn is run.
+    ///
+    /// Claude Code's answer is not always the whole list: while the
+    /// account's access is in doubt (an organization setting briefly
+    /// refusing, say) it offers the base models alone, and the server
+    /// once kept that for hours. A list that loses models is not taken at
+    /// once: it is `doubted`, to be asked again soon, and taken if it
+    /// still says so.
+    public static func refreshModels() async -> ModelRefresh {
+        guard let executable = ToolPath.resolve("claude") else { return .unchanged }
+        let request = #"{"type":"control_request","request_id":"visor-models","request":{"subtype":"initialize"}}"#
+        let parsed = await Command.ask(executable, ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"],
+                                       saying: [request], environment: ToolPath.environment()) { line -> ModelList? in
+            guard let object = JSON.object(line), object["type"] as? String == "control_response",
+                  let response = object["response"] as? [String: Any],
+                  let list = ((response["response"] as? [String: Any]) ?? response)["models"] as? [[String: Any]] else { return nil }
+            // The answer, whatever it holds: an empty list ends the asking too.
+            return parse(models: list) ?? ModelList(models: [], defaultModel: nil)
+        }
+        guard let parsed, !parsed.models.isEmpty else { return .unchanged }
+        return asked.withLock { asked in
+            if !accepts(parsed.models, over: asked.taken?.models), asked.doubted != parsed.models {
+                asked.doubted = parsed.models
+                return .doubted
             }
-            try? input.fileHandleForWriting.close()
-            if p.isRunning { p.terminate() }
-            guard let list = answer?["models"] as? [[String: Any]], let parsed = parse(models: list), !parsed.models.isEmpty else { return }
-            // Claude Code's answer is not always the whole list: while the
-            // account's access is in doubt (an organization setting briefly
-            // refusing, say) it offers the base models alone, and the
-            // server kept that for hours. A list that loses models is not
-            // taken at once but asked again in five minutes; taken if it
-            // still says so.
-            if !confirming, !accepts(parsed.models, over: asked.value?.models) {
-                DispatchQueue.global().asyncAfter(deadline: .now() + 5 * 60) { refreshModels(confirming: true, then: done) }
-                return
-            }
-            let changed = asked.value.map { $0.models != parsed.models || $0.defaultModel != parsed.defaultModel } ?? true
-            asked.value = parsed
-            if changed { done() }
+            asked.doubted = nil
+            let changed = asked.taken != parsed
+            asked.taken = parsed
+            return changed ? .changed : .unchanged
         }
     }
 
@@ -172,7 +156,7 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
     /// display name ("Opus (1M context)"), and now the name as the display
     /// name ("Opus 5.5") with only the tagline in the description. The
     /// title is whichever carries a version, else one made from the model.
-    static func parse(models list: [[String: Any]]) -> (models: [AgentModel], defaultModel: String?)? {
+    static func parse(models list: [[String: Any]]) -> ModelList? {
         func versioned(_ text: String) -> Bool { text.contains { $0.isNumber } }
         var models: [AgentModel] = []
         var resolved: [String: String] = [:]
@@ -202,7 +186,7 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
             if let target, resolved[target] == nil { resolved[target] = value }
         }
         let defaultModel = defaultResolved.flatMap { resolved[$0] }
-        return (models, defaultModel)
+        return ModelList(models: models, defaultModel: defaultModel)
     }
 
     /// The model Claude Code is set to use (`model` in
@@ -226,7 +210,7 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
 /// thread started or resumed by id, each message a turn, a turn
 /// interrupted in place. (`CodexProcess`, one `codex exec` per turn, is
 /// kept in the tree as the older driver but is not what this makes.)
-public final class CodexBackend: AgentBackend, @unchecked Sendable {
+public final class CodexBackend: AgentBackend {
     public let kind: AgentKind = .codex
     public let tool = "codex"
 
@@ -240,7 +224,7 @@ public final class CodexBackend: AgentBackend, @unchecked Sendable {
     /// models cache on disk until then (and where it has no answer).
     public func catalog() -> AgentCatalog {
         var catalog = Self.catalog()
-        if let asked = Self.asked.value, !asked.models.isEmpty {
+        if let asked = Self.asked.withLock({ $0 }), !asked.models.isEmpty {
             catalog.models = asked.models
             // A model set in config.toml wins over the account's default.
             if catalog.defaultModel == nil || !asked.models.contains(where: { $0.id == catalog.defaultModel }) {
@@ -252,59 +236,31 @@ public final class CodexBackend: AgentBackend, @unchecked Sendable {
     }
 
     /// What Codex last said of its models.
-    static let asked = Locked<(models: [AgentModel], defaultModel: String?)?>(nil)
+    static let asked = Mutex<ModelList?>(nil)
 
     /// Asks Codex for its models: `codex app-server`, `initialize`, then
     /// `model/list`, then the process is ended — no thread is started.
-    /// Calls `done` when the list changed.
-    public static func refreshModels(then done: @escaping @Sendable () -> Void) {
-        guard let executable = ToolPath.resolve("codex") else { return }
-        DispatchQueue.global().async {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: executable)
-            p.arguments = ["app-server"]
-            p.currentDirectoryURL = FileManager.default.temporaryDirectory
-            p.environment = ToolPath.environment()
-            let input = Pipe(), output = Pipe()
-            p.standardInput = input
-            p.standardOutput = output
-            p.standardError = FileHandle.nullDevice
-            guard (try? p.run()) != nil else { return }
-            for line in [
-                #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"visor","version":"1"}}}"#,
-                #"{"jsonrpc":"2.0","method":"initialized","params":{}}"#,
-                #"{"jsonrpc":"2.0","id":2,"method":"model/list","params":{}}"#,
-            ] { input.fileHandleForWriting.write(Data((line + "\n").utf8)) }
-            DispatchQueue.global().asyncAfter(deadline: .now() + 20) { if p.isRunning { p.terminate() } }
-            var buffer = Data()
-            var answer: [String: Any]?
-            while answer == nil {
-                let chunk = output.fileHandleForReading.availableData
-                if chunk.isEmpty { break }
-                buffer.append(chunk)
-                while let newline = buffer.firstIndex(of: 0x0A) {
-                    let line = buffer[buffer.startIndex..<newline]
-                    buffer.removeSubrange(buffer.startIndex...newline)
-                    guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                          object["id"] as? Int == 2, let result = object["result"] as? [String: Any] else { continue }
-                    answer = result
-                    break
-                }
-            }
-            try? input.fileHandleForWriting.close()
-            if p.isRunning { p.terminate() }
-            guard let list = answer?["data"] as? [[String: Any]] else { return }
-            let parsed = parse(models: list)
-            guard !parsed.models.isEmpty else { return }
-            let changed = asked.value.map { $0.models != parsed.models || $0.defaultModel != parsed.defaultModel } ?? true
-            asked.value = parsed
-            if changed { done() }
+    public static func refreshModels() async -> ModelRefresh {
+        guard let executable = ToolPath.resolve("codex") else { return .unchanged }
+        let parsed = await Command.ask(executable, ["app-server"], saying: [
+            #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"visor","version":"1"}}}"#,
+            #"{"jsonrpc":"2.0","method":"initialized","params":{}}"#,
+            #"{"jsonrpc":"2.0","id":2,"method":"model/list","params":{}}"#,
+        ], environment: ToolPath.environment()) { line -> ModelList? in
+            guard let object = JSON.object(line), object["id"] as? Int == 2, let result = object["result"] as? [String: Any] else { return nil }
+            return parse(models: result["data"] as? [[String: Any]] ?? [])
+        }
+        guard let parsed, !parsed.models.isEmpty else { return .unchanged }
+        return asked.withLock { asked in
+            let changed = asked != parsed
+            asked = parsed
+            return changed ? .changed : .unchanged
         }
     }
 
     /// `model/list`'s entries as the catalog's: the visible ones, named
     /// codename first ("Astra 6"), their efforts, and which is default.
-    static func parse(models list: [[String: Any]]) -> (models: [AgentModel], defaultModel: String?) {
+    static func parse(models list: [[String: Any]]) -> ModelList {
         var models: [AgentModel] = []
         var defaultModel: String?
         for entry in list where entry["hidden"] as? Bool != true {
@@ -315,7 +271,7 @@ public final class CodexBackend: AgentBackend, @unchecked Sendable {
                                      efforts: efforts, defaultEffort: entry["defaultReasoningEffort"] as? String))
             if entry["isDefault"] as? Bool == true { defaultModel = id }
         }
-        return (models, defaultModel)
+        return ModelList(models: models, defaultModel: defaultModel)
     }
 
     /// "GPT-6-Astra" → "Astra 6", "GPT-5.6-Sol" → "Sol 5.6", "GPT-5.5" →
@@ -369,7 +325,7 @@ public final class CodexBackend: AgentBackend, @unchecked Sendable {
 /// sessions kept in ~/.openrouter/sessions. Its key and default model are
 /// its own business (`openrouter auth login`), like Claude's and Codex's
 /// logins; Visor only runs it.
-public final class OpenRouterBackend: AgentBackend, @unchecked Sendable {
+public final class OpenRouterBackend: AgentBackend {
     public let kind: AgentKind = .openrouter
     public let tool = "openrouter"
 
@@ -494,34 +450,27 @@ public final class OpenRouterBackend: AgentBackend, @unchecked Sendable {
         return "\(dollars(input)) in · \(dollars(output)) out per M tokens"
     }
 
-    /// Fetches the list through the CLI when it is missing or a day old,
-    /// then says so; Visor never calls OpenRouter itself.
-    public static func refreshIfStale(then done: @escaping @Sendable () -> Void) {
+    /// Fetches the list through the CLI when it is missing or a day old:
+    /// whether it did. Visor never calls OpenRouter itself.
+    public static func refreshIfStale() async -> Bool {
         let file = SessionCatalog.openrouterRoot.appendingPathComponent("models.json")
         let age = (try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate).map { Date().timeIntervalSince($0) }
-        guard age == nil || age! > 24 * 60 * 60, let tool = ToolPath.resolve("openrouter") else { return }
-        DispatchQueue.global().async {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: tool)
-            p.arguments = ["models", "--refresh"]
-            p.environment = ToolPath.environment()
-            p.standardOutput = FileHandle.nullDevice
-            p.standardError = FileHandle.nullDevice
-            guard (try? p.run()) != nil else { return }
-            p.waitUntilExit()
-            if p.terminationStatus == 0 { done() }
-        }
+        guard age == nil || age! > 24 * 60 * 60, let tool = ToolPath.resolve("openrouter") else { return false }
+        return await Command.output(tool, ["models", "--refresh"], environment: ToolPath.environment())?.status == 0
     }
 }
 
-/// A value behind a lock, for what a background refresh writes and a
-/// catalog reads.
-final class Locked<Value>: @unchecked Sendable {
-    private var stored: Value
-    private let lock = NSLock()
-    init(_ value: Value) { stored = value }
-    var value: Value {
-        get { lock.lock(); defer { lock.unlock() }; return stored }
-        set { lock.lock(); stored = newValue; lock.unlock() }
-    }
+/// An agent's models as it lists them, and which is its default.
+struct ModelList: Sendable, Equatable {
+    var models: [AgentModel]
+    var defaultModel: String?
+}
+
+/// What asking an agent for its models came to.
+public enum ModelRefresh: Sendable {
+    /// The list held is different now.
+    case changed
+    case unchanged
+    /// The answer dropped models and was not taken: ask again soon.
+    case doubted
 }
