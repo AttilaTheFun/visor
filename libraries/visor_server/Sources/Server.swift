@@ -13,8 +13,9 @@ import VisorProtocol
 /// The server's message cache: every session's rows, from the agents' own
 /// files where they have one and from their events where they do not.
 /// Tests point `shared` at a cache of their own.
+@MainActor
 public enum ServerCache {
-    nonisolated(unsafe) public static var shared: MessageCache = .open(named: "messages")
+    public static var shared: MessageCache = .open(named: "messages")
 }
 
 /// One agent session on the host: its process, its transcript, who watches it.
@@ -1285,8 +1286,10 @@ public final class VisorServer: ObservableObject {
             ws.autoReplyPing = true
             params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
             let listener = try NWListener(using: params)
+            // The listener's queue is the main one: what it says is taken
+            // as it is said, in order.
             listener.stateUpdateHandler = { [weak self] state in
-                Task { @MainActor in
+                MainActor.assumeIsolated {
                     switch state {
                     case .ready: self?.listening = true; self?.lastError = nil
                     case .failed(let error): self?.listening = false; self?.lastError = "\(error)"
@@ -1296,7 +1299,7 @@ public final class VisorServer: ObservableObject {
                 }
             }
             listener.newConnectionHandler = { [weak self] connection in
-                Task { @MainActor in self?.accept(connection) }
+                MainActor.assumeIsolated { self?.accept(connection) }
             }
             listener.start(queue: .main)
             self.listener = listener
@@ -1492,7 +1495,8 @@ public final class VisorServer: ObservableObject {
                 return respond(transcriptJSON(record, since: current ? had.map { $0 > record.revision ? -1 : $0 } : nil))
             }
             transcriptWaiters[record.info.id, default: []].append((revision: record.revision, generation: record.generation, respond: respond))
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.transcriptHold) { [weak self, weak record] in
+            Task { [weak self, weak record] in
+                try? await Task.sleep(for: .seconds(Self.transcriptHold))
                 guard let self, let record else { return }
                 // Still waiting after the hold: answered with what there
                 // is (nothing new), so the client asks again.
@@ -1680,8 +1684,7 @@ public final class VisorServer: ObservableObject {
         // The permission shim: one request per connection, answered later.
         if envelope.type == "approval_request" {
             guard envelope.token == agentToken, let record = session(envelope.session), let id = envelope.id else {
-                client.send(.error("Not an agent of this host"))
-                client.close(after: 0.2)
+                client.sendLast(.error("Not an agent of this host"))
                 return
             }
             let request = ApprovalRequest(id: id, tool: envelope.text ?? "tool", summary: envelope.prompt ?? "")
@@ -1694,10 +1697,7 @@ public final class VisorServer: ObservableObject {
         // Sessions talking to each other, through the Visor MCP server each
         // agent runs: one request per connection, answered at once.
         if envelope.type == "agent" {
-            answerAgent(envelope) { reply in
-                client.send(reply)
-                client.close(after: 0.2)
-            }
+            answerAgent(envelope) { reply in client.sendLast(reply) }
             return
         }
         if !client.authenticated {
@@ -1705,8 +1705,7 @@ public final class VisorServer: ObservableObject {
             let token = envelope.token ?? ""
             let byPassword = !password.isEmpty && (envelope.password ?? "") == password
             guard byPassword || (!token.isEmpty && tokens.contains(token)) else {
-                client.send(.error("Wrong password"))
-                client.close(after: 0.3)
+                client.sendLast(.error("Wrong password"))
                 return
             }
             client.authenticated = true
@@ -1839,8 +1838,7 @@ public final class VisorServer: ObservableObject {
             var answer = Envelope(type: "approval_result")
             answer.id = id
             answer.busy = allow
-            waiter.send(answer)
-            waiter.close(after: 0.5)
+            waiter.sendLast(answer)
             if record.info.pendingApproval?.id == id { record.setPendingApproval(nil) }
             broadcast(.approval(session: record.info.id, record.info.pendingApproval), session: record)
             broadcastSessions()
@@ -2329,9 +2327,11 @@ final class ClientConnection {
         self.connection = connection
     }
 
+    /// The connection's queue is the main one: what it says is taken as
+    /// it is said, in order.
     func start() {
         connection.stateUpdateHandler = { [weak self] state in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 switch state {
                 case .failed, .cancelled: self?.finish()
                 default: break
@@ -2344,14 +2344,15 @@ final class ClientConnection {
 
     private func receive() {
         connection.receiveMessage { [weak self] data, context, _, error in
-            Task { @MainActor in
+            let failed = error != nil
+            let closing = context?.isFinal == true
+                || (context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata)?.opcode == .close
+            MainActor.assumeIsolated {
                 guard let self else { return }
                 if let data, !data.isEmpty, let text = String(data: data, encoding: .utf8), let envelope = Envelope.decode(text) {
                     self.onMessage?(envelope)
                 }
-                if error != nil || context?.isFinal == true { self.finish(); return }
-                if let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata,
-                   metadata.opcode == .close { self.finish(); return }
+                if failed || closing { self.finish(); return }
                 self.receive()
             }
         }
@@ -2359,16 +2360,23 @@ final class ClientConnection {
 
     func send(_ envelope: Envelope) {
         guard !closed else { return }
-        let data = Data(envelope.encoded().utf8)
-        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
-        let context = NWConnection.ContentContext(identifier: "text", metadata: [metadata])
-        connection.send(content: data, contentContext: context, isComplete: true, completion: .contentProcessed { _ in })
+        connection.send(content: Data(envelope.encoded().utf8), contentContext: Self.text, isComplete: true, completion: .contentProcessed { _ in })
     }
 
-    func close(after delay: TimeInterval = 0) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.connection.cancel()
-        }
+    /// Says one last thing and closes once it has gone out.
+    func sendLast(_ envelope: Envelope) {
+        guard !closed else { return }
+        let connection = self.connection
+        connection.send(content: Data(envelope.encoded().utf8), contentContext: Self.text, isComplete: true,
+                        completion: .contentProcessed { _ in connection.cancel() })
+    }
+
+    private static var text: NWConnection.ContentContext {
+        NWConnection.ContentContext(identifier: "text", metadata: [NWProtocolWebSocket.Metadata(opcode: .text)])
+    }
+
+    func close() {
+        connection.cancel()
     }
 
     private func finish() {
