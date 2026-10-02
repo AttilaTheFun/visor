@@ -12,10 +12,10 @@ import VisorServices
 
 public enum VisorFixture {
     /// Whether the app is showing the canned computer.
-    public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
+    @MainActor public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
     /// The screen to open on: sessions, chat, goal, inspector, models,
     /// search or connect ("" for the app's own first screen).
-    public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
+    @MainActor public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
 
     public static let hostID = "fixture"
     /// The session a screen that shows one opens.
@@ -125,7 +125,7 @@ final class FixtureTransport: HostTransport {
 
     func connect(_ config: HostConfig, onEvent: @escaping @MainActor (TransportEvent) -> Void) {
         self.onEvent = onEvent
-        Task { @MainActor in onEvent(.opened) }
+        Task { onEvent(.opened) }
     }
 
     func send(_ text: String) {
@@ -143,7 +143,7 @@ final class FixtureTransport: HostTransport {
         default:
             return
         }
-        Task { @MainActor in for reply in replies { onEvent(.message(reply.encoded())) } }
+        Task { for reply in replies { onEvent(.message(reply.encoded())) } }
     }
 
     func disconnect() { onEvent = nil }

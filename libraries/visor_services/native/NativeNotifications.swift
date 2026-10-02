@@ -11,7 +11,8 @@ import AppKit
 #endif
 import UserNotifications
 
-public final class NativeVisorNotificationService: VisorNotificationService, @unchecked Sendable {
+@MainActor
+public final class NativeVisorNotificationService: VisorNotificationService {
     public init() {}
 
     public func requestPermission() {
@@ -20,9 +21,9 @@ public final class NativeVisorNotificationService: VisorNotificationService, @un
 
     public func registerForRemoteNotifications() {
         #if os(iOS)
-        Task { @MainActor in UIApplication.shared.registerForRemoteNotifications() }
+        UIApplication.shared.registerForRemoteNotifications()
         #else
-        Task { @MainActor in NSApplication.shared.registerForRemoteNotifications() }
+        NSApplication.shared.registerForRemoteNotifications()
         #endif
     }
 

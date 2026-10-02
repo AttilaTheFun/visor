@@ -218,6 +218,7 @@ final class WidgetFeedTests: XCTestCase {
 /// What the system says about notifications, relayed: a token kept with
 /// its kind, service and app; a notification opened, even before anyone
 /// listens (a tap that launched the app).
+@MainActor
 final class NotificationHandlerTests: XCTestCase {
     func testTokensAndOpenedNotifications() {
         let handler = VisorNotificationHandler()

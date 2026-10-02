@@ -10,7 +10,7 @@ import VisorServices
 import XCTest
 
 /// A road whose computer answers as the test scripts it.
-final class ScriptedTransport: HostTransport, @unchecked Sendable {
+final class ScriptedTransport: HostTransport {
     /// What `GET /hello` answers: a body, or a status to fail with.
     var hello: Result<String, ScriptedFailure> = .success(Envelope.hello(host: "Scripted Mac", login: "owner@example.com", token: "tok-1").encoded())
     var sent: [String] = []
@@ -20,7 +20,7 @@ final class ScriptedTransport: HostTransport, @unchecked Sendable {
     func connect(_ config: HostConfig, onEvent: @escaping @MainActor (TransportEvent) -> Void) {
         connected += 1
         self.onEvent = onEvent
-        Task { @MainActor in onEvent(.opened) }
+        Task { onEvent(.opened) }
     }
 
     func send(_ text: String) {
@@ -28,20 +28,17 @@ final class ScriptedTransport: HostTransport, @unchecked Sendable {
         // The computer answers a login it accepts with welcome.
         if let envelope = Envelope.decode(text), envelope.type == "login" {
             let reply: Envelope = envelope.token == "tok-1" ? .welcome(host: "Scripted Mac", sessions: [], catalogs: []) : .error("Wrong password")
-            Task { @MainActor in self.onEvent?(.message(reply.encoded())) }
+            Task { self.onEvent?(.message(reply.encoded())) }
         }
     }
 
     func disconnect() {}
 
-    /// The calls made, by path, after hello. Calls come from concurrent
-    /// tasks, so the list is kept under a lock.
-    private var made: [String] = []
-    private let lock = NSLock()
-    var calls: [String] { lock.withLock { made } }
+    /// The calls made, by path, after hello.
+    private(set) var calls: [String] = []
 
     func call(_ method: String, _ path: String, body: String, config: HostConfig) async throws -> String {
-        if path != "/hello" { lock.withLock { made.append(path) } }
+        if path != "/hello" { calls.append(path) }
         if path == "/hello" { return try hello.get() }
         return Envelope(type: "reply").encoded()
     }
@@ -58,10 +55,11 @@ struct ScriptedBackend: Backend {
     let hostFieldTitle = "Host"
     let hostPlaceholder = ""
     let passwordFieldTitle = "Password"
-    nonisolated(unsafe) static var transport = ScriptedTransport()
-    func makeTransport() -> any HostTransport { Self.transport }
+    @MainActor static var transport = ScriptedTransport()
+    @MainActor func makeTransport() -> any HostTransport { Self.transport }
 }
 
+@MainActor
 final class MemorySettings: VisorSettingsService {
     var values: [String: String] = [:]
     func get(key: String) -> String { values[key] ?? "" }
@@ -72,8 +70,8 @@ final class MemorySettings: VisorSettingsService {
 final class HelloFlowTests: XCTestCase {
     private var transport: ScriptedTransport!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         HostConnection.cache = .inMemory()
         transport = ScriptedTransport()
         ScriptedBackend.transport = transport

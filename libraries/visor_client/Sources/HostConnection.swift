@@ -35,7 +35,7 @@ public struct HostConfig: Identifiable, Hashable, Sendable {
     /// A random id without Foundation's UUID.
     /// This device, as the computers know it: kept, so a computer can
     /// tell whose window a terminal is drawn for across launches.
-    public static let clientID: String = {
+    @MainActor public static let clientID: String = {
         if let saved = VisorHost.settings?.get(key: "clientID"), !saved.isEmpty { return saved }
         let fresh = newID()
         VisorHost.settings?.set(key: "clientID", value: fresh)
@@ -69,7 +69,7 @@ public struct HostConfig: Identifiable, Hashable, Sendable {
 @MainActor
 public final class SessionTranscript: ObservableObject {
     /// How often, at most, views are told of changes (nanoseconds).
-    public nonisolated(unsafe) static var frame: UInt64 = 500_000_000
+    public static var frame: UInt64 = 500_000_000
     /// A frame is running: changes wait for its end.
     private var framing = false
     /// Something changed since views were last told.
@@ -94,7 +94,7 @@ public final class SessionTranscript: ObservableObject {
 
     private func startFrame() {
         framing = true
-        Task { @MainActor [weak self] in
+        Task { [weak self] in
             try? await Task.sleep(nanoseconds: SessionTranscript.frame)
             guard let self else { return }
             if self.dirty { self.announce(); self.startFrame() } else { self.framing = false }
@@ -290,7 +290,7 @@ public final class SessionTranscript: ObservableObject {
             return
         }
         guard activityFlush == nil else { return }
-        activityFlush = Task { @MainActor [weak self] in
+        activityFlush = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard let self, !Task.isCancelled else { return }
             self.activityFlush = nil
@@ -760,7 +760,7 @@ public final class HostConnection: ObservableObject, Identifiable {
     /// The rows already seen, by host and session: on disk where there
     /// is SQLite, so a session opens as it was last seen and syncs only
     /// what changed since; in memory on the web.
-    nonisolated(unsafe) static var cache: MessageCache = .open(named: "messages")
+    static var cache: MessageCache = .open(named: "messages")
     private func cacheKey(_ sessionID: String) -> String { id + "/" + sessionID }
 
     public func transcript(for sessionID: String) -> SessionTranscript {

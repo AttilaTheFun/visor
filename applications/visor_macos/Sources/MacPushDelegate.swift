@@ -29,17 +29,21 @@ final class MacPushDelegate: NSObject, NSApplicationDelegate, UNUserNotification
         NSLog("Visor: no push token: %@", String(describing: error))
     }
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        VisorNotificationHandler.shared.didOpen(Self.data(of: response.notification))
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        let data = Self.data(of: response.notification)
+        await VisorNotificationHandler.shared.didOpen(data)
     }
 
     /// With the app in front: shown, unless it is about the session on screen.
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
-        VisorNotificationHandler.shared.presents(Self.data(of: notification)) ? [.banner, .list, .sound] : []
+        let data = Self.data(of: notification)
+        return await VisorNotificationHandler.shared.presents(data) ? [.banner, .list, .sound] : []
     }
 
-    static func data(of notification: UNNotification) -> [String: String] {
+    /// What a notification carries, as the handler takes it. The system
+    /// calls the delegate off the main actor; only this crosses to it.
+    nonisolated static func data(of notification: UNNotification) -> [String: String] {
         var data: [String: String] = [:]
         for (key, value) in notification.request.content.userInfo {
             if let key = key as? String, let value = value as? String { data[key] = value }
