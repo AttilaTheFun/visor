@@ -2220,11 +2220,10 @@ public final class VisorServer: ObservableObject {
             p.standardError = log
         }
         do { try p.run() } catch { return "Could not start the relauncher: \(error.localizedDescription)" }
-        // Once the answer to whoever asked has gone out. Quitting waits
-        // for the agents (`endAll`), as any quit does.
+        // Once the answer to whoever asked has gone out.
         Task {
             try? await Task.sleep(for: .milliseconds(600))
-            NSApplication.shared.terminate(nil)
+            quit()
         }
         return nil
     }
@@ -2269,10 +2268,24 @@ public final class VisorServer: ObservableObject {
         // shutdown is the one just written.
         for record in sessions { record.stopListening() }
         // Waited for, not merely asked: an agent that outlives the app
-        // runs on with nobody at the other end of its pipes.
-        // All at once: each has its own few seconds to go.
+        // runs on with nobody at the other end of its pipes. All at once:
+        // each has its own few seconds to go.
         let ending = sessions.map { record in Task { await record.process.end(within: .seconds(4)) } }
         for task in ending { await task.value }
+        agentsEnded = true
+    }
+
+    /// The agents have been ended for a quit: nothing is left to wait for.
+    public private(set) var agentsEnded = false
+
+    /// Ends the agents, then the app. The way to quit from the app's own
+    /// code: the agents are gone before the app is asked to terminate, so
+    /// it has nothing to wait for then.
+    public func quit() {
+        Task {
+            await endAll()
+            NSApplication.shared.terminate(nil)
+        }
     }
 }
 
