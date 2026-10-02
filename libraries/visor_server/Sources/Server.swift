@@ -892,7 +892,7 @@ public final class VisorServer: ObservableObject {
     let apnsSender = APNsSender()
     /// Told each push as it is decided, before anything is sent (tests).
     var onPush: ((_ title: String, _ body: String, _ session: String, _ kind: String) -> Void)?
-    private var claudeModelsTimer: Timer?
+    private var modelsRefresh: Task<Void, Never>?
     /// The `front()` under way; and how many have found Tailscale not ready.
     private var fronting: Task<Void, Never>?
     /// Asked for while an attempt ran: run again once it ends.
@@ -1286,25 +1286,31 @@ public final class VisorServer: ObservableObject {
             lastError = "\(error)"
         }
         front()
-        // Claude Code's models and default, asked of it now and every few
-        // hours (a new model, a changed plan).
-        // Codex's too, from its app-server.
-        let refresh: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.broadcastCatalogs() } }
-        ClaudeBackend.refreshModels(then: refresh)
-        CodexBackend.refreshModels(then: refresh)
-        // Again a few minutes after launch: an answer given while the
-        // account was still being checked can be the base models alone.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5 * 60) { ClaudeBackend.refreshModels(then: refresh) }
-        claudeModelsTimer?.invalidate()
-        claudeModelsTimer = Timer.scheduledTimer(withTimeInterval: 6 * 60 * 60, repeats: true) { _ in
-            ClaudeBackend.refreshModels(then: refresh)
-            CodexBackend.refreshModels(then: refresh)
-        }
-        // OpenRouter's model list, from the CLI, when it is a day old.
-        OpenRouterBackend.refreshIfStale { [weak self] in
-            Task { @MainActor in self?.broadcastCatalogs() }
-        }
+        keepModelsFresh()
         resumePending()
+    }
+
+    /// Asks the agents for their models now and every few hours (a new
+    /// model, a changed plan), and tells the clients when a list changed.
+    /// Again a few minutes after launch, and after an answer that dropped
+    /// models: one given while the account was still being checked can be
+    /// the base models alone.
+    private func keepModelsFresh() {
+        modelsRefresh?.cancel()
+        modelsRefresh = Task {
+            var soon = true
+            while !Task.isCancelled {
+                async let claude = ClaudeBackend.refreshModels()
+                async let codex = CodexBackend.refreshModels()
+                // OpenRouter's list, from its CLI, when it is a day old.
+                async let openrouter = OpenRouterBackend.refreshIfStale()
+                let answers = await (claude, codex, openrouter)
+                if answers.0 == .changed || answers.1 == .changed || answers.2 { broadcastCatalogs() }
+                let again: Duration = soon || answers.0 == .doubted ? .seconds(5 * 60) : .seconds(6 * 60 * 60)
+                soon = false
+                try? await Task.sleep(for: again)
+            }
+        }
     }
 
     /// The front on 443, put in place whenever it is not: there is no
