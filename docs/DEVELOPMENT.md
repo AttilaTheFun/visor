@@ -82,7 +82,14 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 
 **Server** (`libraries/visor_server`, `applications/visor_menubar`).
 `VisorServer` (@MainActor) holds `SessionRecord`s. Each record owns an
-`AgentProcess` made by an `AgentBackend` (`AgentBackends.standard`:
+`AgentProcess` — driven on the main actor; what the agent says is read
+and parsed off it (`ChildProcess.swift`) and reaches the record as one
+`AsyncStream` of `AgentEvent`s, in the order said. An agent is ended with
+`stop()` (asked, then made to, not waited for) or `await end(within:)`;
+one is never started on a session while the one before is still going
+(`SessionRecord.held`), and quitting waits for all of them
+(`applicationShouldTerminate` → `endAll`). Processes are made by an
+`AgentBackend` (`AgentBackends.standard`:
 `ClaudeBackend` → `ClaudeProcess` (`claude -p --input-format stream-json
 --output-format stream-json --include-partial-messages`, one process per
 session, `--resume`), `CodexBackend` → `CodexAppServerProcess` (`codex
@@ -247,6 +254,15 @@ a detached relauncher and resumes named sessions with a nudge
   scratch; a `VisorServer()` built over the real archive KILLS every agent
   it lists as an orphan (it has: "claude exited 143").
   `RealFileIndexTests` indexes a real file when `--test_env=VISOR_REAL_FILE=…`.
+- Try a server build against real agents without touching the installed
+  one: `bazel run //tools/staging_server -- [port] [password]` (7533,
+  `staging`) runs a `VisorServer` of its own — its own ports, a scratch
+  folder for what it keeps, the password in memory, loopback only, nothing
+  put in front of it — and the probes take its port:
+  `VISOR_PORT=7533 VISOR_TOKEN=staging node tools/probes/order.mjs`.
+  Ctrl-C ends it, its agents first. Do this before deploying a change to
+  the agent processes: a deploy that cannot start agents cannot resume
+  the session that deployed it.
 - Deploy the server from inside a session: `tools/deploy_server.sh`. The
   current turn is cut; the new server resumes the session with the nudge;
   carry on from there. Verify with `shasum` of the installed binary vs
@@ -281,6 +297,15 @@ a detached relauncher and resumes named sessions with a nudge
   the final record and the ephemeral snapshot, and ends the session. The
   expected tail: `user | assistant ONE | user | assistant TWO`, streams
   empty. Try a trailing space on a message: that used to freeze the record.
+- `node tools/probes/lifecycle.mjs` (`AGENT=codex|openrouter`, `TUI=1` to
+  also switch to the terminal and back) — a throwaway session interrupted
+  mid-turn, carried on, optionally handed to its terminal and back, then
+  ended; the expected tail is `failures 0`, and a few seconds later the
+  server has no agent left as a child (`pgrep -lP <server pid>`).
+- The probes talk to the installed server unless `VISOR_PORT` names
+  another (a staging server). From inside a Visor session `VISOR_TOKEN`
+  is the agent token, which the REST side takes and the socket's login
+  does not: run them against a staging server, or with the password.
 - `node tools/probes/ephemeral.mjs <visor session id>` — the snapshot a
   subscribing client gets (busy, activity, status count, held streams).
   Stale streams here = a bug.

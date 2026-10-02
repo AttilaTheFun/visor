@@ -116,7 +116,7 @@ final class ForkNoticeTests: XCTestCase {
         XCTAssertEqual(record.info.preview, "OK-BANANA")
         XCTAssertNotNil(record.info.updated)
         // A user turn becomes the new preview.
-        _ = record.appendUser("What's next?")
+        record.appendUser("What's next?")
         XCTAssertEqual(record.info.preview, "What's next?")
     }
 

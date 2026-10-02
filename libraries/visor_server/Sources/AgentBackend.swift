@@ -15,10 +15,10 @@ public protocol AgentBackend: AnyObject, Sendable {
     /// The models it offers, and whether the tool is installed.
     func catalog() -> AgentCatalog
     /// A chat process for a session; resumes `resume` if given.
-    func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess
+    @MainActor func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess
     /// The agent's own terminal (a PTY process), for TUI mode; nil where
     /// the agent has no terminal to drive (OpenRouter).
-    func makeTerminal(cwd: String, skipPermissions: Bool, resume: String?) -> (AgentProcess & TerminalCapable)?
+    @MainActor func makeTerminal(cwd: String, skipPermissions: Bool, resume: String?) -> (AgentProcess & TerminalCapable)?
     /// The sessions resumable in this folder.
     func resumable(cwd: String) -> [ResumableSession]
     /// A session's transcript, the newest `limit` rows.
@@ -36,7 +36,7 @@ public extension AgentBackend {
     func transcript(id: String, cwd: String, limit: Int) -> [TranscriptEntry] {
         SessionCatalog.transcript(agent: kind, id: id, cwd: cwd, limit: limit)
     }
-    func makeTerminal(cwd: String, skipPermissions: Bool, resume: String?) -> (AgentProcess & TerminalCapable)? {
+    @MainActor func makeTerminal(cwd: String, skipPermissions: Bool, resume: String?) -> (AgentProcess & TerminalCapable)? {
         TerminalProcess(agent: kind, cwd: cwd, skipPermissions: skipPermissions, resume: resume)
     }
 }
@@ -217,7 +217,7 @@ public final class ClaudeBackend: AgentBackend, @unchecked Sendable {
         return env.isEmpty ? nil : env
     }
 
-    public func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess {
+    @MainActor public func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess {
         ClaudeProcess(cwd: cwd, skipPermissions: skipPermissions, resume: resume, tool: tool)
     }
 }
@@ -232,7 +232,7 @@ public final class CodexBackend: AgentBackend, @unchecked Sendable {
 
     public init() {}
 
-    public func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess {
+    @MainActor public func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess {
         CodexAppServerProcess(cwd: cwd, skipPermissions: skipPermissions, resume: resume)
     }
 
@@ -336,8 +336,8 @@ public final class CodexBackend: AgentBackend, @unchecked Sendable {
         let home = FileManager.default.homeDirectoryForCurrentUser
         var models: [AgentModel] = []
         if let data = try? Data(contentsOf: home.appendingPathComponent(".codex/models_cache.json")),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let list = (object["models"] as? [[String: Any]]) ?? (object as? [[String: Any]]) {
+           let object = try? JSONSerialization.jsonObject(with: data),
+           let list = ((object as? [String: Any])?["models"] as? [[String: Any]]) ?? (object as? [[String: Any]]) {
             for entry in list where (entry["visibility"] as? String ?? "list") == "list" {
                 guard let slug = entry["slug"] as? String else { continue }
                 let efforts = ((entry["supported_reasoning_levels"] as? [[String: Any]]) ?? []).compactMap { $0["effort"] as? String }
@@ -375,7 +375,7 @@ public final class OpenRouterBackend: AgentBackend, @unchecked Sendable {
 
     public init() {}
 
-    public func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess {
+    @MainActor public func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess {
         ClaudeProcess(cwd: cwd, skipPermissions: skipPermissions, resume: resume, tool: tool)
     }
 

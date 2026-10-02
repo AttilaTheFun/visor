@@ -7,23 +7,25 @@
 
 import Foundation
 
-/// The road from clients to this server.
-public protocol ServerExposure: AnyObject {
+/// The road from clients to this server. What it knows it finds out by
+/// asking its tooling, which takes a while: the server asks from time to
+/// time and keeps the answers (`VisorServer.address`, `hostLogin`).
+public protocol ServerExposure: AnyObject, Sendable {
     /// What it is called in the menu ("Tailscale").
     var title: String { get }
     var installed: Bool { get }
     /// What clients type to reach the server, once fronted; nil when unknown.
-    func address() -> String?
+    func address() async -> String?
     /// The network user this machine belongs to ("logan@example.com"):
     /// whose devices are let in without a password. Nil when unknown.
-    func identity() -> String?
+    func identity() async -> String?
     /// The user named by the road's own headers on a proxied request, if
     /// the road vouches for one (Tailscale Serve's identity headers).
     func requester(headers: [String: String]) -> String?
     /// Whether the server is fronted on 443 right now.
-    func fronts(port: UInt16) -> Bool
+    func fronts(port: UInt16) async -> Bool
     /// Puts the front in place; returns the tooling's output.
-    @discardableResult func front(port: UInt16) -> String
+    @discardableResult func front(port: UInt16) async -> String
 }
 
 /// Tailscale Serve, through the CLI inside the Mac app. Never Funnel:
@@ -40,22 +42,22 @@ public final class TailscaleExposure: ServerExposure {
 
     public var installed: Bool { FileManager.default.isExecutableFile(atPath: Self.cli) }
 
-    private func status() -> [String: Any]? {
+    private func status() async -> [String: Any]? {
         guard installed else { return nil }
-        let data = run(["status", "--json"], quiet: true).data(using: .utf8) ?? Data()
+        let data = Data(await run(["status", "--json"], quiet: true).utf8)
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
     static func trimmedName(_ name: String) -> String { name.hasSuffix(".") ? String(name.dropLast()) : name }
 
     /// This Mac's tailnet name ("my-mac.tail1234.ts.net").
-    public func address() -> String? {
-        guard let me = status()?["Self"] as? [String: Any], let name = me["DNSName"] as? String, !name.isEmpty else { return nil }
+    public func address() async -> String? {
+        guard let me = await status()?["Self"] as? [String: Any], let name = me["DNSName"] as? String, !name.isEmpty else { return nil }
         return Self.trimmedName(name)
     }
 
-    public func identity() -> String? {
-        guard let object = status(), let me = object["Self"] as? [String: Any], let userID = me["UserID"],
+    public func identity() async -> String? {
+        guard let object = await status(), let me = object["Self"] as? [String: Any], let userID = me["UserID"],
               let users = object["User"] as? [String: Any], let user = users["\(userID)"] as? [String: Any],
               let login = user["LoginName"] as? String, !login.isEmpty else { return nil }
         return login
@@ -67,9 +69,9 @@ public final class TailscaleExposure: ServerExposure {
     }
 
     /// Both mounts present: `/api` to the REST port, `/` to the WebSocket.
-    public func fronts(port: UInt16) -> Bool {
+    public func fronts(port: UInt16) async -> Bool {
         guard installed else { return false }
-        let text = run(["serve", "status"], quiet: true)
+        let text = await run(["serve", "status"], quiet: true)
         return text.contains("/api") && text.contains(String(port + 1)) && text.contains(String(port))
             && !text.lowercased().contains("funnel")
     }
@@ -78,13 +80,13 @@ public final class TailscaleExposure: ServerExposure {
     /// paths with `serve` turns Funnel off where it was on). The tailnet
     /// needs Serve and HTTPS certificates enabled.
     @discardableResult
-    public func front(port: UInt16) -> String {
+    public func front(port: UInt16) async -> String {
         guard installed else { return "Tailscale is not installed" }
         var output = ""
         for args in [["serve", "--tls-terminated-tcp=443", "off"],
                      ["serve", "--bg", "--https=443", "--set-path", "/api", "http://127.0.0.1:\(port + 1)"],
                      ["serve", "--bg", "--https=443", "--set-path", "/", "http://127.0.0.1:\(port)"]] {
-            output += run(args, quiet: false)
+            output += await run(args, quiet: false)
         }
         return output
     }
@@ -101,18 +103,20 @@ public final class TailscaleExposure: ServerExposure {
         return environment
     }
 
-    private func run(_ arguments: [String], quiet: Bool) -> String {
+    private func run(_ arguments: [String], quiet: Bool) async -> String {
         guard installed else { return "Tailscale is not installed" }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: Self.cli)
-        p.arguments = arguments
-        p.environment = Self.cliEnvironment()
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = quiet ? FileHandle.nullDevice : out
-        guard (try? p.run()) != nil else { return "could not run tailscale" }
-        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        p.waitUntilExit()
-        return text
+        let answer = await Command.output(Self.cli, arguments, environment: Self.cliEnvironment(), errors: !quiet)
+        return answer?.text ?? "could not run tailscale"
     }
+}
+
+/// No road at all: a server reached on loopback only (a staging server).
+final class NoExposure: ServerExposure {
+    let title = "Loopback"
+    let installed = false
+    func address() async -> String? { nil }
+    func identity() async -> String? { nil }
+    func requester(headers: [String: String]) -> String? { nil }
+    func fronts(port: UInt16) async -> Bool { false }
+    func front(port: UInt16) async -> String { "" }
 }

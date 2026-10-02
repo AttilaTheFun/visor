@@ -1,8 +1,10 @@
 // Subscribes to a session, then asks for rows before the first one shown, twice.
 import { execSync } from 'node:child_process';
+// The server's port: the installed one's, or a staging server's (VISOR_PORT).
+const PORT = Number(process.env.VISOR_PORT ?? 7433);
 const PW = process.env.VISOR_TOKEN || execSync('security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w').toString().trim();
 const id = process.argv[2];
-const ws = new WebSocket('ws://127.0.0.1:7433');
+const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
 let first = null, pages = 0;
 ws.onopen = () => ws.send(JSON.stringify({ type: 'login', password: PW, client: 'probe-earlier' }));
 ws.onmessage = ev => {

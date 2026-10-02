@@ -10,8 +10,8 @@ import XCTest
 final class AgentMessagingTests: XCTestCase {
     private var server: VisorServer!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         // Never the real archive: loading it ends the agents it lists.
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-agent-tests-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -79,8 +79,8 @@ final class LinkedMessagingTests: XCTestCase {
     private var here: VisorServer!
     private var there: VisorServer!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-link-tests-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -94,10 +94,10 @@ final class LinkedMessagingTests: XCTestCase {
         there.password = "there-password"
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         here.stop()
         there.stop()
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func record(_ id: String, _ title: String, busy: Bool = false) -> SessionRecord {
@@ -152,8 +152,10 @@ final class LinkedMessagingTests: XCTestCase {
 
     /// What a client connected to both does to link them: asks each for
     /// its code, and gives each the other's.
-    func testAClientLinksTheComputersItHolds() {
+    func testAClientLinksTheComputersItHolds() async {
         here.password = "here-password"
+        await here.fronted()
+        await there.fronted()
         func request(_ method: String, _ path: String, _ password: String, body: String = "") -> HTTPRequest {
             HTTPRequest(method: method, path: path, headers: ["authorization": "Bearer " + password], body: body)
         }
@@ -178,6 +180,7 @@ final class LinkedMessagingTests: XCTestCase {
     func testLinksAreKeptAndTheLinkGoesBothWays() async {
         for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
         here.password = "here-password"
+        await here.fronted()
         let code = ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.apiPort)", password: "there-password")
         let result = await here.link(code.encoded)
         XCTAssertNil(result)

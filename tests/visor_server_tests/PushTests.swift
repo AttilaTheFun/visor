@@ -12,8 +12,8 @@ import XCTest
 final class PushTests: XCTestCase {
     private var server: VisorServer!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-push-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root

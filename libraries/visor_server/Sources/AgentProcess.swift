@@ -2,8 +2,13 @@
 // normalised events. Claude Code and Codex differ in how they are driven
 // (one long-lived process fed on stdin; one process per turn, resumed by
 // id) and in their JSON; each adapter hides that.
+//
+// A process is driven from the main actor, where the server keeps its
+// sessions. What the agent says is read and parsed off it, and reaches
+// the server as a stream of events, in the order the agent said them.
 
 import Foundation
+import Synchronization
 import VisorProtocol
 
 public enum AgentEvent: Sendable {
@@ -32,9 +37,12 @@ public enum AgentEvent: Sendable {
     case tty(Data)
     /// The slash commands the agent takes, as it lists them.
     case commands([SlashCommand])
+    /// The model the agent says it is actually running.
+    case model(String)
 }
 
 /// A process on a PTY: it takes what the user types and can be resized.
+@MainActor
 public protocol TerminalCapable: AnyObject {
     func write(_ data: Data)
     func resize(cols: Int, rows: Int)
@@ -51,9 +59,10 @@ public protocol TerminalCapable: AnyObject {
     func start() throws
 }
 
+@MainActor
 public protocol AgentProcess: AnyObject {
-    /// Called on an arbitrary queue with each event.
-    var onEvent: (@Sendable (AgentEvent) -> Void)? { get set }
+    /// What the agent does, in order. One listener: the session's record.
+    var events: AsyncStream<AgentEvent> { get }
     /// Auto (no prompts) or manual; takes effect when the agent next
     /// (re)spawns — Codex each turn, Claude after `stop`.
     var skipPermissions: Bool { get set }
@@ -61,8 +70,6 @@ public protocol AgentProcess: AnyObject {
     /// effect when the agent next (re)spawns, like `skipPermissions`.
     var model: String? { get set }
     var effort: String? { get set }
-    /// Called when the agent reports which model it actually runs.
-    var onModel: (@Sendable (String) -> Void)? { get set }
     /// How the agent reaches the app: the port and the agent-side token,
     /// plus this session's id. The permission shim is given it in manual
     /// mode, and the agent itself always has it in its environment — that
@@ -81,15 +88,14 @@ public protocol AgentProcess: AnyObject {
     /// without ending the process, this is `stop`.
     func interrupt()
     /// Ends the running process — gracefully (stdin closed, a moment to
-    /// exit) then by force; the transcript and the agent's own session
-    /// survive, so the next `send` resumes it.
+    /// exit) then by force — without waiting for it; the transcript and
+    /// the agent's own session survive, so the next `send` resumes it.
     func stop()
-    /// Ends it and does not return until it is gone (or `deadline`
-    /// seconds have passed, after which it is killed outright). `stop`
-    /// schedules the force step for later, which is no use to a quitting
-    /// app: it exits first and leaves the agent running with nobody on
-    /// the other end of its pipes.
-    func stopAndWait(deadline: TimeInterval)
+    /// Ends it and returns once it is gone: asked to go, then after
+    /// `deadline` made to. What a quitting app waits for (an agent left
+    /// behind runs on with nobody at the other end of its pipes), and what
+    /// comes before another agent is started on the same session.
+    func end(within deadline: Duration) async
     /// The running agent's pid, written down so a later launch can
     /// recognise one of ours that outlived us.
     var processID: Int32? { get }
@@ -113,67 +119,39 @@ public enum AgentProcessError: LocalizedError {
     }
 }
 
-/// Splits a pipe's output into lines and hands each to a handler.
-final class LineReader {
-    private var buffer = Data()
-    private let handler: (String) -> Void
-
-    init(handle: FileHandle, handler: @escaping (String) -> Void) {
-        self.handler = handler
-        handle.readabilityHandler = { [weak self] fh in
-            let data = fh.availableData
-            if data.isEmpty {
-                fh.readabilityHandler = nil
-                self?.flush()
-                return
-            }
-            self?.append(data)
-        }
-    }
-
-    private func append(_ data: Data) {
-        buffer.append(data)
-        while let newline = buffer.firstIndex(of: 0x0A) {
-            let line = buffer[buffer.startIndex..<newline]
-            buffer.removeSubrange(buffer.startIndex...newline)
-            if let text = String(data: line, encoding: .utf8), !text.isEmpty { handler(text) }
-        }
-    }
-
-    private func flush() {
-        if !buffer.isEmpty, let text = String(data: buffer, encoding: .utf8) { handler(text) }
-        buffer.removeAll()
-    }
-}
-
 /// Where the agents' command-line tools live. A GUI app's PATH has none of
-/// the developer directories, so the login shell is asked once per tool.
+/// the developer directories: the usual ones are looked in directly, and
+/// the login shell is asked about a tool they do not have.
 public enum ToolPath {
-    nonisolated(unsafe) private static var cache: [String: String] = [:]
-    private static let lock = NSLock()
+    /// What the login shell said of each tool it was asked about: where it
+    /// is, or that it is not there.
+    private static let asked = Mutex<[String: String?]>([:])
 
-    public static func resolve(_ name: String) -> String? {
-        lock.lock(); defer { lock.unlock() }
-        if let hit = cache[name] { return hit }
+    private static var directories: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidates = ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.claude/local", "\(home)/.npm-global/bin", "/usr/bin"]
-        for dir in candidates where FileManager.default.isExecutableFile(atPath: "\(dir)/\(name)") {
-            cache[name] = "\(dir)/\(name)"
-            return cache[name]
+        return ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.claude/local", "\(home)/.npm-global/bin", "/usr/bin"]
+    }
+
+    /// Where a tool is, as far as is known without waiting: in one of the
+    /// usual directories, or where the login shell last found it.
+    public static func resolve(_ name: String) -> String? {
+        for directory in directories where FileManager.default.isExecutableFile(atPath: "\(directory)/\(name)") {
+            return "\(directory)/\(name)"
         }
-        let shell = Process()
-        shell.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        shell.arguments = ["-lc", "command -v \(name)"]
-        let out = Pipe()
-        shell.standardOutput = out
-        shell.standardError = FileHandle.nullDevice
-        guard (try? shell.run()) != nil else { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        shell.waitUntilExit()
-        let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !path.isEmpty, shell.terminationStatus == 0 else { return nil }
-        cache[name] = path
-        return path
+        return asked.withLock { $0[name] ?? nil }
+    }
+
+    /// Asks the login shell where the tools are that the usual directories
+    /// do not have, and remembers what it says. Starting a login shell
+    /// takes a while, so this is done ahead of need and off the main actor.
+    @concurrent
+    public static func locate(_ names: [String]) async {
+        for name in names where resolve(name) == nil {
+            let answer = await Command.output("/bin/zsh", ["-lc", "command -v \(name)"])
+            let path = answer?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let found = answer?.status == 0 && !path.isEmpty
+            asked.withLock { $0[name] = found ? path : nil }
+        }
     }
 
     /// The environment for a spawned agent: ours, with the developer

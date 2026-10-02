@@ -75,14 +75,16 @@ final class TranscriptStoreTests: XCTestCase {
 
         // The file grows: the cache follows from where it stopped.
         indexer.stop()
+        let file = self.file!
+        let more = Data((line("user", "u30", "a29", "One more") + "\n" + line("assistant", "a30", "u30", "Last answer", id: "msg_30") + "\n").utf8)
+        let follower = SessionIndexer(store: store, sessionID: "S", url: file, window: 10)
+        self.follower = follower
         let grown: [SessionIndexer.Line] = await withCheckedContinuation { c in
-            let follower = SessionIndexer(store: store, sessionID: "S", url: file, window: 10)
-            self.follower = follower
             follower.start(onLoaded: { second in
                 XCTAssertEqual(second.rows.count, 10)
-                if let h = try? FileHandle(forWritingTo: self.file) {
+                if let h = try? FileHandle(forWritingTo: file) {
                     h.seekToEndOfFile()
-                    h.write((self.line("user", "u30", "a29", "One more") + "\n" + self.line("assistant", "a30", "u30", "Last answer", id: "msg_30") + "\n").data(using: .utf8)!)
+                    h.write(more)
                     try? h.close()
                 }
             }, onLines: { c.resume(returning: $0) })
@@ -90,7 +92,7 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertEqual(grown.compactMap { $0.rows.first?.text }, ["One more", "Last answer"])
         XCTAssertEqual(store.count(in: "S"), 62)
         XCTAssertEqual(store.sourceState(of: "S")?.nextSeq, 62)
-        follower?.stop()
+        follower.stop()
 
         // Thrown away: rebuilt from the file alone, the same.
         let fresh = try MessageCache.sqliteInMemory()
