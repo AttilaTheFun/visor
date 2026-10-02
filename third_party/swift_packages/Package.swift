@@ -16,7 +16,7 @@ let package = Package(
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.10.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            revision: "fdd4aacd1b324d4865a2337e39d514538bd70d7d"
+            revision: "6ad9e09ea1a9c7e58b756d7f043fe2d3eb841cb6"
         ),
         // The transcript cache: indexed, searchable rows of every session's
         // file, kept by the server off the main thread.
