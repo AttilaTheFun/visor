@@ -7,9 +7,12 @@
 import Foundation
 
 enum VisorMCP {
-    /// The script, bundled with the menu bar app.
+    /// The script: bundled with the menu bar app, or, for a server that
+    /// is not an app (the staging server), where VISOR_MCP_SCRIPT says.
     static var script: String? {
-        Bundle.main.url(forResource: "visor_mcp", withExtension: "js")?.path
+        if let bundled = Bundle.main.url(forResource: "visor_mcp", withExtension: "js")?.path { return bundled }
+        guard let named = ProcessInfo.processInfo.environment["VISOR_MCP_SCRIPT"], FileManager.default.fileExists(atPath: named) else { return nil }
+        return named
     }
 
     /// Node and the script, when both are here and the session has its

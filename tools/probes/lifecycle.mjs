@@ -44,4 +44,26 @@ if (process.env.TUI) {
   const again = JSON.parse(await rest('GET', `/sessions/${id}/transcript?since=0`)).entries ?? [];
   log('last row:', JSON.stringify(again.at(-1)?.text?.slice(0, 20)));
 }
+if (process.env.MCP) {
+  // The agent's own road to the server: Visor's MCP tools, and with them
+  // a tool call the client is asked to approve (manual permissions).
+  busy = null; send({ type: 'send', session: id, text: 'Call the visor MCP tool list_sessions once and reply with exactly the word LISTED if it answered, or FAILED if it did not.' });
+  await until(() => busy === true, 10000); log('idle after MCP turn:', await until(() => busy === false, 90000));
+  const listed = JSON.parse(await rest('GET', `/sessions/${id}/transcript?since=0`)).entries ?? [];
+  log('MCP answer:', JSON.stringify(listed.at(-1)?.text?.slice(0, 20)));
+  const manual = crypto.randomUUID().toUpperCase();
+  await rest('POST', '/sessions', { id: manual, agent: AGENT, cwd: '/tmp/visor-probe', title: 'probe-approve', skipPermissions: false });
+  let asked = null, done = null;
+  ws.addEventListener('message', ev => { const e = JSON.parse(ev.data); if (e.session !== manual) return;
+    if (e.type === 'approval' && e.approval) asked = e.approval; if (e.type === 'busy') done = e.busy; });
+  send({ type: 'subscribe', session: manual });
+  await sleep(500);
+  send({ type: 'send', session: manual, text: 'Run the shell command `python3 -c "print(40 + 2)"` with your Bash tool and reply with exactly what it printed.' });
+  log('asked to approve:', (await until(() => asked !== null, 60000)) ? asked.tool : 'NOTHING ASKED');
+  if (asked) send({ type: 'approve', session: manual, id: asked.id, allow: true });
+  await until(() => done === false, 60000);
+  const approved = JSON.parse(await rest('GET', `/sessions/${manual}/transcript?since=0`)).entries ?? [];
+  log('after approval:', JSON.stringify(approved.at(-1)?.text?.slice(0, 20)));
+  await rest('DELETE', `/sessions/${manual}`);
+}
 log('end', (await rest('DELETE', `/sessions/${id}`)).slice(0, 30)); log('failures', failures.length); ws.close(); process.exit(0);
