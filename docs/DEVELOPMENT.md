@@ -409,11 +409,40 @@ Bugs seen and not yet fixed are in docs/KNOWN_ISSUES.md.
   would persist it).
 - Codex plan updates are not mapped to the tasks checklist.
 - The openrouter CLI runs its tools without asking (no manual mode); its
-  `--permission-mode` is accepted and ignored.
+  `--permission-mode` is accepted, said to do nothing, and ignored.
 - The first "earlier" page after a resume can be short (in-memory rows
   before the window), then 600 a page.
 - A 212 MB session file indexes in ~9 s on first build (off the main
   thread); resumes after that are lookups.
+
+From the code-quality pass of October 2026, found and left:
+
+- The wire reuses three `Envelope` fields for other meanings (`busy` for
+  an approval's allow, `folders` for the queue, `exists` for "the server
+  has an APNs key"). Giving each its own field is a protocol change every
+  client has to follow.
+- Marks in the transcript are strings by convention: goal and loop rows
+  by id prefix and text (`goal-file-…`, `wake N`), an attachment as prose
+  after the words (`Attached image:`), a picture reference as
+  `host|path`, a notification's target as `computer/session`.
+- `AgentScreen`'s initializer calls `host.transcript(for:)`, which starts
+  the session's sync: building the view is what subscribes it.
+- `SessionTranscript` throttles its own `objectWillChange` (one change
+  told per frame of `SessionTranscript.frame`); it is tied to the send
+  motion fix and measured by `send_motion.sh`.
+- `VisorServer` and `SessionRecord` are `ObservableObject`s. The server is
+  Apple-only and could use Observation; the client cannot until Isomer has
+  it.
+- AgentUI's `TranscriptActions` and `TranscriptImages` are
+  `nonisolated(unsafe)` statics, and its views are not marked
+  `@MainActor`, until Isomer's SwiftUI isolates views to the main actor.
+- The scripts in tools/ repeat how the team id is read, pass a keychain's
+  password as an argument to `security`, and filter `xcodebuild`'s output
+  through `grep … || true`, which hides why a profile was not made.
+- The terminal pane's keyboard inset and input order were changed without
+  a device to try them on (#79).
+- The openrouter CLI, signalled, leaves the command it was running; a
+  reply interrupted mid-stream is not kept in its session.
 
 ## 8. Working conventions
 
