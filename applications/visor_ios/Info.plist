@@ -13,7 +13,7 @@
     <key>CFBundleShortVersionString</key>
     <string>0.13</string>
     <key>CFBundleVersion</key>
-    <string>0.13</string>
+    <string>13</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <!-- The host is a ws:// WebSocket on the tailnet (a 100.x address or a
