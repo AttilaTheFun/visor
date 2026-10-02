@@ -354,7 +354,7 @@ a detached relauncher and resumes named sessions with a nudge
 ### Snapshot fixture
 
 For screenshot tests, the client can show a canned computer instead of
-real ones (`libraries/visor_client/Sources/Fixture.swift`). The setting
+real ones (`libraries/visor_client/Sources/VisorFixture.swift`). The setting
 `fixture` = `snapshot` turns it on; `fixture.screen` opens a screen:
 `sessions`, `chat`, `goal`, `inspector`, `models`, `search` or `connect`. On Apple
 these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so
