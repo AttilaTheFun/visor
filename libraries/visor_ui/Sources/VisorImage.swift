@@ -24,7 +24,7 @@ struct VisorImage: View {
     @State private var base64: String?
     @State private var failed = false
 
-    private var hostID: String { String(reference.split(separator: "|", maxSplits: 1).first ?? "") }
+    private var serverID: String { String(reference.split(separator: "|", maxSplits: 1).first ?? "") }
     private var path: String { String(reference.split(separator: "|", maxSplits: 1).dropFirst().first ?? "") }
 
     var body: some View {
@@ -60,7 +60,7 @@ struct VisorImage: View {
     /// The bytes behind a reference, for the viewer's share sheet.
     static func bytes(reference: String, store: VisorStore) async -> Data? {
         let parts = reference.split(separator: "|", maxSplits: 1)
-        guard parts.count == 2, let host = store.host(for: String(parts[0])) else { return nil }
+        guard parts.count == 2, let host = store.server(for: String(parts[0])) else { return nil }
         let base64: String
         if let cached = VisorImageCache.shared.data(for: reference) {
             base64 = cached
@@ -79,7 +79,7 @@ struct VisorImage: View {
             base64 = cached
             return
         }
-        guard let host = store.host(for: hostID), !path.isEmpty else { failed = true; return }
+        guard let host = store.server(for: serverID), !path.isEmpty else { failed = true; return }
         do {
             let data = try await host.fileData(path: path)
             VisorImageCache.shared.put(data, for: reference)

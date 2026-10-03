@@ -17,7 +17,7 @@ public enum VisorFixture {
     /// search or connect ("" for the app's own first screen).
     @MainActor public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
 
-    public static let hostID = "fixture"
+    public static let serverID = "fixture"
     /// The session a screen that shows one opens.
     public static let chatSession = "fixture-chat"
     /// The session the `goal` screen opens: working toward a goal and
@@ -27,8 +27,8 @@ public enum VisorFixture {
     /// The words the search screen searches for.
     public static let searchQuery = "sync"
 
-    static let config = HostConfig(id: hostID, name: "Snapshot Mac", host: "snapshot.local", password: "", everConnected: true,
-                                   backend: FixtureBackend.name)
+    static let record = AgentServerRecord(id: serverID, name: "Snapshot Mac", address: "snapshot.local", everConnected: true,
+                                          provider: FixtureAgentServerProvider.name)
 
     /// A small picture, the same bytes every run: four coloured blocks.
     static let picture = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABACAIAAABqVuVZAAAAfklEQVR42u3QAQkAIAwAsIcyi2gVe5jJBta5NS4MlmAx+i2lnVlKCBIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRL0cVDuWmJlLYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIE/Rv0AH3IYA5oDZ+mAAAAAElFTkSuQmCC"

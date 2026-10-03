@@ -8,8 +8,8 @@ import VisorProtocol
 /// header follow the connection and the sessions as they change.
 @MainActor
 struct HostSection<Rows: View>: View {
-    @ObservedObject var host: HostConnection
-    @ViewBuilder let rows: (HostConnection) -> Rows
+    @ObservedObject var host: AgentServerConnection
+    @ViewBuilder let rows: (AgentServerConnection) -> Rows
 
     var body: some View {
         Section {
@@ -17,7 +17,7 @@ struct HostSection<Rows: View>: View {
         } header: {
             HStack(spacing: 6) {
                 Circle().fill(host.badge.color).frame(width: 8, height: 8)
-                Text(host.config.name.isEmpty ? host.config.host : host.config.name)
+                Text(host.record.name.isEmpty ? host.record.address : host.record.name)
                     .lineLimit(1)
                 Spacer()
             }
@@ -27,7 +27,7 @@ struct HostSection<Rows: View>: View {
             // settings); VoiceOver reads it out.
             .accessibilityElement(children: .combine)
             .accessibilityValue(host.state.label)
-            .accessibilityIdentifier("computer-" + host.config.name)
+            .accessibilityIdentifier("computer-" + host.record.name)
         }
     }
 }

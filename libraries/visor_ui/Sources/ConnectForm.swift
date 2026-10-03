@@ -1,4 +1,4 @@
-// Adding a computer: its connection code — copied from the Visor menu bar
+// Adding a Mac (the Tailscale provider's sign-in): its connection code — copied from the Visor menu bar
 // app on the Mac, or carried by the QR code a phone's camera scans — which
 // holds the name, the address and the password. A bare Tailscale name
 // works too, with the password typed beside it. Always TLS on 443 (the
@@ -10,22 +10,15 @@ import VisorProtocol
 
 @MainActor
 struct ConnectForm: View {
-    let connect: (HostConfig) -> Void
+    let connect: (AgentServerRecord) -> Void
     @State private var entry = ""
     @State private var password = ""
-    @State private var backendID = Backends.all.first?.id ?? "tailscale"
-    private var backend: any Backend { Backends.backend(for: backendID) ?? TailscaleBackend() }
     /// What was typed or pasted, read as a connection code when it is one.
     private var code: ConnectionCode? { ConnectionCode(parsing: entry) }
 
     var body: some View {
         Form {
             Section {
-                if Backends.all.count > 1 {
-                    Picker("Backend", selection: $backendID) {
-                        ForEach(Backends.all, id: \.id) { Text($0.title).tag($0.id) }
-                    }
-                }
                 TitledField(title: "Connection code") {
                     TextField("Paste the code, or type a Tailscale name", text: $entry)
                         .autocorrectionDisabled()
@@ -45,7 +38,7 @@ struct ConnectForm: View {
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 } else if !entry.trimmed.isEmpty {
-                    TitledField(title: backend.passwordFieldTitle) {
+                    TitledField(title: "Password (if asked)") {
                         PasswordField("Only if the computer asks", text: $password)
                             .accessibilityIdentifier("password")
                     }
@@ -68,9 +61,9 @@ struct ConnectForm: View {
     private func submit() {
         guard !entry.trimmed.isEmpty else { return }
         if let code {
-            connect(HostConfig(name: code.name, host: code.host, password: code.password, backend: backend.id))
+            connect(AgentServerRecord(name: code.name, address: code.host, secret: code.password))
         } else {
-            connect(HostConfig(name: entry.trimmed, host: entry.trimmed, password: password, backend: backend.id))
+            connect(AgentServerRecord(name: entry.trimmed, address: entry.trimmed, secret: password))
         }
     }
 }

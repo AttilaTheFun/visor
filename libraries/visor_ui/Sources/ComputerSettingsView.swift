@@ -2,14 +2,15 @@ import SwiftUI
 import VisorClient
 import VisorProtocol
 
-/// The settings in the detail column, for a computer selected in the sidebar.
+/// The settings in the detail column, for a server selected in the
+/// sidebar: its provider's form.
 @MainActor
 struct ComputerSettingsView: View {
-    @ObservedObject var host: HostConnection
+    @ObservedObject var host: AgentServerConnection
     let forget: () -> Void
 
     var body: some View {
-        ComputerSettingsForm(host: host, forget: forget)
-            .navigationTitle(host.config.name.isEmpty ? "Computer" : host.config.name)
+        AgentServerProviderUIs.ui(for: host.record.provider).settingsView(for: host, forget: forget)
+            .navigationTitle(host.record.name.isEmpty ? "Computer" : host.record.name)
     }
 }

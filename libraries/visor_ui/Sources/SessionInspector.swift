@@ -13,7 +13,7 @@ import VisorProtocol
 
 @MainActor
 struct SessionInspector: View {
-    @ObservedObject var host: HostConnection
+    @ObservedObject var host: AgentServerConnection
     let session: SessionInfo
     /// The room the session's pane has here, in points.
     let window: CGSize
@@ -58,7 +58,7 @@ struct SessionInspector: View {
                     LabeledContent("Agent", value: session.agent.title)
                     LabeledContent("Model", value: host.modelTitle(for: session) + (session.effort.map { " " + AgentCatalog.effortTitle($0) } ?? ""))
                     LabeledContent("Folder", value: session.cwd)
-                    LabeledContent("Computer", value: host.config.name.isEmpty ? host.config.host : host.config.name)
+                    LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
                     if let used = session.contextUsed {
                         LabeledContent("Context", value: "\(used / 1000)k of \((session.contextLimit ?? 0) / 1000)k")
                     }

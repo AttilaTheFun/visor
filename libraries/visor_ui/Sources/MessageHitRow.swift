@@ -7,7 +7,7 @@ import VisorProtocol
 /// A message that matched the search: its words, and whose they are.
 @MainActor
 struct MessageHitRow: View {
-    let hit: HostConnection.SearchHit
+    let hit: SearchHit
     /// The computer's name, when there is more than one to tell apart.
     let computer: String?
 

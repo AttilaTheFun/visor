@@ -12,7 +12,7 @@ import SwiftTerm
 
 @MainActor
 struct TerminalPane: View {
-    @ObservedObject var host: HostConnection
+    @ObservedObject var host: AgentServerConnection
     let sessionID: String
 
     var body: some View {

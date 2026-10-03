@@ -50,9 +50,9 @@ final class OpenRouterCatalogTests: XCTestCase {
     }
 
     func testCatalogReadsTheCLIsModelsWithPrices() throws {
-        let backend = OpenRouterBackend()
+        let harness = OpenRouterHarness()
         // No list on disk yet: a stand-in.
-        XCTAssertEqual(backend.catalog().defaultModel, "openai/gpt-5-nano")
+        XCTAssertEqual(harness.catalog().defaultModel, "openai/gpt-5-nano")
 
         func model(_ id: String, _ name: String, _ prompt: String, _ completion: String, created: Double, tools: Bool = true) -> [String: Any] {
             ["id": id, "name": name, "created": created, "pricing": ["prompt": prompt, "completion": completion],
@@ -67,7 +67,7 @@ final class OpenRouterCatalogTests: XCTestCase {
             model("zeta/other", "Zeta: Other", "0.000003", "0.000015", created: 4),
             model("openai/gpt-5-nano", "OpenAI: GPT-5 Nano", "0.00000005", "0.0000004", created: 0),
         ]])
-        var catalog = backend.catalog()
+        var catalog = harness.catalog()
         // Tool-callers only; the short list is the default and the
         // hand-kept coding list (none of which this file has).
         XCTAssertFalse(catalog.models.contains { $0.id == "acme/no-tools" })
@@ -83,16 +83,16 @@ final class OpenRouterCatalogTests: XCTestCase {
         // The coding list's models, when offered, follow in its order.
         var file = try JSONSerialization.jsonObject(with: Data(contentsOf: home.appendingPathComponent("models.json"))) as! [String: Any]
         var models = file["models"] as! [[String: Any]]
-        models.append(model(OpenRouterBackend.coding[1], "DeepSeek: Second", "0.0000001", "0.0000002", created: 6))
-        models.append(model(OpenRouterBackend.coding[0], "Z.ai: First", "0.0000001", "0.0000002", created: 7))
+        models.append(model(OpenRouterHarness.coding[1], "DeepSeek: Second", "0.0000001", "0.0000002", created: 6))
+        models.append(model(OpenRouterHarness.coding[0], "Z.ai: First", "0.0000001", "0.0000002", created: 7))
         file["models"] = models
         try write("models.json", file)
-        XCTAssertEqual(backend.catalog().models.filter(\.listed).map(\.id),
-                       [OpenRouterBackend.coding[0], OpenRouterBackend.coding[1]])
+        XCTAssertEqual(harness.catalog().models.filter(\.listed).map(\.id),
+                       [OpenRouterHarness.coding[0], OpenRouterHarness.coding[1]])
 
         // The CLI's configured model leads, and is the default.
         try write("config.json", ["apiKey": "sk-or-secret", "model": "zeta/other"])
-        catalog = backend.catalog()
+        catalog = harness.catalog()
         XCTAssertEqual(catalog.defaultModel, "zeta/other")
         // The default is not a suggestion unless it is one.
         XCTAssertFalse(catalog.models.first { $0.id == "zeta/other" }?.listed ?? true)
@@ -106,7 +106,7 @@ final class OpenRouterCatalogTests: XCTestCase {
 
     @MainActor
     func testBackendDrivesTheCLIAsClaude() {
-        let process = OpenRouterBackend().makeProcess(cwd: "/tmp", skipPermissions: true, resume: "abc")
+        let process = OpenRouterHarness().makeProcess(cwd: "/tmp", skipPermissions: true, resume: "abc")
         XCTAssertTrue(process is ClaudeProcess)
         XCTAssertEqual(process.resumeCommand, "cd /tmp && openrouter --resume abc")
     }
@@ -125,7 +125,7 @@ final class ClaudeModelsTests: XCTestCase {
             ["value": "haiku", "resolvedModel": "claude-haiku-4-5-20251001", "displayName": "Haiku",
              "description": "Haiku 4.5 · Fastest for quick answers"],
         ]
-        let parsed = try XCTUnwrap(ClaudeBackend.parse(models: list))
+        let parsed = try XCTUnwrap(ClaudeHarness.parse(models: list))
         XCTAssertEqual(parsed.models.map(\.id), ["opus[1m]", "claude-fable-5-1[1m]", "haiku"])
         XCTAssertEqual(parsed.models.map(\.title), ["Opus 5.5", "Fable 5.1", "Haiku 4.5"])
         XCTAssertEqual(parsed.models[0].subtitle, "Best for everyday, complex tasks · 1M context")
@@ -158,7 +158,7 @@ final class ClaudeModelsNewShapeTests: XCTestCase {
             ["value": "sonnet", "resolvedModel": "claude-sonnet-5", "displayName": "Sonnet",
              "description": "Most efficient for everyday tasks"],
         ]
-        let parsed = try XCTUnwrap(ClaudeBackend.parse(models: list))
+        let parsed = try XCTUnwrap(ClaudeHarness.parse(models: list))
         XCTAssertEqual(parsed.models.map(\.title), ["Opus 5.5", "Fable 5.1", "Sonnet 5"])
         XCTAssertEqual(parsed.models.map(\.subtitle), ["Most capable for ambitious work", "For your toughest challenges",
                                                         "Most efficient for everyday tasks"])
@@ -177,7 +177,7 @@ final class CodexModelsTests: XCTestCase {
              "supportedReasoningEfforts": [["reasoningEffort": "low"]]],
             ["id": "internal", "model": "internal", "displayName": "Internal", "hidden": true],
         ]
-        let parsed = CodexBackend.parse(models: list)
+        let parsed = CodexHarness.parse(models: list)
         XCTAssertEqual(parsed.models.map(\.id), ["gpt-6-astra", "gpt-6-sol"])
         XCTAssertEqual(parsed.models.map(\.title), ["Astra 6", "Sol 6"])
         XCTAssertEqual(parsed.models[0].efforts, ["low", "medium", "ultra"])
@@ -212,10 +212,10 @@ final class ClaudeModelListTests: XCTestCase {
     func testAShorterListWaitsToBeConfirmed() {
         let full = ["opus", "claude-fable-5-1", "sonnet", "haiku"].map(model)
         let base = ["sonnet", "haiku"].map(model)
-        XCTAssertTrue(ClaudeBackend.accepts(full, over: nil), "the first list is taken")
-        XCTAssertTrue(ClaudeBackend.accepts(full, over: base), "a list that grows is taken at once")
-        XCTAssertTrue(ClaudeBackend.accepts(full + [model("claude-opus-5-9")], over: full), "so is one that adds a model")
-        XCTAssertFalse(ClaudeBackend.accepts(base, over: full), "a list that loses Opus and Fable waits")
-        XCTAssertTrue(ClaudeBackend.accepts(full, over: full))
+        XCTAssertTrue(ClaudeHarness.accepts(full, over: nil), "the first list is taken")
+        XCTAssertTrue(ClaudeHarness.accepts(full, over: base), "a list that grows is taken at once")
+        XCTAssertTrue(ClaudeHarness.accepts(full + [model("claude-opus-5-9")], over: full), "so is one that adds a model")
+        XCTAssertFalse(ClaudeHarness.accepts(base, over: full), "a list that loses Opus and Fable waits")
+        XCTAssertTrue(ClaudeHarness.accepts(full, over: full))
     }
 }

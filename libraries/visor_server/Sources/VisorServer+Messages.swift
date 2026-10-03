@@ -85,7 +85,7 @@ extension VisorServer {
         let resume = (envelope.resume ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let info = SessionInfo(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skip, created: Date().timeIntervalSince1970)
         // A resumed session shows what was said before it moved here.
-        let past = resume.isEmpty ? [] : (backends.backend(for: agent)?.transcript(id: resume, cwd: cwd, limit: 300) ?? [])
+        let past = resume.isEmpty ? [] : (harnesses.harness(for: agent)?.transcript(id: resume, cwd: cwd, limit: 300) ?? [])
         let record = SessionRecord(info: info, process: makeProcess(info, resume: resume.isEmpty ? nil : resume), entries: past)
         if !resume.isEmpty { record.refreshResume() }
         sessions.append(record)

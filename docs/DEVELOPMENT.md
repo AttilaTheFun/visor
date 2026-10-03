@@ -96,25 +96,25 @@ and parsed off it (`PipedChild.swift`, `AsyncStream+Lines.swift`) and reaches th
 one is never started on a session while the one before is still going
 (`SessionRecord.held`), and quitting waits for all of them
 (`applicationShouldTerminate` → `endAll`). Processes are made by an
-`AgentBackend` (`AgentBackends.standard`:
-`ClaudeBackend` → `ClaudeProcess` (`claude -p --input-format stream-json
+`AgentHarness` (`AgentHarnesses.standard`:
+`ClaudeHarness` → `ClaudeProcess` (`claude -p --input-format stream-json
 --output-format stream-json --include-partial-messages`, one process per
-session, `--resume`), `CodexBackend` → `CodexAppServerProcess` (`codex
+session, `--resume`), `CodexHarness` → `CodexAppServerProcess` (`codex
 app-server`, JSON-RPC over stdio, thread/start|resume, turn/start,
-turn/interrupt), `OpenRouterBackend` → `ClaudeProcess(tool: "openrouter")`
+turn/interrupt), `OpenRouterHarness` → `ClaudeProcess(tool: "openrouter")`
 (the openrouter CLI speaks the same stream-json; its sessions are
 `~/.openrouter/sessions/<id>.json`, read by `SessionCatalog` for
 resumable/transcript). Its catalog is every tool-calling model in the
 CLI's `~/.openrouter/models.json` (priced subtitles, `group` = maker);
-`listed` marks the suggestions — `OpenRouterBackend.coding`, a hand-kept copy
+`listed` marks the suggestions — `OpenRouterHarness.coding`, a hand-kept copy
 of the top ten at openrouter.ai/collections/programming (update it from
 the page; the API's `category=programming` order does not match it) — the default (the CLI's config, else gpt-5-nano) is not a suggestion.
 The model sheet, for a catalog with unlisted models, shows Current Model
 (what the session runs), then Suggested, then an All Models sheet
 grouped by maker with search. The server runs `openrouter models
 --refresh` at launch when the file is a day old; Visor never calls
-OpenRouter itself). Backends are injectable
-(`VisorServer.backends`) so a different adapter layer can be swapped in.
+OpenRouter itself). Harnesses are injectable
+(`VisorServer.harnesses`) so a different adapter layer can be swapped in.
 
 The **record** is the transcript in memory (`entries`, a window of 600
 rows served) plus the ephemeral state. Every change bumps `revision`;
@@ -169,7 +169,7 @@ messages.sqlite`, keyed by Visor session id; every agent's rows are
 written by the indexer from its log. Client cache: `…/com.LoganShire.
 VisorClient.macOS/messages.sqlite` (iOS in its container), keyed
 `<host id>/<session id>`; a session opens from it synchronously
-(`HostConnection.transcript(for:)`, called from `AgentScreen.init`) and
+(`AgentServerConnection.transcript(for:)`, called from `AgentScreen.init`) and
 syncs only what moved. Both are disposable: client rebuilds from server,
 server from the files. `GET /api/search?q=words` searches the server cache.
 
@@ -185,13 +185,37 @@ tool_result tool_use_id; Codex: item/started|completed by id; OpenRouter:
 call id). A streamed delta for a message the record already carries is
 ignored (both ends); the turn's end sweeps served streams.
 
-**Client** (`libraries/visor_client`): `HostConnection` per computer
-(`HostTransport` = TailscaleTransport: wss + https bearer), `SessionTranscript`
+**Client** (`libraries/visor_client`): `AgentServerConnection` per server,
+over the provider's `AgentServer` (`TailscaleAgentServer`: `hello`, wss +
+https bearer, each operation mapped to the wire protocol in
+`TailscaleAgentServer+Operations.swift`; a fork's maps the same
+operations to its own service), `SessionTranscript`
 (entries, streams by message id, `sending` = optimistic rows that stay the
 last row until the record carries the same words at a later revision AND
 every stream present when sent has landed — `shadowed` hides the matched
 record row meanwhile; `turnStatus: [StatusItem]`). Sent text is trimmed.
 `catalogs` envelope refreshes the agent list (e.g. after a key is saved).
+
+**Another kind of agent server** (a fork hosting agents on its own
+service, behind its own sign-in) adds three things and changes nothing
+else: an `AgentServer` conformance, which is the whole of what the
+client asks of a server — `authenticate` (throw
+`AgentServerError.needsAuthentication` to have the user sign in),
+`openChannel` delivering `AgentServerEvent`s (`.welcome` first, then
+`.sessions`/`.catalogs`/`.session(envelope)`), and the one-shot
+operations (`startSession`, `act(SessionAction)`, `sendMessage`,
+`transcript(of:since:generation:)`, folders, files, search; pushes and
+linking have defaults); an `AgentServerProvider` that makes it for a
+record (`AgentServerProviders.register`, before the store is made); and
+an `AgentServerProviderUI` in VisorUI (`AgentServerProviderUIs.register`)
+whose `addView` is the sign-in — any view; it calls `add` with the
+`AgentServerRecord` once the user is in, `address` and `secret` meaning
+whatever the provider wants — and whose `settingsView` is the saved
+server's detail. With one provider the add sheet is its sign-in; with
+more, a list of providers first. A record's `provider` id picks both.
+The session-side values a server hands back (`SessionInfo`,
+`TranscriptEntry`, the transcript and ephemeral envelopes) are the
+protocol library's, so a fork's server produces those from its own API.
 
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line
@@ -210,9 +234,10 @@ exposure's `requester(headers:)` (Serve's `tailscale-user-login`) equals
 `hostLogin` (from `tailscale status`, read when the front is set up), or the
 bearer is the password, or a token `GET /api/hello` issued (kept in
 memory, 512 newest). The socket's `login` takes `token` or `password`.
-Clients (`HostConnection.open`) do `hello` first — 401 → state
-`.needsPassword`, no retry until a password is saved — then the socket
-with the token. There is no automatic discovery (manual, one-step
+Clients (`AgentServerConnection.open` → `AgentServer.authenticate`) do
+`hello` first — 401 → `AgentServerError.needsAuthentication` → state
+`.needsAuthentication`, no retry until the record changes — then the
+socket with the token. There is no automatic discovery (manual, one-step
 adding keeps Visor from depending on Tailscale's device list): the
 connection code (`ConnectionCode` in visor_protocol, base64url JSON of
 name/host/password) is made by `VisorServer.connectionCode` and taken by
@@ -221,7 +246,7 @@ or the apps' `onOpenURL`. Nothing opens by itself: the sidebar's last
 section is always "Add Computer…", which opens the connect sheet
 (`store.addingComputer`; the Mac also has it in its Computers menu).
 
-**Claude's models.** `ClaudeBackend.refreshModels` (at launch, then
+**Claude's models.** `ClaudeHarness.refreshModels` (at launch, then
 every 6 h) starts `claude -p` with stream-json, sends the SDK's
 `initialize` control request, takes the answer's `models` (value,
 resolvedModel, description, supportedEffortLevels; the "default" entry
@@ -231,7 +256,7 @@ file. That list is the Claude catalog (ids like `opus[1m]` go to
 matching:)` also matches without the `[1m]` mark, so a reported
 `claude-opus-5-5` or an older session's `fable` finds its row.
 
-**Codex's models.** `CodexBackend.refreshModels` (same schedule) runs
+**Codex's models.** `CodexHarness.refreshModels` (same schedule) runs
 `codex app-server`, `initialize`, `model/list`, and ends it: the visible
 models, their efforts and default effort, and `isDefault`. A `model` in
 ~/.codex/config.toml still wins as the default; ~/.codex/models_cache.json
@@ -301,7 +326,7 @@ a detached relauncher and resumes named sessions with a nudge
 - Rules (AGENTS.md): commit straight to main, no attribution lines; no
   Combine; visor_client/visor_ui stay Foundation-free of networking,
   JSON, UserDefaults (they build for the web — `String.trimmingCharacters`
-  is not available there; see `HostConnection.trimmed`); Apple-only
+  is not available there; see `AgentServerConnection.trimmed`); Apple-only
   SwiftUI through Compat.swift.
 - NEVER send test turns into your own working sessions. Start a throwaway
   session over the protocol and end it — that is what the probes do.
@@ -361,10 +386,10 @@ these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so
 launch arguments set them: `-visor.fixture snapshot -visor.fixture.screen
 chat`. The web and Android set them through their settings services. The
 store then holds only "Snapshot Mac", keeps its rows in memory, and saves
-nothing over the real computers. A `fixture` backend's transport answers
-the hello, the socket's login and subscribe, the transcript's sync,
-commands, files and search from fixed data, so everything above the
-transport runs as usual. The inspector and model sheets open 1.5 s after the chat, once
+nothing over the real computers. The `fixture` provider's
+`FixtureAgentServer` answers the sign-in, the channel, subscribe, the
+transcript's sync, commands, files and search from fixed data, so
+everything above the server runs as usual. The inspector and model sheets open 1.5 s after the chat, once
 the thread has settled; take screenshots at least 4 s after launch (8 s
 lets every sheet's glass finish easing in). The busy session shows a static glyph instead of
 a spinner. Pin the simulator's status bar (`xcrun simctl status_bar booted

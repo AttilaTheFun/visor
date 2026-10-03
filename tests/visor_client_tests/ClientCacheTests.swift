@@ -20,11 +20,11 @@ final class ClientCacheTests: XCTestCase {
     }
 
     func testSessionOpensAsLastSeenAndSyncsFromThere() throws {
-        HostConnection.cache = .inMemory()
-        let config = HostConfig(name: "Mac", host: "mac.example", password: "")
+        AgentServerConnection.cache = .inMemory()
+        let config = AgentServerRecord(name: "Mac", address: "mac.example")
 
         // First look: nothing kept, so the view waits for the first sync.
-        let first = HostConnection(config: config)
+        let first = AgentServerConnection(record: config)
         let opened = first.transcript(for: "S")
         XCTAssertFalse(opened.loaded)
         XCTAssertTrue(opened.entries.isEmpty)
@@ -34,16 +34,16 @@ final class ClientCacheTests: XCTestCase {
         opened.sync(transcript([row("a2", "More")], revision: 6, generation: 1, more: true))
         XCTAssertEqual(opened.entries.map(\.id), ["u1", "a1", "a2"])
         let key = config.id + "/S"
-        XCTAssertEqual(HostConnection.cache.messages(in: key, limit: 10).messages.map(\.id), ["u1", "a1", "a2"])
-        XCTAssertEqual(HostConnection.cache.syncState(of: key), SyncState(revision: 6, generation: 1))
+        XCTAssertEqual(AgentServerConnection.cache.messages(in: key, limit: 10).messages.map(\.id), ["u1", "a1", "a2"])
+        XCTAssertEqual(AgentServerConnection.cache.syncState(of: key), SyncState(revision: 6, generation: 1))
 
         // A rebuilt record replaces what was kept.
         opened.sync(transcript([row("u1", "Hello", role: .user), row("a1", "Hi, edited")], revision: 9, generation: 2))
-        XCTAssertEqual(HostConnection.cache.messages(in: key, limit: 10).messages.map(\.text), ["Hello", "Hi, edited"])
+        XCTAssertEqual(AgentServerConnection.cache.messages(in: key, limit: 10).messages.map(\.text), ["Hello", "Hi, edited"])
 
         // As after a relaunch: a new connection to the same computer has
         // the session at once, loaded, and knows where to sync from.
-        let second = HostConnection(config: config)
+        let second = AgentServerConnection(record: config)
         let reopened = second.transcript(for: "S")
         XCTAssertTrue(reopened.loaded)
         XCTAssertEqual(reopened.entries.map(\.text), ["Hello", "Hi, edited"])
@@ -53,7 +53,7 @@ final class ClientCacheTests: XCTestCase {
 
         // Ending the session forgets it.
         second.end("S")
-        XCTAssertEqual(HostConnection.cache.count(in: key), 0)
-        XCTAssertFalse(HostConnection(config: config).transcript(for: "S").loaded)
+        XCTAssertEqual(AgentServerConnection.cache.count(in: key), 0)
+        XCTAssertFalse(AgentServerConnection(record: config).transcript(for: "S").loaded)
     }
 }

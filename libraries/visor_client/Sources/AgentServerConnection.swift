@@ -1,8 +1,8 @@
-// One computer: its saved address and password, the WebSocket to its menu
-// bar app (through the host's socket service, so the same code runs in a
-// browser), the sessions it lists, and a transcript per session the UI
-// observes. Reconnects with a short backoff while the app is open. No
-// Combine: observation is SwiftUI's, waiting is async/await.
+// One agent server: its saved record, the live channel to it (through its
+// provider's `AgentServer`, so a Mac over Tailscale and a fork's service
+// drive the same connection), the sessions it lists, and a transcript per
+// session the UI observes. Reconnects with a short backoff while the app
+// is open. No Combine: observation is SwiftUI's, waiting is async/await.
 
 import SwiftUI
 import MessageCache
@@ -10,7 +10,7 @@ import VisorProtocol
 import VisorServices
 
 @MainActor
-public final class HostConnection: ObservableObject, Identifiable {
+public final class AgentServerConnection: ObservableObject, Identifiable {
     public enum State: Equatable {
         case disconnected
         case connecting
@@ -19,9 +19,10 @@ public final class HostConnection: ObservableObject, Identifiable {
         case offline(String)
         /// The host answered and refused (a wrong password) or errs.
         case failed(String)
-        /// The host does not know this device as its owner's and wants
-        /// the password from its menu bar app (or the one saved is wrong).
-        case needsPassword
+        /// The server does not know this device and wants the user to
+        /// sign in (for a Mac: the password its menu bar app shows), or
+        /// the credentials saved are wrong.
+        case needsAuthentication
 
         public var label: String {
             switch self {
@@ -30,11 +31,11 @@ public final class HostConnection: ObservableObject, Identifiable {
             case .connected: "Connected"
             case .offline(let reason): "Offline: \(reason)"
             case .failed(let message): "Error: \(message)"
-            case .needsPassword: "Needs a password"
+            case .needsAuthentication: "Needs signing in"
             }
         }
 
-        public var wantsPassword: Bool { if case .needsPassword = self { true } else { false } }
+        public var wantsAuthentication: Bool { if case .needsAuthentication = self { true } else { false } }
     }
 
     /// The sidebar badge: green connected; yellow reachable before, not
@@ -43,147 +44,108 @@ public final class HostConnection: ObservableObject, Identifiable {
     public var badge: Badge {
         switch state {
         case .connected: return .connected
-        case .failed, .needsPassword: return .unreachable
-        default: return config.everConnected ? .wasConnected : .unreachable
+        case .failed, .needsAuthentication: return .unreachable
+        default: return record.everConnected ? .wasConnected : .unreachable
         }
     }
 
-    @Published public var config: HostConfig {
-        didSet { onConfigChange?() }
+    @Published public var record: AgentServerRecord {
+        didSet { onRecordChange?() }
     }
     @Published public private(set) var state: State = .disconnected
     @Published public private(set) var sessions: [SessionInfo] = []
     @Published public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
     @Published public private(set) var catalogs: [AgentCatalog] = []
-    /// The store saves when the address or password changes.
-    var onConfigChange: (() -> Void)?
-    /// What `hello` gave for the socket's login, this connection.
-    private var token: String?
+    /// The store saves when the address or credentials change.
+    var onRecordChange: (() -> Void)?
 
-    public nonisolated var id: String { configID }
-    private nonisolated let configID: String
+    public nonisolated var id: String { recordID }
+    private nonisolated let recordID: String
     /// Bumped whenever the live channel is closed, so a closed channel's
     /// late events are ignored.
     private var generation = 0
-    /// The road to this computer, from its backend.
-    private let transport: any HostTransport
+    /// The server itself, from its provider.
+    let server: any AgentServer
     private var wantsConnection = false
     private var attempt = 0
     private var pendingSubscriptions: Set<String> = []
 
-    public init(config: HostConfig) {
-        self.transport = Backends.transport(for: config)
-        self.config = config
-        self.configID = config.id
+    public init(record: AgentServerRecord) {
+        self.server = AgentServerProviders.server(for: record)
+        self.record = record
+        self.recordID = record.id
         loadProjects()
         loadCachedSessions()
     }
 
-    /// Told when the computer sends a new list of its sessions (the store
+    /// Told when the server sends a new list of its sessions (the store
     /// keeps the home screen's widget up to date by it).
     var onSessionsChange: (() -> Void)?
 
     /// The last command that failed, for the UI.
     @Published public var commandError: String?
 
-    public enum HostError: Error { case noHTTP }
-
-    /// One REST call, returning the answer's body.
-    public func fetch(_ method: String, _ path: String, _ body: Envelope? = nil) async throws -> Envelope {
-        let text = try await transport.call(method, path, body: body?.encoded() ?? "", config: config)
-        return Envelope.decode(text, defaultType: "reply") ?? Envelope(type: "reply")
-    }
-
-    /// The host's subfolders of `path` (the picker); the resolved path comes back too.
+    /// The server's subfolders of `path` (the picker); the resolved path comes back too.
     public func folders(at path: String) async throws -> (path: String, folders: [String]) {
-        let reply = try await fetch("GET", "/folders?path=" + HostConnection.escape(path))
-        return (reply.path ?? path, reply.folders ?? [])
+        let listing = try await server.folders(at: path)
+        return (listing.path, listing.folders)
     }
 
-    /// Whether the folder is still on the computer (a project whose folder
+    /// Whether the folder is still on the server (a project whose folder
     /// was renamed or moved answers false).
     public func folderExists(_ path: String) async throws -> Bool {
-        let reply = try await fetch("GET", "/folders?path=" + HostConnection.escape(path))
-        return reply.exists ?? true
+        try await server.folders(at: path).exists
     }
 
-    /// The bytes of a picture the computer holds, base64 (the REST side
-    /// speaks JSON, so they travel as text).
+    /// The bytes of a picture the server holds, base64.
     public func fileData(path: String) async throws -> String {
-        let reply = try await fetch("GET", "/file?path=" + HostConnection.escape(path))
-        guard let data = reply.text, !data.isEmpty else { throw HostError.noHTTP }
-        return data
+        try await server.fileData(path: path)
     }
 
-    /// Puts a picture or a video on the computer and returns where it landed, which
+    /// Puts a picture or a video on the server and returns where it landed, which
     /// is what the agent is then pointed at.
     public func upload(base64: String, name: String) async throws -> String {
-        var body = Envelope(type: "file")
-        body.text = base64
-        body.title = name
-        let reply = try await fetch("POST", "/file", body)
-        guard let path = reply.path, !path.isEmpty else { throw HostError.noHTTP }
-        return path
+        try await server.upload(base64: base64, name: name)
     }
 
-    /// A message that matched a search: where it is and a snippet of it.
-    public struct SearchHit: Identifiable, Hashable, Sendable {
-        public var id: String { session + "/" + message }
-        public let session: String
-        public let message: String
-        public let role: String
-        public let snippet: String
-        public let title: String
-        public let cwd: String
-    }
-
-    /// The messages on this computer whose words match, across every
+    /// The messages on this server whose words match, across every
     /// session, best first.
     public func search(_ query: String) async throws -> [SearchHit] {
-        let text = try await transport.call("GET", "/search?q=" + HostConnection.escape(query), body: "", config: config)
-        return (parseJSON(text)?["hits"].array ?? []).compactMap { hit in
-            guard let session = hit["session"].string, let message = hit["id"].string else { return nil }
-            return SearchHit(session: session, message: message, role: hit["role"].string ?? "", snippet: hit["snippet"].string ?? "",
-                             title: hit["title"].string ?? "", cwd: hit["cwd"].string ?? "")
-        }
+        try await server.search(query)
     }
 
-    /// Gives the computer this device's push token, so its server can say
-    /// when a turn ends or an agent waits, with the app closed. Again on
-    /// each connect: the server keeps the latest.
+    /// Gives the server this device's push token, so it can say when a
+    /// turn ends or an agent waits, with the app closed. Again on each
+    /// connect: the server keeps the latest.
     public func registerForPush() {
         let handler = VisorNotificationHandler.shared
         guard state == .connected, let token = handler.token else { return }
-        var e = Envelope(type: "push")
-        e.deviceToken = token
-        e.platform = handler.platform
-        e.pushEnvironment = handler.environment
-        e.pushTopic = handler.topic
+        let (platform, environment, topic) = (handler.platform, handler.environment, handler.topic)
         Task { [weak self] in
-            // Whether the computer sends pushes (it has an APNs key): then
-            // it says what happened, and this device does not say it too.
-            let reply = try? await self?.fetch("POST", "/push", e)
-            self?.computerPushes = reply?.exists ?? false
+            // Whether the server sends pushes: then it says what happened,
+            // and this device does not say it too.
+            let pushes = try? await self?.server.registerPush(token: token, platform: platform, environment: environment, topic: topic)
+            self?.serverPushes = pushes ?? false
         }
     }
 
-    /// The computer sends this device pushes: local notifications would
-    /// say the same thing twice.
-    var computerPushes = false
+    /// The server sends this device pushes: local notifications would say
+    /// the same thing twice.
+    var serverPushes = false
 
     /// Tells the user (where the host can) what changed in a session while
     /// they may not be looking: a turn finished, an agent waiting for
-    /// approval, a goal done. Only for a change the computer announced:
+    /// approval, a goal done. Only for a change the server announced:
     /// the first list after connecting says what is, not what happened.
     func notifyChanges(from before: [SessionInfo], to after: [SessionInfo]) {
-        guard let notifications = VisorHost.notifications, !computerPushes else { return }
+        guard let notifications = VisorHost.notifications, !serverPushes else { return }
         for new in after {
             guard let old = before.first(where: { $0.id == new.id }), !new.archived, !new.ended else { continue }
             let title = new.title.isEmpty ? new.agent.title : new.title
-            // "<computer>/<session>/<kind>": the id replaces an older one,
+            // "<server>/<session>/<kind>": the id replaces an older one,
             // and says where to go when the notification is opened.
-            let key = config.host + "/" + new.id
+            let key = record.address + "/" + new.id
             if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval {
                 notifications.notify(id: key + "/approval", title: "\(title) is waiting",
                                      body: "Allow \(approval.tool)? " + approval.summary)
@@ -196,74 +158,49 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
     }
 
-    /// The slash commands a session's agent takes, as the computer knows
+    /// The slash commands a session's agent takes, as the server knows
     /// them (none for an agent that lists none).
     public func commands(for sessionID: String) async throws -> [SlashCommand] {
-        try await fetch("GET", "/sessions/\(sessionID)/commands").commands ?? []
+        try await server.commands(for: sessionID)
     }
 
-    /// The computer's connection code, as its server gives it.
+    /// The server's connection code, for linking servers.
     public func connectionCode() async throws -> String {
-        let reply = try await fetch("GET", "/code")
-        guard let code = reply.text, !code.isEmpty else { throw HostError.noHTTP }
-        return code
+        try await server.connectionCode()
     }
 
-    /// Links another computer's server to this one's, so the agents here
-    /// reach its sessions (the server keeps its code).
+    /// Links another server to this one by its code, so the agents here
+    /// reach its sessions.
     public func link(code: String) async throws {
-        var body = Envelope(type: "link")
-        body.text = code
-        let reply = try await fetch("POST", "/link", body)
-        if let error = reply.error { throw LinkError(message: error) }
+        try await server.link(code: code)
     }
 
-    public struct LinkError: Error { public let message: String }
-
-    /// Creates the folder (and its parents) on the host.
+    /// Creates the folder (and its parents) on the server.
     public func makeFolder(_ path: String) async throws -> String {
-        var body = Envelope(type: "mkdir"); body.path = path
-        let reply = try await fetch("POST", "/folders", body)
-        return reply.path ?? path
+        try await server.makeFolder(path)
     }
 
     /// The agent's own sessions started in `cwd`, newest first.
     public func resumable(agent: AgentKind, cwd: String) async throws -> [ResumableSession] {
-        let reply = try await fetch("GET", "/resumable?agent=\(agent.rawValue)&cwd=" + HostConnection.escape(cwd))
-        return reply.resumable ?? []
+        try await server.resumable(agent: agent, cwd: cwd)
     }
 
-    static func escape(_ text: String) -> String {
-        var out = ""
-        for byte in text.utf8 {
-            if (byte >= 48 && byte <= 57) || (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122) || byte == 45 || byte == 46 || byte == 95 || byte == 126 || byte == 47 {
-                out.append(Character(UnicodeScalar(byte)))
-            } else {
-                out += "%" + String(byte, radix: 16, uppercase: true).leftPadded(2)
-            }
+    /// One command on a session; the sessions the answer names refresh
+    /// the list at once (the channel's broadcast follows for everyone
+    /// else). After `.end` they replace it.
+    private func act(_ action: SessionAction, on sessionID: String) {
+        perform { [weak self] in
+            let list = try await self?.server.act(action, on: sessionID) ?? []
+            self?.take(list, replacing: action == .end)
         }
-        return out
     }
 
-    /// One REST call; the answer's `sessions` refreshes the list at once
-    /// (the socket's broadcast follows for everyone else).
-    private func api(_ method: String, _ path: String, _ body: Envelope? = nil, then: (() -> Void)? = nil) {
-        let payload = body?.encoded() ?? ""
-        let config = config
-        let transport = transport
+    /// Runs one operation, keeping what went wrong for the UI.
+    private func perform(_ operation: @escaping @MainActor () async throws -> Void, then: (() -> Void)? = nil) {
         Task { [weak self] in
             do {
-                let text = try await transport.call(method, path, body: payload, config: config)
+                try await operation()
                 guard let self else { return }
-                if let reply = Envelope.decode(text, defaultType: "reply"), let list = reply.sessions {
-                    if reply.type == "welcome" || method == "DELETE" {
-                        self.sessions = list
-                    } else {
-                        for info in list {
-                            if let index = self.sessions.firstIndex(where: { $0.id == info.id }) { self.sessions[index] = info } else { self.sessions.append(info) }
-                        }
-                    }
-                }
                 self.commandError = nil
                 then?()
             } catch {
@@ -272,11 +209,22 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
     }
 
-    /// Edits the saved address or password (the store saves through `onConfigChange`).
-    public func update(_ change: (inout HostConfig) -> Void) {
-        var next = config
+    /// The sessions an answer named, into the list.
+    private func take(_ list: [SessionInfo], replacing: Bool) {
+        if replacing {
+            sessions = list
+            return
+        }
+        for info in list {
+            if let index = sessions.firstIndex(where: { $0.id == info.id }) { sessions[index] = info } else { sessions.append(info) }
+        }
+    }
+
+    /// Edits the saved address or credentials (the store saves through `onRecordChange`).
+    public func update(_ change: (inout AgentServerRecord) -> Void) {
+        var next = record
         change(&next)
-        config = next
+        record = next
     }
 
     public func connect() {
@@ -294,34 +242,31 @@ public final class HostConnection: ObservableObject, Identifiable {
 
     private func closeSocket() {
         generation += 1
-        transport.disconnect()
+        server.closeChannel()
     }
 
-    /// First `hello` over HTTP — the computer lets this device in on the
-    /// network's word (its owner's device) or on the password, and hands
-    /// back its name and a token — then the socket, logged in with the
-    /// token. A 401 is the computer asking for a password: no retrying
-    /// until one is saved.
+    /// The sign-in first — for a Mac, `hello` over HTTP, which lets this
+    /// device in on the network's word or on the password — then the live
+    /// channel. A refusal is the server asking the user to sign in: no
+    /// retrying until the record changes.
     private func open() {
         guard wantsConnection else { return }
         closeSocket()
         state = .connecting
         let mine = generation
-        let transport = transport
-        let config = config
+        let server = server
+        let record = record
         Task { [weak self] in
             do {
-                let text = try await transport.call("GET", "/hello", body: "", config: config)
+                let name = try await server.authenticate(record)
                 guard let self, self.generation == mine, self.wantsConnection else { return }
-                let hello = Envelope.decode(text, defaultType: "hello")
-                self.token = hello?.token
-                if let host = hello?.host, !host.isEmpty, host != self.config.name { self.config.name = host }
-                self.openSocket(mine)
+                if let name, name != self.record.name { self.record.name = name }
+                self.openChannel(mine)
             } catch {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
-                if transport.status(of: error) == 401 {
+                if error as? AgentServerError == .needsAuthentication {
                     self.wantsConnection = false
-                    self.state = .needsPassword
+                    self.state = .needsAuthentication
                 } else {
                     self.dropped("\(error)")
                 }
@@ -329,23 +274,21 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
     }
 
-    private func openSocket(_ mine: Int) {
-        transport.connect(config) { [weak self] event in
+    private func openChannel(_ mine: Int) {
+        server.openChannel { [weak self] event in
             // A channel closed and reopened since: what the old one says
             // is no longer ours.
             guard let self, self.generation == mine else { return }
             switch event {
-            case .opened: self.send(.login(password: self.config.password, token: self.token, client: HostConfig.clientID))
-            case .message(let text): self.handle(text)
             case .closed(let reason): self.dropped(reason)
+            default: self.handle(event)
             }
         }
     }
 
-
     private func dropped(_ reason: String) {
         generation += 1
-        transport.disconnect()
+        server.closeChannel()
         if case .failed = state {} else { state = wantsConnection ? .offline(reason) : .disconnected }
         for transcript in transcripts.values { transcript.busy = false; transcript.activity = nil }
         guard wantsConnection else { return }
@@ -353,48 +296,47 @@ public final class HostConnection: ObservableObject, Identifiable {
         let delay = min(30, 1 << min(attempt, 5))
         let mine = generation
         Task { [weak self] in
-            await self?.transport.delay(milliseconds: Int32(delay * 1000))
+            await self?.server.delay(milliseconds: Int32(delay * 1000))
             guard let self, self.wantsConnection, self.generation == mine else { return }
             self.open()
         }
     }
 
-    private func handle(_ text: String) {
-        guard let envelope = Envelope.decode(text) else { return }
-        switch envelope.type {
-        case "welcome":
+    private func handle(_ event: AgentServerEvent) {
+        switch event {
+        case .welcome(let name, let list, let catalogs):
             state = .connected
             attempt = 0
-            if let host = envelope.host, !host.isEmpty { config.name = host }
-            if !config.everConnected { config.everConnected = true }
-            sessions = envelope.sessions ?? []
+            if !name.isEmpty { record.name = name }
+            if !record.everConnected { record.everConnected = true }
+            sessions = list
             saveCachedSessions()
             onSessionsChange?()
-            catalogs = envelope.catalogs ?? []
+            self.catalogs = catalogs
             // Re-subscribe to whatever was open before the drop.
-            for id in pendingSubscriptions.union(transcripts.keys) { send(.subscribe(session: id)) }
+            for id in pendingSubscriptions.union(transcripts.keys) { server.subscribe(id) }
             pendingSubscriptions.removeAll()
             // A folder may have been renamed or moved while we were away.
             Task { await refreshMissing() }
             registerForPush()
-        case "catalogs":
-            catalogs = envelope.catalogs ?? []
-        case "error":
-            if envelope.message == "Wrong password" {
-                wantsConnection = false
-                state = .needsPassword
-            } else {
-                state = .failed(envelope.message ?? "Rejected")
-            }
-        case "sessions":
+        case .catalogs(let catalogs):
+            self.catalogs = catalogs
+        case .refused:
+            wantsConnection = false
+            state = .needsAuthentication
+        case .failed(let message):
+            state = .failed(message)
+        case .sessions(let list):
             let before = sessions
-            sessions = envelope.sessions ?? []
+            sessions = list
             if state == .connected { notifyChanges(from: before, to: sessions) }
             onSessionsChange?()
             saveCachedSessions()
             // Words sent while the agent was busy come back in its queue.
             for session in sessions { transcripts[session.id]?.settleSending() }
-        default:
+        case .closed:
+            break
+        case .session(let envelope):
             guard let id = envelope.session else { return }
             transcript(for: id).apply(envelope)
             // Working or not, as the session itself says it: the list shows
@@ -436,28 +378,26 @@ public final class HostConnection: ObservableObject, Identifiable {
         return transcript
     }
 
-    /// The transcript syncs over HTTP, apart from the socket: each request
+    /// The transcript syncs apart from the live channel: each request
     /// names the revision held and is answered when the rows have moved
     /// past it (or after a while, with the same), and the answer replaces
-    /// the rows held — so a dropped socket message, a sleep, a restart of
-    /// the computer's server all heal on the next answer. Runs for as long
-    /// as the transcript is kept.
+    /// the rows held — so a dropped channel message, a sleep, a restart of
+    /// the server all heal on the next answer. Runs for as long as the
+    /// transcript is kept.
     private var syncing: [String: Task<Void, Never>] = [:]
 
     private func startSyncing(_ sessionID: String, _ transcript: SessionTranscript) {
         guard syncing[sessionID] == nil else { return }
-        let transport = transport
-        syncing[sessionID] = Task { [weak self, weak transcript] in
+        let server = server
+        syncing[sessionID] = Task { [weak transcript] in
             while !Task.isCancelled {
-                guard let self, let transcript else { return }
-                let config = self.config
+                guard let transcript else { return }
                 let revision = transcript.revision
                 do {
-                    let text = try await transport.call("GET", "/sessions/\(sessionID)/transcript?since=\(revision)&generation=\(transcript.generation)", body: "", config: config)
-                    guard let envelope = Envelope.decode(text, defaultType: "transcript") else { continue }
+                    let envelope = try await server.transcript(of: sessionID, since: revision, generation: transcript.generation)
                     if transcript.takes(envelope) { transcript.sync(envelope) }
                 } catch {
-                    // The computer is away, or a hold timed out on the way:
+                    // The server is away, or a hold timed out on the way:
                     // ask again shortly.
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                 }
@@ -472,16 +412,19 @@ public final class HostConnection: ObservableObject, Identifiable {
         // The agent's commands, known before a message is sent: a message
         // with a command after some words is split where it is typed.
         if sessionCommands[sessionID] == nil { Task { [weak self] in _ = await self?.loadCommands(for: sessionID) } }
-        if state == .connected { send(.subscribe(session: sessionID)) } else { pendingSubscriptions.insert(sessionID) }
+        if state == .connected { server.subscribe(sessionID) } else { pendingSubscriptions.insert(sessionID) }
     }
 
     public func start(agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String? = nil) -> String {
-        let id = HostConfig.newID()
+        let id = AgentServerRecord.newID()
         let transcript = transcript(for: id)
         transcript.loaded = true
-        // Subscribe once the computer has the session.
-        api("POST", "/sessions", .start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions,
-                                        resume: resume)) { [weak self] in
+        // Subscribe once the server has the session.
+        perform({ [weak self] in
+            let list = try await self?.server.startSession(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions,
+                                                           resume: resume) ?? []
+            self?.take(list, replacing: false)
+        }) { [weak self] in
             self?.subscribe(id)
         }
         return id
@@ -491,38 +434,38 @@ public final class HostConnection: ObservableObject, Identifiable {
     /// window of this size on this client. Any other client's terminal
     /// ends: it is one interface, at one size, for one window.
     public func assumeControl(_ sessionID: String, cols: Int, rows: Int) {
-        send(.assumeControl(session: sessionID, cols: cols, rows: rows))
+        server.assumeControl(sessionID, cols: cols, rows: rows)
     }
 
     /// The user has read what the session had to tell them.
     public func acknowledge(_ sessionID: String) {
         transcript(for: sessionID).notice = nil
-        send(.acknowledge(session: sessionID))
+        server.acknowledge(sessionID)
     }
 
     /// Hands the session back to the chat, which every client can draw.
     public func returnToChat(_ sessionID: String) {
-        send(.returnToChat(session: sessionID))
+        server.returnToChat(sessionID)
     }
 
     /// Whether the terminal of this session is drawn for this client.
     public func controlsTerminal(_ session: SessionInfo) -> Bool {
-        session.mode.controlled(by: HostConfig.clientID)
+        session.mode.controlled(by: AgentServerRecord.clientID)
     }
 
     /// Asks for the rows before the first one the transcript has.
     public func loadEarlier(_ sessionID: String) {
         guard let first = transcript(for: sessionID).entries.first else { return }
-        send(.earlier(session: sessionID, before: first.id))
+        server.loadEarlier(sessionID, before: first.id)
     }
 
     /// What the user typed into the terminal, base64.
     public func sendInput(_ sessionID: String, data: String) {
-        send(.input(session: sessionID, data: data))
+        server.sendInput(sessionID, data: data)
     }
 
     public func resize(_ sessionID: String, cols: Int, rows: Int) {
-        send(.resize(session: sessionID, cols: cols, rows: rows))
+        server.resize(sessionID, cols: cols, rows: rows)
     }
 
     // MARK: Projects
@@ -537,7 +480,7 @@ public final class HostConnection: ObservableObject, Identifiable {
         /// this device against the folder's path, so it follows the
         /// project rather than any one session.
         public var alias: String?
-        /// The folder was renamed or moved out from under us: the computer
+        /// The folder was renamed or moved out from under us: the server
         /// says there is nothing there now.
         public var missing = false
         /// Nothing left here, so the folder can be forgotten.
@@ -569,10 +512,10 @@ public final class HostConnection: ObservableObject, Identifiable {
     @Published public private(set) var knownProjects: [String] = []
     /// The names the user gave folders, by path (this device only).
     @Published public private(set) var projectAliases: [String: String] = [:]
-    /// Folders the computer says are no longer there.
+    /// Folders the server says are no longer there.
     @Published public private(set) var missingProjects: Set<String> = []
 
-    /// The computer's projects: every known folder and every folder with a
+    /// The server's projects: every known folder and every folder with a
     /// live session, in the order they were added.
     public var projects: [Project] {
         var order: [String] = knownProjects
@@ -603,7 +546,7 @@ public final class HostConnection: ObservableObject, Identifiable {
     }
 
     /// Points a project at the folder it moved to: the alias follows it,
-    /// and the computer moves the sessions that ran there.
+    /// and the server moves the sessions that ran there.
     public func relocateProject(_ cwd: String, to destination: String) {
         let alias = projectAliases[cwd]
         projectAliases.removeValue(forKey: cwd)
@@ -612,10 +555,10 @@ public final class HostConnection: ObservableObject, Identifiable {
         else if !knownProjects.contains(destination) { knownProjects.append(destination) }
         missingProjects.remove(cwd)
         saveProjects()
-        var e = Envelope(type: "relocate")
-        e.path = cwd
-        e.cwd = destination
-        api("POST", "/relocate", e)
+        perform { [weak self] in
+            let list = try await self?.server.relocateSessions(from: cwd, to: destination) ?? []
+            self?.take(list, replacing: false)
+        }
         Task { await refreshMissing() }
     }
 
@@ -625,7 +568,7 @@ public final class HostConnection: ObservableObject, Identifiable {
         removeProject(cwd)
     }
 
-    /// Asks the computer which of our folders are still there. Cheap (one
+    /// Asks the server which of our folders are still there. Cheap (one
     /// question per project) and only worth doing when connected.
     public func refreshMissing() async {
         guard state == .connected else { return }
@@ -653,9 +596,9 @@ public final class HostConnection: ObservableObject, Identifiable {
     /// What was listed last time. Shown while the connection is being
     /// made, so relaunching does not empty the sidebar and fill it again
     /// a second later. Every session reads as not-connected until the
-    /// computer answers, which is what the yellow dot says.
+    /// server answers, which is what the yellow dot says.
     func loadCachedSessions() {
-        // The canned computer keeps nothing: every run starts the same.
+        // The canned server keeps nothing: every run starts the same.
         guard !VisorFixture.active else { return }
         let saved = VisorHost.settings?.get(key: "sessions." + id) ?? ""
         guard !saved.isEmpty, let list = parseJSON(saved)?.array?.compactMap(SessionInfo.init(json:)) else { return }
@@ -669,13 +612,13 @@ public final class HostConnection: ObservableObject, Identifiable {
     }
 
     private func saveCachedSessions() {
-        // The canned computer keeps nothing: every run starts the same.
+        // The canned server keeps nothing: every run starts the same.
         guard !VisorFixture.active else { return }
         VisorHost.settings?.set(key: "sessions." + id, value: JSONValue.array(sessions.map(\.json)).encoded())
     }
 
     func loadProjects() {
-        // The canned computer keeps nothing: every run starts the same.
+        // The canned server keeps nothing: every run starts the same.
         guard !VisorFixture.active else { return }
         let saved = VisorHost.settings?.get(key: "projects." + id) ?? ""
         knownProjects = parseJSON(saved)?.array?.compactMap(\.string) ?? []
@@ -689,7 +632,7 @@ public final class HostConnection: ObservableObject, Identifiable {
     }
 
     private func saveProjects() {
-        // The canned computer keeps nothing: every run starts the same.
+        // The canned server keeps nothing: every run starts the same.
         guard !VisorFixture.active else { return }
         VisorHost.settings?.set(key: "projects." + id, value: JSONValue.array(knownProjects.map(JSONValue.string)).encoded())
         let names = projectAliases.keys.sorted().map { cwd in
@@ -733,7 +676,7 @@ public final class HostConnection: ObservableObject, Identifiable {
         }
         session.flush()
         Task { [weak self] in
-            // One after the other: a command must reach the computer after
+            // One after the other: a command must reach the server after
             // its words, to wait for their turn to end.
             for post in posts { await self?.post(sessionID, text: post.text, images: post.images) }
         }
@@ -746,7 +689,7 @@ public final class HostConnection: ObservableObject, Identifiable {
     private func outgoing(_ text: String, images: [String], in sessionID: String, _ session: SessionTranscript) -> SessionTranscript.Outgoing {
         let info = sessions.first { $0.id == sessionID }
         let idle = !session.busy && !(info?.busy ?? false) && (info?.queued.isEmpty ?? true) && session.sending.isEmpty
-        let entry = TranscriptEntry(id: "sending-" + HostConfig.newID(), role: .user, text: text, images: images)
+        let entry = TranscriptEntry(id: "sending-" + AgentServerRecord.newID(), role: .user, text: text, images: images)
         var outgoing = SessionTranscript.Outgoing(id: entry.id, entry: entry, sinceRevision: session.revision)
         outgoing.shown = idle
         outgoing.had = Set(session.entries.lazy.filter { $0.role == .user }.map(\.id))
@@ -755,10 +698,7 @@ public final class HostConnection: ObservableObject, Identifiable {
 
     private func post(_ sessionID: String, text: String, images: [String]) async {
         do {
-            let reply = try await fetch("POST", "/sessions/\(sessionID)/send", .send(session: sessionID, text: text, images: images))
-            for info in reply.sessions ?? [] {
-                if let index = sessions.firstIndex(where: { $0.id == info.id }) { sessions[index] = info } else { sessions.append(info) }
-            }
+            take(try await server.sendMessage(sessionID, text: text, images: images), replacing: false)
             commandError = nil
         } catch {
             commandError = "\(error)"
@@ -794,23 +734,20 @@ public final class HostConnection: ObservableObject, Identifiable {
         return [text]
     }
 
-    public func stop(_ sessionID: String) { api("POST", "/sessions/\(sessionID)/stop") }
+    public func stop(_ sessionID: String) { act(.stop, on: sessionID) }
 
     /// Drops a message that is waiting for the turn to end — one of them,
     /// or all of them when `text` is nil.
     public func unqueue(_ sessionID: String, text: String? = nil) {
-        var e = Envelope(type: "unqueue")
-        e.session = sessionID
-        e.text = text
-        api("POST", "/sessions/\(sessionID)/unqueue", e)
+        act(.unqueue(text: text), on: sessionID)
     }
 
     public func setPermissions(_ sessionID: String, skip: Bool) {
-        api("POST", "/sessions/\(sessionID)/permissions", .permissions(session: sessionID, skipPermissions: skip))
+        act(.permissions(skip: skip), on: sessionID)
     }
 
     public func setSettings(_ sessionID: String, model: String?, effort: String?) {
-        api("POST", "/sessions/\(sessionID)/settings", .settings(session: sessionID, model: model, effort: effort))
+        act(.settings(model: model, effort: effort), on: sessionID)
     }
 
     public func catalog(for agent: AgentKind) -> AgentCatalog? { catalogs.first { $0.agent == agent } }
@@ -832,28 +769,24 @@ public final class HostConnection: ObservableObject, Identifiable {
     }
 
     public func approve(_ sessionID: String, id: String, allow: Bool) {
-        api("POST", "/sessions/\(sessionID)/approve", .approve(session: sessionID, id: id, allow: allow))
+        act(.approve(id: id, allow: allow), on: sessionID)
     }
 
     public func rename(_ sessionID: String, title: String) {
-        api("POST", "/sessions/\(sessionID)/rename", .rename(session: sessionID, title: title))
+        act(.rename(title: title), on: sessionID)
     }
 
-    public func archive(_ sessionID: String) { api("POST", "/sessions/\(sessionID)/archive") }
+    public func archive(_ sessionID: String) { act(.archive, on: sessionID) }
 
-    public func unarchive(_ sessionID: String) { api("POST", "/sessions/\(sessionID)/unarchive") }
+    public func unarchive(_ sessionID: String) { act(.unarchive, on: sessionID) }
 
     public var activeSessions: [SessionInfo] { sessions.filter { !$0.archived } }
     public var archivedSessions: [SessionInfo] { sessions.filter(\.archived) }
 
     public func end(_ sessionID: String) {
-        api("DELETE", "/sessions/\(sessionID)")
+        act(.end, on: sessionID)
         transcripts.removeValue(forKey: sessionID)
         syncing.removeValue(forKey: sessionID)?.cancel()
         try? Self.cache.remove(cacheKey(sessionID))
-    }
-
-    private func send(_ envelope: Envelope) {
-        transport.send(envelope.encoded())
     }
 }

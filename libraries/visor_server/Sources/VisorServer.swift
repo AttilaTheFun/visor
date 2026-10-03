@@ -164,7 +164,7 @@ public final class VisorServer: ObservableObject {
     var savingFailed = false
 
     /// The agents the server serves; a host assigns its own before start.
-    public var backends: AgentBackends = .standard
+    public var harnesses: AgentHarnesses = .standard
 
     public var hostName: String {
         let name = Host.current().localizedName ?? ProcessInfo.processInfo.hostName

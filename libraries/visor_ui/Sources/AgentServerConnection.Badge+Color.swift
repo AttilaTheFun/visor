@@ -4,7 +4,7 @@ import SwiftUI
 import VisorClient
 import VisorProtocol
 
-extension HostConnection.Badge {
+extension AgentServerConnection.Badge {
     /// Green answering, yellow not yet, red refused or never reached.
     var color: Color {
         switch self {

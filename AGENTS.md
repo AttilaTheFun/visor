@@ -37,7 +37,7 @@ to one focused change, and say in it how the change was verified.
   method per case.
 - Never use Combine; async/await only. The protocol encodes over its own
   `JSONValue` and the client reaches the host only through
-  libraries/visor_services and a `HostTransport` — no Foundation
+  libraries/visor_services and an `AgentServer` — no Foundation
   networking or UserDefaults in visor_client or visor_ui, so the same code
   can be carried to other platforms by a build that provides those.
 - Apple-only SwiftUI (swipe actions, context menus, item sheets,

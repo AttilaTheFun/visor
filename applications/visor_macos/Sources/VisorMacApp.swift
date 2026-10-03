@@ -61,14 +61,14 @@ struct VisorMacApp: App {
         // reach the same sheet from a bar item.
         .commands {
             CommandMenu("Computers") {
-                ForEach(store.hosts) { host in
-                    Button("\(host.config.name.isEmpty ? host.config.host : host.config.name) — \(host.state.label)") {
+                ForEach(store.servers) { host in
+                    Button("\(host.record.name.isEmpty ? host.record.address : host.record.name) — \(host.state.label)") {
                         host.disconnect()
                         host.connect()
                     }
                 }
-                if !store.hosts.isEmpty { Divider() }
-                Button("Add Computer…") { store.addingComputer = true }
+                if !store.servers.isEmpty { Divider() }
+                Button(AgentServerProviderUIs.addTitle + "…") { store.addingServer = true }
                     .keyboardShortcut(",", modifiers: [.command, .shift])
             }
         }

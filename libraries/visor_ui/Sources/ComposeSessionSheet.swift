@@ -1,5 +1,5 @@
 // The one compose, beside the search: everything a session needs before it
-// exists — which computer, which folder, which harness, and what to call
+// exists — which server, which folder, which harness, and what to call
 // it. The folder is picked from the computer's projects or browsed for.
 // Sessions start in auto mode (no permission prompts — nobody is at the
 // computer to answer them); the chat's model sheet switches to manual.
@@ -15,7 +15,7 @@ struct ComposeSessionSheet: View {
     /// The computer and the new session's id.
     let started: (String, String) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var hostID = ""
+    @State private var serverID = ""
     @State private var cwd = ""
     @State private var agent: AgentKind = .claude
     @State private var title = ""
@@ -27,8 +27,8 @@ struct ComposeSessionSheet: View {
     @State private var resumeID = ""
 
     /// Only a computer that is answering can start a session.
-    private var host: HostConnection? {
-        store.connectedHosts.first { $0.id == hostID } ?? store.connectedHosts.first
+    private var host: AgentServerConnection? {
+        store.connectedServers.first { $0.id == serverID } ?? store.connectedServers.first
     }
     private var available: Set<AgentKind> {
         Set((host?.catalogs ?? []).filter(\.available).map(\.agent))
@@ -41,18 +41,22 @@ struct ComposeSessionSheet: View {
         NavigationStack {
             Form {
                 Section("Where") {
-                    if store.connectedHosts.isEmpty {
+                    if store.connectedServers.isEmpty {
                         Text("No computer is connected. Sessions start on a computer that is answering; check Computers.")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     }
-                    Picker("Computer", selection: $hostID) {
-                        ForEach(store.connectedHosts) { host in
-                            Text(host.config.name.isEmpty ? host.config.host : host.config.name).tag(host.id)
+                    // Which server, when there is a choice; one connected
+                    // server is where the session goes.
+                    if store.connectedServers.count > 1 {
+                        Picker("Server", selection: $serverID) {
+                            ForEach(store.connectedServers) { host in
+                                Text(host.record.name.isEmpty ? host.record.address : host.record.name).tag(host.id)
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .accessibilityIdentifier("computer")
                     }
-                    .pickerStyle(.menu)
-                    .accessibilityIdentifier("computer")
                     if host != nil {
                         // One row: the folder's path, which opens the
                         // folder browser.
@@ -153,11 +157,11 @@ struct ComposeSessionSheet: View {
             }
         }
         .onAppear {
-            if host?.id != hostID { hostID = store.connectedHosts.first?.id ?? "" }
+            if host?.id != serverID { serverID = store.connectedServers.first?.id ?? "" }
             if cwd.isEmpty { useHome() }
             if !available.contains(agent), let first = AgentKind.allCases.first(where: available.contains) { agent = first }
         }
-        .onChange(of: hostID) {
+        .onChange(of: serverID) {
             useHome()
             resumable = []
         }
