@@ -33,10 +33,20 @@ public final class ConnectionLog {
         if lines.count > Self.limit { lines.removeFirst(lines.count - Self.limit) }
     }
 
-    /// The whole log, oldest line first.
+    /// The whole log, oldest line first, under a line saying which zone
+    /// its times are in (a host with no time-zone database, the browser's
+    /// WASI, keeps UTC).
     public var text: String {
         load()
-        return lines.joined(separator: "\n") + "\n"
+        return Self.header(offset: TimeZone.current.secondsFromGMT()) + "\n" + lines.joined(separator: "\n") + "\n"
+    }
+
+    /// "Visor connection log. Times are UTC-04:00."
+    static func header(offset: Int) -> String {
+        guard offset != 0 else { return "Visor connection log. Times are UTC." }
+        let minutes = abs(offset) / 60
+        return "Visor connection log. Times are UTC" + (offset < 0 ? "-" : "+") + String(minutes / 60).leftPadded(2) + ":"
+            + String(minutes % 60).leftPadded(2) + "."
     }
 
     public func clear() {

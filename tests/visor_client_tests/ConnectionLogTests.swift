@@ -15,6 +15,14 @@ final class ConnectionLogTests: XCTestCase {
         XCTAssertEqual(ConnectionLog.stamp(time), formatter.string(from: Date(timeIntervalSince1970: time)))
     }
 
+    /// The export says which zone its times are in.
+    func testTheHeaderNamesTheZone() {
+        XCTAssertEqual(ConnectionLog.header(offset: 0), "Visor connection log. Times are UTC.")
+        XCTAssertEqual(ConnectionLog.header(offset: -14_400), "Visor connection log. Times are UTC-04:00.")
+        XCTAssertEqual(ConnectionLog.header(offset: 19_800), "Visor connection log. Times are UTC+05:30.")
+        XCTAssertTrue(ConnectionLog().text.hasPrefix("Visor connection log. Times are UTC"))
+    }
+
     /// The newest lines are kept, and the next run reads them back.
     func testTheNewestAreKeptAcrossRuns() {
         let settings = MemorySettings()
