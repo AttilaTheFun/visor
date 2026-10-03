@@ -8,7 +8,7 @@ import VisorProtocol
 /// sessions kept in ~/.openrouter/sessions. Its key and default model are
 /// its own business (`openrouter auth login`), like Claude's and Codex's
 /// logins; Visor only runs it.
-public final class OpenRouterBackend: AgentBackend {
+public final class OpenRouterHarness: AgentHarness {
     public let kind: AgentKind = .openrouter
     public let tool = "openrouter"
 

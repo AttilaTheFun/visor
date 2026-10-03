@@ -1,14 +1,14 @@
-// A backend is one agent kind, and everything the server needs of it: how
+// A harness is one agent kind, and everything the server needs of it: how
 // to make its process (a chat process, or its own terminal), what it can
 // resume, a session's transcript, and its models. The server holds a set
-// of backends and never branches on the agent itself — a different set is
+// of harnesses and never branches on the agent itself — a different set is
 // a different set of agents. A host swaps the registry to bring its own.
 
 import Foundation
 import Synchronization
 import VisorProtocol
 
-public protocol AgentBackend: AnyObject, Sendable {
+public protocol AgentHarness: AnyObject, Sendable {
     /// Which agent this serves.
     var kind: AgentKind { get }
     /// The command-line tool it drives, for availability.
@@ -29,7 +29,7 @@ public protocol AgentBackend: AnyObject, Sendable {
     func adoptHistory(id: String, cwd: String)
 }
 
-public extension AgentBackend {
+public extension AgentHarness {
     /// Installed on the login shell's PATH.
     var available: Bool { ToolPath.resolve(tool) != nil }
     func adoptHistory(id: String, cwd: String) { _ = SessionCatalog.adoptHistory(agent: kind, id: id, cwd: cwd) }

@@ -4,7 +4,7 @@ import VisorProtocol
 
 /// Claude Code, and anything that speaks its stream-json protocol under
 /// another tool name (Ori).
-public final class ClaudeBackend: AgentBackend {
+public final class ClaudeHarness: AgentHarness {
     public static let efforts = ["low", "medium", "high", "xhigh", "max"]
     public let kind: AgentKind
     public let tool: String

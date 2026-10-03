@@ -10,23 +10,23 @@ import VisorProtocol
 
 extension VisorServer {
     func makeProcess(_ info: SessionInfo, resume: String?) -> AgentProcess {
-        // The one backend for this agent makes and manages its process;
+        // The one harness for this agent makes and manages its process;
         // the server never branches on the agent itself.
-        let backend = backends.backend(for: info.agent) ?? ClaudeBackend(kind: info.agent, tool: "claude", models: [])
+        let harness = harnesses.harness(for: info.agent) ?? ClaudeHarness(kind: info.agent, tool: "claude", models: [])
         // The folder may have been renamed since this conversation began.
         // Put its history where the folder looks now, so both the agent
         // and a terminal can resume it from there.
-        if let resume { backend.adoptHistory(id: resume, cwd: info.cwd) }
+        if let resume { harness.adoptHistory(id: resume, cwd: info.cwd) }
         let process: AgentProcess
         if case .tui(_, let cols, let rows) = info.mode,
-           let terminal = backend.makeTerminal(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume) {
+           let terminal = harness.makeTerminal(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume) {
             // Born at the window it is drawn for, so its first paint is
             // already the right shape.
             terminal.resize(cols: cols, rows: rows)
             process = terminal
         } else {
             // Chat.
-            process = backend.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
+            process = harness.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
         }
         process.model = info.model
         process.effort = info.effort
@@ -37,7 +37,7 @@ extension VisorServer {
     /// Each provider's models: Claude's aliases and effort levels; Codex's
     /// from its models cache (~/.codex/models_cache.json, the listed ones)
     /// with the default from ~/.codex/config.toml.
-    func catalogs() -> [AgentCatalog] { backends.all.map { $0.catalog() } }
+    func catalogs() -> [AgentCatalog] { harnesses.all.map { $0.catalog() } }
 
     /// Points every session that ran in `from` at `to`. The agent holds
     /// its directory from the moment it spawns, so the process is rebuilt

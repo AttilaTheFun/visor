@@ -6,7 +6,7 @@ import VisorProtocol
 /// thread started or resumed by id, each message a turn, a turn
 /// interrupted in place. (`CodexProcess`, one `codex exec` per turn, is
 /// kept in the tree as the older driver but is not what this makes.)
-public final class CodexBackend: AgentBackend {
+public final class CodexHarness: AgentHarness {
     public let kind: AgentKind = .codex
     public let tool = "codex"
 

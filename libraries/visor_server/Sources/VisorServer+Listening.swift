@@ -39,7 +39,7 @@ extension VisorServer {
         // that is an error to the write, not a signal that ends the app.
         signal(SIGPIPE, SIG_IGN)
         // Where the agents' tools are, for those not in the usual places.
-        let tools = backends.all.map(\.tool) + ["node"]
+        let tools = harnesses.all.map(\.tool) + ["node"]
         Task {
             await ToolPath.locate(tools)
             broadcastCatalogs()
@@ -92,10 +92,10 @@ extension VisorServer {
         modelsRefresh = Task {
             var soon = true
             while !Task.isCancelled {
-                async let claude = ClaudeBackend.refreshModels()
-                async let codex = CodexBackend.refreshModels()
+                async let claude = ClaudeHarness.refreshModels()
+                async let codex = CodexHarness.refreshModels()
                 // OpenRouter's list, from its CLI, when it is a day old.
-                async let openrouter = OpenRouterBackend.refreshIfStale()
+                async let openrouter = OpenRouterHarness.refreshIfStale()
                 let answers = await (claude, codex, openrouter)
                 if answers.0 == .changed || answers.1 == .changed || answers.2 { broadcastCatalogs() }
                 let again: Duration = soon || answers.0 == .doubted ? .seconds(5 * 60) : .seconds(6 * 60 * 60)

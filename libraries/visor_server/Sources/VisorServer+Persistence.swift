@@ -72,7 +72,7 @@ extension VisorServer {
             }
             var entries = item.entries
             if item.shape != StoredSession.currentShape, let resume = item.resumeID {
-                let rebuilt = backends.backend(for: info.agent)?.transcript(id: resume, cwd: info.cwd, limit: 300) ?? []
+                let rebuilt = harnesses.harness(for: info.agent)?.transcript(id: resume, cwd: info.cwd, limit: 300) ?? []
                 if !rebuilt.isEmpty { entries = rebuilt }
             }
             let record = SessionRecord(info: info, process: makeProcess(info, resume: item.resumeID), entries: entries,

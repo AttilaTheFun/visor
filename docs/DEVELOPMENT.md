@@ -96,25 +96,25 @@ and parsed off it (`PipedChild.swift`, `AsyncStream+Lines.swift`) and reaches th
 one is never started on a session while the one before is still going
 (`SessionRecord.held`), and quitting waits for all of them
 (`applicationShouldTerminate` → `endAll`). Processes are made by an
-`AgentBackend` (`AgentBackends.standard`:
-`ClaudeBackend` → `ClaudeProcess` (`claude -p --input-format stream-json
+`AgentHarness` (`AgentHarnesses.standard`:
+`ClaudeHarness` → `ClaudeProcess` (`claude -p --input-format stream-json
 --output-format stream-json --include-partial-messages`, one process per
-session, `--resume`), `CodexBackend` → `CodexAppServerProcess` (`codex
+session, `--resume`), `CodexHarness` → `CodexAppServerProcess` (`codex
 app-server`, JSON-RPC over stdio, thread/start|resume, turn/start,
-turn/interrupt), `OpenRouterBackend` → `ClaudeProcess(tool: "openrouter")`
+turn/interrupt), `OpenRouterHarness` → `ClaudeProcess(tool: "openrouter")`
 (the openrouter CLI speaks the same stream-json; its sessions are
 `~/.openrouter/sessions/<id>.json`, read by `SessionCatalog` for
 resumable/transcript). Its catalog is every tool-calling model in the
 CLI's `~/.openrouter/models.json` (priced subtitles, `group` = maker);
-`listed` marks the suggestions — `OpenRouterBackend.coding`, a hand-kept copy
+`listed` marks the suggestions — `OpenRouterHarness.coding`, a hand-kept copy
 of the top ten at openrouter.ai/collections/programming (update it from
 the page; the API's `category=programming` order does not match it) — the default (the CLI's config, else gpt-5-nano) is not a suggestion.
 The model sheet, for a catalog with unlisted models, shows Current Model
 (what the session runs), then Suggested, then an All Models sheet
 grouped by maker with search. The server runs `openrouter models
 --refresh` at launch when the file is a day old; Visor never calls
-OpenRouter itself). Backends are injectable
-(`VisorServer.backends`) so a different adapter layer can be swapped in.
+OpenRouter itself). Harnesses are injectable
+(`VisorServer.harnesses`) so a different adapter layer can be swapped in.
 
 The **record** is the transcript in memory (`entries`, a window of 600
 rows served) plus the ephemeral state. Every change bumps `revision`;
@@ -221,7 +221,7 @@ or the apps' `onOpenURL`. Nothing opens by itself: the sidebar's last
 section is always "Add Computer…", which opens the connect sheet
 (`store.addingComputer`; the Mac also has it in its Computers menu).
 
-**Claude's models.** `ClaudeBackend.refreshModels` (at launch, then
+**Claude's models.** `ClaudeHarness.refreshModels` (at launch, then
 every 6 h) starts `claude -p` with stream-json, sends the SDK's
 `initialize` control request, takes the answer's `models` (value,
 resolvedModel, description, supportedEffortLevels; the "default" entry
@@ -231,7 +231,7 @@ file. That list is the Claude catalog (ids like `opus[1m]` go to
 matching:)` also matches without the `[1m]` mark, so a reported
 `claude-opus-5-5` or an older session's `fable` finds its row.
 
-**Codex's models.** `CodexBackend.refreshModels` (same schedule) runs
+**Codex's models.** `CodexHarness.refreshModels` (same schedule) runs
 `codex app-server`, `initialize`, `model/list`, and ends it: the visible
 models, their efforts and default effort, and `isDefault`. A `model` in
 ~/.codex/config.toml still wins as the default; ~/.codex/models_cache.json

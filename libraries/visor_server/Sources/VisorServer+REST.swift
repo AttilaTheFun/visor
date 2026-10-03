@@ -155,7 +155,7 @@ extension VisorServer {
     private func restResumable(_ call: RESTCall) -> HTTPResponse {
         guard let agent = call.query["agent"].flatMap(AgentKind.init(wire:)) else { return HTTPResponse(400, "{\"error\":\"agent required\"}") }
         var e = Envelope(type: "resumable")
-        e.resumable = backends.backend(for: agent)?.resumable(cwd: call.query["cwd"] ?? "") ?? []
+        e.resumable = harnesses.harness(for: agent)?.resumable(cwd: call.query["cwd"] ?? "") ?? []
         return .json(e.encoded())
     }
 
