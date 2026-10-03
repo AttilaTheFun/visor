@@ -141,7 +141,7 @@ final class TailscaleSignInTests: XCTestCase {
         let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example"))
         host.connect()
         await settle()
-        socket.elapse(8000)     // the login was answered in time
+        socket.elapse(4000)     // the login was answered in time
         await settle()
         for _ in 0..<2 {
             socket.elapse(16_000)
@@ -160,7 +160,7 @@ final class TailscaleSignInTests: XCTestCase {
         let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example"))
         host.connect()
         await settle()
-        socket.elapse(8000)
+        socket.elapse(4000)
         await settle()
         socket.elapse(16_000)
         await settle()
@@ -175,7 +175,7 @@ final class TailscaleSignInTests: XCTestCase {
         let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example"))
         host.connect()
         await settle()
-        socket.elapse(8000)
+        socket.elapse(4000)
         await settle()
         socket.answersPings = false
         socket.elapse(16_000)
@@ -216,7 +216,7 @@ final class TailscaleSignInTests: XCTestCase {
         host.connect()
         await settle()
         XCTAssertEqual(host.state, .connecting)
-        socket.elapse(8000)
+        socket.elapse(4000)
         await settle()
         XCTAssertEqual(host.state, .offline("No answer to the login"))
     }

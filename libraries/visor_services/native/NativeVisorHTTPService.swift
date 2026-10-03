@@ -1,12 +1,27 @@
 #if canImport(Darwin)
 import Foundation
 import Security
+import Synchronization
 
 public final class NativeVisorHTTPService: VisorHTTPService {
     /// Many requests at once: every open transcript holds a long poll, and
     /// a send must not wait behind them. The shared session caps a host at
     /// six connections, which a handful of subscribed sessions exhaust.
-    private let httpSession: URLSession = {
+    private let httpSession = Mutex(NativeVisorHTTPService.makeSession())
+
+    /// The connections held are let go with whatever was in flight on
+    /// them (a held transcript sync fails and is asked again), and the
+    /// next request starts on a session of its own.
+    public func reset() {
+        let old = httpSession.withLock { session in
+            let old = session
+            session = Self.makeSession()
+            return old
+        }
+        old.invalidateAndCancel()
+    }
+
+    private static func makeSession() -> URLSession {
         let http = URLSessionConfiguration.default
         http.waitsForConnectivity = false
         http.httpMaximumConnectionsPerHost = 16
@@ -16,7 +31,7 @@ public final class NativeVisorHTTPService: VisorHTTPService {
         http.timeoutIntervalForRequest = 60
         http.timeoutIntervalForResource = 120
         return URLSession(configuration: http)
-    }()
+    }
 
     public init() {}
 
@@ -34,7 +49,8 @@ public final class NativeVisorHTTPService: VisorHTTPService {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = Data(body.utf8)
         }
-        let (data, response) = try await httpSession.data(for: request)
+        let session = httpSession.withLock { $0 }
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let text = String(data: data, encoding: .utf8) ?? ""
         guard (200..<300).contains(status) else { throw VisorHTTPFailure(status: status, body: text) }

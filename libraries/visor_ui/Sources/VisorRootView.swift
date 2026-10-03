@@ -152,10 +152,15 @@ public struct VisorRootView: View {
         // it, so each server is tried or checked now rather than at its
         // next retry.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { wasInBackground = true }
-            if phase == .active {
+            switch phase {
+            case .background:
+                wasInBackground = true
+                store.suspend()
+            case .active:
                 store.resume(afterBackground: wasInBackground)
                 wasInBackground = false
+            default:
+                store.noteInactive()
             }
         }
         // A notification the user opened: its session, on its computer.

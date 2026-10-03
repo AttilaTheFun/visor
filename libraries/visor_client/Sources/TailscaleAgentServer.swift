@@ -13,14 +13,17 @@ import VisorServices
 /// The channel is kept honest by a heartbeat of its own — a `ping`
 /// envelope every 16 s, and a channel that says nothing for 8 s after
 /// one is taken as dropped — because a socket that died quietly (a sleep,
-/// a change of network) otherwise looks open until TCP gives up. The same
-/// 8 s is how long the Mac has to answer the login. It is a message of
+/// a change of network) otherwise looks open until TCP gives up. The
+/// socket has 4 s to open and have its login answered. It is a message of
 /// the protocol, not a WebSocket ping frame, which a browser cannot send.
 public final class TailscaleAgentServer: AgentServer {
     /// How often the channel is asked whether it is still there, and how
     /// long it has to say anything at all before it is taken as dropped.
     static let heartbeatInterval: Int32 = 16_000
     static let heartbeatTimeout: Int32 = 8_000
+    /// How long the Mac has to answer the login once the socket is asked
+    /// for: the user is waiting on this one.
+    static let loginTimeout: Int32 = 4_000
     /// How long the channel has to answer when asked outright, as the app
     /// comes back to the front: an answer over Tailscale takes
     /// milliseconds, and the user is looking.
@@ -35,6 +38,8 @@ public final class TailscaleAgentServer: AgentServer {
     /// How many messages this channel has brought: one more after a ping
     /// is the answer to it, whatever the message was.
     private var heard = 0
+    /// Whether this channel's socket opened and the login went out.
+    private var loggedIn = false
 
     public init(record: AgentServerRecord) {
         self.record = record
@@ -68,6 +73,7 @@ public final class TailscaleAgentServer: AgentServer {
         }
         socketID = id
         heard = 0
+        loggedIn = false
         heartbeat = Task { [weak self] in await self?.watch(id, onEvent: onEvent) }
         reader = Task { [weak self] in
             // Events arrive one at a time; the loop ends when the socket is gone.
@@ -76,6 +82,8 @@ public final class TailscaleAgentServer: AgentServer {
                     let event = try await socket.next(id: id)
                     guard let self, self.socketID == id else { return }
                     if event == "open" {
+                        self.loggedIn = true
+                        ConnectionLog.shared.note(self.record.name.isEmpty ? self.record.address : self.record.name, "socket open; login sent")
                         self.send(.login(password: self.record.secret, token: self.token, client: AgentServerRecord.clientID))
                     } else if event.hasPrefix("message ") {
                         self.heard += 1
@@ -102,9 +110,9 @@ public final class TailscaleAgentServer: AgentServer {
     /// starts the connection's retries.
     private func watch(_ id: Int32, onEvent: @escaping @MainActor (AgentServerEvent) -> Void) async {
         guard let socket = VisorHost.socket else { return }
-        await socket.delay(milliseconds: Self.heartbeatTimeout)
+        await socket.delay(milliseconds: Self.loginTimeout)
         guard socketID == id, !Task.isCancelled else { return }
-        if heard == 0 { return drop(id, "No answer to the login", onEvent) }
+        if heard == 0 { return drop(id, loggedIn ? "No answer to the login" : "The socket did not open", onEvent) }
         while true {
             await socket.delay(milliseconds: Self.heartbeatInterval)
             guard socketID == id, !Task.isCancelled else { return }

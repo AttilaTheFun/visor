@@ -196,28 +196,46 @@ every stream present when sent has landed — `shadowed` hides the matched
 record row meanwhile; `turnStatus: [StatusItem]`). Sent text is trimmed.
 `catalogs` envelope refreshes the agent list (e.g. after a key is saved).
 
-**Keeping the connection** (0.18). Three things, each covering what the
-one before cannot see. The retry: after a drop `AgentServerConnection`
-signs in and opens the channel again after 2, 4, 8, 16 s, then every 30
-(`retryDelay(afterAttempt:)`). The heartbeat (`TailscaleAgentServer.watch`):
-a `ping` envelope every 16 s, and a channel that says nothing for 8 s
-after one — or for 8 s after the login — is closed and reported as
+**Keeping the connection** (0.18). The retry: after a drop
+`AgentServerConnection` signs in and opens the channel again after 2, 4,
+8, 16 s, then every 30 (`retryDelay(afterAttempt:)`). Each step has a
+limit, so a try that hangs (a request riding a connection that died while
+the app was away) becomes a drop and a retry: the sign-in has 5 s
+(`signInTimeout`), the socket 4 s to open and have its login answered
+(`TailscaleAgentServer.loginTimeout`). The heartbeat
+(`TailscaleAgentServer.watch`): a `ping` envelope every 16 s, and a
+channel that says nothing for 8 s after one is closed and reported as
 dropped, so a socket that died quietly (a sleep, a change of network) is
 found in seconds rather than when TCP gives up. The poll
 (`startPolling`): `AgentServer.sessions()` once a minute, taken as the
 list while the channel is up, and the cue to reopen it at once when it is
-down and the server answers. And when the app comes back to the front
-(`VisorRootView` on `scenePhase` → `VisorStore.resume`), a server that is
-not connected is tried at once from the start of the schedule, and one
-that looks connected is asked outright (`AgentServer.verifyChannel`: a
-ping, 1 s) and opened afresh if it does not answer. After time in the
-background on a host whose sockets do not outlive it
-(`VisorSocketService.dropsInBackground`: an iPhone) the channel is opened
-afresh without asking, and for the first three failures after coming
-back the next try is 300 ms on rather than on the schedule — the path to
-a server can be a moment behind the app. The timed ones wait on the host's timer
-(`delay`), so the tests drive them by hand (`ScriptedSocket.elapse`,
-`ScriptedServer.elapse`).
+down and the server answers.
+
+The app's place on screen drives the rest (`VisorRootView` on
+`scenePhase`). Leaving for the background (`VisorStore.suspend`) starts
+every server's schedule over and keeps the log. Coming back
+(`VisorStore.resume`) tries every server at the same moment, each on its
+own: one not connected is opened at once, and a try that fails follows
+the schedule from 2 s. One that looks connected is asked outright
+(`AgentServer.verifyChannel`: a ping, 1 s) and opened afresh if it does
+not answer — except after time in the background on a host whose sockets
+do not outlive it (`VisorSocketService.dropsInBackground`: an iPhone),
+where every channel is opened afresh without asking and the host's HTTP
+connections are let go first (`VisorHTTPService.reset`).
+
+The timed parts wait on the host's timer (`delay`), so the tests drive
+them by hand (`ScriptedSocket.elapse`, `ScriptedServer.elapse`).
+
+**The connection log** (`ConnectionLog.shared`): a line per event, with
+the device's local time to the millisecond — the app in front, inactive
+or in the background; per server, each sign-in and how long it took, the
+socket opening, the welcome and how long after the channel was asked for,
+each drop with its reason and the retry it schedules, the minute poll
+when it finds something. The newest 1,500 lines, kept in the host's
+settings when the app leaves the front. The Tailscale computer's settings
+page shares it as `visor-connection-log.txt` (the share sheet: AirDrop,
+Files), copies it, or clears it. A fork's settings view can offer the
+same from `ConnectionLog.shared.text`.
 
 **Pushes and the widget** (0.18). A push's data carries the session's
 state in a word (`state`: working, waiting, goal, idle), its `title`, the

@@ -53,6 +53,19 @@ extension View {
     }
 }
 
+/// The connection log handed to the system's share sheet as a text file
+/// (AirDrop, Files, Mail), where there is one; nothing elsewhere, where
+/// copying it is the way out.
+@MainActor @ViewBuilder func connectionLogShareLink(_ text: String) -> some View {
+    #if os(iOS) || os(macOS)
+    ShareLink(item: ConnectionLogFile(text: text), preview: SharePreview("Visor connection log")) {
+        Text("Share Connection Log")
+    }
+    #else
+    EmptyView()
+    #endif
+}
+
 /// What the system pasteboard holds as text, where there is one.
 @MainActor func pasteboardString() -> String? {
     #if os(iOS)

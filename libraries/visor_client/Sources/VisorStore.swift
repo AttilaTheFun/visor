@@ -164,7 +164,28 @@ public final class VisorStore: ObservableObject {
     public func resume(afterBackground: Bool = false) {
         guard !VisorFixture.active else { return }
         let fresh = afterBackground && (VisorHost.socket?.dropsInBackground ?? false)
+        ConnectionLog.shared.note("app", "in front" + (afterBackground ? ", back from the background" : "")
+                                  + (fresh ? ": every channel is opened afresh" : ""))
+        // Requests must not ride connections that died while the app was
+        // away: the host starts over with new ones.
+        if fresh { VisorHost.http?.reset() }
         servers.forEach { $0.resume(fresh: fresh) }
+    }
+
+    /// The app left the front for the background: each server's retry
+    /// schedule starts over, and the log is kept for the next run.
+    public func suspend() {
+        guard !VisorFixture.active else { return }
+        ConnectionLog.shared.note("app", "in the background")
+        servers.forEach { $0.suspend() }
+        ConnectionLog.shared.keep()
+    }
+
+    /// The app is in front but not the one being used (the app switcher,
+    /// a system sheet over it): only said, for the log.
+    public func noteInactive() {
+        guard !VisorFixture.active else { return }
+        ConnectionLog.shared.note("app", "inactive")
     }
 
     /// The servers answering now: where a new session can go.

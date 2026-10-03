@@ -228,6 +228,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     }
 
     public func connect() {
+        note("connect asked for")
         wantsConnection = true
         attempt = 0
         open()
@@ -259,25 +260,55 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         let mine = generation
         let server = server
         let record = record
+        let started = log.now()
+        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : ""))
+        signingIn = mine
         Task { [weak self] in
             do {
                 let name = try await server.authenticate(record)
                 guard let self, self.generation == mine, self.wantsConnection else { return }
+                self.signingIn = nil
+                self.note("signed in after \(self.log.since(started)) ms; opening the channel")
                 if let name, name != self.record.name { self.record.name = name }
                 self.openChannel(mine)
             } catch {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
+                self.signingIn = nil
                 if error as? AgentServerError == .needsAuthentication {
+                    self.note("sign-in refused after \(self.log.since(started)) ms: needs signing in")
                     self.wantsConnection = false
                     self.state = .needsAuthentication
                 } else {
+                    self.note("sign-in failed after \(self.log.since(started)) ms")
                     self.dropped("\(error)")
                 }
             }
         }
+        // A sign-in that never answers (a request riding a connection that
+        // died while the app was away) is given up on, not waited out.
+        Task { [weak self] in
+            await server.delay(milliseconds: Self.signInTimeout)
+            guard let self, self.signingIn == mine, self.generation == mine else { return }
+            self.signingIn = nil
+            self.dropped("No answer to the sign-in")
+        }
+    }
+
+    /// How long a sign-in has to answer before the try is given up.
+    static let signInTimeout: Int32 = 5_000
+    /// The try (by its generation) whose sign-in is still unanswered.
+    private var signingIn: Int?
+    private var log: ConnectionLog { ConnectionLog.shared }
+    /// When the channel now being opened was asked for, for the log.
+    private var channelAsked = 0.0
+
+    /// One line in the connection log, about this server.
+    func note(_ message: String) {
+        log.note(record.name.isEmpty ? record.address : record.name, message)
     }
 
     private func openChannel(_ mine: Int) {
+        channelAsked = log.now()
         server.openChannel { [weak self] event in
             // A channel closed and reopened since: what the old one says
             // is no longer ours.
@@ -298,32 +329,40 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// the app's time in the background), opened afresh without asking. A
     /// server waiting for the user to sign in is left alone.
     ///
-    /// The network may not be back the instant the app is: the first tries
-    /// that fail after this are tried again at once rather than on the
-    /// schedule (`quickRetries`).
+    ///
+    /// Every server is tried at the same moment, each on its own; a try
+    /// that fails is followed by the schedule from its start (2, 4, 8…).
     public func resume(fresh: Bool = false) {
-        guard wantsConnection else { return }
-        quickRetries = Self.quickRetriesAfterResume
+        guard wantsConnection else {
+            note("back in front: left alone (\(state.label))")
+            return
+        }
         guard state == .connected, !fresh else {
+            note("back in front: connecting now (was \(state.label))")
             attempt = 0
             open()
             return
         }
+        note("back in front: asking the open channel whether it is there")
         let mine = generation
         let server = server
         Task { [weak self] in
             let alive = await server.verifyChannel()
-            guard let self, !alive, self.generation == mine, self.wantsConnection else { return }
+            guard let self, self.generation == mine, self.wantsConnection else { return }
+            self.note(alive ? "the channel answered" : "the channel did not answer: opening afresh")
+            guard !alive else { return }
             self.attempt = 0
             self.open()
         }
     }
 
-    /// How many failed tries after coming back to the front are tried
-    /// again after `quickRetryDelay` rather than on the schedule.
-    static let quickRetriesAfterResume = 3
-    static let quickRetryDelay: Int32 = 300
-    private var quickRetries = 0
+    /// The app left the front. The schedule starts over, so nothing that
+    /// was waiting out a long retry is still waiting when the app is back.
+    public func suspend() {
+        guard wantsConnection else { return }
+        note("app in the background: retry schedule reset (was \(state.label), retry \(attempt))")
+        attempt = 0
+    }
 
     /// How often the server is asked for its sessions outright.
     static let pollInterval: Int32 = 60_000
@@ -342,10 +381,14 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
                 guard let server = self?.server else { return }
                 await server.delay(milliseconds: Self.pollInterval)
                 guard let self, !Task.isCancelled, self.wantsConnection else { continue }
-                guard let list = try? await server.sessions(), !Task.isCancelled, self.wantsConnection else { continue }
+                guard let list = try? await server.sessions(), !Task.isCancelled, self.wantsConnection else {
+                    self.note("minute poll: no answer (\(self.state.label))")
+                    continue
+                }
                 switch self.state {
                 case .connected: self.handle(.sessions(list))
                 case .offline:
+                    self.note("minute poll: the server answers while the channel is down; connecting now")
                     self.attempt = 0
                     self.open()
                 default: break
@@ -365,17 +408,13 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         server.closeChannel()
         if case .failed = state {} else { state = wantsConnection ? .offline(reason) : .disconnected }
         for transcript in transcripts.values { transcript.busy = false; transcript.activity = nil }
-        guard wantsConnection else { return }
-        let wait: Int32
-        if quickRetries > 0 {
-            // Just back in front: the path to the server may be a moment
-            // behind the app.
-            quickRetries -= 1
-            wait = Self.quickRetryDelay
-        } else {
-            attempt += 1
-            wait = Int32(Self.retryDelay(afterAttempt: attempt) * 1000)
+        guard wantsConnection else {
+            note("dropped: \(reason); not retrying")
+            return
         }
+        attempt += 1
+        let wait = Int32(Self.retryDelay(afterAttempt: attempt) * 1000)
+        note("dropped: \(reason); retry \(attempt) in \(wait / 1000) s")
         let mine = generation
         Task { [weak self] in
             await self?.server.delay(milliseconds: wait)
@@ -387,9 +426,9 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     private func handle(_ event: AgentServerEvent) {
         switch event {
         case .welcome(let name, let list, let catalogs):
+            note("connected: welcome \(log.since(channelAsked)) ms after the channel was asked for, \(list.count) sessions")
             state = .connected
             attempt = 0
-            quickRetries = 0
             if !name.isEmpty { record.name = name }
             if !record.everConnected { record.everConnected = true }
             sessions = list
@@ -404,10 +443,12 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             registerForPush()
         case .catalogs(let catalogs):
             self.catalogs = catalogs
-        case .refused:
+        case .refused(let message):
+            note("login refused: \(message)")
             wantsConnection = false
             state = .needsAuthentication
         case .failed(let message):
+            note("the server answered with an error: \(message)")
             state = .failed(message)
         case .sessions(let list):
             let before = sessions

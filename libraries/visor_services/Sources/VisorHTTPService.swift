@@ -5,9 +5,15 @@ public protocol VisorHTTPService: Sendable {
     /// The HTTP status behind an error `request` threw, when it was one
     /// (a 401 is how a computer asks for a password).
     func status(of error: Error) -> Int?
+    /// Lets go of every connection it holds, and whatever is in flight on
+    /// them, so the next request makes its own: asked when the app comes
+    /// back from the background, where the connections it left are dead
+    /// without saying so.
+    func reset()
 }
 
 public extension VisorHTTPService {
+    func reset() {}
     /// A host whose errors read "HTTP <status>: …" needs nothing more.
     func status(of error: Error) -> Int? {
         // The standard library alone: this builds for the browser, whose
