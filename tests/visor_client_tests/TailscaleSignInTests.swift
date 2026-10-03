@@ -187,21 +187,21 @@ final class TailscaleSignInTests: XCTestCase {
     }
 
     /// Asked outright (the app back in front), a channel that answers the
-    /// ping is kept, and one that does not within 3 s is opened afresh.
+    /// ping is kept, and one that does not within 1 s is opened afresh.
     func testAChannelIsVerifiedWhenTheAppComesBack() async {
         let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example"))
         host.connect()
         await settle()
         host.resume()
         await settle()
-        socket.elapse(3000)
+        socket.elapse(1000)
         await settle()
         XCTAssertEqual(socket.opened.count, 1, "it answered")
 
         socket.answersPings = false
         host.resume()
         await settle()
-        socket.elapse(3000)
+        socket.elapse(1000)
         await settle()
         XCTAssertEqual(socket.opened.count, 2, "it did not: a new socket")
         XCTAssertEqual(host.state, .connected)

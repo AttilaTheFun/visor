@@ -104,6 +104,16 @@ public final class NativeVisorSocketService: VisorSocketService {
         finish(id)
     }
 
+    /// iOS suspends the app in the background and its sockets do not
+    /// survive; a Mac's carry on.
+    public var dropsInBackground: Bool {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }
+
     public func delay(milliseconds: Int32) async {
         try? await Task.sleep(nanoseconds: UInt64(max(0, milliseconds)) * 1_000_000)
     }

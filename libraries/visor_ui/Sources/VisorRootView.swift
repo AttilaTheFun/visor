@@ -17,6 +17,8 @@ public struct VisorRootView: View {
     @EnvironmentObject private var store: VisorStore
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.scenePhase) private var scenePhase
+    /// The app has been in the background since it was last in front.
+    @State private var wasInBackground = false
     @State private var columns: NavigationSplitViewVisibility = .all
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var composing = false
@@ -150,7 +152,11 @@ public struct VisorRootView: View {
         // it, so each server is tried or checked now rather than at its
         // next retry.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { store.resume() }
+            if phase == .background { wasInBackground = true }
+            if phase == .active {
+                store.resume(afterBackground: wasInBackground)
+                wasInBackground = false
+            }
         }
         // A notification the user opened: its session, on its computer.
         .onChange(of: store.opening) { _, target in

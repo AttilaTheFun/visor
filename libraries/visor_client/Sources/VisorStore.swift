@@ -158,10 +158,13 @@ public final class VisorStore: ObservableObject {
     }
 
     /// The app came back to the front: every server is tried or checked
-    /// at once (`AgentServerConnection.resume`).
-    public func resume() {
+    /// at once (`AgentServerConnection.resume`). After time in the
+    /// background on a host whose sockets do not outlive it (a phone),
+    /// each channel is opened afresh without being asked first.
+    public func resume(afterBackground: Bool = false) {
         guard !VisorFixture.active else { return }
-        servers.forEach { $0.resume() }
+        let fresh = afterBackground && (VisorHost.socket?.dropsInBackground ?? false)
+        servers.forEach { $0.resume(fresh: fresh) }
     }
 
     /// The servers answering now: where a new session can go.

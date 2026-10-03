@@ -294,10 +294,17 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// running either: so a server that is not connected is tried again
     /// now, from the start of the schedule, and one that looks connected
     /// is asked whether it still is, and opened afresh if it does not
-    /// answer. A server waiting for the user to sign in is left alone.
-    public func resume() {
+    /// answer — or, when `fresh` (the host says its sockets do not outlive
+    /// the app's time in the background), opened afresh without asking. A
+    /// server waiting for the user to sign in is left alone.
+    ///
+    /// The network may not be back the instant the app is: the first tries
+    /// that fail after this are tried again at once rather than on the
+    /// schedule (`quickRetries`).
+    public func resume(fresh: Bool = false) {
         guard wantsConnection else { return }
-        guard state == .connected else {
+        quickRetries = Self.quickRetriesAfterResume
+        guard state == .connected, !fresh else {
             attempt = 0
             open()
             return
@@ -311,6 +318,12 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             self.open()
         }
     }
+
+    /// How many failed tries after coming back to the front are tried
+    /// again after `quickRetryDelay` rather than on the schedule.
+    static let quickRetriesAfterResume = 3
+    static let quickRetryDelay: Int32 = 300
+    private var quickRetries = 0
 
     /// How often the server is asked for its sessions outright.
     static let pollInterval: Int32 = 60_000
@@ -353,11 +366,19 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         if case .failed = state {} else { state = wantsConnection ? .offline(reason) : .disconnected }
         for transcript in transcripts.values { transcript.busy = false; transcript.activity = nil }
         guard wantsConnection else { return }
-        attempt += 1
-        let delay = Self.retryDelay(afterAttempt: attempt)
+        let wait: Int32
+        if quickRetries > 0 {
+            // Just back in front: the path to the server may be a moment
+            // behind the app.
+            quickRetries -= 1
+            wait = Self.quickRetryDelay
+        } else {
+            attempt += 1
+            wait = Int32(Self.retryDelay(afterAttempt: attempt) * 1000)
+        }
         let mine = generation
         Task { [weak self] in
-            await self?.server.delay(milliseconds: Int32(delay * 1000))
+            await self?.server.delay(milliseconds: wait)
             guard let self, self.wantsConnection, self.generation == mine else { return }
             self.open()
         }
@@ -368,6 +389,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         case .welcome(let name, let list, let catalogs):
             state = .connected
             attempt = 0
+            quickRetries = 0
             if !name.isEmpty { record.name = name }
             if !record.everConnected { record.everConnected = true }
             sessions = list

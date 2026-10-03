@@ -217,6 +217,36 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertEqual(other.channels, 0)
     }
 
+    /// After time in the background on a phone the channel is opened
+    /// afresh without being asked; and a try that fails just after coming
+    /// back (the network a moment behind the app) is tried again at once,
+    /// three times, before the schedule takes over.
+    func testBackFromTheBackgroundOpensAfreshAndRetriesQuickly() async {
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        host.resume(fresh: true)
+        await settle()
+        XCTAssertEqual(server.verified, 0, "not asked")
+        XCTAssertEqual(server.channels, 2, "opened afresh")
+        XCTAssertEqual(host.state, .connected)
+
+        server.signIn = .failure(AgentServerError.message("no route yet"))
+        host.resume(fresh: true)
+        await settle()
+        for _ in 0..<3 {
+            XCTAssertTrue(server.pauses.contains(300), "tried again at once")
+            XCTAssertFalse(server.pauses.contains(2000))
+            server.elapse(300)
+            await settle()
+        }
+        XCTAssertTrue(server.pauses.contains(2000), "then the schedule")
+        server.signIn = .success("Scripted Mac")
+        server.elapse(2000)
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+    }
+
     /// Every minute the sessions are asked for outright: taken as the list
     /// while the channel is up, and the cue to open it again at once when
     /// it is down and the server answers.

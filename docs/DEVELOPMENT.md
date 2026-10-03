@@ -210,8 +210,12 @@ down and the server answers. And when the app comes back to the front
 (`VisorRootView` on `scenePhase` → `VisorStore.resume`), a server that is
 not connected is tried at once from the start of the schedule, and one
 that looks connected is asked outright (`AgentServer.verifyChannel`: a
-ping, 3 s) and opened afresh if it does not answer — a phone drops every
-channel when the app leaves the front. The timed ones wait on the host's timer
+ping, 1 s) and opened afresh if it does not answer. After time in the
+background on a host whose sockets do not outlive it
+(`VisorSocketService.dropsInBackground`: an iPhone) the channel is opened
+afresh without asking, and for the first three failures after coming
+back the next try is 300 ms on rather than on the schedule — the path to
+a server can be a moment behind the app. The timed ones wait on the host's timer
 (`delay`), so the tests drive them by hand (`ScriptedSocket.elapse`,
 `ScriptedServer.elapse`).
 

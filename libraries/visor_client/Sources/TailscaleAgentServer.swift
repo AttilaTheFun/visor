@@ -24,7 +24,7 @@ public final class TailscaleAgentServer: AgentServer {
     /// How long the channel has to answer when asked outright, as the app
     /// comes back to the front: an answer over Tailscale takes
     /// milliseconds, and the user is looking.
-    static let verifyTimeout: Int32 = 3_000
+    static let verifyTimeout: Int32 = 1_000
 
     private(set) var record: AgentServerRecord
     /// What `hello` gave for the channel's login.
