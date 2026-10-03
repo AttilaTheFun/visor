@@ -9,7 +9,7 @@ import VisorProtocol
 
 @MainActor
 struct FolderPicker: View {
-    @ObservedObject var host: HostConnection
+    @ObservedObject var host: AgentServerConnection
     /// Where it opens: the folder chosen now, or home.
     var start: String = "~"
     let chosen: (String) -> Void

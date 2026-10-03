@@ -143,12 +143,12 @@ final class OptimisticSendTests: XCTestCase {
 
     func testACommandAfterWordsIsItsOwnMessage() {
         let names: Set<String> = ["goal", "compact"]
-        XCTAssertEqual(HostConnection.split("Here's the context.\n/goal Ship it\nwith tests", commands: names),
+        XCTAssertEqual(AgentServerConnection.split("Here's the context.\n/goal Ship it\nwith tests", commands: names),
                        ["Here's the context.", "/goal Ship it\nwith tests"])
-        XCTAssertEqual(HostConnection.split("/goal Ship it", commands: names), ["/goal Ship it"])
+        XCTAssertEqual(AgentServerConnection.split("/goal Ship it", commands: names), ["/goal Ship it"])
         // Not a command it knows, or not on a line of its own: words.
-        XCTAssertEqual(HostConnection.split("See\n/usr/bin/env", commands: names), ["See\n/usr/bin/env"])
-        XCTAssertEqual(HostConnection.split("Use /goal later", commands: names), ["Use /goal later"])
+        XCTAssertEqual(AgentServerConnection.split("See\n/usr/bin/env", commands: names), ["See\n/usr/bin/env"])
+        XCTAssertEqual(AgentServerConnection.split("Use /goal later", commands: names), ["Use /goal later"])
     }
 }
 
@@ -166,7 +166,7 @@ final class NotificationTests: XCTestCase {
         let told = Told()
         VisorHost.notifications = told
         defer { VisorHost.notifications = nil }
-        let host = HostConnection(config: HostConfig(id: "h", name: "Mac", host: "mac.local", password: ""))
+        let host = AgentServerConnection(record: AgentServerRecord(id: "h", name: "Mac", address: "mac.local", secret: ""))
         var working = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "Sync", busy: true, created: 0)
         working.goal = "Ship it"
         var done = working
@@ -252,10 +252,10 @@ final class NotificationHandlerTests: XCTestCase {
 /// comes back up as the row goes in: the jump this guards against.
 @MainActor
 final class SendIsImmediateTests: XCTestCase {
-    private func host() -> HostConnection {
-        ScriptedBackend.transport = ScriptedTransport()
-        Backends.register(ScriptedBackend())
-        return HostConnection(config: HostConfig(name: "Mac", host: "mac.example", password: "", backend: "scripted"))
+    private func host() -> AgentServerConnection {
+        ScriptedProvider.server = ScriptedServer()
+        AgentServerProviders.register(ScriptedProvider())
+        return AgentServerConnection(record: AgentServerRecord(name: "Mac", address: "mac.example", provider: "scripted"))
     }
 
     func testTheSentMessageIsInTheThreadBeforeSendReturns() {

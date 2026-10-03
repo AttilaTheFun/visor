@@ -76,7 +76,7 @@ public final class SessionTranscript: ObservableObject {
     }
 
     static func likeness(_ entry: TranscriptEntry) -> String {
-        entry.role.rawValue + "|" + HostConnection.trimmed(entry.text)
+        entry.role.rawValue + "|" + AgentServerConnection.trimmed(entry.text)
     }
 
     /// The record's rows, as synced: all the thread shows. What streams

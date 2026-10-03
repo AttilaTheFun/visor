@@ -9,7 +9,7 @@ import VisorProtocol
 /// not read here.
 @MainActor
 struct ArchivedList: View {
-    @ObservedObject var host: HostConnection
+    @ObservedObject var host: AgentServerConnection
     /// One project's folder, or nil for everything on the computer.
     let cwd: String?
     let openProject: (String) -> Void

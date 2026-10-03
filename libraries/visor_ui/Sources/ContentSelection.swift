@@ -7,22 +7,22 @@ import VisorProtocol
 /// What the sidebar has selected: a computer, a project, a session, or a
 /// project's archive.
 public enum ContentSelection: Hashable {
-    case computer(hostID: String)
-    case project(hostID: String, cwd: String)
+    case computer(serverID: String)
+    case project(serverID: String, cwd: String)
     case session(SessionSelection)
     /// A project's archive, by the computer and the folder it runs in.
-    case archived(hostID: String, cwd: String)
+    case archived(serverID: String, cwd: String)
     /// Everything archived on a computer, whichever folder it ran in.
-    case hostArchive(hostID: String)
+    case hostArchive(serverID: String)
 
     var session: SessionSelection? { if case .session(let value) = self { value } else { nil } }
-    var hostID: String? {
+    var serverID: String? {
         switch self {
-        case .computer(let hostID): hostID
-        case .project(let hostID, _): hostID
-        case .session(let value): value.hostID
-        case .archived(let hostID, _): hostID
-        case .hostArchive(let hostID): hostID
+        case .computer(let serverID): serverID
+        case .project(let serverID, _): serverID
+        case .session(let value): value.serverID
+        case .archived(let serverID, _): serverID
+        case .hostArchive(let serverID): serverID
         }
     }
 }

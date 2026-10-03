@@ -8,8 +8,8 @@ import VisorProtocol
 
 @MainActor
 struct ProjectSettingsView: View {
-    @ObservedObject var host: HostConnection
-    let project: HostConnection.Project
+    @ObservedObject var host: AgentServerConnection
+    let project: AgentServerConnection.Project
     let rename: () -> Void
     let locate: () -> Void
     let archive: () -> Void
@@ -20,12 +20,12 @@ struct ProjectSettingsView: View {
             Section {
                 LabeledContent("Name", value: project.name)
                 LabeledContent("Folder", value: project.cwd)
-                LabeledContent("Computer", value: host.config.name.isEmpty ? host.config.host : host.config.name)
+                LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
             } header: {
                 Text("Project")
             } footer: {
                 if project.missing {
-                    Text("\(host.config.name.isEmpty ? "The computer" : host.config.name) can no longer find this folder.")
+                    Text("\(host.record.name.isEmpty ? "The computer" : host.record.name) can no longer find this folder.")
                 }
             }
             Section {

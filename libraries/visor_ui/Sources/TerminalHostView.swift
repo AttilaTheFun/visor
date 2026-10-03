@@ -18,7 +18,7 @@ typealias PlatformViewRepresentable = UIViewRepresentable
 /// The SwiftTerm view, wired to one session.
 @MainActor
 struct TerminalHostView: PlatformViewRepresentable {
-    let host: HostConnection
+    let host: AgentServerConnection
     let sessionID: String
     let transcript: SessionTranscript
 
@@ -54,9 +54,9 @@ struct TerminalHostView: PlatformViewRepresentable {
     /// it was typed.
     @MainActor
     final class Coordinator: NSObject, TerminalViewDelegate {
-        let host: HostConnection
+        let host: AgentServerConnection
         let sessionID: String
-        init(host: HostConnection, sessionID: String) {
+        init(host: AgentServerConnection, sessionID: String) {
             self.host = host
             self.sessionID = sessionID
         }

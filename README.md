@@ -25,18 +25,22 @@ progress.
   computer (its connection state in the header, its sessions, its
   settings last), the transcript and composer from AgentUI. A computer
   is added by pasting its connection code or scanning its QR code
-  (`visor://connect?code=…`). How a
-  client reaches a computer is a `HostTransport` chosen by the computer's
-  `backend`; `TailscaleTransport` (wss + https, a token from `hello` or
-  the password) is the one shipped. A fork adds its own transport for
-  its own backend and registers it with `Backends.register`.
+  (`visor://connect?code=…`). Each computer is one agent server; what
+  the client does with a server — signing in, the live channel, and
+  every operation on sessions, folders and files — is the `AgentServer`
+  protocol, and `TailscaleAgentServer` (the wire protocol: `hello`, wss
+  + https with a bearer) is the one shipped. A fork that hosts agents on
+  its own service registers an `AgentServerProvider` with its own
+  `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
+  view; a new session goes to the one connected server, or to the one
+  picked.
 - **libraries/visor_protocol** — the wire format (docs/protocol.md) and its
   own small JSON, with no Foundation, so the same code runs wherever the
   client is carried.
 - **libraries/visor_services** — what a host gives the client: a socket,
   HTTP and settings. Apple implementations sit beside the protocols.
-- **libraries/visor_client** — computers, connections, transcripts, the
-  session cache, the transports.
+- **libraries/visor_client** — agent servers and their providers,
+  connections, transcripts, the session cache.
 - **libraries/visor_ui** — the views, on AgentUI and NavigationUI.
 - **libraries/visor_server** — the server: sessions, agent processes
   (Claude, Codex, the openrouter CLI from github.com/AttilaTheFun/

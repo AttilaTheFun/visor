@@ -11,7 +11,7 @@ import VisorProtocol
 
 @MainActor
 struct AgentScreen: View {
-    @ObservedObject var host: HostConnection
+    @ObservedObject var host: AgentServerConnection
     let sessionID: String
     @ObservedObject private var transcript: SessionTranscript
     @State private var draft = ""
@@ -34,7 +34,7 @@ struct AgentScreen: View {
     /// The session was ended from here: the screen has nothing left to show.
     let ended: () -> Void
 
-    init(host: HostConnection, sessionID: String, ended: @escaping () -> Void = {}) {
+    init(host: AgentServerConnection, sessionID: String, ended: @escaping () -> Void = {}) {
         self._host = ObservedObject(wrappedValue: host)
         self.sessionID = sessionID
         self.ended = ended
@@ -149,7 +149,7 @@ struct AgentScreen: View {
             emptyTitle: transcript.loaded ? (info?.archived == true ? "Archived" : "What should we do?") : "Loading…",
             emptyBody: transcript.loaded
                 ? "Write the first message below; \(info?.agent.title ?? "the agent") starts in \(info?.cwd ?? "its directory")."
-                : "Fetching the transcript from \(host.config.name).",
+                : "Fetching the transcript from \(host.record.name).",
             draft: $draft,
             placeholder: "Message \(info?.agent.title ?? "the agent")…",
             busy: transcript.busy,
@@ -329,10 +329,10 @@ struct AgentScreen: View {
     private var connectionStatus: String? {
         switch host.state {
         case .connected: nil
-        case .connecting: host.config.everConnected ? "Reconnecting…" : "Connecting…"
+        case .connecting: host.record.everConnected ? "Reconnecting…" : "Connecting…"
         case .offline: "Reconnecting…"
         case .failed(let reason): "Connection failed: \(reason)"
-        case .needsPassword: "The computer wants its password — see Computer Settings"
+        case .needsAuthentication: "The computer wants its password — see Computer Settings"
         case .disconnected: "Not connected"
         }
     }

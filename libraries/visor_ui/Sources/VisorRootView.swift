@@ -32,7 +32,7 @@ public struct VisorRootView: View {
     @State private var selection: ContentSelection?
     @State private var search = ""
     /// Messages matching the search, from every computer connected.
-    @State private var messageHits: [(host: HostConnection, hit: HostConnection.SearchHit)] = []
+    @State private var messageHits: [(host: AgentServerConnection, hit: SearchHit)] = []
     @State private var linking = false
     @State private var linkResult: String?
 
@@ -47,22 +47,17 @@ public struct VisorRootView: View {
         } detail: {
             detailView
         }
-        .sheet(isPresented: $store.addingComputer) {
-            NavigationStack {
-                ConnectForm { config in
-                    store.add(config)
-                    store.addingComputer = false
-                }
-                .navigationTitle("Add Computer")
-                .toolbarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { store.addingComputer = false } }
-                }
+        .sheet(isPresented: $store.addingServer) {
+            AddAgentServerSheet { record in
+                store.add(record)
+                store.addingServer = false
+            } cancel: {
+                store.addingServer = false
             }
         }
         .sheet(isPresented: $composing) {
-            ComposeSessionSheet(store: store) { hostID, id in
-                selection = .session(SessionSelection(hostID: hostID, sessionID: id))
+            ComposeSessionSheet(store: store) { serverID, id in
+                selection = .session(SessionSelection(serverID: serverID, sessionID: id))
                 if compact { compactColumn = .detail }
             }
         }
@@ -120,13 +115,13 @@ public struct VisorRootView: View {
             }
             Button("Delete Project and Sessions", role: .destructive) {
                 if let target = troubled {
-                    if selection?.hostID == target.host.id { selection = nil }
+                    if selection?.serverID == target.host.id { selection = nil }
                     target.host.removeProjectAndSessions(target.cwd)
                 }
                 troubled = nil
             }
         } message: {
-            Text("\(troubled?.host.config.name ?? "The computer") can no longer find \(troubled?.cwd ?? "this folder"). Locate it if it was renamed or moved, or delete the project and the \(troubled?.sessionCount ?? 0) session\(troubled?.sessionCount == 1 ? "" : "s") in it if it is gone for good.")
+            Text("\(troubled?.host.record.name ?? "The computer") can no longer find \(troubled?.cwd ?? "this folder"). Locate it if it was renamed or moved, or delete the project and the \(troubled?.sessionCount ?? 0) session\(troubled?.sessionCount == 1 ? "" : "s") in it if it is gone for good.")
         }
         .onAppear {
             openFixtureScreen()
@@ -148,13 +143,13 @@ public struct VisorRootView: View {
             if compact { compactColumn = value == nil ? .sidebar : .detail }
             // Which session is on screen, so a notification about it, with
             // the app in front, is not shown over it.
-            store.noteViewing(hostID: value?.session?.hostID, sessionID: value?.session?.sessionID)
+            store.noteViewing(serverID: value?.session?.serverID, sessionID: value?.session?.sessionID)
         }
         // A notification the user opened: its session, on its computer.
         .onChange(of: store.opening) { _, target in
-            guard let target, let host = store.host(named: target.computer) else { return }
+            guard let target, let host = store.server(named: target.computer) else { return }
             store.opening = nil
-            selection = .session(SessionSelection(hostID: host.id, sessionID: target.session))
+            selection = .session(SessionSelection(serverID: host.id, sessionID: target.session))
             if compact { compactColumn = .detail }
         }
         // Backing out on a phone is deselecting: the row is no longer
@@ -174,10 +169,10 @@ public struct VisorRootView: View {
         withTransaction(still) {
             switch screen {
             case "chat", "inspector", "models":
-                selection = .session(SessionSelection(hostID: VisorFixture.hostID, sessionID: VisorFixture.chatSession))
+                selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
                 if compact { compactColumn = .detail }
             case "goal":
-                selection = .session(SessionSelection(hostID: VisorFixture.hostID, sessionID: VisorFixture.goalSession))
+                selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))
                 if compact { compactColumn = .detail }
             case "search":
                 search = VisorFixture.searchQuery
@@ -197,7 +192,7 @@ public struct VisorRootView: View {
 
     private var sidebar: some View {
         ListSearchChrome(text: $search, prompt: "Search sessions", composeLabel: "New session",
-                         compose: store.hosts.isEmpty ? nil : { composing = true }) {
+                         compose: store.servers.isEmpty ? nil : { composing = true }) {
             outline
         }
     }
@@ -209,15 +204,15 @@ public struct VisorRootView: View {
     /// in every section at once.
     private var outline: some View {
         List(selection: $selection) {
-            ForEach(store.hosts) { host in
+            ForEach(store.servers) { host in
                 HostSection(host: host) { host in hostRows(host) }
             }
             // What was said, as well as what the sessions are called.
             if searching, !messageHits.isEmpty {
                 Section {
                     ForEach(messageHits, id: \.hit.id) { item in
-                        MessageHitRow(hit: item.hit, computer: store.hosts.count > 1 ? item.host.config.name : nil)
-                            .tag(ContentSelection.session(SessionSelection(hostID: item.host.id, sessionID: item.hit.session)))
+                        MessageHitRow(hit: item.hit, computer: store.servers.count > 1 ? item.host.record.name : nil)
+                            .tag(ContentSelection.session(SessionSelection(serverID: item.host.id, sessionID: item.hit.session)))
                     }
                 } header: {
                     Text("Messages").noHeaderCase()
@@ -225,15 +220,15 @@ public struct VisorRootView: View {
             }
             // Always last: where another computer comes from.
             Section {
-                Button { store.addingComputer = true } label: {
-                    Label("Add Computer…", systemImage: "plus").rowLabel()
+                Button { store.addingServer = true } label: {
+                    Label(AgentServerProviderUIs.addTitle + "…", systemImage: "plus").rowLabel()
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("add-computer")
                 // The servers of the computers here, linked to one another,
                 // so their agents reach each other's sessions.
-                if store.hosts.count > 1 {
-                    Button { linkComputers() } label: {
+                if store.servers.count > 1 {
+                    Button { linkServers() } label: {
                         Label(linking ? "Linking…" : "Link These Computers", systemImage: "link").rowLabel()
                     }
                     .buttonStyle(.plain)
@@ -259,8 +254,8 @@ public struct VisorRootView: View {
         guard query.count > 1 else { messageHits = []; return }
         try? await Task.sleep(nanoseconds: 300_000_000)
         guard !Task.isCancelled else { return }
-        var found: [(host: HostConnection, hit: HostConnection.SearchHit)] = []
-        for host in store.hosts where host.state == .connected {
+        var found: [(host: AgentServerConnection, hit: SearchHit)] = []
+        for host in store.servers where host.state == .connected {
             let hits = (try? await host.search(query)) ?? []
             found += hits.prefix(30).map { (host: host, hit: $0) }
         }
@@ -268,10 +263,10 @@ public struct VisorRootView: View {
         messageHits = found
     }
 
-    private func linkComputers() {
+    private func linkServers() {
         linking = true
         Task {
-            let problems = await store.linkComputers()
+            let problems = await store.linkServers()
             linkResult = problems.map { "Some links failed:\n" + $0 }
                 ?? "The agents on each computer can now list, message and read the sessions on the others."
             linking = false
@@ -279,7 +274,7 @@ public struct VisorRootView: View {
     }
 
     /// A computer's rows: its sessions, its archives, its settings.
-    @ViewBuilder private func hostRows(_ host: HostConnection) -> some View {
+    @ViewBuilder private func hostRows(_ host: AgentServerConnection) -> some View {
         let projects = entries(for: host)
         let cards = projects.flatMap { entry in entry.project.sessions.map { SessionCard(host: host, project: entry.project, session: $0) } }
             .sorted { $0.updated > $1.updated }
@@ -292,7 +287,7 @@ public struct VisorRootView: View {
                 .font(.footnote)
         }
         ForEach(cards) { card in
-            let which = SessionSelection(hostID: host.id, sessionID: card.session.id)
+            let which = SessionSelection(serverID: host.id, sessionID: card.session.id)
             SessionCardRow(session: card.session)
                 .tag(ContentSelection.session(which))
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -311,10 +306,10 @@ public struct VisorRootView: View {
                 Spacer()
                 Text("\(archived.count)").foregroundColor(.secondary)
             }
-            .tag(ContentSelection.hostArchive(hostID: host.id))
-            .accessibilityIdentifier("archived-" + host.config.name)
+            .tag(ContentSelection.hostArchive(serverID: host.id))
+            .accessibilityIdentifier("archived-" + host.record.name)
         }
-        let settings = ContentSelection.computer(hostID: host.id)
+        let settings = ContentSelection.computer(serverID: host.id)
         HStack(spacing: OutlineMetrics.gap) {
             Image(systemName: "gearshape").foregroundColor(.secondary)
                 .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
@@ -322,7 +317,7 @@ public struct VisorRootView: View {
             Spacer()
         }
         .tag(settings)
-        .accessibilityIdentifier("computer-settings-" + host.config.name)
+        .accessibilityIdentifier("computer-settings-" + host.record.name)
     }
 
     @ViewBuilder private func sessionMenu(_ card: SessionCard) -> some View {
@@ -337,10 +332,10 @@ public struct VisorRootView: View {
             Button { copyToPasteboard(command) } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
         }
         Divider()
-        Button { selection = .project(hostID: host.id, cwd: card.project.cwd) } label: {
+        Button { selection = .project(serverID: host.id, cwd: card.project.cwd) } label: {
             Label("Project Settings", systemImage: "folder")
         }
-        Button { selection = .computer(hostID: host.id) } label: {
+        Button { selection = .computer(serverID: host.id) } label: {
             Label("Computer Settings", systemImage: "desktopcomputer")
         }
         Divider()
@@ -352,11 +347,11 @@ public struct VisorRootView: View {
     /// One computer's projects, filtered by the search and sorted by name.
     /// A project whose own name or path matches (or whose computer does)
     /// keeps all its sessions; otherwise only the sessions that match.
-    private func entries(for host: HostConnection) -> [ProjectEntry] {
+    private func entries(for host: AgentServerConnection) -> [ProjectEntry] {
         let query = search.trimmed.lowercased()
         let hostMatches = query.isEmpty
-            || host.config.name.lowercased().contains(query)
-            || host.config.host.lowercased().contains(query)
+            || host.record.name.lowercased().contains(query)
+            || host.record.address.lowercased().contains(query)
         var out: [ProjectEntry] = []
         for project in host.projects {
             if hostMatches || project.name.lowercased().contains(query) || project.cwd.lowercased().contains(query) {
@@ -379,32 +374,32 @@ public struct VisorRootView: View {
 
     @ViewBuilder private var detailView: some View {
         Group {
-            if case .computer(let hostID) = selection, let host = store.host(for: hostID) {
+            if case .computer(let serverID) = selection, let host = store.server(for: serverID) {
                 ComputerSettingsView(host: host, forget: {
                     selection = nil
                     store.remove(host)
                 })
-                .id(hostID)
-            } else if case .project(let hostID, let cwd) = selection, let host = store.host(for: hostID),
+                .id(serverID)
+            } else if case .project(let serverID, let cwd) = selection, let host = store.server(for: serverID),
                       let project = host.projects.first(where: { $0.cwd == cwd }) {
                 ProjectSettingsView(host: host, project: project,
                                     rename: { nameDraft = project.alias ?? ""; renamingProject = ProjectTarget(host: host, project: project) },
                                     locate: { troubled = ProjectTarget(host: host, project: project) },
-                                    archive: { selection = .archived(hostID: hostID, cwd: cwd) },
+                                    archive: { selection = .archived(serverID: serverID, cwd: cwd) },
                                     remove: { removingProject = ProjectTarget(host: host, project: project) })
-                    .id(hostID + "|" + cwd + "|settings")
-            } else if case .archived(let hostID, let cwd) = selection, let host = store.host(for: hostID) {
-                ArchivedList(host: host, cwd: cwd, openProject: { selection = .project(hostID: hostID, cwd: $0) })
-                    .id(hostID + "|" + cwd)
-            } else if case .hostArchive(let hostID) = selection, let host = store.host(for: hostID) {
-                ArchivedList(host: host, cwd: nil, openProject: { selection = .project(hostID: hostID, cwd: $0) })
-                    .id(hostID + "|archive")
-            } else if let which = selection?.session, let host = store.host(for: which.hostID) {
+                    .id(serverID + "|" + cwd + "|settings")
+            } else if case .archived(let serverID, let cwd) = selection, let host = store.server(for: serverID) {
+                ArchivedList(host: host, cwd: cwd, openProject: { selection = .project(serverID: serverID, cwd: $0) })
+                    .id(serverID + "|" + cwd)
+            } else if case .hostArchive(let serverID) = selection, let host = store.server(for: serverID) {
+                ArchivedList(host: host, cwd: nil, openProject: { selection = .project(serverID: serverID, cwd: $0) })
+                    .id(serverID + "|archive")
+            } else if let which = selection?.session, let host = store.server(for: which.serverID) {
                 AgentScreen(host: host, sessionID: which.sessionID, ended: { selection = nil })
                     .id(which)
             } else {
                 EmptyDetail(title: "Nothing selected",
-                            subtitle: store.hosts.isEmpty ? "Connect a computer first." : "Pick a computer, a project or a session, or tap compose to start one.")
+                            subtitle: store.servers.isEmpty ? "Connect a computer first." : "Pick a computer, a project or a session, or tap compose to start one.")
             }
         }
         // The detail takes the window's slack, so the sidebar opens at its
