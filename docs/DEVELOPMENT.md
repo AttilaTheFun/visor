@@ -23,7 +23,11 @@ The repos (github.com/AttilaTheFun):
 | `agent_ui` | SwiftPM package: AgentUI (the chat: transcript, composer, footer), NavigationUI, InboxUI, MessagesUI. Pinned by revision in third_party/swift_packages/Package.swift. |
 | `open_router_cli` | SwiftPM: OpenRouterKit (client, streaming, ORAgent loop, coding tools, sessions, config, Claude's stream-json) and the `openrouter` CLI, which Visor drives. |
 
-Third-party: SwiftTerm 1.10.1 (terminal on Apple), SQLite.swift 0.15.3 (the
+Third-party: SwiftTerm's portable emulator (through agent_ui's TerminalUI,
+from the fork github.com/AttilaTheFun/SwiftTerm, branch `visor-consumer`:
+upstream main plus Android support, with the build plugin's output checked
+in because rspm runs no SwiftPM plugins; the fork's `android-support`
+branch is the change offered upstream), SQLite.swift 0.15.3 (the
 caches), rules_swift_package_manager (rspm) brings SwiftPM packages into
 Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 `@swiftpkg_sqlite.swift//:SQLite`, `@swiftpkg_agent_ui//:AgentUI`.
@@ -207,7 +211,10 @@ window takes the session (`mode` `tui` with its client and size:
 `performMode`), which starts the shell — or keeps it, if another window
 had it — and sends the taker a replay of what it has shown
 (`replayTerminal`: a `tty` with its size set, which tells the client's
-`TerminalHostView` to reset SwiftTerm and draw from there). Bytes go
+`TerminalPane` to start its `TerminalScreen` over and draw from there).
+The client draws it with AgentUI's TerminalUI — SwiftTerm's emulator under
+a SwiftUI view, the same on Apple's SwiftUI and Isomer's — with a key bar
+(esc, ctrl, tab, arrows, paste) on a phone and drag to scroll back. Bytes go
 only to the window that has it (`onTerminalBytes`); keystrokes and
 resizes only from it. A line sent (`send`, REST or socket) is typed in;
 nothing is written down, there are no turns, and agents cannot message a
@@ -299,7 +306,7 @@ protocol library's, so a fork's server produces those from its own API.
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line
 preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:
-status:…)`; a terminal session: `TerminalPane` (SwiftTerm) when this
+status:…)`; a terminal session: `TerminalPane` (AgentUI's TerminalUI) when this
 window has it — taken on opening when no window has it — else "Open in
 another window" with Use Here), `SessionInspector`, `ComposeSessionSheet`
 (Terminal is one of the harnesses). In agent_ui,

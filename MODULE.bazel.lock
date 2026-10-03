@@ -593,7 +593,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 613ad9f2524dd2946345426f66f4530420dc5c9df70d5b5db68fcc15532d2cf9"
+          "FILE:@@//third_party/swift_packages/Package.resolved 4b200ade1b4e6326dc7c735faf88a8187ddaacb3844c2c57267d3fa2d43c16b1"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -603,29 +603,11 @@
               "package": "third_party/swift_packages/Package.swift"
             }
           },
-          "swiftpkg_swiftterm": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_swiftterm",
-              "commit": "5c83a9d214e7354697624c11deb4e488bdcfabad",
-              "remote": "https://github.com/migueldeicaza/SwiftTerm.git",
-              "version": "1.10.1",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": ""
-            }
-          },
           "swiftpkg_agent_ui": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "78b7eb838d0756298a27ebc7c1b6fed642da94d3",
+              "commit": "0a73de8ebc65dd96b15490fb26caaf3da8b6feb3",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
               "env": {},
               "env_inherit": [],
@@ -656,6 +638,24 @@
               "bazel_target_mods": ""
             }
           },
+          "swiftpkg_h": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_h",
+              "commit": "aa3626829160917d4378330617971977cbd78f5b",
+              "remote": "https://github.com/rarestype/h",
+              "version": "1.0.1",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": ""
+            }
+          },
           "swiftpkg_swift_argument_parser": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
@@ -673,11 +673,45 @@
               "dep_module_aliases": "",
               "bazel_target_mods": ""
             }
+          },
+          "swiftpkg_swift_png": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_png",
+              "commit": "8a0bcd4df5e4b307c804937776a56dd6ecdf6396",
+              "remote": "https://github.com/tayloraswift/swift-png",
+              "version": "4.5.1",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": ""
+            }
+          },
+          "swiftpkg_swiftterm": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swiftterm",
+              "commit": "7aca2a981e1c603149fa98a965e571741a3423d1",
+              "remote": "https://github.com/AttilaTheFun/SwiftTerm.git",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": ""
+            }
           }
         },
         "moduleExtensionMetadata": {
           "explicitRootModuleDirectDeps": [
-            "swiftpkg_swiftterm",
             "swiftpkg_agent_ui",
             "swiftpkg_sqlite.swift",
             "swift_package"

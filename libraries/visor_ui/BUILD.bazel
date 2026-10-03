@@ -15,11 +15,8 @@ swift_library(
         "//libraries/visor_services",
         "@swiftpkg_agent_ui//:AgentUI",
         "@swiftpkg_agent_ui//:NavigationUI",
-    ] + select({
-        # The terminal: Apple's SwiftTerm where it runs; another host draws
-        # its own (the web its xterm.js).
-        "@platforms//os:ios": ["@swiftpkg_swiftterm//:SwiftTerm"],
-        "@platforms//os:macos": ["@swiftpkg_swiftterm//:SwiftTerm"],
-        "//conditions:default": [],
-    }),
+        # Terminal sessions: drawn in SwiftUI over SwiftTerm's emulator, on
+        # every platform.
+        "@swiftpkg_agent_ui//:TerminalUI",
+    ],
 )
