@@ -40,12 +40,17 @@ struct TerminalHostView: PlatformViewRepresentable {
         #else
         view.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         #endif
-        // Everything the terminal has shown goes into SwiftTerm's own
-        // emulator, which reflows to the view's width; live bytes follow.
+        // Everything the shell has shown goes into SwiftTerm's own
+        // emulator; live bytes follow. A replay of the whole screen (this
+        // window took the terminal, or subscribed again) starts it over.
         // The view resizes the far PTY as it lays out (sizeChanged), and
-        // the agent repaints its current screen for that width.
+        // what runs there draws itself again for that size.
         for chunk in transcript.terminalBacklog { view.feed(chunk) }
-        transcript.onTerminalBytes = { [weak view] chunk in view?.feed(chunk) }
+        transcript.onTerminalBytes = { [weak view] chunk, startsOver in
+            guard let view else { return }
+            if startsOver { view.getTerminal().resetToInitialState() }
+            view.feed(chunk)
+        }
         return view
     }
 

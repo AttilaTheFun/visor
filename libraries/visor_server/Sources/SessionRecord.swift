@@ -125,14 +125,13 @@ public final class SessionRecord: ObservableObject {
 
     /// sessions is sent again.
     var onInfoChanged: (() -> Void)?
-    /// Busy inferred from the file, for a session the terminal holds.
-    var onFileBusy: ((Bool) -> Void)?
-    /// What the terminal drew, for the one client it is drawn for.
+    /// What a terminal session's shell drew, for the one client it is
+    /// drawn for.
     var onTerminalBytes: ((Envelope) -> Void)?
-    /// Whether the agent is drawing full-screen.
+    /// Whether the shell's program is drawing full-screen.
     var altScreen = false
 
-    /// What the terminal has shown, kept for whoever looks next.
+    /// What the shell has shown, kept for a window that attaches next.
     var scrollback = Data()
 
     static let scrollbackLimit = 200_000

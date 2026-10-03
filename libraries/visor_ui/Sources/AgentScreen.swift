@@ -2,6 +2,10 @@
 // synced from the computer's record. The composer's pills attach files,
 // open the model sheet (model, effort, approval mode) and show a goal, a
 // loop or queued messages; Stop interrupts the turn on the computer.
+//
+// A terminal session's page is its shell, drawn by SwiftTerm for this
+// window: opened, the window takes the terminal, unless another window
+// has it — then it asks first.
 
 import AgentUI
 import NavigationUI
@@ -24,10 +28,9 @@ struct AgentScreen: View {
     /// The attach source open (files, the photo library, the camera).
     @State private var attachSource: AttachSource?
     @State private var taking = false
-    @State private var returning = false
     @State private var showInspector = false
-    /// The room a terminal would have here, in points: what the window is
-    /// worth in cells when this client takes control.
+    /// The room the terminal has here, in points: what the window is
+    /// worth in cells when it takes the terminal.
     @State private var paneSize: CGSize = .zero
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -64,24 +67,35 @@ struct AgentScreen: View {
         return String(draft.dropFirst()).lowercased()
     }
 
-    /// The terminal is drawn only for the window it was taken with.
-    private var controlsTerminal: Bool { info.map(host.controlsTerminal) ?? false }
-    /// Someone else has it in the agent's own terminal.
-    private var controlledElsewhere: Bool { (info?.mode.isTUI ?? false) && !controlsTerminal }
+    private var isTerminal: Bool { info?.agent.isShell ?? false }
+    /// A terminal is drawn only for the window that took it.
+    private var controlsTerminal: Bool { isTerminal && (info.map(host.controlsTerminal) ?? false) }
+    /// Another window has this terminal.
+    private var controlledElsewhere: Bool { isTerminal && (info?.mode.isTUI ?? false) && !controlsTerminal }
 
     var body: some View {
         GeometryReader { geometry in
             Group {
-                if controlsTerminal {
+                if !isTerminal {
+                    chat
+                } else if controlsTerminal {
                     TerminalPane(host: host, sessionID: sessionID)
                 } else if controlledElsewhere {
-                    watching
+                    terminalElsewhere
                 } else {
-                    chat
+                    ProgressView("Opening the terminal…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .onChange(of: geometry.size, initial: true) { _, size in paneSize = size }
+            .onChange(of: geometry.size, initial: true) { _, size in
+                paneSize = size
+                takeTerminalIfFree()
+            }
         }
+        // A terminal no window has is taken by this one as soon as it is
+        // known and connected, and the window has a size.
+        .onChange(of: info?.mode) { takeTerminalIfFree() }
+        .onChange(of: host.state) { takeTerminalIfFree() }
         // The title is the session's; the inspector opens from an explicit
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
@@ -96,8 +110,7 @@ struct AgentScreen: View {
         }
         .adaptiveInspector(isPresented: $showInspector, compact: sizeClass == .compact) {
             if let info {
-                SessionInspector(host: host, session: info, window: paneSize, compact: sizeClass == .compact,
-                                 takeControl: { cols, rows in host.assumeControl(sessionID, cols: cols, rows: rows) },
+                SessionInspector(host: host, session: info, compact: sizeClass == .compact,
                                  close: { showInspector = false },
                                  archive: { showInspector = false; host.archive(sessionID) },
                                  end: { showInspector = false; host.end(sessionID); ended() })
@@ -126,9 +139,6 @@ struct AgentScreen: View {
                 }
             }
         }
-        // Whatever changed the mode, the inspector does not outlive the
-        // screen it was opened over.
-        .onChange(of: info?.mode) { showInspector = false }
         // The session was forked elsewhere and the chat moved to the newer
         // branch: not a choice, but not a surprise either.
         .alert("This session was forked", isPresented: Binding(get: { transcript.notice != nil }, set: { if !$0 { host.acknowledge(sessionID) } })) {
@@ -337,47 +347,39 @@ struct AgentScreen: View {
         }
     }
 
-    /// The session as a reader sees it while someone else drives the
-    /// agent's terminal: what it has said, and the two ways in.
-    private var watching: some View {
-        VStack(spacing: 0) {
-            TranscriptView(messages: rows,
-                           activity: connectionStatus, error: transcript.error,
-                           emptyTitle: "Nothing said yet",
-                           emptyBody: "The agent's own terminal has this session.",
-                           loadEarlier: transcript.hasEarlier ? { host.loadEarlier(sessionID) } : nil)
-            Divider()
-            VStack(spacing: 10) {
-                Label("Being driven from another window", systemImage: "terminal")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                HStack(spacing: 10) {
-                    Button("Take control") { taking = true }
-                        .buttonStyle(.borderedProminent)
-                    Button("Return to chat") { returning = true }
-                        .buttonStyle(.bordered)
-                }
+    /// A terminal another window has: the way to have it here.
+    private var terminalElsewhere: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "terminal").font(.largeTitle).foregroundColor(.secondary)
+            Text("Open in another window").font(.headline)
+            Text("A terminal is drawn for one window at a time. The shell keeps running whichever window has it.")
                 .font(.footnote)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, TranscriptMetrics.edgeInset)
-            .padding(.vertical, 12)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Use Here") { taking = true }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("use-terminal-here")
         }
-        .alert("Take control of the terminal?", isPresented: $taking) {
+        .padding(TranscriptMetrics.edgeInset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .alert("Use this terminal here?", isPresented: $taking) {
             Button("Cancel", role: .cancel) {}
-            Button("Take control") {
-                let cells = TerminalMetrics.cells(in: paneSize)
-                host.assumeControl(sessionID, cols: cells.cols, rows: cells.rows)
-            }
+            Button("Use Here") { takeTerminal() }
         } message: {
-            Text("The agent's terminal starts again for this window. Whoever is driving it now loses it, and anything half-typed there is lost.")
+            Text("The other window stops showing it. The shell and what runs in it carry on.")
         }
-        .alert("Hand the session back to the chat?", isPresented: $returning) {
-            Button("Cancel", role: .cancel) {}
-            Button("Return to chat") { host.returnToChat(sessionID) }
-        } message: {
-            Text("The terminal ends and the session carries on in the chat. Anything half-typed in the terminal is lost.")
-        }
+    }
+
+    /// Takes the terminal for this window at its size in cells.
+    private func takeTerminal() {
+        let cells = TerminalMetrics.cells(in: paneSize)
+        host.assumeControl(sessionID, cols: cells.cols, rows: cells.rows)
+    }
+
+    /// Takes a terminal no window has: opening the session is asking for it.
+    private func takeTerminalIfFree() {
+        guard isTerminal, !(info?.mode.isTUI ?? true), host.state == .connected, paneSize.width > 0, paneSize.height > 0 else { return }
+        takeTerminal()
     }
 
     /// The record's rows, each under the id it keeps through its copies.

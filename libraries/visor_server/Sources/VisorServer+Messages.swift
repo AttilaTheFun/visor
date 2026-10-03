@@ -96,26 +96,41 @@ extension VisorServer {
         broadcastSessions()
     }
 
-    /// The other kind of process takes the session: this one ends
-    /// (once its turn does), the other resumes the same id.
+    /// A window takes a terminal session: from now on the shell is drawn
+    /// for it, at its size — started if it is not running, kept if it is —
+    /// and whoever had it before is sent nothing more. What the shell has
+    /// shown so far goes to the window that took it. A chat session has no
+    /// terminal to take.
     private func performMode(_ envelope: Envelope, from client: ClientConnection?) {
-        guard let record = session(envelope.session) else { return }
-        let mode: SessionMode
-        if envelope.mode == "tui" {
-            // A terminal is drawn for one window: without a client and
-            // its size there is nothing to draw for.
-            let controller = client?.clientID ?? envelope.controller ?? ""
-            guard !controller.isEmpty, let cols = envelope.cols, let rows = envelope.rows, cols > 0, rows > 0 else { return }
-            mode = .tui(controller: controller, cols: cols, rows: rows)
-        } else {
-            mode = .chat
+        guard let record = session(envelope.session), record.info.agent.isShell, envelope.mode == "tui" else { return }
+        // Drawn for one window: without a client and its size there is
+        // nothing to draw for.
+        let controller = client?.clientID ?? envelope.controller ?? ""
+        guard !controller.isEmpty, let cols = envelope.cols, let rows = envelope.rows, cols > 0, rows > 0 else { return }
+        if record.info.archived { unarchive(record) }
+        record.setMode(.tui(controller: controller, cols: cols, rows: rows))
+        launchTerminal(record)
+        if let client {
+            // Taking it is asking for what it draws.
+            record.subscribers.insert(ObjectIdentifier(client))
+            replayTerminal(record, to: client)
         }
-        guard mode != record.info.mode else { return }
-        // At once, as the confirmation said: a turn in flight is cut short.
-        record.setMode(mode)
-        rebuild(record, rereading: true)
-        saveArchive()
         broadcastSessions()
+    }
+
+    /// What the shell has shown, whole, to the window it is drawn for —
+    /// marked as a replay (its size set), so the window starts its screen
+    /// over rather than adding to it — and then the shell asked to draw
+    /// itself again, since what runs on it owns every cell and its own
+    /// painting is the only thing that is certainly true.
+    func replayTerminal(_ record: SessionRecord, to client: ClientConnection) {
+        if let size = record.info.mode.terminalSize {
+            var replay = Envelope.tty(session: record.info.id, data: record.scrollback.base64EncodedString())
+            replay.cols = size.cols
+            replay.rows = size.rows
+            client.send(replay)
+        }
+        record.terminal?.repaint()
     }
 
     private func performInput(_ envelope: Envelope, from client: ClientConnection?) {
@@ -184,20 +199,13 @@ extension VisorServer {
         // Everything that is not the record, in one piece, so a window
         // that opens mid-turn misses none of it.
         client.send(record.ephemeralEnvelope)
-        // What the terminal has shown goes to the one window it was
-        // drawn for, and to no other — then the agent is asked to draw
-        // it again, because a full-screen interface owns every cell and
-        // its own painting is the only thing that is certainly true.
-        if record.info.mode.controlled(by: client.clientID) {
-            if !record.scrollback.isEmpty {
-                client.send(.tty(session: record.info.id, data: record.scrollback.base64EncodedString()))
-            }
-            record.terminal?.repaint()
-        }
+        // A terminal session's screen goes to the one window it is drawn
+        // for, and to no other.
+        if record.info.mode.controlled(by: client.clientID) { replayTerminal(record, to: client) }
     }
 
     private func performPermissions(_ envelope: Envelope) {
-        guard let record = session(envelope.session), let skip = envelope.skipPermissions else { return }
+        guard let record = session(envelope.session), !record.info.agent.isShell, let skip = envelope.skipPermissions else { return }
         guard record.info.skipPermissions != skip else { return }
         record.setPermissions(skip: skip)
         // Claude's mode is a launch flag: the process restarts (resumed by
@@ -221,7 +229,7 @@ extension VisorServer {
     }
 
     private func performSettings(_ envelope: Envelope) {
-        guard let record = session(envelope.session) else { return }
+        guard let record = session(envelope.session), !record.info.agent.isShell else { return }
         let model = envelope.model ?? record.info.model
         let effort = envelope.effort ?? record.info.effort
         guard model != record.info.model || effort != record.info.effort else { return }
@@ -315,6 +323,12 @@ extension VisorServer {
         case "send":
             guard let target = others.first(where: { $0.info.id == envelope.session }) else {
                 reply.error = "No other session with that id; list_sessions names them."
+                return reply
+            }
+            // A terminal is typed into by the person at its window; an
+            // agent has its own shell for commands.
+            guard !target.info.agent.isShell else {
+                reply.error = "That session is a terminal: it is typed into from its window, not sent messages."
                 return reply
             }
             guard let text = envelope.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {

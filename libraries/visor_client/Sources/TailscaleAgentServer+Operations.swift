@@ -8,7 +8,6 @@ extension TailscaleAgentServer {
 
     public func subscribe(_ session: String) { send(.subscribe(session: session)) }
     public func assumeControl(_ session: String, cols: Int, rows: Int) { send(.assumeControl(session: session, cols: cols, rows: rows)) }
-    public func returnToChat(_ session: String) { send(.returnToChat(session: session)) }
     public func acknowledge(_ session: String) { send(.acknowledge(session: session)) }
     public func loadEarlier(_ session: String, before: String) { send(.earlier(session: session, before: before)) }
     public func sendInput(_ session: String, data: String) { send(.input(session: session, data: data)) }

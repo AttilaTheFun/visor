@@ -8,8 +8,9 @@ and the gotchas. Read it whole once; keep it current as things change.
 
 Visor is a Mac menu bar app that runs coding agents (Claude Code, Codex,
 OpenRouter models) as sessions on the Mac and serves them over Tailscale to
-clients on iPhone, iPad, Mac and the web. Clients chat with a session,
-watch it work, and can hand it to a real terminal. The agent doing this
+clients on iPhone, iPad, Mac and the web. Clients chat with a session
+and watch it work, and open terminal sessions on the Mac — its shell,
+as ssh would give it — to run anything there themselves. The agent doing this
 work can drive its own development through Visor: you talk to an agent
 in the Visor client; the agent edits, builds, tests, and redeploys the
 very server it is running under.
@@ -196,6 +197,29 @@ every stream present when sent has landed — `shadowed` hides the matched
 record row meanwhile; `turnStatus: [StatusItem]`). Sent text is trimmed.
 `catalogs` envelope refreshes the agent list (e.g. after a key is saved).
 
+**Terminal sessions** (0.18). A session whose agent is `shell` is the
+login shell of the user the server runs as (`ToolPath.loginShell`, run
+with `-l`) on a PTY in the session's folder: `ShellHarness` makes a
+`ShellProcess`, whose `TerminalChild` holds the PTY (`posix_spawn` with
+`POSIX_SPAWN_SETSID`, the slave opened as the controlling terminal, read
+on a dispatch source built outside the main actor). Nothing runs until a
+window takes the session (`mode` `tui` with its client and size:
+`performMode`), which starts the shell — or keeps it, if another window
+had it — and sends the taker a replay of what it has shown
+(`replayTerminal`: a `tty` with its size set, which tells the client's
+`TerminalHostView` to reset SwiftTerm and draw from there). Bytes go
+only to the window that has it (`onTerminalBytes`); keystrokes and
+resizes only from it. A line sent (`send`, REST or socket) is typed in;
+nothing is written down, there are no turns, and agents cannot message a
+terminal (`answer`). When the shell exits the window is told, and a key
+starts another. The shell's environment is the server's with the
+developer paths, `TERM=xterm-256color`, and no `VISOR_*` variables. A
+restart of the server ends the shells; the sessions come back, and a
+window opening one starts a new shell. These replaced the agent's own
+TUI as a session mode (0.17 and before): to carry a conversation on in
+the agent's interface, copy its resume command, end the chat session,
+and run the command in a terminal session.
+
 **Keeping the connection** (0.18). The retry: after a drop
 `AgentServerConnection` signs in and opens the channel again after 2, 4,
 8, 16 s, then every 30 (`retryDelay(afterAttempt:)`). Each step has a
@@ -275,9 +299,10 @@ protocol library's, so a fork's server produces those from its own API.
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line
 preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:
-status:…)`; watching mode when a terminal holds the session: persisted
-rows + "Being driven from another window" bar with Take control /
-Return to chat), `SessionInspector`, `ComposeSessionSheet`. In agent_ui,
+status:…)`; a terminal session: `TerminalPane` (SwiftTerm) when this
+window has it — taken on opening when no window has it — else "Open in
+another window" with Use Here), `SessionInspector`, `ComposeSessionSheet`
+(Terminal is one of the harnesses). In agent_ui,
 `TranscriptView` renders the record, then ONE always-present
 `EphemeralFooter` cell (id "bottom": streams, queued, sending,
 `ActivityList` of `ActivityItem`s with task checklists, error, the 18 pt
@@ -394,11 +419,12 @@ a detached relauncher and resumes named sessions with a nudge
   the final record and the ephemeral snapshot, and ends the session. The
   expected tail: `user | assistant ONE | user | assistant TWO`, streams
   empty. Try a trailing space on a message: that used to freeze the record.
-- `node tools/probes/lifecycle.mjs` (`AGENT=codex|openrouter`, `TUI=1` to
-  also switch to the terminal and back, `MCP=1` to also have the agent
+- `node tools/probes/lifecycle.mjs` (`AGENT=codex|openrouter`, `TERMINAL=1`
+  to also open a terminal session, type a line into its shell, see it run
+  and have another window take it, `MCP=1` to also have the agent
   call Visor's MCP `list_sessions` and, in a second session with manual
   permissions, ask for a tool call's approval and be given it) — a throwaway session interrupted
-  mid-turn, carried on, optionally handed to its terminal and back, then
+  mid-turn, carried on, then
   ended; the expected tail is `failures 0`, and a few seconds later the
   server has no agent left as a child (`pgrep -lP <server pid>`).
 - The probes talk to the installed server unless `VISOR_PORT` names

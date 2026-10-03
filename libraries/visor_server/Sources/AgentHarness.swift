@@ -1,25 +1,23 @@
-// A harness is one agent kind, and everything the server needs of it: how
-// to make its process (a chat process, or its own terminal), what it can
-// resume, a session's transcript, and its models. The server holds a set
-// of harnesses and never branches on the agent itself — a different set is
-// a different set of agents. A host swaps the registry to bring its own.
+// A harness is one kind of session, and everything the server needs of
+// it: how to make its process (an agent's chat process, or a terminal
+// session's shell), what it can resume, a session's transcript, and its
+// models. The server holds a set of harnesses and never branches on the
+// kind itself — a different set is a different set of kinds. A host swaps
+// the registry to bring its own.
 
 import Foundation
 import Synchronization
 import VisorProtocol
 
 public protocol AgentHarness: AnyObject, Sendable {
-    /// Which agent this serves.
+    /// Which kind of session this serves.
     var kind: AgentKind { get }
     /// The command-line tool it drives, for availability.
     var tool: String { get }
     /// The models it offers, and whether the tool is installed.
     func catalog() -> AgentCatalog
-    /// A chat process for a session; resumes `resume` if given.
+    /// The process for a session; resumes `resume` if given.
     @MainActor func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess
-    /// The agent's own terminal (a PTY process), for TUI mode; nil where
-    /// the agent has no terminal to drive (OpenRouter).
-    @MainActor func makeTerminal(cwd: String, skipPermissions: Bool, resume: String?) -> (AgentProcess & TerminalCapable)?
     /// The sessions resumable in this folder.
     func resumable(cwd: String) -> [ResumableSession]
     /// A session's transcript, the newest `limit` rows.
@@ -36,8 +34,5 @@ public extension AgentHarness {
     func resumable(cwd: String) -> [ResumableSession] { SessionCatalog.resumable(agent: kind, cwd: cwd) }
     func transcript(id: String, cwd: String, limit: Int) -> [TranscriptEntry] {
         SessionCatalog.transcript(agent: kind, id: id, cwd: cwd, limit: limit)
-    }
-    @MainActor func makeTerminal(cwd: String, skipPermissions: Bool, resume: String?) -> (AgentProcess & TerminalCapable)? {
-        TerminalProcess(agent: kind, cwd: cwd, skipPermissions: skipPermissions, resume: resume)
     }
 }

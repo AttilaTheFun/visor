@@ -554,9 +554,9 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         return id
     }
 
-    /// Takes the session into the agent's own terminal, drawn for a
-    /// window of this size on this client. Any other client's terminal
-    /// ends: it is one interface, at one size, for one window.
+    /// Takes a terminal session for this window, at this size. Whichever
+    /// window had it stops being drawn for: a terminal is one size, for
+    /// one window. The shell keeps running throughout.
     public func assumeControl(_ sessionID: String, cols: Int, rows: Int) {
         server.assumeControl(sessionID, cols: cols, rows: rows)
     }
@@ -565,11 +565,6 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     public func acknowledge(_ sessionID: String) {
         transcript(for: sessionID).notice = nil
         server.acknowledge(sessionID)
-    }
-
-    /// Hands the session back to the chat, which every client can draw.
-    public func returnToChat(_ sessionID: String) {
-        server.returnToChat(sessionID)
     }
 
     /// Whether the terminal of this session is drawn for this client.

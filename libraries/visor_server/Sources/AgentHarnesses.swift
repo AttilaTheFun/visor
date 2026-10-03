@@ -16,8 +16,8 @@ public final class AgentHarnesses: Sendable {
 
     public func harness(for kind: AgentKind) -> AgentHarness? { byKind[kind] }
 
-    /// Claude Code, Codex, and Ori (Claude Code's protocol under another
-    /// tool). The set Visor ships with.
+    /// Claude Code, Codex and the openrouter CLI, chatted with, and the
+    /// shell, for terminal sessions. The set Visor ships with.
     public static let standard = AgentHarnesses([
         ClaudeHarness(kind: .claude, tool: "claude", models: [
             AgentModel(id: "fable", title: "Fable 5.1", subtitle: "The most intelligent model", efforts: ClaudeHarness.efforts),
@@ -27,5 +27,6 @@ public final class AgentHarnesses: Sendable {
         ]),
         CodexHarness(),
         OpenRouterHarness(),
+        ShellHarness(),
     ])
 }

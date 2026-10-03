@@ -327,10 +327,11 @@ final class VisorProbe: XCTestCase {
         }
     }
 
-    /// Taking control of a session from a phone, as the phone draws it:
-    /// the chat, the inspector, the confirmation, the terminal it becomes,
-    /// and the sidebar afterwards. The session is a throwaway made over
-    /// the API before the run (VISOR_LOOK_SESSION names it).
+    /// A terminal session from a phone, as the phone draws it: opened, the
+    /// shell is drawn for this window at once; a line typed runs; the
+    /// inspector says which window has it; and the sidebar afterwards. The
+    /// session is a throwaway terminal session made over the API before
+    /// the run (VISOR_LOOK_SESSION names it).
     func testTerminalLook() throws {
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         XCUIDevice.shared.orientation = .portrait
@@ -369,30 +370,27 @@ final class VisorProbe: XCTestCase {
             XCTAssertTrue(any.waitForExistence(timeout: 20), "no session row to open")
             any.tap()
         }
-        Thread.sleep(forTimeInterval: 5)
-        shot(app, "term-0-chat")
+        Thread.sleep(forTimeInterval: 6)
+        shot(app, "term-0-terminal")
+        // Typed into the shell: SwiftTerm takes the keyboard when tapped.
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        Thread.sleep(forTimeInterval: 1)
+        app.typeText("echo visor-look-$((40 + 2))\n")
+        Thread.sleep(forTimeInterval: 3)
+        shot(app, "term-1-typed")
         let title = app.buttons["session-title"].firstMatch
         XCTAssertTrue(title.waitForExistence(timeout: 10), "no title button")
         title.tap()
         Thread.sleep(forTimeInterval: 3)
-        shot(app, "term-1-inspector")
-        let take = app.buttons["Take control of the terminal"].firstMatch
-        XCTAssertTrue(take.waitForExistence(timeout: 5), "no take-control button")
-        take.tap()
+        shot(app, "term-2-inspector")
+        let done = app.buttons["Done"].firstMatch
+        if done.exists { done.tap() }
         Thread.sleep(forTimeInterval: 2)
-        shot(app, "term-2-confirm")
-        let confirm = app.alerts.buttons["Take control"].firstMatch
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "no confirmation")
-        confirm.tap()
-        Thread.sleep(forTimeInterval: 8)
-        shot(app, "term-3-terminal")
-        Thread.sleep(forTimeInterval: 6)
-        shot(app, "term-4-terminal-later")
         // And back to the sidebar: are the sessions still there?
         let back = app.navigationBars.buttons.element(boundBy: 0)
         if back.exists { back.tap() } else { app.swipeRight() }
         Thread.sleep(forTimeInterval: 4)
-        shot(app, "term-5-sidebar-after")
+        shot(app, "term-3-sidebar-after")
     }
 
     private func shot(_ app: XCUIApplication, _ name: String) {

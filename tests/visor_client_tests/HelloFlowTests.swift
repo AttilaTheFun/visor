@@ -69,7 +69,6 @@ final class ScriptedServer: AgentServer {
 
     func subscribe(_ session: String) { subscribed.append(session) }
     func assumeControl(_ session: String, cols: Int, rows: Int) {}
-    func returnToChat(_ session: String) {}
     func acknowledge(_ session: String) {}
     func loadEarlier(_ session: String, before: String) {}
     func sendInput(_ session: String, data: String) {}

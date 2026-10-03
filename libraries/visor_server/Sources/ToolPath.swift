@@ -37,6 +37,17 @@ public enum ToolPath {
         }
     }
 
+    /// The login shell of the user the server runs as (their account's,
+    /// then `SHELL`, then zsh): what a terminal session runs.
+    public static func loginShell() -> String {
+        if let entry = getpwuid(getuid()), let shell = entry.pointee.pw_shell {
+            let path = String(cString: shell)
+            if FileManager.default.isExecutableFile(atPath: path) { return path }
+        }
+        if let shell = ProcessInfo.processInfo.environment["SHELL"], FileManager.default.isExecutableFile(atPath: shell) { return shell }
+        return "/bin/zsh"
+    }
+
     /// The environment for a spawned agent: ours, with the developer
     /// directories on PATH and any trace of a surrounding Claude Code
     /// session removed (a nested session refuses to start).

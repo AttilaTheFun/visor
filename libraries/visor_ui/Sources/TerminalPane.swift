@@ -1,4 +1,4 @@
-// A session's terminal: SwiftTerm fed the PTY's bytes as they arrive,
+// A terminal session's shell: SwiftTerm fed the PTY's bytes as they arrive,
 // keystrokes and resizes sent back. Where SwiftTerm does not run, the
 // pane says so; a host that carries the client elsewhere brings its own.
 
@@ -23,8 +23,8 @@ struct TerminalPane: View {
         #else
         VStack(spacing: 8) {
             Image(systemName: "terminal").font(.largeTitle).foregroundColor(.secondary)
-            Text("The terminal is not drawn on this platform yet.").foregroundColor(.secondary)
-            Text("Switch the display to Chat in the session's inspector.").font(.footnote).foregroundColor(.secondary)
+            Text("Terminals are not drawn on this platform yet.").foregroundColor(.secondary)
+            Text("Open this session on a Mac or an iPhone.").font(.footnote).foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #endif
