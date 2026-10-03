@@ -29,9 +29,9 @@ struct AgentScreen: View {
     @State private var attachSource: AttachSource?
     @State private var taking = false
     @State private var showInspector = false
-    /// The room the terminal has here, in points: what the window is
-    /// worth in cells when it takes the terminal.
-    @State private var paneSize: CGSize = .zero
+    /// Use Here was confirmed: the terminal is drawn here, and taken from
+    /// the other window once it has its size.
+    @State private var usingHere = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The session was ended from here: the screen has nothing left to show.
@@ -74,28 +74,18 @@ struct AgentScreen: View {
     private var controlledElsewhere: Bool { isTerminal && (info?.mode.isTUI ?? false) && !controlsTerminal }
 
     var body: some View {
-        GeometryReader { geometry in
-            Group {
-                if !isTerminal {
-                    chat
-                } else if controlsTerminal {
-                    TerminalPane(host: host, sessionID: sessionID)
-                } else if controlledElsewhere {
-                    terminalElsewhere
-                } else {
-                    ProgressView("Opening the terminal…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .onChange(of: geometry.size, initial: true) { _, size in
-                paneSize = size
-                takeTerminalIfFree()
+        Group {
+            if !isTerminal {
+                chat
+            } else if controlledElsewhere && !usingHere {
+                terminalElsewhere
+            } else {
+                // Drawn here; it takes the terminal (if this window does not
+                // have it) at the size it measures itself to be.
+                TerminalPane(host: host, sessionID: sessionID, useHere: usingHere)
             }
         }
-        // A terminal no window has is taken by this one as soon as it is
-        // known and connected, and the window has a size.
-        .onChange(of: info?.mode) { takeTerminalIfFree() }
-        .onChange(of: host.state) { takeTerminalIfFree() }
+        .onChange(of: controlsTerminal) { _, now in if now { usingHere = false } }
         // The title is the session's; the inspector opens from an explicit
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
@@ -364,22 +354,10 @@ struct AgentScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .alert("Use this terminal here?", isPresented: $taking) {
             Button("Cancel", role: .cancel) {}
-            Button("Use Here") { takeTerminal() }
+            Button("Use Here") { usingHere = true }
         } message: {
             Text("The other window stops showing it. The shell and what runs in it carry on.")
         }
-    }
-
-    /// Takes the terminal for this window at its size in cells.
-    private func takeTerminal() {
-        let cells = TerminalMetrics.cells(in: paneSize)
-        host.assumeControl(sessionID, cols: cells.cols, rows: cells.rows)
-    }
-
-    /// Takes a terminal no window has: opening the session is asking for it.
-    private func takeTerminalIfFree() {
-        guard isTerminal, !(info?.mode.isTUI ?? true), host.state == .connected, paneSize.width > 0, paneSize.height > 0 else { return }
-        takeTerminal()
     }
 
     /// The record's rows, each under the id it keeps through its copies.

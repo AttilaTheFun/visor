@@ -375,7 +375,7 @@ final class VisorProbe: XCTestCase {
         // Typed into the shell: SwiftTerm takes the keyboard when tapped.
         app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         Thread.sleep(forTimeInterval: 1)
-        app.typeText("echo visor-look-$((40 + 2))\n")
+        app.typeText("echo visor-look-$((40 + 2)) cols=$COLUMNS -- 'q'\n")
         Thread.sleep(forTimeInterval: 3)
         shot(app, "term-1-typed")
         let title = app.buttons["session-title"].firstMatch
