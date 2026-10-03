@@ -6,6 +6,7 @@
 #if canImport(Darwin)
 import Foundation
 import Security
+import Synchronization
 
 @MainActor
 public final class NativeVisorSocketService: VisorSocketService {
@@ -66,9 +67,26 @@ public final class NativeVisorSocketService: VisorSocketService {
         return id
     }
 
+    /// Whether something has happened yet, asked from any thread: true
+    /// the first time, false after.
+    private final class Once: Sendable {
+        private let done = Mutex(false)
+        func first() -> Bool {
+            done.withLock { was in
+                defer { was = true }
+                return !was
+            }
+        }
+    }
+
     private nonisolated static func ping(_ task: URLSessionWebSocketTask) async throws {
+        // URLSession calls a ping's handler a second time when the task is
+        // cancelled with the ping unanswered (a socket closed during its
+        // handshake): only the first call is the continuation's.
+        let once = Once()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             task.sendPing { error in
+                guard once.first() else { return }
                 if let error { continuation.resume(throwing: error) } else { continuation.resume() }
             }
         }
