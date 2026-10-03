@@ -289,6 +289,29 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         }
     }
 
+    /// The app came back to the front. A phone drops the channel whenever
+    /// the app leaves it, and whatever was waiting to retry was not
+    /// running either: so a server that is not connected is tried again
+    /// now, from the start of the schedule, and one that looks connected
+    /// is asked whether it still is, and opened afresh if it does not
+    /// answer. A server waiting for the user to sign in is left alone.
+    public func resume() {
+        guard wantsConnection else { return }
+        guard state == .connected else {
+            attempt = 0
+            open()
+            return
+        }
+        let mine = generation
+        let server = server
+        Task { [weak self] in
+            let alive = await server.verifyChannel()
+            guard let self, !alive, self.generation == mine, self.wantsConnection else { return }
+            self.attempt = 0
+            self.open()
+        }
+    }
+
     /// How often the server is asked for its sessions outright.
     static let pollInterval: Int32 = 60_000
     private var polling: Task<Void, Never>?

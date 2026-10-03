@@ -24,6 +24,11 @@ public protocol AgentServer: AnyObject {
     /// (the connection reopens it after a while).
     func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void)
     func closeChannel()
+    /// Asks the open channel whether it is still there, now rather than
+    /// at its next heartbeat: false when it does not answer in a moment.
+    /// Asked when the app comes back to the front, where a channel that
+    /// looks open may have died while the app was not running.
+    func verifyChannel() async -> Bool
     /// A pause, for the reconnect backoff: the host's timer, which is
     /// portable where `Task.sleep` is not.
     func delay(milliseconds: Int32) async
@@ -98,6 +103,7 @@ public protocol AgentServer: AnyObject {
 }
 
 public extension AgentServer {
+    func verifyChannel() async -> Bool { true }
     func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool { false }
     func connectionCode() async throws -> String { throw AgentServerError.unsupported }
     func link(code: String) async throws { throw AgentServerError.unsupported }

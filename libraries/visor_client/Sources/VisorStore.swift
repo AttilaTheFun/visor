@@ -157,6 +157,13 @@ public final class VisorStore: ObservableObject {
         return "not reachable"
     }
 
+    /// The app came back to the front: every server is tried or checked
+    /// at once (`AgentServerConnection.resume`).
+    public func resume() {
+        guard !VisorFixture.active else { return }
+        servers.forEach { $0.resume() }
+    }
+
     /// The servers answering now: where a new session can go.
     public var connectedServers: [AgentServerConnection] { servers.filter { $0.state == .connected } }
 

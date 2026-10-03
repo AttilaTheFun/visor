@@ -16,6 +16,7 @@ import VisorProtocol
 public struct VisorRootView: View {
     @EnvironmentObject private var store: VisorStore
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.scenePhase) private var scenePhase
     @State private var columns: NavigationSplitViewVisibility = .all
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var composing = false
@@ -144,6 +145,12 @@ public struct VisorRootView: View {
             // Which session is on screen, so a notification about it, with
             // the app in front, is not shown over it.
             store.noteViewing(serverID: value?.session?.serverID, sessionID: value?.session?.sessionID)
+        }
+        // Back in front: a phone dropped every channel when the app left
+        // it, so each server is tried or checked now rather than at its
+        // next retry.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { store.resume() }
         }
         // A notification the user opened: its session, on its computer.
         .onChange(of: store.opening) { _, target in

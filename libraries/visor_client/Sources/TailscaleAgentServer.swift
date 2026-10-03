@@ -21,6 +21,10 @@ public final class TailscaleAgentServer: AgentServer {
     /// long it has to say anything at all before it is taken as dropped.
     static let heartbeatInterval: Int32 = 16_000
     static let heartbeatTimeout: Int32 = 8_000
+    /// How long the channel has to answer when asked outright, as the app
+    /// comes back to the front: an answer over Tailscale takes
+    /// milliseconds, and the user is looking.
+    static let verifyTimeout: Int32 = 3_000
 
     private(set) var record: AgentServerRecord
     /// What `hello` gave for the channel's login.
@@ -110,6 +114,15 @@ public final class TailscaleAgentServer: AgentServer {
             guard socketID == id, !Task.isCancelled else { return }
             if heard == before { return drop(id, "No answer to a heartbeat", onEvent) }
         }
+    }
+
+    public func verifyChannel() async -> Bool {
+        guard let id = socketID, let socket = VisorHost.socket else { return false }
+        let before = heard
+        send(.ping())
+        await socket.delay(milliseconds: Self.verifyTimeout)
+        // Another channel since: that one is not this question's to answer.
+        return socketID != id || heard != before
     }
 
     private func drop(_ id: Int32, _ reason: String, _ onEvent: @MainActor (AgentServerEvent) -> Void) {

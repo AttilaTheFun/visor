@@ -50,6 +50,11 @@ final class ScriptedServer: AgentServer {
     /// Ends the channel as the server would, or as a heartbeat would.
     func drop(_ reason: String) { onEvent?(.closed(reason)) }
 
+    /// Whether the open channel answers when asked outright.
+    var alive = true
+    var verified = 0
+    func verifyChannel() async -> Bool { verified += 1; return alive }
+
     /// What asking for the sessions outright answers.
     var listed: Result<[SessionInfo], Error> = .success([])
     var asked = 0
@@ -165,6 +170,51 @@ final class HelloFlowTests: XCTestCase {
         await settle()
         XCTAssertEqual(host.state, .connected)
         XCTAssertEqual(server.channels, 2)
+    }
+
+    /// Back in front: a server that is not connected is tried at once,
+    /// from the start of the schedule; one that looks connected is asked
+    /// whether it is, and opened afresh only if it does not answer; one
+    /// waiting for the user to sign in is left alone.
+    func testComingBackToTheFrontReconnects() async {
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        host.resume()
+        await settle()
+        XCTAssertEqual(server.verified, 1)
+        XCTAssertEqual(server.channels, 1, "it answered: nothing is reopened")
+
+        server.alive = false
+        host.resume()
+        await settle()
+        XCTAssertEqual(server.channels, 2, "it did not: opened afresh")
+        XCTAssertEqual(host.state, .connected)
+
+        // Dropped, and waiting out a retry: the front does not wait.
+        server.signIn = .failure(AgentServerError.message("away"))
+        server.drop("connection lost")
+        await settle()
+        server.elapse(2000)
+        await settle()
+        XCTAssertEqual(host.state, .offline("message(\"away\")"))
+        server.signIn = .success("Scripted Mac")
+        host.resume()
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertEqual(server.channels, 3)
+
+        // Asked to sign in: coming to the front does not retry by itself.
+        let other = ScriptedServer()
+        other.signIn = .failure(AgentServerError.needsAuthentication)
+        ScriptedProvider.server = other
+        let locked = AgentServerConnection(record: AgentServerRecord(name: "", address: "other.example", provider: "scripted"))
+        locked.connect()
+        await settle()
+        locked.resume()
+        await settle()
+        XCTAssertEqual(locked.state, .needsAuthentication)
+        XCTAssertEqual(other.channels, 0)
     }
 
     /// Every minute the sessions are asked for outright: taken as the list
