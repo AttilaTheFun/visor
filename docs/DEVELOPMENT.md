@@ -204,9 +204,15 @@ record row meanwhile; `turnStatus: [StatusItem]`). Sent text is trimmed.
 **Terminal sessions** (0.18). A session whose agent is `shell` is the
 login shell of the user the server runs as (`ToolPath.loginShell`, run
 with `-l`) on a PTY in the session's folder: `ShellHarness` makes a
-`ShellProcess`, whose `TerminalChild` holds the PTY (`posix_spawn` with
-`POSIX_SPAWN_SETSID`, the slave opened as the controlling terminal, read
-on a dispatch source built outside the main actor). Nothing runs until a
+`ShellProcess`, whose `TerminalChild` holds the PTY, read on a dispatch
+source built outside the main actor. The shell is started by
+`visor_spawn_on_terminal` (libraries/visor_server/pty, C): fork, then in
+the child only async-signal-safe calls — default signals, `setsid`,
+`ioctl(TIOCSCTTY)`, the slave on 0–2, every other descriptor closed,
+`chdir`, `execve`. macOS gives a session a controlling terminal only
+through `TIOCSCTTY` in the child, which `posix_spawn` cannot do; without
+it a shell started from the launchd-run server has no job control or
+line editing and Ctrl-C signals nothing (`ps` shows its tty as `??`). Nothing runs until a
 window takes the session (`mode` `tui` with its client and size:
 `performMode`), which starts the shell — or keeps it, if another window
 had it — and sends the taker a replay of what it has shown

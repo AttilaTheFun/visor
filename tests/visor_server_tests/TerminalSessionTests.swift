@@ -65,6 +65,22 @@ final class TerminalSessionTests: XCTestCase {
         let clean = await screen.shows("token=unset")
         XCTAssertTrue(clean, "the server's token stays out of the shell: \(screen.text)")
 
+        // The terminal is the shell's controlling terminal: a job runs in
+        // the foreground, and Ctrl-C ends it at once. (Under the test runner
+        // a shell gets one even without TIOCSCTTY; a server started by
+        // launchd does not, which the lifecycle probe's TERMINAL=1 run
+        // checks against a real server.)
+        try shell.send("ps -o tty= -p $$ | sed 's/^/tty=/'")
+        let hasTerminal = await screen.shows("tty=ttys")
+        XCTAssertTrue(hasTerminal, "a controlling terminal: \(screen.text)")
+        try shell.send("sleep 30; echo slept")
+        try await Task.sleep(for: .milliseconds(500))
+        shell.interrupt()
+        try shell.send("echo interrupted-$((1 + 1))")
+        let interrupted = await screen.shows("interrupted-2", within: 5)
+        XCTAssertTrue(interrupted, "Ctrl-C ended the sleep: \(screen.text)")
+        XCTAssertFalse(screen.text.contains("slept\r"), "the line after the sleep did not run")
+
         shell.write(Data("exit\r".utf8))
         let exited = await screen.shows("The shell exited")
         XCTAssertTrue(exited, screen.text)

@@ -6,6 +6,7 @@
 
 import Darwin
 import Foundation
+import VisorPTY
 import Synchronization
 import VisorProtocol
 
@@ -45,32 +46,23 @@ private final class TerminalChild {
         _ = fcntl(terminal, F_SETFD, FD_CLOEXEC)
         Self.setSize(terminal, cols: cols, rows: rows)
 
-        var actions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&actions)
-        // Opened after setsid, so the slave becomes the child's controlling
-        // terminal: Ctrl-C, job control and resize signals all arrive.
-        posix_spawn_file_actions_addopen(&actions, 0, slavePath, O_RDWR, 0)
-        posix_spawn_file_actions_adddup2(&actions, 0, 1)
-        posix_spawn_file_actions_adddup2(&actions, 0, 2)
-        // The child's own directory, not ours changed around the spawn.
-        posix_spawn_file_actions_addchdir_np(&actions, directory)
-        var attributes: posix_spawnattr_t?
-        posix_spawnattr_init(&attributes)
-        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID))
+        // Started as the leader of a new session whose controlling
+        // terminal is this one (VisorPTY: macOS gives a session its
+        // terminal only by TIOCSCTTY in the child, which posix_spawn cannot
+        // do), so Ctrl-C, job control, line editing and resize signals all
+        // work; in its own directory, with nothing else of ours inherited.
         let argv = ([executable] + arguments).map { strdup($0) } + [nil]
         let envp = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer {
-            posix_spawn_file_actions_destroy(&actions)
-            posix_spawnattr_destroy(&attributes)
             for pointer in argv { free(pointer) }
             for pointer in envp { free(pointer) }
         }
-        var child: pid_t = 0
-        let result = posix_spawn(&child, executable, &actions, &attributes, argv, envp)
-        guard result == 0 else {
+        let child = visor_spawn_on_terminal(executable, argv, envp, directory, terminal)
+        guard child > 0 else {
+            let reason = String(cString: strerror(errno))
             close(terminal)
             close(master)
-            throw AgentProcessError.spawnFailed("\((executable as NSString).lastPathComponent) could not be started (\(result))")
+            throw AgentProcessError.spawnFailed("\((executable as NSString).lastPathComponent) could not be started (\(reason))")
         }
         pid = child
         self.master = master

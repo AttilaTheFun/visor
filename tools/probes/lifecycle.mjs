@@ -1,6 +1,6 @@
 // Lifecycle check on the staging server: interrupt mid-turn, carry on, end. TERMINAL=1 adds a terminal
-// session: taken by this client, a line typed and its output drawn, taken by another window (the same
-// shell), ended.
+// session: taken by this client, a line typed and its output drawn, Ctrl-C ending a job (the terminal is
+// the shell's controlling terminal), taken by another window (the same shell), ended.
 import http from 'node:http';
 const PORT = Number(process.env.VISOR_PORT ?? 7533), PW = process.env.VISOR_TOKEN ?? 'staging';
 const AGENT = process.env.AGENT ?? 'claude';
@@ -45,6 +45,11 @@ if (process.env.TERMINAL) {
   log('take the terminal'); send({ type: 'mode', session: term, mode: 'tui', cols: 100, rows: 30 });
   send({ type: 'input', session: term, data: Buffer.from('echo visor-term-$((40 + 2))\r').toString('base64') });
   log('line ran:', await until(() => screen.includes('visor-term-42'), 10000));
+  // The terminal is the shell's controlling terminal: Ctrl-C ends a job in the foreground.
+  const typeLine = t => send({ type: 'input', session: term, data: Buffer.from(t).toString('base64') });
+  typeLine('sleep 20; echo SLEPT\r'); await sleep(800); typeLine('\x03'); await sleep(300);
+  typeLine('echo after-ctrl-c-$((1 + 1))\r');
+  log('Ctrl-C ended the job:', await until(() => screen.includes('after-ctrl-c-2'), 5000));
   const listed = JSON.parse(await rest('GET', '/sessions')).sessions.find(s => s.id === term);
   log('terminal session:', listed?.agent, JSON.stringify(listed?.mode), 'busy', listed?.busy);
   // Another window takes it, over its own connection: it is sent the screen so far, then what the
