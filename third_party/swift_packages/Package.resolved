@@ -5,7 +5,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/agent_ui.git",
       "state" : {
-        "revision" : "08c9f2515bd2b8a9eac28689c922d1d329f71655"
+        "revision" : "a64620ace49b462565ed2f0b3b18ca53aea7527f"
       }
     },
     {
@@ -49,7 +49,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/SwiftTerm.git",
       "state" : {
-        "revision" : "0d75983ebd8c8e62e696958f7a74a148734c70ce"
+        "revision" : "a652fe780aec9b4a8855841486583a7c8dcffd72"
       }
     }
   ],

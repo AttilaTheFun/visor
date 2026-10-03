@@ -36,8 +36,12 @@ extension PickedImage {
     /// drop grants a file outside the app's own).
     static func read(_ urls: [URL]) -> [PickedImage] {
         urls.compactMap { url in
+            // Security-scoped access is Apple's sandbox, and Apple's
+            // Foundation alone has it.
+            #if canImport(Darwin)
             let granted = url.startAccessingSecurityScopedResource()
             defer { if granted { url.stopAccessingSecurityScopedResource() } }
+            #endif
             guard let data = try? Data(contentsOf: url) else { return nil }
             return PickedImage(name: url.lastPathComponent, base64: data.base64EncodedString())
         }
