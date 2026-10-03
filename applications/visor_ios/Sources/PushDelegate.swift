@@ -37,6 +37,18 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
         return text[open.upperBound..<close.lowerBound] == "development" ? "sandbox" : "production"
     }
 
+    /// A push arrived, shown or silent, with the app in front, behind or
+    /// woken for it: what it says of its session's state goes to the
+    /// widget.
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async
+        -> UIBackgroundFetchResult {
+        var data: [String: String] = [:]
+        for (key, value) in userInfo {
+            if let key = key as? String, let value = value as? String { data[key] = value }
+        }
+        return WidgetFeed().take(push: data) ? .newData : .noData
+    }
+
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         NSLog("Visor: no push token: %@", String(describing: error))
     }

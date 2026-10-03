@@ -175,26 +175,12 @@ public final class VisorStore: ObservableObject {
     func publishWidget() {
         // The canned server never reaches the real home screen.
         guard let widget = VisorHost.widget, !VisorFixture.active else { return }
-        let json = Self.widgetJSON(servers.flatMap { server in server.sessions.map { (server.record.name, $0) } })
+        let json = WidgetSessions.json(servers.flatMap { server in
+            server.sessions.map { WidgetSessions.Source(computer: server.record.name, address: server.record.address, info: $0) }
+        })
         guard json != published else { return }
         published = json
         widget.publish(json)
-    }
-
-    /// Up to eight live sessions, the latest first: what each is called,
-    /// where, its latest words and whether it is working, waiting for
-    /// approval or working toward a goal.
-    static func widgetJSON(_ sessions: [(computer: String, info: SessionInfo)]) -> String {
-        let live = sessions.filter { !$0.info.archived && !$0.info.ended }
-            .sorted { ($0.info.updated ?? $0.info.created) > ($1.info.updated ?? $1.info.created) }
-            .prefix(8)
-        let rows: [JSONValue] = live.map { computer, info in
-            let state = info.pendingApproval != nil ? "waiting" : info.busy ? "working" : info.goal != nil ? "goal" : "idle"
-            return .object(["computer": .string(computer), "title": .string(info.title.isEmpty ? info.agent.title : info.title),
-                            "preview": .string(info.preview ?? ""), "state": .string(state),
-                            "updated": .number(info.updated ?? info.created)])
-        }
-        return JSONValue.object(["sessions": .array(rows)]).encoded()
     }
 
     private func save() {

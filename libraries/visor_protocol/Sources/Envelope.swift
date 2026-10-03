@@ -229,6 +229,10 @@ extension Envelope {
     public static func catalogs(_ catalogs: [AgentCatalog]) -> Envelope {
         var e = Envelope(type: "catalogs"); e.catalogs = catalogs; return e
     }
+    /// The client's heartbeat over the live channel, and the server's
+    /// answer to it: a channel that goes unanswered is taken as dropped.
+    public static func ping() -> Envelope { Envelope(type: "ping") }
+    public static func pong() -> Envelope { Envelope(type: "pong") }
     public static func error(_ message: String) -> Envelope {
         var e = Envelope(type: "error"); e.message = message; return e
     }

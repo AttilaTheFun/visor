@@ -37,6 +37,7 @@ final class FixtureAgentServer: AgentServer {
     func sendInput(_ session: String, data: String) {}
     func resize(_ session: String, cols: Int, rows: Int) {}
 
+    func sessions() async throws -> [SessionInfo] { VisorFixture.sessions }
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] { [] }
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { [] }

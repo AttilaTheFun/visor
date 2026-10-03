@@ -69,6 +69,8 @@ public final class VisorServer: ObservableObject {
 
     /// Told each push as it is decided, before anything is sent (tests).
     var onPush: ((_ title: String, _ body: String, _ session: String, _ kind: String) -> Void)?
+    /// Told of each silent push of a session's state (tests listen).
+    var onStatusPush: ((_ session: String, _ status: String) -> Void)?
     var modelsRefresh: Task<Void, Never>?
     /// The `front()` under way; and how many have found Tailscale not ready.
     var fronting: Task<Void, Never>?

@@ -39,8 +39,28 @@ final class APNsSender {
         request.setValue("alert", forHTTPHeaderField: "apns-push-type")
         request.setValue("10", forHTTPHeaderField: "apns-priority")
         request.setValue(String(collapse.prefix(64)), forHTTPHeaderField: "apns-collapse-id")
+        // `content-available` wakes the app for the data too, so its
+        // widget follows what the notification says.
         var payload: [String: Any] = ["aps": ["alert": ["title": title, "body": body], "sound": "default",
-                                              "thread-id": data["session"] ?? ""]]
+                                              "thread-id": data["session"] ?? "", "content-available": 1]]
+        for (key, value) in data { payload[key] = value }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        return request
+    }
+
+    /// The request for a silent push: nothing shown, only the data, sent
+    /// as APNs asks a background push to be (its own type, priority 5).
+    nonisolated static func statusRequest(to device: PushDevice, jwt: String, collapse: String, data: [String: String]) -> URLRequest? {
+        let host = device.environment == "production" ? "api.push.apple.com" : "api.sandbox.push.apple.com"
+        guard let url = URL(string: "https://\(host)/3/device/\(device.token)") else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        request.httpMethod = "POST"
+        request.setValue("bearer " + jwt, forHTTPHeaderField: "authorization")
+        request.setValue(device.topic, forHTTPHeaderField: "apns-topic")
+        request.setValue("background", forHTTPHeaderField: "apns-push-type")
+        request.setValue("5", forHTTPHeaderField: "apns-priority")
+        request.setValue(String(collapse.prefix(64)), forHTTPHeaderField: "apns-collapse-id")
+        var payload: [String: Any] = ["aps": ["content-available": 1]]
         for (key, value) in data { payload[key] = value }
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
         return request

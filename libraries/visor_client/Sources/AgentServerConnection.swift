@@ -231,10 +231,13 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         wantsConnection = true
         attempt = 0
         open()
+        startPolling()
     }
 
     public func disconnect() {
         wantsConnection = false
+        polling?.cancel()
+        polling = nil
         closeSocket()
         state = .disconnected
         sessions = []
@@ -286,6 +289,41 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         }
     }
 
+    /// How often the server is asked for its sessions outright.
+    static let pollInterval: Int32 = 60_000
+    private var polling: Task<Void, Never>?
+
+    /// The backup for the live channel: every minute the server is asked
+    /// for its sessions over its one-shot side. With the channel up, the
+    /// answer is taken as a list the channel would have brought (so one it
+    /// failed to bring is not missed for long); with the channel down and
+    /// the server answering, the channel is opened again at once rather
+    /// than at the next retry.
+    private func startPolling() {
+        guard polling == nil else { return }
+        polling = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let server = self?.server else { return }
+                await server.delay(milliseconds: Self.pollInterval)
+                guard let self, !Task.isCancelled, self.wantsConnection else { continue }
+                guard let list = try? await server.sessions(), !Task.isCancelled, self.wantsConnection else { continue }
+                switch self.state {
+                case .connected: self.handle(.sessions(list))
+                case .offline:
+                    self.attempt = 0
+                    self.open()
+                default: break
+                }
+            }
+        }
+    }
+
+    /// How long to wait before the next try after a drop, in seconds:
+    /// 2, 4, 8, 16, then every 30.
+    static func retryDelay(afterAttempt attempt: Int) -> Int {
+        attempt >= 5 ? 30 : 1 << max(1, attempt)
+    }
+
     private func dropped(_ reason: String) {
         generation += 1
         server.closeChannel()
@@ -293,7 +331,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         for transcript in transcripts.values { transcript.busy = false; transcript.activity = nil }
         guard wantsConnection else { return }
         attempt += 1
-        let delay = min(30, 1 << min(attempt, 5))
+        let delay = Self.retryDelay(afterAttempt: attempt)
         let mine = generation
         Task { [weak self] in
             await self?.server.delay(milliseconds: Int32(delay * 1000))

@@ -196,6 +196,34 @@ every stream present when sent has landed — `shadowed` hides the matched
 record row meanwhile; `turnStatus: [StatusItem]`). Sent text is trimmed.
 `catalogs` envelope refreshes the agent list (e.g. after a key is saved).
 
+**Keeping the connection** (0.18). Three things, each covering what the
+one before cannot see. The retry: after a drop `AgentServerConnection`
+signs in and opens the channel again after 2, 4, 8, 16 s, then every 30
+(`retryDelay(afterAttempt:)`). The heartbeat (`TailscaleAgentServer.watch`):
+a `ping` envelope every 16 s, and a channel that says nothing for 8 s
+after one — or for 8 s after the login — is closed and reported as
+dropped, so a socket that died quietly (a sleep, a change of network) is
+found in seconds rather than when TCP gives up. The poll
+(`startPolling`): `AgentServer.sessions()` once a minute, taken as the
+list while the channel is up, and the cue to reopen it at once when it is
+down and the server answers. All three wait on the host's timer
+(`delay`), so the tests drive them by hand (`ScriptedSocket.elapse`,
+`ScriptedServer.elapse`).
+
+**Pushes and the widget** (0.18). A push's data carries the session's
+state in a word (`state`: working, waiting, goal, idle), its `title`, the
+computer's `name` and `updated`, beside `computer` and `session`. A change
+that is not worth a notification (a turn beginning, a goal set) goes as a
+silent push (`APNsSender.statusRequest`: background type, priority 5,
+`content-available`); the notifications carry the state too. On the
+iPhone `PushDelegate.application(_:didReceiveRemoteNotification:)` hands
+the data to `WidgetFeed.take(push:)`, which rewrites the widget's kept
+JSON through `WidgetSessions.json(_:applying:)` and reloads it — with the
+app in front, behind, or woken for the push alone (`UIBackgroundModes`:
+`remote-notification`). iOS delivers silent pushes when it chooses and
+not at all to an app the user swiped away; the notifications still
+arrive.
+
 **Another kind of agent server** (a fork hosting agents on its own
 service, behind its own sign-in) adds three things and changes nothing
 else: an `AgentServer` conformance, which is the whole of what the
@@ -203,7 +231,7 @@ client asks of a server — `authenticate` (throw
 `AgentServerError.needsAuthentication` to have the user sign in),
 `openChannel` delivering `AgentServerEvent`s (`.welcome` first, then
 `.sessions`/`.catalogs`/`.session(envelope)`), and the one-shot
-operations (`startSession`, `act(SessionAction)`, `sendMessage`,
+operations (`sessions`, `startSession`, `act(SessionAction)`, `sendMessage`,
 `transcript(of:since:generation:)`, folders, files, search; pushes and
 linking have defaults); an `AgentServerProvider` that makes it for a
 record (`AgentServerProviders.register`, before the store is made); and
@@ -465,12 +493,6 @@ From the code-quality pass of October 2026, found and left:
 - `VisorServer` and `SessionRecord` are `ObservableObject`s. The server is
   Apple-only and could use Observation; the client cannot until Isomer has
   it.
-- AgentUI's `TranscriptActions` and `TranscriptImages` are
-  `nonisolated(unsafe)` statics, and its views are not marked
-  `@MainActor`, until Isomer's SwiftUI isolates views to the main actor.
-- The scripts in tools/ repeat how the team id is read, pass a keychain's
-  password as an argument to `security`, and filter `xcodebuild`'s output
-  through `grep … || true`, which hides why a profile was not made.
 - The terminal pane's keyboard inset and input order were changed without
   a device to try them on (#79).
 - The openrouter CLI, signalled, leaves the command it was running; a

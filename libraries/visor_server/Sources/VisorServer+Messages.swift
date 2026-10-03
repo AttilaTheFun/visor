@@ -66,6 +66,8 @@ extension VisorServer {
         case "unarchive": performUnarchive(envelope)
         case "restart": performRestart(envelope, from: client)
         case "end": performEnd(envelope)
+        // A client's heartbeat: answered at once, to that client only.
+        case "ping": client?.send(.pong())
         default:
             client?.send(.error("Unknown message \(envelope.type)"))
         }

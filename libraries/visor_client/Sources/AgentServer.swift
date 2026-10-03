@@ -47,6 +47,10 @@ public protocol AgentServer: AnyObject {
 
     // MARK: Sessions
 
+    /// The server's sessions now, asked for outright rather than heard
+    /// over the channel: the connection asks every minute, as the backup
+    /// for a channel that has gone quiet or cannot be opened.
+    func sessions() async throws -> [SessionInfo]
     /// Starts a session with the id the client chose. The sessions the
     /// answer names are taken into the list.
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo]

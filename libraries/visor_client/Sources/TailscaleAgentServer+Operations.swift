@@ -16,6 +16,10 @@ extension TailscaleAgentServer {
 
     // MARK: Sessions
 
+    public func sessions() async throws -> [SessionInfo] {
+        try await call("GET", "/sessions").sessions ?? []
+    }
+
     public func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] {
         try await call("POST", "/sessions", .start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions, resume: resume)).sessions ?? []
     }
