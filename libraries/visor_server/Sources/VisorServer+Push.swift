@@ -5,8 +5,11 @@
 // owner's APNs key (Settings → Push Notifications), kept in the keychain.
 //
 // What a push says is the session's name and a fixed phrase; its data
-// names the computer and the session. Nothing the agent or the user said
-// goes to Apple.
+// names the computer and the session, and carries the session's state in
+// a word (working, waiting, goal, idle) and when, so the device can bring
+// its widget up to date without opening the app. A change of state that
+// is not worth a notification — a turn beginning — goes as a silent push
+// with the same data. Nothing the agent or the user said goes to Apple.
 
 import CryptoKit
 import Foundation
@@ -85,20 +88,29 @@ extension VisorServer {
             next[info.id] = state
             guard let old else { continue }
             let name = Self.pushName(for: info)
+            var said = false
             if state.waiting, !old.waiting {
-                push(name, "Waiting for approval", session: info.id, kind: "waiting")
+                push(name, "Waiting for approval", session: info.id, kind: "waiting", status: state.status)
+                said = true
             }
             if state.failed, !old.failed {
-                push(name, "Stopped with an error", session: info.id, kind: "failed")
+                push(name, "Stopped with an error", session: info.id, kind: "failed", status: state.status)
+                said = true
             } else if let goal = old.goal, state.goal == nil {
                 // Met, not cleared by the user: the latest goal row is a met one.
                 if record.goalWasMet(goal) {
                     let taken = old.goalSince.map { Date().timeIntervalSince1970 - $0 }
-                    push(name, "Goal achieved" + (taken.map { " in " + Self.duration($0) } ?? ""), session: info.id, kind: "goal")
+                    push(name, "Goal achieved" + (taken.map { " in " + Self.duration($0) } ?? ""), session: info.id, kind: "goal",
+                         status: state.status)
+                    said = true
                 }
             } else if old.busy, !state.busy, !state.waiting {
-                push(name, "Turn finished", session: info.id, kind: "turn")
+                push(name, "Turn finished", session: info.id, kind: "turn", status: state.status)
+                said = true
             }
+            // A change nothing was said about (a turn beginning, a goal
+            // set): the state alone, silently, for the widget.
+            if !said, state.status != old.status { pushStatus(name, session: info.id, status: state.status) }
         }
         pushStates = next
     }
@@ -119,17 +131,44 @@ extension VisorServer {
     /// The platforms APNs reaches.
     static let apnsPlatforms: Set<String> = ["ios", "macos"]
 
+    /// What a push's data says of a session: where it is, and its state
+    /// in a word with the session's name and the time, for the widget.
+    func pushData(session: String, title: String, status: String?) -> [String: String] {
+        var data = ["computer": pushComputer, "session": session]
+        guard let status else { return data }
+        data["state"] = status
+        data["title"] = title
+        data["name"] = hostName
+        data["updated"] = String(Int(Date().timeIntervalSince1970))
+        return data
+    }
+
+    /// The session's state alone, to every device that asked: a silent
+    /// push, which shows nothing and lets the device update its widget.
+    func pushStatus(_ title: String, session: String, status: String) {
+        onStatusPush?(session, status)
+        deliver(collapse: session + "/status", data: pushData(session: session, title: title, status: status)) { device, jwt, collapse, data in
+            APNsSender.statusRequest(to: device, jwt: jwt, collapse: collapse, data: data)
+        }
+    }
+
     /// Says one thing to every device that asked, as a push.
-    func push(_ title: String, _ body: String, session: String, kind: String) {
+    func push(_ title: String, _ body: String, session: String, kind: String, status: String? = nil) {
         onPush?(title, body, session, kind)
+        deliver(collapse: session + "/" + kind, data: pushData(session: session, title: title, status: status)) { device, jwt, collapse, data in
+            APNsSender.request(to: device, jwt: jwt, title: title, body: body, collapse: collapse, data: data)
+        }
+    }
+
+    /// Sends one request per device, forgetting a device APNs says is gone.
+    private func deliver(collapse: String, data: [String: String],
+                         request make: @escaping @Sendable (PushDevice, String, String, [String: String]) -> URLRequest?) {
         let devices = pushDevices.filter { Self.apnsPlatforms.contains($0.platform) }
         guard let key = storedAPNsKey, !devices.isEmpty else { return }
-        let data = ["computer": pushComputer, "session": session]
         guard let jwt = try? apnsSender.jwt(for: key) else { return }
         Task {
             for device in devices {
-                guard let request = APNsSender.request(to: device, jwt: jwt, title: title, body: body,
-                                                       collapse: session + "/" + kind, data: data) else { continue }
+                guard let request = make(device, jwt, collapse, data) else { continue }
                 let answer = await apnsSender.send(request)
                 if APNsSender.forgets(status: answer.status, reason: answer.reason) {
                     pushDevices.removeAll { $0.token == device.token }

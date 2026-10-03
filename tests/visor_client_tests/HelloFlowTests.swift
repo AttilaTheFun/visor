@@ -20,7 +20,14 @@ final class ScriptedServer: AgentServer {
     var actions: [(SessionAction, String)] = []
     private var onEvent: (@MainActor (AgentServerEvent) -> Void)?
 
-    func authenticate(_ record: AgentServerRecord) async throws -> String? { try signIn.get() }
+    /// A sign-in that never answers.
+    var hangs = false
+    private var hung: [CheckedContinuation<Void, Never>] = []
+
+    func authenticate(_ record: AgentServerRecord) async throws -> String? {
+        if hangs { await withCheckedContinuation { hung.append($0) } }
+        return try signIn.get()
+    }
 
     func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
         channels += 1
@@ -30,11 +37,38 @@ final class ScriptedServer: AgentServer {
     }
 
     func closeChannel() {}
-    func delay(milliseconds: Int32) async {}
+
+    /// The pauses asked for, each held until the test lets it go.
+    private(set) var pauses: [Int32] = []
+    private var held: [CheckedContinuation<Void, Never>] = []
+
+    func delay(milliseconds: Int32) async {
+        pauses.append(milliseconds)
+        await withCheckedContinuation { held.append($0) }
+    }
+
+    /// Lets the oldest pause of this length end.
+    func elapse(_ milliseconds: Int32) {
+        guard let index = pauses.firstIndex(of: milliseconds) else { return }
+        pauses.remove(at: index)
+        held.remove(at: index).resume()
+    }
+
+    /// Ends the channel as the server would, or as a heartbeat would.
+    func drop(_ reason: String) { onEvent?(.closed(reason)) }
+
+    /// Whether the open channel answers when asked outright.
+    var alive = true
+    var verified = 0
+    func verifyChannel() async -> Bool { verified += 1; return alive }
+
+    /// What asking for the sessions outright answers.
+    var listed: Result<[SessionInfo], Error> = .success([])
+    var asked = 0
+    func sessions() async throws -> [SessionInfo] { asked += 1; return try listed.get() }
 
     func subscribe(_ session: String) { subscribed.append(session) }
     func assumeControl(_ session: String, cols: Int, rows: Int) {}
-    func returnToChat(_ session: String) {}
     func acknowledge(_ session: String) {}
     func loadEarlier(_ session: String, before: String) {}
     func sendInput(_ session: String, data: String) {}
@@ -117,6 +151,190 @@ final class HelloFlowTests: XCTestCase {
         await settle()
         XCTAssertEqual(host.state, .connected)
         XCTAssertEqual(host.record.name, "Other Mac")
+    }
+
+    /// After a drop the channel is tried again after 2, 4, 8 and 16
+    /// seconds, then every 30.
+    func testTheRetrySchedule() {
+        XCTAssertEqual((1...7).map(AgentServerConnection.retryDelay(afterAttempt:)), [2, 4, 8, 16, 30, 30, 30])
+    }
+
+    func testADropIsRetriedOnTheSchedule() async {
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        server.signIn = .failure(AgentServerError.message("away"))
+        server.drop("No answer to a heartbeat")
+        await settle()
+        XCTAssertEqual(host.state, .offline("No answer to a heartbeat"))
+        XCTAssertTrue(server.pauses.contains(2000))
+        server.elapse(2000)
+        await settle()
+        XCTAssertTrue(server.pauses.contains(4000), "the sign-in failed again: the next wait is twice as long")
+        server.signIn = .success("Scripted Mac")
+        server.elapse(4000)
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertEqual(server.channels, 2)
+    }
+
+    /// Back in front: a server that is not connected is tried at once,
+    /// from the start of the schedule; one that looks connected is asked
+    /// whether it is, and opened afresh only if it does not answer; one
+    /// waiting for the user to sign in is left alone.
+    func testComingBackToTheFrontReconnects() async {
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        host.resume()
+        await settle()
+        XCTAssertEqual(server.verified, 1)
+        XCTAssertEqual(server.channels, 1, "it answered: nothing is reopened")
+
+        server.alive = false
+        host.resume()
+        await settle()
+        XCTAssertEqual(server.channels, 2, "it did not: opened afresh")
+        XCTAssertEqual(host.state, .connected)
+
+        // Dropped, and waiting out a retry: the front does not wait.
+        server.signIn = .failure(AgentServerError.message("away"))
+        server.drop("connection lost")
+        await settle()
+        server.elapse(2000)
+        await settle()
+        XCTAssertEqual(host.state, .offline("message(\"away\")"))
+        server.signIn = .success("Scripted Mac")
+        host.resume()
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertEqual(server.channels, 3)
+
+        // Asked to sign in: coming to the front does not retry by itself.
+        let other = ScriptedServer()
+        other.signIn = .failure(AgentServerError.needsAuthentication)
+        ScriptedProvider.server = other
+        let locked = AgentServerConnection(record: AgentServerRecord(name: "", address: "other.example", provider: "scripted"))
+        locked.connect()
+        await settle()
+        locked.resume()
+        await settle()
+        XCTAssertEqual(locked.state, .needsAuthentication)
+        XCTAssertEqual(other.channels, 0)
+    }
+
+    /// After time in the background on a phone the channel is opened
+    /// afresh without being asked first; a try that fails then waits out
+    /// the schedule from its start.
+    func testBackFromTheBackgroundOpensAfresh() async {
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        host.resume(fresh: true)
+        await settle()
+        XCTAssertEqual(server.verified, 0, "not asked")
+        XCTAssertEqual(server.channels, 2, "opened afresh")
+        XCTAssertEqual(host.state, .connected)
+
+        server.signIn = .failure(AgentServerError.message("no route yet"))
+        host.resume(fresh: true)
+        await settle()
+        XCTAssertTrue(server.pauses.contains(2000), "the schedule, from its start")
+        server.signIn = .success("Scripted Mac")
+        server.elapse(2000)
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+    }
+
+    /// Going to the background starts the schedule over: a server that had
+    /// worked its way up to long waits is tried at once on coming back, and
+    /// if that fails, two seconds later — not after the long wait it was on.
+    func testTheBackgroundResetsTheSchedule() async {
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        server.signIn = .failure(AgentServerError.message("away"))
+        server.drop("connection lost")
+        await settle()
+        for wait: Int32 in [2000, 4000, 8000] {
+            XCTAssertTrue(server.pauses.contains(wait))
+            server.elapse(wait)
+            await settle()
+        }
+        XCTAssertTrue(server.pauses.contains(16_000), "four failures in")
+
+        host.suspend()
+        host.resume(fresh: true)
+        await settle()
+        XCTAssertTrue(server.pauses.contains(2000), "tried at once, failed, and back to two seconds")
+        server.signIn = .success("Scripted Mac")
+        server.elapse(2000)
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+    }
+
+    /// A sign-in that never answers is given up after five seconds and
+    /// retried on the schedule, rather than waited on.
+    func testASignInThatNeverAnswersIsGivenUp() async {
+        server.hangs = true
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        XCTAssertEqual(host.state, .connecting)
+        server.elapse(5000)
+        await settle()
+        XCTAssertEqual(host.state, .offline("No answer to the sign-in"))
+        server.hangs = false
+        server.elapse(2000)
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+    }
+
+    /// The log says what happened to each server, and when.
+    func testTheLogSaysWhatHappened() async {
+        ConnectionLog.shared.clear()
+        let host = AgentServerConnection(record: AgentServerRecord(name: "Book", address: "book.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        server.signIn = .failure(AgentServerError.message("away"))
+        server.drop("No answer to a heartbeat")
+        await settle()
+        server.elapse(2000)
+        await settle()
+        host.suspend()
+        let text = ConnectionLog.shared.text
+        for expected in ["Book: connect asked for", "Book: signing in", "signed in after", "Scripted Mac: connected: welcome",
+                         "dropped: No answer to a heartbeat; retry 1 in 2 s", "signing in (retry 1)", "sign-in failed after",
+                         "retry 2 in 4 s", "retry schedule reset"] {
+            XCTAssertTrue(text.contains(expected), "no \"\(expected)\" in:\n\(text)")
+        }
+    }
+
+    /// Every minute the sessions are asked for outright: taken as the list
+    /// while the channel is up, and the cue to open it again at once when
+    /// it is down and the server answers.
+    func testTheMinutePollIsTheBackup() async {
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        XCTAssertTrue(server.pauses.contains(60_000))
+        server.listed = .success([SessionInfo(id: "s1", agent: .claude, cwd: "/tmp", title: "Polled", created: 0)])
+        server.elapse(60_000)
+        await settle()
+        XCTAssertEqual(server.asked, 1)
+        XCTAssertEqual(host.sessions.map(\.title), ["Polled"], "a list the channel did not bring")
+
+        // The channel drops and the retries find nothing; the poll does.
+        server.signIn = .failure(AgentServerError.message("away"))
+        server.drop("connection lost")
+        await settle()
+        server.elapse(2000)
+        await settle()
+        XCTAssertEqual(host.state, .offline("message(\"away\")"))
+        server.signIn = .success("Scripted Mac")
+        server.elapse(60_000)
+        await settle()
+        XCTAssertEqual(host.state, .connected, "reopened on the poll's answer, not at the next retry")
     }
 
     /// A session command goes to the server as the typed action, and

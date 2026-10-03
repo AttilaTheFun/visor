@@ -13,6 +13,8 @@ struct ComputerSettingsForm: View {
     @State private var name = ""
     @State private var address = ""
     @State private var password = ""
+    /// The connection log as it was when this page opened.
+    @State private var log = ""
 
     var body: some View {
         Form {
@@ -37,9 +39,25 @@ struct ComputerSettingsForm: View {
                 Button("Reconnect") { host.connect() }
                 Button("Forget this computer", role: .destructive, action: forget)
             }
+            // What the client did about its connections, to send to
+            // whoever is finding out why one was slow.
+            Section {
+                connectionLogShareLink(log)
+                    .accessibilityIdentifier("share-log")
+                Button("Copy Connection Log") { copyToPasteboard(log) }
+                Button("Clear Connection Log", role: .destructive) {
+                    ConnectionLog.shared.clear()
+                    log = ConnectionLog.shared.text
+                }
+            } header: {
+                Text("Diagnostics")
+            } footer: {
+                Text("Every computer's sign-ins, drops and retries, and the app coming to the front and leaving it, with the time of each. Nothing of any conversation.")
+            }
         }
         .insetGroupedForm()
         .onAppear {
+            log = ConnectionLog.shared.text
             name = host.record.name
             address = host.record.address
             password = host.record.secret

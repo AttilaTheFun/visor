@@ -207,11 +207,41 @@ final class WidgetFeedTests: XCTestCase {
         waiting.pendingApproval = ApprovalRequest(id: "x", tool: "Bash", summary: "ls")
         var ended = SessionInfo(id: "c", agent: .claude, cwd: "/tmp", title: "Old", ended: true, created: 0)
         ended.updated = 40
-        let json = parseJSON(VisorStore.widgetJSON([("Mini", waiting), ("Mini", ended), ("Book", working)]))
-        let rows = json?["sessions"].array ?? []
+        let text = WidgetSessions.json([.init(computer: "Mini", address: "mini.ts.net", info: waiting),
+                                        .init(computer: "Mini", address: "mini.ts.net", info: ended),
+                                        .init(computer: "Book", address: "book.ts.net", info: working)])
+        let rows = parseJSON(text)?["sessions"].array ?? []
         XCTAssertEqual(rows.map { $0["title"].string }, ["Sync", "Codex"], "latest first; ended left out; an untitled one by its agent")
         XCTAssertEqual(rows.map { $0["state"].string }, ["working", "waiting"])
         XCTAssertEqual(rows.first?["computer"].string, "Book")
+        XCTAssertEqual(rows.first?["session"].string, "a")
+        XCTAssertEqual(rows.first?["address"].string, "book.ts.net")
+    }
+
+    /// A push's word on a session changes its row, and brings it to the
+    /// top; a session the widget has not seen gets a row; a push that says
+    /// nothing of a state changes nothing.
+    func testAPushBringsTheWidgetUpToDate() throws {
+        var working = SessionInfo(id: "a", agent: .claude, cwd: "/tmp", title: "Sync", busy: true, created: 0)
+        working.updated = 30
+        var idle = SessionInfo(id: "b", agent: .codex, cwd: "/tmp", title: "Docs", created: 0)
+        idle.updated = 20
+        let before = WidgetSessions.json([.init(computer: "Mini", address: "mini.ts.net", info: working),
+                                          .init(computer: "Mini", address: "mini.ts.net", info: idle)])
+        let push = ["computer": "mini.ts.net", "session": "b", "state": "waiting", "title": "Docs", "name": "Mini", "updated": "50"]
+        let after = try XCTUnwrap(WidgetSessions.json(before, applying: push))
+        var rows = parseJSON(after)?["sessions"].array ?? []
+        XCTAssertEqual(rows.map { $0["session"].string }, ["b", "a"], "the one that changed is the latest")
+        XCTAssertEqual(rows.map { $0["state"].string }, ["waiting", "working"])
+        XCTAssertEqual(rows.first?["updated"].double, 50)
+
+        let other = ["computer": "book.ts.net", "session": "z", "state": "working", "title": "New", "name": "Book", "updated": "60"]
+        rows = parseJSON(try XCTUnwrap(WidgetSessions.json(after, applying: other)))?["sessions"].array ?? []
+        XCTAssertEqual(rows.map { $0["title"].string }, ["New", "Docs", "Sync"])
+        XCTAssertEqual(rows.first?["computer"].string, "Book")
+
+        XCTAssertNil(WidgetSessions.json(before, applying: ["computer": "mini.ts.net", "session": "b"]), "an older server's push")
+        XCTAssertNotNil(WidgetSessions.json("", applying: push), "with nothing kept yet, the push's session is the widget")
     }
 }
 

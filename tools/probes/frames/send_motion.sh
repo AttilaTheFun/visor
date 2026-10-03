@@ -21,8 +21,12 @@ mkdir -p "$OUT"
 API=http://127.0.0.1:7434/api
 PW="${VISOR_TOKEN:-$(security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w 2>/dev/null || true)}"
 HOST="${1:-$(curl -s -H "Authorization: Bearer $PW" $API/code | python3 -c 'import json,sys,base64; t=json.load(sys.stdin)["text"]; t+="="*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t))["host"])')}"
-SIM="$(xcrun simctl list devices booted | grep -o '[0-9A-F-]\{36\}' | head -1)"
-[ -n "$SIM" ] || { echo "No booted simulator" >&2; exit 2; }
+# Only the test runner's own simulator, by name: whatever else is booted
+# may be another agent's (one simulator per agent at a time).
+SIM_NAME="BAZEL_TEST_iPhone 17_27.0"
+SIM="$(xcrun simctl list devices | grep -F "$SIM_NAME (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
+[ -n "$SIM" ] || { echo "No simulator named $SIM_NAME: run an iOS probe once to make it" >&2; exit 2; }
+xcrun simctl list devices booted | grep -qF "$SIM" || { echo "$SIM_NAME is not booted: boot it with xcrun simctl boot $SIM" >&2; exit 2; }
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 swiftc -O -o "$OUT/motion" $HERE/motion.swift
 swiftc -O -o "$OUT/sheet" $HERE/sheet.swift

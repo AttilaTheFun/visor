@@ -11,4 +11,12 @@ public protocol VisorSocketService {
     /// Suspends for a while (the reconnect backoff). The host's timer: the
     /// wasm executor has none of its own, so `Task.sleep` is not portable.
     func delay(milliseconds: Int32) async
+    /// Whether the host's sockets die when the app leaves the front for
+    /// the background (an iPhone's do): the client then opens them afresh
+    /// on coming back rather than asking whether they are still there.
+    var dropsInBackground: Bool { get }
+}
+
+public extension VisorSocketService {
+    var dropsInBackground: Bool { false }
 }

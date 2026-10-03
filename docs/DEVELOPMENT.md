@@ -8,8 +8,9 @@ and the gotchas. Read it whole once; keep it current as things change.
 
 Visor is a Mac menu bar app that runs coding agents (Claude Code, Codex,
 OpenRouter models) as sessions on the Mac and serves them over Tailscale to
-clients on iPhone, iPad, Mac and the web. Clients chat with a session,
-watch it work, and can hand it to a real terminal. The agent doing this
+clients on iPhone, iPad, Mac and the web. Clients chat with a session
+and watch it work, and open terminal sessions on the Mac — its shell,
+as ssh would give it — to run anything there themselves. The agent doing this
 work can drive its own development through Visor: you talk to an agent
 in the Visor client; the agent edits, builds, tests, and redeploys the
 very server it is running under.
@@ -22,7 +23,11 @@ The repos (github.com/AttilaTheFun):
 | `agent_ui` | SwiftPM package: AgentUI (the chat: transcript, composer, footer), NavigationUI, InboxUI, MessagesUI. Pinned by revision in third_party/swift_packages/Package.swift. |
 | `open_router_cli` | SwiftPM: OpenRouterKit (client, streaming, ORAgent loop, coding tools, sessions, config, Claude's stream-json) and the `openrouter` CLI, which Visor drives. |
 
-Third-party: SwiftTerm 1.10.1 (terminal on Apple), SQLite.swift 0.15.3 (the
+Third-party: SwiftTerm's portable emulator (through agent_ui's TerminalUI,
+from the fork github.com/AttilaTheFun/SwiftTerm, branch `visor-consumer`:
+upstream main plus Android support, with the build plugin's output checked
+in because rspm runs no SwiftPM plugins; the fork's `android-support`
+branch is the change offered upstream), SQLite.swift 0.15.3 (the
 caches), rules_swift_package_manager (rspm) brings SwiftPM packages into
 Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 `@swiftpkg_sqlite.swift//:SQLite`, `@swiftpkg_agent_ui//:AgentUI`.
@@ -196,6 +201,93 @@ every stream present when sent has landed — `shadowed` hides the matched
 record row meanwhile; `turnStatus: [StatusItem]`). Sent text is trimmed.
 `catalogs` envelope refreshes the agent list (e.g. after a key is saved).
 
+**Terminal sessions** (0.18). A session whose agent is `shell` is the
+login shell of the user the server runs as (`ToolPath.loginShell`, run
+with `-l`) on a PTY in the session's folder: `ShellHarness` makes a
+`ShellProcess`, whose `TerminalChild` holds the PTY, read on a dispatch
+source built outside the main actor. The shell is started by
+`visor_spawn_on_terminal` (libraries/visor_server/pty, C): fork, then in
+the child only async-signal-safe calls — default signals, `setsid`,
+`ioctl(TIOCSCTTY)`, the slave on 0–2, every other descriptor closed,
+`chdir`, `execve`. macOS gives a session a controlling terminal only
+through `TIOCSCTTY` in the child, which `posix_spawn` cannot do; without
+it a shell started from the launchd-run server has no job control or
+line editing and Ctrl-C signals nothing (`ps` shows its tty as `??`). Nothing runs until a
+window takes the session (`mode` `tui` with its client and size:
+`performMode`), which starts the shell — or keeps it, if another window
+had it — and sends the taker a replay of what it has shown
+(`replayTerminal`: a `tty` with its size set, which tells the client's
+`TerminalPane` to start its `TerminalScreen` over and draw from there).
+The client draws it with AgentUI's TerminalUI — SwiftTerm's emulator under
+a SwiftUI view, the same on Apple's SwiftUI and Isomer's — with a key bar
+(esc, ctrl, tab, arrows, paste) on a phone and drag to scroll back. Bytes go
+only to the window that has it (`onTerminalBytes`); keystrokes and
+resizes only from it. A line sent (`send`, REST or socket) is typed in;
+nothing is written down, there are no turns, and agents cannot message a
+terminal (`answer`). When the shell exits the window is told, and a key
+starts another. The shell's environment is the server's with the
+developer paths, `TERM=xterm-256color`, and no `VISOR_*` variables. A
+restart of the server ends the shells; the sessions come back, and a
+window opening one starts a new shell. These replaced the agent's own
+TUI as a session mode (0.17 and before): to carry a conversation on in
+the agent's interface, copy its resume command, end the chat session,
+and run the command in a terminal session.
+
+**Keeping the connection** (0.18). The retry: after a drop
+`AgentServerConnection` signs in and opens the channel again after 2, 4,
+8, 16 s, then every 30 (`retryDelay(afterAttempt:)`). Each step has a
+limit, so a try that hangs (a request riding a connection that died while
+the app was away) becomes a drop and a retry: the sign-in has 5 s
+(`signInTimeout`), the socket 4 s to open and have its login answered
+(`TailscaleAgentServer.loginTimeout`). The heartbeat
+(`TailscaleAgentServer.watch`): a `ping` envelope every 16 s, and a
+channel that says nothing for 8 s after one is closed and reported as
+dropped, so a socket that died quietly (a sleep, a change of network) is
+found in seconds rather than when TCP gives up. The poll
+(`startPolling`): `AgentServer.sessions()` once a minute, taken as the
+list while the channel is up, and the cue to reopen it at once when it is
+down and the server answers.
+
+The app's place on screen drives the rest (`VisorRootView` on
+`scenePhase`). Leaving for the background (`VisorStore.suspend`) starts
+every server's schedule over and keeps the log. Coming back
+(`VisorStore.resume`) tries every server at the same moment, each on its
+own: one not connected is opened at once, and a try that fails follows
+the schedule from 2 s. One that looks connected is asked outright
+(`AgentServer.verifyChannel`: a ping, 1 s) and opened afresh if it does
+not answer — except after time in the background on a host whose sockets
+do not outlive it (`VisorSocketService.dropsInBackground`: an iPhone),
+where every channel is opened afresh without asking and the host's HTTP
+connections are let go first (`VisorHTTPService.reset`).
+
+The timed parts wait on the host's timer (`delay`), so the tests drive
+them by hand (`ScriptedSocket.elapse`, `ScriptedServer.elapse`).
+
+**The connection log** (`ConnectionLog.shared`): a line per event, with
+the device's local time to the millisecond — the app in front, inactive
+or in the background; per server, each sign-in and how long it took, the
+socket opening, the welcome and how long after the channel was asked for,
+each drop with its reason and the retry it schedules, the minute poll
+when it finds something. The newest 1,500 lines, kept in the host's
+settings when the app leaves the front. The Tailscale computer's settings
+page shares it as `visor-connection-log.txt` (the share sheet: AirDrop,
+Files), copies it, or clears it. A fork's settings view can offer the
+same from `ConnectionLog.shared.text`.
+
+**Pushes and the widget** (0.18). A push's data carries the session's
+state in a word (`state`: working, waiting, goal, idle), its `title`, the
+computer's `name` and `updated`, beside `computer` and `session`. A change
+that is not worth a notification (a turn beginning, a goal set) goes as a
+silent push (`APNsSender.statusRequest`: background type, priority 5,
+`content-available`); the notifications carry the state too. On the
+iPhone `PushDelegate.application(_:didReceiveRemoteNotification:)` hands
+the data to `WidgetFeed.take(push:)`, which rewrites the widget's kept
+JSON through `WidgetSessions.json(_:applying:)` and reloads it — with the
+app in front, behind, or woken for the push alone (`UIBackgroundModes`:
+`remote-notification`). iOS delivers silent pushes when it chooses and
+not at all to an app the user swiped away; the notifications still
+arrive.
+
 **Another kind of agent server** (a fork hosting agents on its own
 service, behind its own sign-in) adds three things and changes nothing
 else: an `AgentServer` conformance, which is the whole of what the
@@ -203,7 +295,7 @@ client asks of a server — `authenticate` (throw
 `AgentServerError.needsAuthentication` to have the user sign in),
 `openChannel` delivering `AgentServerEvent`s (`.welcome` first, then
 `.sessions`/`.catalogs`/`.session(envelope)`), and the one-shot
-operations (`startSession`, `act(SessionAction)`, `sendMessage`,
+operations (`sessions`, `startSession`, `act(SessionAction)`, `sendMessage`,
 `transcript(of:since:generation:)`, folders, files, search; pushes and
 linking have defaults); an `AgentServerProvider` that makes it for a
 record (`AgentServerProviders.register`, before the store is made); and
@@ -220,9 +312,10 @@ protocol library's, so a fork's server produces those from its own API.
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line
 preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:
-status:…)`; watching mode when a terminal holds the session: persisted
-rows + "Being driven from another window" bar with Take control /
-Return to chat), `SessionInspector`, `ComposeSessionSheet`. In agent_ui,
+status:…)`; a terminal session: `TerminalPane` (AgentUI's TerminalUI) when this
+window has it — taken on opening when no window has it — else "Open in
+another window" with Use Here), `SessionInspector`, `ComposeSessionSheet`
+(Terminal is one of the harnesses). In agent_ui,
 `TranscriptView` renders the record, then ONE always-present
 `EphemeralFooter` cell (id "bottom": streams, queued, sending,
 `ActivityList` of `ActivityItem`s with task checklists, error, the 18 pt
@@ -339,11 +432,12 @@ a detached relauncher and resumes named sessions with a nudge
   the final record and the ephemeral snapshot, and ends the session. The
   expected tail: `user | assistant ONE | user | assistant TWO`, streams
   empty. Try a trailing space on a message: that used to freeze the record.
-- `node tools/probes/lifecycle.mjs` (`AGENT=codex|openrouter`, `TUI=1` to
-  also switch to the terminal and back, `MCP=1` to also have the agent
+- `node tools/probes/lifecycle.mjs` (`AGENT=codex|openrouter`, `TERMINAL=1`
+  to also open a terminal session, type a line into its shell, see it run
+  and have another window take it, `MCP=1` to also have the agent
   call Visor's MCP `list_sessions` and, in a second session with manual
   permissions, ask for a tool call's approval and be given it) — a throwaway session interrupted
-  mid-turn, carried on, optionally handed to its terminal and back, then
+  mid-turn, carried on, then
   ended; the expected tail is `failures 0`, and a few seconds later the
   server has no agent left as a child (`pgrep -lP <server pid>`).
 - The probes talk to the installed server unless `VISOR_PORT` names
@@ -465,12 +559,6 @@ From the code-quality pass of October 2026, found and left:
 - `VisorServer` and `SessionRecord` are `ObservableObject`s. The server is
   Apple-only and could use Observation; the client cannot until Isomer has
   it.
-- AgentUI's `TranscriptActions` and `TranscriptImages` are
-  `nonisolated(unsafe)` statics, and its views are not marked
-  `@MainActor`, until Isomer's SwiftUI isolates views to the main actor.
-- The scripts in tools/ repeat how the team id is read, pass a keychain's
-  password as an argument to `security`, and filter `xcodebuild`'s output
-  through `grep … || true`, which hides why a profile was not made.
 - The terminal pane's keyboard inset and input order were changed without
   a device to try them on (#79).
 - The openrouter CLI, signalled, leaves the command it was running; a

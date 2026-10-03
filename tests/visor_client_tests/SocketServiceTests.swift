@@ -79,6 +79,35 @@ final class SocketServiceTests: XCTestCase {
         XCTAssertNotEqual(event, "close closed", "the socket waited for ever on a handshake that never came")
     }
 
+    /// A socket closed while its handshake is still unanswered — what the
+    /// client does when a login gets no answer in time — ends quietly.
+    /// (Behind a real front URLSession has answered the pending ping twice
+    /// then, which once brought the app down; this listener does not make
+    /// it do so, so the guard in `ping` is what covers that.)
+    func testClosingDuringTheHandshakeEndsQuietly() async throws {
+        let listener = try NWListener(using: .tcp, on: .any)
+        let held = HeldConnections()
+        listener.newConnectionHandler = { connection in
+            connection.start(queue: .global())
+            held.keep(connection)
+        }
+        let ready = AsyncStream<UInt16> { continuation in
+            listener.stateUpdateHandler = { state in
+                if case .ready = state, let port = listener.port?.rawValue { continuation.yield(port); continuation.finish() }
+            }
+        }
+        listener.start(queue: .global())
+        var port: UInt16 = 0
+        for await value in ready { port = value }
+        defer { listener.cancel() }
+        let service = NativeVisorSocketService()
+        let id = service.open(url: "ws://127.0.0.1:\(port)")
+        let event = await firstEvent(of: service, id: id, within: 1)
+        XCTAssertEqual(event, "close closed")
+        // Long enough for URLSession to say what it has to say again.
+        try await Task.sleep(for: .seconds(2))
+    }
+
     func testAServerThatIsNotThereIsSaid() async throws {
         // A port nothing listens on.
         let (listener, port) = try await refusingListener("")

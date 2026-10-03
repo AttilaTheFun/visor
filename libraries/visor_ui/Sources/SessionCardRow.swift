@@ -5,7 +5,7 @@ import VisorClient
 import VisorProtocol
 
 /// A session in the sidebar: its name, the full path of its folder, the first lines of
-/// the latest message; and at the trailing edge what is happening — a
+/// the latest message (a terminal, marked, has none); and at the trailing edge what is happening — a
 /// spinner while the agent works, a raised hand while it waits to be
 /// allowed something. Whether the computer answers is its section's.
 @MainActor
@@ -16,6 +16,10 @@ struct SessionCardRow: View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
+                    if session.agent.isShell {
+                        Image(systemName: "terminal").font(.caption).foregroundColor(.secondary)
+                            .accessibilityLabel("Terminal")
+                    }
                     Text(session.title.isEmpty ? session.agent.title : session.title)
                         .font(.headline)
                         .lineLimit(1)
@@ -34,10 +38,13 @@ struct SessionCardRow: View {
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(session.preview ?? "No messages yet")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
+                // A terminal has no messages: its folder says where it is.
+                if !session.agent.isShell {
+                    Text(session.preview ?? "No messages yet")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if session.busy {

@@ -157,6 +157,37 @@ public final class VisorStore: ObservableObject {
         return "not reachable"
     }
 
+    /// The app came back to the front: every server is tried or checked
+    /// at once (`AgentServerConnection.resume`). After time in the
+    /// background on a host whose sockets do not outlive it (a phone),
+    /// each channel is opened afresh without being asked first.
+    public func resume(afterBackground: Bool = false) {
+        guard !VisorFixture.active else { return }
+        let fresh = afterBackground && (VisorHost.socket?.dropsInBackground ?? false)
+        ConnectionLog.shared.note("app", "in front" + (afterBackground ? ", back from the background" : "")
+                                  + (fresh ? ": every channel is opened afresh" : ""))
+        // Requests must not ride connections that died while the app was
+        // away: the host starts over with new ones.
+        if fresh { VisorHost.http?.reset() }
+        servers.forEach { $0.resume(fresh: fresh) }
+    }
+
+    /// The app left the front for the background: each server's retry
+    /// schedule starts over, and the log is kept for the next run.
+    public func suspend() {
+        guard !VisorFixture.active else { return }
+        ConnectionLog.shared.note("app", "in the background")
+        servers.forEach { $0.suspend() }
+        ConnectionLog.shared.keep()
+    }
+
+    /// The app is in front but not the one being used (the app switcher,
+    /// a system sheet over it): only said, for the log.
+    public func noteInactive() {
+        guard !VisorFixture.active else { return }
+        ConnectionLog.shared.note("app", "inactive")
+    }
+
     /// The servers answering now: where a new session can go.
     public var connectedServers: [AgentServerConnection] { servers.filter { $0.state == .connected } }
 
@@ -175,26 +206,12 @@ public final class VisorStore: ObservableObject {
     func publishWidget() {
         // The canned server never reaches the real home screen.
         guard let widget = VisorHost.widget, !VisorFixture.active else { return }
-        let json = Self.widgetJSON(servers.flatMap { server in server.sessions.map { (server.record.name, $0) } })
+        let json = WidgetSessions.json(servers.flatMap { server in
+            server.sessions.map { WidgetSessions.Source(computer: server.record.name, address: server.record.address, info: $0) }
+        })
         guard json != published else { return }
         published = json
         widget.publish(json)
-    }
-
-    /// Up to eight live sessions, the latest first: what each is called,
-    /// where, its latest words and whether it is working, waiting for
-    /// approval or working toward a goal.
-    static func widgetJSON(_ sessions: [(computer: String, info: SessionInfo)]) -> String {
-        let live = sessions.filter { !$0.info.archived && !$0.info.ended }
-            .sorted { ($0.info.updated ?? $0.info.created) > ($1.info.updated ?? $1.info.created) }
-            .prefix(8)
-        let rows: [JSONValue] = live.map { computer, info in
-            let state = info.pendingApproval != nil ? "waiting" : info.busy ? "working" : info.goal != nil ? "goal" : "idle"
-            return .object(["computer": .string(computer), "title": .string(info.title.isEmpty ? info.agent.title : info.title),
-                            "preview": .string(info.preview ?? ""), "state": .string(state),
-                            "updated": .number(info.updated ?? info.created)])
-        }
-        return JSONValue.object(["sessions": .array(rows)]).encoded()
     }
 
     private func save() {

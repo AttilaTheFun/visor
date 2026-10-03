@@ -17,6 +17,7 @@ enum SessionCatalog {
         case .claude: return claude(cwd: wanted)
         case .codex: return codex(cwd: wanted)
         case .openrouter: return openrouter(cwd: wanted)
+        case .shell: return []
         }
     }
 
@@ -259,6 +260,7 @@ enum SessionCatalog {
         case .claude: entries = claudeTranscript(id: id, cwd: cwd)
         case .codex: entries = codexTranscript(id: id)
         case .openrouter: entries = openrouterTranscript(id: id)
+        case .shell: entries = []
         }
         return Array(entries.suffix(limit))
     }

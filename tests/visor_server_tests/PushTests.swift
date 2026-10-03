@@ -56,6 +56,47 @@ final class PushTests: XCTestCase {
         XCTAssertEqual(said.count, count)
     }
 
+    /// A change of state nothing is said about goes as a silent push, for
+    /// the widget; one that is said carries the state with it instead.
+    func testAStateChangeAloneIsPushedSilently() {
+        var said: [String] = []
+        var states: [String] = []
+        server.onPush = { _, _, _, kind in said.append(kind) }
+        server.onStatusPush = { session, status in states.append(session + ": " + status) }
+        let session = record("s")
+        server.sessions = [session]
+        server.notifyPushes()
+        XCTAssertTrue(states.isEmpty, "the first look says nothing")
+        _ = session.apply(.busy(true))
+        server.notifyPushes()
+        XCTAssertEqual(states, ["s: working"])
+        XCTAssertTrue(said.isEmpty)
+        server.notifyPushes()
+        XCTAssertEqual(states.count, 1, "nothing changed, nothing sent")
+        _ = session.apply(.busy(false))
+        server.notifyPushes()
+        XCTAssertEqual(said, ["turn"])
+        XCTAssertEqual(states.count, 1, "the notification carries the state itself")
+    }
+
+    func testAPushCarriesTheSessionsState() throws {
+        let data = server.pushData(session: "s", title: "Isomer", status: "working")
+        XCTAssertEqual(data["state"], "working")
+        XCTAssertEqual(data["title"], "Isomer")
+        XCTAssertEqual(data["session"], "s")
+        XCTAssertNotNil(data["updated"].flatMap(Int.init))
+        XCTAssertEqual(Set(server.pushData(session: "s", title: "Isomer", status: nil).keys), ["computer", "session"])
+
+        let device = PushDevice(token: "ab12", platform: "ios", environment: "production", topic: "com.example.app", registered: 0)
+        let silent = try XCTUnwrap(APNsSender.statusRequest(to: device, jwt: "J", collapse: "s/status", data: data))
+        XCTAssertEqual(silent.url?.absoluteString, "https://api.push.apple.com/3/device/ab12")
+        XCTAssertEqual(silent.value(forHTTPHeaderField: "apns-push-type"), "background")
+        XCTAssertEqual(silent.value(forHTTPHeaderField: "apns-priority"), "5")
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: silent.httpBody ?? Data()) as? [String: Any])
+        XCTAssertEqual((payload["aps"] as? [String: Any])?.keys.sorted(), ["content-available"], "nothing shown, no sound")
+        XCTAssertEqual(payload["state"] as? String, "working")
+    }
+
     func testTheRequestCarriesNothingOfTheConversation() throws {
         let device = PushDevice(token: "ab12", platform: "ios", environment: "sandbox", topic: "com.example.app", registered: 0)
         let request = try XCTUnwrap(APNsSender.request(to: device, jwt: "J", title: "Isomer", body: "Turn finished",

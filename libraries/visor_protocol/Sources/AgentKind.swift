@@ -2,19 +2,27 @@
 import Foundation
 #endif
 
-/// Which command-line agent a session runs.
+/// What a session runs: a command-line agent, chatted with, or the
+/// computer's own shell, typed into on a terminal.
 public enum AgentKind: String, Codable, CaseIterable, Sendable {
     case claude
     case codex
     case openrouter
+    /// The login shell of the user the server runs as, on a terminal in
+    /// the session's folder: what ssh would give.
+    case shell
 
     public var title: String {
         switch self {
         case .claude: "Claude Code"
         case .codex: "Codex"
         case .openrouter: "OpenRouter"
+        case .shell: "Terminal"
         }
     }
+
+    /// Whether the session is a terminal rather than a chat.
+    public var isShell: Bool { self == .shell }
 
     /// A kind as named on the wire or in a store. A name no longer
     /// offered ("ori", a Claude-protocol harness that OpenRouter replaced)

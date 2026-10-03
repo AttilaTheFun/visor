@@ -8,13 +8,16 @@ extension TailscaleAgentServer {
 
     public func subscribe(_ session: String) { send(.subscribe(session: session)) }
     public func assumeControl(_ session: String, cols: Int, rows: Int) { send(.assumeControl(session: session, cols: cols, rows: rows)) }
-    public func returnToChat(_ session: String) { send(.returnToChat(session: session)) }
     public func acknowledge(_ session: String) { send(.acknowledge(session: session)) }
     public func loadEarlier(_ session: String, before: String) { send(.earlier(session: session, before: before)) }
     public func sendInput(_ session: String, data: String) { send(.input(session: session, data: data)) }
     public func resize(_ session: String, cols: Int, rows: Int) { send(.resize(session: session, cols: cols, rows: rows)) }
 
     // MARK: Sessions
+
+    public func sessions() async throws -> [SessionInfo] {
+        try await call("GET", "/sessions").sessions ?? []
+    }
 
     public func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] {
         try await call("POST", "/sessions", .start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions, resume: resume)).sessions ?? []

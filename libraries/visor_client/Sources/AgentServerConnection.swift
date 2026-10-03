@@ -228,13 +228,17 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     }
 
     public func connect() {
+        note("connect asked for")
         wantsConnection = true
         attempt = 0
         open()
+        startPolling()
     }
 
     public func disconnect() {
         wantsConnection = false
+        polling?.cancel()
+        polling = nil
         closeSocket()
         state = .disconnected
         sessions = []
@@ -256,25 +260,55 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         let mine = generation
         let server = server
         let record = record
+        let started = log.now()
+        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : ""))
+        signingIn = mine
         Task { [weak self] in
             do {
                 let name = try await server.authenticate(record)
                 guard let self, self.generation == mine, self.wantsConnection else { return }
+                self.signingIn = nil
+                self.note("signed in after \(self.log.since(started)) ms; opening the channel")
                 if let name, name != self.record.name { self.record.name = name }
                 self.openChannel(mine)
             } catch {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
+                self.signingIn = nil
                 if error as? AgentServerError == .needsAuthentication {
+                    self.note("sign-in refused after \(self.log.since(started)) ms: needs signing in")
                     self.wantsConnection = false
                     self.state = .needsAuthentication
                 } else {
+                    self.note("sign-in failed after \(self.log.since(started)) ms")
                     self.dropped("\(error)")
                 }
             }
         }
+        // A sign-in that never answers (a request riding a connection that
+        // died while the app was away) is given up on, not waited out.
+        Task { [weak self] in
+            await server.delay(milliseconds: Self.signInTimeout)
+            guard let self, self.signingIn == mine, self.generation == mine else { return }
+            self.signingIn = nil
+            self.dropped("No answer to the sign-in")
+        }
+    }
+
+    /// How long a sign-in has to answer before the try is given up.
+    static let signInTimeout: Int32 = 5_000
+    /// The try (by its generation) whose sign-in is still unanswered.
+    private var signingIn: Int?
+    private var log: ConnectionLog { ConnectionLog.shared }
+    /// When the channel now being opened was asked for, for the log.
+    private var channelAsked = 0.0
+
+    /// One line in the connection log, about this server.
+    func note(_ message: String) {
+        log.note(record.name.isEmpty ? record.address : record.name, message)
     }
 
     private func openChannel(_ mine: Int) {
+        channelAsked = log.now()
         server.openChannel { [weak self] event in
             // A channel closed and reopened since: what the old one says
             // is no longer ours.
@@ -286,17 +320,104 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         }
     }
 
+    /// The app came back to the front. A phone drops the channel whenever
+    /// the app leaves it, and whatever was waiting to retry was not
+    /// running either: so a server that is not connected is tried again
+    /// now, from the start of the schedule, and one that looks connected
+    /// is asked whether it still is, and opened afresh if it does not
+    /// answer — or, when `fresh` (the host says its sockets do not outlive
+    /// the app's time in the background), opened afresh without asking. A
+    /// server waiting for the user to sign in is left alone.
+    ///
+    ///
+    /// Every server is tried at the same moment, each on its own; a try
+    /// that fails is followed by the schedule from its start (2, 4, 8…).
+    public func resume(fresh: Bool = false) {
+        guard wantsConnection else {
+            note("back in front: left alone (\(state.label))")
+            return
+        }
+        guard state == .connected, !fresh else {
+            note("back in front: connecting now (was \(state.label))")
+            attempt = 0
+            open()
+            return
+        }
+        note("back in front: asking the open channel whether it is there")
+        let mine = generation
+        let server = server
+        Task { [weak self] in
+            let alive = await server.verifyChannel()
+            guard let self, self.generation == mine, self.wantsConnection else { return }
+            self.note(alive ? "the channel answered" : "the channel did not answer: opening afresh")
+            guard !alive else { return }
+            self.attempt = 0
+            self.open()
+        }
+    }
+
+    /// The app left the front. The schedule starts over, so nothing that
+    /// was waiting out a long retry is still waiting when the app is back.
+    public func suspend() {
+        guard wantsConnection else { return }
+        note("app in the background: retry schedule reset (was \(state.label), retry \(attempt))")
+        attempt = 0
+    }
+
+    /// How often the server is asked for its sessions outright.
+    static let pollInterval: Int32 = 60_000
+    private var polling: Task<Void, Never>?
+
+    /// The backup for the live channel: every minute the server is asked
+    /// for its sessions over its one-shot side. With the channel up, the
+    /// answer is taken as a list the channel would have brought (so one it
+    /// failed to bring is not missed for long); with the channel down and
+    /// the server answering, the channel is opened again at once rather
+    /// than at the next retry.
+    private func startPolling() {
+        guard polling == nil else { return }
+        polling = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let server = self?.server else { return }
+                await server.delay(milliseconds: Self.pollInterval)
+                guard let self, !Task.isCancelled, self.wantsConnection else { continue }
+                guard let list = try? await server.sessions(), !Task.isCancelled, self.wantsConnection else {
+                    self.note("minute poll: no answer (\(self.state.label))")
+                    continue
+                }
+                switch self.state {
+                case .connected: self.handle(.sessions(list))
+                case .offline:
+                    self.note("minute poll: the server answers while the channel is down; connecting now")
+                    self.attempt = 0
+                    self.open()
+                default: break
+                }
+            }
+        }
+    }
+
+    /// How long to wait before the next try after a drop, in seconds:
+    /// 2, 4, 8, 16, then every 30.
+    static func retryDelay(afterAttempt attempt: Int) -> Int {
+        attempt >= 5 ? 30 : 1 << max(1, attempt)
+    }
+
     private func dropped(_ reason: String) {
         generation += 1
         server.closeChannel()
         if case .failed = state {} else { state = wantsConnection ? .offline(reason) : .disconnected }
         for transcript in transcripts.values { transcript.busy = false; transcript.activity = nil }
-        guard wantsConnection else { return }
+        guard wantsConnection else {
+            note("dropped: \(reason); not retrying")
+            return
+        }
         attempt += 1
-        let delay = min(30, 1 << min(attempt, 5))
+        let wait = Int32(Self.retryDelay(afterAttempt: attempt) * 1000)
+        note("dropped: \(reason); retry \(attempt) in \(wait / 1000) s")
         let mine = generation
         Task { [weak self] in
-            await self?.server.delay(milliseconds: Int32(delay * 1000))
+            await self?.server.delay(milliseconds: wait)
             guard let self, self.wantsConnection, self.generation == mine else { return }
             self.open()
         }
@@ -305,6 +426,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     private func handle(_ event: AgentServerEvent) {
         switch event {
         case .welcome(let name, let list, let catalogs):
+            note("connected: welcome \(log.since(channelAsked)) ms after the channel was asked for, \(list.count) sessions")
             state = .connected
             attempt = 0
             if !name.isEmpty { record.name = name }
@@ -321,10 +443,12 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             registerForPush()
         case .catalogs(let catalogs):
             self.catalogs = catalogs
-        case .refused:
+        case .refused(let message):
+            note("login refused: \(message)")
             wantsConnection = false
             state = .needsAuthentication
         case .failed(let message):
+            note("the server answered with an error: \(message)")
             state = .failed(message)
         case .sessions(let list):
             let before = sessions
@@ -430,9 +554,9 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         return id
     }
 
-    /// Takes the session into the agent's own terminal, drawn for a
-    /// window of this size on this client. Any other client's terminal
-    /// ends: it is one interface, at one size, for one window.
+    /// Takes a terminal session for this window, at this size. Whichever
+    /// window had it stops being drawn for: a terminal is one size, for
+    /// one window. The shell keeps running throughout.
     public func assumeControl(_ sessionID: String, cols: Int, rows: Int) {
         server.assumeControl(sessionID, cols: cols, rows: rows)
     }
@@ -441,11 +565,6 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     public func acknowledge(_ sessionID: String) {
         transcript(for: sessionID).notice = nil
         server.acknowledge(sessionID)
-    }
-
-    /// Hands the session back to the chat, which every client can draw.
-    public func returnToChat(_ sessionID: String) {
-        server.returnToChat(sessionID)
     }
 
     /// Whether the terminal of this session is drawn for this client.

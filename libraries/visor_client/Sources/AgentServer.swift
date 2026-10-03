@@ -24,6 +24,11 @@ public protocol AgentServer: AnyObject {
     /// (the connection reopens it after a while).
     func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void)
     func closeChannel()
+    /// Asks the open channel whether it is still there, now rather than
+    /// at its next heartbeat: false when it does not answer in a moment.
+    /// Asked when the app comes back to the front, where a channel that
+    /// looks open may have died while the app was not running.
+    func verifyChannel() async -> Bool
     /// A pause, for the reconnect backoff: the host's timer, which is
     /// portable where `Task.sleep` is not.
     func delay(milliseconds: Int32) async
@@ -32,21 +37,25 @@ public protocol AgentServer: AnyObject {
 
     /// Follows a session: its state and new rows arrive as `.session` events.
     func subscribe(_ session: String)
-    /// Takes the session into the agent's own terminal, drawn for a window
-    /// of this size on this client.
+    /// Takes a terminal session for this client's window: its shell is
+    /// drawn at this size, for this client, and what it has shown comes
+    /// back as a replay (`.session` with a `tty` envelope whose size is
+    /// set). Whoever had it before is sent nothing more.
     func assumeControl(_ session: String, cols: Int, rows: Int)
-    /// Hands the session back to the chat.
-    func returnToChat(_ session: String)
     /// The user has read what the session had to tell them.
     func acknowledge(_ session: String)
     /// Asks for the rows before `before`.
     func loadEarlier(_ session: String, before: String)
-    /// What the user typed into the terminal, base64.
+    /// What the user typed into a terminal session, base64.
     func sendInput(_ session: String, data: String)
     func resize(_ session: String, cols: Int, rows: Int)
 
     // MARK: Sessions
 
+    /// The server's sessions now, asked for outright rather than heard
+    /// over the channel: the connection asks every minute, as the backup
+    /// for a channel that has gone quiet or cannot be opened.
+    func sessions() async throws -> [SessionInfo]
     /// Starts a session with the id the client chose. The sessions the
     /// answer names are taken into the list.
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo]
@@ -94,6 +103,7 @@ public protocol AgentServer: AnyObject {
 }
 
 public extension AgentServer {
+    func verifyChannel() async -> Bool { true }
     func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool { false }
     func connectionCode() async throws -> String { throw AgentServerError.unsupported }
     func link(code: String) async throws { throw AgentServerError.unsupported }

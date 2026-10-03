@@ -9,12 +9,37 @@ import VisorServices
 /// token, and https://…/api for the one-shot calls, the password as the
 /// bearer token. Over the host's socket and HTTP services, so the same
 /// code runs in a browser.
+///
+/// The channel is kept honest by a heartbeat of its own — a `ping`
+/// envelope every 16 s, and a channel that says nothing for 8 s after
+/// one is taken as dropped — because a socket that died quietly (a sleep,
+/// a change of network) otherwise looks open until TCP gives up. The
+/// socket has 4 s to open and have its login answered. It is a message of
+/// the protocol, not a WebSocket ping frame, which a browser cannot send.
 public final class TailscaleAgentServer: AgentServer {
+    /// How often the channel is asked whether it is still there, and how
+    /// long it has to say anything at all before it is taken as dropped.
+    static let heartbeatInterval: Int32 = 16_000
+    static let heartbeatTimeout: Int32 = 8_000
+    /// How long the Mac has to answer the login once the socket is asked
+    /// for: the user is waiting on this one.
+    static let loginTimeout: Int32 = 4_000
+    /// How long the channel has to answer when asked outright, as the app
+    /// comes back to the front: an answer over Tailscale takes
+    /// milliseconds, and the user is looking.
+    static let verifyTimeout: Int32 = 1_000
+
     private(set) var record: AgentServerRecord
     /// What `hello` gave for the channel's login.
     private var token: String?
     private var socketID: Int32?
     private var reader: Task<Void, Never>?
+    private var heartbeat: Task<Void, Never>?
+    /// How many messages this channel has brought: one more after a ping
+    /// is the answer to it, whatever the message was.
+    private var heard = 0
+    /// Whether this channel's socket opened and the login went out.
+    private var loggedIn = false
 
     public init(record: AgentServerRecord) {
         self.record = record
@@ -47,6 +72,9 @@ public final class TailscaleAgentServer: AgentServer {
             return
         }
         socketID = id
+        heard = 0
+        loggedIn = false
+        heartbeat = Task { [weak self] in await self?.watch(id, onEvent: onEvent) }
         reader = Task { [weak self] in
             // Events arrive one at a time; the loop ends when the socket is gone.
             while !Task.isCancelled {
@@ -54,8 +82,11 @@ public final class TailscaleAgentServer: AgentServer {
                     let event = try await socket.next(id: id)
                     guard let self, self.socketID == id else { return }
                     if event == "open" {
+                        self.loggedIn = true
+                        ConnectionLog.shared.note(self.record.name.isEmpty ? self.record.address : self.record.name, "socket open; login sent")
                         self.send(.login(password: self.record.secret, token: self.token, client: AgentServerRecord.clientID))
                     } else if event.hasPrefix("message ") {
+                        self.heard += 1
                         if let translated = Self.translate(String(event.dropFirst(8))) { onEvent(translated) }
                     } else if event.hasPrefix("close ") || event.hasPrefix("error ") {
                         self.socketID = nil
@@ -72,11 +103,52 @@ public final class TailscaleAgentServer: AgentServer {
         }
     }
 
+    /// Watches a channel for as long as it is the one open: the login must
+    /// be answered in time, and after that each heartbeat must be followed
+    /// by something — the `pong`, or anything else the Mac says. A channel
+    /// that stays silent is closed and reported as dropped, which is what
+    /// starts the connection's retries.
+    private func watch(_ id: Int32, onEvent: @escaping @MainActor (AgentServerEvent) -> Void) async {
+        guard let socket = VisorHost.socket else { return }
+        await socket.delay(milliseconds: Self.loginTimeout)
+        guard socketID == id, !Task.isCancelled else { return }
+        if heard == 0 { return drop(id, loggedIn ? "No answer to the login" : "The socket did not open", onEvent) }
+        while true {
+            await socket.delay(milliseconds: Self.heartbeatInterval)
+            guard socketID == id, !Task.isCancelled else { return }
+            let before = heard
+            send(.ping())
+            await socket.delay(milliseconds: Self.heartbeatTimeout)
+            guard socketID == id, !Task.isCancelled else { return }
+            if heard == before { return drop(id, "No answer to a heartbeat", onEvent) }
+        }
+    }
+
+    public func verifyChannel() async -> Bool {
+        guard let id = socketID, let socket = VisorHost.socket else { return false }
+        let before = heard
+        send(.ping())
+        await socket.delay(milliseconds: Self.verifyTimeout)
+        // Another channel since: that one is not this question's to answer.
+        return socketID != id || heard != before
+    }
+
+    private func drop(_ id: Int32, _ reason: String, _ onEvent: @MainActor (AgentServerEvent) -> Void) {
+        socketID = nil
+        reader?.cancel()
+        reader = nil
+        VisorHost.socket?.disconnect(id: id)
+        onEvent(.closed(reason))
+    }
+
     /// A message from the Mac, as the event it means. Nil for one that is
-    /// not an envelope.
+    /// not an envelope, and for the answer to a heartbeat — a `pong`, or
+    /// from a Mac older than the heartbeat, its complaint about the ping.
     static func translate(_ text: String) -> AgentServerEvent? {
         guard let envelope = Envelope.decode(text) else { return nil }
         switch envelope.type {
+        case "pong": return nil
+        case "error" where envelope.message == "Unknown message ping": return nil
         case "welcome": return .welcome(name: envelope.host ?? "", sessions: envelope.sessions ?? [], catalogs: envelope.catalogs ?? [])
         case "sessions": return .sessions(envelope.sessions ?? [])
         case "catalogs": return .catalogs(envelope.catalogs ?? [])
@@ -86,6 +158,8 @@ public final class TailscaleAgentServer: AgentServer {
     }
 
     public func closeChannel() {
+        heartbeat?.cancel()
+        heartbeat = nil
         reader?.cancel()
         reader = nil
         if let socketID { VisorHost.socket?.disconnect(id: socketID) }
@@ -93,7 +167,13 @@ public final class TailscaleAgentServer: AgentServer {
     }
 
     public func delay(milliseconds: Int32) async {
-        await VisorHost.socket?.delay(milliseconds: milliseconds)
+        // A host with no socket service has no timer to lend: wait all the
+        // same, so nothing that paces itself by this spins.
+        guard let socket = VisorHost.socket else {
+            try? await Task.sleep(nanoseconds: UInt64(max(0, milliseconds)) * 1_000_000)
+            return
+        }
+        await socket.delay(milliseconds: milliseconds)
     }
 
     func send(_ envelope: Envelope) {

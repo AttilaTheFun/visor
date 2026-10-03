@@ -1,5 +1,6 @@
-// The sessions' agents: made, bound to their records, given what the
-// user says, rebuilt when a session's folder, mode or settings change.
+// The sessions' agents (and terminal sessions' shells): made, bound to
+// their records, given what the user says, rebuilt when a session's
+// folder or settings change.
 
 import AppKit
 import ClaudeTranscript
@@ -17,17 +18,10 @@ extension VisorServer {
         // Put its history where the folder looks now, so both the agent
         // and a terminal can resume it from there.
         if let resume { harness.adoptHistory(id: resume, cwd: info.cwd) }
-        let process: AgentProcess
-        if case .tui(_, let cols, let rows) = info.mode,
-           let terminal = harness.makeTerminal(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume) {
-            // Born at the window it is drawn for, so its first paint is
-            // already the right shape.
-            terminal.resize(cols: cols, rows: rows)
-            process = terminal
-        } else {
-            // Chat.
-            process = harness.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
-        }
+        let process = harness.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
+        // A shell is born at the window it is drawn for, so its first
+        // prompt is already the right shape.
+        if let size = info.mode.terminalSize { (process as? TerminalCapable)?.resize(cols: size.cols, rows: size.rows) }
         process.model = info.model
         process.effort = info.effort
         process.approvalEnvironment = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]
@@ -102,10 +96,10 @@ extension VisorServer {
 
     /// Ends the agent and makes a new one on the same session, which
     /// picks the conversation up as the file stands: one built for the
-    /// session as it is now (its folder, its mode). A turn in flight is
-    /// cut short. A terminal starts as soon as the old agent is gone; the
-    /// chat's agent starts with the next message, which is when resuming
-    /// matters. With `rereading`, the transcript is read again, since the
+    /// session as it is now (its folder, its settings). A turn in flight
+    /// is cut short. A terminal session's shell starts again at once if a
+    /// window has it; the chat's agent starts with the next message,
+    /// which is when resuming matters. With `rereading`, the transcript is read again, since the
     /// file may have moved on under another writer.
     func rebuild(_ record: SessionRecord, rereading: Bool = false) {
         record.restartWhenIdle = false
@@ -135,7 +129,8 @@ extension VisorServer {
         deliver(waiting.text, to: record, images: waiting.images)
     }
 
-    /// A terminal is live before anything is said: bound and started now.
+    /// A terminal session's shell is live before anything is typed: bound
+    /// and started now (or kept, if it is running), at its window's size.
     func launchTerminal(_ record: SessionRecord) {
         if !record.isBound { bind(record) }
         if let size = record.info.mode.terminalSize { record.terminal?.resize(cols: size.cols, rows: size.rows) }
@@ -146,14 +141,20 @@ extension VisorServer {
     }
 
     func deliver(_ text: String, to record: SessionRecord, images: [String] = []) {
+        // A terminal session has no turns: what is sent is a line typed
+        // into its shell, and nothing is written down.
+        if record.info.agent.isShell {
+            if !record.isBound { bind(record) }
+            do { try record.process.send(text) } catch {
+                broadcast(record.apply(.failure(error.localizedDescription)), session: record)
+            }
+            return
+        }
         // A turn in flight is left alone. What the user says now waits its
         // turn and goes over as soon as the agent falls idle — interrupting
         // is a deliberate act (`stop`), not the cost of typing.
-        // A terminal at a prompt (trust this folder? accept bypass mode?
-        // allow this tool?) is not at its input box: typed text would answer
-        // the prompt with its default. The message waits until it is.
         // Nor is anything said while the agent before this one is going.
-        if record.info.busy || record.held || (record.terminal.map { !$0.ready } ?? false) {
+        if record.info.busy || record.held {
             record.enqueue(text, images: images)
             saveArchive()
             broadcastSessions()
@@ -215,11 +216,6 @@ extension VisorServer {
             self.saveArchive()
         }
         record.onInfoChanged = { [weak self] in self?.broadcastSessionsSoon() }
-        record.onFileBusy = { [weak self, weak record] busy in
-            guard let self, let record else { return }
-            self.broadcast(.busy(session: record.info.id, busy), session: record)
-            self.broadcastSessions()
-        }
         record.listen { [weak self, weak record] event in
             guard let self, let record else { return }
             self.handle(event, from: record)

@@ -4,7 +4,8 @@ Remote agent sessions: Visor Server, a Mac menu bar app, runs Claude Code, Codex
 openrouter CLI as subprocesses on the host and exposes them over
 Tailscale; a SwiftUI client for iPhone, iPad and Mac adds a Mac from its
 connection code, starts sessions, chats with them and watches their
-progress.
+progress, and opens terminal sessions — the Mac's own shell, drawn in
+SwiftUI over SwiftTerm's emulator — to run anything there directly.
 
 ## Parts
 

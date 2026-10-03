@@ -330,6 +330,43 @@
         }
       }
     },
+    "@@protobuf+//python/dist:system_python.bzl%system_python_extension": {
+      "general": {
+        "bzlTransitiveDigest": "pmsA+awieucfllLc2n7k8xEoPp0i5LF9Hw6mGX0cqSQ=",
+        "usagesDigest": "A+RWmbKdBBwZcBbNGNvfPbqG2vYZRjVrFp6x1iRUrAk=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "system_python": {
+            "repoRuleId": "@@protobuf+//python/dist:system_python.bzl%system_python",
+            "attributes": {
+              "minimum_python_version": "3.9"
+            }
+          }
+        }
+      }
+    },
+    "@@pybind11_bazel+//:internal_configure.bzl%internal_configure_extension": {
+      "general": {
+        "bzlTransitiveDigest": "NRXra7941UfmNUyIxnLt82V5hULluVGL2nBsijTl4j4=",
+        "usagesDigest": "D1r3lfzMuUBFxgG8V6o0bQTLMk3GkaGOaPzw53wrwyw=",
+        "recordedInputs": [
+          "REPO_MAPPING:pybind11_bazel+,bazel_tools bazel_tools",
+          "FILE:@@pybind11_bazel+//MODULE.bazel e6f4c20442eaa7c90d7190d8dc539d0ab422f95c65a57cc59562170c58ae3d34"
+        ],
+        "generatedRepoSpecs": {
+          "pybind11": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "build_file": "@@pybind11_bazel+//:pybind11-BUILD.bazel",
+              "strip_prefix": "pybind11-2.12.0",
+              "urls": [
+                "https://github.com/pybind/pybind11/archive/v2.12.0.zip"
+              ]
+            }
+          }
+        }
+      }
+    },
     "@@rules_kotlin+//src/main/starlark/core/repositories:bzlmod_setup.bzl%rules_kotlin_extensions": {
       "general": {
         "bzlTransitiveDigest": "+Kp6j204mBZ3mxlIDDR0gBoP45BZ4jYRhRAcB8sU0qc=",
@@ -593,7 +630,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved a647283e0e41e439e8cd0dad21cf21954cb4d3b72f690126c569e7dc419b8c02"
+          "FILE:@@//third_party/swift_packages/Package.resolved b5cd63128c14b288c899fdced2e79666831ca3fef1b98a5d28c6c556e9abb0ac"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -603,29 +640,11 @@
               "package": "third_party/swift_packages/Package.swift"
             }
           },
-          "swiftpkg_swiftterm": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_swiftterm",
-              "commit": "5c83a9d214e7354697624c11deb4e488bdcfabad",
-              "remote": "https://github.com/migueldeicaza/SwiftTerm.git",
-              "version": "1.10.1",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": ""
-            }
-          },
           "swiftpkg_agent_ui": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "9c33abe7ee05749562dec3e0785bd26bb5b70b06",
+              "commit": "262906a4d59b48484bf19834497cc034baae0989",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
               "env": {},
               "env_inherit": [],
@@ -656,6 +675,24 @@
               "bazel_target_mods": ""
             }
           },
+          "swiftpkg_h": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_h",
+              "commit": "aa3626829160917d4378330617971977cbd78f5b",
+              "remote": "https://github.com/rarestype/h",
+              "version": "1.0.1",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": ""
+            }
+          },
           "swiftpkg_swift_argument_parser": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
@@ -673,11 +710,45 @@
               "dep_module_aliases": "",
               "bazel_target_mods": ""
             }
+          },
+          "swiftpkg_swift_png": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_png",
+              "commit": "8a0bcd4df5e4b307c804937776a56dd6ecdf6396",
+              "remote": "https://github.com/tayloraswift/swift-png",
+              "version": "4.5.1",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": ""
+            }
+          },
+          "swiftpkg_swiftterm": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swiftterm",
+              "commit": "a652fe780aec9b4a8855841486583a7c8dcffd72",
+              "remote": "https://github.com/AttilaTheFun/SwiftTerm.git",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": ""
+            }
           }
         },
         "moduleExtensionMetadata": {
           "explicitRootModuleDirectDeps": [
-            "swiftpkg_swiftterm",
             "swiftpkg_agent_ui",
             "swiftpkg_sqlite.swift",
             "swift_package"

@@ -31,12 +31,12 @@ final class FixtureAgentServer: AgentServer {
     }
 
     func assumeControl(_ session: String, cols: Int, rows: Int) {}
-    func returnToChat(_ session: String) {}
     func acknowledge(_ session: String) {}
     func loadEarlier(_ session: String, before: String) {}
     func sendInput(_ session: String, data: String) {}
     func resize(_ session: String, cols: Int, rows: Int) {}
 
+    func sessions() async throws -> [SessionInfo] { VisorFixture.sessions }
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] { [] }
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { [] }

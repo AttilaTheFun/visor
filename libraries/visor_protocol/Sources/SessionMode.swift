@@ -2,16 +2,16 @@
 import Foundation
 #endif
 
-/// Which process holds a session, and — when it is the agent's own
-/// terminal — whose window it is drawn for. A terminal interface is
-/// rendered on the computer at one fixed size, so it belongs to exactly
-/// one client: the mode carries that client and its window, and there is
-/// no way to be in the terminal without them.
+/// Whose window a terminal session is drawn for. A shell's terminal is
+/// one fixed size on the computer, so it belongs to exactly one client at
+/// a time: the mode carries that client and its window. A chat session is
+/// always `chat`, drawn by each client for its own screen, and so is a
+/// terminal session no window has taken yet.
 public enum SessionMode: Hashable, Sendable {
-    /// The headless process, drawn by each client for its own screen.
+    /// No window has the terminal (and, for a chat, none needs it).
     case chat
-    /// The agent's own interface on a terminal of `cols` × `rows`,
-    /// drawn for the client that took control.
+    /// A terminal session's shell, on a terminal of `cols` × `rows`,
+    /// drawn for the client that took it.
     case tui(controller: String, cols: Int, rows: Int)
 
     public var isTUI: Bool { if case .tui = self { true } else { false } }

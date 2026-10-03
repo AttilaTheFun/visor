@@ -112,13 +112,6 @@ extension SessionRecord {
                 if shownPrompts.count > Self.rememberedPrompts * 2 { shownPrompts.removeFirst(Self.rememberedPrompts) }
             }
             for row in line.rows where take(fileRow: row) { changed.append(row) }
-            // With the terminal holding the session there is no stream to
-            // say whether the agent is working: the file says — a prompt
-            // or a tool result opens work, a final answer ends it.
-            if info.mode.isTUI, let record = line.record, let busy = Self.busy(after: record), busy != info.busy {
-                info.busy = busy
-                onFileBusy?(busy)
-            }
         }
         if !changed.isEmpty { onFileRows?(changed) }
     }
@@ -135,22 +128,12 @@ extension SessionRecord {
 
     /// Whether a prompt in the file is one this server sent — words it has
     /// sent and not yet seen written — or one the agent fed itself (a
-    /// command's expansion, a reminder). A terminal's prompts are all the
-    /// user's own.
+    /// command's expansion, a reminder).
     func isOurs(prompt record: ClaudeRecord?) -> Bool {
-        if info.mode.isTUI { return true }
         guard case .user(let text, _)? = record?.kind else { return true }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty || trimmed.hasPrefix("<") { return true }
         return unwritten.contains { Self.sameWords(trimmed, $0.text) }
-    }
-
-    static func busy(after record: ClaudeRecord) -> Bool? {
-        switch record.kind {
-        case .user, .toolResult: true
-        case .assistant(_, _, let stop, _, _): stop == "tool_use" ? true : (stop == nil ? nil : false)
-        case .title, .goal: nil
-        }
     }
 
     /// Follows the file the first time anyone looks at a resumed session.

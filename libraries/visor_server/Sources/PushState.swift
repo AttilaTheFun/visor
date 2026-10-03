@@ -9,4 +9,8 @@ struct PushState: Equatable {
     var failed = false
     var goal: String?
     var goalSince: Double?
+
+    /// The session's state in a word, as a widget shows it: waiting for
+    /// approval, working, working toward a goal, or idle.
+    var status: String { waiting ? "waiting" : busy ? "working" : goal != nil ? "goal" : "idle" }
 }
