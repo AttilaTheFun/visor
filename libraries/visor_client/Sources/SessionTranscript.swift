@@ -210,13 +210,15 @@ public final class SessionTranscript: ObservableObject {
     }
 
     /// Rows from before the first shown, put in front of it; `more`, whether
-    /// there are rows before these.
-    func putEarlier(_ rows: [TranscriptEntry], more: Bool) {
+    /// there are rows before these. How many were new.
+    @discardableResult
+    func putEarlier(_ rows: [TranscriptEntry], more: Bool) -> Int {
         let held = Set(entries.map(\.id))
         let older = rows.filter { !held.contains($0.id) }
         if !older.isEmpty { entries = older + entries }
         hasEarlier = more
         loadingEarlier = false
+        return older.count
     }
 
     /// Drops an outgoing message once the transcript has moved past when

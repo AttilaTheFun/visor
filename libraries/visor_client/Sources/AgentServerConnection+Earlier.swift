@@ -62,9 +62,16 @@ extension AgentServerConnection {
                 try? cache.prepend(key, rows)
             }
         }
-        if !more { transcript.reachedStart = true }
         let page = Array(rows.suffix(Self.earlierPage))
-        transcript.putEarlier(page, more: more || rows.count > page.count)
+        let added = transcript.putEarlier(page, more: more || rows.count > page.count)
+        // Nothing new (a server before 0.19 answers a row past its own
+        // with rows the thread has): asking again would bring the same, so
+        // the thread goes no further back rather than spin for ever.
+        if !more { transcript.reachedStart = true }
+        if !rows.isEmpty, added == 0 {
+            transcript.reachedStart = true
+            transcript.hasEarlier = false
+        }
     }
 
     /// After the channel comes back: asks again for any page that was on

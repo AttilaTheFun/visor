@@ -126,4 +126,48 @@ final class EarlierPagesTests: XCTestCase {
         transcript.sync(delta)
         XCTAssertFalse(transcript.hasEarlier, "the server's more is about its own last rows")
     }
+
+    /// The server's last page, larger than one shown: the rest are still
+    /// to come, from the cache.
+    func testTheLastServerPageLargerThanOneShownKeepsGoing() async throws {
+        try keep(rows("s", 10))
+        let transcript = host.transcript(for: "S")
+        var delta = Envelope(type: "transcript")
+        delta.entries = []
+        delta.revision = 4
+        delta.generation = 1
+        delta.more = true
+        transcript.sync(delta)
+        host.loadEarlier("S")
+        await settle()
+        server.deliver(earlier(rows("e", 300), more: false))
+        await settle()
+        XCTAssertEqual(transcript.entries.first?.id, "e100")
+        XCTAssertTrue(transcript.hasEarlier, "100 rows still before these")
+        host.loadEarlier("S")
+        await settle()
+        XCTAssertEqual(transcript.entries.first?.id, "e0")
+        XCTAssertFalse(transcript.hasEarlier, "the server said there is nothing before")
+        XCTAssertEqual(server.earlierAsked.count, 1)
+    }
+
+    /// A server that answers with rows the thread already has (one before
+    /// 0.19, asked about a row past its own) ends the paging instead of
+    /// leaving the spinner to ask for ever.
+    func testAPageOfNothingNewEndsThePaging() async throws {
+        try keep(rows("s", 10))
+        let transcript = host.transcript(for: "S")
+        var delta = Envelope(type: "transcript")
+        delta.entries = []
+        delta.revision = 4
+        delta.generation = 1
+        delta.more = true
+        transcript.sync(delta)
+        host.loadEarlier("S")
+        await settle()
+        server.deliver(earlier(rows("s", 5), more: true))
+        await settle()
+        XCTAssertEqual(transcript.entries.count, 10)
+        XCTAssertFalse(transcript.hasEarlier)
+    }
 }
