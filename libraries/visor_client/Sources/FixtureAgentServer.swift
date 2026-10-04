@@ -32,7 +32,22 @@ final class FixtureAgentServer: AgentServer {
 
     func assumeControl(_ session: String, cols: Int, rows: Int) {}
     func acknowledge(_ session: String) {}
-    func loadEarlier(_ session: String, before: String) {}
+    /// On the `earlier` screen, the goal session's thread goes back further:
+    /// a page of 200 rows comes half a second after it is asked for, as
+    /// from a server, and there is nothing before those.
+    func loadEarlier(_ session: String, before: String) {
+        guard let onEvent, VisorFixture.screen == "earlier", session == VisorFixture.goalSession else { return }
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            var page = Envelope(type: "earlier")
+            page.session = session
+            page.entries = (0..<200).map { index in
+                TranscriptEntry(id: "\(session)-earlier-\(index)", role: index % 2 == 0 ? .user : .assistant, text: "Earlier row \(index)")
+            }
+            page.more = false
+            onEvent(.session(page))
+        }
+    }
     func sendInput(_ session: String, data: String) {}
     func resize(_ session: String, cols: Int, rows: Int) {}
 
@@ -54,7 +69,7 @@ final class FixtureAgentServer: AgentServer {
         e.revision = 1
         e.generation = 1
         e.reset = true
-        e.more = false
+        e.more = VisorFixture.screen == "earlier" && session == VisorFixture.goalSession
         return e
     }
 

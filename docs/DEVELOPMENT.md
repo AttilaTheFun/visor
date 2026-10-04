@@ -475,7 +475,9 @@ a detached relauncher and resumes named sessions with a nudge
 For screenshot tests, the client can show a canned computer instead of
 real ones (`libraries/visor_client/Sources/VisorFixture.swift`). The setting
 `fixture` = `snapshot` turns it on; `fixture.screen` opens a screen:
-`sessions`, `chat`, `goal`, `inspector`, `models`, `search` or `connect`. On Apple
+`sessions`, `chat`, `goal`, `inspector`, `models`, `search` or `connect`
+(`earlier` is `goal` with a page of earlier rows that loads as its spinner
+row shows). On Apple
 these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so
 launch arguments set them: `-visor.fixture snapshot -visor.fixture.screen
 chat`. The web and Android set them through their settings services. The
@@ -489,6 +491,20 @@ lets every sheet's glass finish easing in). The busy session shows a static glyp
 a spinner. Pin the simulator's status bar (`xcrun simctl status_bar booted
 override --time 9:41 …`) and the same screen gives the same pixels every
 run. The iOS probe's `testFixtureScreens` takes all six.
+
+### Fixture look check
+
+`tools/probes/look/fixture_look.sh` photographs each fixture screen on a
+simulator of its own (erased first, shut down after) and compares it with
+its reference in `tests/look/ios`. That covers the bars' soft edge, the
+glass composer, wrapped list items, pictures and the sheets. It then records
+the `earlier` screen as a page of earlier rows goes in, and fails if the
+list does not come to rest on the rows it showed, or shows anywhere else for
+more than three frames (`look.swift`). Runs of one build give the same
+pixels, so the limit is tight (0.1% of pixels). What differs is drawn red in
+the output folder. After a change that is meant to look different, look at
+the new screens and take them with `--accept`. It needs no computer and
+works with the Mac locked. Shut down any other simulator of yours first.
 
 ### Send motion check
 

@@ -189,7 +189,7 @@ public struct VisorRootView: View {
             case "chat", "inspector", "models":
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
                 if compact { compactColumn = .detail }
-            case "goal":
+            case "goal", "earlier":
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))
                 if compact { compactColumn = .detail }
             case "search":

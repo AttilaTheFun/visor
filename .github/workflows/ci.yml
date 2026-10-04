@@ -32,5 +32,6 @@ jobs:
           bazel test --test_output=errors
           //tests/visor_server_tests
           //tests/visor_client_tests
+          //tests/visor_ui_tests
           //tests/message_cache_tests
           //tests/claude_transcript_tests
