@@ -31,8 +31,13 @@ swift_deps.from_package(
 )
 
 # SwiftTerm generates two files with a build plugin, and rspm runs no SwiftPM
-# plugins: the patch adds them, made from the pinned revision (regenerate
-# with SwiftTermBuildInfoGenerator when the pin moves, as its comment says).
+# plugins: the patch adds them, made from the pinned revision, and drops the
+# plugin from the target. When agent_ui moves the pin, make them again in an
+# export of the new revision (no .git, so the commit comes from here):
+#   git archive <rev> | tar -x -C <dir> && cd <dir> &&
+#   SWIFTTERM_BUILD_COMMIT=<rev> SWIFTTERM_BUILD_DIRTY=0 swift run SwiftTermBuildInfoGenerator \
+#     "$PWD" Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift
+# and write the patch again (diff -ruN against a clean export, -p1).
 swift_deps.configure_package(
     name = "swiftterm",
     patch_args = ["-p1"],
