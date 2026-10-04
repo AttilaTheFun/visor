@@ -1,35 +1,12 @@
 // Listening: the socket and the REST side on loopback, the front put on
 // 443 by the exposure, and the agents' model lists kept fresh.
 
-import AppKit
 import ClaudeTranscript
-import MessageCache
 import Foundation
-import Network
+import MessageCache
 import VisorProtocol
 
 extension VisorServer {
-    /// The host's Tailscale (100.64.0.0/10) and other IPv4 addresses.
-    public static func addresses() -> [(name: String, address: String)] {
-        var result: [(String, String)] = []
-        var list: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&list) == 0, let first = list else { return [] }
-        defer { freeifaddrs(list) }
-        for ptr in sequence(first: first, next: { $0.pointee.ifa_next }) {
-            let ifa = ptr.pointee
-            guard let addr = ifa.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET) else { continue }
-            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            if getnameinfo(addr, socklen_t(addr.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
-                let address = String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
-                let name = String(cString: ifa.ifa_name)
-                if address == "127.0.0.1" { continue }
-                result.append((name, address))
-            }
-        }
-        // Tailscale first: the CGNAT range on a utun interface.
-        return result.sorted { a, b in a.1.hasPrefix("100.") && !b.1.hasPrefix("100.") }
-    }
-
     /// Listens once there is a password; without one the menu says so
     /// and Settings is where to go. The listeners take loopback only:
     /// the front is the one way in from the network.
@@ -37,7 +14,7 @@ extension VisorServer {
         guard listener == nil, !password.isEmpty else { return }
         // An agent that has gone leaves a pipe that cannot be written to:
         // that is an error to the write, not a signal that ends the app.
-        signal(SIGPIPE, SIG_IGN)
+        ServerPlatform.current.processes.ignoreBrokenPipes()
         // Where the agents' tools are, for those not in the usual places.
         let tools = harnesses.all.map(\.tool) + ["node"]
         Task {
@@ -50,32 +27,14 @@ extension VisorServer {
         }
         do { try http.start(); self.http = http } catch { lastError = "API: \(error)" }
         do {
-            let params = NWParameters(tls: nil)
-            params.allowLocalEndpointReuse = true
-            params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
-            let ws = NWProtocolWebSocket.Options()
-            ws.autoReplyPing = true
-            params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
-            let listener = try NWListener(using: params)
-            // The listener's queue is the main one: what it says is taken
-            // as it is said, in order.
-            listener.stateUpdateHandler = { [weak self] state in
-                MainActor.assumeIsolated {
-                    switch state {
-                    case .ready: self?.listening = true; self?.lastError = nil
-                    case .failed(let error): self?.listening = false; self?.lastError = "\(error)"
-                    case .cancelled: self?.listening = false
-                    default: break
-                    }
-                }
-            }
-            listener.newConnectionHandler = { [weak self] connection in
-                MainActor.assumeIsolated { self?.accept(connection) }
-            }
-            listener.start(queue: .main)
-            self.listener = listener
+            listener = try ServerPlatform.current.listening.listen(port: port) { [weak self] stream in self?.accept(stream) }
+            listening = true
+            lastError = nil
+            Self.log("listening on 127.0.0.1:\(port) (WebSocket) and :\(apiPort) (REST)")
         } catch {
+            listening = false
             lastError = "\(error)"
+            Self.log("could not listen on \(port): \(error)")
         }
         front()
         keepModelsFresh()
@@ -117,7 +76,11 @@ extension VisorServer {
         guard fronting == nil else { frontAgain = true; return }
         let exposure = self.exposure
         let port = self.port
-        guard exposure.installed else { serveError = "\(exposure.title) is not installed"; return }
+        guard exposure.installed else {
+            if serveError == nil { Self.log("\(exposure.title) is not installed: clients reach this computer through it") }
+            serveError = "\(exposure.title) is not installed"
+            return
+        }
         fronting = Task {
             var message: String?
             let identity = await exposure.identity()
@@ -137,7 +100,11 @@ extension VisorServer {
                 return
             }
             if let identity { hostLogin = identity }
-            if let address { self.address = address }
+            if let address, address != self.address {
+                self.address = address
+                Self.log("reached at \(address) through \(exposure.title)")
+            }
+            if message != serveError, let message { Self.log("\(exposure.title): \(message)") }
             serveError = message
             guard message != nil else { frontAttempts = 0; return }
             frontAttempts += 1
@@ -154,8 +121,9 @@ extension VisorServer {
     func fronted() async { await fronting?.value }
 
     public func stop() {
-        listener?.cancel()
+        listener?.stop()
         listener = nil
+        listening = false
         http?.stop()
         http = nil
         // Whoever was waiting on a transcript gets what there is, now.
@@ -165,11 +133,12 @@ extension VisorServer {
         clientCount = 0
     }
 
-    func accept(_ nw: NWConnection) {
-        let client = ClientConnection(connection: nw)
+    func accept(_ stream: any ByteStream) {
+        let client = ClientConnection(stream: stream)
         let key = ObjectIdentifier(client)
         connections[key] = client
         clientCount = connections.count
+        Self.log("a client connected (\(clientCount) now)")
         client.onMessage = { [weak self, weak client] envelope in
             guard let self, let client else { return }
             self.handle(envelope, from: client)
@@ -178,6 +147,7 @@ extension VisorServer {
             guard let self else { return }
             self.connections.removeValue(forKey: key)
             self.clientCount = self.connections.count
+            Self.log("a client left (\(self.clientCount) now)")
             for session in self.sessions { session.subscribers.remove(key) }
         }
         client.start()

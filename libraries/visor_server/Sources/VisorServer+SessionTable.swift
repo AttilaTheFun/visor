@@ -1,10 +1,8 @@
 // Every session as a table, for notes or another agent.
 
-import AppKit
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import Network
 import VisorProtocol
 
 extension VisorServer {

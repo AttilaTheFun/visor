@@ -1,6 +1,3 @@
-import Foundation
-import Network
-
 public struct HTTPRequest {
     public var method: String
     public var path: String

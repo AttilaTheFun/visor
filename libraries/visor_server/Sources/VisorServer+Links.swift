@@ -138,22 +138,17 @@ extension VisorServer {
     /// base address (`http://127.0.0.1:7434`), which tests use.
     func call(_ link: ConnectionCode, path: String, _ envelope: Envelope) async throws -> Envelope {
         let base = link.host.contains("://") ? link.host : "https://\(link.host)"
-        guard let url = URL(string: "\(base)/api/\(path)") else { throw URLError(.badURL) }
-        var request = URLRequest(url: url, timeoutInterval: 15)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(link.password)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Data(envelope.encoded().utf8)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let body = String(decoding: data, as: UTF8.self)
-        guard let answer = Envelope.decode(body, defaultType: "error") else {
-            throw NSError(domain: "Visor", code: (response as? HTTPURLResponse)?.statusCode ?? 0,
-                          userInfo: [NSLocalizedDescriptionKey: "it answered \((response as? HTTPURLResponse)?.statusCode ?? 0)"])
+        let request = OutgoingRequest(url: "\(base)/api/\(path)", method: "POST",
+                                      headers: ["Authorization": "Bearer \(link.password)", "Content-Type": "application/json"],
+                                      body: Data(envelope.encoded().utf8))
+        let answer = try await ServerPlatform.current.fetching.fetch(request)
+        guard let reply = Envelope.decode(String(decoding: answer.body, as: UTF8.self), defaultType: "error") else {
+            throw NSError(domain: "Visor", code: answer.status, userInfo: [NSLocalizedDescriptionKey: "it answered \(answer.status)"])
         }
-        if let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
-            throw NSError(domain: "Visor", code: status,
-                          userInfo: [NSLocalizedDescriptionKey: answer.error ?? answer.message ?? "it answered \(status)"])
+        if answer.status >= 400 {
+            throw NSError(domain: "Visor", code: answer.status,
+                          userInfo: [NSLocalizedDescriptionKey: reply.error ?? reply.message ?? "it answered \(answer.status)"])
         }
-        return answer
+        return reply
     }
 }

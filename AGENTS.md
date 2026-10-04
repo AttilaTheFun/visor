@@ -40,6 +40,12 @@ to one focused change, and say in it how the change was verified.
   libraries/visor_services and an `AgentServer` — no Foundation
   networking or UserDefaults in visor_client or visor_ui, so the same code
   can be carried to other platforms by a build that provides those.
+- The server library (libraries/visor_server) has no conditional
+  compilation and no platform checks: what differs between systems is a
+  protocol in its `ServerPlatform`, implemented per system
+  (libraries/visor_server_apple, …_posix, …_linux, …_windows) and given
+  by the binary that runs it. A new need of the system is a new member
+  there, never an `#if os(…)`.
 - Apple-only SwiftUI (swipe actions, context menus, item sheets,
   SecureField) goes through libraries/visor_ui/Sources/Compat.swift.
   Views that touch the @MainActor models are marked @MainActor. AgentUI's

@@ -1,18 +1,31 @@
-// Visor's MCP server, as each agent is told of it: a script bundled with
-// the menu bar app, run by Node, that gives a session tools to list,
-// message and read the other sessions on this computer (and, in Claude's
-// manual mode, the `approve` tool the phone answers). The server side of
-// those tools is `VisorServer.agentReply`.
+// Visor's MCP server, as each agent is told of it: a script (VisorMCPScript)
+// run by Node, that gives a session tools to list, message and read the
+// other sessions on this computer (and, in Claude's manual mode, the
+// `approve` tool the phone answers). The server side of those tools is
+// `VisorServer.agentReply`.
 
 import Foundation
+import Synchronization
 
 enum VisorMCP {
-    /// The script: bundled with the menu bar app, or, for a server that
-    /// is not an app (the staging server), where VISOR_MCP_SCRIPT says.
+    /// Where the script was written this run, once it has been.
+    private static let written = Mutex<String?>(nil)
+
+    /// The script, written into the data directory the first time it is
+    /// asked for in a run (again when it differs from what is there).
     static var script: String? {
-        if let bundled = Bundle.main.url(forResource: "visor_mcp", withExtension: "js")?.path { return bundled }
-        guard let named = ProcessInfo.processInfo.environment["VISOR_MCP_SCRIPT"], FileManager.default.fileExists(atPath: named) else { return nil }
-        return named
+        written.withLock { path in
+            if let path { return path }
+            let directory = ServerPlatform.current.host.dataDirectory
+            let file = directory.appendingPathComponent("visor_mcp.js")
+            let source = Data(VisorMCPScript.source.utf8)
+            if (try? Data(contentsOf: file)) != source {
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                guard (try? source.write(to: file, options: .atomic)) != nil else { return nil }
+            }
+            path = file.path
+            return path
+        }
     }
 
     /// Node and the script, when both are here and the session has its

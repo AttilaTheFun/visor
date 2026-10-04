@@ -1,10 +1,8 @@
 // Telling the clients: one session's subscribers, or everyone.
 
-import AppKit
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import Network
 import VisorProtocol
 
 extension VisorServer {

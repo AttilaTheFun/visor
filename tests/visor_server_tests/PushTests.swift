@@ -2,18 +2,16 @@
 // fixed phrase, the session's id: nothing from the conversation), and the
 // token that signs it.
 
-import CryptoKit
 import Foundation
 import VisorProtocol
 @testable import VisorServer
 import XCTest
 
 @MainActor
-final class PushTests: XCTestCase {
+final class PushTests: ServerTestCase {
     private var server: VisorServer!
 
     override func setUp() async throws {
-        try await super.setUp()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-push-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -89,10 +87,10 @@ final class PushTests: XCTestCase {
 
         let device = PushDevice(token: "ab12", platform: "ios", environment: "production", topic: "com.example.app", registered: 0)
         let silent = try XCTUnwrap(APNsSender.statusRequest(to: device, jwt: "J", collapse: "s/status", data: data))
-        XCTAssertEqual(silent.url?.absoluteString, "https://api.push.apple.com/3/device/ab12")
-        XCTAssertEqual(silent.value(forHTTPHeaderField: "apns-push-type"), "background")
-        XCTAssertEqual(silent.value(forHTTPHeaderField: "apns-priority"), "5")
-        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: silent.httpBody ?? Data()) as? [String: Any])
+        XCTAssertEqual(silent.url, "https://api.push.apple.com/3/device/ab12")
+        XCTAssertEqual(silent.headers["apns-push-type"], "background")
+        XCTAssertEqual(silent.headers["apns-priority"], "5")
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: silent.body) as? [String: Any])
         XCTAssertEqual((payload["aps"] as? [String: Any])?.keys.sorted(), ["content-available"], "nothing shown, no sound")
         XCTAssertEqual(payload["state"] as? String, "working")
     }
@@ -101,10 +99,10 @@ final class PushTests: XCTestCase {
         let device = PushDevice(token: "ab12", platform: "ios", environment: "sandbox", topic: "com.example.app", registered: 0)
         let request = try XCTUnwrap(APNsSender.request(to: device, jwt: "J", title: "Isomer", body: "Turn finished",
                                                        collapse: "s/turn", data: ["computer": "mini.ts.net", "session": "s"]))
-        XCTAssertEqual(request.url?.absoluteString, "https://api.sandbox.push.apple.com/3/device/ab12")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "apns-topic"), "com.example.app")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "bearer J")
-        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])
+        XCTAssertEqual(request.url, "https://api.sandbox.push.apple.com/3/device/ab12")
+        XCTAssertEqual(request.headers["apns-topic"], "com.example.app")
+        XCTAssertEqual(request.headers["authorization"], "bearer J")
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: request.body) as? [String: Any])
         XCTAssertEqual(Set(payload.keys), ["aps", "computer", "session"])
         let alert = (payload["aps"] as? [String: Any])?["alert"] as? [String: String]
         XCTAssertEqual(alert, ["title": "Isomer", "body": "Turn finished"])
@@ -123,22 +121,6 @@ final class PushTests: XCTestCase {
         XCTAssertFalse(APNsSender.forgets(status: 0, reason: nil))
     }
 
-    func testTheSigningTokenVerifies() throws {
-        let key = P256.Signing.PrivateKey()
-        let jwt = try APNsSender().jwt(for: APNsKey(pem: key.pemRepresentation, keyID: "ABCDEFGHIJ", teamID: "TEAMTEAM12"))
-        let parts = jwt.split(separator: ".").map(String.init)
-        XCTAssertEqual(parts.count, 3)
-        func decode(_ s: String) -> Data {
-            var b = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-            while b.count % 4 != 0 { b += "=" }
-            return Data(base64Encoded: b)!
-        }
-        let signature = try P256.Signing.ECDSASignature(rawRepresentation: decode(parts[2]))
-        XCTAssertTrue(key.publicKey.isValidSignature(signature, for: Data((parts[0] + "." + parts[1]).utf8)))
-        let header = try JSONSerialization.jsonObject(with: decode(parts[0])) as? [String: String]
-        XCTAssertEqual(header, ["alg": "ES256", "kid": "ABCDEFGHIJ"])
-    }
-
     func testDevicesAreKept() {
         var e = Envelope(type: "push")
         e.deviceToken = "ab12"; e.platform = "ios"; e.pushEnvironment = "sandbox"; e.pushTopic = "com.example.app"
@@ -154,34 +136,5 @@ final class PushTests: XCTestCase {
         XCTAssertEqual(VisorServer.keptPushDevices().count, 2)
         XCTAssertEqual(VisorServer.duration(40), "40s")
         XCTAssertEqual(VisorServer.duration(12 * 60), "12m")
-    }
-}
-
-/// The APNs key can be set over the REST side by whoever is let in, and
-/// is never answered back.
-@MainActor
-final class PushKeyRouteTests: XCTestCase {
-    func testTheKeyIsSetOverREST() {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-pushkey-" + UUID().uuidString)
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        VisorServer.storeRoot = root
-        VisorServer.secrets = MemorySecrets()
-        let server = VisorServer(port: 7974)
-        server.exposure = FakeExposure()
-        server.password = "pw"
-        defer { server.stop() }
-        func post(_ path: String, _ body: String, bearer: String = "pw") -> HTTPResponse {
-            server.route(HTTPRequest(method: "POST", path: path, headers: ["authorization": "Bearer " + bearer], body: body))
-        }
-        let pem = P256.Signing.PrivateKey().pemRepresentation
-        let body = String(decoding: try! JSONSerialization.data(withJSONObject: ["key": pem, "keyID": "ABCDEFGHIJ", "teamID": "TEAMTEAM12"]), as: UTF8.self)
-        XCTAssertEqual(post("/api/push/key", body, bearer: "wrong").status, 401)
-        XCTAssertEqual(post("/api/push/key", #"{"key":"nonsense","keyID":"ABCDEFGHIJ","teamID":"TEAMTEAM12"}"#).status, 400)
-        let set = post("/api/push/key", body)
-        XCTAssertEqual(set.status, 200)
-        XCTAssertFalse(set.body.contains("PRIVATE KEY"), "the key is not answered back")
-        XCTAssertEqual(server.apnsKey.keyID, "ABCDEFGHIJ")
-        XCTAssertTrue(server.apnsKey.configured)
-        XCTAssertEqual(post("/api/push/test", "").status, 400, "no device yet")
     }
 }

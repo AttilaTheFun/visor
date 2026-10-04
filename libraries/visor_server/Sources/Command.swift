@@ -10,8 +10,9 @@ enum Command {
     static func output(_ executable: String, _ arguments: [String], environment: [String: String]? = nil,
                        errors: Bool = false) async -> (status: Int32, text: String)? {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
+        let command = ServerPlatform.current.tools.command(executable, arguments)
+        process.executableURL = URL(fileURLWithPath: command.executable)
+        process.arguments = command.arguments
         if let environment { process.environment = environment }
         let out = Pipe()
         process.standardOutput = out
@@ -36,8 +37,9 @@ enum Command {
                                       environment: [String: String], within limit: Duration = .seconds(20),
                                       answer: @Sendable (String) -> Answer?) async -> Answer? {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
+        let command = ServerPlatform.current.tools.command(executable, arguments)
+        process.executableURL = URL(fileURLWithPath: command.executable)
+        process.arguments = command.arguments
         process.currentDirectoryURL = FileManager.default.temporaryDirectory
         process.environment = environment
         let input = Pipe(), output = Pipe()
@@ -52,7 +54,7 @@ enum Command {
         let pid = process.processIdentifier
         let deadline = Task {
             try await Task.sleep(for: limit)
-            kill(pid, SIGTERM)
+            ServerPlatform.current.processes.terminate(pid)
         }
         defer { deadline.cancel() }
         var splitter = LineSplitter()
@@ -71,20 +73,15 @@ enum Command {
     }
 
     /// Waits for a process, ours or not, to exit: whether it had by the
-    /// time `limit` passed.
+    /// time `limit` passed. Asked a few times a second.
     @concurrent
-    static func exited(_ pid: pid_t, within limit: Duration) async -> Bool {
-        let (exits, gone) = AsyncStream.makeStream(of: Void.self)
-        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .global())
-        source.setEventHandler { gone.yield(); gone.finish() }
-        source.resume()
-        defer { source.cancel() }
-        // Gone before anyone was watching.
-        if kill(pid, 0) != 0 { return true }
-        let timeout = Task { try? await Task.sleep(for: limit); gone.finish() }
-        var exited = false
-        for await _ in exits { exited = true }
-        timeout.cancel()
-        return exited
+    static func exited(_ pid: Int32, within limit: Duration) async -> Bool {
+        let processes = ServerPlatform.current.processes
+        let deadline = ContinuousClock.now + limit
+        while processes.isRunning(pid) {
+            guard ContinuousClock.now < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return true
     }
 }

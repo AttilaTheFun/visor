@@ -7,7 +7,7 @@ import VisorProtocol
 import XCTest
 
 @MainActor
-final class TranscriptDeltaTests: XCTestCase {
+final class TranscriptDeltaTests: ServerTestCase {
     private func row(_ id: String, _ text: String = "") -> TranscriptEntry { TranscriptEntry(id: id, role: .assistant, text: text.isEmpty ? id : text) }
 
     func testRemovalsAndInsertsAreDeltas() {

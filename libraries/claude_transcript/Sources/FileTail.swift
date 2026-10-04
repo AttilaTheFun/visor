@@ -1,7 +1,8 @@
 // A log file as it grows. An agent appends a record at a time; the tail
 // reads from where it left off, keeps a partial last line for the next
-// read, and hands over whole lines. The kernel says when the file is
-// written to; a file that does not exist yet is looked for until it does.
+// read, and hands over whole lines. The system says when the file is
+// written to (FileWatching); a file that does not exist yet is looked for
+// until it does.
 
 import Foundation
 
@@ -21,12 +22,13 @@ public enum FileTail {
     /// where it was and read on from the same place, and one that has
     /// become shorter than that place is read again from its start. The
     /// stream runs until whoever reads it stops.
-    public static func batches(of url: URL, startingAt offset: UInt64 = 0) -> AsyncStream<Batch> {
+    public static func batches(of url: URL, startingAt offset: UInt64 = 0,
+                               watching watcher: any FileWatching = PollingFileWatching()) -> AsyncStream<Batch> {
         AsyncStream { continuation in
             let following = Task {
                 var reader = Reader(url: url, offset: offset)
                 while !Task.isCancelled {
-                    guard let changes = changes(to: url) else {
+                    guard let changes = watcher.changes(to: url) else {
                         // Not there yet, and nothing announces a file that
                         // does not exist: looked for again shortly.
                         try? await Task.sleep(for: .milliseconds(250))
@@ -41,30 +43,6 @@ public enum FileTail {
                 }
             }
             continuation.onTermination = { _ in following.cancel() }
-        }
-    }
-
-    /// The kernel's word on a file: `true` when it has been written to,
-    /// `false` once when it is deleted or renamed, after which nothing
-    /// more is said. Nil when the file cannot be opened. Writes that come
-    /// faster than they are read are one `true`.
-    private static func changes(to url: URL) -> AsyncStream<Bool>? {
-        let descriptor = open(url.path, O_EVTONLY)
-        guard descriptor >= 0 else { return nil }
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor, eventMask: [.write, .extend, .delete, .rename],
-                                                               queue: .global(qos: .utility))
-        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
-            source.setEventHandler {
-                if source.data.contains(.delete) || source.data.contains(.rename) {
-                    continuation.yield(false)
-                    continuation.finish()
-                } else {
-                    continuation.yield(true)
-                }
-            }
-            source.setCancelHandler { close(descriptor) }
-            continuation.onTermination = { _ in source.cancel() }
-            source.resume()
         }
     }
 

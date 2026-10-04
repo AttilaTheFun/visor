@@ -11,7 +11,6 @@
 // is not worth a notification — a turn beginning — goes as a silent push
 // with the same data. Nothing the agent or the user said goes to Apple.
 
-import CryptoKit
 import Foundation
 import VisorProtocol
 
@@ -49,6 +48,8 @@ extension VisorServer {
 
     /// The APNs key as set in Settings, if all of it is.
     public var apnsKey: (keyID: String, teamID: String, configured: Bool) {
+        // Read, so a view showing this is drawn again when it is set.
+        _ = apnsKeyChanges
         let key = Self.secrets.get("apns.key") ?? ""
         return (Self.secrets.get("apns.keyID") ?? "", Self.secrets.get("apns.teamID") ?? "", !key.isEmpty)
     }
@@ -57,12 +58,13 @@ extension VisorServer {
     /// when it is usable; otherwise why not.
     public func setAPNsKey(pem: String, keyID: String, teamID: String) -> String? {
         let pem = pem.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (try? P256.Signing.PrivateKey(pemRepresentation: pem)) != nil else { return "That is not an APNs key (.p8)." }
+        guard let signing = ServerPlatform.current.pushSigning else { return "This computer does not send pushes." }
+        guard signing.accepts(pem) else { return "That is not an APNs key (.p8)." }
         guard keyID.count == 10, teamID.count == 10 else { return "The key id and the team id are ten characters each." }
         Self.secrets.set("apns.key", pem)
         Self.secrets.set("apns.keyID", keyID)
         Self.secrets.set("apns.teamID", teamID)
-        objectWillChange.send()
+        apnsKeyChanges += 1
         return nil
     }
 
@@ -162,10 +164,10 @@ extension VisorServer {
 
     /// Sends one request per device, forgetting a device APNs says is gone.
     private func deliver(collapse: String, data: [String: String],
-                         request make: @escaping @Sendable (PushDevice, String, String, [String: String]) -> URLRequest?) {
+                         request make: @escaping @Sendable (PushDevice, String, String, [String: String]) -> OutgoingRequest?) {
         let devices = pushDevices.filter { Self.apnsPlatforms.contains($0.platform) }
-        guard let key = storedAPNsKey, !devices.isEmpty else { return }
-        guard let jwt = try? apnsSender.jwt(for: key) else { return }
+        guard let key = storedAPNsKey, !devices.isEmpty, let signing = ServerPlatform.current.pushSigning else { return }
+        guard let jwt = try? apnsSender.jwt(for: key, signing: signing) else { return }
         Task {
             for device in devices {
                 guard let request = make(device, jwt, collapse, data) else { continue }

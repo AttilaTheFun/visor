@@ -10,7 +10,7 @@ import VisorProtocol
 
 /// One agent session on the host: its process, its transcript, who watches it.
 @MainActor
-public final class SessionRecord: ObservableObject {
+public final class SessionRecord {
     public internal(set) var info: SessionInfo
 
     public internal(set) var entries: [TranscriptEntry] = [] {

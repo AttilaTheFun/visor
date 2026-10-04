@@ -5,7 +5,7 @@ import VisorProtocol
 @testable import VisorServer
 import XCTest
 
-final class TurnStatusTests: XCTestCase {
+final class TurnStatusTests: ServerTestCase {
     func testItemsFollowTheEvents() {
         var turn = TurnStatus()
         turn.thinking(true)

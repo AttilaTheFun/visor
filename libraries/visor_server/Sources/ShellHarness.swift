@@ -8,11 +8,11 @@ public final class ShellHarness: AgentHarness {
     public let kind = AgentKind.shell
     public let tool: String
     /// The shell each session runs.
-    let shell: String
+    let shell: ShellCommand
 
-    public init(shell: String = ToolPath.loginShell()) {
+    public init(shell: ShellCommand = ToolPath.loginShell()) {
         self.shell = shell
-        tool = (shell as NSString).lastPathComponent
+        tool = (shell.executable as NSString).lastPathComponent
     }
 
     public func catalog() -> AgentCatalog { AgentCatalog(agent: .shell, models: []) }

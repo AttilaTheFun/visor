@@ -1,11 +1,9 @@
 // What clients say over the socket, and what agents ask of the other
 // sessions.
 
-import AppKit
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import Network
 import VisorProtocol
 
 extension VisorServer {
@@ -92,6 +90,7 @@ extension VisorServer {
         if !resume.isEmpty { record.refreshResume() }
         sessions.append(record)
         if let client { record.subscribers.insert(ObjectIdentifier(client)) }
+        Self.log("session started: \(title) (\(agent.title)) in \(cwd)\(resume.isEmpty ? "" : ", resuming \(resume)")")
         saveArchive()
         broadcastSessions()
     }
@@ -279,6 +278,7 @@ extension VisorServer {
         record.process.stop()
         record.markEnded()
         sessions.removeAll { $0 === record }
+        Self.log("session ended: \(record.info.title)")
         saveArchive()
         broadcastSessions()
     }

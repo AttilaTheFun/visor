@@ -2,11 +2,9 @@
 // their records, given what the user says, rebuilt when a session's
 // folder or settings change.
 
-import AppKit
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import Network
 import VisorProtocol
 
 extension VisorServer {
@@ -57,6 +55,7 @@ extension VisorServer {
     }
 
     func archive(_ record: SessionRecord) {
+        Self.log("session archived: \(record.info.title)")
         record.process.stop()
         record.refreshResume()
         record.setArchived(true)

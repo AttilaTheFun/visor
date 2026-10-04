@@ -1,11 +1,9 @@
 // The sessions written down and read back: sessions.json, what a launch
 // carries on with, and the agents a previous life left behind.
 
-import AppKit
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import Network
 import VisorProtocol
 
 extension VisorServer {
@@ -104,12 +102,13 @@ extension VisorServer {
     /// look like the agent it claims to be.
     @concurrent
     static func endOrphan(pid: Int32, resume: String?) async {
-        guard pid > 1, kill(pid, 0) == 0 else { return }
-        guard let command = await Command.output("/bin/ps", ["-p", String(pid), "-o", "command="])?.text else { return }
+        let processes = ServerPlatform.current.processes
+        guard pid > 1, processes.isRunning(pid) else { return }
+        guard let command = await processes.commandLine(of: pid) else { return }
         guard command.contains("claude") || command.contains("codex") || command.contains("openrouter") else { return }
         if let resume, !resume.isEmpty, !command.contains(resume) { return }
-        kill(pid, SIGTERM)
-        if await !Command.exited(pid, within: .seconds(2)) { kill(pid, SIGKILL) }
+        processes.terminate(pid)
+        if await !Command.exited(pid, within: .seconds(2)) { processes.kill(pid) }
     }
 
     /// Writes every session down (the name is historical: it began as the

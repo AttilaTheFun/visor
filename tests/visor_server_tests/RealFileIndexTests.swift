@@ -6,7 +6,7 @@ import VisorProtocol
 @testable import VisorServer
 import XCTest
 
-final class RealFileIndexTests: XCTestCase {
+final class RealFileIndexTests: ServerTestCase {
     func testIndexesTheRealFile() async throws {
         guard let path = ProcessInfo.processInfo.environment["VISOR_REAL_FILE"] else { throw XCTSkip("no VISOR_REAL_FILE") }
         let dbPath = FileManager.default.temporaryDirectory.appendingPathComponent("visor-real-\(UUID().uuidString).sqlite").path

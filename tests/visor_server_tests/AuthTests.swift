@@ -36,12 +36,11 @@ final class FakeExposure: ServerExposure {
 }
 
 @MainActor
-final class AuthTests: XCTestCase {
+final class AuthTests: ServerTestCase {
     private var server: VisorServer!
     private var exposure: FakeExposure!
 
     override func setUp() async throws {
-        try await super.setUp()
         // Never the real archive: loading it ends the agents it lists.
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-auth-tests-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -57,7 +56,6 @@ final class AuthTests: XCTestCase {
     override func tearDown() async throws {
         server.stop()
         UserDefaults.standard.removeObject(forKey: "visor.password")
-        try await super.tearDown()
     }
 
     private func request(_ path: String, bearer: String? = nil, login: String? = nil) -> HTTPRequest {

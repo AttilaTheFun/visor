@@ -368,6 +368,46 @@ Settings" last (edit or remove). Compose offers only
 a detached relauncher and resumes named sessions with a nudge
 ("[Visor] The Visor server restarted while you were working…").
 
+**The server on every system.** `libraries/visor_server` has no
+conditional compilation and imports nothing of a system: what differs —
+listening on loopback, a shell on a pseudo-terminal, signals to process
+ids, where secrets are kept, outgoing HTTPS, signing pushes, reading a
+picture's header, word of a file being written, where the agents' tools
+are, the host's name and data directory, relaunching, the road in — is a
+protocol (`LoopbackListening`, `TerminalLaunching`, `ProcessSignals`,
+`SecretStore`, `HTTPFetching`, `PushSigning`, `ImageMeasuring`,
+`FileWatching`, `ToolLocating`, `HostDetails`, `ServerLifecycle`,
+`ServerExposure`), gathered in a `ServerPlatform` the binary sets as
+`ServerPlatform.current` before anything else. HTTP and the WebSocket
+(RFC 6455, with its own SHA-1) are read and written by the server over
+the plain bytes a `ByteStream` carries, so every system speaks them the
+same way. The platforms:
+
+- the Mac's (`ServerPlatform.apple()`, libraries/visor_server_apple): the
+  Network framework's TCP, the keychain, CryptoKit and URLSession for
+  APNs, ImageIO, a vnode dispatch source, the app's relauncher, os_log;
+- POSIX (libraries/visor_server_posix, shared by the Mac and Linux):
+  terminals, signals, loopback sockets and daemons, with the calls whose
+  shape differs between macOS and Linux in C (`c/visor_posix.c`), so the
+  Swift is the same on both;
+- Linux's and Windows's (libraries/visor_server_linux, …_windows), each a
+  `CommandLineSystem` for `visor-server` (libraries/visor_server_cli: run,
+  start, stop, status, password, code): POSIX and FoundationNetworking;
+  Winsock, ConPTY, the Win32 process calls. Neither sends pushes yet
+  (`pushSigning` is nil), pictures are measured from their headers
+  (`HeaderImageMeasuring`), files are polled (`PollingFileWatching`), the
+  password is in a file only its user reads (`FileSecrets`), and Windows
+  keeps the message cache in memory (no SQLite there).
+
+The command-line server keeps its sessions, secrets, pid file
+(`<pid> <port>`) and background log in `$XDG_DATA_HOME/visor`
+(`~/.local/share/visor`) or `%LOCALAPPDATA%\Visor`; `stop` asks the server
+through `POST /api/quit`, so it ends its agents first on every system.
+Tailscale Serve needs the tailnet's HTTPS certificates, and on Linux
+either root or `sudo tailscale set --operator=$USER`. The Windows server
+is built and tried in CI (a terminal session on ConPTY with PowerShell);
+it has not been run against real agents.
+
 ## 4. The working loop
 
 - Every target compiles in the Swift 6 language mode with warnings as
@@ -448,6 +488,16 @@ a detached relauncher and resumes named sessions with a nudge
   subscribing client gets (busy, activity, status count, held streams).
   Stale streams here = a bug.
 - `node tools/probes/earlier.mjs <visor session id>` — pages earlier rows.
+- `node tools/probes/terminal.mjs` — any server, no agent needed: the REST
+  side and the socket answer, a terminal session runs the shell (a line, a
+  large output, Ctrl-C), and is ended; `QUIT=1` then stops the server
+  through `/api/quit`; `VISOR_SHELL=powershell` for a Windows server.
+- `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
+  as its user would run it: a password, `run` checked with the terminal
+  probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
+  it; on the Mac, in a container: a podman machine of your own, an image
+  with `swift:6.4-noble`, `libsqlite3-dev` and Node 22, the checkout
+  mounted, `swift build --product visor-server` then this.
 - REST locally is plain HTTP: `http://127.0.0.1:7434/api/...` with
   `Authorization: Bearer <password>` (`security find-generic-password -s
   com.LoganShire.VisorServer.macOS -a password -w`), or, inside a Visor

@@ -1,0 +1,37 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("@rules_swift//swift:swift_interop_hint.bzl", "swift_interop_hint")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# What macOS and Linux share for the server: terminals (a pseudo-terminal,
+# the shell the leader of a session on it), signals to processes, loopback
+# sockets. The calls whose shape differs between the two are in C
+# (c/visor_posix.c), so the Swift is the same on both. Built here for the
+# Mac; Linux builds it with SwiftPM (Package.swift).
+swift_library(
+    name = "visor_server_posix",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorServerPOSIX",
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        ":visor_posix_c",
+        "//libraries/visor_server",
+    ],
+)
+
+cc_library(
+    name = "visor_posix_c",
+    srcs = ["c/visor_posix.c"],
+    hdrs = ["c/include/visor_posix.h"],
+    aspect_hints = [":visor_posix_swift"],
+    strip_include_prefix = "c/include",
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+swift_interop_hint(
+    name = "visor_posix_swift",
+    module_name = "CVisorPOSIX",
+)

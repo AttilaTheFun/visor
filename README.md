@@ -1,7 +1,8 @@
 # Visor
 
-Remote agent sessions: Visor Server, a Mac menu bar app, runs Claude Code, Codex and the
-openrouter CLI as subprocesses on the host and exposes them over
+Remote agent sessions: Visor Server, a Mac menu bar app (or `visor-server`,
+the same server as a command for Linux and Windows), runs Claude Code, Codex
+and the openrouter CLI as subprocesses on the host and exposes them over
 Tailscale; a SwiftUI client for iPhone, iPad and Mac adds a Mac from its
 connection code, starts sessions, chats with them and watches their
 progress, and opens terminal sessions — the Mac's own shell, drawn in
@@ -47,7 +48,17 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   (Claude, Codex, the openrouter CLI from github.com/AttilaTheFun/
   open_router_cli, which speaks Claude's stream-json protocol), the
   archive, the HTTP and WebSocket listeners. Agents are configured
-  outside Visor (`claude`, `codex login`, `openrouter auth login`).
+  outside Visor (`claude`, `codex login`, `openrouter auth login`). It is
+  the same on every system and asks the system for nothing except
+  through the `ServerPlatform` it is given: sockets, terminals, process
+  signals, secrets, pushes, picture headers, file watching, tool paths.
+- **libraries/visor_server_apple**, **…_posix** — the Mac's platform (the
+  Network framework, the keychain, CryptoKit, ImageIO) and what macOS and
+  Linux share (terminals, signals and sockets, through a small C shim).
+- **libraries/visor_server_cli**, **…_linux**, **…_windows**,
+  **applications/visor_server_linux**, **…_windows** — `visor-server`,
+  the command-line server, and each system's platform for it (Linux:
+  POSIX; Windows: Winsock and ConPTY).
 
 ## Building
 
@@ -58,6 +69,14 @@ through rules_swift_package_manager from third_party/swift_packages.
     bazel build --ios_multi_cpus=sim_arm64 //applications/visor_ios
     bazel test //tests/...
     bazel run //:xcodeproj     # generates Visor.xcodeproj for Xcode (not committed)
+
+The command-line server for Linux and Windows is SwiftPM's (Package.swift
+at the root; Swift 6.2 or later, and on Linux `libsqlite3-dev`):
+
+    swift build -c release --product visor-server
+    .build/release/visor-server            # run here, saying what it does
+    .build/release/visor-server start      # or in the background (stop, status)
+    .build/release/visor-server code       # the connection code to add it with
 
 Needs Xcode 27 and Bazelisk. The bundle ids are constants at the top of
 each app's BUILD.bazel; your Apple team id goes in a `.bazelrc.user` you

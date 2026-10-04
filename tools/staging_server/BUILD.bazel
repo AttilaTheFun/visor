@@ -12,5 +12,8 @@ swift_binary(
     copts = STRICT_SWIFT,
     module_name = "VisorStagingServer",
     target_compatible_with = ["@platforms//os:macos"],
-    deps = ["//libraries/visor_server"],
+    deps = [
+        "//libraries/visor_server",
+        "//libraries/visor_server_apple",
+    ],
 )

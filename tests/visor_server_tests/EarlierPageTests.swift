@@ -9,7 +9,7 @@ import VisorProtocol
 import XCTest
 
 @MainActor
-final class EarlierPageTests: XCTestCase {
+final class EarlierPageTests: ServerTestCase {
     private func line(_ type: String, _ uuid: String, _ parent: String?, _ text: String, id: String? = nil) -> String {
         let content: Any = type == "assistant" ? [["type": "text", "text": text]] : text
         var message: [String: Any] = ["role": type, "content": content]

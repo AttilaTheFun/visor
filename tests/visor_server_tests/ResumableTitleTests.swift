@@ -6,7 +6,7 @@
 @testable import VisorServer
 import XCTest
 
-final class ResumableTitleTests: XCTestCase {
+final class ResumableTitleTests: ServerTestCase {
     func testTheLatestTitlesAreReadFromTheEnd() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("titles-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: file) }

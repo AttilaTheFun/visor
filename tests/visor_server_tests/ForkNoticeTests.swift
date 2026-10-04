@@ -8,7 +8,7 @@ import VisorProtocol
 import XCTest
 
 @MainActor
-final class ForkNoticeTests: XCTestCase {
+final class ForkNoticeTests: ServerTestCase {
     private var id = ""
     private var file: URL!
     private let cwd = "/tmp/visor_branch_test"

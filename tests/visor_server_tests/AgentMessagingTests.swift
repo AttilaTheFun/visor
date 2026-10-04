@@ -7,11 +7,10 @@ import VisorProtocol
 import XCTest
 
 @MainActor
-final class AgentMessagingTests: XCTestCase {
+final class AgentMessagingTests: ServerTestCase {
     private var server: VisorServer!
 
     override func setUp() async throws {
-        try await super.setUp()
         // Never the real archive: loading it ends the agents it lists.
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-agent-tests-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -75,12 +74,11 @@ final class AgentMessagingTests: XCTestCase {
 /// Sessions on linked computers: two servers, each with its own REST side
 /// on this Mac, linked by a code whose host is the other's base address.
 @MainActor
-final class LinkedMessagingTests: XCTestCase {
+final class LinkedMessagingTests: ServerTestCase {
     private var here: VisorServer!
     private var there: VisorServer!
 
     override func setUp() async throws {
-        try await super.setUp()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-link-tests-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -97,7 +95,6 @@ final class LinkedMessagingTests: XCTestCase {
     override func tearDown() async throws {
         here.stop()
         there.stop()
-        try await super.tearDown()
     }
 
     private func record(_ id: String, _ title: String, busy: Bool = false) -> SessionRecord {

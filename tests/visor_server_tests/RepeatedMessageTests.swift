@@ -7,7 +7,7 @@ import VisorProtocol
 import XCTest
 
 @MainActor
-final class RepeatedMessageTests: XCTestCase {
+final class RepeatedMessageTests: ServerTestCase {
     func testSentWordsWaitForTheLog() {
         let info = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "t", created: 0)
         let r = SessionRecord(info: info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))

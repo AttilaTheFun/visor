@@ -1,11 +1,9 @@
 // The REST side of the protocol: one request, one answer (a transcript's
 // long poll holds its answer until there is something to say).
 
-import AppKit
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import Network
 import VisorProtocol
 
 extension VisorServer {
@@ -88,6 +86,7 @@ extension VisorServer {
         case ("POST", 1, "push"): restRegisterPushDevice(call)
         case ("POST", 1, "link"): restLinkBack(call)
         case ("POST", 1, "restart"): restRestart(call)
+        case ("POST", 1, "quit"): restQuit(call)
         case ("POST", 1, "sessions"): restStartSession(call)
         case ("DELETE", 2, "sessions"): restEndSession(call)
         case ("POST", 3, "sessions"): restSessionAction(call)
@@ -260,6 +259,19 @@ extension VisorServer {
         var e = Envelope(type: "restart")
         e.sessions = sessions.filter { carry.contains($0.info.id) }.map(\.info)
         return .json(e.encoded())
+    }
+
+    /// Stops the server: the agents ended (what was running written down
+    /// as running, so the next start carries it on), then the process —
+    /// once the answer has gone out. How `visor-server stop` asks, which
+    /// works the same on every system.
+    private func restQuit(_ call: RESTCall) -> HTTPResponse {
+        Self.log("asked to stop")
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            quit()
+        }
+        return .json(Envelope(type: "quit").encoded())
     }
 
     private func restStartSession(_ call: RESTCall) -> HTTPResponse {

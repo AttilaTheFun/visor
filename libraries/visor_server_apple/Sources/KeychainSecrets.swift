@@ -1,9 +1,14 @@
 import Foundation
 import Security
+import VisorServer
 
-final class KeychainSecrets: SecretStore {
+/// Secrets in the keychain, as generic passwords under the app's bundle id.
+/// The app that wrote one reads it without asking, as long as it is signed
+/// the same way each build (a stable signature, not ad hoc).
+public final class KeychainSecrets: SecretStore {
     private let service: String
-    init(service: String = Bundle.main.bundleIdentifier ?? "Visor Server") { self.service = service }
+
+    public init(service: String = Bundle.main.bundleIdentifier ?? "Visor Server") { self.service = service }
 
     private func query(_ key: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
@@ -11,7 +16,7 @@ final class KeychainSecrets: SecretStore {
          kSecAttrAccount as String: key]
     }
 
-    func get(_ key: String) -> String? {
+    public func get(_ key: String) -> String? {
         var query = query(key)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -20,7 +25,7 @@ final class KeychainSecrets: SecretStore {
         return String(decoding: data, as: UTF8.self)
     }
 
-    func set(_ key: String, _ value: String?) {
+    public func set(_ key: String, _ value: String?) {
         let query = query(key)
         guard let value, !value.isEmpty else { SecItemDelete(query as CFDictionary); return }
         let data = Data(value.utf8)

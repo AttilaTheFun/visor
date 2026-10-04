@@ -2,60 +2,49 @@ import Foundation
 import Synchronization
 import VisorProtocol
 
-/// Where the agents' command-line tools live. A GUI app's PATH has none of
-/// the developer directories: the usual ones are looked in directly, and
-/// the login shell is asked about a tool they do not have.
+/// Where the agents' command-line tools live. A server started by the
+/// system has little on its PATH: the platform's usual directories are
+/// looked in directly, and the system (the login shell) is asked about a
+/// tool they do not have.
 public enum ToolPath {
-    /// What the login shell said of each tool it was asked about: where it
-    /// is, or that it is not there.
+    /// What the system said of each tool it was asked about: where it is,
+    /// or that it is not there.
     private static let asked = Mutex<[String: String?]>([:])
 
-    private static var directories: [String] {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.claude/local", "\(home)/.npm-global/bin", "/usr/bin"]
-    }
-
     /// Where a tool is, as far as is known without waiting: in one of the
-    /// usual directories, or where the login shell last found it.
+    /// usual directories, or where the system last found it.
     public static func resolve(_ name: String) -> String? {
-        for directory in directories where FileManager.default.isExecutableFile(atPath: "\(directory)/\(name)") {
-            return "\(directory)/\(name)"
+        let tools = ServerPlatform.current.tools
+        for directory in tools.directories {
+            for file in tools.fileNames(for: name) {
+                let path = (directory as NSString).appendingPathComponent(file)
+                if FileManager.default.isExecutableFile(atPath: path) { return path }
+            }
         }
         return asked.withLock { $0[name] ?? nil }
     }
 
-    /// Asks the login shell where the tools are that the usual directories
-    /// do not have, and remembers what it says. Starting a login shell
-    /// takes a while, so this is done ahead of need and off the main actor.
+    /// Asks the system where the tools are that the usual directories do
+    /// not have, and remembers what it says. That takes a while, so it is
+    /// done ahead of need and off the main actor.
     @concurrent
     public static func locate(_ names: [String]) async {
         for name in names where resolve(name) == nil {
-            let answer = await Command.output("/bin/zsh", ["-lc", "command -v \(name)"])
-            let path = answer?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let found = answer?.status == 0 && !path.isEmpty
-            asked.withLock { $0[name] = found ? path : nil }
+            let found = await ServerPlatform.current.tools.ask(for: name)
+            asked.withLock { $0[name] = found }
         }
     }
 
-    /// The login shell of the user the server runs as (their account's,
-    /// then `SHELL`, then zsh): what a terminal session runs.
-    public static func loginShell() -> String {
-        if let entry = getpwuid(getuid()), let shell = entry.pointee.pw_shell {
-            let path = String(cString: shell)
-            if FileManager.default.isExecutableFile(atPath: path) { return path }
-        }
-        if let shell = ProcessInfo.processInfo.environment["SHELL"], FileManager.default.isExecutableFile(atPath: shell) { return shell }
-        return "/bin/zsh"
+    /// The shell a terminal session runs: the user's own.
+    public static func loginShell() -> ShellCommand {
+        ServerPlatform.current.tools.loginShell
     }
 
-    /// The environment for a spawned agent: ours, with the developer
-    /// directories on PATH and any trace of a surrounding Claude Code
-    /// session removed (a nested session refuses to start).
+    /// The environment for a spawned agent: ours, with the tool
+    /// directories on its search path and any trace of a surrounding
+    /// Claude Code session removed (a nested session refuses to start).
     public static func environment() -> [String: String] {
-        var env = ProcessInfo.processInfo.environment
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let extra = ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.claude/local"]
-        env["PATH"] = (extra + [env["PATH"] ?? "/usr/bin:/bin"]).joined(separator: ":")
+        var env = ServerPlatform.current.tools.environment(ProcessInfo.processInfo.environment)
         for key in env.keys where key == "CLAUDECODE" || key.hasPrefix("CLAUDE_CODE_") { env.removeValue(forKey: key) }
         return env
     }
