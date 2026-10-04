@@ -65,8 +65,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: compnerd/gha-setup-swift@main
         with:
-          branch: swift-6.4-release
-          tag: 6.4-RELEASE
+          branch: swift-6.4.0-release
+          tag: 6.4.0-RELEASE
       - uses: actions/setup-node@v4
         with:
           node-version: 22
