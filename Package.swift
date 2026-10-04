@@ -13,8 +13,10 @@
 
 import PackageDescription
 
-/// Swift 6, and a warning is an error, as in the Bazel build (STRICT_SWIFT).
-let strict: [SwiftSetting] = [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-as-errors"])]
+/// Swift 6, and a warning is an error, as in the Bazel build (STRICT_SWIFT)
+/// — except on Windows, whose SDK module warns about itself ("wchar_t …
+/// broken by a context change") in everything that imports Foundation.
+let strict: [SwiftSetting] = [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-as-errors"], .when(platforms: [.macOS, .linux]))]
 
 /// The libraries every system's server is built from.
 let shared: [Target] = [
