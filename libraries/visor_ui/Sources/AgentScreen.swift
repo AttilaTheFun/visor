@@ -271,7 +271,7 @@ struct AgentScreen: View {
                         // A frame of it, marked as a video.
                         ZStack {
                             if let thumbnail = picked.thumbnail {
-                                Base64Image(base64: thumbnail)
+                                Base64Image(base64: thumbnail, key: picked.id + "#frame")
                             } else {
                                 Color.secondary.opacity(0.15)
                             }
@@ -281,7 +281,7 @@ struct AgentScreen: View {
                                 .shadow(radius: 2)
                         }
                     } else if AttachmentKind.isImage(picked.name) {
-                        Base64Image(base64: picked.base64)
+                        Base64Image(base64: picked.base64, key: picked.id)
                     } else {
                         // Any other file: what it is called.
                         VStack(spacing: 4) {

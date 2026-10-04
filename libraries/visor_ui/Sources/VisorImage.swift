@@ -30,7 +30,7 @@ struct VisorImage: View {
     var body: some View {
         Group {
             if let base64 {
-                Base64Image(base64: base64, maxEdge: maxEdge)
+                Base64Image(base64: base64, key: reference, maxEdge: maxEdge)
             } else if failed {
                 // Nothing to show and nothing to be done about it here:
                 // the file is on a computer that is not answering, or is
