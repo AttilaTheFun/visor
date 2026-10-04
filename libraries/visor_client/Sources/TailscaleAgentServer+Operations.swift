@@ -48,7 +48,11 @@ extension TailscaleAgentServer {
 
     public func transcript(of session: String, since revision: Int, generation: Int) async throws -> Envelope {
         let text = try await callText("GET", "/sessions/\(session)/transcript?since=\(revision)&generation=\(generation)", body: "")
-        guard let envelope = Envelope.decode(text, defaultType: "transcript") else { throw AgentServerError.message("Not a transcript") }
+        // Read off the main actor: the whole of a thread is hundreds of rows.
+        let envelope = await Task.detached(priority: .userInitiated) {
+            Envelope.decode(text, defaultType: "transcript")
+        }.value
+        guard let envelope else { throw AgentServerError.message("Not a transcript") }
         return envelope
     }
 

@@ -94,6 +94,12 @@ public final class SessionTranscript: ObservableObject {
     public var revision = 0
     /// Whether the thread goes back further than what has been sent.
     public var hasEarlier = false { didSet { changed() } }
+    /// A page of earlier rows is on its way (from the cache or the server).
+    var loadingEarlier = false
+    /// The row the server was asked for the rows before, until it answers.
+    var earlierAsked: String?
+    /// The server has said there is nothing before the first row shown.
+    var reachedStart = false
     /// Something to tell the user about the session, until they
     /// acknowledge it: that it was forked elsewhere and the chat now
     /// follows the newer branch.
@@ -124,8 +130,6 @@ public final class SessionTranscript: ObservableObject {
     /// Told what a sync brought — the whole, or rows new or changed — so
     /// the cache keeps it. Set by the connection that owns this.
     var keep: ((_ whole: Bool, _ rows: [TranscriptEntry], _ state: SyncState) -> Void)?
-    /// Told rows that came from before the first shown.
-    var keepEarlier: (([TranscriptEntry]) -> Void)?
 
     /// Whether a sync's answer brings anything: the first answer, rows
     /// past the revision held, or the rows as a whole in another
@@ -142,6 +146,8 @@ public final class SessionTranscript: ObservableObject {
         let rows = envelope.entries ?? []
         let whole: Bool
         var kept = rows
+        // The rows replaced by the answer's, not merged with them.
+        var replaced = false
         if envelope.reset != true, let generation = envelope.generation, generation == self.generation, loaded {
             // A delta: the rows removed since the revision held go; each
             // row new, changed or moved since goes after the row it follows
@@ -178,16 +184,39 @@ public final class SessionTranscript: ObservableObject {
             entries = next
         } else {
             whole = true
+            replaced = true
             carryDisplayIDs(from: entries, to: rows)
             entries = rows
             generation = envelope.generation ?? generation
+            // Earlier pages start over from these rows.
+            loadingEarlier = false
+            earlierAsked = nil
+            reachedStart = false
         }
         revision = envelope.revision ?? revision
-        hasEarlier = envelope.more ?? false
+        // The server's word on rows before its own last ones: the whole
+        // answer's says what is before it; a delta's only that there are
+        // rows before the server's last page, which the rows held may
+        // already go past (pages loaded since).
+        if replaced || entries.isEmpty {
+            hasEarlier = envelope.more ?? false
+        } else if envelope.more == true, !reachedStart {
+            hasEarlier = true
+        }
         if envelope.entries?.contains(where: { $0.role == .user }) == true { error = nil }
         loaded = true
         keep?(whole, kept, SyncState(revision: revision, generation: generation))
         settleSending()
+    }
+
+    /// Rows from before the first shown, put in front of it; `more`, whether
+    /// there are rows before these.
+    func putEarlier(_ rows: [TranscriptEntry], more: Bool) {
+        let held = Set(entries.map(\.id))
+        let older = rows.filter { !held.contains($0.id) }
+        if !older.isEmpty { entries = older + entries }
+        hasEarlier = more
+        loadingEarlier = false
     }
 
     /// Drops an outgoing message once the transcript has moved past when
@@ -257,12 +286,6 @@ public final class SessionTranscript: ObservableObject {
             busy = envelope.busy ?? false
             error = envelope.error
             notice = envelope.notice
-        case "earlier":
-            // Rows from before the first one shown, put in front of it.
-            let older = (envelope.entries ?? []).filter { row in !entries.contains { $0.id == row.id } }
-            entries = older + entries
-            hasEarlier = envelope.more ?? false
-            keepEarlier?(older)
         case "ephemeral":
             // Everything that is not the record, on subscribing.
             turnStatus = envelope.status ?? []
