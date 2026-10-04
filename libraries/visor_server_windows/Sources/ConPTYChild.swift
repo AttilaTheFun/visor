@@ -50,6 +50,10 @@ final class ConPTYChild: TerminalChild {
         var startup = STARTUPINFOEXW()
         startup.StartupInfo.cb = DWORD(MemoryLayout<STARTUPINFOEXW>.size)
         startup.lpAttributeList = OpaquePointer(list)
+        // STARTF_USESTDHANDLES, with none given: otherwise a child of a
+        // server whose own output is redirected (a log file) takes those
+        // handles instead of the console's, and draws into the log.
+        startup.StartupInfo.dwFlags = DWORD(0x0000_0100)
         var information = PROCESS_INFORMATION()
         var line = Array(WindowsCommandLine.join([command.executable] + command.arguments).utf16) + [0]
         var block = WindowsCommandLine.environmentBlock(environment)
