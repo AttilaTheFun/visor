@@ -2,7 +2,8 @@
 import Foundation
 #endif
 
-/// A provider's models and its default, sent with `welcome`.
+/// A provider's models and its default, and its account, sent with
+/// `welcome`.
 public struct AgentCatalog: Codable, Hashable, Sendable {
     public var agent: AgentKind
     public var models: [AgentModel]
@@ -12,13 +13,18 @@ public struct AgentCatalog: Codable, Hashable, Sendable {
     /// Something to tell whoever picks a model: that the tool is not
     /// logged in on this computer, say.
     public var note: String?
+    /// How the agent is paid for here and how near its limits it is, once
+    /// a session of it has said.
+    public var account: AgentAccount?
 
-    public init(agent: AgentKind, models: [AgentModel], defaultModel: String? = nil, available: Bool = true, note: String? = nil) {
+    public init(agent: AgentKind, models: [AgentModel], defaultModel: String? = nil, available: Bool = true, note: String? = nil,
+                account: AgentAccount? = nil) {
         self.agent = agent
         self.models = models
         self.defaultModel = defaultModel
         self.available = available
         self.note = note
+        self.account = account
     }
 
     /// The model a session runs: its own, else the provider's default.

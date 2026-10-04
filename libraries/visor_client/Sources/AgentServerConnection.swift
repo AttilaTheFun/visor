@@ -444,6 +444,8 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             registerForPush()
         case .catalogs(let catalogs):
             self.catalogs = catalogs
+        case .account(let account, let agent):
+            if let index = catalogs.firstIndex(where: { $0.agent == agent }) { catalogs[index].account = account }
         case .refused(let message):
             note("login refused: \(message)")
             wantsConnection = false

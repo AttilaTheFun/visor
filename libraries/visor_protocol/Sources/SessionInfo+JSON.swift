@@ -13,6 +13,7 @@ extension SessionInfo {
         if let contextUsed { o["contextUsed"] = .number(Double(contextUsed)) }
         if !queued.isEmpty { o["queued"] = .array(queued.map(JSONValue.string)) }
         if let contextLimit { o["contextLimit"] = .number(Double(contextLimit)) }
+        if let usage { o["usage"] = usage.json }
         if let goal { o["goal"] = .string(goal) }
         if let loopWake { o["loopWake"] = .number(loopWake) }
         if let loopCron { o["loopCron"] = .string(loopCron) }
@@ -37,6 +38,7 @@ extension SessionInfo {
         reportedModel = json["reportedModel"].string
         queued = json["queued"].array?.compactMap(\.string) ?? []
         contextLimit = json["contextLimit"].double.map(Int.init)
+        usage = SessionUsage(json: json["usage"])
         goal = json["goal"].string
         loopWake = json["loopWake"].double
         loopCron = json["loopCron"].string

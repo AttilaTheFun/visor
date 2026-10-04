@@ -77,6 +77,7 @@ extension VisorServer {
                                        shownPrompts: item.shownPrompts ?? [], notice: item.notice)
             record.refreshResume()
             record.interrupted = item.interrupted ?? false
+            record.reportedUsage = item.reportedUsage
             // The outbox, lined up with its words (a file from before it was
             // kept has words and no files).
             let files = item.queuedImages ?? []

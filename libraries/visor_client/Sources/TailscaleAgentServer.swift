@@ -158,6 +158,9 @@ public final class TailscaleAgentServer: AgentServer {
         case "welcome": return .welcome(name: envelope.host ?? "", sessions: envelope.sessions ?? [], catalogs: envelope.catalogs ?? [])
         case "sessions": return .sessions(envelope.sessions ?? [])
         case "catalogs": return .catalogs(envelope.catalogs ?? [])
+        case "account":
+            guard let account = envelope.account, let agent = envelope.agent else { return nil }
+            return .account(account, of: agent)
         case "error": return envelope.message == "Wrong password" ? .refused(envelope.message ?? "") : .failed(envelope.message ?? "Rejected")
         default: return .session(envelope)
         }

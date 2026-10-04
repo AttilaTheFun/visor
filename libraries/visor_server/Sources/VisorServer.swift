@@ -58,6 +58,9 @@ public final class VisorServer {
 
     /// The slash commands each agent listed when it last ran (VisorServer+Commands.swift).
     var knownCommands: [AgentKind: [SlashCommand]] = [:]
+    /// How each agent is paid for and how near its limits it is, as its
+    /// sessions last said; read from disk when first wanted.
+    var knownAccounts: [AgentKind: AgentAccount]?
 
     /// The devices that asked for pushes, what each session last looked like,
     /// and what sends them (VisorServer+Push.swift).
@@ -152,6 +155,8 @@ public final class VisorServer {
 
     /// Beside the sessions: the slash commands each agent last listed.
     static var commandsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("commands.json") }
+    /// And each agent's account, as its sessions last said.
+    static var accountsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("accounts.json") }
 
     /// What a session is told when its turn was cut off by a restart. It
     /// arrives as a user turn, which is what it is: the agent's own process
