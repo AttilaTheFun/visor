@@ -10,6 +10,9 @@ BIN="${1:-.build/debug/visor-server}"
 PORT=7633
 failures=0
 check() { if "$@"; then echo "ok: $*"; else echo "FAILED: $*"; failures=$((failures + 1)); fi; }
+# Gone: no such process, or one that has exited and not been reaped (a
+# container's first process may not reap what it adopts).
+gone() { ! kill -0 "$1" 2>/dev/null || [ "$(sed 's/.*) //' /proc/"$1"/stat 2>/dev/null | cut -c1)" = Z ]; }
 
 PW="$($BIN password)"
 check test ${#PW} -ge 12
@@ -32,10 +35,10 @@ curl -s -X POST -H "Authorization: Bearer $PW" http://127.0.0.1:$((PORT + 1))/ap
 sleep 4
 SECOND=$(cut -d' ' -f1 "$DATA/visor-server.pid")
 check test "$FIRST" != "$SECOND"
-check bash -c "! kill -0 $FIRST 2>/dev/null"
+check gone "$FIRST"
 check node tools/probes/terminal.mjs
 check $BIN stop
-check bash -c "! kill -0 $SECOND 2>/dev/null"
+check gone "$SECOND"
 echo "--- the background server's log"
 cat "$DATA/visor-server.log"
 echo "failures $failures"

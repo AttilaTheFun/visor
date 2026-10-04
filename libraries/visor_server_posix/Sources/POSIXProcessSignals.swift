@@ -10,7 +10,15 @@ public struct POSIXProcessSignals: ProcessSignals {
 
     public func kill(_ pid: Int32) { signalProcess(pid, SIGKILL) }
 
-    public func isRunning(_ pid: Int32) -> Bool { processExists(pid) }
+    /// A process that has exited but not been reaped (its parent gone and
+    /// the system's first process not reaping: a container's) still has
+    /// its id, and is not running: /proc says so where there is one.
+    public func isRunning(_ pid: Int32) -> Bool {
+        guard processExists(pid) else { return false }
+        guard let stat = try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8),
+              let close = stat.lastIndex(of: ")") else { return true }
+        return stat[stat.index(after: close)...].trimmingCharacters(in: .whitespaces).first != "Z"
+    }
 
     /// From /proc where the system has it (Linux); from `ps` elsewhere.
     public func commandLine(of pid: Int32) async -> String? {

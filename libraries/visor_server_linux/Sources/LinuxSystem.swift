@@ -10,11 +10,14 @@ import VisorServerPOSIX
 public struct LinuxSystem: CommandLineSystem {
     public init() {}
 
-    /// $XDG_DATA_HOME/visor, or ~/.local/share/visor.
+    /// $XDG_DATA_HOME/visor, or ~/.local/share/visor ($HOME's, as the XDG
+    /// directories are).
     public var dataDirectory: URL {
         let environment = ProcessInfo.processInfo.environment
+        let home = environment["HOME"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser
         let base = environment["XDG_DATA_HOME"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/share")
+            ?? home.appendingPathComponent(".local/share")
         return base.appendingPathComponent("visor")
     }
 
