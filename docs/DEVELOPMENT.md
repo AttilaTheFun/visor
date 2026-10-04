@@ -24,10 +24,10 @@ The repos (github.com/AttilaTheFun):
 | `open_router_cli` | SwiftPM: OpenRouterKit (client, streaming, ORAgent loop, coding tools, sessions, config, Claude's stream-json) and the `openrouter` CLI, which Visor drives. |
 
 Third-party: SwiftTerm's portable emulator (through agent_ui's TerminalUI,
-from the fork github.com/AttilaTheFun/SwiftTerm, branch `visor-consumer`:
-upstream main plus Android support, with the build plugin's output checked
-in because rspm runs no SwiftPM plugins; the fork's `android-support`
-branch is the change offered upstream), SQLite.swift 0.15.3 (the
+from upstream github.com/migueldeicaza/SwiftTerm, which builds for Android
+since #733; rspm runs no SwiftPM plugins, so MODULE.bazel patches in what
+its build plugin generates, third_party/swift_packages/swiftterm.patch,
+made from the pinned revision), SQLite.swift 0.15.3 (the
 caches), rules_swift_package_manager (rspm) brings SwiftPM packages into
 Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 `@swiftpkg_sqlite.swift//:SQLite`, `@swiftpkg_agent_ui//:AgentUI`.
@@ -368,6 +368,46 @@ Settings" last (edit or remove). Compose offers only
 a detached relauncher and resumes named sessions with a nudge
 ("[Visor] The Visor server restarted while you were working…").
 
+**The server on every system.** `libraries/visor_server` has no
+conditional compilation and imports nothing of a system: what differs —
+listening on loopback, a shell on a pseudo-terminal, signals to process
+ids, where secrets are kept, outgoing HTTPS, signing pushes, reading a
+picture's header, word of a file being written, where the agents' tools
+are, the host's name and data directory, relaunching, the road in — is a
+protocol (`LoopbackListening`, `TerminalLaunching`, `ProcessSignals`,
+`SecretStore`, `HTTPFetching`, `PushSigning`, `ImageMeasuring`,
+`FileWatching`, `ToolLocating`, `HostDetails`, `ServerLifecycle`,
+`ServerExposure`), gathered in a `ServerPlatform` the binary sets as
+`ServerPlatform.current` before anything else. HTTP and the WebSocket
+(RFC 6455, with its own SHA-1) are read and written by the server over
+the plain bytes a `ByteStream` carries, so every system speaks them the
+same way. The platforms:
+
+- the Mac's (`ServerPlatform.apple()`, libraries/visor_server_apple): the
+  Network framework's TCP, the keychain, CryptoKit and URLSession for
+  APNs, ImageIO, a vnode dispatch source, the app's relauncher, os_log;
+- POSIX (libraries/visor_server_posix, shared by the Mac and Linux):
+  terminals, signals, loopback sockets and daemons, with the calls whose
+  shape differs between macOS and Linux in C (`c/visor_posix.c`), so the
+  Swift is the same on both;
+- Linux's and Windows's (libraries/visor_server_linux, …_windows), each a
+  `CommandLineSystem` for `visor-server` (libraries/visor_server_cli: run,
+  start, stop, status, password, code): POSIX and FoundationNetworking;
+  Winsock, ConPTY, the Win32 process calls. Neither sends pushes yet
+  (`pushSigning` is nil), pictures are measured from their headers
+  (`HeaderImageMeasuring`), files are polled (`PollingFileWatching`), the
+  password is in a file only its user reads (`FileSecrets`), and Windows
+  keeps the message cache in memory (no SQLite there).
+
+The command-line server keeps its sessions, secrets, pid file
+(`<pid> <port>`) and background log in `$XDG_DATA_HOME/visor`
+(`~/.local/share/visor`) or `%LOCALAPPDATA%\Visor`; `stop` asks the server
+through `POST /api/quit`, so it ends its agents first on every system.
+Tailscale Serve needs the tailnet's HTTPS certificates, and on Linux
+either root or `sudo tailscale set --operator=$USER`. The Windows server
+is built and tried in CI (a terminal session on ConPTY with PowerShell);
+it has not been run against real agents.
+
 ## 4. The working loop
 
 - Every target compiles in the Swift 6 language mode with warnings as
@@ -448,6 +488,16 @@ a detached relauncher and resumes named sessions with a nudge
   subscribing client gets (busy, activity, status count, held streams).
   Stale streams here = a bug.
 - `node tools/probes/earlier.mjs <visor session id>` — pages earlier rows.
+- `node tools/probes/terminal.mjs` — any server, no agent needed: the REST
+  side and the socket answer, a terminal session runs the shell (a line, a
+  large output, Ctrl-C), and is ended; `QUIT=1` then stops the server
+  through `/api/quit`; `VISOR_SHELL=powershell` for a Windows server.
+- `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
+  as its user would run it: a password, `run` checked with the terminal
+  probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
+  it; on the Mac, in a container: a podman machine of your own, an image
+  with `swift:6.4-noble`, `libsqlite3-dev` and Node 22, the checkout
+  mounted, `swift build --product visor-server` then this.
 - REST locally is plain HTTP: `http://127.0.0.1:7434/api/...` with
   `Authorization: Bearer <password>` (`security find-generic-password -s
   com.LoganShire.VisorServer.macOS -a password -w`), or, inside a Visor
@@ -475,7 +525,9 @@ a detached relauncher and resumes named sessions with a nudge
 For screenshot tests, the client can show a canned computer instead of
 real ones (`libraries/visor_client/Sources/VisorFixture.swift`). The setting
 `fixture` = `snapshot` turns it on; `fixture.screen` opens a screen:
-`sessions`, `chat`, `goal`, `inspector`, `models`, `search` or `connect`. On Apple
+`sessions`, `chat`, `goal`, `inspector`, `models`, `search` or `connect`
+(`earlier` is `goal` with a page of earlier rows that loads as its spinner
+row shows). On Apple
 these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so
 launch arguments set them: `-visor.fixture snapshot -visor.fixture.screen
 chat`. The web and Android set them through their settings services. The
@@ -489,6 +541,20 @@ lets every sheet's glass finish easing in). The busy session shows a static glyp
 a spinner. Pin the simulator's status bar (`xcrun simctl status_bar booted
 override --time 9:41 …`) and the same screen gives the same pixels every
 run. The iOS probe's `testFixtureScreens` takes all six.
+
+### Fixture look check
+
+`tools/probes/look/fixture_look.sh` photographs each fixture screen on a
+simulator of its own (erased first, shut down after) and compares it with
+its reference in `tests/look/ios`. That covers the bars' soft edge, the
+glass composer, wrapped list items, pictures and the sheets. It then records
+the `earlier` screen as a page of earlier rows goes in, and fails if the
+list does not come to rest on the rows it showed, or shows anywhere else for
+more than three frames (`look.swift`). Runs of one build give the same
+pixels, so the limit is tight (0.1% of pixels). What differs is drawn red in
+the output folder. After a change that is meant to look different, look at
+the new screens and take them with `--accept`. It needs no computer and
+works with the Mac locked. Shut down any other simulator of yours first.
 
 ### Send motion check
 

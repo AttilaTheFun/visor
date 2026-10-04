@@ -4,9 +4,10 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 import VisorProtocol
 import VisorServer
+import VisorServerApple
 
 struct SettingsPane: View {
-    @ObservedObject var server: VisorServer
+    var server: VisorServer
     @State private var draft = ""
     @State private var message: String?
     @State private var linkDraft = ""
@@ -146,7 +147,7 @@ struct SettingsPane: View {
             }
             Section("Addresses") {
                 if let name = server.address { Text(name) }
-                ForEach(VisorServer.addresses(), id: \.address) { entry in
+                ForEach(NetworkAddresses.all(), id: \.address) { entry in
                     Text("\(entry.address)  \(entry.name)")
                 }
                 Text("Port \(String(server.port)), on this Mac only; the network reaches it through the front on 443")

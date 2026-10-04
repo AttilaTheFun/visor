@@ -1,40 +1,24 @@
-load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_swift//swift:swift.bzl", "swift_library")
-load("@rules_swift//swift:swift_interop_hint.bzl", "swift_interop_hint")
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 package(default_visibility = ["//visibility:public"])
 
-# The host side (macOS only): a WebSocket server on the Tailscale interface
-# that authenticates clients by password and runs agent sessions — Claude
-# Code and Codex as subprocesses whose JSON streams are normalised into the
-# protocol's transcript entries.
+# The server: a WebSocket and a REST listener on loopback that authenticate
+# clients and run agent sessions — Claude Code, Codex and the rest as
+# subprocesses whose JSON streams are normalised into the protocol's
+# transcript entries, and terminal sessions. Nothing in it is particular to
+# a system: what is (sockets, terminals, secrets, pushes, …) is given by the
+# binary that runs it, as a ServerPlatform (visor_server_apple for the menu
+# bar app; the Linux and Windows command-line servers build with SwiftPM,
+# Package.swift).
 swift_library(
     name = "visor_server",
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorServer",
-    target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//libraries/claude_transcript",
         "//libraries/message_cache",
         "//libraries/visor_protocol",
-        ":visor_pty",
     ],
-)
-
-# A process started on a pseudo-terminal that is its controlling terminal
-# (a terminal session's shell): fork, TIOCSCTTY and execve, which
-# posix_spawn cannot do on macOS and Swift must not do after a fork.
-cc_library(
-    name = "visor_pty",
-    srcs = ["pty/visor_pty.c"],
-    hdrs = ["pty/visor_pty.h"],
-    aspect_hints = [":visor_pty_swift"],
-    target_compatible_with = ["@platforms//os:macos"],
-)
-
-swift_interop_hint(
-    name = "visor_pty_swift",
-    module_name = "VisorPTY",
 )

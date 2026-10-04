@@ -48,7 +48,11 @@ extension TailscaleAgentServer {
 
     public func transcript(of session: String, since revision: Int, generation: Int) async throws -> Envelope {
         let text = try await callText("GET", "/sessions/\(session)/transcript?since=\(revision)&generation=\(generation)", body: "")
-        guard let envelope = Envelope.decode(text, defaultType: "transcript") else { throw AgentServerError.message("Not a transcript") }
+        // Read off the main actor: the whole of a thread is hundreds of rows.
+        let envelope = await Task.detached(priority: .userInitiated) {
+            Envelope.decode(text, defaultType: "transcript")
+        }.value
+        guard let envelope else { throw AgentServerError.message("Not a transcript") }
         return envelope
     }
 
@@ -80,8 +84,13 @@ extension TailscaleAgentServer {
     }
 
     public func fileData(path: String) async throws -> String {
-        let reply = try await call("GET", "/file?path=" + Self.escape(path))
-        guard let data = reply.text, !data.isEmpty else { throw AgentServerError.message("No such file") }
+        let text = try await callText("GET", "/file?path=" + Self.escape(path), body: "")
+        // A picture is megabytes of quoted base64: read off the main actor,
+        // whose frames it would otherwise hold up as each one arrives.
+        let data = await Task.detached(priority: .userInitiated) {
+            Envelope.decode(text, defaultType: "reply")?.text
+        }.value
+        guard let data, !data.isEmpty else { throw AgentServerError.message("No such file") }
         return data
     }
 

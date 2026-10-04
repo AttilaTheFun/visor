@@ -176,6 +176,69 @@ final class VisorProbe: XCTestCase {
         }
     }
 
+    /// The fixture's chat as drawn — a long bullet that starts in bold
+    /// wraps rather than stopping at "…" — and the send button taking a
+    /// tap beside its circle, in the room around it, not only on it.
+    func testFixtureChatTouch() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        Thread.sleep(forTimeInterval: 4)
+        // The long bullet is in the assistant's first reply, above.
+        app.swipeDown()
+        Thread.sleep(forTimeInterval: 1)
+        shot(app, "chat-bullets")
+        app.swipeUp()
+        Thread.sleep(forTimeInterval: 1)
+        let field = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "no composer")
+        field.tap()
+        field.typeText("hit area check")
+        let send = app.buttons["Send"].firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 5), "no send button")
+        // Beside the drawn circle, down and to the right of it: 24 points
+        // from its centre each way is 6 points past its edge.
+        let frame = send.frame
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX + 24, dy: frame.midY + 24)).tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        shot(app, "chat-after-tap-beside-send")
+        let left = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+        XCTAssertFalse((left.value as? String ?? "").contains("hit area check"), "a tap beside the send button sent the message")
+    }
+
+    /// Text in the thread can be selected: held down on, the agent's words
+    /// (markdown) and the user's (plain text) each get a selection and the
+    /// edit menu with Copy. A `safeAreaBar` on the thread's scroll view
+    /// took the press on iOS 26 and 27, so nothing could be selected
+    /// (AgentUI's composer is a safe-area inset for that).
+    func testFixtureSelectText() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        Thread.sleep(forTimeInterval: 4)
+        var offered: [String: Bool] = [:]
+        for (label, name) in [("Rows now sync", "agent"), ("Here's the layout", "user")] {
+            let words = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", label)).firstMatch
+            XCTAssertTrue(words.waitForExistence(timeout: 10), "no \(name) message")
+            words.press(forDuration: 1.2)
+            Thread.sleep(forTimeInterval: 1)
+            shot(app, "chat-select-text-\(name)")
+            // The edit menu's Copy: a menu item before iOS 26, a button in
+            // its glass bar since (not the message's own Copy button).
+            let menuCopy = app.buttons.matching(NSPredicate(format: "label == 'Copy' AND identifier != 'copy-message'")).firstMatch
+            offered[name] = app.menuItems["Copy"].firstMatch.waitForExistence(timeout: 3) || menuCopy.exists
+            print("VISOR_SELECT \(name): Copy offered \(offered[name] ?? false)")
+            // Away from the menu, to dismiss it.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).tap()
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTAssertEqual(offered, ["agent": true, "user": true], "where the edit menu offered Copy")
+    }
+
     /// What a row opens over its thread, in the fixture's chat: the run of
     /// tool calls, and a picture. Each opens from a row, shows what it
     /// should, and goes with Done.

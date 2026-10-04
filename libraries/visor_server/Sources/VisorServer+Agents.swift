@@ -2,11 +2,9 @@
 // their records, given what the user says, rebuilt when a session's
 // folder or settings change.
 
-import AppKit
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import Network
 import VisorProtocol
 
 extension VisorServer {
@@ -31,7 +29,13 @@ extension VisorServer {
     /// Each provider's models: Claude's aliases and effort levels; Codex's
     /// from its models cache (~/.codex/models_cache.json, the listed ones)
     /// with the default from ~/.codex/config.toml.
-    func catalogs() -> [AgentCatalog] { harnesses.all.map { $0.catalog() } }
+    func catalogs() -> [AgentCatalog] {
+        harnesses.all.map { harness in
+            var catalog = harness.catalog()
+            catalog.account = account(for: catalog.agent)
+            return catalog
+        }
+    }
 
     /// Points every session that ran in `from` at `to`. The agent holds
     /// its directory from the moment it spawns, so the process is rebuilt
@@ -57,6 +61,7 @@ extension VisorServer {
     }
 
     func archive(_ record: SessionRecord) {
+        Self.log("session archived: \(record.info.title)")
         record.process.stop()
         record.refreshResume()
         record.setArchived(true)
@@ -233,6 +238,12 @@ extension VisorServer {
         case .context, .session:
             // These land in the session list, not an envelope.
             broadcastSessions()
+        case .spent:
+            broadcastSessionsSoon()
+        case .plan(let plan, let subscription):
+            keepPlan(plan, subscription: subscription, for: record.info.agent)
+        case .limits(let limits):
+            keepLimits(limits, for: record.info.agent)
         case .model:
             if record.info.reportedModel != reported { broadcastSessions() }
         case .commands(let list):

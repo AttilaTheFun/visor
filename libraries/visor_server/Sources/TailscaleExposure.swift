@@ -1,18 +1,22 @@
 import Foundation
 
-/// Tailscale Serve, through the CLI inside the Mac app. Never Funnel:
+/// Tailscale Serve, through its command-line tool (on a Mac, the app's own
+/// executable; elsewhere, `tailscale`). Never Funnel:
 /// the identity headers that let a user's own devices in come only from
 /// the tailnet, and a server that is only reachable from the tailnet is
 /// one whose every caller Tailscale has named.
 public final class TailscaleExposure: ServerExposure {
     public let title = "Tailscale"
-    static let cli = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    /// Where the tool is.
+    let cli: String
     /// The header Serve adds to a proxied request from a tailnet user.
     static let loginHeader = "tailscale-user-login"
 
-    public init() {}
+    public init(cli: String) {
+        self.cli = cli
+    }
 
-    public var installed: Bool { FileManager.default.isExecutableFile(atPath: Self.cli) }
+    public var installed: Bool { FileManager.default.isExecutableFile(atPath: cli) }
 
     private func status() async -> [String: Any]? {
         guard installed else { return nil }
@@ -77,7 +81,7 @@ public final class TailscaleExposure: ServerExposure {
 
     private func run(_ arguments: [String], quiet: Bool) async -> String {
         guard installed else { return "Tailscale is not installed" }
-        let answer = await Command.output(Self.cli, arguments, environment: Self.cliEnvironment(), errors: !quiet)
+        let answer = await Command.output(cli, arguments, environment: Self.cliEnvironment(), errors: !quiet)
         return answer?.text ?? "could not run tailscale"
     }
 }

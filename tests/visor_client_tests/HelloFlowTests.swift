@@ -57,6 +57,9 @@ final class ScriptedServer: AgentServer {
     /// Ends the channel as the server would, or as a heartbeat would.
     func drop(_ reason: String) { onEvent?(.closed(reason)) }
 
+    /// Says something over the channel, as the server would.
+    func deliver(_ event: AgentServerEvent) { onEvent?(event) }
+
     /// Whether the open channel answers when asked outright.
     var alive = true
     var verified = 0
@@ -70,7 +73,9 @@ final class ScriptedServer: AgentServer {
     func subscribe(_ session: String) { subscribed.append(session) }
     func assumeControl(_ session: String, cols: Int, rows: Int) {}
     func acknowledge(_ session: String) {}
-    func loadEarlier(_ session: String, before: String) {}
+    /// The rows asked for over the channel: the session, and the row they go before.
+    var earlierAsked: [(session: String, before: String)] = []
+    func loadEarlier(_ session: String, before: String) { earlierAsked.append((session, before)) }
     func sendInput(_ session: String, data: String) {}
     func resize(_ session: String, cols: Int, rows: Int) {}
 

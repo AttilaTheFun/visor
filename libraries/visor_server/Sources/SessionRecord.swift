@@ -10,7 +10,7 @@ import VisorProtocol
 
 /// One agent session on the host: its process, its transcript, who watches it.
 @MainActor
-public final class SessionRecord: ObservableObject {
+public final class SessionRecord {
     public internal(set) var info: SessionInfo
 
     public internal(set) var entries: [TranscriptEntry] = [] {
@@ -115,6 +115,9 @@ public final class SessionRecord: ObservableObject {
 
     /// What the user is told about the session until they acknowledge it.
     var notice: String?
+    /// The agent's running total as it last reported it: what the next
+    /// report is measured from (`info.usage` is what was added up).
+    var reportedUsage: SessionUsage?
     /// Rows the file produced, told to subscribers by the server.
     var onFileRows: (([TranscriptEntry]) -> Void)?
     /// The transcript was read again from the file and is different, or
@@ -162,7 +165,7 @@ public final class SessionRecord: ObservableObject {
     var stored: StoredSession {
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
-        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages)
+        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage)
     }
 
     /// The session's resume command, refreshed from the process (the id is

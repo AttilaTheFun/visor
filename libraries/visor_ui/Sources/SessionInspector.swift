@@ -1,6 +1,7 @@
 // The session's inspector, from the title: what it is, where, and the
-// ways out. For a chat, its agent, model and context; for a terminal,
-// which window has it.
+// ways out. For a chat, its agent and model, and what it has used of
+// its context and its account's limits; for a terminal, which window
+// has it.
 
 import SwiftUI
 import VisorClient
@@ -57,9 +58,6 @@ struct SessionInspector: View {
                         LabeledContent("Model", value: host.modelTitle(for: session) + (session.effort.map { " " + AgentCatalog.effortTitle($0) } ?? ""))
                         LabeledContent("Folder", value: session.cwd)
                         LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
-                        if let used = session.contextUsed {
-                            LabeledContent("Context", value: "\(used / 1000)k of \((session.contextLimit ?? 0) / 1000)k")
-                        }
                         LabeledContent("State", value: session.busy ? "Working" : (session.archived ? "Archived" : "Idle"))
                         // To carry the conversation on in the agent's own
                         // interface: end this session, open a terminal
@@ -68,6 +66,9 @@ struct SessionInspector: View {
                             Button { copyToPasteboard(command) } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
                         }
                     }
+                }
+                if !session.agent.isShell {
+                    SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)
                 }
                 Section {
                     // A terminal keeps nothing to come back to: it is ended,

@@ -6,7 +6,7 @@ import VisorProtocol
 @testable import VisorServer
 import XCTest
 
-final class OpenRouterCatalogTests: XCTestCase {
+final class OpenRouterCatalogTests: ServerTestCase {
     private var home: URL!
 
     override func setUp() async throws {
@@ -113,7 +113,7 @@ final class OpenRouterCatalogTests: XCTestCase {
 }
 
 /// Claude Code's own model list, as `initialize` answers it.
-final class ClaudeModelsTests: XCTestCase {
+final class ClaudeModelsTests: ServerTestCase {
     func testInitializeModelsBecomeTheCatalog() throws {
         let list: [[String: Any]] = [
             ["value": "default", "resolvedModel": "claude-opus-5-5[1m]", "displayName": "Default (recommended)",
@@ -145,7 +145,7 @@ final class ClaudeModelsTests: XCTestCase {
 
 /// The newer shape of Claude Code's list: the name as the display name,
 /// only the tagline in the description.
-final class ClaudeModelsNewShapeTests: XCTestCase {
+final class ClaudeModelsNewShapeTests: ServerTestCase {
     func testNameFromTheDisplayName() throws {
         let list: [[String: Any]] = [
             ["value": "default", "resolvedModel": "claude-opus-5-5", "displayName": "Default (recommended)",
@@ -167,7 +167,7 @@ final class ClaudeModelsNewShapeTests: XCTestCase {
 }
 
 /// Codex's own model list, as its app-server's `model/list` answers it.
-final class CodexModelsTests: XCTestCase {
+final class CodexModelsTests: ServerTestCase {
     func testModelListBecomesTheCatalog() {
         let list: [[String: Any]] = [
             ["id": "gpt-6-astra", "model": "gpt-6-astra", "displayName": "GPT-6-Astra", "description": "Frontier intelligence.",
@@ -188,7 +188,7 @@ final class CodexModelsTests: XCTestCase {
 
 /// The catalog says when the CLI has no key: the list still shows, and the
 /// picker says why a session would fail.
-final class OpenRouterLoginTests: XCTestCase {
+final class OpenRouterLoginTests: ServerTestCase {
     func testALoggedOutCLIIsSaid() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("visor-or-login-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
@@ -206,7 +206,7 @@ final class OpenRouterLoginTests: XCTestCase {
 /// Claude Code's list of models is replaced at once only by one that keeps
 /// every model held (a new one may be added); one that drops models waits
 /// for a second answer.
-final class ClaudeModelListTests: XCTestCase {
+final class ClaudeModelListTests: ServerTestCase {
     private func model(_ id: String) -> AgentModel { AgentModel(id: id, title: id, efforts: []) }
 
     func testAShorterListWaitsToBeConfirmed() {

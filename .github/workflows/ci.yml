@@ -32,5 +32,56 @@ jobs:
           bazel test --test_output=errors
           //tests/visor_server_tests
           //tests/visor_client_tests
+          //tests/visor_ui_tests
           //tests/message_cache_tests
           //tests/claude_transcript_tests
+
+  # The command-line server on Linux: built, its tests run, and the server
+  # itself tried — run, a terminal session over its WebSocket, restarted,
+  # stopped (tools/probes/command_line_server.sh). No agent CLI needed.
+  linux:
+    runs-on: ubuntu-24.04
+    container: swift:6.4-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packages
+        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev procps curl
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build
+        run: swift build --product visor-server
+      - name: Test
+        run: swift test
+      - name: Try the server
+        run: tools/probes/command_line_server.sh
+
+  # The command-line server on Windows: built, and tried — run, a terminal
+  # session on ConPTY with PowerShell over its WebSocket, stopped through
+  # its REST side.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: compnerd/gha-setup-swift@main
+        with:
+          branch: swift-6.4.0-release
+          tag: 6.4.0-RELEASE
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build
+        run: swift build --product visor-server
+      - name: Try the server
+        shell: pwsh
+        run: |
+          $server = ".build\debug\visor-server.exe"
+          $password = & $server password
+          Start-Process -FilePath $server -ArgumentList "run","--port","7633" -NoNewWindow `
+            -RedirectStandardOutput server.log -RedirectStandardError server-errors.log
+          Start-Sleep 3
+          $env:VISOR_PORT = "7633"; $env:VISOR_TOKEN = $password; $env:VISOR_SHELL = "powershell"; $env:QUIT = "1"
+          node tools/probes/terminal.mjs
+          $status = $LASTEXITCODE
+          Get-Content server.log, server-errors.log
+          exit $status

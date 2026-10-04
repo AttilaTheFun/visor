@@ -21,17 +21,41 @@ public enum ClaudeSessionFiles {
     /// The project directory's name for a folder.
     public static func projectDirectoryName(for cwd: String) -> String {
         // The folder as Claude Code sees it: the real path, then every
-        // "/", "." and "_" as "-". POSIX realpath, not Foundation's
-        // resolvingSymlinksInPath, which strips "/private" on a Mac and so
-        // names /tmp's directory "-tmp" where Claude Code has "-private-tmp".
-        let expanded = (cwd as NSString).expandingTildeInPath
-        var name = expanded
-        if let resolved = realpath(expanded, nil) {
-            name = String(cString: resolved)
-            free(resolved)
-        }
+        // "/", "." and "_" as "-".
+        var name = realPath((cwd as NSString).expandingTildeInPath)
         for character in ["/", ".", "_"] { name = name.replacingOccurrences(of: character, with: "-") }
         return name
+    }
+
+    /// An absolute path with every symbolic link in it followed, as
+    /// realpath(3) gives it — not Foundation's resolvingSymlinksInPath,
+    /// which strips "/private" on a Mac and so names /tmp's directory
+    /// "-tmp" where Claude Code has "-private-tmp". Any other path is
+    /// given back as it is.
+    static func realPath(_ path: String) -> String {
+        guard path.hasPrefix("/") else { return path }
+        var resolved = ""
+        var pending = path.split(separator: "/").map(String.init)
+        var links = 0
+        while !pending.isEmpty {
+            let part = pending.removeFirst()
+            if part == "." { continue }
+            if part == ".." {
+                resolved = (resolved as NSString).deletingLastPathComponent
+                if resolved == "/" { resolved = "" }
+                continue
+            }
+            let candidate = resolved + "/" + part
+            // A loop of links goes no further than realpath would.
+            if links < 40, let target = try? FileManager.default.destinationOfSymbolicLink(atPath: candidate) {
+                links += 1
+                if target.hasPrefix("/") { resolved = "" }
+                pending = target.split(separator: "/").map(String.init) + pending
+            } else {
+                resolved = candidate
+            }
+        }
+        return resolved.isEmpty ? "/" : resolved
     }
 
     /// Where a session's file should be, whether or not it exists yet.

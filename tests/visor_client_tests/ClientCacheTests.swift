@@ -19,7 +19,7 @@ final class ClientCacheTests: XCTestCase {
         return e
     }
 
-    func testSessionOpensAsLastSeenAndSyncsFromThere() throws {
+    func testSessionOpensAsLastSeenAndSyncsFromThere() async throws {
         AgentServerConnection.cache = .inMemory()
         let config = AgentServerRecord(name: "Mac", address: "mac.example")
 
@@ -34,11 +34,14 @@ final class ClientCacheTests: XCTestCase {
         opened.sync(transcript([row("a2", "More")], revision: 6, generation: 1, more: true))
         XCTAssertEqual(opened.entries.map(\.id), ["u1", "a1", "a2"])
         let key = config.id + "/S"
+        // Written off the main actor, in order.
+        await AgentServerConnection.cacheQueue.drain()
         XCTAssertEqual(AgentServerConnection.cache.messages(in: key, limit: 10).messages.map(\.id), ["u1", "a1", "a2"])
         XCTAssertEqual(AgentServerConnection.cache.syncState(of: key), SyncState(revision: 6, generation: 1))
 
         // A rebuilt record replaces what was kept.
         opened.sync(transcript([row("u1", "Hello", role: .user), row("a1", "Hi, edited")], revision: 9, generation: 2))
+        await AgentServerConnection.cacheQueue.drain()
         XCTAssertEqual(AgentServerConnection.cache.messages(in: key, limit: 10).messages.map(\.text), ["Hello", "Hi, edited"])
 
         // As after a relaunch: a new connection to the same computer has
@@ -53,6 +56,7 @@ final class ClientCacheTests: XCTestCase {
 
         // Ending the session forgets it.
         second.end("S")
+        await AgentServerConnection.cacheQueue.drain()
         XCTAssertEqual(AgentServerConnection.cache.count(in: key), 0)
         XCTAssertFalse(AgentServerConnection(record: config).transcript(for: "S").loaded)
     }

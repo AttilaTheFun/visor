@@ -8,10 +8,8 @@
 import ClaudeTranscript
 import Foundation
 import MessageCache
-import os
 import VisorProtocol
 
-private let log = Logger(subsystem: "com.LoganShire.Visor", category: "index")
 
 actor SessionIndexer {
     /// What a session looks like once the cache is up to date with its file.
@@ -71,7 +69,7 @@ actor SessionIndexer {
     private func index(into continuation: AsyncStream<Event>.Continuation) async {
         catchUp()
         continuation.yield(.loaded(loaded()))
-        for await batch in FileTail.batches(of: url, startingAt: state.bytes) {
+        for await batch in FileTail.batches(of: url, startingAt: state.bytes, watching: ServerPlatform.current.files) {
             let taken = take(parser.lines(in: batch.data), endingAt: batch.position)
             if !taken.isEmpty { continuation.yield(.lines(taken)) }
         }
@@ -99,7 +97,7 @@ actor SessionIndexer {
             parser.resume(after: store.nodes(in: sessionID).last?.key)
         } else {
             state = SourceState(path: url.path, identity: identity, bytes: 0, nextSeq: 0)
-            do { try store.resetSource(sessionID, state: state) } catch { log.error("reset \(self.sessionID, privacy: .public): \(String(describing: error), privacy: .public)") }
+            do { try store.resetSource(sessionID, state: state) } catch { VisorServer.log("index: reset \(self.sessionID): \(String(describing: error))") }
         }
         guard facts.size > state.bytes, let handle = try? FileHandle(forReadingFrom: url) else { return }
         defer { try? handle.close() }
@@ -120,8 +118,8 @@ actor SessionIndexer {
         }
         state.bytes += UInt64(last + 1)
         let started = Date()
-        do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { log.error("ingest \(self.sessionID, privacy: .public): \(String(describing: error), privacy: .public)") }
-        log.info("caught up \(self.sessionID, privacy: .public): \(lineRecords.count) lines, \(rowRecords.count) rows, \(Int(Date().timeIntervalSince(started) * 1000)) ms writing")
+        do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { VisorServer.log("index: ingest \(self.sessionID): \(String(describing: error))") }
+        VisorServer.log("index: caught up \(self.sessionID): \(lineRecords.count) lines, \(rowRecords.count) rows, \(Int(Date().timeIntervalSince(started) * 1000)) ms writing")
     }
 
     /// The branch, from the tree the cache holds, and the rows to show.
@@ -129,7 +127,7 @@ actor SessionIndexer {
         let shape = ClaudeBranch.current(nodes: store.nodes(in: sessionID).map { ClaudeBranch.Node(uuid: $0.key, parentUuid: $0.parentKey, isPrompt: $0.isPrompt) })
         members = shape.members
         abandoned = shape.abandoned
-        do { try store.removeMessages(in: sessionID, sourceKeys: shape.abandoned) } catch { log.error("drop \(self.sessionID, privacy: .public): \(String(describing: error), privacy: .public)") }
+        do { try store.removeMessages(in: sessionID, sourceKeys: shape.abandoned) } catch { VisorServer.log("index: drop \(self.sessionID): \(String(describing: error))") }
         let page = store.messages(in: sessionID, limit: window)
         return Loaded(rows: page.messages, more: page.more, prompts: shape.prompts, abandoned: shape.abandoned, abandonedPrompts: shape.abandonedPrompts)
     }
@@ -162,7 +160,7 @@ actor SessionIndexer {
             taken.append(Line(uuid: line.uuid, isPrompt: line.isPrompt, record: line.record, rows: rows))
         }
         state.bytes = position
-        do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { log.error("follow \(self.sessionID, privacy: .public): \(String(describing: error), privacy: .public)") }
+        do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { VisorServer.log("index: follow \(self.sessionID): \(String(describing: error))") }
         return taken
     }
 

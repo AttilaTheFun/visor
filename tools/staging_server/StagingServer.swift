@@ -9,6 +9,7 @@
 
 import Foundation
 import VisorServer
+import VisorServerApple
 
 @main
 @MainActor
@@ -19,13 +20,9 @@ struct StagingServer {
         let password = arguments.dropFirst().first ?? "staging"
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-staging-\(port)")
 
-        // The agents' MCP server is a script in the menu bar app's bundle;
-        // here it is taken from the source tree (`bazel run` says where
-        // that is; run by hand, from the repository's root).
-        if ProcessInfo.processInfo.environment["VISOR_MCP_SCRIPT"] == nil {
-            let tree = ProcessInfo.processInfo.environment["BUILD_WORKSPACE_DIRECTORY"] ?? FileManager.default.currentDirectoryPath
-            setenv("VISOR_MCP_SCRIPT", tree + "/applications/visor_menubar/Resources/visor_mcp.js", 1)
-        }
+        // A Mac's platform, with its password in memory rather than the
+        // keychain the installed server uses.
+        ServerPlatform.current = .apple(secrets: MemorySecrets())
 
         let server = VisorServer.staging(port: port, root: root, password: password)
         setlinebuf(stdout)

@@ -4,60 +4,63 @@
 // envelopes routed to the sessions (SessionRecord.swift), each of which
 // is one agent. Sessions are written down and outlive the app.
 
-import AppKit
 import ClaudeTranscript
-import MessageCache
 import Foundation
-import Network
+import MessageCache
+import Observation
 import VisorProtocol
 
-
 @MainActor
-public final class VisorServer: ObservableObject {
+@Observable
+public final class VisorServer {
     /// The one server of the menu bar app.
     public static let shared = VisorServer()
 
-    @Published public internal(set) var sessions: [SessionRecord] = []
+    public internal(set) var sessions: [SessionRecord] = []
 
-    @Published public internal(set) var clientCount = 0
+    public internal(set) var clientCount = 0
 
-    @Published public internal(set) var listening = false
+    public internal(set) var listening = false
 
-    @Published public internal(set) var lastError: String?
+    public internal(set) var lastError: String?
     /// Required: the server does not listen without one. The user's own
 
     /// devices on the network are let in by the road's identity instead
     /// (Tailscale names the caller); the password is for a client the
     /// road does not vouch for — another user's device on a shared
     /// network, or a tool on this Mac.
-    @Published public var password: String {
+    public var password: String {
         didSet {
             Self.secrets.set("password", password)
             if listener == nil, !password.isEmpty { start() }
         }
     }
 
-    /// Where the password is kept: the keychain; tests swap in their own.
-    static var secrets: SecretStore = KeychainSecrets()
+    /// Where the password is kept: the system's place for secrets (the
+    /// platform's); tests swap in their own.
+    static var secrets: any SecretStore = ServerPlatform.current.secrets
 
     /// The bundle ids this app had before, whose settings it takes over.
     static let formerBundleIDs = ["com.LoganShire.Visor.MenuBar"]
 
     /// The network user this Mac belongs to, as the exposure reports it;
     /// requests the road names as theirs need no password.
-    @Published public internal(set) var hostLogin: String?
+    public internal(set) var hostLogin: String?
     /// This Mac's name on the network ("my-mac.tail1234.ts.net"), once the
 
     /// exposure has said it; learned with the owner, so the menu shows it
     /// even when Tailscale came up after the app did.
-    @Published public internal(set) var address: String?
+    public internal(set) var address: String?
     /// What went wrong putting the front in place, or nil.
-    @Published public internal(set) var serveError: String?
+    public internal(set) var serveError: String?
     /// The other computers' servers this one's agents reach (VisorServer+Links.swift).
-    @Published public internal(set) var links: [ConnectionCode] = []
+    public internal(set) var links: [ConnectionCode] = []
 
     /// The slash commands each agent listed when it last ran (VisorServer+Commands.swift).
     var knownCommands: [AgentKind: [SlashCommand]] = [:]
+    /// How each agent is paid for and how near its limits it is, as its
+    /// sessions last said; read from disk when first wanted.
+    var knownAccounts: [AgentKind: AgentAccount]?
 
     /// The devices that asked for pushes, what each session last looked like,
     /// and what sends them (VisorServer+Push.swift).
@@ -66,6 +69,8 @@ public final class VisorServer: ObservableObject {
     var pushStates: [String: PushState] = [:]
 
     let apnsSender = APNsSender()
+    /// Counts up when the APNs key is set: what a view showing it watches.
+    var apnsKeyChanges = 0
 
     /// Told each push as it is decided, before anything is sent (tests).
     var onPush: ((_ title: String, _ body: String, _ session: String, _ kind: String) -> Void)?
@@ -85,7 +90,7 @@ public final class VisorServer: ObservableObject {
 
     public let port: UInt16
 
-    var listener: NWListener?
+    var listener: (any LoopbackListener)?
     var http: HTTPServer?
     var connections: [ObjectIdentifier: ClientConnection] = [:]
 
@@ -124,8 +129,9 @@ public final class VisorServer: ObservableObject {
         return server
     }
 
-    /// How clients reach this server; Tailscale unless a fork says otherwise.
-    public var exposure: any ServerExposure = TailscaleExposure()
+    /// How clients reach this server: the platform's (Tailscale), unless a
+    /// fork says otherwise.
+    public var exposure: any ServerExposure = ServerPlatform.current.exposure()
 
     /// The connection code a client takes to add this computer in one
     /// step: its name, its address, the password. Nil until the address
@@ -135,19 +141,22 @@ public final class VisorServer: ObservableObject {
         return ConnectionCode(name: hostName, host: address, password: password)
     }
 
-    /// ~/Library/Application Support/Visor/sessions.json (archive.json
-    /// before sessions were all kept; read once and folded in).
+    /// sessions.json in the platform's data directory (on a Mac
+    /// ~/Library/Application Support/Visor; archive.json before sessions
+    /// were all kept, read once and folded in).
     /// Tests point this at a scratch folder: a server built over the real
     /// archive ends the agents it records as orphans of a previous life.
     static var storeRoot: URL?
     static var storeURL: URL {
-        let base = storeRoot ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
+        let base = storeRoot ?? ServerPlatform.current.host.dataDirectory
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("sessions.json")
     }
 
     /// Beside the sessions: the slash commands each agent last listed.
     static var commandsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("commands.json") }
+    /// And each agent's account, as its sessions last said.
+    static var accountsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("accounts.json") }
 
     /// What a session is told when its turn was cut off by a restart. It
     /// arrives as a user turn, which is what it is: the agent's own process
@@ -168,10 +177,7 @@ public final class VisorServer: ObservableObject {
     /// The agents the server serves; a host assigns its own before start.
     public var harnesses: AgentHarnesses = .standard
 
-    public var hostName: String {
-        let name = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
-        return name
-    }
+    public var hostName: String { ServerPlatform.current.host.name }
 
     /// The HTTP API: the same commands as the WebSocket, one request each,
     /// with the password as a bearer token. Paths may carry Tailscale

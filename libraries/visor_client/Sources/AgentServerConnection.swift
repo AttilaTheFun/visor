@@ -438,11 +438,14 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             // Re-subscribe to whatever was open before the drop.
             for id in pendingSubscriptions.union(transcripts.keys) { server.subscribe(id) }
             pendingSubscriptions.removeAll()
+            askEarlierAgain()
             // A folder may have been renamed or moved while we were away.
             Task { await refreshMissing() }
             registerForPush()
         case .catalogs(let catalogs):
             self.catalogs = catalogs
+        case .account(let account, let agent):
+            if let index = catalogs.firstIndex(where: { $0.agent == agent }) { catalogs[index].account = account }
         case .refused(let message):
             note("login refused: \(message)")
             wantsConnection = false
@@ -462,6 +465,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             break
         case .session(let envelope):
             guard let id = envelope.session else { return }
+            if envelope.type == "earlier" { return takeEarlier(envelope, for: id) }
             transcript(for: id).apply(envelope)
             // Working or not, as the session itself says it: the list shows
             // the same at once, rather than whatever the last list said (a
@@ -477,7 +481,10 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// is SQLite, so a session opens as it was last seen and syncs only
     /// what changed since; in memory on the web.
     static var cache: MessageCache = .open(named: "messages")
-    private func cacheKey(_ sessionID: String) -> String { id + "/" + sessionID }
+    /// Where the cache is written, and read past what is shown: off the
+    /// main actor, in order.
+    static let cacheQueue = CacheQueue()
+    func cacheKey(_ sessionID: String) -> String { id + "/" + sessionID }
 
     public func transcript(for sessionID: String) -> SessionTranscript {
         if let existing = transcripts[sessionID] { return existing }
@@ -493,10 +500,12 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             transcript.loaded = true
         }
         transcript.keep = { whole, rows, state in
-            if whole { try? Self.cache.replace(key, with: rows) } else { try? Self.cache.append(key, rows) }
-            try? Self.cache.setSyncState(state, for: key)
+            let cache = Self.cache
+            Self.cacheQueue.write {
+                if whole { try? cache.replace(key, with: rows) } else { try? cache.append(key, rows) }
+                try? cache.setSyncState(state, for: key)
+            }
         }
-        transcript.keepEarlier = { rows in try? Self.cache.prepend(key, rows) }
         transcripts[sessionID] = transcript
         startSyncing(sessionID, transcript)
         return transcript
@@ -570,12 +579,6 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// Whether the terminal of this session is drawn for this client.
     public func controlsTerminal(_ session: SessionInfo) -> Bool {
         session.mode.controlled(by: AgentServerRecord.clientID)
-    }
-
-    /// Asks for the rows before the first one the transcript has.
-    public func loadEarlier(_ sessionID: String) {
-        guard let first = transcript(for: sessionID).entries.first else { return }
-        server.loadEarlier(sessionID, before: first.id)
     }
 
     /// What the user typed into the terminal, base64.
@@ -906,6 +909,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         act(.end, on: sessionID)
         transcripts.removeValue(forKey: sessionID)
         syncing.removeValue(forKey: sessionID)?.cancel()
-        try? Self.cache.remove(cacheKey(sessionID))
+        let cache = Self.cache, key = cacheKey(sessionID)
+        Self.cacheQueue.write { try? cache.remove(key) }
     }
 }

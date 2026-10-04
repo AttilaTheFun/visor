@@ -11,11 +11,19 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 import VisorProtocol
 import VisorServer
+import VisorServerApple
 
 @main
 struct VisorMenuBarApp: App {
-    @ObservedObject private var server = VisorServer.shared
+    private let server: VisorServer
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+
+    init() {
+        // The Mac's sockets, keychain, pushes and the rest, before anything
+        // asks the server for them.
+        ServerPlatform.current = .apple()
+        server = VisorServer.shared
+    }
 
     var body: some Scene {
         MenuBarExtra {

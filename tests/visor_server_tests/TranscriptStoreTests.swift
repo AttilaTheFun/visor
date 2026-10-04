@@ -8,7 +8,7 @@ import VisorProtocol
 @testable import VisorServer
 import XCTest
 
-final class TranscriptStoreTests: XCTestCase {
+final class TranscriptStoreTests: ServerTestCase {
     private var dir: URL!
     private var file: URL!
     private var store: MessageCache!

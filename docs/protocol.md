@@ -51,6 +51,8 @@ libraries/visor_protocol; the apps register the `visor` URL scheme).
 | `GET /folders?path=` | | `path` (resolved, `~` expanded) and `folders` (subfolders, hidden ones skipped) — the project picker |
 | `POST /folders` | `path` | creates the folder with its parents; answers like GET |
 | `GET /resumable?agent=&cwd=` | | `resumable`: the agent's own sessions started in `cwd` (Claude's `~/.claude/projects`, Codex's `~/.codex/sessions`), newest first, `id`/`title` (first prompt)/`timestamp` |
+| `POST /restart` | `path` (a new build to install over this one, optional), `session` (one to carry on besides the busy ones) | `restart`: the sessions carried on; the server then relaunches |
+| `POST /quit` | | `quit`; the server then ends its agents (what was running is written down as running, for the next start) and exits — how `visor-server stop` stops it |
 
 A client asks `GET /sessions` once a minute as the backup for the socket:
 the list is taken as a `sessions` broadcast would be, and an answer while
@@ -92,7 +94,8 @@ and `subscribe` and stream the rest.
 
 | type | fields | meaning |
 |---|---|---|
-| `welcome` | `host`, `sessions`, `catalogs` | Login accepted. `catalogs`: each provider's models (`id`, `title`, `subtitle`, `efforts`, `defaultEffort`) and default — Claude's aliases, Codex's from `~/.codex/models_cache.json` + `config.toml`, OpenRouter's every tool-calling model from the CLI's list, priced in `subtitle`, maker in `group`, `listed: false` for those outside the short list. |
+| `welcome` | `host`, `sessions`, `catalogs` | Login accepted. `catalogs`: each provider's models (`id`, `title`, `subtitle`, `efforts`, `defaultEffort`) and default — Claude's aliases, Codex's from `~/.codex/models_cache.json` + `config.toml`, OpenRouter's every tool-calling model from the CLI's list, priced in `subtitle`, maker in `group`, `listed: false` for those outside the short list — and its `account`, once a session of it has said (below). |
+| `account` | `agent`, `account` | An agent's account changed: its plan, or how near its limits it is. Replaces the `account` of that agent's catalog. |
 | `error` | `message` | Rejected (before or after login). |
 | `pong` | | The answer to `ping`, to that client only. |
 | `sessions` | `sessions` | The session list changed (a start, an end, busy flipped). |
@@ -106,12 +109,14 @@ and `subscribe` and stream the rest.
 | `tty` | `session`, `data` (base64); `cols`, `rows` on a replay | What a terminal session's shell drew, to the window it is drawn for only. With `cols` set it is the whole screen so far (on taking the terminal, or subscribing again while holding it): the client starts its screen over. |
 
 `SessionInfo`: `id`, `agent` (`claude`, `codex`, `openrouter`, `shell`), `mode` (absent, or — for a terminal session a window has — `{"kind":"tui","controller":<client>,"cols":…,"rows":…}`), `cwd`, `title` (given, or the agent's name numbered within the folder),
-`busy`, `ended`, `skipPermissions`, `model`, `effort` (nil: the provider's / model's default; Claude fills `model` with what it actually runs), `archived`, `resumeCommand` (once the agent's own id is known: `cd <cwd> && claude --resume <id>` / `codex resume <id>`), `created`. Every session (live or archived) persists in `~/Library/Application Support/Visor/sessions.json` on the host, so a relaunch of the menu bar app brings them back idle, resumable by the agent's own id. `TranscriptEntry`: `id`, `role`
+`busy`, `ended`, `skipPermissions`, `model`, `effort` (nil: the provider's / model's default; Claude fills `model` with what it actually runs), `archived`, `resumeCommand` (once the agent's own id is known: `cd <cwd> && claude --resume <id>` / `codex resume <id>`), `created`, `contextUsed`/`contextLimit` (the last request's tokens and the model's window), `usage` (what the session has used in all: `input` tokens, cache reads included, `cached`, `output`, and `cost` in dollars where the agent prices its turns — Claude Code at API prices even on a subscription, the openrouter CLI at OpenRouter's). Every session (live or archived) persists in `~/Library/Application Support/Visor/sessions.json` on the host, so a relaunch of the menu bar app brings them back idle, resumable by the agent's own id. `TranscriptEntry`: `id`, `role`
 (`user`/`assistant`/`tool`), `text`, `activities`, `toolName` — the shape of
 AgentUI's `TranscriptMessage`, which the client maps one to one. Tool
 entries (`toolName: "tool_result"`) carry the first 400 characters of a
 tool's output; the transcript view hides them, the assistant's
 `activities` row is what the user sees.
+
+`AgentAccount` (an agent's, per computer): `plan` in words ("Subscription", "ChatGPT Pro", "API key"), `subscription` (paid for by a plan, so a session's `cost` is what it would have cost), `limits`, `updated` (when an agent last said, seconds since 1970). Each limit: `name` ("5-hour", "Weekly", "Key limit", "Credits"), `used` (the share, 0–1), `resets` (seconds since 1970), and for an amount `left`, `total`, `unit` (`dollars` or `credits`). The server keeps the last of each agent's in `accounts.json` beside the sessions.
 
 ## Agents
 
@@ -121,7 +126,12 @@ tool's output; the transcript view hides them, the assistant's
   a `{"type":"user","message":{…}}` line per turn on stdin. `system/init`
   gives the session id; `stream_event` text deltas become `delta`;
   `tool_use` blocks become activity labels (`Name: first line of the
-  input`); `result` ends the turn. The rows themselves come from Claude
+  input`); `result` ends the turn, with the process's running totals
+  (`modelUsage`, `total_cost_usd`: the server adds up their differences,
+  and the whole of a total that started over); `system/init`'s
+  `apiKeySource` ("none": a subscription's login) is the plan, and
+  `rate_limit_event`'s `unifiedWindows` the subscription's five-hour and
+  weekly windows. The rows themselves come from Claude
   Code's session file, followed as it is written — as every agent's do
   from its own log (the transcript sync, in DEVELOPMENT.md).
 - **OpenRouter**: the `openrouter` CLI (github.com/AttilaTheFun/open_router_cli)
@@ -130,13 +140,18 @@ tool's output; the transcript view hides them, the assistant's
   with its own sessions under `~/.openrouter/sessions`, where it also keeps
   `<id>.jsonl`, a line per message appended as it lands, which Visor
   follows. Its key is its own (`openrouter auth login`); Visor never holds
-  one.
+  one. Its result carries the run's tokens and cost as Claude Code's does,
+  and after each turn a `system/usage_limits` line gives the key's limit
+  and the account's credits, as OpenRouter's `/key` and `/credits` say.
 - **Codex**: `codex app-server`, one per session, a thread started or
   resumed by id and each message a turn. Its events give the thread id,
   the reply's words as they stream, and what is running; the rows come
   from the thread's rollout
   (`~/.codex/sessions/<y>/<m>/<d>/rollout-*-<thread>.jsonl`), followed as
-  Codex writes it.
+  Codex writes it. `thread/tokenUsage/updated` gives the context (`last`)
+  and the thread's tokens (`total`); `account/read` and
+  `account/rateLimits/read`, asked at launch, and
+  `account/rateLimits/updated` give the plan, its windows and credits.
 
 ## Approvals (manual mode)
 

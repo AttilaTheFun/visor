@@ -8,7 +8,7 @@ import VisorProtocol
 import XCTest
 
 @MainActor
-final class OutboxTests: XCTestCase {
+final class OutboxTests: ServerTestCase {
     private func record() -> SessionRecord {
         let info = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "t", created: 0)
         return SessionRecord(info: info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))

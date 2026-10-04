@@ -33,12 +33,10 @@ private final class Screen {
     }
 }
 
-@MainActor
-final class TerminalSessionTests: XCTestCase {
+final class TerminalSessionTests: ServerTestCase {
     private var folder: String!
 
     override func setUp() async throws {
-        try await super.setUp()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-terminal-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         folder = root.path
@@ -50,7 +48,7 @@ final class TerminalSessionTests: XCTestCase {
     func testAShellIsTypedIntoAndDraws() async throws {
         setenv("VISOR_TOKEN", "not-for-the-shell", 1)
         defer { unsetenv("VISOR_TOKEN") }
-        let shell = ShellProcess(cwd: folder, shell: "/bin/sh")
+        let shell = ShellProcess(cwd: folder, shell: ShellCommand("/bin/sh", ["-l"]))
         let screen = Screen(shell.events)
         shell.resize(cols: 80, rows: 24)
         try shell.start()
@@ -70,16 +68,19 @@ final class TerminalSessionTests: XCTestCase {
         // a shell gets one even without TIOCSCTTY; a server started by
         // launchd does not, which the lifecycle probe's TERMINAL=1 run
         // checks against a real server.)
-        try shell.send("ps -o tty= -p $$ | sed 's/^/tty=/'")
+        // (Its name: "ttys…" on a Mac, "pts/…" on Linux; "?" for none.)
+        try shell.send("ps -o tty= -p $$ | sed 's/^/tty=/; s#^tty=pts/#tty=ttys#'")
         let hasTerminal = await screen.shows("tty=ttys")
         XCTAssertTrue(hasTerminal, "a controlling terminal: \(screen.text)")
-        try shell.send("sleep 30; echo slept")
+        // Ctrl-C ends the job at once: the next line runs within seconds of
+        // a sleep of thirty. (Whether the rest of the interrupted line runs
+        // is the shell's own choice: bash 3.2 runs it, dash does not.)
+        try shell.send("sleep 30")
         try await Task.sleep(for: .milliseconds(500))
         shell.interrupt()
         try shell.send("echo interrupted-$((1 + 1))")
         let interrupted = await screen.shows("interrupted-2", within: 5)
         XCTAssertTrue(interrupted, "Ctrl-C ended the sleep: \(screen.text)")
-        XCTAssertFalse(screen.text.contains("slept\r"), "the line after the sleep did not run")
 
         shell.write(Data("exit\r".utf8))
         let exited = await screen.shows("The shell exited")
@@ -105,7 +106,7 @@ final class TerminalSessionTests: XCTestCase {
         VisorServer.storeRoot = store
         VisorServer.secrets = MemorySecrets()
         let server = VisorServer(port: 7995)
-        server.harnesses = AgentHarnesses([ClaudeHarness(kind: .claude, tool: "claude", models: []), ShellHarness(shell: "/bin/sh")])
+        server.harnesses = AgentHarnesses([ClaudeHarness(kind: .claude, tool: "claude", models: []), ShellHarness(shell: ShellCommand("/bin/sh", ["-l"]))])
 
         server.perform(.start(id: "T", agent: .shell, cwd: folder, title: "", skipPermissions: true), from: nil)
         let record = try XCTUnwrap(server.session("T"))

@@ -87,12 +87,16 @@ extension SessionRecord {
             e.more = start > 0 || moreBefore
             return e
         }
-        guard let indexer, let first = entries.first?.id else {
+        guard let indexer else {
             e.entries = []
             e.more = false
             return e
         }
-        let page = await indexer.earlier(before: first, limit: Self.servedRows)
+        // Before the row asked about, wherever it is: the record's first, or
+        // one the client has paged to past the record's own rows. (Before
+        // the record's first, always, sent a client that had paged that far
+        // the rows it had, and it asked again for ever.)
+        let page = await indexer.earlier(before: id, limit: Self.servedRows)
         e.entries = page.rows
         e.more = page.more
         return e

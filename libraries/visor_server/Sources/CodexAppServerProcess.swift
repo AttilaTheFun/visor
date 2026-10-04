@@ -35,6 +35,9 @@ public final class CodexAppServerProcess: AgentProcess {
     private var nextRequestID = 1
     /// Answers waited on, by request id.
     private var replies: [Int: CheckedContinuation<Reply, Never>] = [:]
+    /// The account's limits as last said, for a sparse update to lay
+    /// itself over.
+    private var rateLimits: CodexOutput.RateLimits?
 
     public init(cwd: String, skipPermissions: Bool, resume: String?) {
         self.cwd = cwd
@@ -172,6 +175,10 @@ public final class CodexAppServerProcess: AgentProcess {
         }
         Task {
             _ = await self.request("initialize", ["clientInfo": ["name": "visor", "version": "1"]], of: child)
+            // How the account is paid for and how near its limits it is;
+            // turns update the limits as they go.
+            _ = await self.request("account/read", [:], of: child)
+            _ = await self.request("account/rateLimits/read", ["excludeResetCreditDetails": true], of: child)
         }
         // A thread being resumed is picked up now, so the first turn does
         // not wait on it.
@@ -224,6 +231,14 @@ public final class CodexAppServerProcess: AgentProcess {
             emit.yield(.busy(false))
         case .tokens(let used, let limit):
             emit.yield(.context(used: used, limit: limit))
+        case .spent(let usage):
+            emit.yield(.spent(usage))
+        case .plan(let plan, let subscription):
+            emit.yield(.plan(plan, subscription: subscription))
+        case .rateLimits(let update):
+            let merged = update.merged(over: rateLimits)
+            rateLimits = merged
+            emit.yield(.limits(merged.limits))
         case .failure(let message):
             emit.yield(.failure(message))
         }

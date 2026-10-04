@@ -16,15 +16,31 @@ enum CodexOutput: Sendable {
     /// The turn ended; with what went wrong, unless it was interrupted.
     case turnCompleted(failure: String?)
     case tokens(used: Int, limit: Int?)
+    /// The thread's running total of tokens.
+    case spent(SessionUsage)
+    /// How the account is paid for (an answer to `account/read`).
+    case plan(String, subscription: Bool)
+    /// The account's windows and credits, whole or in part.
+    case rateLimits(RateLimits)
     case failure(String)
 
     static func parse(_ line: String) -> [CodexOutput] {
         guard let object = JSON.object(line) else { return [] }
         if let id = object["id"] as? Int, object["method"] == nil {
             let result = object["result"] as? [String: Any]
-            return [.reply(id: id, thread: (result?["thread"] as? [String: Any])?["id"] as? String,
-                           turn: (result?["turn"] as? [String: Any])?["id"] as? String,
-                           error: object["error"].map(describe))]
+            var outputs: [CodexOutput] = [.reply(id: id, thread: (result?["thread"] as? [String: Any])?["id"] as? String,
+                                                  turn: (result?["turn"] as? [String: Any])?["id"] as? String,
+                                                  error: object["error"].map(describe))]
+            // The account's reads, told by what they hold.
+            if let account = result?["account"] as? [String: Any], let type = account["type"] as? String {
+                switch type {
+                case "chatgpt": outputs.append(.plan(planName(account["planType"] as? String ?? "plan"), subscription: true))
+                case "apiKey": outputs.append(.plan("API key", subscription: false))
+                default: outputs.append(.plan(type, subscription: false))
+                }
+            }
+            if let snapshot = result?["rateLimits"] as? [String: Any] { outputs.append(.rateLimits(RateLimits(snapshot))) }
+            return outputs
         }
         guard let method = object["method"] as? String else { return [] }
         if let id = object["id"] as? Int { return [.asked(id: id, method: method)] }
@@ -61,9 +77,20 @@ enum CodexOutput: Sendable {
             }
             return [.turnCompleted(failure: failure)]
         case "thread/tokenUsage/updated":
+            // The last request's tokens are what the context holds; the
+            // total is the thread's.
             guard let usage = params["tokenUsage"] as? [String: Any] ?? params["usage"] as? [String: Any] else { return [] }
-            let used = (usage["total"] as? Int) ?? (usage["totalTokens"] as? Int) ?? (usage["inputTokens"] as? Int ?? 0)
-            return used > 0 ? [.tokens(used: used, limit: usage["contextWindow"] as? Int ?? usage["modelContextWindow"] as? Int)] : []
+            var outputs: [CodexOutput] = []
+            let used = ((usage["last"] as? [String: Any])?["totalTokens"] as? Int) ?? (usage["totalTokens"] as? Int) ?? 0
+            if used > 0 { outputs.append(.tokens(used: used, limit: usage["modelContextWindow"] as? Int ?? usage["contextWindow"] as? Int)) }
+            if let total = usage["total"] as? [String: Any] {
+                outputs.append(.spent(SessionUsage(input: total["inputTokens"] as? Int ?? 0, cached: total["cachedInputTokens"] as? Int ?? 0,
+                                                   output: total["outputTokens"] as? Int ?? 0)))
+            }
+            return outputs
+        case "account/rateLimits/updated":
+            guard let snapshot = params["rateLimits"] as? [String: Any] else { return [] }
+            return [.rateLimits(RateLimits(snapshot))]
         case "error":
             guard let message = (params["error"] as? [String: Any])?["message"] as? String ?? params["message"] as? String else { return [] }
             return [.failure(message)]

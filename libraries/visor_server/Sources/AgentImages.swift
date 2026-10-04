@@ -4,17 +4,14 @@
 // written down and everything afterwards refers to the path. The client
 // asks for the bytes again when it draws them.
 
-import CryptoKit
 import Foundation
-import ImageIO
 import VisorProtocol
 
 enum AgentImages {
     /// Where pictures live: beside the session store, so removing Visor's
-    /// support directory takes them with it.
+    /// data directory takes them with it.
     static var directory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Visor/images")
+        let base = ServerPlatform.current.host.dataDirectory.appendingPathComponent("images")
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
@@ -25,7 +22,7 @@ enum AgentImages {
         guard let data = Data(base64Encoded: base64), !data.isEmpty else { return nil }
         // Named by its bytes: the same picture read again from the
         // session file is the same file, not a second copy.
-        let digest = SHA256.hash(data: data).prefix(8).map { String(format: "%02x", $0) }.joined()
+        let digest = SHA256.hash(data).prefix(8).map { String(format: "%02x", $0) }.joined()
         let suffix = fileExtension(for: mediaType)
         // A given name keeps its stem but takes the digest too: a phone
         // names every pick "image-0", and two pictures are two files.
@@ -60,17 +57,7 @@ enum AgentImages {
     /// A picture's size in pixels, read from its header — the bytes are
     /// not decoded. Nil for a file that is not there or not a picture.
     static func pixelSize(path: String) -> ImageSize? {
-        let resolved = (path as NSString).expandingTildeInPath
-        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: resolved) as CFURL, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              width > 0, height > 0
-        else { return nil }
-        // A picture that says it is rotated is shown rotated: swap so the
-        // layout reserves the shape the eye will see.
-        let orientation = properties[kCGImagePropertyOrientation] as? UInt32 ?? 1
-        return orientation >= 5 ? ImageSize(width: height, height: width) : ImageSize(width: width, height: height)
+        ServerPlatform.current.images.pixelSize(path: (path as NSString).expandingTildeInPath)
     }
 
     /// Sizes for a row's pictures, in order; stops at the first one that

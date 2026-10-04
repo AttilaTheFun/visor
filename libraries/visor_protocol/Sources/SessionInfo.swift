@@ -39,6 +39,9 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// model's window. Both nil until a turn reports them.
     public var contextUsed: Int?
     public var contextLimit: Int?
+    /// What the session has used in all, as far as Visor has seen it: nil
+    /// until a turn reports it.
+    public var usage: SessionUsage?
     /// What the user has said while the agent was working, in the order it
     /// was said. A turn in flight is not interrupted for it: the queue is
     /// handed over when the agent next falls idle.
@@ -103,6 +106,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         effort = try c.decodeIfPresent(String.self, forKey: .effort)
         contextUsed = try c.decodeIfPresent(Int.self, forKey: .contextUsed)
         contextLimit = try c.decodeIfPresent(Int.self, forKey: .contextLimit)
+        usage = try c.decodeIfPresent(SessionUsage.self, forKey: .usage)
         queued = try c.decodeIfPresent([String].self, forKey: .queued) ?? []
         created = try c.decodeIfPresent(Double.self, forKey: .created) ?? 0
         mode = try c.decodeIfPresent(SessionMode.self, forKey: .mode) ?? .chat

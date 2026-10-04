@@ -87,7 +87,13 @@ public final class TailscaleAgentServer: AgentServer {
                         self.send(.login(password: self.record.secret, token: self.token, client: AgentServerRecord.clientID))
                     } else if event.hasPrefix("message ") {
                         self.heard += 1
-                        if let translated = Self.translate(String(event.dropFirst(8))) { onEvent(translated) }
+                        // Read off the main actor: a page of earlier rows
+                        // is hundreds of them. The loop waits for each, so
+                        // messages still arrive in order.
+                        let text = String(event.dropFirst(8))
+                        let translated = await Task.detached(priority: .userInitiated) { Self.translate(text) }.value
+                        guard self.socketID == id else { return }
+                        if let translated { onEvent(translated) }
                     } else if event.hasPrefix("close ") || event.hasPrefix("error ") {
                         self.socketID = nil
                         onEvent(.closed(String(event.split(separator: " ", maxSplits: 1).last ?? "")))
@@ -144,7 +150,7 @@ public final class TailscaleAgentServer: AgentServer {
     /// A message from the Mac, as the event it means. Nil for one that is
     /// not an envelope, and for the answer to a heartbeat — a `pong`, or
     /// from a Mac older than the heartbeat, its complaint about the ping.
-    static func translate(_ text: String) -> AgentServerEvent? {
+    nonisolated static func translate(_ text: String) -> AgentServerEvent? {
         guard let envelope = Envelope.decode(text) else { return nil }
         switch envelope.type {
         case "pong": return nil
@@ -152,6 +158,9 @@ public final class TailscaleAgentServer: AgentServer {
         case "welcome": return .welcome(name: envelope.host ?? "", sessions: envelope.sessions ?? [], catalogs: envelope.catalogs ?? [])
         case "sessions": return .sessions(envelope.sessions ?? [])
         case "catalogs": return .catalogs(envelope.catalogs ?? [])
+        case "account":
+            guard let account = envelope.account, let agent = envelope.agent else { return nil }
+            return .account(account, of: agent)
         case "error": return envelope.message == "Wrong password" ? .refused(envelope.message ?? "") : .failed(envelope.message ?? "Rejected")
         default: return .session(envelope)
         }

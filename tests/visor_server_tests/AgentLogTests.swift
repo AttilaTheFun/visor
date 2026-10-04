@@ -7,7 +7,7 @@ import VisorProtocol
 @testable import VisorServer
 import XCTest
 
-final class AgentLogTests: XCTestCase {
+final class AgentLogTests: ServerTestCase {
     private func jsonl(_ objects: [[String: Any]]) -> Data {
         Data(objects.map { String(decoding: try! JSONSerialization.data(withJSONObject: $0), as: UTF8.self) }.joined(separator: "\n").utf8)
     }
@@ -70,7 +70,7 @@ final class AgentLogTests: XCTestCase {
 }
 
 /// A goal's records are shown as the goal's rows: set, then met.
-final class GoalRowTests: XCTestCase {
+final class GoalRowTests: ServerTestCase {
     func testGoalsBecomeTheirOwnRows() {
         let rows = TranscriptAssembler.rows(in: [
             // As Claude Code writes it: the goal's state, then the command.
@@ -86,7 +86,7 @@ final class GoalRowTests: XCTestCase {
 
 /// What the user attached comes back from the agent's log as a list of
 /// paths under the words; the row shows the words and the pictures.
-final class AttachedPictureTests: XCTestCase {
+final class AttachedPictureTests: ServerTestCase {
     func testAttachedPathsAreThePictures() {
         let words = TranscriptAssembler.attachments(in: "Look at this\n\nAttached image:\n- /tmp/a.png")
         XCTAssertEqual(words.text, "Look at this")
@@ -108,7 +108,7 @@ final class AttachedPictureTests: XCTestCase {
 /// (its state and its notice), marks for the loop, and the session's
 /// info following the latest of each.
 @MainActor
-final class GoalAndLoopTests: XCTestCase {
+final class GoalAndLoopTests: ServerTestCase {
     func testAGoalIsOneCardAndLoopsAreMarked() {
         let rows = TranscriptAssembler.rows(in: [
             ClaudeRecord(uuid: "g1", kind: .goal(condition: "Ship it", met: false, reason: nil), timestamp: nil),

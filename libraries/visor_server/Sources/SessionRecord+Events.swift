@@ -108,6 +108,15 @@ extension SessionRecord {
         case .commands(let list):
             commands = list
             return nil
+        case .spent(let total):
+            let added = reportedUsage.map { total.continues(from: $0) ? total.since($0) : total } ?? total
+            reportedUsage = total
+            info.usage = (info.usage ?? SessionUsage()).adding(added)
+            // The sessions list carries it; the caller broadcasts that.
+            return nil
+        case .plan, .limits:
+            // The account's, not the session's: the server keeps them.
+            return nil
         case .model(let model):
             // What actually ran, for display only. The user's choice
             // (info.model) is never changed here — a turn that fell back

@@ -30,4 +30,11 @@ public enum AgentEvent: Sendable {
     case commands([SlashCommand])
     /// The model the agent says it is actually running.
     case model(String)
+    /// What the agent's session has used, as the agent's own running
+    /// total: which may start over when the agent is launched again.
+    case spent(SessionUsage)
+    /// How the agent's account is paid for: the plan, in words.
+    case plan(String, subscription: Bool)
+    /// The account's windows and budgets as they stand.
+    case limits([UsageLimit])
 }

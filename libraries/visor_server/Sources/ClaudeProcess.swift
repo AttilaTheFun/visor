@@ -168,12 +168,17 @@ public final class ClaudeProcess: AgentProcess {
         switch output {
         case .commands(let list):
             emit.yield(.commands(list))
-        case .began(let session, let model):
+        case .began(let session, let model, let keySource):
             if let session {
                 resumeID = session
                 emit.yield(.session(session))
             }
             if let model, !model.isEmpty { emit.yield(.model(model)) }
+            // A login is a subscription; a key is paid for by the token.
+            if let keySource {
+                let subscription = keySource == "none"
+                emit.yield(.plan(subscription ? "Subscription" : "API key", subscription: subscription))
+            }
         case .messageStarted(let id):
             // A new message begins: its own row from here on, never run
             // together with the one before (a tool call between two
@@ -197,7 +202,10 @@ public final class ClaudeProcess: AgentProcess {
             for id in ids { emit.yield(.toolFinished(id: id)) }
             emit.yield(.activity("Thinking…"))
             emit.yield(.thinking(true))
-        case .result(let failure):
+        case .limits(let limits):
+            emit.yield(.limits(limits))
+        case .result(let failure, let spent):
+            if let spent { emit.yield(.spent(spent)) }
             // An interrupt ends the turn with an error result of its own
             // (error_during_execution); that is the stop the user asked
             // for, not something to show as a failure.

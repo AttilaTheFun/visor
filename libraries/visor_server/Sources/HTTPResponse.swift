@@ -1,6 +1,3 @@
-import Foundation
-import Network
-
 public struct HTTPResponse {
     public var status: Int
     public var body: String

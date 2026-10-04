@@ -18,6 +18,7 @@ swift_library(
     deps = [
         "//libraries/visor_protocol",
         "//libraries/visor_server",
+        "//libraries/visor_server_apple",
     ],
 )
 
@@ -29,8 +30,6 @@ macos_application(
     infoplists = ["Info.plist"],
     minimum_os_version = "15.0",
     resources = [
-        # Claude's permission prompt tool for manual mode (docs/protocol.md).
-        "Resources/visor_mcp.js",
         # The flat icon, beside the compiled app icon.
         "//artwork/app-icon:Visor.icns",
     ],

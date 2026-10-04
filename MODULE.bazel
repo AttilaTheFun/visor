@@ -11,6 +11,7 @@ bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
 bazel_dep(name = "apple_support", version = "2.8.4")
 bazel_dep(name = "rules_swift", version = "4.1.0")
+
 # The server's one C file (libraries/visor_server/pty); already in the
 # graph at this version through rules_swift.
 bazel_dep(name = "rules_cc", version = "0.2.20")
@@ -28,12 +29,25 @@ swift_deps.from_package(
     resolved = "//third_party/swift_packages:Package.resolved",
     swift = "//third_party/swift_packages:Package.swift",
 )
+
+# SwiftTerm generates two files with a build plugin, and rspm runs no SwiftPM
+# plugins: the patch adds them, made from the pinned revision, and drops the
+# plugin from the target. When agent_ui moves the pin, make them again in an
+# export of the new revision (no .git, so the commit comes from here):
+#   git archive <rev> | tar -x -C <dir> && cd <dir> &&
+#   SWIFTTERM_BUILD_COMMIT=<rev> SWIFTTERM_BUILD_DIRTY=0 swift run SwiftTermBuildInfoGenerator \
+#     "$PWD" Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift
+# and write the patch again (diff -ruN against a clean export, -p1).
+swift_deps.configure_package(
+    name = "swiftterm",
+    patch_args = ["-p1"],
+    patches = ["//third_party/swift_packages:swiftterm.patch"],
+)
 use_repo(
     swift_deps,
     "swift_package",
     "swiftpkg_agent_ui",
     "swiftpkg_sqlite.swift",
-    "swiftpkg_swiftterm",
 )
 
 # The builder's own signing values (the Apple team), from .bazelrc.user.

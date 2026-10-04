@@ -1,3 +1,10 @@
+// Visor's MCP server, as Node runs it: the script itself, kept here so
+// every build of the server has it without a bundle to carry it in. The
+// server writes it into its data directory and points the agents at that
+// file (VisorMCP.swift).
+
+enum VisorMCPScript {
+    static let source = #"""
 // Visor's MCP server, run by every agent session the menu bar app starts.
 // Its tools let a session see the other sessions on this computer and on
 // the computers linked to it, message them, and read what they said. In manual mode Claude also calls
@@ -139,4 +146,6 @@ function summary(input) {
   }
   const first = Object.values(input).find((v) => typeof v === "string");
   return first ? first.split("\n")[0].slice(0, 200) : "";
+}
+"""#
 }

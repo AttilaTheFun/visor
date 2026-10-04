@@ -1,11 +1,9 @@
 // Who is let in: the road's word on the caller, the password, the tokens
 // `hello` hands out; and where the password is kept.
 
-import AppKit
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import Network
 import VisorProtocol
 
 extension VisorServer {

@@ -1,8 +1,6 @@
-import AppKit
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import Network
 import VisorProtocol
 
 /// The server's message cache: every session's rows, from the agents' own

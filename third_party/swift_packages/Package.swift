@@ -2,10 +2,10 @@
 
 // The SwiftPM dependencies Visor consumes through rules_swift_package_manager:
 // AgentUI (the agent chat page, the navigation containers and the terminal,
-// which brings SwiftTerm's emulator from github.com/AttilaTheFun/SwiftTerm; a private
-// repo — git's credential helper from `gh auth setup-git` lets Bazel's clone
-// and SwiftPM's resolve reach it). rspm reads Package.resolved for the pinned
-// graph and generates one `@swiftpkg_<name>` repo per package.
+// which brings SwiftTerm's emulator from github.com/migueldeicaza/SwiftTerm;
+// swiftterm.patch adds what its build plugin generates, since rspm runs no
+// SwiftPM plugins). rspm reads Package.resolved for the pinned graph and
+// generates one `@swiftpkg_<name>` repo per package.
 import PackageDescription
 
 let package = Package(
@@ -14,7 +14,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            revision: "262906a4d59b48484bf19834497cc034baae0989"
+            revision: "14bfd21d9d0331e1439436ae5b66dc5bf314a71d"
         ),
         // The transcript cache: indexed, searchable rows of every session's
         // file, kept by the server off the main thread.

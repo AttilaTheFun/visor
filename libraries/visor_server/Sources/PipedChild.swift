@@ -27,8 +27,9 @@ final class PipedChild {
 
     init(executable: String, arguments: [String], directory: String, environment: [String: String]) throws {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
+        let command = ServerPlatform.current.tools.command(executable, arguments)
+        process.executableURL = URL(fileURLWithPath: command.executable)
+        process.arguments = command.arguments
         process.currentDirectoryURL = URL(fileURLWithPath: directory)
         process.environment = environment
         let input = Pipe(), output = Pipe(), errors = Pipe()
@@ -76,7 +77,7 @@ final class PipedChild {
             try await Task.sleep(for: grace)
             if process.isRunning { process.terminate() }
             try await Task.sleep(for: .seconds(1))
-            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            if process.isRunning { ServerPlatform.current.processes.kill(process.processIdentifier) }
         }
         _ = await exit.value
         force.cancel()

@@ -42,6 +42,9 @@ public struct Envelope: Codable, Sendable {
     public var sessions: [SessionInfo]?
     // welcome: each provider's models
     public var catalogs: [AgentCatalog]?
+    /// account: how `agent` is paid for and how near its limits it is,
+    /// changed since its catalog was sent.
+    public var account: AgentAccount?
     // settings: the session's model and effort (nil keeps the current one)
     public var model: String?
     public var effort: String?
@@ -224,6 +227,10 @@ extension Envelope {
     /// The agents on offer changed (a key was entered on the server).
     public static func catalogs(_ catalogs: [AgentCatalog]) -> Envelope {
         var e = Envelope(type: "catalogs"); e.catalogs = catalogs; return e
+    }
+    /// An agent's account changed: its plan, or how near its limits it is.
+    public static func account(_ account: AgentAccount, of agent: AgentKind) -> Envelope {
+        var e = Envelope(type: "account"); e.agent = agent; e.account = account; return e
     }
     /// The client's heartbeat over the live channel, and the server's
     /// answer to it: a channel that goes unanswered is taken as dropped.

@@ -7,6 +7,7 @@
 // login and welcome, the transcript's sync, the files and the search are
 // all answered here, from these fixtures, instead of by a server.
 
+import Foundation
 import VisorProtocol
 import VisorServices
 
@@ -50,6 +51,7 @@ public enum VisorFixture {
         var chat = session(chatSession, .claude, "/Users/visor/Developer/weather", "Offline sync",
                            model: "opus", preview: "Rows now sync in the background; waiting for your approval to run the tests.", age: 60)
         chat.goal = "Rows written offline are all on the server after reconnecting"
+        chat.usage = SessionUsage(input: 1_284_000, cached: 1_102_000, output: 36_400, cost: 6.42)
         var docs = session("fixture-docs", .claude, "/Users/visor/Developer/handbook", "Release notes",
                            model: "sonnet", preview: "Drafted the notes for 2.4 with the three fixes.", age: 7200)
         docs.goal = "The release notes cover every change since 2.3"
@@ -69,10 +71,22 @@ public enum VisorFixture {
             AgentModel(id: "opus", title: "Opus 5.5", subtitle: "Most capable", efforts: ["low", "medium", "high"], defaultEffort: "high"),
             AgentModel(id: "sonnet", title: "Sonnet 5", subtitle: "Fast and capable", efforts: ["low", "medium", "high"], defaultEffort: "medium"),
             AgentModel(id: "haiku", title: "Haiku 4.5", subtitle: "Fastest", efforts: []),
-         ], defaultModel: "opus"),
+         ], defaultModel: "opus", account: claudeAccount),
          AgentCatalog(agent: .codex, models: [
             AgentModel(id: "gpt-5.5", title: "GPT-5.5", efforts: ["low", "medium", "high"], defaultEffort: "medium"),
          ], defaultModel: "gpt-5.5")]
+    }
+
+    /// A subscription's windows, as of two minutes ago. Its times are
+    /// the clock's, not the fixture's: the inspector says how long until
+    /// each resets, and a screenshot taken within half a minute reads the
+    /// same.
+    static var claudeAccount: AgentAccount {
+        let now = Date().timeIntervalSince1970
+        return AgentAccount(plan: "Subscription", subscription: true, limits: [
+            UsageLimit(name: "5-hour", used: 0.22, resets: now + 2 * 3600 + 10 * 60 + 30),
+            UsageLimit(name: "Weekly", used: 0.82, resets: now + 3 * 86_400 + 4 * 3600 + 30),
+        ], updated: now - 150)
     }
 
     static let transcript: [TranscriptEntry] = [
@@ -86,6 +100,7 @@ public enum VisorFixture {
         - write each row to the local store first
         - mark it *pending* until the server confirms it
         - retry pending rows when the connection returns
+        - **keep the order rows were written in**, so a row edited twice while offline reaches the server as its last edit, not its first
 
         ```swift
         func save(_ row: Row) throws {

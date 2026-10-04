@@ -6,7 +6,7 @@ import VisorProtocol
 import VisorServer
 
 struct MenuContent: View {
-    @ObservedObject var server: VisorServer
+    var server: VisorServer
 
     var body: some View {
         Group {

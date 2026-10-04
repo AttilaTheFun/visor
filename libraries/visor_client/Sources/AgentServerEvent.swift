@@ -10,6 +10,8 @@ public enum AgentServerEvent: Sendable {
     case sessions([SessionInfo])
     /// The harnesses' catalogs changed (a tool installed, models refreshed).
     case catalogs([AgentCatalog])
+    /// An agent's account changed: its plan, or how near its limits it is.
+    case account(AgentAccount, of: AgentKind)
     /// Something about one session, as the protocol says it: working or
     /// not, its ephemeral state, a new row, a notice.
     case session(Envelope)

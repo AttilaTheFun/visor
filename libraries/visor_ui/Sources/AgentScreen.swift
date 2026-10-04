@@ -46,12 +46,14 @@ struct AgentScreen: View {
 
     private var info: SessionInfo? { host.sessions.first { $0.id == sessionID } }
 
-    /// While the draft is a slash and the start of a command's name, the
+    /// While a draft is a slash and the start of a command's name, the
     /// commands it could be, best first: names that begin with what is
-    /// typed, then names that hold it.
-    private var suggestions: [AgentSuggestion] {
-        guard let typed = Self.commandPrefix(draft) else { return [] }
-        let sorted = (host.sessionCommands[sessionID] ?? []).sorted { $0.name.lowercased() < $1.name.lowercased() }
+    /// typed, then names that hold it. Asked by the composer as the draft
+    /// changes: this screen does not read the draft, so typing does not
+    /// redraw it (or the thread).
+    static func suggestions(for draft: String, from commands: [SlashCommand]) -> [AgentSuggestion] {
+        guard let typed = commandPrefix(draft) else { return [] }
+        let sorted = commands.sorted { $0.name.lowercased() < $1.name.lowercased() }
         let starting = sorted.filter { $0.name.lowercased().hasPrefix(typed) }
         let holding = typed.isEmpty ? [] : sorted.filter { !$0.name.lowercased().hasPrefix(typed) && $0.name.lowercased().contains(typed) }
         return (starting + holding).prefix(40).map { command in
@@ -166,7 +168,7 @@ struct AgentScreen: View {
                 host.stop(sessionID)
             },
             loadEarlier: transcript.hasEarlier ? { host.loadEarlier(sessionID) } : nil,
-            suggestions: suggestions,
+            suggestions: { [commands = host.sessionCommands[sessionID] ?? []] draft in Self.suggestions(for: draft, from: commands) },
             pick: { draft = $0.text }
         ) {
             if let approval = transcript.pendingApproval {
@@ -271,7 +273,7 @@ struct AgentScreen: View {
                         // A frame of it, marked as a video.
                         ZStack {
                             if let thumbnail = picked.thumbnail {
-                                Base64Image(base64: thumbnail)
+                                Base64Image(base64: thumbnail, key: picked.id + "#frame")
                             } else {
                                 Color.secondary.opacity(0.15)
                             }
@@ -281,7 +283,7 @@ struct AgentScreen: View {
                                 .shadow(radius: 2)
                         }
                     } else if AttachmentKind.isImage(picked.name) {
-                        Base64Image(base64: picked.base64)
+                        Base64Image(base64: picked.base64, key: picked.id)
                     } else {
                         // Any other file: what it is called.
                         VStack(spacing: 4) {

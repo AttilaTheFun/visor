@@ -26,6 +26,7 @@ extension Envelope {
         e.text = value["text"].string
         e.sessions = value["sessions"].array?.compactMap(SessionInfo.init(json:))
         e.catalogs = value["catalogs"].array?.compactMap(AgentCatalog.init(json:))
+        e.account = AgentAccount(json: value["account"])
         e.model = value["model"].string
         e.effort = value["effort"].string
         e.entries = value["entries"].array?.compactMap(TranscriptEntry.init(json:))
@@ -83,6 +84,7 @@ extension Envelope {
         put("session", session); put("text", text)
         if let sessions { o["sessions"] = .array(sessions.map(\.json)) }
         if let catalogs { o["catalogs"] = .array(catalogs.map(\.json)) }
+        if let account { o["account"] = account.json }
         put("model", model); put("effort", effort)
         if let entries { o["entries"] = .array(entries.map(\.json)) }
         put("streaming", streaming); put("activity", activity)
