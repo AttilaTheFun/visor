@@ -86,6 +86,7 @@ public enum VisorFixture {
         - write each row to the local store first
         - mark it *pending* until the server confirms it
         - retry pending rows when the connection returns
+        - **keep the order rows were written in**, so a row edited twice while offline reaches the server as its last edit, not its first
 
         ```swift
         func save(_ row: Row) throws {

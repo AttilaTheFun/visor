@@ -176,6 +176,38 @@ final class VisorProbe: XCTestCase {
         }
     }
 
+    /// The fixture's chat as drawn — a long bullet that starts in bold
+    /// wraps rather than stopping at "…" — and the send button taking a
+    /// tap beside its circle, in the room around it, not only on it.
+    func testFixtureChatTouch() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        Thread.sleep(forTimeInterval: 4)
+        // The long bullet is in the assistant's first reply, above.
+        app.swipeDown()
+        Thread.sleep(forTimeInterval: 1)
+        shot(app, "chat-bullets")
+        app.swipeUp()
+        Thread.sleep(forTimeInterval: 1)
+        let field = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "no composer")
+        field.tap()
+        field.typeText("hit area check")
+        let send = app.buttons["Send"].firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 5), "no send button")
+        // Beside the drawn circle, down and to the right of it: 24 points
+        // from its centre each way is 6 points past its edge.
+        let frame = send.frame
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX + 24, dy: frame.midY + 24)).tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        shot(app, "chat-after-tap-beside-send")
+        let left = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+        XCTAssertFalse((left.value as? String ?? "").contains("hit area check"), "a tap beside the send button sent the message")
+    }
+
     /// What a row opens over its thread, in the fixture's chat: the run of
     /// tool calls, and a picture. Each opens from a row, shows what it
     /// should, and goes with Done.
