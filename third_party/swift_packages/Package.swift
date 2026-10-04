@@ -14,7 +14,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            revision: "3ebc1934b383956d48bdf2f7ad06a7e3bf3ed16d"
+            revision: "d49812c3634202754ca78332e1d47fcdbc0f861e"
         ),
         // The transcript cache: indexed, searchable rows of every session's
         // file, kept by the server off the main thread.

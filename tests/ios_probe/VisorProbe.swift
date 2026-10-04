@@ -208,6 +208,37 @@ final class VisorProbe: XCTestCase {
         XCTAssertFalse((left.value as? String ?? "").contains("hit area check"), "a tap beside the send button sent the message")
     }
 
+    /// Text in the thread can be selected: held down on, the agent's words
+    /// (markdown) and the user's (plain text) each get a selection and the
+    /// edit menu with Copy. A `safeAreaBar` on the thread's scroll view
+    /// took the press on iOS 26 and 27, so nothing could be selected
+    /// (AgentUI's composer is a safe-area inset for that).
+    func testFixtureSelectText() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        Thread.sleep(forTimeInterval: 4)
+        var offered: [String: Bool] = [:]
+        for (label, name) in [("Rows now sync", "agent"), ("Here's the layout", "user")] {
+            let words = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", label)).firstMatch
+            XCTAssertTrue(words.waitForExistence(timeout: 10), "no \(name) message")
+            words.press(forDuration: 1.2)
+            Thread.sleep(forTimeInterval: 1)
+            shot(app, "chat-select-text-\(name)")
+            // The edit menu's Copy: a menu item before iOS 26, a button in
+            // its glass bar since (not the message's own Copy button).
+            let menuCopy = app.buttons.matching(NSPredicate(format: "label == 'Copy' AND identifier != 'copy-message'")).firstMatch
+            offered[name] = app.menuItems["Copy"].firstMatch.waitForExistence(timeout: 3) || menuCopy.exists
+            print("VISOR_SELECT \(name): Copy offered \(offered[name] ?? false)")
+            // Away from the menu, to dismiss it.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).tap()
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTAssertEqual(offered, ["agent": true, "user": true], "where the edit menu offered Copy")
+    }
+
     /// What a row opens over its thread, in the fixture's chat: the run of
     /// tool calls, and a picture. Each opens from a row, shows what it
     /// should, and goes with Done.
