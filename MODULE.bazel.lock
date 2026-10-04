@@ -625,12 +625,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "97Cx3oE1dAcPSNsqqdpwN/hnA7HUd22kQXNxEB8IlNo=",
-        "usagesDigest": "A6DC8dr8R+csaQN9mtHB7VQKYf4oVWviykcn2SbbbHw=",
+        "usagesDigest": "1WmCPxJgZCHpaBKcADTF/tZiEqVoJohkR8Lw6cLOJrk=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 9729b39115c1e1f0a523193c4004f7a7dd3b083200394811a7612be7f90c890a"
+          "FILE:@@//third_party/swift_packages/Package.resolved 11c7b7ac50fd9a2429e7618dce43ac4ba867e64a0a177bc335156b222cf77109"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -644,7 +644,7 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "8a80eabf1832c6a447f367f06e11e0d201ea3dc9",
+              "commit": "3ebc1934b383956d48bdf2f7ad06a7e3bf3ed16d",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
               "env": {},
               "env_inherit": [],
@@ -733,12 +733,24 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_swiftterm",
-              "commit": "a652fe780aec9b4a8855841486583a7c8dcffd72",
-              "remote": "https://github.com/AttilaTheFun/SwiftTerm.git",
+              "commit": "839d4fa1ffd4ea2ede5664e1c1fb13cc5771e11a",
+              "remote": "https://github.com/migueldeicaza/SwiftTerm.git",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
+              "init_submodules": false,
               "make_files_read_only": false,
+              "recursive_init_submodules": true,
+              "patch_args": [
+                "-p1"
+              ],
+              "patch_cmds": [],
+              "patch_cmds_win": [],
+              "patch_tool": "",
+              "patches": [
+                "@@//third_party/swift_packages:swiftterm.patch"
+              ],
+              "publicly_expose_all_targets": false,
               "replace_scm_with_registry": false,
               "target_deps": {},
               "module_aliases": {},

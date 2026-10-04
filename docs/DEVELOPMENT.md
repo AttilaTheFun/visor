@@ -24,10 +24,10 @@ The repos (github.com/AttilaTheFun):
 | `open_router_cli` | SwiftPM: OpenRouterKit (client, streaming, ORAgent loop, coding tools, sessions, config, Claude's stream-json) and the `openrouter` CLI, which Visor drives. |
 
 Third-party: SwiftTerm's portable emulator (through agent_ui's TerminalUI,
-from the fork github.com/AttilaTheFun/SwiftTerm, branch `visor-consumer`:
-upstream main plus Android support, with the build plugin's output checked
-in because rspm runs no SwiftPM plugins; the fork's `android-support`
-branch is the change offered upstream), SQLite.swift 0.15.3 (the
+from upstream github.com/migueldeicaza/SwiftTerm, which builds for Android
+since #733; rspm runs no SwiftPM plugins, so MODULE.bazel patches in what
+its build plugin generates, third_party/swift_packages/swiftterm.patch,
+made from the pinned revision), SQLite.swift 0.15.3 (the
 caches), rules_swift_package_manager (rspm) brings SwiftPM packages into
 Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 `@swiftpkg_sqlite.swift//:SQLite`, `@swiftpkg_agent_ui//:AgentUI`.
