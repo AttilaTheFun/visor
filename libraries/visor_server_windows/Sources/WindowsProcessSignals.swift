@@ -25,7 +25,7 @@ public struct WindowsProcessSignals: ProcessSignals {
         defer { CloseHandle(process) }
         var code: DWORD = 0
         // STILL_ACTIVE
-        return GetExitCodeProcess(process, &code).boolValue && code == 259
+        return GetExitCodeProcess(process, &code) && code == 259
     }
 
     /// The program's path: Windows keeps a process's command line out of
@@ -35,7 +35,7 @@ public struct WindowsProcessSignals: ProcessSignals {
         defer { CloseHandle(process) }
         var buffer = [WCHAR](repeating: 0, count: 32768)
         var size = DWORD(buffer.count)
-        guard QueryFullProcessImageNameW(process, 0, &buffer, &size).boolValue else { return nil }
+        guard QueryFullProcessImageNameW(process, 0, &buffer, &size) else { return nil }
         return String(decoding: buffer[0..<Int(size)], as: UTF16.self)
     }
 

@@ -16,7 +16,7 @@ final class ConPTYChild: TerminalChild {
 
     init(_ command: ShellCommand, directory: String, environment: [String: String], cols: Int, rows: Int) throws {
         var inputRead: HANDLE?, inputWrite: HANDLE?, outputRead: HANDLE?, outputWrite: HANDLE?
-        guard CreatePipe(&inputRead, &inputWrite, nil, 0).boolValue, CreatePipe(&outputRead, &outputWrite, nil, 0).boolValue,
+        guard CreatePipe(&inputRead, &inputWrite, nil, 0), CreatePipe(&outputRead, &outputWrite, nil, 0),
               let inputRead, let inputWrite, let outputRead, let outputWrite else {
             throw AgentProcessError.spawnFailed("could not make the console's pipes")
         }
@@ -37,13 +37,13 @@ final class ConPTYChild: TerminalChild {
         _ = InitializeProcThreadAttributeList(nil, 1, 0, &bytes)
         let list = UnsafeMutableRawPointer.allocate(byteCount: Int(bytes), alignment: 16)
         defer { list.deallocate() }
-        guard InitializeProcThreadAttributeList(OpaquePointer(list), 1, 0, &bytes).boolValue else {
+        guard InitializeProcThreadAttributeList(OpaquePointer(list), 1, 0, &bytes) else {
             ClosePseudoConsole(made)
             throw AgentProcessError.spawnFailed("could not attach to the pseudo console")
         }
         defer { DeleteProcThreadAttributeList(OpaquePointer(list)) }
         // PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE
-        guard UpdateProcThreadAttribute(OpaquePointer(list), 0, DWORD_PTR(0x0002_0016), made, SIZE_T(MemoryLayout<HPCON>.size), nil, nil).boolValue else {
+        guard UpdateProcThreadAttribute(OpaquePointer(list), 0, DWORD_PTR(0x0002_0016), made, SIZE_T(MemoryLayout<HPCON>.size), nil, nil) else {
             ClosePseudoConsole(made)
             throw AgentProcessError.spawnFailed("could not attach to the pseudo console")
         }
@@ -58,7 +58,7 @@ final class ConPTYChild: TerminalChild {
         let created = directory.withCString(encodedAs: UTF16.self) { folder in
             withUnsafeMutablePointer(to: &startup) { pointer in
                 pointer.withMemoryRebound(to: STARTUPINFOW.self, capacity: 1) { info in
-                    CreateProcessW(nil, &line, nil, nil, false, flags, &block, folder, info, &information).boolValue
+                    CreateProcessW(nil, &line, nil, nil, false, flags, &block, folder, info, &information)
                 }
             }
         }
@@ -92,7 +92,7 @@ final class ConPTYChild: TerminalChild {
             while true {
                 var read: DWORD = 0
                 let count = DWORD(buffer.count)
-                let ok = buffer.withUnsafeMutableBytes { ReadFile(pipe.handle, $0.baseAddress, count, &read, nil).boolValue }
+                let ok = buffer.withUnsafeMutableBytes { ReadFile(pipe.handle, $0.baseAddress, count, &read, nil) }
                 guard ok, read > 0 else { break }
                 drawn.yield(Data(buffer[0..<Int(read)]))
             }

@@ -66,7 +66,7 @@ public struct WindowsSystem: CommandLineSystem {
         var line = Array(WindowsCommandLine.join([executable] + arguments).utf16) + [0]
         // CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
         let flags = DWORD(0x0000_0200 | 0x0800_0000)
-        guard CreateProcessW(nil, &line, nil, nil, true, flags, nil, nil, &startup, &information).boolValue else {
+        guard CreateProcessW(nil, &line, nil, nil, true, flags, nil, nil, &startup, &information) else {
             throw NSError(domain: "Visor", code: Int(GetLastError()), userInfo: [NSLocalizedDescriptionKey: "could not start \(executable)"])
         }
         CloseHandle(information.hThread)
