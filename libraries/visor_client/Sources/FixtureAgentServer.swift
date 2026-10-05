@@ -4,15 +4,29 @@ import VisorServices
 /// Answers as a server would, from the fixtures, at once. The transcript's
 /// sync, once it has the rows, is held for as long as it is asked, as a
 /// server holds it while nothing changes. Anything that would change
-/// something is taken, and nothing changes.
+/// something is taken, and nothing changes. What it answers with goes
+/// through the wire's own coding first (`wire`), as a server's answer
+/// does: a screenshot of the fixture is then a run of the decoders too, on
+/// whatever platform it is taken.
 final class FixtureAgentServer: AgentServer {
     private var onEvent: (@MainActor (AgentServerEvent) -> Void)?
 
     func authenticate(_ record: AgentServerRecord) async throws -> String? { VisorFixture.record.name }
 
+    /// An envelope as it arrives: encoded and decoded again.
+    static func wire(_ envelope: Envelope) -> Envelope {
+        Envelope.decode(envelope.encoded()) ?? envelope
+    }
+
+    /// The fixture's sessions and catalogs, as a `welcome` carries them.
+    static var welcome: Envelope {
+        wire(.welcome(host: VisorFixture.record.name, sessions: VisorFixture.sessions, catalogs: VisorFixture.catalogs))
+    }
+
     func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
         self.onEvent = onEvent
-        Task { onEvent(.welcome(name: VisorFixture.record.name, sessions: VisorFixture.sessions, catalogs: VisorFixture.catalogs)) }
+        let welcome = Self.welcome
+        Task { onEvent(.welcome(name: welcome.host ?? "", sessions: welcome.sessions ?? [], catalogs: welcome.catalogs ?? [])) }
     }
 
     func closeChannel() { onEvent = nil }
@@ -25,8 +39,8 @@ final class FixtureAgentServer: AgentServer {
         guard let onEvent else { return }
         let approval = session == VisorFixture.chatSession
             ? ApprovalRequest(id: "fixture-approval", tool: "Bash", summary: "swift test --filter SyncTests") : nil
-        let reply = Envelope.ephemeral(session: session, streams: [], status: [], activity: nil, busy: false,
-                                       approval: approval, queued: [], notice: nil)
+        let reply = Self.wire(.ephemeral(session: session, streams: [], status: [], activity: nil, busy: false,
+                                         approval: approval, queued: [], notice: nil))
         Task { onEvent(.session(reply)) }
     }
 
@@ -45,13 +59,13 @@ final class FixtureAgentServer: AgentServer {
                 TranscriptEntry(id: "\(session)-earlier-\(index)", role: index % 2 == 0 ? .user : .assistant, text: "Earlier row \(index)")
             }
             page.more = false
-            onEvent(.session(page))
+            onEvent(.session(Self.wire(page)))
         }
     }
     func sendInput(_ session: String, data: String) {}
     func resize(_ session: String, cols: Int, rows: Int) {}
 
-    func sessions() async throws -> [SessionInfo] { VisorFixture.sessions }
+    func sessions() async throws -> [SessionInfo] { Self.welcome.sessions ?? [] }
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] { [] }
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { [] }
@@ -70,7 +84,7 @@ final class FixtureAgentServer: AgentServer {
         e.generation = 1
         e.reset = true
         e.more = VisorFixture.screen == "earlier" && session == VisorFixture.goalSession
-        return e
+        return Self.wire(e)
     }
 
     func commands(for session: String) async throws -> [SlashCommand] {

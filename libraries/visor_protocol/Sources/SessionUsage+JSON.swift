@@ -7,7 +7,7 @@ extension SessionUsage {
 
     init?(json: JSONValue) {
         guard json["input"].double != nil || json["output"].double != nil else { return nil }
-        self.init(input: json["input"].double.map(Int.init) ?? 0, cached: json["cached"].double.map(Int.init) ?? 0,
-                  output: json["output"].double.map(Int.init) ?? 0, cost: json["cost"].double)
+        self.init(input: json["input"].int64 ?? 0, cached: json["cached"].int64 ?? 0,
+                  output: json["output"].int64 ?? 0, cost: json["cost"].double)
     }
 }

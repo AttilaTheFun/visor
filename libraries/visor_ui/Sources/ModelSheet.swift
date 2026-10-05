@@ -147,7 +147,7 @@ struct ModelSheet: View {
                         HStack {
                             Text(ContextRing.summary(used: used, limit: limit))
                             Spacer()
-                            Text("\(Int((Double(used) / Double(max(limit, 1))) * 100))%")
+                            Text("\(Int64(whole: (Double(used) / Double(max(limit, 1))) * 100))%")
                                 .foregroundColor(.secondary)
                         }
                         if session.agent == .claude {

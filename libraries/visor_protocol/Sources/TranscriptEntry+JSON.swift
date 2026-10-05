@@ -21,7 +21,7 @@ extension TranscriptEntry {
                   images: json["images"].array?.compactMap(\.string) ?? [],
                   imageSizes: json["imageSizes"].array?.compactMap { size -> ImageSize? in
                       guard let w = size["width"].double, let h = size["height"].double, w > 0, h > 0 else { return nil }
-                      return ImageSize(width: Int(w), height: Int(h))
+                      return ImageSize(width: Int(whole: w), height: Int(whole: h))
                   } ?? [])
     }
 }

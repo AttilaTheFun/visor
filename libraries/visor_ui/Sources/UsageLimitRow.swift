@@ -15,8 +15,8 @@ struct UsageLimitRow: View {
     private var detail: String {
         var parts: [String] = []
         if let left = limit.left {
-            let amount = limit.unit == .dollars ? UsageWords.dollars(left) : UsageWords.grouped(Int(left))
-            let total = limit.total.map { " of " + (limit.unit == .dollars ? UsageWords.dollars($0) : UsageWords.grouped(Int($0))) } ?? ""
+            let amount = limit.unit == .dollars ? UsageWords.dollars(left) : UsageWords.grouped(Int64(whole: left))
+            let total = limit.total.map { " of " + (limit.unit == .dollars ? UsageWords.dollars($0) : UsageWords.grouped(Int64(whole: $0))) } ?? ""
             parts.append(amount + total + " left")
         }
         if let resets = limit.resets {

@@ -101,10 +101,10 @@ extension ClaudeOutput {
         guard let models = result["modelUsage"] as? [String: [String: Any]], !models.isEmpty else { return nil }
         var usage = SessionUsage(cost: result["total_cost_usd"] as? Double)
         for model in models.values {
-            let cached = model["cacheReadInputTokens"] as? Int ?? 0
-            usage.input += (model["inputTokens"] as? Int ?? 0) + cached + (model["cacheCreationInputTokens"] as? Int ?? 0)
+            let cached = Int64(model["cacheReadInputTokens"] as? Int ?? 0)
+            usage.input += Int64(model["inputTokens"] as? Int ?? 0) + cached + Int64(model["cacheCreationInputTokens"] as? Int ?? 0)
             usage.cached += cached
-            usage.output += model["outputTokens"] as? Int ?? 0
+            usage.output += Int64(model["outputTokens"] as? Int ?? 0)
         }
         return usage
     }

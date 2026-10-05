@@ -51,8 +51,8 @@ extension Envelope {
         e.rows = value["rows"].int
         e.before = value["before"].string
         e.more = value["more"].bool
-        e.revision = value["revision"].double.map(Int.init)
-        e.generation = value["generation"].double.map(Int.init)
+        e.revision = value["revision"].int
+        e.generation = value["generation"].int
         e.after = value["after"].array?.compactMap(\.string)
         e.removed = value["removed"].array?.compactMap(\.string)
         e.reset = value["reset"].bool

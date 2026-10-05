@@ -34,10 +34,10 @@ extension SessionInfo {
                   archived: json["archived"].bool ?? false, resumeCommand: json["resumeCommand"].string,
                   model: json["model"].string, effort: json["effort"].string, created: json["created"].double ?? 0)
         pendingApproval = ApprovalRequest(json: json["pendingApproval"])
-        contextUsed = json["contextUsed"].double.map(Int.init)
+        contextUsed = json["contextUsed"].int
         reportedModel = json["reportedModel"].string
         queued = json["queued"].array?.compactMap(\.string) ?? []
-        contextLimit = json["contextLimit"].double.map(Int.init)
+        contextLimit = json["contextLimit"].int
         usage = SessionUsage(json: json["usage"])
         goal = json["goal"].string
         loopWake = json["loopWake"].double
@@ -46,7 +46,7 @@ extension SessionInfo {
         updated = json["updated"].double
         if json["mode"]["kind"].string == "tui", let controller = json["mode"]["controller"].string,
            let cols = json["mode"]["cols"].double, let rows = json["mode"]["rows"].double {
-            mode = .tui(controller: controller, cols: Int(cols), rows: Int(rows))
+            mode = .tui(controller: controller, cols: Int(whole: cols), rows: Int(whole: rows))
         } else {
             mode = .chat
         }
