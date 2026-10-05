@@ -37,8 +37,17 @@ public enum JSONValue: Equatable, Sendable {
         return nil
     }
 
+    /// A number as a whole one, never trapping (`init(whole:)`): past
+    /// what an `Int` holds — 32 bits on the web — it is the nearest end.
     public var int: Int? {
-        if case .number(let n) = self { return Int(n) }
+        if case .number(let n) = self { return Int(whole: n) }
+        return nil
+    }
+
+    /// A number as a whole one of 64 bits on every platform: a count that
+    /// can pass two billion (tokens).
+    public var int64: Int64? {
+        if case .number(let n) = self { return Int64(whole: n) }
         return nil
     }
 

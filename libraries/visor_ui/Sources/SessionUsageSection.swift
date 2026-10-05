@@ -17,7 +17,7 @@ struct SessionUsageSection: View {
         if session.contextUsed != nil || session.usage != nil {
             Section {
                 if let used = session.contextUsed {
-                    LabeledContent("Context", value: UsageWords.tokens(used) + (session.contextLimit.map { " of " + UsageWords.tokens($0) } ?? ""))
+                    LabeledContent("Context", value: UsageWords.tokens(Int64(used)) + (session.contextLimit.map { " of " + UsageWords.tokens(Int64($0)) } ?? ""))
                 }
                 if let usage = session.usage {
                     LabeledContent("Tokens in", value: UsageWords.tokens(usage.input)

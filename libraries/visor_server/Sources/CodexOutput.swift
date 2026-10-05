@@ -84,8 +84,9 @@ enum CodexOutput: Sendable {
             let used = ((usage["last"] as? [String: Any])?["totalTokens"] as? Int) ?? (usage["totalTokens"] as? Int) ?? 0
             if used > 0 { outputs.append(.tokens(used: used, limit: usage["modelContextWindow"] as? Int ?? usage["contextWindow"] as? Int)) }
             if let total = usage["total"] as? [String: Any] {
-                outputs.append(.spent(SessionUsage(input: total["inputTokens"] as? Int ?? 0, cached: total["cachedInputTokens"] as? Int ?? 0,
-                                                   output: total["outputTokens"] as? Int ?? 0)))
+                outputs.append(.spent(SessionUsage(input: Int64(total["inputTokens"] as? Int ?? 0),
+                                                   cached: Int64(total["cachedInputTokens"] as? Int ?? 0),
+                                                   output: Int64(total["outputTokens"] as? Int ?? 0))))
             }
             return outputs
         case "account/rateLimits/updated":

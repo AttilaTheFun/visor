@@ -51,7 +51,9 @@ public enum VisorFixture {
         var chat = session(chatSession, .claude, "/Users/visor/Developer/weather", "Offline sync",
                            model: "opus", preview: "Rows now sync in the background; waiting for your approval to run the tests.", age: 60)
         chat.goal = "Rows written offline are all on the server after reconnecting"
-        chat.usage = SessionUsage(input: 1_284_000, cached: 1_102_000, output: 36_400, cost: 6.42)
+        // Past what 32 bits hold, as a long session's count is: the web's
+        // `Int` is 32 bits, and a client there must take it.
+        chat.usage = SessionUsage(input: 3_302_964_500, cached: 3_100_000_000, output: 36_400, cost: 6.42)
         var docs = session("fixture-docs", .claude, "/Users/visor/Developer/handbook", "Release notes",
                            model: "sonnet", preview: "Drafted the notes for 2.4 with the three fixes.", age: 7200)
         docs.goal = "The release notes cover every change since 2.3"
