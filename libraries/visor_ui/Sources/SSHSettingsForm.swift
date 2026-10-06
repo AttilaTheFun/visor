@@ -50,7 +50,7 @@ struct SSHSettingsForm: View {
     private func save() {
         host.disconnect()
         host.update { record in
-            record.name = name.trimmed
+            record.rename(to: name)
             record.address = address.trimmed
             record.secret = password
         }

@@ -272,7 +272,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
                 self.signingIn = nil
                 self.note("signed in after \(self.log.since(started)) ms; opening the channel")
-                if let name, name != self.record.name { self.record.name = name }
+                if let name { self.record.takeServerName(name) }
                 self.openChannel(mine)
             } catch {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
@@ -433,7 +433,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             state = .connected
             live = true
             attempt = 0
-            if !name.isEmpty { record.name = name }
+            record.takeServerName(name)
             if !record.everConnected { record.everConnected = true }
             sessions = list
             saveCachedSessions()
