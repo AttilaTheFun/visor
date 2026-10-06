@@ -25,7 +25,9 @@ struct AddAgentServerSheet: View {
                 } else {
                     List(providers, id: \.id) { provider in
                         Button(provider.title) { chosen = provider.id }
+                            .accessibilityIdentifier("provider-" + provider.id)
                     }
+                    .choiceListInSheet(rows: providers.count)
                     .navigationTitle(AgentServerProviderUIs.addTitle)
                 }
             }
