@@ -9,9 +9,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.20</string>
+    <string>0.21</string>
     <key>CFBundleVersion</key>
-    <string>20</string>
+    <string>21</string>
     <!-- A server may be plain http:// on a LAN or a VPN, which ATS would
          otherwise refuse as cleartext. Arbitrary loads alone: with
          NSAllowsLocalNetworking beside it, ATS ignores it. -->
