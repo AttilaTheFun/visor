@@ -31,6 +31,10 @@ enum ClaudeOutput: Sendable, Equatable {
     /// The account's windows and budgets: a subscription's rate limits,
     /// or the openrouter CLI's key and credits.
     case limits([UsageLimit])
+    /// What runs in the background, whole, whenever it changes: a command
+    /// run in the background, a monitor, an agent — each by its id, kind
+    /// and description — until the list is empty again.
+    case background([StatusItem])
 
     static func parse(_ line: String) -> [ClaudeOutput] {
         guard let object = JSON.object(line), let type = object["type"] as? String else { return [] }
@@ -50,6 +54,14 @@ enum ClaudeOutput: Sendable, Equatable {
                                       keySource: object["apiKeySource"] as? String))
             }
             if object["subtype"] as? String == "usage_limits" { outputs.append(.limits(Self.keyLimits(object))) }
+            if object["subtype"] as? String == "background_tasks_changed", let tasks = object["tasks"] as? [[String: Any]] {
+                outputs.append(.background(tasks.compactMap { task in
+                    guard let id = task["task_id"] as? String else { return nil }
+                    let type = task["task_type"] as? String ?? ""
+                    let label = (task["description"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? type
+                    return StatusItem(id: id, kind: TurnStatus.kind(ofTask: type), label: label, running: true)
+                }))
+            }
             return outputs
         case "rate_limit_event":
             guard let info = object["rate_limit_info"] as? [String: Any] else { return [] }

@@ -235,7 +235,7 @@ extension VisorServer {
         // window they are drawn for inside apply.
         broadcast(record.apply(event), session: record)
         switch event {
-        case .context, .session:
+        case .context, .session, .background:
             // These land in the session list, not an envelope.
             broadcastSessions()
         case .spent:

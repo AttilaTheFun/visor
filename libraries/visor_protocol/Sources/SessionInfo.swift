@@ -64,6 +64,10 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// seconds since 1970, or the cron schedule it repeats on.
     public var loopWake: Double?
     public var loopCron: String?
+    /// What the agent has running in the background and is waiting on
+    /// between turns — a monitor, a command, a subagent — as the agent
+    /// reports the list; empty when nothing is.
+    public var background: [StatusItem] = []
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -115,5 +119,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         goal = try c.decodeIfPresent(String.self, forKey: .goal)
         loopWake = try c.decodeIfPresent(Double.self, forKey: .loopWake)
         loopCron = try c.decodeIfPresent(String.self, forKey: .loopCron)
+        background = try c.decodeIfPresent([StatusItem].self, forKey: .background) ?? []
     }
 }

@@ -151,7 +151,7 @@ struct AgentScreen: View {
             messages: rows,
             // The road to the computer, when it is down, says more than
             // what the turn was last heard doing.
-            status: connectionStatus == nil ? transcript.turnStatus.map(ActivityItem.init) : [],
+            status: connectionStatus == nil ? statusItems.map(ActivityItem.init) : [],
             activity: connectionStatus ?? transcript.activity,
             error: transcript.error,
             emptyTitle: transcript.loaded ? (info?.archived == true ? "Archived" : "What should we do?") : "Loading…",
@@ -393,6 +393,14 @@ struct AgentScreen: View {
     }
 
     /// The session's name, as the sidebar lists it.
+    /// The turn's status lines, and under them what the agent has in the
+    /// background (a turn's own line for the same work is not repeated).
+    private var statusItems: [StatusItem] {
+        let turn = transcript.turnStatus
+        let background = (info?.background ?? []).filter { item in !turn.contains { $0.id == item.id } }
+        return turn + background
+    }
+
     private var sessionTitle: String {
         info.map { $0.title.isEmpty ? $0.agent.title : $0.title } ?? "Session"
     }

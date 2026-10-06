@@ -45,6 +45,15 @@ struct SessionCardRow: View {
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 }
+                // Between turns, what the agent is waiting on in the
+                // background: a monitor, a command, an agent of its own.
+                if !session.busy, let waiting = Self.waitingLine(session.background) {
+                    Text(waiting)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("waiting-" + session.id)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if session.busy {
@@ -59,8 +68,18 @@ struct SessionCardRow: View {
             } else if session.pendingApproval != nil {
                 Image(systemName: "hand.raised.fill").foregroundColor(.yellow)
                     .accessibilityLabel("Waiting for approval")
+            } else if !session.background.isEmpty {
+                Image(systemName: "clock").foregroundColor(.secondary)
+                    .accessibilityLabel("Waiting on background work")
             }
         }
         .accessibilityIdentifier("session-" + session.id)
+    }
+
+    /// "Waiting on CI checks on PR #92" — the first, and how many more.
+    static func waitingLine(_ background: [StatusItem]) -> String? {
+        guard let first = background.first else { return nil }
+        let more = background.count - 1
+        return "Waiting on " + first.label + (more > 0 ? " and \(more) more" : "")
     }
 }
