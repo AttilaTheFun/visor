@@ -193,7 +193,15 @@ shell | monitor | subagent | tool | tasks; running/done; TodoWrite → a
 tasks item with `[TaskItem]`) from `AgentEvent.thinking/.toolStarted/
 .toolFinished`, which all three processes emit (Claude: tool_use id ↔
 tool_result tool_use_id; Codex: item/started|completed by id; OpenRouter:
-call id). A streamed delta for a message the record already carries is
+call id). What the agent has in the background between turns — a command
+run in the background, a monitor, an agent of its own — is different:
+Claude Code reports the whole list whenever it changes
+(`system/background_tasks_changed` → `AgentEvent.background`), the
+session carries it (`SessionInfo.background: [StatusItem]`, cleared when
+its process starts over) and the sessions list broadcasts it; the
+sidebar row shows a clock and "Waiting on …" while the session is idle,
+and the chat's status lines carry the items under the turn's own. A
+streamed delta for a message the record already carries is
 ignored (both ends); the turn's end sweeps served streams.
 
 **Client** (`libraries/visor_client`): `AgentServerConnection` per server,
