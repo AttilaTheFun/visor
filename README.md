@@ -31,9 +31,14 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   (`visor://connect?code=…`). Each computer is one agent server; what
   the client does with a server — signing in, the live channel, and
   every operation on sessions, folders and files — is the `AgentServer`
-  protocol, and `WireAgentServer` (the wire protocol: `hello`, ws(s) +
+  protocol, and `HTTPAgentServer` (the wire protocol: `hello`, ws(s) +
   http(s) with a bearer, at any URL or a bare name; followed by
-  polling where the road carries no WebSocket) is the one shipped. A fork that hosts agents on
+  polling where the road carries no WebSocket) is the one shipped.
+  `SSHAgentServer` is the other way in on a Mac or an iPhone: the
+  computer's own SSH (Remote Login), reached as `user@host[:port]` with
+  a key the device makes and keeps, and the same wire protocol through a
+  port forwarded to the server's loopback — nothing open on the network
+  but SSH, and nothing added to the server. A fork that hosts agents on
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one
@@ -42,7 +47,8 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   own small JSON, with no Foundation, so the same code runs wherever the
   client is carried.
 - **libraries/visor_services** — what a host gives the client: a socket,
-  HTTP and settings. Apple implementations sit beside the protocols.
+  HTTP, settings and, where it has it, SSH. Apple implementations sit
+  beside the protocols.
 - **libraries/visor_client** — agent servers and their providers,
   connections, transcripts, the session cache.
 - **libraries/visor_ui** — the views, on AgentUI and NavigationUI.

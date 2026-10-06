@@ -13,7 +13,7 @@ import VisorServices
 ///
 /// The live channel is an accessory. Where it cannot be had — the host
 /// has no socket service, or the road does not carry WebSockets — the
-/// server is followed by polling instead (WireAgentServer+Polling): the
+/// server is followed by polling instead (HTTPAgentServer+Polling): the
 /// list of sessions and each open session's state are asked for and held
 /// until they change, as the transcript always is. The socket is tried
 /// again now and then, and takes over when it opens.
@@ -24,7 +24,7 @@ import VisorServices
 /// a change of network) otherwise looks open until TCP gives up. The
 /// socket has 4 s to open and have its login answered. It is a message of
 /// the protocol, not a WebSocket ping frame, which a browser cannot send.
-public final class WireAgentServer: AgentServer {
+public final class HTTPAgentServer: AgentServer {
     /// How often the channel is asked whether it is still there, and how
     /// long it has to say anything at all before it is taken as dropped.
     static let heartbeatInterval: Int32 = 16_000
@@ -42,7 +42,7 @@ public final class WireAgentServer: AgentServer {
     var address: ServerAddress? { ServerAddress(record.address) }
     /// What `hello` gave for the channel's login.
     var token: String?
-    /// Following by polling instead of the channel (WireAgentServer+Polling).
+    /// Following by polling instead of the channel (HTTPAgentServer+Polling).
     var polling: Polling?
     private var socketID: Int32?
     private var reader: Task<Void, Never>?

@@ -1,7 +1,8 @@
 // The services a host injects into the client (docs/wasm_di.md in swift_ffi,
 // the same shape as Isomer's platform services): a WebSocket the client
 // drives by id, HTTP requests, a settings store for the saved computers,
-// and — where the host has them — notifications and a home screen widget.
+// and — where the host has them — notifications, a home screen widget and
+// SSH.
 // Nothing else crosses the boundary; async methods suspend in the guest
 // and the host answers when it has something.
 //
@@ -18,6 +19,8 @@ public enum VisorHost {
     public static var settings: (any VisorSettingsService)?
     public static var notifications: (any VisorNotificationService)?
     public static var widget: (any VisorWidgetService)?
+    /// SSH, where the host has it (a Mac, an iPhone): a road to a server.
+    public static var ssh: (any VisorSSHService)?
 }
 
 /// Hands the client its services. An app calls this once, before it makes
@@ -25,10 +28,12 @@ public enum VisorHost {
 /// Android app) installs its own.
 @MainActor
 public func installVisorServices(socket: any VisorSocketService, http: any VisorHTTPService, settings: any VisorSettingsService,
-                                 notifications: (any VisorNotificationService)? = nil, widget: (any VisorWidgetService)? = nil) {
+                                 notifications: (any VisorNotificationService)? = nil, widget: (any VisorWidgetService)? = nil,
+                                 ssh: (any VisorSSHService)? = nil) {
     VisorHost.socket = socket
     VisorHost.http = http
     VisorHost.settings = settings
     VisorHost.notifications = notifications
     VisorHost.widget = widget
+    VisorHost.ssh = ssh
 }

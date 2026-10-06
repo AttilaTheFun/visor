@@ -27,7 +27,11 @@ Third-party: SwiftTerm's portable emulator (through agent_ui's TerminalUI,
 from upstream github.com/migueldeicaza/SwiftTerm, which builds for Android
 since #733; rspm runs no SwiftPM plugins, so MODULE.bazel patches in what
 its build plugin generates, third_party/swift_packages/swiftterm.patch,
-made from the pinned revision), SQLite.swift 0.15.3 (the
+made from the pinned revision), swift-nio-ssh 0.9 (the SSH client on
+Apple hosts; it keeps a host key's wire form to itself, so
+third_party/swift_packages/swift_nio_ssh.patch adds
+`NIOSSHPublicKey.openSSHRepresentation` for the kept host key — to be
+offered upstream), SQLite.swift 0.15.3 (the
 caches), rules_swift_package_manager (rspm) brings SwiftPM packages into
 Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 `@swiftpkg_sqlite.swift//:SQLite`, `@swiftpkg_agent_ui//:AgentUI`.
@@ -193,10 +197,17 @@ call id). A streamed delta for a message the record already carries is
 ignored (both ends); the turn's end sweeps served streams.
 
 **Client** (`libraries/visor_client`): `AgentServerConnection` per server,
-over the provider's `AgentServer` (`WireAgentServer`: `hello`, ws(s) +
+over the provider's `AgentServer` (`HTTPAgentServer`: `hello`, ws(s) +
 http(s) bearer at a `ServerAddress`, each operation mapped to the wire
-protocol in `WireAgentServer+Operations.swift`, and polling in its
-place when the socket cannot be had, `WireAgentServer+Polling.swift`; a
+protocol in `HTTPAgentServer+Operations.swift`, and polling in its
+place when the socket cannot be had, `HTTPAgentServer+Polling.swift`;
+`SSHAgentServer`: the record's `user@host[:port]` opened through the
+host's `VisorSSHService` with the device's key, the computer's host key
+kept in the settings the first time (`ssh.hostkey.<user@host:port>`)
+and compared after, the server's port 7433 forwarded from a local port,
+and an `HTTPAgentServer` at `http://127.0.0.1:<port>` doing the rest
+with the record's password; offered only where `VisorHost.ssh` is set
+(`AgentServerProvider.available`), so not on the web or Android yet; a
 fork's maps the same operations to its own service), `SessionTranscript`
 (entries, streams by message id, `sending` = optimistic rows that stay the
 last row until the record carries the same words at a later revision AND
@@ -242,8 +253,8 @@ and run the command in a terminal session.
 limit, so a try that hangs (a request riding a connection that died while
 the app was away) becomes a drop and a retry: the sign-in has 5 s
 (`signInTimeout`), the socket 4 s to open and have its login answered
-(`WireAgentServer.loginTimeout`). The heartbeat
-(`WireAgentServer.watch`): a `ping` envelope every 16 s, and a
+(`HTTPAgentServer.loginTimeout`). The heartbeat
+(`HTTPAgentServer.watch`): a `ping` envelope every 16 s, and a
 channel that says nothing for 8 s after one is closed and reported as
 dropped, so a socket that died quietly (a sleep, a change of network) is
 found in seconds rather than when TCP gives up. The poll
@@ -506,6 +517,23 @@ it has not been run against real agents.
   --test_env=VISOR_POLL_PASSWORD=staging --spawn_strategy=local
   --nocache_test_results` (skipped without the URL). It connects by
   polling, starts a throwaway session, watches it work and ends it.
+- SSH against a real `sshd`, over the native service (`SSHProbeTests`,
+  skipped without the address): a throwaway sshd of your own, so your
+  `~/.ssh` is not touched — `ssh-keygen -t ed25519 -N "" -f
+  /tmp/sshprobe/hostkey`, an empty `/tmp/sshprobe/authorized_keys` (mode
+  600), a config with `Port 2299`, `ListenAddress 127.0.0.1`, that
+  `HostKey` and `AuthorizedKeysFile`, `PasswordAuthentication no`,
+  `UsePAM no`, `StrictModes no`, `PerSourcePenalties no`, a `PidFile`
+  there; `/usr/sbin/sshd -D -e -f /tmp/sshprobe/sshd_config`. Then
+  `bazel test //tests/visor_client_tests --test_filter=SSHProbeTests
+  --test_env=VISOR_SSH_ADDRESS=$USER@127.0.0.1:2299
+  --test_env=VISOR_SSH_AUTHORIZED_KEYS=/tmp/sshprobe/authorized_keys
+  --test_env=VISOR_SSH_PASSWORD --nocache_test_results` with the local
+  server's password exported (and `VISOR_SSH_TARGET_PORT` if it is not
+  on 7433). The device's key is refused before it is in the file and
+  taken after; `hello` is answered through the forwarded port; another
+  host key is refused; the whole client connects over the provider and
+  sees the sessions. Kill the sshd by its pid file afterwards.
 - `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
   as its user would run it: a password, `run` checked with the terminal
   probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
@@ -643,6 +671,13 @@ From the code-quality pass of October 2026, found and left:
   a device to try them on (#79).
 - The openrouter CLI, signalled, leaves the command it was running; a
   reply interrupted mid-stream is not kept in its session.
+- SSH is offered on Apple hosts only: the web has no SSH, and Android's
+  host (Isomer) does not provide a `VisorSSHService` yet; the Linux and
+  Windows clients, when there are some, can give one over swift-nio-ssh.
+  The device's key is one per device, kept in the settings' secrets
+  (`ssh.key`); there is no way yet to see or forget a computer's kept
+  host key but forgetting the computer's record does not clear it
+  (`ssh.hostkey.<user@host:port>` in the settings).
 
 ## 8. Working conventions
 

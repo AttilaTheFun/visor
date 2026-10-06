@@ -1,0 +1,21 @@
+diff -ruN a/Sources/NIOSSH/Keys And Signatures/NIOSSHPublicKey.swift b/Sources/NIOSSH/Keys And Signatures/NIOSSHPublicKey.swift
+--- a/Sources/NIOSSH/Keys And Signatures/NIOSSHPublicKey.swift	2026-10-06 14:43:10
++++ b/Sources/NIOSSH/Keys And Signatures/NIOSSHPublicKey.swift	2026-10-06 14:43:10
+@@ -466,3 +466,17 @@
+         self = publicKeyString
+     }
+ }
++
++// Added by Visor (third_party/swift_packages/swift_nio_ssh.patch): the
++// key as OpenSSH writes it, so a client can keep a computer's host key
++// and compare it next time. Offered upstream.
++extension NIOSSHPublicKey {
++    /// The key as an `authorized_keys` or `known_hosts` entry: its type
++    /// and its wire form in base64.
++    public var openSSHRepresentation: String {
++        var buffer = ByteBufferAllocator().buffer(capacity: 256)
++        buffer.writeSSHHostKey(self)
++        let bytes = Data(buffer.readableBytesView)
++        return String(decoding: self.keyPrefix, as: UTF8.self) + " " + bytes.base64EncodedString()
++    }
++}

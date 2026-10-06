@@ -1,15 +1,17 @@
 import VisorProtocol
 import VisorServices
 
-/// The providers this build knows. The wire protocol's server is the one
-/// shipped; a fork registers its own at launch, before the store is made.
+/// The providers this build knows. The wire protocol's server over HTTP
+/// is the first shipped, and SSH where the host can (`SSHAgentServerProvider`);
+/// a fork registers its own at launch, before the store is made.
 /// The first is the default: what a record of an unknown kind, or the add
 /// sheet with nothing chosen, gets.
 @MainActor
 public enum AgentServerProviders {
-    private static var registry: [any AgentServerProvider] = [VisorServerProvider()]
+    private static var registry: [any AgentServerProvider] = [HTTPAgentServerProvider(), SSHAgentServerProvider()]
 
-    public static var all: [any AgentServerProvider] { registry }
+    /// The providers this host can use.
+    public static var all: [any AgentServerProvider] { registry.filter(\.available) }
 
     public static func register(_ provider: any AgentServerProvider) {
         registry.removeAll { $0.id == provider.id }
@@ -17,7 +19,7 @@ public enum AgentServerProviders {
     }
 
     public static func provider(for id: String) -> (any AgentServerProvider)? {
-        let id = id == VisorServerProvider.formerName ? VisorServerProvider.name : id
+        let id = HTTPAgentServerProvider.formerNames.contains(id) ? HTTPAgentServerProvider.name : id
         return registry.first { $0.id == id }
     }
 

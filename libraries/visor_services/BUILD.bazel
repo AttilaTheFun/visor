@@ -16,6 +16,11 @@ swift_library(
         "//conditions:default": [],
     }),
     module_name = "VisorServices",
+    deps = select({
+        "@platforms//os:ios": ["@swiftpkg_swift_nio_ssh//:NIOSSH"],
+        "@platforms//os:macos": ["@swiftpkg_swift_nio_ssh//:NIOSSH"],
+        "//conditions:default": [],
+    }),
 )
 
 # The Apple implementations as sources, for a host that compiles them for

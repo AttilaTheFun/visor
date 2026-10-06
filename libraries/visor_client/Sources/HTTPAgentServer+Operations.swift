@@ -3,7 +3,7 @@ import VisorServices
 
 // Each operation of the protocol, as the wire protocol carries it: the
 // live ones as envelopes over the socket, the one-shot ones as REST calls.
-extension WireAgentServer {
+extension HTTPAgentServer {
     // MARK: Over the live channel
 
     // Over the channel; by polling, what has a one-shot form is asked

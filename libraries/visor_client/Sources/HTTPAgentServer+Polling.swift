@@ -11,7 +11,7 @@
 import VisorProtocol
 import VisorServices
 
-extension WireAgentServer {
+extension HTTPAgentServer {
     /// How long the socket is left alone before it is tried again, and
     /// how many answers in a row the list may fail before the server is
     /// taken as gone.

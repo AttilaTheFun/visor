@@ -17,7 +17,7 @@ struct VisorMacApp: App {
         Self.adoptFormerApp()
         // The host's services first: the store connects through them.
         installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService(),
-                             notifications: NativeVisorNotificationService())
+                             notifications: NativeVisorNotificationService(), ssh: NativeVisorSSHService())
         if !VisorFixture.active {
             // (The push token is asked for once launched: MacPushDelegate.)
             VisorHost.notifications?.requestPermission()
