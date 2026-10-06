@@ -336,6 +336,29 @@ The session-side values a server hands back (`SessionInfo`,
 `TranscriptEntry`, the transcript and ephemeral envelopes) are the
 protocol library's, so a fork's server produces those from its own API.
 
+**The network of computers** (`VisorServer+Peers`, `+Relay`;
+`VisorStore`, `AgentServerConnection`): every server has an id
+(`ServerSettings.serverID`, made once) and keeps `peers: [Peer]` (id,
+name, addresses, password) in the secrets, from a code pasted in
+Settings, a client's `POST /api/peers`, or a peer passing on what it
+knows (`tellPeers`, after anything new: `adopt` says whether it was);
+`hello` and `GET /api/peers` carry the server's own addresses
+(`ownAddresses`: the public address, each address with the port while
+the network reaches it, `user@address` while SSH is let in). A server
+relays HTTP for a peer under `/peer/<id>/` (`relayTarget`, `relay`:
+the peer's password put in, `X-Visor-Relay` against circles, the first
+road that answers kept in `workingRoads`); an upgrade there is refused
+in `accept`, so the client polls. The agents' cross-computer calls take
+the same roads (`roads(to:)`, `call`). On the client, a record keeps
+`serverID` and `roads`; `AgentServerConnection` tries the roads of a
+round in turn (`roadsToTry`: the one that answered last, the record's,
+then `relayRoads` through the other connected servers, `/peer/<id>`
+under each), the next at once when one does not answer; on connecting,
+`VisorStore.joined` folds a duplicate record of the same computer,
+takes in the server's peers (`take`: a new record, or more roads for a
+known one) and introduces the servers to one another (`introduce`). The
+Link These Computers row is gone: holding two servers is the link.
+
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line
 preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:

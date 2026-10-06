@@ -42,7 +42,11 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   its user can open (Settings: "SSH, no password"), SSH having signed
   the user in already; with that off, the port on the computer's
   loopback, with the password. Nothing has to be open on the network
-  but SSH. A fork that hosts agents on
+  but SSH. The computers form a network: each server keeps its peers
+  and tells its clients and peers of them, a client of any of them
+  learns of the rest and is carried to one it cannot reach itself
+  (`/peer/<id>/…` under a server it can), and a client that holds two
+  servers introduces them. A fork that hosts agents on
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one
