@@ -2,8 +2,10 @@ import VisorProtocol
 import VisorServices
 
 /// A Visor server speaking the wire protocol (docs/protocol.md), wherever
-/// it is reached: a name on a network (HTTPS at the root), or any URL a
-/// proxy, a tunnel or a port gives (`ServerAddress`). `hello` over HTTP
+/// it is reached: a name on a network (HTTPS at the root), any URL a
+/// proxy, a tunnel or a port gives (`ServerAddress`), or the computer's
+/// own SSH (`SSHAddress`, `user@host`), through which the server is
+/// reached on its loopback (HTTPAgentServer+SSH). `hello` over HTTP
 /// first — the server lets this device in on the road's word (its owner's
 /// device) or on the password, and hands back its name and a token —
 /// then the socket at the root for the live channel, logged in with the
@@ -38,8 +40,14 @@ public final class HTTPAgentServer: AgentServer {
     static let verifyTimeout: Int32 = 1_000
 
     private(set) var record: AgentServerRecord
-    /// Where the server is: the record's address, read as a URL.
-    var address: ServerAddress? { ServerAddress(record.address) }
+    /// The record's address as an SSH one, when it is one.
+    var sshAddress: SSHAddress? { SSHAddress(record.address) }
+    /// The SSH connection and the server's address through it, while open.
+    var tunnelSession: (any VisorSSHSession)?
+    var tunnel: ServerAddress?
+    /// Where the server is: the record's address, read as a URL — or,
+    /// for an SSH address, the loopback port the tunnel gives, once open.
+    var address: ServerAddress? { sshAddress != nil ? tunnel : ServerAddress(record.address) }
     /// What `hello` gave for the channel's login.
     var token: String?
     /// Following by polling instead of the channel (HTTPAgentServer+Polling).
@@ -59,11 +67,13 @@ public final class HTTPAgentServer: AgentServer {
 
     public func authenticate(_ record: AgentServerRecord) async throws -> String? {
         self.record = record
+        if let sshAddress { try await openTunnel(sshAddress) }
         do {
             let hello = try await call("GET", "/hello")
             token = hello.token
             return hello.host.flatMap { $0.isEmpty ? nil : $0 }
         } catch {
+            closeTunnel()
             // A 401 is the Mac asking for a password.
             if VisorHost.http?.status(of: error) == 401 { throw AgentServerError.needsAuthentication }
             throw error
@@ -71,7 +81,7 @@ public final class HTTPAgentServer: AgentServer {
     }
 
     public func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
-        closeChannel()
+        closeSocket()
         guard let address else {
             Task { onEvent(.closed("Bad address")) }
             return
@@ -205,6 +215,13 @@ public final class HTTPAgentServer: AgentServer {
     }
 
     public func closeChannel() {
+        closeSocket()
+        closeTunnel()
+    }
+
+    /// Ends the channel, the socket or the polling, and leaves the tunnel
+    /// for the next channel.
+    private func closeSocket() {
         stopPolling()
         heartbeat?.cancel()
         heartbeat = nil

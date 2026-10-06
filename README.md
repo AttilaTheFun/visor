@@ -34,11 +34,12 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   protocol, and `HTTPAgentServer` (the wire protocol: `hello`, ws(s) +
   http(s) with a bearer, at any URL or a bare name; followed by
   polling where the road carries no WebSocket) is the one shipped.
-  `SSHAgentServer` is the other way in on a Mac or an iPhone: the
-  computer's own SSH (Remote Login), reached as `user@host[:port]` with
-  a key the device makes and keeps, and the same wire protocol through a
-  port forwarded to the server's loopback — nothing open on the network
-  but SSH, and nothing added to the server. A fork that hosts agents on
+  On a Mac or an iPhone the address can also be the computer's own SSH
+  (Remote Login), `user@host[:port]`, through jump hosts if need be
+  (`?via=user@jump`): the client opens the connection with a key it
+  makes and keeps, and runs the same wire protocol through a port
+  forwarded to the server's loopback — nothing open on the network but
+  SSH, and nothing added to the server. A fork that hosts agents on
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one

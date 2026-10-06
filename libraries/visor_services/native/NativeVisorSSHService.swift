@@ -1,7 +1,9 @@
 // SSH with swift-nio-ssh: this device's Ed25519 key (made once, kept with
-// the secrets), a connection as a user, the computer's host key kept and
-// compared (trust on first use), and a port on the computer's loopback
-// reached from a port here through a direct-tcpip channel per connection.
+// the secrets), a connection as a user — through jump hosts if need be,
+// each next handshake run through a direct-tcpip channel of the one
+// before — each computer's host key kept and compared (trust on first
+// use), and a port on the last computer's loopback reached from a port
+// here through a direct-tcpip channel per connection.
 
 import Crypto
 import Foundation
@@ -32,45 +34,74 @@ public final class NativeVisorSSHService: VisorSSHService {
         NIOSSHPrivateKey(ed25519Key: privateKey()).publicKey.openSSHRepresentation + " visor"
     }
 
-    public func connect(user: String, host: String, port: Int, hostKey: String?) async throws -> any VisorSSHSession {
+    public func connect(_ route: [VisorSSHHop], hostKeys: [String?]) async throws -> any VisorSSHSession {
+        guard let first = route.first else { throw VisorSSHError.unreachable("no host") }
         let key = NIOSSHPrivateKey(ed25519Key: privateKey())
-        let seen = SSHOutcome(expected: hostKey)
-        let bootstrap = ClientBootstrap(group: group)
-            .channelInitializer { channel in
-                channel.eventLoop.makeCompletedFuture {
-                    let handler = NIOSSHHandler(role: .client(.init(userAuthDelegate: KeyAuthenticator(user: user, key: key, channel: channel, outcome: seen),
-                                                                     serverAuthDelegate: HostKeyChecker(channel: channel, outcome: seen))),
-                                                allocator: channel.allocator, inboundChildChannelInitializer: nil)
-                    try channel.pipeline.syncOperations.addHandler(handler)
-                }
-            }
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
-            .connectTimeout(.seconds(10))
-        let channel: Channel
+        let outcomes = route.indices.map { SSHOutcome(expected: hostKeys.count > $0 ? hostKeys[$0] : nil) }
+        let root: Channel
         do {
-            channel = try await bootstrap.connect(host: host, port: port).get()
+            root = try await ClientBootstrap(group: group)
+                .channelInitializer { channel in
+                    channel.eventLoop.makeCompletedFuture {
+                        try channel.pipeline.syncOperations.addHandler(Self.sshHandler(for: first, key: key, on: channel, outcome: outcomes[0]))
+                    }
+                }
+                .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
+                .connectTimeout(.seconds(10))
+                .connect(host: first.host, port: first.port).get()
         } catch {
             throw VisorSSHError.unreachable(String(describing: error))
         }
-        let handler = try await channel.eventLoop.submit {
-            NIOLoopBound(try channel.pipeline.syncOperations.handler(type: NIOSSHHandler.self), eventLoop: channel.eventLoop)
-        }.get()
-        // Authentication is done when a session's first channel opens;
-        // one is asked for now, so a refused key is known at once.
         do {
+            var channel = root
+            var handler = try await Self.handler(on: channel)
+            // Authentication is done when a session's first channel opens;
+            // one is asked for now, so a refused key is known at once.
             try await Self.probe(handler, on: channel)
+            let loopback = try SocketAddress(ipAddress: "127.0.0.1", port: 0)
+            for (index, hop) in route.enumerated().dropFirst() {
+                let previous = handler
+                let current = channel
+                let outcome = outcomes[index]
+                let next = try await current.eventLoop.flatSubmit {
+                    let opened = current.eventLoop.makePromise(of: Channel.self)
+                    let target = SSHChannelType.DirectTCPIP(targetHost: hop.host, targetPort: hop.port, originatorAddress: loopback)
+                    previous.value.createChannel(opened, channelType: .directTCPIP(target)) { child, _ in
+                        child.eventLoop.makeCompletedFuture {
+                            try child.pipeline.syncOperations.addHandlers([SSHWrapper(), Self.sshHandler(for: hop, key: key, on: child, outcome: outcome)])
+                        }
+                    }
+                    return opened.futureResult
+                }.get()
+                channel = next
+                handler = try await Self.handler(on: next)
+                try await Self.probe(handler, on: next)
+            }
+            return NativeVisorSSHSession(root: root, handler: handler, hostKeys: outcomes.map { $0.hostKey ?? "" }, group: group)
         } catch {
-            try? await channel.close().get()
-            if let refusal = seen.failure { throw refusal }
+            try? await root.close().get()
+            if let refusal = outcomes.compactMap(\.failure).first { throw refusal }
             throw VisorSSHError.keyRefused
         }
-        guard let hostKeyLine = seen.hostKey else { throw VisorSSHError.keyRefused }
-        return NativeVisorSSHSession(channel: channel, handler: handler, hostKey: hostKeyLine, group: group)
+    }
+
+    /// The client's SSH handler for one hop: the device's key offered,
+    /// the host key checked against what was seen before.
+    private nonisolated static func sshHandler(for hop: VisorSSHHop, key: NIOSSHPrivateKey, on channel: Channel, outcome: SSHOutcome) -> NIOSSHHandler {
+        NIOSSHHandler(role: .client(.init(userAuthDelegate: KeyAuthenticator(user: hop.user, key: key, channel: channel, outcome: outcome),
+                                          serverAuthDelegate: HostKeyChecker(channel: channel, outcome: outcome))),
+                      allocator: channel.allocator, inboundChildChannelInitializer: nil)
+    }
+
+    private nonisolated static func handler(on channel: Channel) async throws -> NIOLoopBound<NIOSSHHandler> {
+        try await channel.eventLoop.submit {
+            NIOLoopBound(try channel.pipeline.syncOperations.handler(type: NIOSSHHandler.self), eventLoop: channel.eventLoop)
+        }.get()
     }
 
     /// Opens and closes a session channel: the server answers only once
     /// the user is authenticated.
-    private static func probe(_ handler: NIOLoopBound<NIOSSHHandler>, on channel: Channel) async throws {
+    private nonisolated static func probe(_ handler: NIOLoopBound<NIOSSHHandler>, on channel: Channel) async throws {
         let child = try await channel.eventLoop.flatSubmit {
             let opened = channel.eventLoop.makePromise(of: Channel.self)
             handler.value.createChannel(opened, channelType: .session) { child, _ in child.eventLoop.makeSucceededFuture(()) }
@@ -80,8 +111,8 @@ public final class NativeVisorSSHService: VisorSSHService {
     }
 }
 
-/// What the connection's handshake found, written from the event loop
-/// and read once it is over: the host key seen, and what was refused.
+/// What one hop's handshake found, written from the event loop and read
+/// once it is over: the host key seen, and what was refused.
 final class SSHOutcome: Sendable {
     private struct State { var seen: String?; var failure: VisorSSHError? }
     private let expected: String?

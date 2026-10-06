@@ -11,7 +11,7 @@ public struct HTTPAgentServerProvider: AgentServerProvider {
     /// What records called it before.
     public static let formerNames = ["visor", "tailscale"]
     public let id = HTTPAgentServerProvider.name
-    public let title = "Address (HTTP)"
+    public let title = "Address"
     public init() {}
     public func makeServer(for record: AgentServerRecord) -> any AgentServer { HTTPAgentServer(record: record) }
 }

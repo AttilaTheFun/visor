@@ -1,6 +1,7 @@
-// One SSH connection: a listener on 127.0.0.1 whose every connection
-// becomes a direct-tcpip channel to a port on the computer's loopback,
-// the two glued together.
+// One SSH connection, to the last hop of its route: a listener on
+// 127.0.0.1 whose every connection becomes a direct-tcpip channel to a
+// port on the computer's loopback, the two glued together. Closing the
+// first hop's connection closes everything run through it.
 
 import Foundation
 import NIOCore
@@ -9,16 +10,16 @@ import NIOSSH
 
 @MainActor
 final class NativeVisorSSHSession: VisorSSHSession {
-    let hostKey: String
-    private let channel: Channel
+    let hostKeys: [String]
+    private let root: Channel
     private let handler: NIOLoopBound<NIOSSHHandler>
     private let group: MultiThreadedEventLoopGroup
     private var listeners: [Channel] = []
 
-    init(channel: Channel, handler: NIOLoopBound<NIOSSHHandler>, hostKey: String, group: MultiThreadedEventLoopGroup) {
-        self.channel = channel
+    init(root: Channel, handler: NIOLoopBound<NIOSSHHandler>, hostKeys: [String], group: MultiThreadedEventLoopGroup) {
+        self.root = root
         self.handler = handler
-        self.hostKey = hostKey
+        self.hostKeys = hostKeys
         self.group = group
     }
 
@@ -49,25 +50,7 @@ final class NativeVisorSSHSession: VisorSSHSession {
     func close() {
         for listener in listeners { listener.close(promise: nil) }
         listeners = []
-        channel.close(promise: nil)
-    }
-}
-
-/// SSH channel data as bytes, and bytes as SSH channel data.
-private final class SSHWrapper: ChannelDuplexHandler {
-    typealias InboundIn = SSHChannelData
-    typealias InboundOut = ByteBuffer
-    typealias OutboundIn = ByteBuffer
-    typealias OutboundOut = SSHChannelData
-
-    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        let data = unwrapInboundIn(data)
-        guard case .channel = data.type, case .byteBuffer(let buffer) = data.data else { return context.close(promise: nil) }
-        context.fireChannelRead(wrapInboundOut(buffer))
-    }
-
-    func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-        context.write(wrapOutboundOut(SSHChannelData(type: .channel, data: .byteBuffer(unwrapOutboundIn(data)))), promise: promise)
+        root.close(promise: nil)
     }
 }
 

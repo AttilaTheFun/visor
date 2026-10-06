@@ -5,6 +5,7 @@
 import SwiftUI
 import VisorClient
 import VisorProtocol
+import VisorServices
 
 @MainActor
 struct ComputerSettingsForm: View {
@@ -15,13 +16,15 @@ struct ComputerSettingsForm: View {
     @State private var password = ""
     /// The connection log as it was when this page opened.
     @State private var log = ""
+    /// Whether the computer is reached over its own SSH.
+    private var overSSH: Bool { SSHAddress(host.record.address) != nil }
 
     var body: some View {
         Form {
             Section {
                 TitledField(title: "Name") { TextField("Name", text: $name) }
                 TitledField(title: "Address") {
-                    TextField("my-mac.tail1234.ts.net or https://…", text: $address)
+                    TextField("my-mac.tail1234.ts.net, https://… or user@host", text: $address)
                         .autocorrectionDisabled()
                         .keyboardTypeURL()
                 }
@@ -30,10 +33,13 @@ struct ComputerSettingsForm: View {
                 Text("Computer")
             } footer: {
                 Text(host.state.wantsAuthentication
-                     ? "This computer does not know this device as its owner's. Type the password its Visor menu bar app shows and save."
+                     ? (overSSH
+                        ? "The computer refused this device's key, or Visor Server refused the password. Put the key below in the user's authorized keys, check the password, and save."
+                        : "This computer does not know this device as its owner's. Type the password its Visor menu bar app shows and save.")
                      : host.state.label + (host.state == .connected && !host.live
                         ? ". Followed by polling: this road carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn." : ""))
             }
+            if overSSH, VisorHost.ssh != nil { DeviceKeySection() }
             Section {
                 Button("Save and reconnect", action: save)
                     .disabled(address.trimmed.isEmpty)

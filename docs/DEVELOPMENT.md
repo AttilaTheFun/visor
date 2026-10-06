@@ -209,13 +209,14 @@ over the provider's `AgentServer` (`HTTPAgentServer`: `hello`, ws(s) +
 http(s) bearer at a `ServerAddress`, each operation mapped to the wire
 protocol in `HTTPAgentServer+Operations.swift`, and polling in its
 place when the socket cannot be had, `HTTPAgentServer+Polling.swift`;
-`SSHAgentServer`: the record's `user@host[:port]` opened through the
-host's `VisorSSHService` with the device's key, the computer's host key
-kept in the settings the first time (`ssh.hostkey.<user@host:port>`)
-and compared after, the server's port 7433 forwarded from a local port,
-and an `HTTPAgentServer` at `http://127.0.0.1:<port>` doing the rest
-with the record's password; offered only where `VisorHost.ssh` is set
-(`AgentServerProvider.available`), so not on the web or Android yet; a
+an SSH address (`SSHAddress`, `user@host[:port]`, `?via=user@jump,…`
+for jump hosts) is the same server reached through the computer's own
+SSH, `HTTPAgentServer+SSH.swift`: the route opened through the host's
+`VisorSSHService` with the device's key, each hop's host key kept in the
+settings the first time (`ssh.hostkey.<user@host:port>`) and compared
+after, the server's port 7433 forwarded from a local port, and `address`
+then `http://127.0.0.1:<port>` for everything else; only where
+`VisorHost.ssh` is set, so not on the web or Android yet; a
 fork's maps the same operations to its own service), `SessionTranscript`
 (entries, streams by message id, `sending` = optimistic rows that stay the
 last row until the record carries the same words at a later revision AND
@@ -541,7 +542,8 @@ it has not been run against real agents.
   on 7433). The device's key is refused before it is in the file and
   taken after; `hello` is answered through the forwarded port; another
   host key is refused; the whole client connects over the provider and
-  sees the sessions. Kill the sshd by its pid file afterwards.
+  sees the sessions; then the same through a jump host (the sshd jumped
+  through to itself). Kill the sshd by its pid file afterwards.
 - `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
   as its user would run it: a password, `run` checked with the terminal
   probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
@@ -679,9 +681,12 @@ From the code-quality pass of October 2026, found and left:
   a device to try them on (#79).
 - The openrouter CLI, signalled, leaves the command it was running; a
   reply interrupted mid-stream is not kept in its session.
-- SSH is offered on Apple hosts only: the web has no SSH, and Android's
-  host (Isomer) does not provide a `VisorSSHService` yet; the Linux and
-  Windows clients, when there are some, can give one over swift-nio-ssh.
+- SSH addresses work on Apple hosts only: the web has no SSH, and
+  Android's host (Isomer) does not provide a `VisorSSHService` yet; the
+  Linux and Windows clients, when there are some, can give one over
+  swift-nio-ssh. The address still needs Visor Server running on the
+  computer; a computer with only SSH could be served by starting the
+  command-line server there over an exec channel, which is not done.
   The device's key is one per device, kept in the settings' secrets
   (`ssh.key`); there is no way yet to see or forget a computer's kept
   host key but forgetting the computer's record does not clear it
