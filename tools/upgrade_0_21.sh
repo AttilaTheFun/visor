@@ -12,6 +12,8 @@
 #       by the other's code, so the agents on one reach the sessions on the
 #       other. The files are the ones written to ~/Downloads (a line with
 #       `visor://connect?code=…`); they hold the passwords, so they stay there.
+#       (A Mac cannot reach its own VPN address from itself: its own server
+#       is asked on loopback, and its own client should name it so too.)
 set -euo pipefail
 DATA="$HOME/Library/Application Support/Visor"
 case "${1:-}" in
@@ -42,10 +44,18 @@ def read(path):
             fields = json.loads(base64.urlsafe_b64decode(code + "=" * (-len(code) % 4)))
             return code, fields
     sys.exit("no code in " + path)
+import subprocess, re
+def local(host):
+    # This computer cannot reach its own VPN address from itself (the way
+    # such interfaces work on a Mac): its own server is asked on loopback.
+    own = set(re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", subprocess.run(["ifconfig"], capture_output=True, text=True).stdout))
+    m = re.match(r"(https?)://([^/:]+)(:\d+)?(/.*)?$", host)
+    if m and m.group(2) in own: return m.group(1) + "://127.0.0.1" + (m.group(3) or "") + (m.group(4) or "")
+    return host
 def link(server, code):
     # Each server takes the other's code: POST /api/link, with its own password.
     body = json.dumps({"type": "link", "text": code}).encode()
-    request = urllib.request.Request(server["host"] + "/api/link", data=body, method="POST",
+    request = urllib.request.Request(local(server["host"]) + "/api/link", data=body, method="POST",
                                      headers={"Authorization": "Bearer " + server["password"], "Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=10) as answer:
         reply = json.loads(answer.read())
