@@ -31,9 +31,13 @@ final class ScriptedSocket: VisorSocketService {
     private var queue: [String] = []
     private var waiting: CheckedContinuation<String, Error>?
 
+    /// Whether a socket opens at all (a road that carries no WebSocket
+    /// leaves it hanging).
+    var opens = true
+
     func open(url: String) -> Int32 {
         opened.append(url)
-        push("open")
+        if opens { push("open") }
         return Int32(opened.count)
     }
 
@@ -111,7 +115,7 @@ final class TailscaleSignInTests: XCTestCase {
         await settle()
         XCTAssertEqual(host.state, .connected)
         XCTAssertEqual(host.record.name, "Scripted Mac")
-        XCTAssertEqual(socket.opened, ["wss://mac.example"])
+        XCTAssertEqual(socket.opened, ["wss://mac.example/"])
         let login = socket.sent.compactMap { Envelope.decode($0) }.first { $0.type == "login" }
         XCTAssertEqual(login?.token, "tok-1")
         XCTAssertEqual(login?.password, "")

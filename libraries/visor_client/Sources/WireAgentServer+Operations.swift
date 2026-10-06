@@ -3,13 +3,23 @@ import VisorServices
 
 // Each operation of the protocol, as the wire protocol carries it: the
 // live ones as envelopes over the socket, the one-shot ones as REST calls.
-extension TailscaleAgentServer {
+extension WireAgentServer {
     // MARK: Over the live channel
 
-    public func subscribe(_ session: String) { send(.subscribe(session: session)) }
+    // Over the channel; by polling, what has a one-shot form is asked
+    // for that way, and the terminal's bytes, which only the channel
+    // carries, are not.
+    public func subscribe(_ session: String) {
+        if polling != nil { pollState(of: session) } else { send(.subscribe(session: session)) }
+    }
     public func assumeControl(_ session: String, cols: Int, rows: Int) { send(.assumeControl(session: session, cols: cols, rows: rows)) }
-    public func acknowledge(_ session: String) { send(.acknowledge(session: session)) }
-    public func loadEarlier(_ session: String, before: String) { send(.earlier(session: session, before: before)) }
+    public func acknowledge(_ session: String) {
+        if polling != nil { Task { _ = try? await call("POST", "/sessions/\(Self.escape(session))/acknowledge") } }
+        else { send(.acknowledge(session: session)) }
+    }
+    public func loadEarlier(_ session: String, before: String) {
+        if polling != nil { pollEarlier(of: session, before: before) } else { send(.earlier(session: session, before: before)) }
+    }
     public func sendInput(_ session: String, data: String) { send(.input(session: session, data: data)) }
     public func resize(_ session: String, cols: Int, rows: Int) { send(.resize(session: session, cols: cols, rows: rows)) }
 

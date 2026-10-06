@@ -492,6 +492,15 @@ it has not been run against real agents.
   side and the socket answer, a terminal session runs the shell (a line, a
   large output, Ctrl-C), and is ended; `QUIT=1` then stops the server
   through `/api/quit`; `VISOR_SHELL=powershell` for a Windows server.
+- `node tools/probes/noweb_proxy.mjs` — a reverse proxy on 8099 that
+  carries HTTP only (`/visor/api` → 7534, the rest → 7533, every WebSocket
+  upgrade refused): a road with no WebSockets in front of a staging
+  server. Then the polling fallback against it, over the native services:
+  `bazel test //tests/visor_client_tests --test_filter=PollingProbeTests
+  --test_env=VISOR_POLL_URL=http://127.0.0.1:8099/visor
+  --test_env=VISOR_POLL_PASSWORD=staging --spawn_strategy=local
+  --nocache_test_results` (skipped without the URL). It connects by
+  polling, starts a throwaway session, watches it work and ends it.
 - `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
   as its user would run it: a password, `run` checked with the terminal
   probe, then `start`, a restart through `/api/restart`, `stop`. CI runs

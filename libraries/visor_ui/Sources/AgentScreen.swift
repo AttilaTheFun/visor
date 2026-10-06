@@ -79,6 +79,8 @@ struct AgentScreen: View {
         Group {
             if !isTerminal {
                 chat
+            } else if !host.live {
+                terminalNeedsChannel
             } else if controlledElsewhere && !usingHere {
                 terminalElsewhere
             } else {
@@ -340,6 +342,21 @@ struct AgentScreen: View {
     }
 
     /// A terminal another window has: the way to have it here.
+    /// A terminal's bytes travel only over the live channel, which this
+    /// road does not carry.
+    private var terminalNeedsChannel: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "terminal").font(.largeTitle).foregroundColor(.secondary)
+            Text("Needs a live connection").font(.headline)
+            Text("This computer is followed by polling, and a terminal is drawn only over a live channel. The shell keeps running; chats work as usual.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(TranscriptMetrics.edgeInset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var terminalElsewhere: some View {
         VStack(spacing: 12) {
             Image(systemName: "terminal").font(.largeTitle).foregroundColor(.secondary)

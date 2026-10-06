@@ -1,14 +1,22 @@
 import VisorProtocol
 import VisorServices
 
-/// A Mac running the menu bar app behind its Tailscale Serve endpoint,
-/// speaking the wire protocol (docs/protocol.md): `hello` over HTTPS
-/// first — the Mac lets this device in on the network's word (its
-/// owner's device) or on the password, and hands back its name and a
-/// token — then wss:// on 443 for the live channel, logged in with the
-/// token, and https://…/api for the one-shot calls, the password as the
-/// bearer token. Over the host's socket and HTTP services, so the same
-/// code runs in a browser.
+/// A Visor server speaking the wire protocol (docs/protocol.md), wherever
+/// it is reached: a Mac behind Tailscale Serve at its tailnet name, or any
+/// URL a proxy or a tunnel gives (`ServerAddress`). `hello` over HTTP
+/// first — the server lets this device in on the road's word (its owner's
+/// device) or on the password, and hands back its name and a token —
+/// then the socket at the root for the live channel, logged in with the
+/// token, and `/api` for the one-shot calls, the password as the bearer
+/// token. Over the host's socket and HTTP services, so the same code runs
+/// in a browser.
+///
+/// The live channel is an accessory. Where it cannot be had — the host
+/// has no socket service, or the road does not carry WebSockets — the
+/// server is followed by polling instead (WireAgentServer+Polling): the
+/// list of sessions and each open session's state are asked for and held
+/// until they change, as the transcript always is. The socket is tried
+/// again now and then, and takes over when it opens.
 ///
 /// The channel is kept honest by a heartbeat of its own — a `ping`
 /// envelope every 16 s, and a channel that says nothing for 8 s after
@@ -16,7 +24,7 @@ import VisorServices
 /// a change of network) otherwise looks open until TCP gives up. The
 /// socket has 4 s to open and have its login answered. It is a message of
 /// the protocol, not a WebSocket ping frame, which a browser cannot send.
-public final class TailscaleAgentServer: AgentServer {
+public final class WireAgentServer: AgentServer {
     /// How often the channel is asked whether it is still there, and how
     /// long it has to say anything at all before it is taken as dropped.
     static let heartbeatInterval: Int32 = 16_000
@@ -30,8 +38,12 @@ public final class TailscaleAgentServer: AgentServer {
     static let verifyTimeout: Int32 = 1_000
 
     private(set) var record: AgentServerRecord
+    /// Where the server is: the record's address, read as a URL.
+    var address: ServerAddress? { ServerAddress(record.address) }
     /// What `hello` gave for the channel's login.
-    private var token: String?
+    var token: String?
+    /// Following by polling instead of the channel (WireAgentServer+Polling).
+    var polling: Polling?
     private var socketID: Int32?
     private var reader: Task<Void, Never>?
     private var heartbeat: Task<Void, Never>?
@@ -60,13 +72,16 @@ public final class TailscaleAgentServer: AgentServer {
 
     public func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
         closeChannel()
-        // What went wrong is said after `openChannel` returns, as an event
-        // from the socket would be.
-        guard let socket = VisorHost.socket else {
-            Task { onEvent(.closed("No socket service on this host")) }
+        guard let address else {
+            Task { onEvent(.closed("Bad address")) }
             return
         }
-        let id = socket.open(url: "wss://\(record.address)")
+        // No socket to be had here: followed by polling from the start.
+        guard let socket = VisorHost.socket else {
+            poll(address, onEvent: onEvent)
+            return
+        }
+        let id = socket.open(url: address.socket)
         guard id >= 0 else {
             Task { onEvent(.closed("Bad address")) }
             return
@@ -96,7 +111,18 @@ public final class TailscaleAgentServer: AgentServer {
                         if let translated { onEvent(translated) }
                     } else if event.hasPrefix("close ") || event.hasPrefix("error ") {
                         self.socketID = nil
-                        onEvent(.closed(String(event.split(separator: " ", maxSplits: 1).last ?? "")))
+                        let reason = String(event.split(separator: " ", maxSplits: 1).last ?? "")
+                        // Refused before it opened, while the server itself
+                        // answered `hello`: a road that carries no WebSocket.
+                        // Polling takes over, and the socket is tried later.
+                        if !self.loggedIn, let address = self.address {
+                            self.heartbeat?.cancel()
+                            self.heartbeat = nil
+                            socket.disconnect(id: id)
+                            self.poll(address, onEvent: onEvent, after: "the socket was refused: \(reason)")
+                            return
+                        }
+                        onEvent(.closed(reason))
                         return
                     }
                 } catch {
@@ -118,7 +144,19 @@ public final class TailscaleAgentServer: AgentServer {
         guard let socket = VisorHost.socket else { return }
         await socket.delay(milliseconds: Self.loginTimeout)
         guard socketID == id, !Task.isCancelled else { return }
-        if heard == 0 { return drop(id, loggedIn ? "No answer to the login" : "The socket did not open", onEvent) }
+        // A socket that opened and was not answered is a server that is
+        // not there: dropped. One that never opened at all is a road that
+        // may carry no WebSocket: polling takes over, and the socket is
+        // tried again later.
+        if heard == 0 {
+            if loggedIn { return drop(id, "No answer to the login", onEvent) }
+            socketID = nil
+            reader?.cancel()
+            reader = nil
+            socket.disconnect(id: id)
+            guard let address else { return onEvent(.closed("The socket did not open")) }
+            return poll(address, onEvent: onEvent, after: "the socket did not open")
+        }
         while true {
             await socket.delay(milliseconds: Self.heartbeatInterval)
             guard socketID == id, !Task.isCancelled else { return }
@@ -167,6 +205,7 @@ public final class TailscaleAgentServer: AgentServer {
     }
 
     public func closeChannel() {
+        stopPolling()
         heartbeat?.cancel()
         heartbeat = nil
         reader?.cancel()
@@ -199,7 +238,8 @@ public final class TailscaleAgentServer: AgentServer {
     /// One REST call, returning the answer's body as it came.
     func callText(_ method: String, _ path: String, body: String) async throws -> String {
         guard let http = VisorHost.http else { throw AgentServerError.message("No HTTP service on this host") }
-        return try await http.request(method: method, url: "https://\(record.address)/api" + path, body: body, authorization: record.secret)
+        guard let address else { throw AgentServerError.message("Bad address") }
+        return try await http.request(method: method, url: address.api + path, body: body, authorization: record.secret)
     }
 
     static func escape(_ text: String) -> String {

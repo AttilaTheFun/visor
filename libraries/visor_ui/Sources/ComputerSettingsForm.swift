@@ -1,4 +1,4 @@
-// A Mac's settings (the Tailscale provider's): its address and password
+// A computer's settings (a Visor server's): its address and password
 // (editable, reconnecting on save), its state in words, Reconnect, and
 // Forget, shown in the detail column from the sidebar.
 
@@ -20,8 +20,8 @@ struct ComputerSettingsForm: View {
         Form {
             Section {
                 TitledField(title: "Name") { TextField("Name", text: $name) }
-                TitledField(title: "Tailscale name") {
-                    TextField("my-mac.tail1234.ts.net", text: $address)
+                TitledField(title: "Address") {
+                    TextField("my-mac.tail1234.ts.net or https://…", text: $address)
                         .autocorrectionDisabled()
                         .keyboardTypeURL()
                 }
@@ -31,7 +31,8 @@ struct ComputerSettingsForm: View {
             } footer: {
                 Text(host.state.wantsAuthentication
                      ? "This computer does not know this device as its owner's. Type the password its Visor menu bar app shows and save."
-                     : host.state.label)
+                     : host.state.label + (host.state == .connected && !host.live
+                        ? ". Followed by polling: this road carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn." : ""))
             }
             Section {
                 Button("Save and reconnect", action: save)

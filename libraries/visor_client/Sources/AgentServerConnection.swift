@@ -53,6 +53,9 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         didSet { onRecordChange?() }
     }
     @Published public private(set) var state: State = .disconnected
+    /// Whether the server is followed live over its channel, or by polling
+    /// (where the road carries no WebSocket): the same, more slowly.
+    @Published public private(set) var live = true
     @Published public private(set) var sessions: [SessionInfo] = []
     @Published public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
@@ -428,6 +431,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         case .welcome(let name, let list, let catalogs):
             note("connected: welcome \(log.since(channelAsked)) ms after the channel was asked for, \(list.count) sessions")
             state = .connected
+            live = true
             attempt = 0
             if !name.isEmpty { record.name = name }
             if !record.everConnected { record.everConnected = true }
@@ -444,6 +448,9 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             registerForPush()
         case .catalogs(let catalogs):
             self.catalogs = catalogs
+        case .transport(let live):
+            if self.live != live { note(live ? "following live" : "following by polling") }
+            self.live = live
         case .account(let account, let agent):
             if let index = catalogs.firstIndex(where: { $0.agent == agent }) { catalogs[index].account = account }
         case .refused(let message):

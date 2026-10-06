@@ -51,6 +51,12 @@ public final class VisorServer {
     /// exposure has said it; learned with the owner, so the menu shows it
     /// even when Tailscale came up after the app did.
     public internal(set) var address: String?
+    /// The address set by hand for a server fronted some other way than
+    /// the exposure (VisorServer+PublicAddress.swift): a URL, as the
+    /// client reads it (`ServerAddress`). Empty: the exposure's.
+    public var publicAddress: String = VisorServer.keptPublicAddress() {
+        didSet { if publicAddress != oldValue { keepPublicAddress() } }
+    }
     /// What went wrong putting the front in place, or nil.
     public internal(set) var serveError: String?
     /// The other computers' servers this one's agents reach (VisorServer+Links.swift).
@@ -137,7 +143,7 @@ public final class VisorServer {
     /// step: its name, its address, the password. Nil until the address
     /// is known and a password is set.
     public var connectionCode: ConnectionCode? {
-        guard !password.isEmpty, let address else { return nil }
+        guard !password.isEmpty, let address = reachableAddress else { return nil }
         return ConnectionCode(name: hostName, host: address, password: password)
     }
 
@@ -197,6 +203,13 @@ public final class VisorServer {
     var transcriptWaiters: [String: [(revision: Int, generation: Int, respond: (HTTPResponse) -> Void)]] = [:]
 
     static let transcriptHold: TimeInterval = 25
+
+    /// The list of sessions' revision, counting up with each change, and
+    /// those holding for the next (VisorServer+Polling).
+    var sessionsRevision = 1
+    var sessionsWaiters: [(HTTPResponse) -> Void] = []
+    /// Those holding for a session's ephemeral state to change, by session.
+    var stateWaiters: [String: [(HTTPResponse) -> Void]] = [:]
 
     /// The list, once, after a burst: a turn writes a row per tool call.
     var sessionsBroadcastPending = false

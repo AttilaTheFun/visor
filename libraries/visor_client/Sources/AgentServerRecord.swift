@@ -5,8 +5,8 @@ import VisorServices
 
 /// A saved agent server: which provider reaches it, where, and with what
 /// credentials. The provider reads `address` and `secret` as its own —
-/// for Tailscale, the Mac's name and its password; for a fork's service,
-/// whatever its sign-in leaves behind.
+/// for a Visor server, where it is reached (`ServerAddress`) and its
+/// password; for a fork's service, whatever its sign-in leaves behind.
 public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     public var id: String
     /// What the sidebar calls it (the server's own name once known).
@@ -22,7 +22,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     public var provider: String
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
-                provider: String = "tailscale") {
+                provider: String = VisorServerProvider.name) {
         self.id = id
         self.name = name
         self.address = address
@@ -57,6 +57,6 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         self.init(id: id, name: json["name"].string ?? "", address: address,
                   secret: json["secret"].string ?? json["password"].string ?? "",
                   everConnected: json["everConnected"].bool ?? false,
-                  provider: json["provider"].string ?? json["backend"].string ?? "tailscale")
+                  provider: json["provider"].string ?? json["backend"].string ?? VisorServerProvider.name)
     }
 }

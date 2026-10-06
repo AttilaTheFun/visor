@@ -17,9 +17,13 @@ struct MenuContent: View {
                 Text(server.listening ? "Visor is serving on port \(String(server.port))" : "Visor is not listening")
             }
             if let error = server.lastError { Text(error) }
-            // What a client types: the tailnet name (clients connect over
-            // TLS on 443, through Tailscale Serve, always).
-            if let tailnetName = server.address {
+            // What a client types: the address set by hand (a proxy, a
+            // tunnel), else the tailnet name (TLS on 443 through Tailscale
+            // Serve).
+            if server.frontedElsewhere, let address = server.reachableAddress {
+                Button("\(address)") { copy(address) }
+                Text("Reached through a front of your own, at this address")
+            } else if let tailnetName = server.address {
                 Button("\(tailnetName)") { copy(tailnetName) }
                 if let serveError = server.serveError {
                     Text("HTTPS: \(serveError)")
@@ -31,7 +35,7 @@ struct MenuContent: View {
                     Text("\(login)'s devices connect without a password")
                 }
             } else {
-                Text("\(server.exposure.title) is not installed — clients need its endpoint")
+                Text("\(server.exposure.title) is not installed — set an address in Settings for a front of your own")
             }
             Divider()
             if let code = server.connectionCode {

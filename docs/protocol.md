@@ -9,36 +9,63 @@ where the route names the type.
 
 ## Who gets in
 
-The server listens on loopback only; the one road in from the network is
-Tailscale Serve on 443, which proxies to it from the same Mac and adds
-`Tailscale-User-Login` naming the tailnet user behind each request. A
-request is answered when that user is the Mac's own (`tailscale status`
-says whose the Mac is), or when `Authorization: Bearer` is the password
-from the menu bar app, or a token from `hello`. So the user's own devices
-need no password; another user's device on a shared tailnet, an older
-client, or a tool on the Mac itself (loopback, no headers) uses the
-password. The server does not listen at all without a password set.
+The server listens on loopback only: the WebSocket on its port (7433) and
+the REST side on the next (7434). Something in front of it is the road in
+from the network. The one shipped is Tailscale Serve on 443, which proxies
+to both from the same Mac (`/api` to the REST side, everything else to
+the socket) and adds `Tailscale-User-Login` naming the tailnet user behind
+each request. A request is answered when that user is the Mac's own
+(`tailscale status` says whose the Mac is), or when `Authorization: Bearer`
+is the password from the menu bar app, or a token from `hello`. So the
+user's own devices need no password; another user's device on a shared
+tailnet, an older client, or a tool on the Mac itself (loopback, no
+headers) uses the password. The server does not listen at all without a
+password set.
+
+Any other front works the same way — a reverse proxy, a tunnel — routing
+`/api` to the REST port and the rest to the socket port, with the
+password as the credential: the menu bar app's Settings take the address
+that front gives (`https://proxy.example.com/visor`), and the connection
+code carries it. The API reads the same under a mount path forwarded
+whole (`/visor/api/sessions`).
 
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
 200 gives `host` (the Mac's name), `login` (whose it is) and `token` —
 then the WebSocket, logged in with `token` (or `password`).
 
+The WebSocket is an accessory. A client whose road does not carry
+WebSockets (or whose host has no socket service) follows the server by
+polling instead, with the same effect a little later: the list of
+sessions (`GET /sessions?since=`) and each open session's state
+(`GET /sessions/<id>/state?since=`), each held by the server until it
+changes, as the transcript's sync always is; the rows before one from
+`GET /sessions/<id>/earlier`. Only a terminal session's bytes need the
+socket. Pushes are optional the same way: a device whose server sends
+none notifies itself.
+
 ## Connection codes
 
 Computers are added by hand, in one step. The menu bar app shows a
 connection code — URL-safe base64 (no padding) of
-`{"v":1,"name":…,"host":<tailnet name>,"password":…}` — as a string to
+`{"v":1,"name":…,"host":<address>,"password":…}` — as a string to
 copy and as a QR code of `visor://connect?code=<code>`. A client takes
-the code, the link, or a bare tailnet name (`ConnectionCode` in
+the code, the link, or an address typed by hand (`ConnectionCode` in
 libraries/visor_protocol; the apps register the `visor` URL scheme).
+The address is a bare tailnet name, meaning HTTPS on 443 at the root,
+or any `http(s)://` URL with a port and a mount path as the front gives
+it (`ServerAddress`): the socket is `ws(s)://` at that root, the REST
+side under `/api`.
 
 ## REST (`https://<host>/api`, `Authorization: Bearer <password or token>`)
 
 | method and path | body | answer |
 |---|---|---|
 | `GET /hello` | | `hello`: `host`, `login`, `token` — or 401 |
-| `GET /sessions` | | the `welcome` envelope: `host`, `sessions`, `catalogs` |
+| `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
+| `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
+| `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
+| `POST /sessions/<id>/acknowledge` | | the user has read the session's notice |
 | `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript) | `sessions` with the new one |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |

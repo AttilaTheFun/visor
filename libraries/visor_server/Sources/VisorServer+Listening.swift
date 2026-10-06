@@ -77,6 +77,9 @@ extension VisorServer {
         let exposure = self.exposure
         let port = self.port
         guard exposure.installed else {
+            // Reached some other way (a proxy, a tunnel, at the address
+            // set by hand): nothing is missing.
+            if frontedElsewhere { serveError = nil; return }
             if serveError == nil { Self.log("\(exposure.title) is not installed: clients reach this computer through it") }
             serveError = "\(exposure.title) is not installed"
             return

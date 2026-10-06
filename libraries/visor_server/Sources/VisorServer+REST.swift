@@ -22,7 +22,7 @@ extension VisorServer {
     }
 
     func route(_ request: HTTPRequest, respond: @escaping (HTTPResponse) -> Void) {
-        let path = (request.path.split(separator: "?").first.map(String.init) ?? request.path).replacingOccurrences(of: "/api", with: "", options: .anchored)
+        let path = Self.apiPath(request.path.split(separator: "?").first.map(String.init) ?? request.path)
         let parts = path.split(separator: "/").map(String.init)
         if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "commands", authorized(request) {
             guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
@@ -30,6 +30,18 @@ extension VisorServer {
             e.session = record.info.id
             e.commands = commands(for: record)
             return respond(.json(e.encoded()))
+        }
+        if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "state", authorized(request) {
+            guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
+            return answerState(of: record, since: Self.query(request.path)["since"].flatMap(Int.init), respond: respond)
+        }
+        if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "earlier", authorized(request) {
+            guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
+            guard let before = Self.query(request.path)["before"], !before.isEmpty else { return respond(HTTPResponse(400, "{\"error\":\"before?\"}")) }
+            return answerEarlier(of: record, before: before, respond: respond)
+        }
+        if request.method == "GET", parts.count == 1, parts[0] == "sessions", authorized(request) {
+            return answerSessions(since: Self.query(request.path)["since"].flatMap(Int.init), respond: respond)
         }
         if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "transcript", authorized(request) {
             guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
@@ -66,7 +78,7 @@ extension VisorServer {
     func route(_ request: HTTPRequest) -> HTTPResponse {
         guard authorized(request) else { return refusal(request) }
         var path = request.path.split(separator: "?").first.map(String.init) ?? request.path
-        if path.hasPrefix("/api") { path = String(path.dropFirst(4)) }
+        path = Self.apiPath(path)
         let parts = path.split(separator: "/").map(String.init)
         let call = RESTCall(request: request, parts: parts, query: Self.query(request.path), body: Envelope.decodeBody(request.body))
         return switch (request.method, parts.count, parts.first) {
@@ -104,9 +116,7 @@ extension VisorServer {
     }
 
     /// The sessions and the catalogs, as `welcome` carries them.
-    private func sessionsJSON() -> String {
-        Envelope.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs()).encoded()
-    }
+    private func sessionsJSON() -> String { sessionsEnvelope().encoded() }
 
     /// The client is in (by the road's word or the password): its
     /// name for this computer, whose it is, and a token to log
@@ -131,7 +141,7 @@ extension VisorServer {
     }
 
     private func restListSessions(_ call: RESTCall) -> HTTPResponse {
-        return .json(sessionsJSON())
+        .json(sessionsEnvelope().encoded())
     }
 
     private func restListFolders(_ call: RESTCall) -> HTTPResponse {
@@ -293,7 +303,7 @@ extension VisorServer {
 
     private func restSessionAction(_ call: RESTCall) -> HTTPResponse {
         let action = call.parts[2]
-        guard ["send", "stop", "unqueue", "archive", "unarchive", "permissions", "settings", "approve", "rename", "mode"].contains(action) else {
+        guard ["send", "stop", "unqueue", "archive", "unarchive", "permissions", "settings", "approve", "rename", "mode", "acknowledge"].contains(action) else {
             return HTTPResponse(404, "{\"error\":\"unknown action\"}")
         }
         guard let record = session(call.parts[1]) else { return HTTPResponse(404, "{\"error\":\"no such session\"}") }
@@ -302,6 +312,15 @@ extension VisorServer {
         e.session = record.info.id
         perform(e, from: nil)
         return .json(Envelope.sessions([record.info]).encoded())
+    }
+
+    /// The path below `/api`, wherever a front mounted it: Tailscale Serve
+    /// forwards `/api/...` as it is; a reverse proxy may forward
+    /// `/visor/api/...` whole, which reads the same.
+    static func apiPath(_ path: String) -> String {
+        if let range = path.range(of: "/api/") { return "/" + path[range.upperBound...] }
+        if path == "/api" || path.hasSuffix("/api") { return "/" }
+        return path
     }
 
     /// A request's query string, decoded.

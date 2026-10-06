@@ -15,6 +15,7 @@ struct SettingsPane: View {
     @State private var linking = false
     @State private var choosingKey = false
     @State private var keyPEM = ""
+    @State private var publicAddress = ""
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
@@ -81,10 +82,17 @@ struct SettingsPane: View {
                 if let serveError = server.serveError {
                     Text("HTTPS: \(serveError)").font(.caption).foregroundColor(.red)
                     Button("Retry") { server.front() }
+                } else if server.frontedElsewhere {
+                    Text("Reached through a front of your own: clients take the address below. \(server.exposure.title) Serve is not needed for it.")
+                        .font(.caption).foregroundColor(.secondary)
                 } else {
                     Text("HTTPS on 443 through \(server.exposure.title) Serve, reachable from this network only.")
                         .font(.caption).foregroundColor(.secondary)
                 }
+                TextField("Address for a front of your own (https://proxy.example.com/visor)", text: $publicAddress)
+                    .onSubmit { server.publicAddress = publicAddress; server.front() }
+                Text("Leave it empty to use \(server.exposure.title)'s name. Set it when a reverse proxy or a tunnel fronts this Mac at one address, sending /api to port \(String(server.port + 1)) and everything else to port \(String(server.port)): the connection code then carries that address. A front that passes no WebSockets still works; clients poll instead.")
+                    .font(.caption).foregroundColor(.secondary)
             } header: {
                 Text("Network")
             }
@@ -156,6 +164,7 @@ struct SettingsPane: View {
         .formStyle(.grouped)
         .frame(width: 520, height: 760)
         .onAppear {
+            publicAddress = server.publicAddress
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password

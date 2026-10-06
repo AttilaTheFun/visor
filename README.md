@@ -3,7 +3,7 @@
 Remote agent sessions: Visor Server, a Mac menu bar app (or `visor-server`,
 the same server as a command for Linux and Windows), runs Claude Code, Codex
 and the openrouter CLI as subprocesses on the host and exposes them over
-Tailscale; a SwiftUI client for iPhone, iPad and Mac adds a Mac from its
+Tailscale, or any front of your own; a SwiftUI client for iPhone, iPad and Mac adds a Mac from its
 connection code, starts sessions, chats with them and watches their
 progress, and opens terminal sessions — the Mac's own shell, drawn in
 SwiftUI over SwiftTerm's emulator — to run anything there directly.
@@ -30,8 +30,9 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   (`visor://connect?code=…`). Each computer is one agent server; what
   the client does with a server — signing in, the live channel, and
   every operation on sessions, folders and files — is the `AgentServer`
-  protocol, and `TailscaleAgentServer` (the wire protocol: `hello`, wss
-  + https with a bearer) is the one shipped. A fork that hosts agents on
+  protocol, and `WireAgentServer` (the wire protocol: `hello`, ws(s) +
+  http(s) with a bearer, at a Tailscale name or any URL; followed by
+  polling where the road carries no WebSocket) is the one shipped. A fork that hosts agents on
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one
@@ -105,10 +106,13 @@ you install it.
   an app bundle over Visor Server. Treat access to Visor like an SSH
   login to your Mac.
 - **Who can reach it.** The server listens on this Mac's loopback address
-  only. The one way in from the network is Tailscale Serve on port 443,
-  which is reachable from your tailnet, never the public internet.
+  only. The way in from the network shipped is Tailscale Serve on port
+  443, which is reachable from your tailnet, never the public internet.
   Serve names the Tailscale user behind each request, and your own
-  devices are let in on that. Every other device needs the password.
+  devices are let in on that. Every other device needs the password —
+  including every device behind a front of your own (a reverse proxy or
+  a tunnel, set as the address in Settings), which names no user: that
+  front is yours to keep off the public internet.
 - **The password and the connection code.** The connection code, and the
   QR code that carries it, holds the password in plain base64. Share it
   only with your own devices. The password is kept in the keychain, by
