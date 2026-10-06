@@ -19,6 +19,11 @@ final class NetworkListener: Listener {
             parameters = .tcp
         }
         parameters.allowLocalEndpointReuse = true
+        // IPv4 only. The default is one IPv6 socket meant to take IPv4 as
+        // well, which takes it from the LAN but not through a VPN's tun
+        // interface (Tailscale's): the address in the connection code
+        // then times out. Every address a code carries is IPv4.
+        if let ip = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options { ip.version = .v4 }
         guard let endpointPort = NWEndpoint.Port(rawValue: options.port) else { throw NWError.posix(.EINVAL) }
         if !options.everywhere { parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: endpointPort) }
         listener = try NWListener(using: parameters, on: options.everywhere ? endpointPort : .any)
