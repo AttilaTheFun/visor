@@ -5,6 +5,11 @@
 // listens on this computer alone, or on every interface when opened to
 // the network, and tells clients an address accordingly.
 
+#if canImport(Glibc)
+import Glibc
+#else
+import Darwin
+#endif
 import VisorProtocol
 @testable import VisorServer
 import Synchronization
@@ -153,33 +158,49 @@ final class AuthTests: ServerTestCase {
         let mode = try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? Int
         XCTAssertEqual(mode.map { $0 & 0o777 }, 0o600)
 
-        // As the client reaches it: nc -U on the computer, HTTP through it
-        // (where there is an nc; CI's Linux image installs one).
-        if let nc = ["/usr/bin/nc", "/bin/nc"].first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
-            let answer = try await Self.through(path, "GET /api/hello HTTP/1.1\r\nHost: visor\r\n\r\n", nc: nc)
-            XCTAssertTrue(answer.hasPrefix("HTTP/1.1 200"), answer)
-            XCTAssertTrue(answer.contains("\"hello\""), answer)
-        }
+        // As the client reaches it (`nc -U` on the computer): a connection
+        // to the file, HTTP through it, no bearer.
+        let answer = await Self.through(path, "GET /api/hello HTTP/1.1\r\nHost: visor\r\n\r\n")
+        XCTAssertTrue(answer.hasPrefix("HTTP/1.1 200"), answer)
+        XCTAssertTrue(answer.contains("\"hello\""), answer)
 
         server.settings.sshEnabled = false
         for _ in 0..<50 where FileManager.default.fileExists(atPath: path) { try? await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertFalse(FileManager.default.fileExists(atPath: path))
     }
 
-    /// Sends `text` to the socket file with `nc -U` and takes what comes back.
-    private static func through(_ path: String, _ text: String, nc: String) async throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: nc)
-        process.arguments = ["-U", path]
-        let input = Pipe(), output = Pipe()
-        process.standardInput = input
-        process.standardOutput = output
-        try process.run()
-        input.fileHandleForWriting.write(Data(text.utf8))
-        input.fileHandleForWriting.closeFile()
-        let data = await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
-        process.waitUntilExit()
-        return String(decoding: data, as: UTF8.self)
+    /// Sends `text` down a connection to the socket file and takes what
+    /// comes back, off the main actor (the server answers there).
+    private static func through(_ path: String, _ text: String) async -> String {
+        await Task.detached {
+            #if canImport(Glibc)
+            let kind = Int32(SOCK_STREAM.rawValue)
+            #else
+            let kind = SOCK_STREAM
+            #endif
+            let fd = socket(AF_UNIX, kind, 0)
+            guard fd >= 0 else { return "no socket: \(errno)" }
+            defer { close(fd) }
+            var address = sockaddr_un()
+            address.sun_family = sa_family_t(AF_UNIX)
+            let capacity = MemoryLayout.size(ofValue: address.sun_path)
+            withUnsafeMutablePointer(to: &address.sun_path) { sunPath in
+                sunPath.withMemoryRebound(to: CChar.self, capacity: capacity) { _ = strncpy($0, path, capacity - 1) }
+            }
+            let connected = withUnsafePointer(to: &address) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+            }
+            guard connected == 0 else { return "not connected: \(errno)" }
+            _ = text.withCString { write(fd, $0, strlen($0)) }
+            var answer = Data()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while true {
+                let count = read(fd, &buffer, buffer.count)
+                guard count > 0 else { break }
+                answer.append(contentsOf: buffer[..<count])
+            }
+            return String(decoding: answer, as: UTF8.self)
+        }.value
     }
 }
 
