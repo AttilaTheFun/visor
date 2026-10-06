@@ -12,6 +12,15 @@
     <string>0.20</string>
     <key>CFBundleVersion</key>
     <string>20</string>
+    <!-- A server may be plain http:// on a LAN or a VPN, which ATS would
+         otherwise refuse as cleartext. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
     <key>NSHumanReadableCopyright</key>
     <string></string>
     <key>CFBundleURLTypes</key>

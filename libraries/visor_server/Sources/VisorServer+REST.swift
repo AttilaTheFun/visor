@@ -97,6 +97,7 @@ extension VisorServer {
         case ("POST", 2, "push") where parts[1] == "test": restTestPush(call)
         case ("POST", 1, "push"): restRegisterPushDevice(call)
         case ("POST", 1, "link"): restLinkBack(call)
+        case ("POST", 1, "unlink"): restUnlink(call)
         case ("POST", 1, "restart"): restRestart(call)
         case ("POST", 1, "quit"): restQuit(call)
         case ("POST", 1, "sessions"): restStartSession(call)
@@ -246,6 +247,13 @@ extension VisorServer {
         var reply = Envelope(type: "push")
         reply.exists = apnsKey.configured
         return .json(reply.encoded())
+    }
+
+    /// Forgets a linked computer, by the host its code named (`text`).
+    private func restUnlink(_ call: RESTCall) -> HTTPResponse {
+        guard let host = call.body.text, !host.isEmpty else { return HTTPResponse(400, Envelope.error("The host to unlink is required").encoded()) }
+        unlink(host: host)
+        return .json(Envelope(type: "unlink").encoded())
     }
 
     /// A computer this one's code was pasted into, linking back.

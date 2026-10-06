@@ -18,6 +18,15 @@
     <array>
         <string>com.LoganShire.Visor.MenuBar</string>
     </array>
+    <!-- A server may be plain http:// on a LAN or a VPN, which ATS would
+         otherwise refuse as cleartext. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
     <!-- A menu bar app: no Dock icon, no app menu. -->
     <key>LSUIElement</key>
     <true/>
