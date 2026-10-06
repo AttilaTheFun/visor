@@ -90,14 +90,15 @@ final class VisorProbe: XCTestCase {
         app.launch()
         let row = app.descendants(matching: .any).matching(identifier: "session-" + id).firstMatch
         if !row.waitForExistence(timeout: 15) {
-            // No computer yet: add the host by name (the simulator shares
-            // this Mac's Tailscale identity, so no password).
+            // No computer yet: add the host by its address and password.
             let add = app.buttons["add-computer"].firstMatch
             XCTAssertTrue(add.waitForExistence(timeout: 10), "no Add Computer row")
             add.tap()
             let host = app.textFields["host"].firstMatch
             XCTAssertTrue(host.waitForExistence(timeout: 10), "no connect form")
             host.tap(); host.typeText(env["VISOR_PROBE_HOST"] ?? "my-mac.example.ts.net")
+            let secure = app.secureTextFields["password"].firstMatch
+            if secure.waitForExistence(timeout: 5) { secure.tap(); secure.typeText(env["VISOR_PROBE_PASSWORD"] ?? "") }
             app.buttons["connect"].firstMatch.tap()
         }
         XCTAssertTrue(row.waitForExistence(timeout: 30), "the session's row did not appear")

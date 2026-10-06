@@ -2,7 +2,7 @@
 # The command-line server (Linux), tried as its user would: a password made, the server run in the
 # terminal and checked with the terminal probe, stopped through its REST side; then started in the
 # background, restarted through /api/restart (the new process waits for the old to go), checked
-# again, and stopped with `visor-server stop`. Needs no agent CLI and no Tailscale.
+# again, and stopped with `visor-server stop`. Needs no agent CLI.
 #   tools/probes/command_line_server.sh [path to visor-server]   (default .build/debug/visor-server)
 set -uo pipefail
 cd "$(dirname "$0")/../.."
@@ -31,7 +31,7 @@ sleep 2
 check $BIN status
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}/visor"
 FIRST=$(cut -d' ' -f1 "$DATA/visor-server.pid")
-curl -s -X POST -H "Authorization: Bearer $PW" http://127.0.0.1:$((PORT + 1))/api/restart -d '{}' > /dev/null
+curl -s -X POST -H "Authorization: Bearer $PW" http://127.0.0.1:$PORT/api/restart -d '{}' > /dev/null
 sleep 4
 SECOND=$(cut -d' ' -f1 "$DATA/visor-server.pid")
 check test "$FIRST" != "$SECOND"

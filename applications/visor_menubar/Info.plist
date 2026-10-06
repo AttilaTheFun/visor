@@ -9,15 +9,23 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.20</string>
+    <string>0.21</string>
     <key>CFBundleVersion</key>
-    <string>20</string>
+    <string>21</string>
     <!-- The app it takes over from, by bundle id: an update from it
          installs this beside it and removes it (Server.relaunch). -->
     <key>VisorReplaces</key>
     <array>
         <string>com.LoganShire.Visor.MenuBar</string>
     </array>
+    <!-- A server may be plain http:// on a LAN or a VPN, which ATS would
+         otherwise refuse as cleartext. Arbitrary loads alone: with
+         NSAllowsLocalNetworking beside it, ATS ignores it. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
     <!-- A menu bar app: no Dock icon, no app menu. -->
     <key>LSUIElement</key>
     <true/>

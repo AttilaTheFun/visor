@@ -10,6 +10,11 @@ extension VisorServer {
         for key in session.subscribers {
             connections[key]?.send(envelope)
         }
+        // The same for those polling: anything ephemeral (the record's
+        // rows have their own sync, and terminal bytes only the channel).
+        if envelope.type != "entry", envelope.type != "transcript", envelope.type != "tty", envelope.type != "earlier" {
+            stateChanged(session)
+        }
     }
 
     /// Nothing to say is nothing sent.
@@ -20,6 +25,7 @@ extension VisorServer {
     func broadcastSessions() {
         let envelope = Envelope.sessions(sessions.map(\.info))
         for connection in connections.values where connection.authenticated { connection.send(envelope) }
+        sessionsChanged()
         notifyPushes()
     }
 

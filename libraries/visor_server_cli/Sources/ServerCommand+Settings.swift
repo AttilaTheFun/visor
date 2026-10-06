@@ -15,16 +15,52 @@ extension ServerCommand {
         } else {
             print("The server is not running.")
         }
-        let exposure = platform.exposure()
-        guard exposure.installed else {
-            print("\(exposure.title) is not installed: clients reach this computer through it.")
+        let settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        if settings.reachableFromNetwork {
+            let addresses = platform.host.addresses()
+            print("The network reaches it directly" + (addresses.isEmpty ? "." : ", at " + addresses.joined(separator: ", ") + "."))
+        } else {
+            print("Only this computer reaches it: a reverse proxy or a tunnel here is the road in (`network on` opens it to the network).")
+        }
+        if settings.publicAddress.isEmpty {
+            print("Clients are told " + (Self.reachableAddress(platform, settings).map { "\($0)." } ?? "no address: `address <url>` sets one."))
+        } else {
+            print("Clients are told \(settings.publicAddress) (set by hand).")
+        }
+    }
+
+    /// The address clients are told, as the server would make it.
+    static func reachableAddress(_ platform: ServerPlatform, _ settings: ServerSettings, port: UInt16 = Envelope.defaultPort) -> String? {
+        let set = settings.publicAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !set.isEmpty { return set }
+        guard settings.reachableFromNetwork, let first = platform.host.addresses().first else { return nil }
+        return "http://\(first):\(port)"
+    }
+
+    /// Opens the server to the network, or keeps it to this computer.
+    @MainActor
+    func network(_ value: String?) throws {
+        var settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        switch value {
+        case "on": settings.reachableFromNetwork = true
+        case "off": settings.reachableFromNetwork = false
+        default: throw CommandLineError.usage("network on, or network off")
+        }
+        settings.keep(at: VisorServer.settingsURL)
+        print(settings.reachableFromNetwork ? "The network reaches the server directly, from its next start." : "Only this computer reaches the server, from its next start.")
+    }
+
+    /// Shows or sets the address clients are told.
+    @MainActor
+    func address(_ value: String?) {
+        var settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        guard let value else {
+            print(settings.publicAddress.isEmpty ? "No address is set: clients are told the server's own guess, if the network reaches it." : settings.publicAddress)
             return
         }
-        if let address = await exposure.address() {
-            print("This computer is \(address) on \(exposure.title).")
-        } else {
-            print("\(exposure.title) has not said where this computer is: is it up?")
-        }
+        settings.publicAddress = value == "-" ? "" : value
+        settings.keep(at: VisorServer.settingsURL)
+        print(settings.publicAddress.isEmpty ? "Address cleared." : "Clients will be told \(settings.publicAddress), from the server's next start.")
     }
 
     /// Shows the password, making one if there is none; or sets it.
@@ -47,16 +83,15 @@ extension ServerCommand {
 
     /// The connection code: this computer's name, its address, the password.
     @MainActor
-    func code() async throws {
+    func code() throws {
         let platform = quietPlatform()
         guard let password = platform.secrets.get("password"), !password.isEmpty else {
             throw CommandLineError.failed("there is no password yet: `visor-server password` makes one")
         }
-        let exposure = platform.exposure()
-        guard exposure.installed else { throw CommandLineError.failed("\(exposure.title) is not installed") }
-        guard let address = await exposure.address() else {
-            throw CommandLineError.failed("\(exposure.title) has not said where this computer is: is it up?")
+        let settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        guard let address = Self.reachableAddress(platform, settings) else {
+            throw CommandLineError.failed("no address to give: `network on` for the network to reach this computer, or `address <url>` for a front of your own")
         }
-        Self.printCode(ConnectionCode(name: platform.host.name, host: address, password: password), through: exposure.title)
+        Self.printCode(ConnectionCode(name: platform.host.name, host: address, password: password))
     }
 }

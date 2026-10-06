@@ -2,8 +2,8 @@ import Foundation
 
 /// This Mac's addresses on its networks.
 public enum NetworkAddresses {
-    /// Its Tailscale (100.64.0.0/10) and other IPv4 addresses, Tailscale's
-    /// first.
+    /// Its IPv4 addresses, loopback left out: a VPN's (the 100.64.0.0/10
+    /// range such networks use) first, then the LAN's.
     public static func all() -> [(name: String, address: String)] {
         var result: [(String, String)] = []
         var list: UnsafeMutablePointer<ifaddrs>?
@@ -19,7 +19,7 @@ public enum NetworkAddresses {
                 result.append((String(cString: entry.ifa_name), text))
             }
         }
-        // Tailscale first: the CGNAT range on a utun interface.
+        // A VPN's address first: it reaches the Mac from anywhere.
         return result.sorted { a, b in a.1.hasPrefix("100.") && !b.1.hasPrefix("100.") }
     }
 }

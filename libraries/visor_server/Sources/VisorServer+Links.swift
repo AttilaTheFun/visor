@@ -38,7 +38,7 @@ extension VisorServer {
     /// went wrong. Linking again replaces the code (a new password).
     public func link(_ text: String) async -> String? {
         guard let code = ConnectionCode(parsing: text) else { return "That is not a connection code." }
-        if code.host == address { return "That is this computer's own code." }
+        if code.host == reachableAddress { return "That is this computer's own code." }
         adopt(code)
         guard let mine = connectionCode else { return nil }
         var e = Envelope(type: "link")
@@ -134,10 +134,10 @@ extension VisorServer {
     }
 
     /// One request to a linked computer's REST side, with its password.
-    /// The code's host is its network name (HTTPS on 443), or a whole
-    /// base address (`http://127.0.0.1:7434`), which tests use.
+    /// The code's host is an address as a client reads it: a bare name
+    /// (HTTPS at the root) or a whole base URL (`ServerAddress`).
     func call(_ link: ConnectionCode, path: String, _ envelope: Envelope) async throws -> Envelope {
-        let base = link.host.contains("://") ? link.host : "https://\(link.host)"
+        let base = ServerAddress(link.host)?.root ?? link.host
         let request = OutgoingRequest(url: "\(base)/api/\(path)", method: "POST",
                                       headers: ["Authorization": "Bearer \(link.password)", "Content-Type": "application/json"],
                                       body: Data(envelope.encoded().utf8))

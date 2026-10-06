@@ -2,8 +2,8 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 load("@rules_apple//apple:ios.bzl", "ios_ui_test")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 
-# Simulator probe for the client against Visor Server on this Mac, through
-# its Tailscale Serve endpoint (VISOR_PROBE_HOST, the Mac's tailnet name):
+# Simulator probe for the client against Visor Server on this Mac
+# (VISOR_PROBE_HOST, its address; VISOR_PROBE_PASSWORD):
 # looks at screens, records a send, photographs the snapshot fixture.
 # Screenshots go to /private/tmp/visor_probe (run with --spawn_strategy=local
 # so the sandbox allows the write). Manual, one case at a time:

@@ -22,4 +22,7 @@ public enum AgentServerEvent: Sendable {
     case failed(String)
     /// The channel closed, with the reason.
     case closed(String)
+    /// How the server is being followed: live over its channel, or by
+    /// polling where the channel cannot be had. Live until said otherwise.
+    case transport(live: Bool)
 }

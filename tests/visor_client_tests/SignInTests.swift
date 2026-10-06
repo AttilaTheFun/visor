@@ -1,8 +1,7 @@
-// The Mac's sign-in over the host's services: `hello` over HTTP first —
-// let in on the network's word or the password, refused with 401
-// otherwise — then the socket, logged in with the token hello gave. A
-// 401 is the Mac asking for a password, which the connection shows and
-// does not retry.
+// A server's sign-in over the host's services: `hello` over HTTP first —
+// let in on the password, refused with 401 otherwise — then the socket,
+// logged in with the token hello gave. A 401 is the server asking for a
+// password, which the connection shows and does not retry.
 
 import Foundation
 @testable import VisorClient
@@ -31,9 +30,13 @@ final class ScriptedSocket: VisorSocketService {
     private var queue: [String] = []
     private var waiting: CheckedContinuation<String, Error>?
 
+    /// Whether a socket opens at all (a road that carries no WebSocket
+    /// leaves it hanging).
+    var opens = true
+
     func open(url: String) -> Int32 {
         opened.append(url)
-        push("open")
+        if opens { push("open") }
         return Int32(opened.count)
     }
 
@@ -85,7 +88,7 @@ final class ScriptedSocket: VisorSocketService {
 }
 
 @MainActor
-final class TailscaleSignInTests: XCTestCase {
+final class SignInTests: XCTestCase {
     private var socket: ScriptedSocket!
 
     override func setUp() async throws {
@@ -111,7 +114,7 @@ final class TailscaleSignInTests: XCTestCase {
         await settle()
         XCTAssertEqual(host.state, .connected)
         XCTAssertEqual(host.record.name, "Scripted Mac")
-        XCTAssertEqual(socket.opened, ["wss://mac.example"])
+        XCTAssertEqual(socket.opened, ["wss://mac.example/"])
         let login = socket.sent.compactMap { Envelope.decode($0) }.first { $0.type == "login" }
         XCTAssertEqual(login?.token, "tok-1")
         XCTAssertEqual(login?.password, "")

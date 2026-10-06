@@ -26,7 +26,7 @@ struct StagingServer {
 
         let server = VisorServer.staging(port: port, root: root, password: password)
         setlinebuf(stdout)
-        print("Visor staging server: ws://127.0.0.1:\(port), http://127.0.0.1:\(port + 1)/api, password \(password)")
+        print("Visor staging server: http://127.0.0.1:\(port) (the socket at /, the API at /api), password \(password)")
         print("Kept in \(root.path)")
 
         // Its agents go before it does.

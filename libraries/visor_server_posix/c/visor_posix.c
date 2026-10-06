@@ -100,7 +100,7 @@ pid_t visor_spawn_detached(const char *path, char *const argv[], char *const env
     _exit(127);
 }
 
-int visor_listen_loopback(unsigned short port) {
+int visor_listen(unsigned short port, int everywhere) {
     int listener = socket(AF_INET, SOCK_STREAM, 0);
     if (listener < 0) return -1;
     (void)fcntl(listener, F_SETFD, FD_CLOEXEC);
@@ -110,7 +110,7 @@ int visor_listen_loopback(unsigned short port) {
     memset(&address, 0, sizeof address);
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
-    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_addr.s_addr = htonl(everywhere ? INADDR_ANY : INADDR_LOOPBACK);
     if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || listen(listener, 64) != 0) {
         int error = errno;
         close(listener);

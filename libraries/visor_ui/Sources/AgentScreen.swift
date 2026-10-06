@@ -79,6 +79,8 @@ struct AgentScreen: View {
         Group {
             if !isTerminal {
                 chat
+            } else if !host.live {
+                terminalNeedsChannel
             } else if controlledElsewhere && !usingHere {
                 terminalElsewhere
             } else {
@@ -113,6 +115,10 @@ struct AgentScreen: View {
         // legible only in the dark palette.
         .terminalBarScheme(controlsTerminal)
         .toolbarTitleDisplayMode(.inline)
+        // The draft is kept as it is typed, and taken up again when the
+        // session is opened again (SavedDrafts).
+        .onAppear { if draft.isEmpty { draft = SavedDrafts.draft(server: host.record.id, session: sessionID) } }
+        .onChange(of: draft) { _, now in SavedDrafts.keep(now, server: host.record.id, session: sessionID) }
         .onAppear {
             host.subscribe(sessionID)
             // Screenshot tests: the inspector or the model picker, open —
@@ -340,6 +346,21 @@ struct AgentScreen: View {
     }
 
     /// A terminal another window has: the way to have it here.
+    /// A terminal's bytes travel only over the live channel, which this
+    /// road does not carry.
+    private var terminalNeedsChannel: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "terminal").font(.largeTitle).foregroundColor(.secondary)
+            Text("Needs a live connection").font(.headline)
+            Text("This computer is followed by polling, and a terminal is drawn only over a live channel. The shell keeps running; chats work as usual.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(TranscriptMetrics.edgeInset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var terminalElsewhere: some View {
         VStack(spacing: 12) {
             Image(systemName: "terminal").font(.largeTitle).foregroundColor(.secondary)
@@ -393,6 +414,7 @@ struct AgentScreen: View {
         let paths = attachments.compactMap(\.path)
         guard !text.isEmpty || !paths.isEmpty else { return }
         draft = ""
+        SavedDrafts.clear(server: host.record.id, session: sessionID)
         attachments = []
         // The pictures travel beside the words: the transcript shows them,
         // and the host names their paths to the agent.

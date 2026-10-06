@@ -85,10 +85,7 @@ final class LinkedMessagingTests: ServerTestCase {
         VisorServer.secrets = MemorySecrets()
         here = VisorServer(port: 7980)
         there = VisorServer(port: 7982)
-        here.exposure = FakeExposure()
-        let road = FakeExposure()
-        road.name = "other-mac.example.ts.net"
-        there.exposure = road
+        there.settings.publicAddress = "other-mac.example.ts.net"
         there.password = "there-password"
     }
 
@@ -119,7 +116,7 @@ final class LinkedMessagingTests: ServerTestCase {
         here.sessions = [record("A", "Mini work")]
         there.sessions = [record("B", "Laptop work", busy: true)]
         for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
-        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.apiPort)", password: "there-password"))
+        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.port)", password: "there-password"))
 
         let list = await ask("sessions")
         XCTAssertTrue(list.text?.contains("On this computer: none.") == true, list.text ?? "")
@@ -142,7 +139,7 @@ final class LinkedMessagingTests: ServerTestCase {
     func testAWrongPasswordIsSaid() async {
         here.sessions = [record("A", "Mini work")]
         for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
-        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.apiPort)", password: "wrong"))
+        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.port)", password: "wrong"))
         let read = await ask("read", about: "other-mac/B")
         XCTAssertTrue(read.error?.contains("wrong password") == true, read.error ?? "")
     }
@@ -151,8 +148,7 @@ final class LinkedMessagingTests: ServerTestCase {
     /// its code, and gives each the other's.
     func testAClientLinksTheComputersItHolds() async {
         here.password = "here-password"
-        await here.fronted()
-        await there.fronted()
+        here.settings.publicAddress = "this-mac.example.ts.net"
         func request(_ method: String, _ path: String, _ password: String, body: String = "") -> HTTPRequest {
             HTTPRequest(method: method, path: path, headers: ["authorization": "Bearer " + password], body: body)
         }
@@ -177,8 +173,8 @@ final class LinkedMessagingTests: ServerTestCase {
     func testLinksAreKeptAndTheLinkGoesBothWays() async {
         for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
         here.password = "here-password"
-        await here.fronted()
-        let code = ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.apiPort)", password: "there-password")
+        here.settings.publicAddress = "this-mac.example.ts.net"
+        let code = ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.port)", password: "there-password")
         let result = await here.link(code.encoded)
         XCTAssertNil(result)
         XCTAssertEqual(here.links.map(\.host), [code.host])

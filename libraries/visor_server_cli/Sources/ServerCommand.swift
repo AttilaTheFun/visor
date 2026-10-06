@@ -27,9 +27,15 @@ public struct ServerCommand {
           password Shows the password (making one if there is none);
                    `password <new>` sets it.
           code     Shows the connection code a client adds this computer with.
+          network  `network on` lets the network reach the server directly
+                   (every interface); `network off` (the default) keeps it to
+                   this computer, with a reverse proxy or a tunnel in front.
+          address  Shows the address clients are told; `address <url>` sets
+                   it (what a proxy, a tunnel or a name gives), `address -`
+                   clears it. The server takes it when started again.
 
         Options for run and start:
-          --port <n>   The WebSocket port, the REST side on the next (7433).
+          --port <n>   The port, for the socket and the REST side alike (7433).
           --log <file> Where its lines go (start: visor-server.log in its folder).
         """
 
@@ -47,7 +53,9 @@ public struct ServerCommand {
             case "stop": try await stop()
             case "status": await status()
             case "password": password(rest.first)
-            case "code": try await code()
+            case "code": try code()
+            case "network": try network(rest.first)
+            case "address": address(rest.first)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")
             }

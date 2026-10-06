@@ -15,6 +15,9 @@ struct SettingsPane: View {
     @State private var linking = false
     @State private var choosingKey = false
     @State private var keyPEM = ""
+    @State private var publicAddress = ""
+    @State private var tlsPath = ""
+    @State private var tlsPassword = ""
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
@@ -45,10 +48,10 @@ struct SettingsPane: View {
                             }
                         }
                     }
-                    Text("The code holds this Mac's Tailscale name and password: share it only with your own devices.")
+                    Text("The code holds this Mac's address and password: share it only with your own devices.")
                         .font(.caption).foregroundColor(.secondary)
                 } else {
-                    Text(server.password.isEmpty ? "Set a password below to get a connection code." : "Waiting for \(server.exposure.title) to name this Mac…")
+                    Text(server.password.isEmpty ? "Set a password below to get a connection code." : "Open the server to the network, or set an address, below, to get a connection code.")
                         .font(.caption).foregroundColor(.secondary)
                 }
             } header: {
@@ -63,7 +66,7 @@ struct SettingsPane: View {
                     Button("Generate") { draft = VisorServer.generatePassword() }
                 }
                 Text(server.password.isEmpty
-                     ? "Visor does not serve until a password is set. Your own devices on your \(server.exposure.title) network get in without it; it is for a device \(server.exposure.title) does not know as yours, and for tools on this Mac."
+                     ? "Visor does not serve until a password is set. Every client and every tool on this Mac signs in with it; the connection code carries it."
                      : "Clients that are already connected stay connected; new logins use the new password.")
                     .font(.caption).foregroundColor(.secondary)
                 if let message { Text(message).font(.caption).foregroundColor(.red) }
@@ -71,20 +74,23 @@ struct SettingsPane: View {
                 Text("Password")
             }
             Section {
-                if let login = server.hostLogin {
-                    Text("This Mac belongs to \(login) on \(server.exposure.title). Devices signed in as \(login) are let in without the password.")
-                        .font(.caption).foregroundColor(.secondary)
-                } else {
-                    Text("\(server.exposure.title) has not said whose this Mac is; clients will need the password.")
-                        .font(.caption).foregroundColor(.secondary)
-                }
-                if let serveError = server.serveError {
-                    Text("HTTPS: \(serveError)").font(.caption).foregroundColor(.red)
-                    Button("Retry") { server.front() }
-                } else {
-                    Text("HTTPS on 443 through \(server.exposure.title) Serve, reachable from this network only.")
-                        .font(.caption).foregroundColor(.secondary)
-                }
+                Toggle("Reachable from the network", isOn: Binding(get: { server.settings.reachableFromNetwork },
+                                                                  set: { server.settings.reachableFromNetwork = $0 }))
+                Text(server.settings.reachableFromNetwork
+                     ? "The server listens on every interface, port \(String(server.port)): a LAN, a VPN or a tunnel reaches it directly, with the password."
+                     : "Only this Mac reaches the server, on 127.0.0.1:\(String(server.port)). A reverse proxy or a tunnel on this Mac is the road in; set its address below.")
+                    .font(.caption).foregroundColor(.secondary)
+                TextField("Address clients take (https://proxy.example.com/visor)", text: $publicAddress)
+                    .onSubmit { server.settings.publicAddress = publicAddress }
+                Text("What a proxy, a tunnel or a name on the network gives, scheme and all; the connection code carries it. Empty, the server guesses from its own addresses when the network reaches it. A front that passes no WebSockets still works: clients poll instead.")
+                    .font(.caption).foregroundColor(.secondary)
+                TextField("TLS identity, a .p12 file (empty: plain, or TLS is the front's)", text: $tlsPath)
+                    .onSubmit { server.settings.tlsIdentityPath = tlsPath }
+                SecureField("The .p12 file's password", text: $tlsPassword)
+                    .onSubmit { server.settings.tlsIdentityPath = tlsPath; server.setTLSPassword(tlsPassword) }
+                Text(server.servesTLS ? "Serving TLS with the identity above." : "Serving plain TCP: TLS, if any, is the front's. Press Return in a field to apply it.")
+                    .font(.caption).foregroundColor(.secondary)
+                if let error = server.lastError { Text(error).font(.caption).foregroundColor(.red) }
             } header: {
                 Text("Network")
             }
@@ -146,16 +152,18 @@ struct SettingsPane: View {
                 if name.hasPrefix("AuthKey_") { keyID = String(name.dropFirst(8)) }
             }
             Section("Addresses") {
-                if let name = server.address { Text(name) }
+                if let address = server.reachableAddress { Text("Clients are told \(address)") }
                 ForEach(NetworkAddresses.all(), id: \.address) { entry in
                     Text("\(entry.address)  \(entry.name)")
                 }
-                Text("Port \(String(server.port)), on this Mac only; the network reaches it through the front on 443")
+                Text(server.settings.reachableFromNetwork ? "Port \(String(server.port)) on each of these" : "Port \(String(server.port)), on this Mac only")
             }
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 760)
         .onAppear {
+            publicAddress = server.settings.publicAddress
+            tlsPath = server.settings.tlsIdentityPath
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password

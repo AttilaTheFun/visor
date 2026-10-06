@@ -1,8 +1,9 @@
-// Adding a Mac (the Tailscale provider's sign-in): its connection code — copied from the Visor menu bar
-// app on the Mac, or carried by the QR code a phone's camera scans — which
-// holds the name, the address and the password. A bare Tailscale name
-// works too, with the password typed beside it. Always TLS on 443 (the
-// Mac's Tailscale Serve endpoint).
+// Adding a computer (a Visor server's sign-in): its connection code —
+// copied from the Visor menu bar app on the Mac, or carried by the QR
+// code a phone's camera scans — which holds the name, the address and
+// the password. An address works too, with the password typed beside it:
+// a name on a network (HTTPS at the root), or the URL a proxy, a tunnel
+// or a port gives (`ServerAddress`).
 
 import SwiftUI
 import VisorClient
@@ -20,7 +21,7 @@ struct ConnectForm: View {
         Form {
             Section {
                 TitledField(title: "Connection code") {
-                    TextField("Paste the code, or type a Tailscale name", text: $entry)
+                    TextField("Paste the code, or type an address", text: $entry)
                         .autocorrectionDisabled()
                         .keyboardTypeURL()
                         .accessibilityIdentifier("host")
@@ -34,7 +35,7 @@ struct ConnectForm: View {
                     .accessibilityIdentifier("paste-code")
                 }
                 if let code {
-                    Text("\(code.name) at \(code.host)")
+                    Text("\(code.name) at \(ServerAddress(code.host)?.display ?? code.host)")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 } else if !entry.trimmed.isEmpty {
@@ -46,7 +47,7 @@ struct ConnectForm: View {
             } header: {
                 Text("Computer")
             } footer: {
-                Text("In the Visor menu bar app on the Mac: Copy Connection Code, or open Settings and scan its QR code with this device's camera.")
+                Text("In the Visor menu bar app on the Mac: Copy Connection Code, or open Settings and scan its QR code with this device's camera. Or type where the server is reached: a URL such as http://192.168.1.20:7433 or https://proxy.example.com/visor, or a name (HTTPS).")
             }
             Section {
                 Button("Connect", action: submit)

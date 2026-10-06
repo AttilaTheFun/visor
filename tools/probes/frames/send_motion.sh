@@ -6,7 +6,7 @@
 # what it does when the composer gives up its lines a frame before the
 # message goes into the thread, or the sent row is dropped and put back.
 #
-#   tools/probes/frames/send_motion.sh [host]     (default: this Mac's Tailscale name)
+#   tools/probes/frames/send_motion.sh [host]     (default: this Mac's address)
 #
 # Needs: the server running on this Mac, a booted simulator the probe runs
 # on (rules_apple's "BAZEL_TEST_iPhone 17_27.0"; boot it with `xcrun simctl
@@ -18,7 +18,7 @@ cd "$(dirname "$0")/../../.."
 HERE=tools/probes/frames
 OUT="$(mktemp -d)/send"
 mkdir -p "$OUT"
-API=http://127.0.0.1:7434/api
+API=http://127.0.0.1:7433/api
 PW="${VISOR_TOKEN:-$(security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w 2>/dev/null || true)}"
 HOST="${1:-$(curl -s -H "Authorization: Bearer $PW" $API/code | python3 -c 'import json,sys,base64; t=json.load(sys.stdin)["text"]; t+="="*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t))["host"])')}"
 # Only the test runner's own simulator, by name: whatever else is booted

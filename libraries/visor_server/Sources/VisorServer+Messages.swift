@@ -177,6 +177,7 @@ extension VisorServer {
     private func performAcknowledge(_ envelope: Envelope) {
         guard let record = session(envelope.session) else { return }
         record.notice = nil
+        stateChanged(record)
         saveArchive()
     }
 
@@ -278,6 +279,7 @@ extension VisorServer {
         record.process.stop()
         record.markEnded()
         sessions.removeAll { $0 === record }
+        dropWaiters(for: record.info.id)
         Self.log("session ended: \(record.info.title)")
         saveArchive()
         broadcastSessions()

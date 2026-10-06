@@ -1,5 +1,5 @@
-// Who is let in: the road's word on the caller, the password, the tokens
-// `hello` hands out; and where the password is kept.
+// Who is let in: the password, and the tokens `hello` hands out; and
+// where the password is kept.
 
 import ClaudeTranscript
 import MessageCache
@@ -38,28 +38,18 @@ extension VisorServer {
         return ""
     }
 
-    /// Whether a request may be answered: the road names the caller as
-    /// this Mac's own user, or the bearer is the password or a token
-    /// `hello` issued.
+    /// Whether a request may be answered: the bearer is the password or a
+    /// token `hello` issued.
     func authorized(_ request: HTTPRequest) -> Bool {
-        if let login = exposure.requester(headers: request.headers), let mine = hostLogin, login == mine { return true }
         guard let bearer = request.authorization, !bearer.isEmpty else { return false }
         // The agent token too: the agents this server started (and the
         // tools they run, such as a deploy) hold it, and no one else.
         return bearer == password || tokens.contains(bearer) || bearer == agentToken
     }
 
-    /// The answer to a request that is not let in. A request the road
-    /// names a user for, while this Mac does not yet know its own user
-    /// (Tailscale still starting at login), is told to come back rather
-    /// than refused: a refusal reads as "wants a password", and a client
-    /// stops trying.
+    /// The answer to a request that is not let in: it wants the password.
     func refusal(_ request: HTTPRequest) -> HTTPResponse {
-        if hostLogin == nil, exposure.requester(headers: request.headers) != nil {
-            front()
-            return HTTPResponse(503, "{\"error\":\"starting\"}")
-        }
-        return HTTPResponse(401, "{\"error\":\"wrong password\"}")
+        HTTPResponse(401, "{\"error\":\"wrong password\"}")
     }
 
     /// A token for the socket's login, for a client that `hello` let in.

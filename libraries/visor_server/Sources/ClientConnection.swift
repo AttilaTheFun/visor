@@ -14,8 +14,8 @@ final class ClientConnection {
     var onMessage: ((Envelope) -> Void)?
     var onClose: (() -> Void)?
 
-    init(stream: any ByteStream) {
-        socket = WebSocketConnection(stream: stream)
+    init(stream: any ByteStream, received: Data = Data()) {
+        socket = WebSocketConnection(stream: stream, received: received)
     }
 
     /// What it says is taken as it is said, in order.

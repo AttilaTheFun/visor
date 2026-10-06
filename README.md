@@ -2,8 +2,9 @@
 
 Remote agent sessions: Visor Server, a Mac menu bar app (or `visor-server`,
 the same server as a command for Linux and Windows), runs Claude Code, Codex
-and the openrouter CLI as subprocesses on the host and exposes them over
-Tailscale; a SwiftUI client for iPhone, iPad and Mac adds a Mac from its
+and the openrouter CLI as subprocesses on the host and serves them to your
+devices over whatever reaches the host — a LAN, a VPN, a reverse proxy, a
+tunnel; a SwiftUI client for iPhone, iPad and Mac adds a computer from its
 connection code, starts sessions, chats with them and watches their
 progress, and opens terminal sessions — the Mac's own shell, drawn in
 SwiftUI over SwiftTerm's emulator — to run anything there directly.
@@ -12,16 +13,16 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
 
 - **applications/visor_menubar** — the host, Visor Server
   (`com.LoganShire.VisorServer.macOS`). A menu bar app (`LSUIElement`)
-  running `VisorServer`: a WebSocket listener (port 7433) and a REST side
-  (7434), both on loopback; Tailscale Serve is put in front on 443 at
-  launch (`/api` to REST, `/` to the WebSocket) and is the one road in.
-  Serve names the tailnet user behind each request, and the Mac's own
-  user's devices are let in on that; a password (required — Settings
-  opens on first launch until one is set) is for everyone else and for
-  tools on the Mac. The menu shows the Mac's tailnet name, whose it is,
-  the password, Copy Connection Code, the connected clients and the
-  sessions; Settings shows the connection code as a QR code. How the server is exposed
-  is a `ServerExposure`; Tailscale is the one shipped.
+  running `VisorServer`: one listener (port 7433) for the WebSocket at `/`
+  and the REST side under `/api`, on loopback alone or on every interface
+  when opened to the network, plain or over TLS with a PKCS#12 identity.
+  A password (required — Settings opens on first launch until one is
+  set) is what every client signs in with. The menu shows the address
+  clients take, the password, Copy Connection Code, the connected
+  clients and the sessions; Settings shows the connection code as a QR
+  code, and takes the network setting, the address a front of your own
+  gives, and the TLS identity. The server knows nothing of what reaches
+  it: a LAN, a VPN, a reverse proxy and a tunnel are all the same to it.
 - **applications/visor_ios**, **applications/visor_macos** — the client on
   shared host sources: an inset grouped sidebar with a section per
   computer (its connection state in the header, its sessions, its
@@ -30,8 +31,9 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   (`visor://connect?code=…`). Each computer is one agent server; what
   the client does with a server — signing in, the live channel, and
   every operation on sessions, folders and files — is the `AgentServer`
-  protocol, and `TailscaleAgentServer` (the wire protocol: `hello`, wss
-  + https with a bearer) is the one shipped. A fork that hosts agents on
+  protocol, and `WireAgentServer` (the wire protocol: `hello`, ws(s) +
+  http(s) with a bearer, at any URL or a bare name; followed by
+  polling where the road carries no WebSocket) is the one shipped. A fork that hosts agents on
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one
@@ -82,8 +84,7 @@ Needs Xcode 27 and Bazelisk. The bundle ids are constants at the top of
 each app's BUILD.bazel; your Apple team id goes in a `.bazelrc.user` you
 keep (`common --repo_env=VISOR_TEAM_ID=<team>`), for signing for a device. The agents are configured on their own — `claude`,
 `codex login`, and [`openrouter`](https://github.com/AttilaTheFun/open_router_cli)
-`auth login` — and Tailscale must be running with HTTPS certificates
-enabled. docs/DEVELOPMENT.md has the full setup, the architecture, and
+`auth login`. docs/DEVELOPMENT.md has the full setup, the architecture, and
 the deploy loop.
 
 ## Contributing
@@ -104,20 +105,22 @@ you install it.
   and write any file your user account can, through the API, and install
   an app bundle over Visor Server. Treat access to Visor like an SSH
   login to your Mac.
-- **Who can reach it.** The server listens on this Mac's loopback address
-  only. The one way in from the network is Tailscale Serve on port 443,
-  which is reachable from your tailnet, never the public internet.
-  Serve names the Tailscale user behind each request, and your own
-  devices are let in on that. Every other device needs the password.
+- **Who can reach it.** By default the server listens on this Mac's
+  loopback address only, and a reverse proxy or a tunnel on the Mac is
+  the road in; opened to the network in Settings, it listens on every
+  interface, for a LAN, a VPN or a tunnel to reach directly. Every
+  device signs in with the password; nothing about the road is trusted.
+  Keeping the server off the public internet — on a VPN, behind a front
+  that authenticates — is yours to do.
 - **The password and the connection code.** The connection code, and the
   QR code that carries it, holds the password in plain base64. Share it
   only with your own devices. The password is kept in the keychain, by
   Visor Server and by each client that saves it; the apps are signed so
   that each build reads its own items without a prompt.
-- **On a shared tailnet, use a long password.** The generated password,
+- **On a shared network, use a long password.** The generated password,
   four words from a short list, is easy to type rather than strong, and
-  wrong guesses are not rate-limited. Anyone on a tailnet you share with
-  others can reach port 443 and try.
+  wrong guesses are not rate-limited. Anyone who can reach the port can
+  try.
 - **Revoking access.** Changing the password stops new logins. Clients
   that are already connected keep their session until you quit and
   reopen Visor Server.

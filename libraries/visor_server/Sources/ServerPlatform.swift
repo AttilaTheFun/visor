@@ -10,7 +10,7 @@ import Synchronization
 
 public struct ServerPlatform: Sendable {
     /// Listening on loopback, and the connections that arrive.
-    public var listening: any LoopbackListening
+    public var listening: any Listening
     /// Programs started on a pseudo-terminal: a terminal session's shell.
     public var terminals: any TerminalLaunching
     /// Signals to processes by id, and what a process is.
@@ -32,15 +32,13 @@ public struct ServerPlatform: Sendable {
     public var host: HostDetails
     /// Relaunching into another build, and quitting.
     public var lifecycle: any ServerLifecycle
-    /// The road in from the network, unless a fork brings its own.
-    public var exposure: @Sendable () -> any ServerExposure
     /// What the server says it is doing, a line at a time.
     public var log: @Sendable (String) -> Void
 
-    public init(listening: any LoopbackListening, terminals: any TerminalLaunching, processes: any ProcessSignals,
+    public init(listening: any Listening, terminals: any TerminalLaunching, processes: any ProcessSignals,
                 secrets: any SecretStore, fetching: any HTTPFetching, pushSigning: (any PushSigning)?,
                 images: any ImageMeasuring, files: any FileWatching, tools: any ToolLocating, host: HostDetails,
-                lifecycle: any ServerLifecycle, exposure: @escaping @Sendable () -> any ServerExposure,
+                lifecycle: any ServerLifecycle,
                 log: @escaping @Sendable (String) -> Void) {
         self.listening = listening
         self.terminals = terminals
@@ -53,7 +51,6 @@ public struct ServerPlatform: Sendable {
         self.tools = tools
         self.host = host
         self.lifecycle = lifecycle
-        self.exposure = exposure
         self.log = log
     }
 

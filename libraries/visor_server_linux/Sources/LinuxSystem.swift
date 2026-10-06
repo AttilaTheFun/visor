@@ -27,10 +27,8 @@ public struct LinuxSystem: CommandLineSystem {
 
     public func platform(log: @escaping @Sendable (String) -> Void, lifecycle: any ServerLifecycle) -> ServerPlatform {
         let data = dataDirectory
-        let tailscale = ["/usr/bin/tailscale", "/usr/local/bin/tailscale", "/usr/sbin/tailscale"]
-            .first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/tailscale"
         return ServerPlatform(
-            listening: POSIXLoopback(),
+            listening: POSIXListening(),
             terminals: POSIXTerminals(),
             processes: POSIXProcessSignals(),
             secrets: FileSecrets(url: data.appendingPathComponent("secrets.json")),
@@ -39,9 +37,8 @@ public struct LinuxSystem: CommandLineSystem {
             images: HeaderImageMeasuring(),
             files: PollingFileWatching(),
             tools: LinuxTools(),
-            host: HostDetails(name: ProcessInfo.processInfo.hostName, dataDirectory: data),
+            host: HostDetails(name: ProcessInfo.processInfo.hostName, dataDirectory: data, addresses: { POSIXAddresses.all() }),
             lifecycle: lifecycle,
-            exposure: { TailscaleExposure(cli: tailscale) },
             log: log
         )
     }

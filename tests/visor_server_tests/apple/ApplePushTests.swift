@@ -38,7 +38,6 @@ final class PushKeyRouteTests: ServerTestCase {
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         let server = VisorServer(port: 7974)
-        server.exposure = FakeExposure()
         server.password = "pw"
         defer { server.stop() }
         func post(_ path: String, _ body: String, bearer: String = "pw") -> HTTPResponse {

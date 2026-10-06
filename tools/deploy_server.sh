@@ -15,8 +15,8 @@ tools/sign_mac_app.sh "/tmp/vmb/Visor Server.app"
 # the keychain (the first read asks once).
 PW="${VISOR_TOKEN:-$(security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w 2>/dev/null || true)}"
 SESSION="${1:-${VISOR_SESSION:-}}"
-# The REST side is plain HTTP on localhost; TLS is Tailscale's, at the hostname.
-curl -s --max-time 10 -X POST http://127.0.0.1:7434/api/restart \
+# The REST side is plain HTTP on localhost, on the server's one port.
+curl -s --max-time 10 -X POST http://127.0.0.1:7433/api/restart \
   -H "Authorization: Bearer $PW" -H 'Content-Type: application/json' \
   -d "{\"path\":\"/tmp/vmb/Visor Server.app\",\"session\":\"$SESSION\"}"
 echo

@@ -17,7 +17,6 @@ final class PushTests: ServerTestCase {
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         server = VisorServer(port: 7976)
-        server.exposure = FakeExposure()
     }
 
     private func record(_ id: String, busy: Bool = false) -> SessionRecord {

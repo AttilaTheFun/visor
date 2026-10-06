@@ -17,7 +17,6 @@ final class UsageTests: ServerTestCase {
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         server = VisorServer(port: 7979)
-        server.exposure = FakeExposure()
     }
 
     override func tearDown() async throws {

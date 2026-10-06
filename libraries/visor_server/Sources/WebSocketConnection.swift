@@ -37,11 +37,15 @@ final class WebSocketConnection {
         static let pong: UInt8 = 0xA
     }
 
-    init(stream: any ByteStream) {
+    /// - Parameter received: what arrived before the connection was known
+    ///   to be a WebSocket's (its upgrade request, or the start of it).
+    init(stream: any ByteStream, received: Data = Data()) {
         self.stream = stream
+        buffer = Array(received)
     }
 
     func start() {
+        if !buffer.isEmpty { take(Data()) }
         stream.receive { [weak self] chunk in self?.take(chunk) }
     }
 

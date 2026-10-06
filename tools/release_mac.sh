@@ -88,7 +88,7 @@ if [ "$PUBLISH" = "--publish" ]; then
     --title "Visor $VERSION" --notes-file - <<NOTES
 Visor $VERSION for the Mac, signed with Developer ID and notarized by Apple.
 
-- **Visor-Server-$VERSION.dmg** — Visor Server, the menu bar app that runs Claude Code, Codex and the openrouter CLI on your Mac and serves them to your devices over Tailscale. Needs macOS 15 and Tailscale with HTTPS certificates enabled; the agents' CLIs are yours to install.
+- **Visor-Server-$VERSION.dmg** — Visor Server, the menu bar app that runs Claude Code, Codex and the openrouter CLI on your Mac and serves them to your devices over any network that reaches your Mac — a LAN, a VPN, a reverse proxy, a tunnel. Needs macOS 15; the agents' CLIs are yours to install.
 - **Visor-$VERSION.dmg** — the Visor client for the Mac.
 
 Open the disk image and drag the app to Applications. The iPhone and iPad client is built from source for now (see the README).

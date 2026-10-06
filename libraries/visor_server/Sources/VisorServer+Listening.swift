@@ -1,5 +1,6 @@
-// Listening: the socket and the REST side on loopback, the front put on
-// 443 by the exposure, and the agents' model lists kept fresh.
+// Listening: one port for the socket and the REST side, on loopback or
+// on every interface, plain or over TLS, as the settings say; and the
+// agents' model lists kept fresh.
 
 import ClaudeTranscript
 import Foundation
@@ -8,8 +9,7 @@ import VisorProtocol
 
 extension VisorServer {
     /// Listens once there is a password; without one the menu says so
-    /// and Settings is where to go. The listeners take loopback only:
-    /// the front is the one way in from the network.
+    /// and Settings is where to go.
     public func start() {
         guard listener == nil, !password.isEmpty else { return }
         // An agent that has gone leaves a pipe that cannot be written to:
@@ -21,22 +21,22 @@ extension VisorServer {
             await ToolPath.locate(tools)
             broadcastCatalogs()
         }
-        let http = HTTPServer(port: apiPort) { [weak self] request, respond in
+        let http = HTTPServer { [weak self] request, respond in
             guard let self else { return respond(HTTPResponse(500, "{\"error\":\"gone\"}")) }
             self.route(request, respond: respond)
         }
-        do { try http.start(); self.http = http } catch { lastError = "API: \(error)" }
+        self.http = http
+        let options = ListeningOptions(port: port, everywhere: settings.reachableFromNetwork, tls: tlsIdentity)
         do {
-            listener = try ServerPlatform.current.listening.listen(port: port) { [weak self] stream in self?.accept(stream) }
+            listener = try ServerPlatform.current.listening.listen(options) { [weak self] stream in self?.accept(stream) }
             listening = true
             lastError = nil
-            Self.log("listening on 127.0.0.1:\(port) (WebSocket) and :\(apiPort) (REST)")
+            Self.log("listening on \(options.everywhere ? "every interface" : "127.0.0.1"):\(port)\(options.tls == nil ? "" : " with TLS")")
         } catch {
             listening = false
             lastError = "\(error)"
             Self.log("could not listen on \(port): \(error)")
         }
-        front()
         keepModelsFresh()
         resumePending()
     }
@@ -64,68 +64,8 @@ extension VisorServer {
         }
     }
 
-    /// The front on 443, put in place whenever it is not: there is no
-    /// switch for it. What goes wrong is shown in the menu.
-    /// At login the menu bar app and Tailscale start together, so the
-    /// first try often finds Tailscale not yet up: no owner and no front.
-    /// It tries again — every few seconds at first, then every minute —
-    /// until both are known.
-    public func front() {
-        // One attempt at a time; one asked for meanwhile runs after it, as
-        // it may know something the running one did not.
-        guard fronting == nil else { frontAgain = true; return }
-        let exposure = self.exposure
-        let port = self.port
-        guard exposure.installed else {
-            if serveError == nil { Self.log("\(exposure.title) is not installed: clients reach this computer through it") }
-            serveError = "\(exposure.title) is not installed"
-            return
-        }
-        fronting = Task {
-            var message: String?
-            let identity = await exposure.identity()
-            let address = await exposure.address()
-            if identity == nil {
-                message = "waiting for \(exposure.title)"
-            } else if await !exposure.fronts(port: port) {
-                let output = await exposure.front(port: port).lowercased()
-                if output.contains("error") || output.contains("not enabled") || output.contains("not allowed") {
-                    message = output.split(separator: "\n").first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }).map(String.init) ?? output
-                }
-            }
-            fronting = nil
-            if frontAgain {
-                frontAgain = false
-                front()
-                return
-            }
-            if let identity { hostLogin = identity }
-            if let address, address != self.address {
-                self.address = address
-                Self.log("reached at \(address) through \(exposure.title)")
-            }
-            if message != serveError, let message { Self.log("\(exposure.title): \(message)") }
-            serveError = message
-            guard message != nil else { frontAttempts = 0; return }
-            frontAttempts += 1
-            let wait = frontAttempts < 24 ? 5 : 60
-            Task {
-                try? await Task.sleep(for: .seconds(wait))
-                front()
-            }
-        }
-    }
-
-    /// Returns once the attempt under way, if there is one, has learned
-    /// what it could (tests).
-    func fronted() async { await fronting?.value }
-
     public func stop() {
-        listener?.stop()
-        listener = nil
-        listening = false
-        http?.stop()
-        http = nil
+        stopListening()
         // Whoever was waiting on a transcript gets what there is, now.
         for record in sessions { answerTranscriptWaiters(for: record) }
         for connection in connections.values { connection.close() }
@@ -133,8 +73,25 @@ extension VisorServer {
         clientCount = 0
     }
 
+    func stopListening() {
+        listener?.stop()
+        listener = nil
+        listening = false
+        http = nil
+    }
+
+    /// A connection: its first bytes say whether it is the live channel or
+    /// a request of the REST side.
     func accept(_ stream: any ByteStream) {
-        let client = ClientConnection(stream: stream)
+        FrontDoor(stream: stream, socket: { [weak self] stream, received in
+            self?.acceptClient(stream, received: received)
+        }, http: { [weak self] stream, received in
+            self?.http?.serve(stream, received: received)
+        }).start()
+    }
+
+    private func acceptClient(_ stream: any ByteStream, received: Data) {
+        let client = ClientConnection(stream: stream, received: received)
         let key = ObjectIdentifier(client)
         connections[key] = client
         clientCount = connections.count

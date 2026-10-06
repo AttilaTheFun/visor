@@ -25,6 +25,9 @@ public final class SessionRecord {
     /// Counts up with every change to the rows; what a client syncing
     /// over HTTP compares to.
     public internal(set) var revision = 0
+    /// The ephemeral state's revision: counts up with every change told
+    /// to subscribers, for a client that polls for it instead.
+    var stateRevision = 1
 
     /// Counts up when a client holding an older revision can no longer be
     /// brought up to date by a delta (the record of removed rows was let

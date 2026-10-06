@@ -1,44 +1,70 @@
 # The Visor protocol
 
-Two channels on one HTTPS endpoint (the Mac's Tailscale Serve name, 443):
-a WebSocket at `/` for login and the live stream, and a REST API under
-`/api` for everything else. Both carry the same JSON envelopes (`Envelope`
+Two channels on one endpoint (`http(s)://<address>`, port 7433 by default
+on the server itself, or wherever a front puts it): a WebSocket at `/` for
+login and the live stream, and a REST API under `/api` for everything
+else. Both carry the same JSON envelopes (`Envelope`
 in libraries/visor_protocol): `{"type": …}` plus the fields that type uses
 on the socket; the same fields as request and response bodies over HTTP,
 where the route names the type.
 
 ## Who gets in
 
-The server listens on loopback only; the one road in from the network is
-Tailscale Serve on 443, which proxies to it from the same Mac and adds
-`Tailscale-User-Login` naming the tailnet user behind each request. A
-request is answered when that user is the Mac's own (`tailscale status`
-says whose the Mac is), or when `Authorization: Bearer` is the password
-from the menu bar app, or a token from `hello`. So the user's own devices
-need no password; another user's device on a shared tailnet, an older
-client, or a tool on the Mac itself (loopback, no headers) uses the
-password. The server does not listen at all without a password set.
+The server has one listener (7433 by default), which tells a WebSocket
+upgrade from a request by its first bytes: the live channel at `/`, the
+REST side under `/api`. By default it listens on loopback only, so the
+road in from the network is something on the same computer — a reverse
+proxy, a tunnel — forwarding one address to it; opened to the network
+(`reachableFromNetwork`, in the menu bar app's Settings or
+`visor-server network on`), it listens on every interface, for a LAN, a
+VPN or a tunnel to reach directly. It serves plain TCP, or TLS with a
+PKCS#12 identity where the system can (the Mac); otherwise TLS is the
+front's. The server does not listen at all without a password set.
+
+A request is answered when `Authorization: Bearer` is the password from
+the menu bar app, or a token from `hello`. Nothing about the road is
+trusted: no header names a user, and every device signs in the same
+way, with the password the connection code carries. The API reads the
+same under a mount path a front forwards whole (`/visor/api/sessions`).
 
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
 200 gives `host` (the Mac's name), `login` (whose it is) and `token` —
 then the WebSocket, logged in with `token` (or `password`).
 
+The WebSocket is an accessory. A client whose road does not carry
+WebSockets (or whose host has no socket service) follows the server by
+polling instead, with the same effect a little later: the list of
+sessions (`GET /sessions?since=`) and each open session's state
+(`GET /sessions/<id>/state?since=`), each held by the server until it
+changes, as the transcript's sync always is; the rows before one from
+`GET /sessions/<id>/earlier`. Only a terminal session's bytes need the
+socket. Pushes are optional the same way: a device whose server sends
+none notifies itself.
+
 ## Connection codes
 
 Computers are added by hand, in one step. The menu bar app shows a
 connection code — URL-safe base64 (no padding) of
-`{"v":1,"name":…,"host":<tailnet name>,"password":…}` — as a string to
+`{"v":1,"name":…,"host":<address>,"password":…}` — as a string to
 copy and as a QR code of `visor://connect?code=<code>`. A client takes
-the code, the link, or a bare tailnet name (`ConnectionCode` in
+the code, the link, or an address typed by hand (`ConnectionCode` in
 libraries/visor_protocol; the apps register the `visor` URL scheme).
+The address is any `http(s)://` URL with a port and a mount path as the
+server or its front gives it, or a bare name meaning HTTPS at the root
+(`ServerAddress`): the socket is `ws(s)://` at that root, the REST side
+under `/api`.
 
 ## REST (`https://<host>/api`, `Authorization: Bearer <password or token>`)
 
 | method and path | body | answer |
 |---|---|---|
 | `GET /hello` | | `hello`: `host`, `login`, `token` — or 401 |
-| `GET /sessions` | | the `welcome` envelope: `host`, `sessions`, `catalogs` |
+| `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
+| `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
+| `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
+| `POST /sessions/<id>/acknowledge` | | the user has read the session's notice |
+| `POST /unlink` | `text`: a linked computer's host | forgets that link |
 | `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript) | `sessions` with the new one |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
@@ -59,9 +85,7 @@ the list is taken as a `sessions` broadcast would be, and an answer while
 the socket is down reopens it at once.
 
 401 when nothing lets the request in, 404 for an unknown session. The socket's `sessions`
-broadcast follows every change, so other clients see it too. Behind the
-Mac's Serve the API is at port 7434 (`/api` is stripped or not — both
-accepted), the socket at 7433.
+broadcast follows every change, so other clients see it too.
 
 ## WebSocket (`wss://<host>/`)
 

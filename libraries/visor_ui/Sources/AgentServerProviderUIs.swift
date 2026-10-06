@@ -1,11 +1,12 @@
 import SwiftUI
 import VisorClient
 
-/// The providers' views this build knows, by provider. Tailscale's is the
-/// one shipped; a fork registers its own at launch, with its provider.
+/// The providers' views this build knows, by provider. The Visor server's
+/// are the ones shipped; a fork registers its own at launch, with its
+/// provider.
 @MainActor
 public enum AgentServerProviderUIs {
-    private static var registry: [any AgentServerProviderUI] = [TailscaleAgentServerProviderUI()]
+    private static var registry: [any AgentServerProviderUI] = [VisorServerProviderUI()]
 
     public static var all: [any AgentServerProviderUI] { registry }
 

@@ -1,11 +1,12 @@
-// An agent server is somewhere agents run and a client manages them: a Mac
-// running the menu bar app, reached over Tailscale, is the one shipped; a
-// company's service hosting remote agents is one a fork adds. Everything
-// the client asks of a server goes through this protocol — signing in,
-// the live channel, and each one-shot operation — so a different server
-// is a different conformance, and nothing above it changes. The Tailscale
-// one speaks the wire protocol (docs/protocol.md); a fork's speaks whatever
-// its service speaks, and hands back the same values.
+// An agent server is somewhere agents run and a client manages them: a
+// computer running Visor Server, reached at whatever address it has, is
+// the one shipped; a company's service hosting remote agents is one a
+// fork adds. Everything the client asks of a server goes through this
+// protocol — signing in, the live channel, and each one-shot operation —
+// so a different server is a different conformance, and nothing above it
+// changes. The one shipped speaks the wire protocol (docs/protocol.md); a
+// fork's speaks whatever its service speaks, and hands back the same
+// values.
 
 import VisorProtocol
 import VisorServices

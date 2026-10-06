@@ -8,7 +8,8 @@
 
 public struct ConnectionCode: Equatable, Sendable {
     public var name: String
-    /// The Tailscale name clients reach it at (always HTTPS on 443).
+    /// Where clients reach it: a URL, or a bare name (HTTPS at the root)
+    /// (`ServerAddress`).
     public var host: String
     public var password: String
 
