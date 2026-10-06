@@ -1,5 +1,5 @@
 // One agent server: its saved record, the live channel to it (through its
-// provider's `AgentServer`, so a Mac over Tailscale and a fork's service
+// provider's `AgentServer`, so a Visor server and a fork's service
 // drive the same connection), the sessions it lists, and a transcript per
 // session the UI observes. Reconnects with a short backoff while the app
 // is open. No Combine: observation is SwiftUI's, waiting is async/await.

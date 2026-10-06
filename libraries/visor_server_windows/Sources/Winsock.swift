@@ -21,14 +21,14 @@ func startWinsock() {
 let noSocket = ~SOCKET(0)
 
 /// A TCP socket listening on 127.0.0.1:`port`, or nil with the error.
-func listenOnLoopback(_ port: UInt16) -> (socket: SOCKET?, error: Int32) {
+func listenOn(_ port: UInt16, everywhere: Bool) -> (socket: SOCKET?, error: Int32) {
     startWinsock()
     let listener = WinSDK.socket(AF_INET, SOCK_STREAM, Int32(IPPROTO_TCP.rawValue))
     guard listener != noSocket else { return (nil, WSAGetLastError()) }
     var address = sockaddr_in()
     address.sin_family = ADDRESS_FAMILY(AF_INET)
     address.sin_port = port.bigEndian
-    address.sin_addr.S_un.S_addr = UInt32(0x7F00_0001).bigEndian
+    address.sin_addr.S_un.S_addr = everywhere ? 0 : UInt32(0x7F00_0001).bigEndian
     let bound = withUnsafePointer(to: &address) { pointer in
         pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { WinSDK.bind(listener, $0, Int32(MemoryLayout<sockaddr_in>.size)) }
     }

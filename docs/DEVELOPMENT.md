@@ -7,8 +7,8 @@ and the gotchas. Read it whole once; keep it current as things change.
 ## 1. What this is
 
 Visor is a Mac menu bar app that runs coding agents (Claude Code, Codex,
-OpenRouter models) as sessions on the Mac and serves them over Tailscale to
-clients on iPhone, iPad, Mac and the web. Clients chat with a session
+OpenRouter models) as sessions on the Mac and serves them to clients on
+iPhone, iPad, Mac and the web, over whatever reaches the Mac. Clients chat with a session
 and watch it work, and open terminal sessions on the Mac — its shell,
 as ssh would give it — to run anything there themselves. The agent doing this
 work can drive its own development through Visor: you talk to an agent
@@ -38,13 +38,15 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
    (`brew install bazelisk`); Bazel version from `.bazelversion`.
 2. Clone this repo; Bazel and SwiftPM fetch agent_ui and the third-party
    packages themselves. Clone open_router_cli beside it to build the CLI.
-3. Tailscale, logged into your tailnet with HTTPS certificates enabled. The menu bar app puts
-   `tailscale serve` in front on launch (443 → ws 7433 at `/`, REST 7434
-   at `/api`; both listeners are loopback-only). Clients connect to
-   `<machine>.<tailnet>.ts.net`. Serve adds `Tailscale-User-Login` to
-   each proxied request; a request from the Mac's own tailnet user is
-   let in on that, everyone else (and loopback tools, the probes) uses
-   the password. There is no Funnel any more.
+3. A road from your devices to the Mac. The server has one listener,
+   port 7433 (the WebSocket at `/`, the REST side under `/api`), on
+   loopback by default; in Settings, "Reachable from the network" makes
+   it listen on every interface, for a LAN or a VPN to
+   reach it directly at `http://<address>:7433`, and "Address clients
+   take" names what a reverse proxy or a tunnel gives instead. TLS: a
+   PKCS#12 identity in Settings, or the front's. Every client, and every
+   tool on the Mac (the probes), signs in with the password; the server
+   trusts nothing about the road.
 4. Agents, each configured on its own — Visor holds no keys: `claude`
    (Claude Code CLI, logged in), `codex` (`codex login`; Visor drives
    `codex app-server`), `openrouter` (build open_router_cli with
@@ -191,10 +193,11 @@ call id). A streamed delta for a message the record already carries is
 ignored (both ends); the turn's end sweeps served streams.
 
 **Client** (`libraries/visor_client`): `AgentServerConnection` per server,
-over the provider's `AgentServer` (`TailscaleAgentServer`: `hello`, wss +
-https bearer, each operation mapped to the wire protocol in
-`TailscaleAgentServer+Operations.swift`; a fork's maps the same
-operations to its own service), `SessionTranscript`
+over the provider's `AgentServer` (`WireAgentServer`: `hello`, ws(s) +
+http(s) bearer at a `ServerAddress`, each operation mapped to the wire
+protocol in `WireAgentServer+Operations.swift`, and polling in its
+place when the socket cannot be had, `WireAgentServer+Polling.swift`; a
+fork's maps the same operations to its own service), `SessionTranscript`
 (entries, streams by message id, `sending` = optimistic rows that stay the
 last row until the record carries the same words at a later revision AND
 every stream present when sent has landed — `shadowed` hides the matched
@@ -239,8 +242,8 @@ and run the command in a terminal session.
 limit, so a try that hangs (a request riding a connection that died while
 the app was away) becomes a drop and a retry: the sign-in has 5 s
 (`signInTimeout`), the socket 4 s to open and have its login answered
-(`TailscaleAgentServer.loginTimeout`). The heartbeat
-(`TailscaleAgentServer.watch`): a `ping` envelope every 16 s, and a
+(`WireAgentServer.loginTimeout`). The heartbeat
+(`WireAgentServer.watch`): a `ping` envelope every 16 s, and a
 channel that says nothing for 8 s after one is closed and reported as
 dropped, so a socket that died quietly (a sleep, a change of network) is
 found in seconds rather than when TCP gives up. The poll
@@ -269,7 +272,7 @@ or in the background; per server, each sign-in and how long it took, the
 socket opening, the welcome and how long after the channel was asked for,
 each drop with its reason and the retry it schedules, the minute poll
 when it finds something. The newest 1,500 lines, kept in the host's
-settings when the app leaves the front. The Tailscale computer's settings
+settings when the app leaves the front. The computer's settings
 page shares it as `visor-connection-log.txt` (the share sheet: AirDrop,
 Files), copies it, or clears it. A fork's settings view can offer the
 same from `ConnectionLog.shared.text`.
@@ -322,16 +325,18 @@ another window" with Use Here), `SessionInspector`, `ComposeSessionSheet`
 gap) — the only scroll target; the first population is not animated; the
 scroll after the composer grows waits for layout (`afterLayout`).
 
-**Who gets in (2026-09-24).** `VisorServer.authorized(request)`: the
-exposure's `requester(headers:)` (Serve's `tailscale-user-login`) equals
-`hostLogin` (from `tailscale status`, read when the front is set up), or the
+**Who gets in (2026-10-06).** `VisorServer.authorized(request)`: the
 bearer is the password, or a token `GET /api/hello` issued (kept in
-memory, 512 newest). The socket's `login` takes `token` or `password`.
+memory, 512 newest); no header names a user. The socket's `login` takes
+`token` or `password`. One listener (`FrontDoor` tells an upgrade from a
+request by its first bytes), on loopback or every interface
+(`ServerSettings.reachableFromNetwork`), plain or TLS (`tlsIdentityPath`,
+Apple only; elsewhere `ListeningError.tlsUnavailable`).
 Clients (`AgentServerConnection.open` → `AgentServer.authenticate`) do
 `hello` first — 401 → `AgentServerError.needsAuthentication` → state
 `.needsAuthentication`, no retry until the record changes — then the
 socket with the token. There is no automatic discovery (manual, one-step
-adding keeps Visor from depending on Tailscale's device list): the
+adding keeps Visor from depending on any network's device list): the
 connection code (`ConnectionCode` in visor_protocol, base64url JSON of
 name/host/password) is made by `VisorServer.connectionCode` and taken by
 `VisorStore.open(_:)`, from the connect form (code, link or bare name)
@@ -403,8 +408,8 @@ The command-line server keeps its sessions, secrets, pid file
 (`<pid> <port>`) and background log in `$XDG_DATA_HOME/visor`
 (`~/.local/share/visor`) or `%LOCALAPPDATA%\Visor`; `stop` asks the server
 through `POST /api/quit`, so it ends its agents first on every system.
-Tailscale Serve needs the tailnet's HTTPS certificates, and on Linux
-either root or `sudo tailscale set --operator=$USER`. The Windows server
+`visor-server network on` opens it to the network, `visor-server address
+<url>` names a front of your own; it serves no TLS (a proxy does). The Windows server
 is built and tried in CI (a terminal session on ConPTY with PowerShell);
 it has not been run against real agents.
 
@@ -507,7 +512,7 @@ it has not been run against real agents.
   it; on the Mac, in a container: a podman machine of your own, an image
   with `swift:6.4-noble`, `libsqlite3-dev` and Node 22, the checkout
   mounted, `swift build --product visor-server` then this.
-- REST locally is plain HTTP: `http://127.0.0.1:7434/api/...` with
+- REST locally is plain HTTP: `http://127.0.0.1:7433/api/...` with
   `Authorization: Bearer <password>` (`security find-generic-password -s
   com.LoganShire.VisorServer.macOS -a password -w`), or, inside a Visor
   session, its `$VISOR_TOKEN`. Node's http needs an
@@ -524,8 +529,8 @@ it has not been run against real agents.
   apps are looked at. The iOS simulator probe (`tests/ios_probe`) drives
   the phone client. rules_apple 5's runner makes its own simulator
   (`--ios_simulator_device="iPhone 17" --ios_simulator_version=27.0`;
-  `--destination` is NOT accepted). The simulator shares the host Mac's
-  Tailscale identity, so no password is needed. The `*Look` cases expect
+  `--destination` is NOT accepted). It adds the host by `VISOR_PROBE_HOST`
+  and `VISOR_PROBE_PASSWORD`. The `*Look` cases expect
   a session on the host (`VISOR_LOOK_SESSION` names it); the fixture and
   send-frames cases bring or are given their own.
 

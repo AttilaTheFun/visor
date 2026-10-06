@@ -5,12 +5,12 @@ import VisorServer
 
 /// A listening socket, accepted on by a thread of its own.
 @MainActor
-final class POSIXListener: LoopbackListener {
+final class POSIXListener: Listener {
     private let descriptor: Int32
     private let stopped = StopFlag()
 
-    init(port: UInt16, accept: @escaping @MainActor (any ByteStream) -> Void) throws {
-        let descriptor = visor_listen_loopback(port)
+    init(port: UInt16, everywhere: Bool, accept: @escaping @MainActor (any ByteStream) -> Void) throws {
+        let descriptor = visor_listen(port, everywhere ? 1 : 0)
         guard descriptor >= 0 else {
             throw NSError(domain: "Visor", code: Int(errno),
                           userInfo: [NSLocalizedDescriptionKey: "port \(port): \(String(cString: strerror(errno)))"])

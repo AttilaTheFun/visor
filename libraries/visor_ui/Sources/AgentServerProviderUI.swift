@@ -2,7 +2,7 @@ import SwiftUI
 import VisorClient
 
 /// A provider's views: how a new server of its kind is signed in, and how
-/// a saved one's settings are shown. Tailscale's are the connection code
+/// a saved one's settings are shown. The Visor server's are the connection code
 /// form and the address-and-password form; a fork registers its own
 /// (`AgentServerProviderUIs.register`) beside its `AgentServerProvider`,
 /// and shows whatever its sign-in needs — a web view, a device code, a

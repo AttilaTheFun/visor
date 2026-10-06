@@ -1,10 +1,10 @@
-// Where a Visor server is reached: a URL, or a bare name. A Mac behind
-// Tailscale Serve is reached at its tailnet name, HTTPS on 443 at the
-// root, so a bare name means `https://<name>`. Anything else that fronts
-// a server — a reverse proxy, a tunnel, a port on a LAN — is written as
-// the URL the client should use, scheme and all, with a path where the
-// server is mounted below the root (`https://proxy.example/visor`). The
-// socket and the one-shot calls are found from it.
+// Where a Visor server is reached: a URL, or a bare name. A name alone
+// means HTTPS at the root (`https://<name>`), as a name on a network with
+// certificates gives it. Anything else — the server's own port on a LAN
+// or a VPN, a reverse proxy, a tunnel — is written as the URL the client
+// should use, scheme and all, with a path where the server is mounted
+// below the root (`https://proxy.example/visor`). The socket and the
+// one-shot calls are found from it.
 //
 // By hand, without Foundation's URL: the same code runs in the web client.
 
@@ -40,7 +40,7 @@ public struct ServerAddress: Equatable, Hashable, Sendable {
     /// The one-shot calls, under `/api`.
     public var api: String { root + "/api" }
 
-    /// Whether this is the Tailscale form: a bare name, HTTPS at the root.
+    /// Whether this is a bare name: HTTPS at the root, nothing else said.
     public var isBareName: Bool { root.hasPrefix("https://") && !root.dropFirst(8).contains("/") && !root.dropFirst(8).contains(":") }
 
     /// What to show for it: the bare name where that is all there is,

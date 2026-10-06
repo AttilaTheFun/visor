@@ -26,7 +26,7 @@ public struct WindowsSystem: CommandLineSystem {
     public func platform(log: @escaping @Sendable (String) -> Void, lifecycle: any ServerLifecycle) -> ServerPlatform {
         let data = dataDirectory
         return ServerPlatform(
-            listening: WinsockLoopback(),
+            listening: WinsockListening(),
             terminals: ConPTYTerminals(),
             processes: WindowsProcessSignals(),
             secrets: FileSecrets(url: data.appendingPathComponent("secrets.json")),
@@ -37,7 +37,6 @@ public struct WindowsSystem: CommandLineSystem {
             tools: WindowsTools(),
             host: HostDetails(name: ProcessInfo.processInfo.hostName, dataDirectory: data),
             lifecycle: lifecycle,
-            exposure: { TailscaleExposure(cli: "C:\\Program Files\\Tailscale\\tailscale.exe") },
             log: log
         )
     }

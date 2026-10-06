@@ -35,7 +35,7 @@ pid_t visor_spawn_detached(const char *path, char *const argv[], char *const env
 
 /// A TCP socket listening on 127.0.0.1:`port` (close-on-exec, the address
 /// reusable at once). -1 with errno set.
-int visor_listen_loopback(unsigned short port);
+int visor_listen(unsigned short port, int everywhere);
 
 /// The next connection on a listening socket (close-on-exec, its writes
 /// given up after 30 seconds of a peer that reads nothing). -1 with errno

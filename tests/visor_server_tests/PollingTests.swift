@@ -17,7 +17,6 @@ final class PollingTests: ServerTestCase {
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         server = VisorServer(port: 7981)
-        server.exposure = FakeExposure()
         server.password = "pw"
     }
 

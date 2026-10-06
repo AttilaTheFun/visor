@@ -1,4 +1,4 @@
-// A server's address: a bare Tailscale name, or any URL a proxy or a
+// A server's address: a bare name, or any URL a port, a proxy or a
 // tunnel gives, each turned into the root, the socket and the API.
 
 import VisorProtocol

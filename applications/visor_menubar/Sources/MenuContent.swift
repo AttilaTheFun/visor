@@ -17,25 +17,13 @@ struct MenuContent: View {
                 Text(server.listening ? "Visor is serving on port \(String(server.port))" : "Visor is not listening")
             }
             if let error = server.lastError { Text(error) }
-            // What a client types: the address set by hand (a proxy, a
-            // tunnel), else the tailnet name (TLS on 443 through Tailscale
-            // Serve).
-            if server.frontedElsewhere, let address = server.reachableAddress {
+            // What a client types: the address set by hand, else the
+            // server's own guess when the network reaches it.
+            if let address = server.reachableAddress {
                 Button("\(address)") { copy(address) }
-                Text("Reached through a front of your own, at this address")
-            } else if let tailnetName = server.address {
-                Button("\(tailnetName)") { copy(tailnetName) }
-                if let serveError = server.serveError {
-                    Text("HTTPS: \(serveError)")
-                    Button("Retry HTTPS (\(server.exposure.title) Serve)") { server.front() }
-                } else {
-                    Text("HTTPS on 443 through \(server.exposure.title) Serve, this network only")
-                }
-                if let login = server.hostLogin {
-                    Text("\(login)'s devices connect without a password")
-                }
+                Text(server.settings.reachableFromNetwork ? "Reachable from the network, port \(String(server.port))" : "Through a front of your own on this Mac")
             } else {
-                Text("\(server.exposure.title) is not installed — set an address in Settings for a front of your own")
+                Text("Only this Mac reaches it: open it to the network, or set an address, in Settings")
             }
             Divider()
             if let code = server.connectionCode {
@@ -44,7 +32,7 @@ struct MenuContent: View {
             }
             if !server.password.isEmpty {
                 Button("Password: \(server.password)") { copy(server.password) }
-                Text("For a device \(server.exposure.title) does not know as yours")
+                Text("What every client signs in with")
                 Text("Click the name or the password to copy it")
                 Divider()
             }

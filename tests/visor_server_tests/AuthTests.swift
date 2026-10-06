@@ -1,44 +1,16 @@
-// Who gets in: a request the road names as the owner's, a bearer that is
-// the password, or a token `hello` issued — and nobody else. Without a
-// password the server does not listen at all.
+// Who gets in: a bearer that is the password, or a token `hello` issued
+// — and nobody else. Without a password the server does not listen at
+// all; with one it listens on this computer alone, or on every interface
+// when opened to the network, and tells clients an address accordingly.
 
 import VisorProtocol
 @testable import VisorServer
 import Synchronization
 import XCTest
 
-/// A road that names whoever the test says and records
-/// whether it was asked to front.
-final class FakeExposure: ServerExposure {
-    private struct State {
-        var owner: String? = "owner@example.com"
-        var fronted = false
-        var name = "this-mac.example.ts.net"
-    }
-    private let state = Mutex(State())
-
-    let title = "Fake"
-    let installed = true
-    var owner: String? {
-        get { state.withLock { $0.owner } }
-        set { state.withLock { $0.owner = newValue } }
-    }
-    var fronted: Bool { state.withLock { $0.fronted } }
-    var name: String {
-        get { state.withLock { $0.name } }
-        set { state.withLock { $0.name = newValue } }
-    }
-    func address() async -> String? { name }
-    func identity() async -> String? { owner }
-    func requester(headers: [String: String]) -> String? { headers["x-fake-login"] }
-    func fronts(port: UInt16) async -> Bool { fronted }
-    func front(port: UInt16) async -> String { state.withLock { $0.fronted = true }; return "" }
-}
-
 @MainActor
 final class AuthTests: ServerTestCase {
     private var server: VisorServer!
-    private var exposure: FakeExposure!
 
     override func setUp() async throws {
         // Never the real archive: loading it ends the agents it lists.
@@ -49,8 +21,6 @@ final class AuthTests: ServerTestCase {
         // Never the real keychain.
         VisorServer.secrets = MemorySecrets()
         server = VisorServer(port: 7997)
-        exposure = FakeExposure()
-        server.exposure = exposure
     }
 
     override func tearDown() async throws {
@@ -58,10 +28,9 @@ final class AuthTests: ServerTestCase {
         UserDefaults.standard.removeObject(forKey: "visor.password")
     }
 
-    private func request(_ path: String, bearer: String? = nil, login: String? = nil) -> HTTPRequest {
+    private func request(_ path: String, bearer: String? = nil) -> HTTPRequest {
         var headers: [String: String] = [:]
         if let bearer { headers["authorization"] = "Bearer " + bearer }
-        if let login { headers["x-fake-login"] = login }
         return HTTPRequest(method: "GET", path: path, headers: headers, body: "")
     }
 
@@ -69,78 +38,65 @@ final class AuthTests: ServerTestCase {
         XCTAssertEqual(server.password, "")
         server.start()
         XCTAssertFalse(server.listening)
-        XCTAssertFalse(exposure.fronted)
-        // Nothing gets in either way while there is no password.
+        // Nothing gets in while there is no password.
         XCTAssertEqual(server.route(request("/api/sessions", bearer: "")).status, 401)
     }
 
-    func testSettingThePasswordStartsAndFronts() async {
+    func testSettingThePasswordStarts() async {
         server.password = "pearl-grove"
-        // The listener comes up asynchronously; the front is put in place
-        // off the main thread.
-        for _ in 0..<50 where !(server.listening && exposure.fronted) { try? await Task.sleep(nanoseconds: 50_000_000) }
+        for _ in 0..<50 where !server.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertTrue(server.listening)
-        XCTAssertTrue(exposure.fronted)
+        // On this computer alone, nothing is said to clients about where.
+        XCTAssertNil(server.reachableAddress)
+        XCTAssertNil(server.connectionCode)
     }
 
-    func testOwnerPasswordAndTokenGetIn() async {
+    func testPasswordAndTokenGetIn() async {
         server.password = "pearl-grove"
-        for _ in 0..<50 where server.hostLogin == nil { try? await Task.sleep(nanoseconds: 50_000_000) }
-        XCTAssertEqual(server.hostLogin, "owner@example.com")
-
         XCTAssertEqual(server.route(request("/api/sessions")).status, 401)
         XCTAssertEqual(server.route(request("/api/sessions", bearer: "wrong")).status, 401)
-        XCTAssertEqual(server.route(request("/api/sessions", login: "someone@else.com")).status, 401)
+        // A header a front might add names nobody to this server.
+        var named = request("/api/sessions")
+        named.headers["x-forwarded-user"] = "owner@example.com"
+        XCTAssertEqual(server.route(named).status, 401)
         XCTAssertEqual(server.route(request("/api/sessions", bearer: "pearl-grove")).status, 200)
-        XCTAssertEqual(server.route(request("/api/sessions", login: "owner@example.com")).status, 200)
 
-        // hello gives the owner a token the socket (and further calls) take.
-        let hello = server.route(request("/api/hello", login: "owner@example.com"))
+        // hello gives a token the socket (and further calls) take.
+        let hello = server.route(request("/api/hello", bearer: "pearl-grove"))
         XCTAssertEqual(hello.status, 200)
         let envelope = Envelope.decode(hello.body)
         XCTAssertEqual(envelope?.type, "hello")
-        XCTAssertEqual(envelope?.login, "owner@example.com")
         let token = envelope?.token ?? ""
         XCTAssertFalse(token.isEmpty)
         XCTAssertEqual(server.route(request("/api/sessions", bearer: token)).status, 200)
         XCTAssertEqual(server.route(request("/api/sessions", bearer: token + "x")).status, 401)
-        // A stranger gets no token.
-        XCTAssertEqual(server.route(request("/api/hello", login: "someone@else.com")).status, 401)
-    }
-
-    func testOwnerIsToldToWaitWhileTailscaleStarts() async {
-        // At login Tailscale may not have said whose this Mac is yet.
-        exposure.owner = nil
-        server.password = "pearl-grove"
-        for _ in 0..<50 where server.serveError == nil { try? await Task.sleep(nanoseconds: 50_000_000) }
-        XCTAssertEqual(server.serveError, "waiting for Fake")
-        // The owner's device is told to come back, not to bring a password.
-        XCTAssertEqual(server.route(request("/api/hello", login: "owner@example.com")).status, 503)
-        // A request with no identity is still simply refused.
+        // Without the password, no token.
         XCTAssertEqual(server.route(request("/api/hello")).status, 401)
-
-        // Tailscale answers; the next try learns the owner.
-        exposure.owner = "owner@example.com"
-        server.front()
-        for _ in 0..<50 where server.hostLogin == nil { try? await Task.sleep(nanoseconds: 50_000_000) }
-        XCTAssertEqual(server.hostLogin, "owner@example.com")
-        // The name the menu shows is learned with it.
-        XCTAssertEqual(server.address, "this-mac.example.ts.net")
-        XCTAssertEqual(server.route(request("/api/hello", login: "owner@example.com")).status, 200)
     }
 
-    func testTailscaleCLIRunsAsTheCLIWithoutATerminal() {
-        // Started at login there is no terminal: the CLI must be told.
-        XCTAssertEqual(TailscaleExposure.cliEnvironment(["HOME": "/Users/me"])["TERM"], "dumb")
-        // A terminal's own TERM is left alone.
-        XCTAssertEqual(TailscaleExposure.cliEnvironment(["TERM": "xterm-256color"])["TERM"], "xterm-256color")
+    /// Opened to the network, the server tells clients its first address
+    /// with the port; an address set by hand is told instead.
+    func testTheAddressClientsAreTold() async {
+        server.password = "pearl-grove"
+        server.settings.reachableFromNetwork = true
+        for _ in 0..<50 where !server.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
+        XCTAssertTrue(server.listening)
+        if let first = ServerPlatform.current.host.addresses().first {
+            XCTAssertEqual(server.reachableAddress, "http://\(first):7997")
+        } else {
+            XCTAssertNil(server.reachableAddress, "no network at all")
+        }
+        server.settings.publicAddress = "https://proxy.example.com/visor"
+        XCTAssertEqual(server.reachableAddress, "https://proxy.example.com/visor")
+        XCTAssertEqual(server.connectionCode?.host, "https://proxy.example.com/visor")
+        // Kept, for the next launch.
+        XCTAssertEqual(ServerSettings.kept(at: VisorServer.settingsURL).publicAddress, "https://proxy.example.com/visor")
     }
 
     func testConnectionCodeCarriesAddressAndPassword() async {
         XCTAssertNil(server.connectionCode)
         server.password = "pearl-grove"
-        // The address is the road's to say, and it is asked in the background.
-        await server.fronted()
+        server.settings.publicAddress = "this-mac.example.ts.net"
         let code = server.connectionCode
         XCTAssertEqual(code?.host, "this-mac.example.ts.net")
         XCTAssertEqual(code?.password, "pearl-grove")

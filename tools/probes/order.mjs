@@ -15,7 +15,7 @@ const M2 = process.argv[3] ?? 'Reply with exactly the word TWO and nothing else.
 function rest(method, path, body) {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : '';
-    const req = http.request({ host: '127.0.0.1', port: PORT + 1, path: '/api' + path, method, agent: false,
+    const req = http.request({ host: '127.0.0.1', port: PORT, path: '/api' + path, method, agent: false,
       headers: { Authorization: 'Bearer ' + PW, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } }, res => {
       let s = ''; res.on('data', d => s += d); res.on('end', () => resolve(s));
     });

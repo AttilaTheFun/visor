@@ -8,7 +8,7 @@ const id = crypto.randomUUID().toUpperCase();
 const t0 = Date.now(); const log = (...a) => console.log(((Date.now() - t0) / 1000).toFixed(2).padStart(6), ...a);
 const rest = (method, path, body) => new Promise((resolve, reject) => {
   const data = body ? JSON.stringify(body) : '';
-  const req = http.request({ host: '127.0.0.1', port: PORT + 1, path: '/api' + path, method, agent: false,
+  const req = http.request({ host: '127.0.0.1', port: PORT, path: '/api' + path, method, agent: false,
     headers: { Authorization: 'Bearer ' + PW, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } }, res => { let s = ''; res.on('data', d => s += d); res.on('end', () => resolve(s)); });
   req.on('error', reject); if (data) req.write(data); req.end(); });
 let busy = null, failures = [], tty = 0, mode = null, screen = '';

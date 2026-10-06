@@ -16,7 +16,6 @@ final class CommandsTests: ServerTestCase {
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         server = VisorServer(port: 7978)
-        server.exposure = FakeExposure()
         server.password = "pw"
     }
 

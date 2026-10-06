@@ -1,8 +1,7 @@
-// The Mac's sign-in over the host's services: `hello` over HTTP first —
-// let in on the network's word or the password, refused with 401
-// otherwise — then the socket, logged in with the token hello gave. A
-// 401 is the Mac asking for a password, which the connection shows and
-// does not retry.
+// A server's sign-in over the host's services: `hello` over HTTP first —
+// let in on the password, refused with 401 otherwise — then the socket,
+// logged in with the token hello gave. A 401 is the server asking for a
+// password, which the connection shows and does not retry.
 
 import Foundation
 @testable import VisorClient
@@ -89,7 +88,7 @@ final class ScriptedSocket: VisorSocketService {
 }
 
 @MainActor
-final class TailscaleSignInTests: XCTestCase {
+final class SignInTests: XCTestCase {
     private var socket: ScriptedSocket!
 
     override func setUp() async throws {

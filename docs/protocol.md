@@ -1,33 +1,31 @@
 # The Visor protocol
 
-Two channels on one HTTPS endpoint (the Mac's Tailscale Serve name, 443):
-a WebSocket at `/` for login and the live stream, and a REST API under
-`/api` for everything else. Both carry the same JSON envelopes (`Envelope`
+Two channels on one endpoint (`http(s)://<address>`, port 7433 by default
+on the server itself, or wherever a front puts it): a WebSocket at `/` for
+login and the live stream, and a REST API under `/api` for everything
+else. Both carry the same JSON envelopes (`Envelope`
 in libraries/visor_protocol): `{"type": …}` plus the fields that type uses
 on the socket; the same fields as request and response bodies over HTTP,
 where the route names the type.
 
 ## Who gets in
 
-The server listens on loopback only: the WebSocket on its port (7433) and
-the REST side on the next (7434). Something in front of it is the road in
-from the network. The one shipped is Tailscale Serve on 443, which proxies
-to both from the same Mac (`/api` to the REST side, everything else to
-the socket) and adds `Tailscale-User-Login` naming the tailnet user behind
-each request. A request is answered when that user is the Mac's own
-(`tailscale status` says whose the Mac is), or when `Authorization: Bearer`
-is the password from the menu bar app, or a token from `hello`. So the
-user's own devices need no password; another user's device on a shared
-tailnet, an older client, or a tool on the Mac itself (loopback, no
-headers) uses the password. The server does not listen at all without a
-password set.
+The server has one listener (7433 by default), which tells a WebSocket
+upgrade from a request by its first bytes: the live channel at `/`, the
+REST side under `/api`. By default it listens on loopback only, so the
+road in from the network is something on the same computer — a reverse
+proxy, a tunnel — forwarding one address to it; opened to the network
+(`reachableFromNetwork`, in the menu bar app's Settings or
+`visor-server network on`), it listens on every interface, for a LAN, a
+VPN or a tunnel to reach directly. It serves plain TCP, or TLS with a
+PKCS#12 identity where the system can (the Mac); otherwise TLS is the
+front's. The server does not listen at all without a password set.
 
-Any other front works the same way — a reverse proxy, a tunnel — routing
-`/api` to the REST port and the rest to the socket port, with the
-password as the credential: the menu bar app's Settings take the address
-that front gives (`https://proxy.example.com/visor`), and the connection
-code carries it. The API reads the same under a mount path forwarded
-whole (`/visor/api/sessions`).
+A request is answered when `Authorization: Bearer` is the password from
+the menu bar app, or a token from `hello`. Nothing about the road is
+trusted: no header names a user, and every device signs in the same
+way, with the password the connection code carries. The API reads the
+same under a mount path a front forwards whole (`/visor/api/sessions`).
 
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
@@ -52,10 +50,10 @@ connection code — URL-safe base64 (no padding) of
 copy and as a QR code of `visor://connect?code=<code>`. A client takes
 the code, the link, or an address typed by hand (`ConnectionCode` in
 libraries/visor_protocol; the apps register the `visor` URL scheme).
-The address is a bare tailnet name, meaning HTTPS on 443 at the root,
-or any `http(s)://` URL with a port and a mount path as the front gives
-it (`ServerAddress`): the socket is `ws(s)://` at that root, the REST
-side under `/api`.
+The address is any `http(s)://` URL with a port and a mount path as the
+server or its front gives it, or a bare name meaning HTTPS at the root
+(`ServerAddress`): the socket is `ws(s)://` at that root, the REST side
+under `/api`.
 
 ## REST (`https://<host>/api`, `Authorization: Bearer <password or token>`)
 
@@ -86,9 +84,7 @@ the list is taken as a `sessions` broadcast would be, and an answer while
 the socket is down reopens it at once.
 
 401 when nothing lets the request in, 404 for an unknown session. The socket's `sessions`
-broadcast follows every change, so other clients see it too. Behind the
-Mac's Serve the API is at port 7434 (`/api` is stripped or not — both
-accepted), the socket at 7433.
+broadcast follows every change, so other clients see it too.
 
 ## WebSocket (`wss://<host>/`)
 

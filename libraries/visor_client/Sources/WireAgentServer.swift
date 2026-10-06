@@ -2,8 +2,8 @@ import VisorProtocol
 import VisorServices
 
 /// A Visor server speaking the wire protocol (docs/protocol.md), wherever
-/// it is reached: a Mac behind Tailscale Serve at its tailnet name, or any
-/// URL a proxy or a tunnel gives (`ServerAddress`). `hello` over HTTP
+/// it is reached: a name on a network (HTTPS at the root), or any URL a
+/// proxy, a tunnel or a port gives (`ServerAddress`). `hello` over HTTP
 /// first — the server lets this device in on the road's word (its owner's
 /// device) or on the password, and hands back its name and a token —
 /// then the socket at the root for the live channel, logged in with the
@@ -33,7 +33,7 @@ public final class WireAgentServer: AgentServer {
     /// for: the user is waiting on this one.
     static let loginTimeout: Int32 = 4_000
     /// How long the channel has to answer when asked outright, as the app
-    /// comes back to the front: an answer over Tailscale takes
+    /// comes back to the front: an answer over a network takes
     /// milliseconds, and the user is looking.
     static let verifyTimeout: Int32 = 1_000
 

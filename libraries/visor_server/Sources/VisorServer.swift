@@ -1,8 +1,8 @@
-// The server: a WebSocket listener and a small HTTP one, both on loopback
-// (the road in from the network is the exposure's front on 443), a
-// password or the road's word on each caller, and the protocol's
-// envelopes routed to the sessions (SessionRecord.swift), each of which
-// is one agent. Sessions are written down and outlive the app.
+// The server: one listener for the WebSocket and the REST side (on
+// loopback, or on every interface when the network is to reach it), a
+// password on each caller, and the protocol's envelopes routed to the
+// sessions (SessionRecord.swift), each of which is one agent. Sessions
+// are written down and outlive the app.
 
 import ClaudeTranscript
 import Foundation
@@ -23,12 +23,9 @@ public final class VisorServer {
     public internal(set) var listening = false
 
     public internal(set) var lastError: String?
-    /// Required: the server does not listen without one. The user's own
-
-    /// devices on the network are let in by the road's identity instead
-    /// (Tailscale names the caller); the password is for a client the
-    /// road does not vouch for — another user's device on a shared
-    /// network, or a tool on this Mac.
+    /// Required: the server does not listen without one. Every client and
+    /// every tool on this computer signs in with it; the connection code
+    /// carries it.
     public var password: String {
         didSet {
             Self.secrets.set("password", password)
@@ -43,22 +40,17 @@ public final class VisorServer {
     /// The bundle ids this app had before, whose settings it takes over.
     static let formerBundleIDs = ["com.LoganShire.Visor.MenuBar"]
 
-    /// The network user this Mac belongs to, as the exposure reports it;
-    /// requests the road names as theirs need no password.
-    public internal(set) var hostLogin: String?
-    /// This Mac's name on the network ("my-mac.tail1234.ts.net"), once the
-
-    /// exposure has said it; learned with the owner, so the menu shows it
-    /// even when Tailscale came up after the app did.
-    public internal(set) var address: String?
-    /// The address set by hand for a server fronted some other way than
-    /// the exposure (VisorServer+PublicAddress.swift): a URL, as the
-    /// client reads it (`ServerAddress`). Empty: the exposure's.
-    public var publicAddress: String = VisorServer.keptPublicAddress() {
-        didSet { if publicAddress != oldValue { keepPublicAddress() } }
+    /// How the server is reached (ServerSettings): kept as set, and
+    /// listened by again when how it listens changes.
+    public var settings: ServerSettings = ServerSettings.kept(at: VisorServer.settingsURL) {
+        didSet {
+            guard settings != oldValue else { return }
+            settings.keep(at: Self.settingsURL)
+            if settings.reachableFromNetwork != oldValue.reachableFromNetwork || settings.tlsIdentityPath != oldValue.tlsIdentityPath {
+                listenAgain()
+            }
+        }
     }
-    /// What went wrong putting the front in place, or nil.
-    public internal(set) var serveError: String?
     /// The other computers' servers this one's agents reach (VisorServer+Links.swift).
     public internal(set) var links: [ConnectionCode] = []
 
@@ -83,25 +75,15 @@ public final class VisorServer {
     /// Told of each silent push of a session's state (tests listen).
     var onStatusPush: ((_ session: String, _ status: String) -> Void)?
     var modelsRefresh: Task<Void, Never>?
-    /// The `front()` under way; and how many have found Tailscale not ready.
-    var fronting: Task<Void, Never>?
-    /// Asked for while an attempt ran: run again once it ends.
-    var frontAgain = false
-
-    var frontAttempts = 0
-
     /// Tokens handed out by `hello` to clients the road (or the password)
     /// let in, for the socket's login; new each launch.
     var tokens: [String] = []
 
     public let port: UInt16
 
-    var listener: (any LoopbackListener)?
+    var listener: (any Listener)?
     var http: HTTPServer?
     var connections: [ObjectIdentifier: ClientConnection] = [:]
-
-    /// The REST side, beside the WebSocket: `port + 1`.
-    public var apiPort: UInt16 { port + 1 }
 
     /// What the permission shim presents instead of the password; new per launch.
     let agentToken = UUID().uuidString
@@ -121,27 +103,22 @@ public final class VisorServer {
 
     /// A server apart from the user's own: its own port, a folder of its
     /// own for what it keeps, the password given and held in memory, and
-    /// no road from the network. For trying a build against real agents
-    /// without touching the installed server's sessions, its keychain or
-    /// its front (tools/staging_server).
+    /// reached from this computer only. For trying a build against real
+    /// agents without touching the installed server's sessions or its
+    /// keychain (tools/staging_server).
     public static func staging(port: UInt16, root: URL, password: String) -> VisorServer {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         storeRoot = root
         secrets = MemorySecrets()
         ServerCache.shared = .inMemory()
         let server = VisorServer(port: port)
-        server.exposure = NoExposure()
         server.password = password
         return server
     }
 
-    /// How clients reach this server: the platform's (Tailscale), unless a
-    /// fork says otherwise.
-    public var exposure: any ServerExposure = ServerPlatform.current.exposure()
-
     /// The connection code a client takes to add this computer in one
-    /// step: its name, its address, the password. Nil until the address
-    /// is known and a password is set.
+    /// step: its name, its address, the password. Nil until there is an
+    /// address to give and a password is set.
     public var connectionCode: ConnectionCode? {
         guard !password.isEmpty, let address = reachableAddress else { return nil }
         return ConnectionCode(name: hostName, host: address, password: password)
@@ -186,8 +163,8 @@ public final class VisorServer {
     public var hostName: String { ServerPlatform.current.host.name }
 
     /// The HTTP API: the same commands as the WebSocket, one request each,
-    /// with the password as a bearer token. Paths may carry Tailscale
-    /// Serve's `/api` mount prefix.
+    /// with the password as a bearer token. Paths may carry whatever a
+    /// front mounted the API under, before `/api`.
     ///   GET    /sessions                       the host, its sessions, the model catalogs
     ///   POST   /sessions                       start {id?, agent, cwd, title, skipPermissions}
     ///   POST   /sessions/{id}/send             {text}

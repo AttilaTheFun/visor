@@ -3,7 +3,7 @@
 // as such and not retried. For a Mac the sign-in is `hello` over HTTP —
 // let in on the network's word or the password, refused with 401
 // otherwise — and the channel is the socket, logged in with the token
-// hello gave; `TailscaleSignInTests` covers that over scripted services.
+// hello gave; `SignInTests` covers that over scripted services.
 
 import Foundation
 @testable import VisorClient

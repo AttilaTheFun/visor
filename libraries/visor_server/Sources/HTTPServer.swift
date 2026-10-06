@@ -1,45 +1,34 @@
 // A small HTTP/1.1 server for the REST side of the protocol: one request
 // per connection is all the clients need. JSON in and out, a bearer
 // password, CORS for the web client (including Chrome's private-network
-// preflight). Sits beside the WebSocket listener; the road in fronts both
-// on 443 (/api → here). Read and written here over the system's bytes.
+// preflight). Connections come to it from the one listener (FrontDoor)
+// with the bytes that have arrived. Read and written here over the
+// system's bytes.
 
 import Foundation
 
 @MainActor
 public final class HTTPServer {
-    private var listener: (any LoopbackListener)?
-    private let port: UInt16
     /// Answers a request, now or later: a long poll holds its answer
     /// until there is something to say.
     private let handler: (HTTPRequest, @escaping @MainActor (HTTPResponse) -> Void) -> Void
 
-    public init(port: UInt16, handler: @escaping (HTTPRequest, @escaping @MainActor (HTTPResponse) -> Void) -> Void) {
-        self.port = port
+    public init(handler: @escaping (HTTPRequest, @escaping @MainActor (HTTPResponse) -> Void) -> Void) {
         self.handler = handler
     }
 
-    /// Loopback only: the road in is the exposure (Tailscale Serve), which
-    /// proxies from this computer and names the caller in headers nobody
-    /// else can add.
-    public func start() throws {
-        listener = try ServerPlatform.current.listening.listen(port: port) { [weak self] stream in
-            self?.accept(stream)
-        }
-    }
-
-    public func stop() {
-        listener?.stop()
-        listener = nil
-    }
-
-    private func accept(_ stream: any ByteStream) {
+    /// Serves one connection: the request, once whole, is answered and the
+    /// connection closed.
+    func serve(_ stream: any ByteStream, received: Data) {
         let exchange = Exchange()
-        stream.receive { [weak self] chunk in
+        exchange.received = received
+        let take: @MainActor (Data?) -> Void = { [weak self] chunk in
             guard let self, !exchange.answered else { return }
-            guard let chunk else { return stream.close() }
-            exchange.received.append(chunk)
-            guard let request = Self.parse(exchange.received) else { return }
+            if let chunk { exchange.received.append(chunk) } else if exchange.received.isEmpty { return stream.close() }
+            guard let request = Self.parse(exchange.received) else {
+                if chunk == nil { stream.close() }
+                return
+            }
             exchange.answered = true
             if request.method == "OPTIONS" {
                 self.write(HTTPResponse(204), to: stream)
@@ -47,6 +36,9 @@ public final class HTTPServer {
                 self.handler(request) { [weak self] response in self?.write(response, to: stream) }
             }
         }
+        // What has arrived may already be the whole request.
+        take(Data())
+        if !exchange.answered { stream.receive(take) }
     }
 
     /// Where the head of a request ends (the blank line's first byte), or

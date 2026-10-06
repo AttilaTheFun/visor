@@ -11,7 +11,7 @@ const t0 = Date.now(); const log = (...a) => console.log(((Date.now() - t0) / 10
 const failures = []; const check = (what, ok) => { log(what + ':', ok); if (!ok) failures.push(what); };
 const rest = (method, path, body) => new Promise((resolve, reject) => {
   const data = body ? JSON.stringify(body) : '';
-  const req = http.request({ host: '127.0.0.1', port: PORT + 1, path: '/api' + path, method, agent: false,
+  const req = http.request({ host: '127.0.0.1', port: PORT, path: '/api' + path, method, agent: false,
     headers: { Authorization: 'Bearer ' + PW, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } },
     res => { let s = ''; res.on('data', d => s += d); res.on('end', () => resolve({ status: res.statusCode, body: s })); });
   req.on('error', reject); if (data) req.write(data); req.end(); });
@@ -32,7 +32,7 @@ const until = async (f, limit) => { const end = Date.now() + limit; while (!f() 
 
 const listed = await rest('GET', '/sessions');
 check('REST answers with the password', listed.status === 200 && Array.isArray(JSON.parse(listed.body).sessions));
-const refused = await new Promise(resolve => http.get({ host: '127.0.0.1', port: PORT + 1, path: '/api/sessions',
+const refused = await new Promise(resolve => http.get({ host: '127.0.0.1', port: PORT, path: '/api/sessions',
   headers: { Authorization: 'Bearer wrong' } }, res => { res.resume(); resolve(res.statusCode); }));
 check('REST refuses a wrong password', refused === 401);
 

@@ -16,8 +16,8 @@
     <string>20</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
-    <!-- The host is a ws:// WebSocket on the tailnet (a 100.x address or a
-         MagicDNS name), which ATS would otherwise refuse as cleartext. -->
+    <!-- A server may be plain http:// and ws:// on a LAN or a VPN, which
+         ATS would otherwise refuse as cleartext. -->
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

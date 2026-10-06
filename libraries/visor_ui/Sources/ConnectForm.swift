@@ -2,8 +2,8 @@
 // copied from the Visor menu bar app on the Mac, or carried by the QR
 // code a phone's camera scans — which holds the name, the address and
 // the password. An address works too, with the password typed beside it:
-// a Tailscale name (HTTPS at the root), or the URL a proxy or a tunnel
-// gives (`ServerAddress`).
+// a name on a network (HTTPS at the root), or the URL a proxy, a tunnel
+// or a port gives (`ServerAddress`).
 
 import SwiftUI
 import VisorClient
@@ -47,7 +47,7 @@ struct ConnectForm: View {
             } header: {
                 Text("Computer")
             } footer: {
-                Text("In the Visor menu bar app on the Mac: Copy Connection Code, or open Settings and scan its QR code with this device's camera. Or type where the server is reached: a Tailscale name, or a URL such as https://proxy.example.com/visor.")
+                Text("In the Visor menu bar app on the Mac: Copy Connection Code, or open Settings and scan its QR code with this device's camera. Or type where the server is reached: a URL such as http://192.168.1.20:7433 or https://proxy.example.com/visor, or a name (HTTPS).")
             }
             Section {
                 Button("Connect", action: submit)

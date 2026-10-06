@@ -8,7 +8,7 @@ package(default_visibility = ["//visibility:public"])
 BUNDLE_ID = "com.LoganShire.VisorServer.macOS"
 
 # The host: Visor Server, a menu bar app (no Dock icon) running the server. The menu
-# shows the Tailscale address, the password to type on a client, the
+# shows the address clients take, the password to type on a client, the
 # connected clients and the running sessions.
 swift_library(
     name = "menubar_lib",

@@ -122,7 +122,7 @@ extension VisorServer {
     /// name for this computer, whose it is, and a token to log
     /// the socket in with.
     private func restHello(_ call: RESTCall) -> HTTPResponse {
-        return .json(Envelope.hello(host: hostName, login: hostLogin ?? "", token: issueToken()).encoded())
+        return .json(Envelope.hello(host: hostName, login: "", token: issueToken()).encoded())
     }
 
     /// Rows whose words match, across every session: `q` is the
@@ -253,7 +253,7 @@ extension VisorServer {
         guard let code = call.body.text.flatMap(ConnectionCode.init(parsing:)) else {
             return HTTPResponse(400, Envelope.error("A connection code is required").encoded())
         }
-        if code.host != address { adopt(code) }
+        if code.host != reachableAddress { adopt(code) }
         return .json(Envelope(type: "link").encoded())
     }
 
@@ -314,9 +314,9 @@ extension VisorServer {
         return .json(Envelope.sessions([record.info]).encoded())
     }
 
-    /// The path below `/api`, wherever a front mounted it: Tailscale Serve
-    /// forwards `/api/...` as it is; a reverse proxy may forward
-    /// `/visor/api/...` whole, which reads the same.
+    /// The path below `/api`, wherever a front mounted it: most forward
+    /// `/api/...` as it is; a reverse proxy may forward `/visor/api/...`
+    /// whole, which reads the same.
     static func apiPath(_ path: String) -> String {
         if let range = path.range(of: "/api/") { return "/" + path[range.upperBound...] }
         if path == "/api" || path.hasSuffix("/api") { return "/" }

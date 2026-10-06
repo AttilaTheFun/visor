@@ -47,25 +47,24 @@ extension ServerCommand {
         while true { try? await Task.sleep(for: .seconds(3600)) }
     }
 
-    /// Once the road in has said where this computer is: the code a client
-    /// adds it with. (Only to a terminal: the code carries the password.)
+    /// The code a client adds this computer with. (Only to a terminal: the
+    /// code carries the password.)
     @MainActor
     private func announce(_ server: VisorServer) async {
-        for _ in 0..<60 where server.connectionCode == nil {
-            try? await Task.sleep(for: .seconds(1))
-        }
         guard let code = server.connectionCode else {
-            print(server.serveError.map { "\(server.exposure.title): \($0)" } ?? "\(server.exposure.title) has not said where this computer is.")
-            print("`visor-server code` shows the connection code once it has.")
+            print(server.settings.reachableFromNetwork
+                  ? "No address to give yet: this computer has none on a network."
+                  : "Only this computer reaches the server: `visor-server network on` opens it to the network, or `visor-server address <url>` names a front of your own.")
+            print("`visor-server code` shows the connection code once there is an address.")
             return
         }
-        Self.printCode(code, through: server.exposure.title)
+        Self.printCode(code)
     }
 
-    static func printCode(_ code: ConnectionCode, through road: String) {
+    static func printCode(_ code: ConnectionCode) {
         print("""
 
-            Reached at \(code.host) through \(road). In Visor, add this computer with the code:
+            Reached at \(code.host). In Visor, add this computer with the code:
 
               \(code.encoded)
 
@@ -101,7 +100,7 @@ extension ServerCommand {
         let port = (try? String(contentsOf: pidFile, encoding: .utf8))?.split(whereSeparator: \.isWhitespace).dropFirst().first
             .flatMap { UInt16($0) } ?? Envelope.defaultPort
         let password = platform.secrets.get("password") ?? ""
-        let asked = OutgoingRequest(url: "http://127.0.0.1:\(port + 1)/api/quit", method: "POST",
+        let asked = OutgoingRequest(url: "http://127.0.0.1:\(port)/api/quit", method: "POST",
                                     headers: ["Authorization": "Bearer \(password)"], timeout: 5)
         if (try? await platform.fetching.fetch(asked))?.status != 200 { platform.processes.terminate(pid) }
         // It ends its agents before it goes: a few seconds.
