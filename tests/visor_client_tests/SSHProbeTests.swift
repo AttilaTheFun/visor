@@ -38,7 +38,9 @@ final class SSHProbeTests: XCTestCase {
             XCTFail("let in without the key")
         } catch VisorSSHError.keyRefused {}
 
-        // Authorized: in, the host key seen, the port forwarded.
+        // Authorized: in, the host key seen, the server reached — at its
+        // socket file with no password (VISOR_SSH_PASSWORD unset), or at
+        // its port with the password.
         let line = ssh.publicKey()
         XCTAssertTrue(line.hasPrefix("ssh-ed25519 AAAA"), line)
         let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: authorized))
@@ -48,9 +50,10 @@ final class SSHProbeTests: XCTestCase {
         let session = try await ssh.connect([hop], hostKeys: [nil])
         XCTAssertEqual(session.hostKeys.count, 1)
         XCTAssertTrue(session.hostKeys[0].hasPrefix("ssh-"), session.hostKeys[0])
+        let password = environment["VISOR_SSH_PASSWORD"] ?? ""
         let targetPort = Int(environment["VISOR_SSH_TARGET_PORT"] ?? "") ?? 7433
-        let port = try await session.forward(toPort: targetPort)
-        let answer = try await NativeVisorHTTPService().request(method: "GET", url: "http://127.0.0.1:\(port)/api/hello", body: "", authorization: environment["VISOR_SSH_PASSWORD"] ?? "")
+        let port = password.isEmpty ? try await session.attach(command: VisorAgentServer.attachCommand) : try await session.forward(toPort: targetPort)
+        let answer = try await NativeVisorHTTPService().request(method: "GET", url: "http://127.0.0.1:\(port)/api/hello", body: "", authorization: password)
         XCTAssertNotNil(Envelope.decode(answer)?.host, answer)
         session.close()
 
@@ -63,13 +66,13 @@ final class SSHProbeTests: XCTestCase {
         // Through a jump host: the sshd, jumped through to itself.
         let jumped = try await ssh.connect([hop, hop], hostKeys: [session.hostKeys[0], nil])
         XCTAssertEqual(jumped.hostKeys, [session.hostKeys[0], session.hostKeys[0]])
-        let jumpedPort = try await jumped.forward(toPort: targetPort)
-        let jumpedAnswer = try await NativeVisorHTTPService().request(method: "GET", url: "http://127.0.0.1:\(jumpedPort)/api/hello", body: "", authorization: environment["VISOR_SSH_PASSWORD"] ?? "")
+        let jumpedPort = password.isEmpty ? try await jumped.attach(command: VisorAgentServer.attachCommand) : try await jumped.forward(toPort: targetPort)
+        let jumpedAnswer = try await NativeVisorHTTPService().request(method: "GET", url: "http://127.0.0.1:\(jumpedPort)/api/hello", body: "", authorization: password)
         XCTAssertNotNil(Envelope.decode(jumpedAnswer)?.host, jumpedAnswer)
         jumped.close()
 
         // The whole client, through the provider.
-        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: address, secret: environment["VISOR_SSH_PASSWORD"] ?? ""))
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: address, secret: password))
         host.connect()
         try await until("connected over SSH") { host.state == .connected }
         XCTAssertTrue(host.live, "the live channel goes through the tunnel")

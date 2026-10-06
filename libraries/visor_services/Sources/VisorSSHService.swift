@@ -26,6 +26,10 @@ public protocol VisorSSHSession: AnyObject {
     /// Reaches `port` on the computer's loopback through a port here, on
     /// 127.0.0.1: the port, for as long as the session is open.
     func forward(toPort port: Int) async throws -> Int
+    /// Runs `command` on the computer for each connection to a port here,
+    /// on 127.0.0.1, the connection's bytes being the command's input and
+    /// output: the port, for as long as the session is open.
+    func attach(command: String) async throws -> Int
     func close()
 }
 

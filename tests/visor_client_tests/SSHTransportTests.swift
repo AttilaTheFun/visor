@@ -37,22 +37,32 @@ final class ScriptedSSH: VisorSSHService {
 final class ScriptedSSHSession: VisorSSHSession {
     let hostKeys: [String]
     var forwarded: [Int] = []
+    var attached: [String] = []
     var closed = false
     init(hostKeys: [String]) { self.hostKeys = hostKeys }
     func forward(toPort port: Int) async throws -> Int { forwarded.append(port); return 54321 }
+    func attach(command: String) async throws -> Int { attached.append(command); return 60001 }
     func close() { closed = true }
 }
 
-/// HTTP that records where it was asked, and answers hello.
+/// HTTP that records where it was asked, and answers hello — except at
+/// a port that answers nothing (a server with no socket file: the
+/// command there ends at once, and so does the connection).
 final class RecordingHTTP: VisorHTTPService {
     private let asked = Mutex<[String]>([])
+    private let dead = Mutex<Set<Int>>([])
     var urls: [String] { asked.withLock { $0 } }
+    var bearers: [String] { tokens.withLock { $0 } }
+    private let tokens = Mutex<[String]>([])
+    func kill(port: Int) { dead.withLock { _ = $0.insert(port) } }
     func request(method: String, url: String, body: String, authorization: String) async throws -> String {
         asked.withLock { $0.append(url) }
+        tokens.withLock { $0.append(authorization) }
+        if dead.withLock({ $0.contains { url.hasPrefix("http://127.0.0.1:\($0)/") } }) { throw ScriptedFailure(status: 0) }
         if url.hasSuffix("/api/hello") { return Envelope.hello(host: "Mini", login: "", token: "tok-1").encoded() }
         return Envelope(type: "reply").encoded()
     }
-    func status(of error: Error) -> Int? { nil }
+    func status(of error: Error) -> Int? { (error as? ScriptedFailure)?.status }
 }
 
 @MainActor
@@ -101,9 +111,9 @@ final class SSHTransportTests: XCTestCase {
     }
 
     /// Signing in connects as the user with no host key the first time,
-    /// keeps the one seen, forwards the server's port and says hello
-    /// through it; the next sign-in offers the kept key and closes the
-    /// earlier connection.
+    /// keeps the one seen, reaches the server's socket file (the command
+    /// run there) and says hello through it, no password asked; the next
+    /// sign-in offers the kept key and closes the earlier connection.
     func testTheFirstSignInKeepsTheHostKeyAndTheNextOffersIt() async throws {
         let server = VisorAgentServer(record: record())
         let name = try await server.authenticate(record())
@@ -112,13 +122,29 @@ final class SSHTransportTests: XCTestCase {
         XCTAssertEqual(ssh.connects[0].route, [VisorSSHHop(user: "logan", host: "mini.local", port: 22)])
         XCTAssertEqual(ssh.connects[0].hostKeys, [nil])
         XCTAssertEqual(settings.get(key: "ssh.hostkey.logan@mini.local:22"), "ssh-ed25519 AAAAhost mini")
-        XCTAssertEqual(ssh.sessions[0].forwarded, [7433])
-        XCTAssertEqual(http.urls, ["http://127.0.0.1:54321/api/hello"])
+        XCTAssertEqual(ssh.sessions[0].attached, ["nc -U ~/.visor/server.sock"])
+        XCTAssertEqual(ssh.sessions[0].forwarded, [], "the port is not needed")
+        XCTAssertEqual(http.urls, ["http://127.0.0.1:60001/api/hello"])
 
         _ = try await server.authenticate(record())
         XCTAssertEqual(ssh.connects[1].hostKeys, ["ssh-ed25519 AAAAhost mini"])
         XCTAssertTrue(ssh.sessions[0].closed, "the earlier connection is closed before the next")
         XCTAssertFalse(ssh.sessions[1].closed)
+    }
+
+    /// A server that does not serve its socket file (SSH clients not let
+    /// in without a password, an older server, no `nc`) is reached at its
+    /// port on the computer's loopback instead, with the password.
+    func testAServerWithoutTheSocketFileIsReachedAtItsPort() async throws {
+        http.kill(port: 60001)
+        let server = VisorAgentServer(record: record())
+        let name = try await server.authenticate(record())
+        XCTAssertEqual(name, "Mini")
+        XCTAssertEqual(ssh.sessions[0].attached, ["nc -U ~/.visor/server.sock"])
+        XCTAssertEqual(ssh.sessions[0].forwarded, [7433])
+        XCTAssertEqual(http.urls, ["http://127.0.0.1:60001/api/hello", "http://127.0.0.1:54321/api/hello"])
+        XCTAssertEqual(http.bearers.last, "pw")
+        XCTAssertEqual(ssh.sessions.count, 1, "the same connection carries the port")
     }
 
     /// Through jump hosts, every hop is connected in order and every

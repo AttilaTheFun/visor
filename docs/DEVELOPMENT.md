@@ -44,10 +44,14 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
    packages themselves. Clone open_router_cli beside it to build the CLI.
 3. A road from your devices to the Mac. The server has one listener,
    port 7433 (the WebSocket at `/`, the REST side under `/api`), on
-   loopback by default; in Settings, "Reachable from the network" makes
+   loopback by default; in Settings, "HTTP, with the password" makes
    it listen on every interface, for a LAN or a VPN to
    reach it directly at `http://<address>:7433`, and "Address clients
-   take" names what a reverse proxy or a tunnel gives instead. TLS: a
+   take" names what a reverse proxy or a tunnel gives instead. "SSH, no
+   password" (on by default) serves the same on `~/.visor/server.sock`,
+   for a client that comes through the Mac's Remote Login as you
+   (address `user@host`), already signed in. Neither on: this Mac alone
+   reaches the port. TLS: a
    PKCS#12 identity in Settings, or the front's. Every client, and every
    tool on the Mac (the probes), signs in with the password; the server
    trusts nothing about the road.
@@ -351,7 +355,15 @@ memory, 512 newest); no header names a user. The socket's `login` takes
 `token` or `password`. One listener (`FrontDoor` tells an upgrade from a
 request by its first bytes), on loopback or every interface
 (`ServerSettings.reachableFromNetwork`), plain or TLS (`tlsIdentityPath`,
-Apple only; elsewhere `ListeningError.tlsUnavailable`).
+Apple only; elsewhere `ListeningError.tlsUnavailable`); and a second on
+the socket file `VisorServer.socketPath` while `sshEnabled`
+(`ListeningOptions.unixPath`; Apple and POSIX, not Windows:
+`ListeningError.unixUnavailable`), whose connections are trusted —
+`HTTPRequest.trusted`, `ClientConnection.trusted`: no bearer, no
+password at login. The client over SSH tries the file first
+(`VisorAgentServer+SSH`: `nc -U` over an exec channel per connection,
+`VisorSSHSession.attach`) and falls back to the port with the password
+(`forward`) when hello fails there.
 Clients (`AgentServerConnection.open` → `AgentServer.authenticate`) do
 `hello` first — 401 → `AgentServerError.needsAuthentication` → state
 `.needsAuthentication`, no retry until the record changes — then the
@@ -428,8 +440,10 @@ The command-line server keeps its sessions, secrets, pid file
 (`<pid> <port>`) and background log in `$XDG_DATA_HOME/visor`
 (`~/.local/share/visor`) or `%LOCALAPPDATA%\Visor`; `stop` asks the server
 through `POST /api/quit`, so it ends its agents first on every system.
-`visor-server network on` opens it to the network, `visor-server address
-<url>` names a front of your own; it serves no TLS (a proxy does). The Windows server
+`visor-server network on` opens it to the network, `visor-server ssh
+on|off` serves the socket file for SSH clients (Linux; not Windows),
+`visor-server address <url>` names a front of your own; it serves no TLS
+(a proxy does). The Windows server
 is built and tried in CI (a terminal session on ConPTY with PowerShell);
 it has not been run against real agents.
 

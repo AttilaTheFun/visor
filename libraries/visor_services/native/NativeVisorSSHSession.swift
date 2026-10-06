@@ -24,18 +24,38 @@ final class NativeVisorSSHSession: VisorSSHSession {
     }
 
     func forward(toPort port: Int) async throws -> Int {
+        try await listen { local in
+            let originator: SocketAddress
+            do { originator = try local.remoteAddress ?? SocketAddress(ipAddress: "127.0.0.1", port: 0) } catch { return .failure(error) }
+            return .success((.directTCPIP(SSHChannelType.DirectTCPIP(targetHost: "127.0.0.1", targetPort: port, originatorAddress: originator)), nil))
+        }
+    }
+
+    func attach(command: String) async throws -> Int {
+        try await listen { _ in .success((.session, command)) }
+    }
+
+    /// A port here whose every connection becomes a channel of the kind
+    /// `plan` says (a command run, for a session channel), the two glued.
+    private func listen(_ plan: @escaping @Sendable (Channel) -> Result<(SSHChannelType, String?), Error>) async throws -> Int {
         let handler = self.handler
         let listener = try await ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { local in
                 let opened = local.eventLoop.makePromise(of: Channel.self)
-                let originator: SocketAddress
-                do { originator = try local.remoteAddress ?? SocketAddress(ipAddress: "127.0.0.1", port: 0) } catch { return local.eventLoop.makeFailedFuture(error) }
-                let target = SSHChannelType.DirectTCPIP(targetHost: "127.0.0.1", targetPort: port, originatorAddress: originator)
-                handler.value.createChannel(opened, channelType: .directTCPIP(target)) { remote, _ in
+                let kind: SSHChannelType
+                let command: String?
+                switch plan(local) {
+                case .success(let planned): (kind, command) = planned
+                case .failure(let error): return local.eventLoop.makeFailedFuture(error)
+                }
+                handler.value.createChannel(opened, channelType: kind) { remote, _ in
                     remote.eventLoop.makeCompletedFuture {
                         let (a, b) = GlueHandler.matchedPair()
-                        try remote.pipeline.syncOperations.addHandlers([SSHWrapper(), a])
+                        var handlers: [ChannelHandler] = [SSHWrapper()]
+                        if let command { handlers.append(ExecStarter(command: command)) }
+                        handlers.append(a)
+                        try remote.pipeline.syncOperations.addHandlers(handlers)
                         try local.pipeline.syncOperations.addHandler(b)
                     }
                 }
@@ -51,6 +71,22 @@ final class NativeVisorSSHSession: VisorSSHSession {
         for listener in listeners { listener.close(promise: nil) }
         listeners = []
         root.close(promise: nil)
+    }
+}
+
+/// Asks a session channel to run a command, once the channel is up; a
+/// refusal closes it (and with it the connection glued to it).
+private final class ExecStarter: ChannelInboundHandler {
+    typealias InboundIn = ByteBuffer
+    private let command: String
+    init(command: String) { self.command = command }
+
+    func channelActive(context: ChannelHandlerContext) {
+        let loopBound = NIOLoopBound(context, eventLoop: context.eventLoop)
+        context.triggerUserOutboundEvent(SSHChannelRequestEvent.ExecRequest(command: command, wantReply: true)).whenFailure { _ in
+            loopBound.value.close(promise: nil)
+        }
+        context.fireChannelActive()
     }
 }
 

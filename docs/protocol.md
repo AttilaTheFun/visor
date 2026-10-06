@@ -20,12 +20,19 @@ proxy, a tunnel — forwarding one address to it; opened to the network
 VPN or a tunnel to reach directly. It serves plain TCP, or TLS with a
 PKCS#12 identity where the system can (the Mac); otherwise TLS is the
 front's. The server does not listen at all without a password set.
+With `sshEnabled` (the default; `visor-server ssh on|off`) it also
+serves the same on a socket file only its user can open,
+`~/.visor/server.sock`: a client that comes through the computer's own
+SSH as that user reaches it there (running `nc -U ~/.visor/server.sock`
+per connection) and is already signed in.
 
 A request is answered when `Authorization: Bearer` is the password from
-the menu bar app, or a token from `hello`. Nothing about the road is
-trusted: no header names a user, and every device signs in the same
-way, with the password the connection code carries. The API reads the
-same under a mount path a front forwards whole (`/visor/api/sessions`).
+the menu bar app, or a token from `hello` — or when it came on the
+socket file, where no bearer is needed. Nothing else about the road is
+trusted: no header names a user, and every device on the network signs
+in the same way, with the password the connection code carries. The API
+reads the same under a mount path a front forwards whole
+(`/visor/api/sessions`).
 
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
@@ -98,7 +105,7 @@ and `subscribe` and stream the rest.
 
 | type | fields | meaning |
 |---|---|---|
-| `login` | `token` (from `hello`) or `password` | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
+| `login` | `token` (from `hello`) or `password`; neither on the socket file | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
 | `start` | `id`, `agent` (`claude`/`codex`/`openrouter`, or `shell` for a terminal session), `cwd`, `title`, `skipPermissions` | Create a session (the client picks the id; an empty title means the agent's name, numbered). Nothing is spawned until the first `send` — for a terminal, until a window takes it (`mode`). The client is subscribed to it. |
 | `send` | `session`, `text` | A user turn. To a terminal session: the text typed into its shell and entered; nothing is written down. |
 | `stop` | `session` | Kill the agent's process; the transcript stays and the next `send` resumes the agent's own session. |

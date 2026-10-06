@@ -1,3 +1,4 @@
+import Darwin
 import Network
 import Security
 import VisorServer
@@ -7,6 +8,8 @@ import VisorServer
 @MainActor
 final class NetworkListener: Listener {
     private let listener: NWListener
+    /// The socket file, when that is what is listened on: removed at stop.
+    private let unixPath: String?
 
     init(_ options: ListeningOptions, accept: @escaping @MainActor (any ByteStream) -> Void) throws {
         let parameters: NWParameters
@@ -19,14 +22,26 @@ final class NetworkListener: Listener {
             parameters = .tcp
         }
         parameters.allowLocalEndpointReuse = true
-        // IPv4 only. The default is one IPv6 socket meant to take IPv4 as
-        // well, which takes it from the LAN but not through a VPN's tun
-        // interface (Tailscale's): the address in the connection code
-        // then times out. Every address a code carries is IPv4.
-        if let ip = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options { ip.version = .v4 }
-        guard let endpointPort = NWEndpoint.Port(rawValue: options.port) else { throw NWError.posix(.EINVAL) }
-        if !options.everywhere { parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: endpointPort) }
-        listener = try NWListener(using: parameters, on: options.everywhere ? endpointPort : .any)
+        unixPath = options.unixPath
+        if let path = options.unixPath {
+            // A socket file of this user's alone: a stale one is replaced,
+            // and the new one is closed to everyone else once it exists.
+            unlink(path)
+            parameters.requiredLocalEndpoint = .unix(path: path)
+            listener = try NWListener(using: parameters)
+            listener.stateUpdateHandler = { state in
+                if case .ready = state { chmod(path, 0o600) }
+            }
+        } else {
+            // IPv4 only. The default is one IPv6 socket meant to take IPv4
+            // as well, which takes it from the LAN but not through a VPN's
+            // tun interface (Tailscale's): the address in the connection
+            // code then times out. Every address a code carries is IPv4.
+            if let ip = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options { ip.version = .v4 }
+            guard let endpointPort = NWEndpoint.Port(rawValue: options.port) else { throw NWError.posix(.EINVAL) }
+            if !options.everywhere { parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: endpointPort) }
+            listener = try NWListener(using: parameters, on: options.everywhere ? endpointPort : .any)
+        }
         listener.newConnectionHandler = { connection in
             MainActor.assumeIsolated { accept(NetworkStream(connection)) }
         }
@@ -47,5 +62,6 @@ final class NetworkListener: Listener {
 
     func stop() {
         listener.cancel()
+        if let unixPath { unlink(unixPath) }
     }
 }

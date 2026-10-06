@@ -66,14 +66,29 @@ public final class VisorAgentServer: AgentServer {
 
     public func authenticate(_ record: AgentServerRecord) async throws -> String? {
         self.record = record
-        if let sshAddress { try await openTunnel(sshAddress) }
+        if let sshAddress {
+            try await openTunnel(sshAddress)
+            // The socket file first, signed in by SSH alone; a server that
+            // does not serve it is reached at its port, with the password.
+            if let name = try? await hello() { return name }
+            try await fallBackToPort()
+        }
+        do {
+            return try await hello()
+        } catch {
+            closeTunnel()
+            throw error
+        }
+    }
+
+    /// `hello`: the server's name, and the token for the channel's login.
+    /// A 401 is the server asking for a password.
+    private func hello() async throws -> String? {
         do {
             let hello = try await call("GET", "/hello")
             token = hello.token
             return hello.host.flatMap { $0.isEmpty ? nil : $0 }
         } catch {
-            closeTunnel()
-            // A 401 is the Mac asking for a password.
             if VisorHost.http?.status(of: error) == 401 { throw AgentServerError.needsAuthentication }
             throw error
         }

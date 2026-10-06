@@ -37,9 +37,12 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   shipped. On a Mac or an iPhone the address can be the computer's own SSH
   (Remote Login), `user@host[:port]`, through jump hosts if need be
   (`?via=user@jump`): the client opens the connection with a key it
-  makes and keeps, and runs the same wire protocol through a port
-  forwarded to the server's loopback — nothing open on the network but
-  SSH, and nothing added to the server. A fork that hosts agents on
+  makes and keeps, and runs the same wire protocol through it. The
+  server lets such a client in without a password, at a socket file only
+  its user can open (Settings: "SSH, no password"), SSH having signed
+  the user in already; with that off, the port on the computer's
+  loopback, with the password. Nothing has to be open on the network
+  but SSH. A fork that hosts agents on
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one

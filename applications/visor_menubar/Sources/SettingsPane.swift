@@ -74,11 +74,17 @@ struct SettingsPane: View {
                 Text("Password")
             }
             Section {
-                Toggle("Reachable from the network", isOn: Binding(get: { server.settings.reachableFromNetwork },
-                                                                  set: { server.settings.reachableFromNetwork = $0 }))
+                Toggle("HTTP, with the password", isOn: Binding(get: { server.settings.reachableFromNetwork },
+                                                                set: { server.settings.reachableFromNetwork = $0 }))
                 Text(server.settings.reachableFromNetwork
-                     ? "The server listens on every interface, port \(String(server.port)): a LAN, a VPN or a tunnel reaches it directly, with the password."
-                     : "Only this Mac reaches the server, on 127.0.0.1:\(String(server.port)). A reverse proxy or a tunnel on this Mac is the road in; set its address below.")
+                     ? "The server listens on every interface, port \(String(server.port)): the LAN, a VPN or a tunnel reaches it directly, with the password."
+                     : "Off: only this Mac reaches the port, on 127.0.0.1:\(String(server.port)). A reverse proxy or a tunnel on this Mac is the road in; set its address below.")
+                    .font(.caption).foregroundColor(.secondary)
+                Toggle("SSH, no password", isOn: Binding(get: { server.settings.sshEnabled },
+                                                         set: { server.settings.sshEnabled = $0 }))
+                Text(server.settings.sshEnabled
+                     ? "A client that comes through this Mac's Remote Login as you (its address user@host) is already you: it reaches the server at ~/.visor/server.sock with no password."
+                     : "Off: a client that comes through Remote Login reaches the port on this Mac, with the password.")
                     .font(.caption).foregroundColor(.secondary)
                 TextField("Address clients take (https://proxy.example.com/visor)", text: $publicAddress)
                     .onSubmit { server.settings.publicAddress = publicAddress }

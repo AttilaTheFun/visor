@@ -46,7 +46,8 @@ public final class VisorServer {
         didSet {
             guard settings != oldValue else { return }
             settings.keep(at: Self.settingsURL)
-            if settings.reachableFromNetwork != oldValue.reachableFromNetwork || settings.tlsIdentityPath != oldValue.tlsIdentityPath {
+            if settings.reachableFromNetwork != oldValue.reachableFromNetwork || settings.tlsIdentityPath != oldValue.tlsIdentityPath
+                || settings.sshEnabled != oldValue.sshEnabled {
                 listenAgain()
             }
         }
@@ -82,6 +83,8 @@ public final class VisorServer {
     public let port: UInt16
 
     var listener: (any Listener)?
+    /// The socket file SSH clients reach, while `settings.sshEnabled`.
+    var socketListener: (any Listener)?
     var http: HTTPServer?
     var connections: [ObjectIdentifier: ClientConnection] = [:]
 

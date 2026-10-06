@@ -22,6 +22,9 @@ extension ServerCommand {
         } else {
             print("Only this computer reaches it: a reverse proxy or a tunnel here is the road in (`network on` opens it to the network).")
         }
+        print(settings.sshEnabled
+              ? "Clients through this computer's SSH reach it at \(VisorServer.socketPath) without a password."
+              : "Clients through this computer's SSH reach the port, with the password (`ssh on` lets them in without).")
         if settings.publicAddress.isEmpty {
             print("Clients are told " + (Self.reachableAddress(platform, settings).map { "\($0)." } ?? "no address: `address <url>` sets one."))
         } else {
@@ -48,6 +51,21 @@ extension ServerCommand {
         }
         settings.keep(at: VisorServer.settingsURL)
         print(settings.reachableFromNetwork ? "The network reaches the server directly, from its next start." : "Only this computer reaches the server, from its next start.")
+    }
+
+    /// Lets SSH clients in without a password, or not.
+    @MainActor
+    func ssh(_ value: String?) throws {
+        var settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        switch value {
+        case "on": settings.sshEnabled = true
+        case "off": settings.sshEnabled = false
+        default: throw CommandLineError.usage("ssh on, or ssh off")
+        }
+        settings.keep(at: VisorServer.settingsURL)
+        print(settings.sshEnabled
+              ? "Clients through this computer's SSH are let in without a password, from the server's next start."
+              : "Clients through this computer's SSH need the password, from the server's next start.")
     }
 
     /// Shows or sets the address clients are told.

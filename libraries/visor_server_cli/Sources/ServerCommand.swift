@@ -30,6 +30,10 @@ public struct ServerCommand {
           network  `network on` lets the network reach the server directly
                    (every interface); `network off` (the default) keeps it to
                    this computer, with a reverse proxy or a tunnel in front.
+          ssh      `ssh on` (the default) also serves a socket file only this
+                   user can open, for clients that come through the
+                   computer's own SSH: no password; `ssh off` leaves them
+                   the port, with the password.
           address  Shows the address clients are told; `address <url>` sets
                    it (what a proxy, a tunnel or a name gives), `address -`
                    clears it. The server takes it when started again.
@@ -55,6 +59,7 @@ public struct ServerCommand {
             case "password": password(rest.first)
             case "code": try code()
             case "network": try network(rest.first)
+            case "ssh": try ssh(rest.first)
             case "address": address(rest.first)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")

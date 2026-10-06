@@ -8,6 +8,7 @@ public struct WinsockListening: Listening {
     @MainActor
     public func listen(_ options: ListeningOptions, accept: @escaping @MainActor (any ByteStream) -> Void) throws -> any Listener {
         guard options.tls == nil else { throw ListeningError.tlsUnavailable }
+        guard options.unixPath == nil else { throw ListeningError.unixUnavailable }
         return try WinsockListener(port: options.port, everywhere: options.everywhere, accept: accept)
     }
 }

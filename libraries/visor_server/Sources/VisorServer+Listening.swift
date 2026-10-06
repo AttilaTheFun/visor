@@ -1,6 +1,8 @@
 // Listening: one port for the socket and the REST side, on loopback or
-// on every interface, plain or over TLS, as the settings say; and the
-// agents' model lists kept fresh.
+// on every interface, plain or over TLS, as the settings say; the same
+// on a socket file only this user can open, for clients that come
+// through the computer's own SSH (trusted: no password); and the agents'
+// model lists kept fresh.
 
 import ClaudeTranscript
 import Foundation
@@ -37,8 +39,35 @@ extension VisorServer {
             lastError = "\(error)"
             Self.log("could not listen on \(port): \(error)")
         }
+        listenForSSH()
         keepModelsFresh()
         resumePending()
+    }
+
+    /// The socket file: `~/.visor/server.sock`, short enough for a socket
+    /// path anywhere, in a folder of this user's alone — or where a test
+    /// or a staging server puts its own, away from the installed server's.
+    public static var socketPath: String {
+        socketPathOverride ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".visor/server.sock").path
+    }
+    public static var socketPathOverride: String?
+
+    /// Listens on the socket file, when SSH clients are let in without a
+    /// password. A system without socket files, or a folder that cannot
+    /// be made, is logged and leaves the port as the only road.
+    private func listenForSSH() {
+        guard settings.sshEnabled, socketListener == nil else { return }
+        let path = Self.socketPath
+        let folder = (path as NSString).deletingLastPathComponent
+        do {
+            try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            socketListener = try ServerPlatform.current.listening.listen(ListeningOptions(port: port, unixPath: path)) { [weak self] stream in
+                self?.accept(stream, trusted: true)
+            }
+            Self.log("listening for SSH clients at \(path)")
+        } catch {
+            Self.log("not listening for SSH clients: \(error)")
+        }
     }
 
     /// Asks the agents for their models now and every few hours (a new
@@ -76,22 +105,26 @@ extension VisorServer {
     func stopListening() {
         listener?.stop()
         listener = nil
+        socketListener?.stop()
+        socketListener = nil
         listening = false
         http = nil
     }
 
     /// A connection: its first bytes say whether it is the live channel or
-    /// a request of the REST side.
-    func accept(_ stream: any ByteStream) {
+    /// a request of the REST side. A trusted one (the socket file) is let
+    /// in without the password.
+    func accept(_ stream: any ByteStream, trusted: Bool = false) {
         FrontDoor(stream: stream, socket: { [weak self] stream, received in
-            self?.acceptClient(stream, received: received)
+            self?.acceptClient(stream, received: received, trusted: trusted)
         }, http: { [weak self] stream, received in
-            self?.http?.serve(stream, received: received)
+            self?.http?.serve(stream, received: received, trusted: trusted)
         }).start()
     }
 
-    private func acceptClient(_ stream: any ByteStream, received: Data) {
+    private func acceptClient(_ stream: any ByteStream, received: Data, trusted: Bool) {
         let client = ClientConnection(stream: stream, received: received)
+        client.trusted = trusted
         let key = ObjectIdentifier(client)
         connections[key] = client
         clientCount = connections.count

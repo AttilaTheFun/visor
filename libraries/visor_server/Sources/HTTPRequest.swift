@@ -3,6 +3,10 @@ public struct HTTPRequest {
     public var path: String
     public var headers: [String: String]
     public var body: String
+    /// Whether the connection it came on is one only this user could
+    /// open (the socket file an SSH client reaches): then it is let in
+    /// without a bearer.
+    public var trusted = false
 
     /// The bearer token; "" for a bare `Bearer` (no password).
     public var authorization: String? {

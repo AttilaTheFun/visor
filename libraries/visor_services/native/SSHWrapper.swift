@@ -12,7 +12,9 @@ final class SSHWrapper: ChannelDuplexHandler {
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let data = unwrapInboundIn(data)
-        guard case .channel = data.type, case .byteBuffer(let buffer) = data.data else { return context.close(promise: nil) }
+        guard case .byteBuffer(let buffer) = data.data else { return context.close(promise: nil) }
+        // A command's complaints (its standard error) are not the stream.
+        guard case .channel = data.type else { return }
         context.fireChannelRead(wrapInboundOut(buffer))
     }
 

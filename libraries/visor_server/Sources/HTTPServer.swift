@@ -19,16 +19,17 @@ public final class HTTPServer {
 
     /// Serves one connection: the request, once whole, is answered and the
     /// connection closed.
-    func serve(_ stream: any ByteStream, received: Data) {
+    func serve(_ stream: any ByteStream, received: Data, trusted: Bool = false) {
         let exchange = Exchange()
         exchange.received = received
         let take: @MainActor (Data?) -> Void = { [weak self] chunk in
             guard let self, !exchange.answered else { return }
             if let chunk { exchange.received.append(chunk) } else if exchange.received.isEmpty { return stream.close() }
-            guard let request = Self.parse(exchange.received) else {
+            guard var request = Self.parse(exchange.received) else {
                 if chunk == nil { stream.close() }
                 return
             }
+            request.trusted = trusted
             exchange.answered = true
             if request.method == "OPTIONS" {
                 self.write(HTTPResponse(204), to: stream)

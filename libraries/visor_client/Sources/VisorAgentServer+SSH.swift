@@ -1,10 +1,13 @@
 // A server reached over SSH: the computer's `sshd` is the road in,
 // authenticated by this device's key, and the server itself is reached
-// on its own loopback through a forwarded port. Everything else is the
-// HTTP server over that port — the sign-in with the password, the live
-// channel, the one-shot calls, the polling fallback. Nothing has to be
-// open on the computer's network but SSH, and nothing is added to the
-// server.
+// through it — at its socket file, where a connection as the user is
+// already signed in and no password is asked (`nc -U` run on the
+// computer for each connection), or, where the server does not serve
+// that, at its port on the computer's loopback, with the password.
+// Everything else is the HTTP server over the port here — the sign-in,
+// the live channel, the one-shot calls, the polling fallback. Nothing
+// has to be open on the computer's network but SSH, and nothing is
+// added to the server.
 
 import VisorProtocol
 import VisorServices
@@ -12,10 +15,14 @@ import VisorServices
 extension VisorAgentServer {
     /// The server's port on the computer's loopback.
     static let serverPort = Int(Envelope.defaultPort)
+    /// What reaches the server's socket file on the computer, run there
+    /// for each connection (`VisorServer.socketPath`).
+    static let attachCommand = "nc -U ~/.visor/server.sock"
 
     /// Opens the SSH connection along the address's route — each hop's
-    /// host key kept the first time and compared after — and forwards a
-    /// port here to the server; `address` is then the tunnel's.
+    /// host key kept the first time and compared after — and a port here
+    /// that reaches the server's socket file; `address` is then the
+    /// tunnel's. `fallBackToPort` reaches the port instead.
     func openTunnel(_ address: SSHAddress) async throws {
         closeTunnel()
         guard let ssh = VisorHost.ssh else { throw AgentServerError.message("This app cannot reach a computer over SSH") }
@@ -38,13 +45,23 @@ extension VisorAgentServer {
             VisorHost.settings?.set(key: SSHAddress.hostKeySetting(hop), value: session.hostKeys[index])
         }
         do {
-            let port = try await session.forward(toPort: Self.serverPort)
+            let port = try await session.attach(command: Self.attachCommand)
             tunnelSession = session
             tunnel = ServerAddress("http://127.0.0.1:\(port)")
         } catch {
             session.close()
-            throw AgentServerError.message("\(address.target.host) could not forward a port: \(error)")
+            throw AgentServerError.message("\(address.target.host) could not open a channel: \(error)")
         }
+    }
+
+    /// The server's port on the computer's loopback, with the password,
+    /// for a server that does not serve its socket file (SSH clients not
+    /// let in without a password, an older server, a system without
+    /// socket files, no `nc` there).
+    func fallBackToPort() async throws {
+        guard let session = tunnelSession else { throw AgentServerError.message("Not connected over SSH") }
+        let port = try await session.forward(toPort: Self.serverPort)
+        tunnel = ServerAddress("http://127.0.0.1:\(port)")
     }
 
     func closeTunnel() {

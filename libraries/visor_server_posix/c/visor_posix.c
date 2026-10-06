@@ -10,6 +10,8 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <termios.h>
 #include <unistd.h>
@@ -112,6 +114,25 @@ int visor_listen(unsigned short port, int everywhere) {
     address.sin_port = htons(port);
     address.sin_addr.s_addr = htonl(everywhere ? INADDR_ANY : INADDR_LOOPBACK);
     if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || listen(listener, 64) != 0) {
+        int error = errno;
+        close(listener);
+        errno = error;
+        return -1;
+    }
+    return listener;
+}
+
+int visor_listen_unix(const char *path) {
+    struct sockaddr_un address;
+    if (strlen(path) >= sizeof address.sun_path) { errno = ENAMETOOLONG; return -1; }
+    int listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listener < 0) return -1;
+    (void)fcntl(listener, F_SETFD, FD_CLOEXEC);
+    unlink(path);
+    memset(&address, 0, sizeof address);
+    address.sun_family = AF_UNIX;
+    strncpy(address.sun_path, path, sizeof address.sun_path - 1);
+    if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || chmod(path, 0600) != 0 || listen(listener, 64) != 0) {
         int error = errno;
         close(listener);
         errno = error;
