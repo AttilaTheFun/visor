@@ -153,10 +153,13 @@ final class AuthTests: ServerTestCase {
         let mode = try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? Int
         XCTAssertEqual(mode.map { $0 & 0o777 }, 0o600)
 
-        // As the client reaches it: nc -U on the computer, HTTP through it.
-        let answer = try await Self.through(path, "GET /api/hello HTTP/1.1\r\nHost: visor\r\n\r\n")
-        XCTAssertTrue(answer.hasPrefix("HTTP/1.1 200"), answer)
-        XCTAssertTrue(answer.contains("\"hello\""), answer)
+        // As the client reaches it: nc -U on the computer, HTTP through it
+        // (where there is an nc; CI's Linux image installs one).
+        if let nc = ["/usr/bin/nc", "/bin/nc"].first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            let answer = try await Self.through(path, "GET /api/hello HTTP/1.1\r\nHost: visor\r\n\r\n", nc: nc)
+            XCTAssertTrue(answer.hasPrefix("HTTP/1.1 200"), answer)
+            XCTAssertTrue(answer.contains("\"hello\""), answer)
+        }
 
         server.settings.sshEnabled = false
         for _ in 0..<50 where FileManager.default.fileExists(atPath: path) { try? await Task.sleep(nanoseconds: 50_000_000) }
@@ -164,9 +167,9 @@ final class AuthTests: ServerTestCase {
     }
 
     /// Sends `text` to the socket file with `nc -U` and takes what comes back.
-    private static func through(_ path: String, _ text: String) async throws -> String {
+    private static func through(_ path: String, _ text: String, nc: String) async throws -> String {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/nc")
+        process.executableURL = URL(fileURLWithPath: nc)
         process.arguments = ["-U", path]
         let input = Pipe(), output = Pipe()
         process.standardInput = input
