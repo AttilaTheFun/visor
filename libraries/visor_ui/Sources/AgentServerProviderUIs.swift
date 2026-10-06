@@ -6,7 +6,7 @@ import VisorClient
 /// provider.
 @MainActor
 public enum AgentServerProviderUIs {
-    private static var registry: [any AgentServerProviderUI] = [HTTPAgentServerProviderUI()]
+    private static var registry: [any AgentServerProviderUI] = [VisorAgentServerProviderUI()]
 
     public static var all: [any AgentServerProviderUI] { registry }
 

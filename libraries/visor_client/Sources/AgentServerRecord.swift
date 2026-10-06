@@ -25,7 +25,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     public var renamed: Bool
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
-                provider: String = HTTPAgentServerProvider.name, renamed: Bool = false) {
+                provider: String = VisorAgentServerProvider.name, renamed: Bool = false) {
         self.id = id
         self.name = name
         self.address = address
@@ -79,7 +79,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         self.init(id: id, name: json["name"].string ?? "", address: address,
                   secret: json["secret"].string ?? json["password"].string ?? "",
                   everConnected: json["everConnected"].bool ?? false,
-                  provider: json["provider"].string ?? json["backend"].string ?? HTTPAgentServerProvider.name,
+                  provider: json["provider"].string ?? json["backend"].string ?? VisorAgentServerProvider.name,
                   renamed: json["renamed"].bool ?? false)
     }
 }

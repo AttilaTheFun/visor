@@ -1,21 +1,20 @@
 import VisorProtocol
 import VisorServices
 
-/// A Visor server speaking the wire protocol (docs/protocol.md), wherever
-/// it is reached: a name on a network (HTTPS at the root), any URL a
-/// proxy, a tunnel or a port gives (`ServerAddress`), or the computer's
-/// own SSH (`SSHAddress`, `user@host`), through which the server is
-/// reached on its loopback (HTTPAgentServer+SSH). `hello` over HTTP
-/// first — the server lets this device in on the road's word (its owner's
-/// device) or on the password, and hands back its name and a token —
-/// then the socket at the root for the live channel, logged in with the
-/// token, and `/api` for the one-shot calls, the password as the bearer
-/// token. Over the host's socket and HTTP services, so the same code runs
-/// in a browser.
+/// A Visor server speaking the wire protocol (docs/protocol.md), reached
+/// as its address says: a name on a network (HTTPS at the root), any
+/// http(s) URL a proxy, a tunnel or a port gives (`ServerAddress`), or
+/// the computer's own SSH (`SSHAddress`, `user@host`), through which the
+/// server is reached on its loopback (VisorAgentServer+SSH). `hello` over
+/// HTTP first — the server lets this device in on the password, and
+/// hands back its name and a token — then the socket at the root for the
+/// live channel, logged in with the token, and `/api` for the one-shot
+/// calls, the password as the bearer token. Over the host's socket and
+/// HTTP services, so the same code runs in a browser.
 ///
 /// The live channel is an accessory. Where it cannot be had — the host
 /// has no socket service, or the road does not carry WebSockets — the
-/// server is followed by polling instead (HTTPAgentServer+Polling): the
+/// server is followed by polling instead (VisorAgentServer+Polling): the
 /// list of sessions and each open session's state are asked for and held
 /// until they change, as the transcript always is. The socket is tried
 /// again now and then, and takes over when it opens.
@@ -26,7 +25,7 @@ import VisorServices
 /// a change of network) otherwise looks open until TCP gives up. The
 /// socket has 4 s to open and have its login answered. It is a message of
 /// the protocol, not a WebSocket ping frame, which a browser cannot send.
-public final class HTTPAgentServer: AgentServer {
+public final class VisorAgentServer: AgentServer {
     /// How often the channel is asked whether it is still there, and how
     /// long it has to say anything at all before it is taken as dropped.
     static let heartbeatInterval: Int32 = 16_000
@@ -50,7 +49,7 @@ public final class HTTPAgentServer: AgentServer {
     var address: ServerAddress? { sshAddress != nil ? tunnel : ServerAddress(record.address) }
     /// What `hello` gave for the channel's login.
     var token: String?
-    /// Following by polling instead of the channel (HTTPAgentServer+Polling).
+    /// Following by polling instead of the channel (VisorAgentServer+Polling).
     var polling: Polling?
     private var socketID: Int32?
     private var reader: Task<Void, Never>?

@@ -105,7 +105,7 @@ final class SSHTransportTests: XCTestCase {
     /// through it; the next sign-in offers the kept key and closes the
     /// earlier connection.
     func testTheFirstSignInKeepsTheHostKeyAndTheNextOffersIt() async throws {
-        let server = HTTPAgentServer(record: record())
+        let server = VisorAgentServer(record: record())
         let name = try await server.authenticate(record())
         XCTAssertEqual(name, "Mini")
         XCTAssertEqual(ssh.connects.count, 1)
@@ -125,7 +125,7 @@ final class SSHTransportTests: XCTestCase {
     /// hop's key kept under its own name.
     func testJumpHostsAreOnTheWayAndEachKeyIsKept() async throws {
         ssh.hostKeysGiven = ["ssh-ed25519 AAAAjump", "ssh-ed25519 AAAAhost mini"]
-        let server = HTTPAgentServer(record: record("logan@10.0.0.2?via=logan@jump.example:2200"))
+        let server = VisorAgentServer(record: record("logan@10.0.0.2?via=logan@jump.example:2200"))
         _ = try await server.authenticate(record("logan@10.0.0.2?via=logan@jump.example:2200"))
         XCTAssertEqual(ssh.connects[0].route, [VisorSSHHop(user: "logan", host: "jump.example", port: 2200), VisorSSHHop(user: "logan", host: "10.0.0.2", port: 22)])
         XCTAssertEqual(ssh.connects[0].hostKeys, [nil, nil])
@@ -137,7 +137,7 @@ final class SSHTransportTests: XCTestCase {
     /// that refuses the device's key is a sign-in to redo; a host with no
     /// SSH says so; nothing is said over HTTP in any case.
     func testWhatSSHRefusesIsSaidAsTheConnectionSaysIt() async throws {
-        let server = HTTPAgentServer(record: record())
+        let server = VisorAgentServer(record: record())
         ssh.failure = .hostKeyChanged
         do {
             _ = try await server.authenticate(record())
@@ -170,13 +170,13 @@ final class SSHTransportTests: XCTestCase {
     /// Closing the channel closes the SSH connection with it; a plain
     /// address never touches SSH.
     func testClosingTheChannelClosesTheConnection() async throws {
-        let server = HTTPAgentServer(record: record())
+        let server = VisorAgentServer(record: record())
         _ = try await server.authenticate(record())
         server.closeChannel()
         XCTAssertTrue(ssh.sessions[0].closed)
         XCTAssertNil(server.address, "no tunnel, no address")
 
-        let plain = HTTPAgentServer(record: record("http://10.0.0.2:7433"))
+        let plain = VisorAgentServer(record: record("http://10.0.0.2:7433"))
         _ = try await plain.authenticate(record("http://10.0.0.2:7433"))
         XCTAssertEqual(ssh.connects.count, 1)
         XCTAssertEqual(http.urls.last, "http://10.0.0.2:7433/api/hello")

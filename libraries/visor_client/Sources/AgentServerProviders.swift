@@ -8,7 +8,7 @@ import VisorServices
 /// sheet with nothing chosen, gets.
 @MainActor
 public enum AgentServerProviders {
-    private static var registry: [any AgentServerProvider] = [HTTPAgentServerProvider()]
+    private static var registry: [any AgentServerProvider] = [VisorAgentServerProvider()]
 
     public static var all: [any AgentServerProvider] { registry }
 
@@ -18,7 +18,7 @@ public enum AgentServerProviders {
     }
 
     public static func provider(for id: String) -> (any AgentServerProvider)? {
-        let id = HTTPAgentServerProvider.formerNames.contains(id) ? HTTPAgentServerProvider.name : id
+        let id = VisorAgentServerProvider.formerNames.contains(id) ? VisorAgentServerProvider.name : id
         return registry.first { $0.id == id }
     }
 

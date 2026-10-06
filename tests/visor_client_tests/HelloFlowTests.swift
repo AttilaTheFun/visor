@@ -383,7 +383,7 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertEqual(host?.record.address, "mini.example")
         XCTAssertEqual(host?.record.secret, "pearl-grove")
         XCTAssertEqual(host?.record.name, "Studio Mac")
-        XCTAssertEqual(host?.record.provider, "http")
+        XCTAssertEqual(host?.record.provider, "visor")
         // The same computer again (a pasted code): updated, not doubled.
         store.open(ConnectionCode(name: "Mini", host: "mini.example", password: "new-pass").encoded)
         XCTAssertEqual(store.servers.count, 1)

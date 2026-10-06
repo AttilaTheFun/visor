@@ -3,8 +3,8 @@ import VisorClient
 
 /// A Visor server's views: a connection code (or an address and password)
 /// to add one, and its address and password to edit.
-public struct HTTPAgentServerProviderUI: AgentServerProviderUI {
-    public let providerID = HTTPAgentServerProvider.name
+public struct VisorAgentServerProviderUI: AgentServerProviderUI {
+    public let providerID = VisorAgentServerProvider.name
     public let addTitle = "Add Computer"
     public init() {}
 

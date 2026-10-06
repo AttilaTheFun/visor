@@ -205,13 +205,13 @@ streamed delta for a message the record already carries is
 ignored (both ends); the turn's end sweeps served streams.
 
 **Client** (`libraries/visor_client`): `AgentServerConnection` per server,
-over the provider's `AgentServer` (`HTTPAgentServer`: `hello`, ws(s) +
+over the provider's `AgentServer` (`VisorAgentServer`: `hello`, ws(s) +
 http(s) bearer at a `ServerAddress`, each operation mapped to the wire
-protocol in `HTTPAgentServer+Operations.swift`, and polling in its
-place when the socket cannot be had, `HTTPAgentServer+Polling.swift`;
+protocol in `VisorAgentServer+Operations.swift`, and polling in its
+place when the socket cannot be had, `VisorAgentServer+Polling.swift`;
 an SSH address (`SSHAddress`, `user@host[:port]`, `?via=user@jump,…`
 for jump hosts) is the same server reached through the computer's own
-SSH, `HTTPAgentServer+SSH.swift`: the route opened through the host's
+SSH, `VisorAgentServer+SSH.swift`: the route opened through the host's
 `VisorSSHService` with the device's key, each hop's host key kept in the
 settings the first time (`ssh.hostkey.<user@host:port>`) and compared
 after, the server's port 7433 forwarded from a local port, and `address`
@@ -262,8 +262,8 @@ and run the command in a terminal session.
 limit, so a try that hangs (a request riding a connection that died while
 the app was away) becomes a drop and a retry: the sign-in has 5 s
 (`signInTimeout`), the socket 4 s to open and have its login answered
-(`HTTPAgentServer.loginTimeout`). The heartbeat
-(`HTTPAgentServer.watch`): a `ping` envelope every 16 s, and a
+(`VisorAgentServer.loginTimeout`). The heartbeat
+(`VisorAgentServer.watch`): a `ping` envelope every 16 s, and a
 channel that says nothing for 8 s after one is closed and reported as
 dropped, so a socket that died quietly (a sleep, a change of network) is
 found in seconds rather than when TCP gives up. The poll

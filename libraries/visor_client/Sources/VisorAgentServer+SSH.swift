@@ -9,7 +9,7 @@
 import VisorProtocol
 import VisorServices
 
-extension HTTPAgentServer {
+extension VisorAgentServer {
     /// The server's port on the computer's loopback.
     static let serverPort = Int(Envelope.defaultPort)
 

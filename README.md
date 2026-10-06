@@ -31,10 +31,10 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   (`visor://connect?code=…`). Each computer is one agent server; what
   the client does with a server — signing in, the live channel, and
   every operation on sessions, folders and files — is the `AgentServer`
-  protocol, and `HTTPAgentServer` (the wire protocol: `hello`, ws(s) +
-  http(s) with a bearer, at any URL or a bare name; followed by
-  polling where the road carries no WebSocket) is the one shipped.
-  On a Mac or an iPhone the address can also be the computer's own SSH
+  protocol, and `VisorAgentServer` (the wire protocol: `hello`, ws(s) +
+  http(s) with a bearer, over HTTP, HTTPS or SSH as the address says;
+  followed by polling where the road carries no WebSocket) is the one
+  shipped. On a Mac or an iPhone the address can be the computer's own SSH
   (Remote Login), `user@host[:port]`, through jump hosts if need be
   (`?via=user@jump`): the client opens the connection with a key it
   makes and keeps, and runs the same wire protocol through a port

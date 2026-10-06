@@ -11,7 +11,7 @@ final class AccountEventTests: XCTestCase {
                                    limits: [UsageLimit(name: "Weekly", used: 0.17, resets: 1_791_654_291),
                                             UsageLimit(name: "Credits", left: 62_500, unit: .credits)],
                                    updated: 1_791_000_000)
-        guard case .account(let said, let agent)? = HTTPAgentServer.translate(Envelope.account(account, of: .codex).encoded()) else {
+        guard case .account(let said, let agent)? = VisorAgentServer.translate(Envelope.account(account, of: .codex).encoded()) else {
             return XCTFail("not an account event")
         }
         XCTAssertEqual(agent, .codex)
@@ -19,6 +19,6 @@ final class AccountEventTests: XCTestCase {
         // One without its agent is nothing to act on.
         var bare = Envelope(type: "account")
         bare.account = account
-        XCTAssertNil(HTTPAgentServer.translate(bare.encoded()))
+        XCTAssertNil(VisorAgentServer.translate(bare.encoded()))
     }
 }
