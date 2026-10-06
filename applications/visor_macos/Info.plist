@@ -13,12 +13,11 @@
     <key>CFBundleVersion</key>
     <string>20</string>
     <!-- A server may be plain http:// on a LAN or a VPN, which ATS would
-         otherwise refuse as cleartext. -->
+         otherwise refuse as cleartext. Arbitrary loads alone: with
+         NSAllowsLocalNetworking beside it, ATS ignores it. -->
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>
-        <true/>
-        <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
     <key>NSHumanReadableCopyright</key>

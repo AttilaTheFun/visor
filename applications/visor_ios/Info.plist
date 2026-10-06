@@ -22,8 +22,6 @@
     <dict>
         <key>NSAllowsArbitraryLoads</key>
         <true/>
-        <key>NSAllowsLocalNetworking</key>
-        <true/>
     </dict>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Visor connects to Visor Server on your Mac.</string>
