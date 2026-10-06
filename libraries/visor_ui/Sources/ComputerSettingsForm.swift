@@ -40,6 +40,7 @@ struct ComputerSettingsForm: View {
                 Button("Reconnect") { host.connect() }
                 Button("Forget this computer", role: .destructive, action: forget)
             }
+            ConnectionCodeSection(record: host.record)
             // What the client did about its connections, to send to
             // whoever is finding out why one was slow.
             Section {
