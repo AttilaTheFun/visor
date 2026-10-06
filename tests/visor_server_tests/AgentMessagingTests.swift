@@ -84,6 +84,9 @@ final class LinkedMessagingTests: ServerTestCase {
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         here = VisorServer(port: 7980)
+        // Its own settings: a server of its own, with an id of its own.
+        VisorServer.storeRoot = VisorServer.storeRoot?.appendingPathComponent("there")
+        try? FileManager.default.createDirectory(at: VisorServer.storeRoot!, withIntermediateDirectories: true)
         there = VisorServer(port: 7982)
         there.settings.publicAddress = "other-mac.example.ts.net"
         there.password = "there-password"
@@ -116,7 +119,7 @@ final class LinkedMessagingTests: ServerTestCase {
         here.sessions = [record("A", "Mini work")]
         there.sessions = [record("B", "Laptop work", busy: true)]
         for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
-        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.port)", password: "there-password"))
+        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.port)", password: "there-password").peer)
 
         let list = await ask("sessions")
         XCTAssertTrue(list.text?.contains("On this computer: none.") == true, list.text ?? "")
@@ -133,13 +136,13 @@ final class LinkedMessagingTests: ServerTestCase {
         XCTAssertTrue(queued.hasSuffix("Is the client done?"))
 
         let nowhere = await ask("read", about: "nowhere/B")
-        XCTAssertNotNil(nowhere.error, "an unlinked computer")
+        XCTAssertNotNil(nowhere.error, "a computer not on the network")
     }
 
     func testAWrongPasswordIsSaid() async {
         here.sessions = [record("A", "Mini work")]
         for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
-        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.port)", password: "wrong"))
+        here.adopt(ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.port)", password: "wrong").peer)
         let read = await ask("read", about: "other-mac/B")
         XCTAssertTrue(read.error?.contains("wrong password") == true, read.error ?? "")
     }
@@ -163,9 +166,10 @@ final class LinkedMessagingTests: ServerTestCase {
         XCTAssertEqual(here.route(request("POST", "/api/link", "here-password", body: link.encoded())).status, 200)
         link.text = codes[0]
         XCTAssertEqual(there.route(request("POST", "/api/link", "there-password", body: link.encoded())).status, 200)
-        XCTAssertEqual(here.links.map(\.host), ["other-mac.example.ts.net"])
-        XCTAssertEqual(there.links.map(\.host), ["this-mac.example.ts.net"])
-        XCTAssertEqual(there.links.first?.password, "here-password")
+        XCTAssertEqual(here.peers.map(\.addresses), [["other-mac.example.ts.net"]])
+        XCTAssertEqual(there.peers.map(\.addresses), [["this-mac.example.ts.net"]])
+        XCTAssertEqual(there.peers.first?.password, "here-password")
+        XCTAssertEqual(there.peers.first?.id, here.id, "the code carries the id")
         // A stranger gets no code.
         XCTAssertEqual(here.route(HTTPRequest(method: "GET", path: "/api/code", headers: [:], body: "")).status, 401)
     }
@@ -177,14 +181,14 @@ final class LinkedMessagingTests: ServerTestCase {
         let code = ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.port)", password: "there-password")
         let result = await here.link(code.encoded)
         XCTAssertNil(result)
-        XCTAssertEqual(here.links.map(\.host), [code.host])
+        XCTAssertEqual(here.peers.map(\.addresses), [[code.host]])
         // The other computer took this one's code back.
-        XCTAssertEqual(there.links.map(\.host), ["this-mac.example.ts.net"])
+        XCTAssertEqual(there.peers.map(\.addresses), [["this-mac.example.ts.net"]])
         XCTAssertEqual(VisorServer.slug("Logan’s MacBook Pro"), "logan-s-macbook-pro")
         let nonsense = await here.link("nonsense")
         XCTAssertEqual(nonsense, "That is not a connection code.")
-        here.unlink(host: code.host)
-        XCTAssertTrue(here.links.isEmpty)
-        XCTAssertTrue(VisorServer.keptLinks().isEmpty, "kept as unlinked")
+        here.forget(peer: code.host)
+        XCTAssertTrue(here.peers.isEmpty)
+        XCTAssertTrue(VisorServer.keptPeers().isEmpty, "kept as forgotten")
     }
 }

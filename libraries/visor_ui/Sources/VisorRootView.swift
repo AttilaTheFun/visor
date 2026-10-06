@@ -36,8 +36,6 @@ public struct VisorRootView: View {
     @State private var search = ""
     /// Messages matching the search, from every computer connected.
     @State private var messageHits: [(host: AgentServerConnection, hit: SearchHit)] = []
-    @State private var linking = false
-    @State private var linkResult: String?
 
     public init() {}
 
@@ -243,25 +241,10 @@ public struct VisorRootView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("add-computer")
-                // The servers of the computers here, linked to one another,
-                // so their agents reach each other's sessions.
-                if store.servers.count > 1 {
-                    Button { linkServers() } label: {
-                        Label(linking ? "Linking…" : "Link These Computers", systemImage: "link").rowLabel()
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(linking)
-                    .accessibilityIdentifier("link-computers")
-                }
             }
         }
         .insetGroupedList()
         .task(id: search.trimmed) { await searchMessages(search.trimmed) }
-        .alert("Link These Computers", isPresented: presenting($linkResult)) {
-            Button("OK") { linkResult = nil }
-        } message: {
-            Text(linkResult ?? "")
-        }
         .navigationTitle("Sessions")
         .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 440)
     }
@@ -279,16 +262,6 @@ public struct VisorRootView: View {
         }
         guard !Task.isCancelled else { return }
         messageHits = found
-    }
-
-    private func linkServers() {
-        linking = true
-        Task {
-            let problems = await store.linkServers()
-            linkResult = problems.map { "Some links failed:\n" + $0 }
-                ?? "The agents on each computer can now list, message and read the sessions on the others."
-            linking = false
-        }
     }
 
     /// A computer's rows: its sessions, its archives, its settings.

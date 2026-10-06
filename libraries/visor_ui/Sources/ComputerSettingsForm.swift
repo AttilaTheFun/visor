@@ -40,6 +40,20 @@ struct ComputerSettingsForm: View {
                         ? ". Followed by polling: this road carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn." : ""))
             }
             if overSSH, VisorHost.ssh != nil { DeviceKeySection() }
+            if !host.record.roads.isEmpty || host.road != nil {
+                Section {
+                    if let road = host.road, road != host.record.address {
+                        Text("Reached by \(road)").font(.footnote)
+                    }
+                    ForEach(host.record.roads, id: \.self) { road in
+                        Text(road).font(.footnote.monospaced()).foregroundColor(.secondary).lineLimit(1).truncationMode(.middle)
+                    }
+                } header: {
+                    Text("Other roads")
+                } footer: {
+                    Text("Addresses this computer and the others say it is reached at, tried in turn when the one above does not answer — and, last, through any other computer here that reaches it.")
+                }
+            }
             Section {
                 Button("Save and reconnect", action: save)
                     .disabled(address.trimmed.isEmpty)

@@ -101,26 +101,26 @@ struct SettingsPane: View {
                 Text("Network")
             }
             Section {
-                ForEach(server.links, id: \.host) { link in
+                ForEach(server.peers, id: \.self) { peer in
                     HStack {
                         VStack(alignment: .leading) {
-                            Text(link.name)
-                            Text(link.host).font(.caption).foregroundColor(.secondary)
+                            Text(peer.name)
+                            Text(peer.addresses.joined(separator: ", ")).font(.caption).foregroundColor(.secondary).lineLimit(1)
                         }
                         Spacer()
-                        Button("Unlink") { server.unlink(host: link.host) }
+                        Button("Forget") { server.forget(peer: peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id) }
                     }
                 }
                 HStack {
                     TextField("Another computer's connection code", text: $linkDraft)
-                    Button("Link") { link() }
+                    Button("Add") { link() }
                         .disabled(linking || linkDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                Text("The agents here can list, message and read the sessions on linked computers, and theirs the ones here. Paste the code on either computer: the link goes both ways.")
+                Text("The computers on the network: the agents here reach the sessions on each, and each reaches the ones here; a client of any of them learns of the rest, and is carried to one it cannot reach itself. A client that holds two computers introduces them; or paste a code here, once.")
                     .font(.caption).foregroundColor(.secondary)
                 if let linkMessage { Text(linkMessage).font(.caption).foregroundColor(.red) }
             } header: {
-                Text("Linked computers")
+                Text("Computers on the network")
             }
             Section {
                 let current = server.apnsKey
@@ -182,7 +182,7 @@ struct SettingsPane: View {
         Task {
             linkMessage = await server.link(linkDraft)
             // Kept here, even if the other did not link back: the code is done with.
-            if let code = ConnectionCode(parsing: linkDraft), server.links.contains(where: { $0.host == code.host }) { linkDraft = "" }
+            if let code = ConnectionCode(parsing: linkDraft), server.peers.contains(where: { $0.isSame(as: code.peer) }) { linkDraft = "" }
             linking = false
         }
     }

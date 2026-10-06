@@ -6,6 +6,11 @@
 // A server is added through its provider's own sign-in. For a Mac that is
 // one step: its connection code (pasted, or a scanned QR code's
 // `visor://connect?code=` link) carries its name, address and password.
+// Adding one adds this device to its network: the server tells of the
+// other computers it knows, each is added here with every road to it
+// (its own addresses, and through any server here that reaches it), and
+// the servers this device holds are introduced to one another, so their
+// agents reach each other's sessions with nothing more to do.
 
 import MessageCache
 import SwiftUI
@@ -125,36 +130,58 @@ public final class VisorStore: ObservableObject {
 
     public func server(for id: String) -> AgentServerConnection? { servers.first { $0.id == id } }
 
-    /// Links every connected server to one another, so the agents on each
-    /// reach the sessions on the others: each gives its connection code,
-    /// and each is handed the others'. Nil when all are linked; otherwise
-    /// what went wrong, per server.
-    public func linkServers() async -> String? {
-        let connected = servers.filter { $0.state == .connected }
-        guard connected.count > 1 else { return "Connect to two or more computers first." }
-        var codes: [(server: AgentServerConnection, code: String)] = []
-        var problems: [String] = []
-        for server in connected {
-            do { codes.append((server, try await server.connectionCode())) } catch { problems.append("\(server.record.name): \(Self.describe(error))") }
+    /// A server connected and said who it is: another record of the same
+    /// computer is folded into it, the computers it knows are taken in,
+    /// and it and the others here are introduced to one another.
+    private func joined(_ server: AgentServerConnection) async {
+        guard !VisorFixture.active else { return }
+        fold(server)
+        if let peers = try? await server.peers() {
+            for peer in peers { take(peer, from: server) }
         }
-        for (server, _) in codes {
-            for (other, code) in codes where other !== server {
-                do { try await server.link(code: code) } catch { problems.append("\(server.record.name) → \(other.record.name): \(Self.describe(error))") }
-            }
+        let others = servers.filter { $0 !== server }.compactMap(\.asPeer)
+        if !others.isEmpty { try? await server.introduce(others) }
+        if let me = server.asPeer {
+            for other in servers where other !== server && other.state == .connected { try? await other.introduce([me]) }
         }
-        return problems.isEmpty ? nil : problems.joined(separator: "\n")
     }
 
-    private static func describe(_ error: Error) -> String {
-        if let error = error as? AgentServerError {
-            switch error {
-            case .message(let message): return message
-            case .unsupported: return "it cannot be linked"
-            case .needsAuthentication: return "it needs signing in"
-            }
+    /// Two records of one computer (added by two roads before either had
+    /// said its id): the other's roads are kept here, the other goes.
+    private func fold(_ server: AgentServerConnection) {
+        let id = server.record.serverID
+        guard !id.isEmpty else { return }
+        for other in servers where other !== server && other.record.serverID == id {
+            server.update { $0.learnRoads(other.record.allRoads) }
+            remove(other)
         }
-        if let status = VisorHost.http?.status(of: error) { return status == 404 ? "its Visor Server is too old to link" : "it answered \(status)" }
-        return "not reachable"
+    }
+
+    /// What a server says of another computer: more roads (and the
+    /// password, if none is kept) for one held here, or a new one, added
+    /// and connected — by one of its own addresses, or through the server
+    /// that told of it.
+    func take(_ peer: Peer, from teller: AgentServerConnection) {
+        guard let first = peer.addresses.first, peer.id.isEmpty || peer.id != teller.record.serverID else { return }
+        if let known = servers.first(where: { $0.record.isSame(as: peer) }) {
+            known.learn(peer)
+            return
+        }
+        let record = AgentServerRecord(name: peer.name, address: first, secret: peer.password, serverID: peer.id, roads: Array(peer.addresses.dropFirst()))
+        let added = AgentServerConnection(record: record)
+        servers.append(added)
+        observe(added)
+        added.connect()
+        save()
+    }
+
+    /// The roads to a server through the others connected here: each
+    /// carries requests to a computer it knows (`/peer/<id>` under it).
+    func relayRoads(to target: AgentServerConnection) -> [String] {
+        let id = target.record.serverID
+        guard !id.isEmpty else { return [] }
+        return servers.filter { $0 !== target && $0.state == .connected && $0.record.serverID != id }
+            .compactMap { other in other.server.reachedAt.map { $0 + "/peer/" + id } }
     }
 
     /// The app came back to the front: every server is tried or checked
@@ -198,6 +225,14 @@ public final class VisorStore: ObservableObject {
             self.save()
         }
         server.onSessionsChange = { [weak self] in self?.publishWidget() }
+        server.relayRoads = { [weak self, weak server] in
+            guard let self, let server else { return [] }
+            return self.relayRoads(to: server)
+        }
+        server.onConnected = { [weak self, weak server] in
+            guard let self, let server else { return }
+            Task { await self.joined(server) }
+        }
     }
 
     /// The latest sessions on every server, for the home screen's widget:

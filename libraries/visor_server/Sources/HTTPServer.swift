@@ -42,6 +42,14 @@ public final class HTTPServer {
         if !exchange.answered { stream.receive(take) }
     }
 
+    /// The path on a request's first line ("" when there is none yet).
+    nonisolated static func requestPath(_ received: Data) -> String {
+        guard let end = headerEnd(received) else { return "" }
+        let head = String(decoding: received[..<end], as: UTF8.self)
+        let line = head.split(separator: "\r\n", maxSplits: 1).first.map { $0.split(separator: " ") } ?? []
+        return line.count >= 2 ? String(line[1]) : ""
+    }
+
     /// Where the head of a request ends (the blank line's first byte), or
     /// nil while it is still arriving.
     nonisolated static func headerEnd(_ bytes: some Collection<UInt8>) -> Int? {

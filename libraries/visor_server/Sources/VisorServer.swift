@@ -52,8 +52,11 @@ public final class VisorServer {
             }
         }
     }
-    /// The other computers' servers this one's agents reach (VisorServer+Links.swift).
-    public internal(set) var links: [ConnectionCode] = []
+    /// The other computers on the network, as this one knows them
+    /// (VisorServer+Peers.swift).
+    public internal(set) var peers: [Peer] = []
+    /// The road that last reached each peer, by its id: tried first.
+    var workingRoads: [String: String] = [:]
 
     /// The slash commands each agent listed when it last ran (VisorServer+Commands.swift).
     var knownCommands: [AgentKind: [SlashCommand]] = [:]
@@ -100,7 +103,8 @@ public final class VisorServer {
         self.port = port
         Self.adoptFormerFolders()
         password = Self.keptPassword()
-        links = Self.keptLinks()
+        peers = Self.keptPeers()
+        if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()
     }
 
@@ -124,7 +128,7 @@ public final class VisorServer {
     /// address to give and a password is set.
     public var connectionCode: ConnectionCode? {
         guard !password.isEmpty, let address = reachableAddress else { return nil }
-        return ConnectionCode(name: hostName, host: address, password: password)
+        return ConnectionCode(name: hostName, host: address, password: password, id: id)
     }
 
     /// sessions.json in the platform's data directory (on a Mac

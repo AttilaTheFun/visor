@@ -23,9 +23,15 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     /// Whether the user gave it its name: then the server's own name,
     /// which a sign-in gives, does not replace it.
     public var renamed: Bool
+    /// The server's id on the network of computers, once a sign-in has
+    /// said it; "" before, and for a server from before ids.
+    public var serverID: String
+    /// Other addresses it is reached at, as the server and its peers
+    /// say: tried in turn when `address` does not answer.
+    public var roads: [String]
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
-                provider: String = VisorAgentServerProvider.name, renamed: Bool = false) {
+                provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", roads: [String] = []) {
         self.id = id
         self.name = name
         self.address = address
@@ -33,6 +39,34 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         self.everConnected = everConnected
         self.provider = provider
         self.renamed = renamed
+        self.serverID = serverID
+        self.roads = roads
+    }
+
+    /// Every address to try, the preferred first, without repeats.
+    public var allRoads: [String] {
+        var out: [String] = []
+        for road in [address] + roads where !road.isEmpty && !out.contains(road) { out.append(road) }
+        return out
+    }
+
+    /// Takes in addresses the server or its peers say it is reached at.
+    /// Whether any was new.
+    @discardableResult
+    public mutating func learnRoads(_ addresses: [String]) -> Bool {
+        var learned = false
+        for road in addresses where !road.isEmpty && road != address && !roads.contains(road) {
+            roads.append(road)
+            learned = true
+        }
+        return learned
+    }
+
+    /// Whether this is the same computer as `peer`: by id when both have
+    /// one, else by an address in common.
+    public func isSame(as peer: Peer) -> Bool {
+        if !serverID.isEmpty, !peer.id.isEmpty { return serverID == peer.id }
+        return !Set(allRoads).isDisjoint(with: peer.addresses)
     }
 
     /// The server's own name, as a sign-in gives it: taken unless the
@@ -69,7 +103,8 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
 
     var json: JSONValue {
         .object(["id": .string(id), "name": .string(name), "address": .string(address), "secret": .string(secret),
-                 "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed)])
+                 "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed),
+                 "serverID": .string(serverID), "roads": .array(roads.map(JSONValue.string))])
     }
 
     /// Reads a saved record; one saved by an earlier build, as a computer
@@ -80,6 +115,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
                   secret: json["secret"].string ?? json["password"].string ?? "",
                   everConnected: json["everConnected"].bool ?? false,
                   provider: json["provider"].string ?? json["backend"].string ?? VisorAgentServerProvider.name,
-                  renamed: json["renamed"].bool ?? false)
+                  renamed: json["renamed"].bool ?? false, serverID: json["serverID"].string ?? "",
+                  roads: json["roads"].array?.compactMap(\.string) ?? [])
     }
 }

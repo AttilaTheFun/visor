@@ -26,6 +26,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// URL a proxy, a tunnel or a name on the network gives. Empty: the
     /// server's own guess from its addresses.
     public var publicAddress = ""
+    /// This server's id on the network of computers: made once, kept.
+    public var serverID = ""
 
     public init() {}
 
@@ -42,6 +44,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         sshEnabled = try c.decodeIfPresent(Bool.self, forKey: .sshEnabled) ?? true
         tlsIdentityPath = try c.decodeIfPresent(String.self, forKey: .tlsIdentityPath) ?? ""
         publicAddress = try c.decodeIfPresent(String.self, forKey: .publicAddress) ?? ""
+        serverID = try c.decodeIfPresent(String.self, forKey: .serverID) ?? ""
     }
 
     public func keep(at url: URL) {

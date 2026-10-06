@@ -63,6 +63,8 @@ extension Envelope {
         }
         e.images = value["images"].array?.compactMap(\.string)
         e.folders = value["folders"].array?.compactMap(\.string)
+        e.addresses = value["addresses"].array?.compactMap(\.string)
+        e.peers = value["peers"].array?.compactMap(Peer.init(json:))
         e.resumable = value["resumable"].array?.compactMap(ResumableSession.init(json:))
         e.deviceToken = value["deviceToken"].string
         e.platform = value["platform"].string
@@ -111,6 +113,8 @@ extension Envelope {
         if let streams { o["streams"] = .array(streams.map { .object(["id": .string($0.id), "text": .string($0.text)]) }) }
         if let images, !images.isEmpty { o["images"] = .array(images.map(JSONValue.string)) }
         if let folders { o["folders"] = .array(folders.map(JSONValue.string)) }
+        if let addresses { o["addresses"] = .array(addresses.map(JSONValue.string)) }
+        if let peers { o["peers"] = .array(peers.map(\.json)) }
         if let resumable { o["resumable"] = .array(resumable.map(\.json)) }
         if let deviceToken { o["deviceToken"] = .string(deviceToken) }
         if let platform { o["platform"] = .string(platform) }

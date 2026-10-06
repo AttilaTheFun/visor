@@ -146,4 +146,17 @@ extension VisorAgentServer {
         let reply = try await call("POST", "/link", body)
         if let error = reply.error { throw AgentServerError.message(error) }
     }
+
+    public func peers() async throws -> [Peer] {
+        let reply = try await call("GET", "/peers")
+        if let error = reply.error { throw AgentServerError.message(error) }
+        return reply.peers ?? []
+    }
+
+    public func introduce(_ peers: [Peer]) async throws {
+        var body = Envelope(type: "peers")
+        body.peers = peers
+        let reply = try await call("POST", "/peers", body)
+        if let error = reply.error { throw AgentServerError.message(error) }
+    }
 }

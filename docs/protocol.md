@@ -66,12 +66,15 @@ under `/api`.
 
 | method and path | body | answer |
 |---|---|---|
-| `GET /hello` | | `hello`: `host`, `login`, `token` — or 401 |
+| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id` and own `addresses` — or 401 |
 | `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
 | `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
 | `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
 | `POST /sessions/<id>/acknowledge` | | the user has read the session's notice |
-| `POST /unlink` | `text`: a linked computer's host | forgets that link |
+| `GET /peers` | | `peers`: the server's `id`, `host`, own `addresses`, and its `peers` |
+| `POST /peers` | `peers`: computers to tell the server of | `peers`; kept and passed on |
+| `POST /unlink` | `text`: a peer's id or address | forgets that peer |
+| `/peer/<id>/api/…` | any of the above | the peer's own answer, relayed |
 | `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript) | `sessions` with the new one |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
@@ -212,21 +215,35 @@ delivered as a new turn (queued while the other session works), prefixed
 `[Message from the Visor session "<title>" (<id>), not from the user. …]`.
 Node must be on the PATH (as it already is for approvals).
 
-Sessions on other computers are reachable once the computers are linked:
-Visor Server's Settings → Linked computers takes the other computer's
-connection code, keeps it in the keychain, and sends this computer's code to
-the other's `POST /api/link` (`{"type":"link","text":<code>}`), so the link
-goes both ways. `list_sessions` then lists each linked computer's sessions as
-`<computer>/<id>`, the computer's name in lower case with dashes
-(`logans-macbook-pro/1tzn…`). Asks about such a session are forwarded to that
-computer's `POST /api/agent`, over HTTPS with its password, as the same
-envelope with `client` set to the caller as `<computer>/<id>`, `title` its
-name and `host` its computer; the answer is the `agent_result`. Messages from
-another computer are prefixed `[Message from the Visor session "<title>"
-(<computer>/<id>) on <computer name>, not from the user. …]`, and are
-answered with `send_message` to that id.
+Sessions on other computers are reachable across the network of
+computers. Every server has an id (`hello` says it, with the server's own
+`addresses`); each keeps its peers — `Peer`: `id`, `name`, `addresses`,
+`password` — in the keychain. A computer joins once, anywhere: its
+connection code (which carries its id) pasted into another's Settings,
+which sends this computer's code to its `POST /api/link`; or a client that
+holds two servers, which introduces each to the other through
+`POST /api/peers` (`{"type":"peers","peers":[…]}`). What a server is told
+it keeps and passes on to its other peers the same way, so what one learns
+all learn; nothing is passed on twice (a server takes in only what is
+news, and the `X-Visor-Relay` header names who told it). `GET /api/peers`
+gives a client the network as the server knows it: `id`, `host`,
+`addresses` (its own) and `peers`. `POST /api/unlink` (`text`: an id or an
+address) forgets one.
 
-A client connected to several computers links them all in one step (Link
-These Computers, in the sidebar): it takes each server's code from
-`GET /api/code` (`{"type":"code","text":<code>}`, for a client already let
-in) and gives each server the others' codes through `POST /api/link`.
+A server relays for its peers: `/peer/<id>/api/…` under a server is the
+peer's API, carried there (with the peer's password put in, down a road
+the server has — one of the peer's addresses, or another peer that reaches
+it) and the answer brought back; a WebSocket upgrade under `/peer/<id>/`
+is refused, so a client follows the peer by polling. A request names the
+servers it has passed through in `X-Visor-Relay`, and none carries it
+twice or further than three.
+
+`list_sessions` lists each peer's sessions as `<computer>/<id>`, the
+computer's name in lower case with dashes (`logans-macbook-pro/1tzn…`).
+Asks about such a session are forwarded to that computer's
+`POST /api/agent`, with its password, as the same envelope with `client`
+set to the caller as `<computer>/<id>`, `title` its name and `host` its
+computer; the answer is the `agent_result`. Messages from another computer
+are prefixed `[Message from the Visor session "<title>" (<computer>/<id>)
+on <computer name>, not from the user. …]`, and are answered with
+`send_message` to that id.

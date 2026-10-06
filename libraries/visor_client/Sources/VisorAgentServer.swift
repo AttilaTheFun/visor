@@ -49,6 +49,8 @@ public final class VisorAgentServer: AgentServer {
     var address: ServerAddress? { sshAddress != nil ? tunnel : ServerAddress(record.address) }
     /// What `hello` gave for the channel's login.
     var token: String?
+    public private(set) var identity: ServerIdentity?
+    public var reachedAt: String? { address?.root }
     /// Following by polling instead of the channel (VisorAgentServer+Polling).
     var polling: Polling?
     private var socketID: Int32?
@@ -87,6 +89,7 @@ public final class VisorAgentServer: AgentServer {
         do {
             let hello = try await call("GET", "/hello")
             token = hello.token
+            if let id = hello.id, !id.isEmpty { identity = ServerIdentity(id: id, addresses: hello.addresses ?? []) }
             return hello.host.flatMap { $0.isEmpty ? nil : $0 }
         } catch {
             if VisorHost.http?.status(of: error) == 401 { throw AgentServerError.needsAuthentication }

@@ -12,19 +12,26 @@ public struct ConnectionCode: Equatable, Sendable {
     /// (`ServerAddress`).
     public var host: String
     public var password: String
+    /// The server's id, when the code is from a server that has one.
+    public var id: String
 
-    public init(name: String, host: String, password: String) {
+    public init(name: String, host: String, password: String, id: String = "") {
         self.name = name
         self.host = host
         self.password = password
+        self.id = id
     }
+
+    /// The computer as a peer: one address, the one the code carries.
+    public var peer: Peer { Peer(id: id, name: name, addresses: [host], password: password) }
 
     public static let scheme = "visor"
 
     /// The code itself: base64url, no padding.
     public var encoded: String {
-        let json = JSONValue.object(["v": .number(1), "name": .string(name), "host": .string(host), "password": .string(password)])
-        return Base64URL.encode(Array(json.encoded().utf8))
+        var fields: [String: JSONValue] = ["v": .number(1), "name": .string(name), "host": .string(host), "password": .string(password)]
+        if !id.isEmpty { fields["id"] = .string(id) }
+        return Base64URL.encode(Array(JSONValue.object(fields).encoded().utf8))
     }
 
     /// The link a QR code carries; opening it opens Visor with the code.
@@ -43,6 +50,6 @@ public struct ConnectionCode: Equatable, Sendable {
         guard !value.isEmpty, let bytes = Base64URL.decode(String(value)),
               let json = parseJSON(String(decoding: bytes, as: UTF8.self)),
               let host = json["host"].string, !host.isEmpty else { return nil }
-        self.init(name: json["name"].string ?? host, host: host, password: json["password"].string ?? "")
+        self.init(name: json["name"].string ?? host, host: host, password: json["password"].string ?? "", id: json["id"].string ?? "")
     }
 }
