@@ -54,7 +54,7 @@ extension VisorServer {
 
     /// Listens on the socket file, when SSH clients are let in without a
     /// password. A system without socket files, or a folder that cannot
-    /// be made, is logged and leaves the port as the only road.
+    /// be made, is logged and leaves the port as the only path.
     private func listenForSSH() {
         guard settings.sshEnabled, socketListener == nil else { return }
         let path = Self.socketPath

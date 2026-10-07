@@ -22,7 +22,7 @@ public protocol AgentServerAuthenticator {
     func headers(for record: AgentServerRecord) async throws -> [String: String]
 }
 
-/// No proof asked: the road is the proof (a LAN, a VPN of one's own, the
+/// No proof asked: the path is the proof (a LAN, a VPN of one's own, the
 /// computer's SSH), and the server is set to ask nothing.
 public struct NoAuthenticator: AgentServerAuthenticator {
     public nonisolated static let name = "none"

@@ -1,4 +1,4 @@
-// A server reached over SSH: the computer's `sshd` is the road in,
+// A server reached over SSH: the computer's `sshd` is the path in,
 // authenticated by this device's key, and the server itself is reached
 // through it — at its socket file, where a connection as the user is
 // already signed in and no password is asked (`nc -U` run on the

@@ -127,7 +127,7 @@ extension VisorServer {
     /// The sessions and the catalogs, as `welcome` carries them.
     private func sessionsJSON() -> String { sessionsEnvelope().encoded() }
 
-    /// The client is in (by the road's word or the password): its
+    /// The client is in (by the path's word or the password): its
     /// name for this computer, whose it is, and a token to log
     /// the socket in with.
     private func restHello(_ call: RESTCall) -> HTTPResponse {

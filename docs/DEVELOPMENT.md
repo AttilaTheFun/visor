@@ -54,7 +54,7 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
    first. None on: this Mac alone reaches the port. TLS: a
    PKCS#12 identity in Settings, or the front's. Every client, and every
    tool on the Mac (the probes), signs in with the password; the server
-   trusts nothing about the road.
+   trusts nothing about the path.
 4. Agents, each configured on its own — Visor holds no keys: `claude`
    (Claude Code CLI, logged in), `codex` (`codex login`; Visor drives
    `codex app-server`), `openrouter` (build open_router_cli with
@@ -347,7 +347,7 @@ knows (`tellPeers`, after anything new: `adopt` says whether it was);
 the network reaches it, `user@address` while SSH is let in). A server
 relays HTTP for a peer under `/peer/<id>/` (`relayTarget`, `relay`:
 the peer's password put in, `X-Visor-Relay` against circles, the first
-road that answers kept in `workingPaths`); an upgrade there is refused
+path that answers kept in `workingPaths`); an upgrade there is refused
 in `accept`, so the client polls. The agents' cross-computer calls take
 the same paths (`paths(to:)`, `call`). On the client, a record keeps
 `serverID` and `paths`; `AgentServerConnection` tries the paths of a
@@ -468,7 +468,7 @@ conditional compilation and imports nothing of a system: what differs —
 listening on loopback, a shell on a pseudo-terminal, signals to process
 ids, where secrets are kept, outgoing HTTPS, signing pushes, reading a
 picture's header, word of a file being written, where the agents' tools
-are, the host's name and data directory, relaunching, the road in — is a
+are, the host's name and data directory, relaunching, the path in — is a
 protocol (`LoopbackListening`, `TerminalLaunching`, `ProcessSignals`,
 `SecretStore`, `HTTPFetching`, `PushSigning`, `ImageMeasuring`,
 `FileWatching`, `ToolLocating`, `HostDetails`, `ServerLifecycle`,
@@ -591,7 +591,7 @@ it has not been run against real agents.
   through `/api/quit`; `VISOR_SHELL=powershell` for a Windows server.
 - `node tools/probes/noweb_proxy.mjs` — a reverse proxy on 8099 that
   carries HTTP only (`/visor/api` → 7534, the rest → 7533, every WebSocket
-  upgrade refused): a road with no WebSockets in front of a staging
+  upgrade refused): a path with no WebSockets in front of a staging
   server. Then the polling fallback against it, over the native services:
   `bazel test //tests/visor_client_tests --test_filter=PollingProbeTests
   --test_env=VISOR_POLL_URL=http://127.0.0.1:8099/visor

@@ -149,7 +149,7 @@ struct AgentScreen: View {
     private var chat: some View {
         AgentView(
             messages: rows,
-            // The road to the computer, when it is down, says more than
+            // The path to the computer, when it is down, says more than
             // what the turn was last heard doing.
             status: connectionStatus == nil ? statusItems.map(ActivityItem.init) : [],
             activity: connectionStatus ?? transcript.activity,
@@ -332,7 +332,7 @@ struct AgentScreen: View {
         }
     }
 
-    /// The road to the computer, when it is not open: shown where the
+    /// The path to the computer, when it is not open: shown where the
     /// turn's status goes, under the thread, rather than floating over it.
     private var connectionStatus: String? {
         switch host.state {
@@ -347,7 +347,7 @@ struct AgentScreen: View {
 
     /// A terminal another window has: the way to have it here.
     /// A terminal's bytes travel only over the live channel, which this
-    /// road does not carry.
+    /// path does not carry.
     private var terminalNeedsChannel: some View {
         VStack(spacing: 12) {
             Image(systemName: "terminal").font(.largeTitle).foregroundColor(.secondary)

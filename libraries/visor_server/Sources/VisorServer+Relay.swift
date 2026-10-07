@@ -13,7 +13,7 @@ import VisorProtocol
 extension VisorServer {
     /// How many servers a relayed request may pass through.
     static let longestRelay = 3
-    /// How long a relayed request may take: a held poll, and the road.
+    /// How long a relayed request may take: a held poll, and the path.
     static let relayTimeout: Double = pollHold + 20
 
     /// A path under `/peer/<id>`: the id, and the rest of the path (with

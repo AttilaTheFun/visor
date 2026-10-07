@@ -32,7 +32,7 @@ public struct NetworkAddress: Equatable, Sendable {
         return (64...127).contains(parts[1])
     }
 
-    /// Loopback: this computer's own road, always open.
+    /// Loopback: this computer's own path, always open.
     public static func isLoopback(_ address: String) -> Bool {
         address == "127.0.0.1" || address == "::1" || address.hasPrefix("127.")
     }

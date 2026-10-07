@@ -24,7 +24,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// port on loopback instead, with the password.
     public var sshEnabled = true
     /// A PKCS#12 file with the certificate and key to serve TLS with;
-    /// empty for plain TCP (TLS being the front's, or the road trusted).
+    /// empty for plain TCP (TLS being the front's, or the path trusted).
     /// Its password is a secret (`tlsPassword`).
     public var tlsIdentityPath = ""
     /// A reverse proxy or a tunnel of your own in front of the server
@@ -38,7 +38,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     public var serverID = ""
     /// What a client must show: "password" (a bearer that is the
     /// password, or a token hello gave), or "none" — anyone who reaches
-    /// the server is let in, the road being the proof (a LAN or a VPN of
+    /// the server is let in, the path being the proof (a LAN or a VPN of
     /// one's own, SSH alone, a front of your own that signs users in).
     public var authentication = "password"
 

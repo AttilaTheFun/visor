@@ -70,7 +70,7 @@ if (process.env.TERMINAL) {
   log('end terminal', (await rest('DELETE', `/sessions/${term}`)).slice(0, 30));
 }
 if (process.env.MCP) {
-  // The agent's own road to the server: Visor's MCP tools, and with them
+  // The agent's own path to the server: Visor's MCP tools, and with them
   // a tool call the client is asked to approve (manual permissions).
   busy = null; send({ type: 'send', session: id, text: 'Call the visor MCP tool list_sessions once and reply with exactly the word LISTED if it answered, or FAILED if it did not.' });
   await until(() => busy === true, 10000); log('idle after MCP turn:', await until(() => busy === false, 90000));

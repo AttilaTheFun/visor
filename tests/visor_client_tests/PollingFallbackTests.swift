@@ -136,7 +136,7 @@ final class PollingFallbackTests: XCTestCase {
         XCTAssertEqual(host.state, .connected)
     }
 
-    /// A socket that never opens (a road with no WebSocket): after the
+    /// A socket that never opens (a path with no WebSocket): after the
     /// login's time, polling takes over, and the socket is tried again
     /// after a while.
     func testASocketThatNeverOpensGivesWayToPolling() async throws {

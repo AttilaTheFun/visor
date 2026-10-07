@@ -33,7 +33,7 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   every operation on sessions, folders and files — is the `AgentServer`
   protocol, and `VisorAgentServer` (the wire protocol: `hello`, ws(s) +
   http(s) with a bearer, over HTTP, HTTPS or SSH as the address says;
-  followed by polling where the road carries no WebSocket) is the one
+  followed by polling where the path carries no WebSocket) is the one
   shipped. On a Mac or an iPhone the address can be the computer's own SSH
   (Remote Login), `user@host[:port]`, through jump hosts if need be
   (`?via=user@jump`): the client opens the connection with a key it
@@ -121,9 +121,9 @@ you install it.
   login to your Mac.
 - **Who can reach it.** By default the server listens on this Mac's
   loopback address only, and a reverse proxy or a tunnel on the Mac is
-  the road in; opened to the network in Settings, it listens on every
+  the path in; opened to the network in Settings, it listens on every
   interface, for a LAN, a VPN or a tunnel to reach directly. Every
-  device signs in with the password; nothing about the road is trusted.
+  device signs in with the password; nothing about the path is trusted.
   Keeping the server off the public internet — on a VPN, behind a front
   that authenticates — is yours to do.
 - **The password and the connection code.** The connection code, and the

@@ -33,11 +33,11 @@ A request is answered when `Authorization: Bearer` is the password from
 the menu bar app, or a token from `hello` — or when it came on the
 socket file, where no bearer is needed — or when the server is set to
 ask nothing (`authentication: none` in its settings; `visor-server auth
-none`), the road being the proof: a LAN or VPN of one's own, SSH alone,
+none`), the path being the proof: a LAN or VPN of one's own, SSH alone,
 or a front that signs users in before requests reach Visor. On the
 client, how it proves itself is apart from how it reaches the server: an
 authenticator (none, the password, or a fork's own — a company's SSO
-whose token goes in a header) gives the headers every request carries. Nothing else about the road is
+whose token goes in a header) gives the headers every request carries. Nothing else about the path is
 trusted: no header names a user, and every device on the network signs
 in the same way, with the password the connection code carries. The API
 reads the same under a mount path a front forwards whole
@@ -48,7 +48,7 @@ it has, possibly none) — 401 means "this device needs the password";
 200 gives `host` (the Mac's name), `login` (whose it is) and `token` —
 then the WebSocket, logged in with `token` (or `password`).
 
-The WebSocket is an accessory. A client whose road does not carry
+The WebSocket is an accessory. A client whose path does not carry
 WebSockets (or whose host has no socket service) follows the server by
 polling instead, with the same effect a little later: the list of
 sessions (`GET /sessions?since=`) and each open session's state
@@ -241,7 +241,7 @@ gives a client the network as the server knows it: `id`, `host`,
 address) forgets one.
 
 A server relays for its peers: `/peer/<id>/api/…` under a server is the
-peer's API, carried there (with the peer's password put in, down a road
+peer's API, carried there (with the peer's password put in, down a path
 the server has — one of the peer's addresses, or another peer that reaches
 it) and the answer brought back; a WebSocket upgrade under `/peer/<id>/`
 is refused, so a client follows the peer by polling. A request names the

@@ -25,12 +25,12 @@ public struct PasswordAuthenticatorUI: AgentServerAuthenticatorUI {
     }
 }
 
-/// Nothing to type: the road is the proof.
+/// Nothing to type: the path is the proof.
 public struct NoAuthenticatorUI: AgentServerAuthenticatorUI {
     public let authenticatorID = NoAuthenticator.name
     public init() {}
     public func fields(address: String, secret: Binding<String>) -> AnyView {
-        AnyView(Text("No sign-in: the computer lets in whoever reaches it, by a road of your own.")
+        AnyView(Text("No sign-in: the computer lets in whoever reaches it, by a path of your own.")
             .font(.footnote).foregroundColor(.secondary))
     }
 }

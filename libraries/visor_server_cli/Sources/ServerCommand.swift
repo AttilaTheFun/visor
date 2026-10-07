@@ -40,7 +40,7 @@ public struct ServerCommand {
                    the port, with the password.
           auth     `auth password` (the default) asks clients for the
                    password; `auth none` lets in anyone who reaches the
-                   server — the road being the proof (a LAN or VPN of your
+                   server — the path being the proof (a LAN or VPN of your
                    own, SSH alone, a front that signs users in).
           address  Shows the reverse proxy's or tunnel's address, the one
                    clients are told first; `address <url>` sets it and turns

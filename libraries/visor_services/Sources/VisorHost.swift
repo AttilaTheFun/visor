@@ -19,7 +19,7 @@ public enum VisorHost {
     public static var settings: (any VisorSettingsService)?
     public static var notifications: (any VisorNotificationService)?
     public static var widget: (any VisorWidgetService)?
-    /// SSH, where the host has it (a Mac, an iPhone): a road to a server.
+    /// SSH, where the host has it (a Mac, an iPhone): a path to a server.
     public static var ssh: (any VisorSSHService)?
 }
 

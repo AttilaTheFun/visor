@@ -6,7 +6,7 @@ public struct ListeningOptions: Sendable, Equatable {
     /// Every interface, not loopback alone.
     public var everywhere: Bool
     /// Serve TLS with this identity; nil for plain TCP (a front of your
-    /// own terminates TLS, or the road is trusted).
+    /// own terminates TLS, or the path is trusted).
     public var tls: TLSIdentity?
     /// Listen on a Unix domain socket at this path instead of the port,
     /// made so that only this user can open it; a stale file there is

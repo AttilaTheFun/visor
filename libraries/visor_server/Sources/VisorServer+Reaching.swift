@@ -1,6 +1,6 @@
 // Where clients reach this server, as it can tell: the address set by
 // hand, else one made from how it listens and what addresses this
-// computer has. There is no road of the server's own: a network it is on
+// computer has. There is no path of the server's own: a network it is on
 // (a LAN, a VPN), a reverse proxy or a tunnel in front
 // of it are all the same to it, and the password is what lets a client in.
 

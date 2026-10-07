@@ -13,7 +13,7 @@ import VisorServices
 /// HTTP services, so the same code runs in a browser.
 ///
 /// The live channel is an accessory. Where it cannot be had — the host
-/// has no socket service, or the road does not carry WebSockets — the
+/// has no socket service, or the path does not carry WebSockets — the
 /// server is followed by polling instead (VisorAgentServer+Polling): the
 /// list of sessions and each open session's state are asked for and held
 /// until they change, as the transcript always is. The socket is tried
@@ -144,7 +144,7 @@ public final class VisorAgentServer: AgentServer {
                         self.socketID = nil
                         let reason = String(event.split(separator: " ", maxSplits: 1).last ?? "")
                         // Refused before it opened, while the server itself
-                        // answered `hello`: a road that carries no WebSocket.
+                        // answered `hello`: a path that carries no WebSocket.
                         // Polling takes over, and the socket is tried later.
                         if !self.loggedIn, let address = self.address {
                             self.heartbeat?.cancel()
@@ -176,7 +176,7 @@ public final class VisorAgentServer: AgentServer {
         await socket.delay(milliseconds: Self.loginTimeout)
         guard socketID == id, !Task.isCancelled else { return }
         // A socket that opened and was not answered is a server that is
-        // not there: dropped. One that never opened at all is a road that
+        // not there: dropped. One that never opened at all is a path that
         // may carry no WebSocket: polling takes over, and the socket is
         // tried again later.
         if heard == 0 {

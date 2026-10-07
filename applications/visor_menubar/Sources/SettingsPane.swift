@@ -76,7 +76,7 @@ struct SettingsPane: View {
                     Text("Nothing").tag("none")
                 }
                 Text(server.settings.asksNothing
-                     ? "Anyone who reaches the server is let in: keep it to roads of your own — this Mac, a VPN of yours, SSH, or a front that signs users in before it reaches Visor."
+                     ? "Anyone who reaches the server is let in: keep it to paths of your own — this Mac, a VPN of yours, SSH, or a front that signs users in before it reaches Visor."
                      : "A client signs in with the password (or a token it was given for it); SSH clients at the socket file need neither.")
                     .font(.caption).foregroundColor(.secondary)
             } header: {

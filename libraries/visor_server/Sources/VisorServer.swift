@@ -85,7 +85,7 @@ public final class VisorServer {
     /// Told of each silent push of a session's state (tests listen).
     var onStatusPush: ((_ session: String, _ status: String) -> Void)?
     var modelsRefresh: Task<Void, Never>?
-    /// Tokens handed out by `hello` to clients the road (or the password)
+    /// Tokens handed out by `hello` to clients the path (or the password)
     /// let in, for the socket's login; new each launch.
     var tokens: [String] = []
 
