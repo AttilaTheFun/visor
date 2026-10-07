@@ -748,8 +748,11 @@ What tvOS does differently, found the hard way:
   rules_swift_package_manager, and importing SwiftTerm (13) from it fails
   the analysis: agent_ui's and third_party's Package.swift declare
   `.tvOS("26.0")`.
-- `navigationSplitViewStyle(.balanced)` shows ONE column at a time on a
-  TV; its own style is the two-column one (the sidebar over the detail).
+- `NavigationSplitView` on a TV lays its sidebar OVER the detail at a
+  width of its own (`navigationSplitViewColumnWidth` is ignored), and
+  `.balanced` shows one column at a time: NavigationUI's SplitView lays
+  the TV's two columns out itself (an HStack: the sidebar a card of
+  `SplitMetrics.tvSidebarWidth`, the detail the rest).
 - A `TextField` with `axis: .vertical` grows to the height it is offered;
   the TV's field is one line (AgentUI's DraftField).
 - The detail column's title is drawn over a list that scrolls under it,
@@ -760,10 +763,10 @@ What tvOS does differently, found the hard way:
 - No pasteboard, no swipe actions, no text selection, no ShareLink, no
   photo pickers, no Speech framework: Compat.swift and the build's selects
   (visor_services leaves NativeVisorDictationService out) cover them.
-- The TV's sidebar is the system's width (`navigationSplitViewColumnWidth`
-  is ignored) and lies OVER the detail's leading edge: the thread's column
-  (`TranscriptMetrics.maxContentWidth`) is centred clear of it, and its
-  rows show the folder's name and one line (`Screen.tv`).
+- The TV's sidebar rows show the folder's name and one line, and its
+  glyphs are drawn larger (`Screen.tv`, OutlineMetrics); the thread's
+  column (`TranscriptMetrics.maxContentWidth`) is the width beside the
+  sidebar.
 - A `@ViewBuilder` extension method that wraps `self` in a `VStack` with a
   row above it crashed the TV app at launch (`destroy for AgentView`, an
   over-release in `AgentScreen.body`), and whether it did changed with a
