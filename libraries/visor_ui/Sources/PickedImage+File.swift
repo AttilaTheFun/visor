@@ -8,7 +8,7 @@ extension PickedImage {
         let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("attachments", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let destination = folder.appendingPathComponent(name)
-        guard (try? data.write(to: destination, options: .atomic)) != nil else { return nil }
+        guard (try? data.write(to: destination)) != nil else { return nil }
         return destination
     }
 }
