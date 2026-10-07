@@ -69,13 +69,23 @@ PY
 if [ -n "$PROFILE" ]; then
     cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
     WANTED="$(mktemp -t visor-entitlements).plist"
-    python3 - "$PROFILE" "$WANTED" <<'PY'
+    python3 - "$PROFILE" "$WANTED" "$APP" <<'PY'
 import plistlib, subprocess, sys
 profile = plistlib.loads(subprocess.run(["security", "cms", "-D", "-i", sys.argv[1]], capture_output=True).stdout)
 granted = profile.get("Entitlements", {})
 keep = ["com.apple.application-identifier", "com.apple.developer.team-identifier", "com.apple.developer.aps-environment"]
+wanted = {k: granted[k] for k in keep if k in granted}
+# The hardened runtime's own entitlements (the microphone, for dictation)
+# are the app's to claim, from the entitlements the build signed it with.
+own = subprocess.run(["codesign", "-d", "--entitlements", ":-", sys.argv[3]], capture_output=True).stdout
+try:
+    for key, value in plistlib.loads(own).items():
+        if key.startswith("com.apple.security."):
+            wanted[key] = value
+except Exception:
+    pass
 with open(sys.argv[2], "wb") as f:
-    plistlib.dump({k: granted[k] for k in keep if k in granted}, f)
+    plistlib.dump(wanted, f)
 PY
     ENTITLEMENTS=(--entitlements "$WANTED")
 fi

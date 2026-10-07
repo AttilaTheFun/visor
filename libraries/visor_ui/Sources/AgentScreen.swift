@@ -110,7 +110,7 @@ struct AgentScreen: View {
                                  end: { showInspector = false; host.end(sessionID); ended() })
             }
         }
-        .navigationTitle(sessionTitle)
+        .threadTitle(sessionTitle)
         // The terminal is black; a bar drawn over it keeps its title
         // legible only in the dark palette.
         .terminalBarScheme(controlsTerminal)
@@ -175,7 +175,8 @@ struct AgentScreen: View {
             },
             loadEarlier: transcript.hasEarlier ? { host.loadEarlier(sessionID) } : nil,
             suggestions: { [commands = host.sessionCommands[sessionID] ?? []] draft in Self.suggestions(for: draft, from: commands) },
-            pick: { draft = $0.text }
+            pick: { draft = $0.text },
+            dictation: DictationBridge.installed
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval,

@@ -10,11 +10,11 @@ import PackageDescription
 
 let package = Package(
     name: "visor_swift_packages",
-    platforms: [.iOS("18.0"), .macOS("15.0")],
+    platforms: [.iOS("18.0"), .macOS("15.0"), .tvOS("26.0")],
     dependencies: [
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            revision: "e229fffc56dfb2755fcc406c44a5fa0736cdf2e2"
+            revision: "e85132285884f4b78a7c762b5a37bc74a16b7875"
         ),
         // The transcript cache: indexed, searchable rows of every session's
         // file, kept by the server off the main thread.

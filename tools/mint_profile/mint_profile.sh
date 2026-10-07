@@ -6,8 +6,9 @@
 # both. Plug the iPhone in first, so it is registered with the team.
 # rules_apple then finds "iOS Team Provisioning Profile: <bundle id>".
 #
-#   tools/mint_profile/mint_profile.sh <bundle id> <team id> [device UDID] [entitlements]
-# (the bundle id in applications/visor_ios/BUILD.bazel, the team in .bazelrc.user).
+#   tools/mint_profile/mint_profile.sh <bundle id> <team id> [device UDID] [entitlements] [ios|tvos]
+# (the bundle id in applications/visor_ios/BUILD.bazel, the team in .bazelrc.user;
+# `tvos` for the Apple TV's, applications/visor_tvos, the TV paired with Xcode).
 # With an entitlements file (the app's own, e.g. applications/visor_ios/
 # app.entitlements), the App ID gets those capabilities (push) and the
 # profile carries them: what the wildcard profile cannot.
@@ -29,12 +30,14 @@ BUNDLE="${1:?bundle id, as BUNDLE_ID in applications/visor_ios/BUILD.bazel}"
 TEAM="${2:?Apple team id, as VISOR_TEAM_ID in .bazelrc.user}"
 DEVICE="${3:-}"
 ENTITLEMENTS="${4:-}"
+PLATFORM="${5:-ios}"
 . "$(dirname "$0")/lib.sh"
 mint_auth
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-mint_project "$WORK" "$TEAM" "$BUNDLE" ios "$ENTITLEMENTS"
+mint_project "$WORK" "$TEAM" "$BUNDLE" "$PLATFORM" "$ENTITLEMENTS"
 DESTINATION="generic/platform=iOS"
+[ "$PLATFORM" = tvos ] && DESTINATION="generic/platform=tvOS"
 [ -n "$DEVICE" ] && DESTINATION="id=$DEVICE"
 cd "$WORK"
 # Xcode makes the certificate and the profile on the way to building; a

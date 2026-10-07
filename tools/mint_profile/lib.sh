@@ -14,7 +14,7 @@ mint_auth() {
 
 # A throwaway one-file app with automatic signing, in <work>: the project is
 # written here rather than kept (*.xcodeproj is ignored).
-#   mint_project <work> <team> <bundle id> ios|macos [entitlements file]
+#   mint_project <work> <team> <bundle id> ios|macos|tvos [entitlements file]
 mint_project() {
   local work="$1" team="$2" bundle="$3" platform="$4" entitlements="${5:-}"
   local here settings sdk entitlements_setting=""
@@ -29,6 +29,10 @@ mint_project() {
     sdk=macosx
     settings="SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 15.0; SWIFT_VERSION = 5.0;
 			GENERATE_INFOPLIST_FILE = YES; ENABLE_HARDENED_RUNTIME = YES;"
+  elif [ "$platform" = tvos ]; then
+    sdk=appletvos
+    settings="SDKROOT = appletvos; TVOS_DEPLOYMENT_TARGET = 18.0; SWIFT_VERSION = 5.0;
+			GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; TARGETED_DEVICE_FAMILY = 3;"
   else
     sdk=iphoneos
     settings="SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0;

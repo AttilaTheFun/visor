@@ -73,6 +73,17 @@ extension View {
         #endif
     }
 
+    /// The thread's title in its bar, except on a TV, whose bar has no
+    /// background and whose list scrolls under it: the title would sit on
+    /// the messages. The session is the highlighted row of the sidebar.
+    @ViewBuilder func threadTitle(_ title: String) -> some View {
+        #if os(tvOS)
+        navigationTitle("")
+        #else
+        navigationTitle(title)
+        #endif
+    }
+
     /// A section header as written, not upper-cased.
     @ViewBuilder func noHeaderCase() -> some View {
         #if canImport(UIKit) || canImport(AppKit)

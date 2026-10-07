@@ -726,6 +726,41 @@ to look at. `SendIsImmediateTests` holds the client's half in CI: the sent
 message is in the thread before `sendMessage` returns, and a repeated
 message waits for its own row.
 
+### The Apple TV
+
+The TV client (applications/visor_tvos) is the shared client and views on
+tvOS 26, driven by the remote's focus: the split view, the sidebar, the
+transcript and the composer as on the Mac, with the composer's field a
+button for the system keyboard (the remote's own dictation types into
+it). Build and try it on the Apple TV simulator with the fixture:
+
+    bazel build --platforms=@apple_support//platforms:tvos_sim_arm64 //applications/visor_tvos
+    ipa=$(bazel cquery --platforms=@apple_support//platforms:tvos_sim_arm64 //applications/visor_tvos --output=files)
+    unzip -o "$ipa" -d /tmp/tvapp && xcrun simctl install booted /tmp/tvapp/Payload/visor_tvos.app
+    xcrun simctl launch booted com.LoganShire.VisorClient.tvOS -visor.fixture snapshot -visor.fixture.screen chat
+
+A device build needs the TV paired with Xcode (Devices and Simulators,
+over the network) and a tvOS profile for the bundle id
+(`tools/mint_profile/mint_profile.sh <bundle id> <team> "" "" tvos`).
+What tvOS does differently, found the hard way:
+
+- A package that declares no tvOS platform is given tvOS 12 by
+  rules_swift_package_manager, and importing SwiftTerm (13) from it fails
+  the analysis: agent_ui's and third_party's Package.swift declare
+  `.tvOS("26.0")`.
+- `navigationSplitViewStyle(.balanced)` shows ONE column at a time on a
+  TV; its own style is the two-column one (the sidebar over the detail).
+- A `TextField` with `axis: .vertical` grows to the height it is offered;
+  the TV's field is one line (AgentUI's DraftField).
+- The detail column's title is drawn over a list that scrolls under it,
+  with no bar background: the thread has no title on a TV
+  (`threadTitle`), the sidebar's highlighted row says which it is.
+- A search field in the sidebar (`safeAreaInset`) floats over the rows:
+  the TV's list chrome is the compose button alone.
+- No pasteboard, no swipe actions, no text selection, no ShareLink, no
+  photo pickers, no Speech framework: Compat.swift and the build's selects
+  (visor_services leaves NativeVisorDictationService out) cover them.
+
 ## 6. Gotchas that cost time
 
 - A subagent's plain `sleep` is blocked by the harness; use
