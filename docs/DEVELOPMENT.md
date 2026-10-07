@@ -741,6 +741,16 @@ moment, so this is a look, not a gate.
 
 ## 6. Gotchas that cost time
 
+- A Mac app that reaches LAN addresses needs NSLocalNetworkUsageDescription
+  and the user's yes (System Settings → Privacy & Security → Local
+  Network). Without it macOS refuses its connections with "No route to
+  host" (errno 65) and never asks, while Terminal reaches the same address:
+  the Mac client's LAN paths failed that way until 0.23.
+- The client's connection log is in UserDefaults while it runs
+  (`defaults read com.LoganShire.VisorClient.macOS visor.connectionLog`),
+  and a failed keychain call is in the system log
+  (`log show --predicate 'subsystem == "com.LoganShire.VisorClient"'`).
+
 - A subagent's plain `sleep` is blocked by the harness; use
   `python3 -c "import time; time.sleep(N)"` to make one actually wait.
 - The `-p` SDK session has no task-list tool (TodoWrite) in this harness
