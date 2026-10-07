@@ -21,6 +21,9 @@ public enum VisorHost {
     public static var widget: (any VisorWidgetService)?
     /// SSH, where the host has it (a Mac, an iPhone): a path to a server.
     public static var ssh: (any VisorSSHService)?
+    /// The device's own networks, where the host tells them: which path
+    /// fits where the device is, and when that changes.
+    public static var network: (any VisorNetworkService)?
 }
 
 /// Hands the client its services. An app calls this once, before it makes
@@ -29,11 +32,12 @@ public enum VisorHost {
 @MainActor
 public func installVisorServices(socket: any VisorSocketService, http: any VisorHTTPService, settings: any VisorSettingsService,
                                  notifications: (any VisorNotificationService)? = nil, widget: (any VisorWidgetService)? = nil,
-                                 ssh: (any VisorSSHService)? = nil) {
+                                 ssh: (any VisorSSHService)? = nil, network: (any VisorNetworkService)? = nil) {
     VisorHost.socket = socket
     VisorHost.http = http
     VisorHost.settings = settings
     VisorHost.notifications = notifications
     VisorHost.widget = widget
     VisorHost.ssh = ssh
+    VisorHost.network = network
 }

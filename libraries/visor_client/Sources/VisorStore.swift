@@ -59,6 +59,9 @@ public final class VisorStore: ObservableObject {
         }
         for server in servers { observe(server); server.connect() }
         listenForNotifications()
+        // Where the device is decides which path to each computer fits:
+        // a change is acted on at once.
+        VisorHost.network?.onChange = { [weak self] in self?.servers.forEach { $0.networkChanged() } }
     }
 
     /// A push token arriving goes to every server; a notification the

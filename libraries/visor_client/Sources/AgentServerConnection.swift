@@ -326,17 +326,73 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// How long a sign-in has to answer before the try is given up.
     static let signInTimeout: Int32 = 5_000
 
-    /// The paths for a round: the one that answered last time, the
-    /// record's address, its other paths, then those through other
-    /// servers.
+    /// The paths for a round: the one that answered last time (while it
+    /// still fits where the device is), then the record's own paths
+    /// ranked by fit — a path on a network the device is on now first
+    /// (the LAN at home), then overlay-network ones (a tailnet) while the
+    /// device has such a network, then the rest, with the record's
+    /// address first among equals — then those through other servers.
     private func pathsToTry() -> [String] {
         var candidates: [String] = []
-        if let lastGoodPath { candidates.append(lastGoodPath) }
-        candidates += record.allPaths
+        let own = record.allPaths
+        for fit in [PathFit.local, .overlay, .other, .unlikely] {
+            var tier = own.filter { Self.fit(of: $0) == fit }
+            // The one that answered last time first among its equals.
+            if let lastGoodPath, let index = tier.firstIndex(of: lastGoodPath) {
+                tier.remove(at: index)
+                tier.insert(lastGoodPath, at: 0)
+            }
+            candidates += tier
+        }
         candidates += relayPaths?() ?? []
         var out: [String] = []
         for path in candidates where !out.contains(path) { out.append(path) }
         return out.isEmpty ? [record.address] : out
+    }
+
+    /// How a path fits where the device is now.
+    enum PathFit { case local, overlay, other, unlikely }
+
+    static func fit(of path: String) -> PathFit {
+        guard let network = VisorHost.network, let host = Self.host(ofPath: path) else { return .other }
+        if network.isOnLocalNetwork(host) { return .local }
+        if Self.isOverlay(host) { return network.hasVPN ? .overlay : .unlikely }
+        if Self.isPrivate(host) { return .unlikely }
+        return .other
+    }
+
+    /// A path's host: the SSH target's, or the URL's.
+    static func host(ofPath path: String) -> String? {
+        if let ssh = SSHAddress(path) { return ssh.target.host }
+        return ServerAddress(path).flatMap { host(of: $0.root) }
+    }
+
+    /// 100.64.0.0/10: a tailnet's addresses.
+    static func isOverlay(_ host: String) -> Bool {
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 4 && parts[0] == 100 && (64...127).contains(parts[1])
+    }
+
+    /// 10/8, 172.16/12, 192.168/16: a LAN's addresses, reachable only from it.
+    static func isPrivate(_ host: String) -> Bool {
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return false }
+        return parts[0] == 10 || (parts[0] == 172 && (16...31).contains(parts[1])) || (parts[0] == 192 && parts[1] == 168)
+    }
+
+    /// The device's networks changed: a server not connected is tried
+    /// now, from the start; one connected by a path that no longer fits
+    /// best (over the tailnet, now that the LAN is back; over the LAN,
+    /// now left) is connected again by the one that does.
+    public func networkChanged() {
+        guard wantsConnection else { return }
+        let best = pathsToTry().first
+        if state == .connected, let path, path == best { return }
+        note("the networks changed: connecting by \(best ?? record.address)" + (state == .connected ? " instead of \(path ?? "")" : ""))
+        attempt = 0
+        lastGoodPath = nil
+        pathIndex = 0
+        open()
     }
 
     /// What the server said of itself: its id, and its own addresses as

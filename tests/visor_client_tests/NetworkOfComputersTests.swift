@@ -11,6 +11,16 @@ import VisorProtocol
 import VisorServices
 import XCTest
 
+/// The device's networks as the test says them: which hosts are on a
+/// network of its own, and whether it has a tailnet address.
+@MainActor
+final class ScriptedNetwork: VisorNetworkService {
+    var local: Set<String> = []
+    var hasVPN = true
+    var onChange: (@MainActor () -> Void)?
+    func isOnLocalNetwork(_ host: String) -> Bool { local.contains(host) }
+}
+
 @MainActor
 final class NetworkOfComputersTests: XCTestCase {
     override func setUp() async throws {
@@ -218,9 +228,50 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(again?.record.address, "ssh://logan@100.90.45.11")
         XCTAssertTrue(again?.record.paths.contains("http://100.90.45.11:7433") == true)
     }
+
+    /// Where the device is ranks the paths: the LAN's address first at
+    /// home, the tailnet's away (and the LAN's last, out of reach), and
+    /// a change of networks moves the connection to the path that fits.
+    func testThePathThatFitsTheNetworkComesFirst() async {
+        let network = ScriptedNetwork()
+        VisorHost.network = network
+        defer { VisorHost.network = nil }
+        let record = AgentServerRecord(name: "Mini", address: "ssh://logan@100.90.45.11", secret: "pw", provider: "scripted",
+                                       paths: ["ssh://logan@192.168.4.52", "http://100.90.45.11:7433", "http://192.168.4.52:7433"])
+        let server = scripted(record)
+        // Away: the LAN's addresses are out of reach, the tailnet's first.
+        network.local = []
+        XCTAssertEqual(AgentServerConnection.fit(of: "ssh://logan@192.168.4.52"), .unlikely)
+        XCTAssertEqual(AgentServerConnection.fit(of: "ssh://logan@100.90.45.11"), .overlay)
+        XCTAssertEqual(AgentServerConnection.fit(of: "https://proxy.example.com/visor"), .other)
+        let host = AgentServerConnection(record: record)
+        host.connect()
+        await settle()
+        XCTAssertEqual(host.path, "ssh://logan@100.90.45.11")
+        XCTAssertEqual(server.signedInBy, ["ssh://logan@100.90.45.11"], "the LAN was not even tried")
+        // Home: the LAN is back, and the connection moves to it at once.
+        network.local = ["192.168.4.52"]
+        host.networkChanged()
+        await settle()
+        XCTAssertEqual(host.path, "ssh://logan@192.168.4.52")
+        XCTAssertEqual(server.signedInBy.last, "ssh://logan@192.168.4.52")
+        // Still home, nothing else changed: left alone.
+        let count = server.signedInBy.count
+        host.networkChanged()
+        await settle()
+        XCTAssertEqual(server.signedInBy.count, count)
+        // Away again with the tailnet off: nothing fits better than the
+        // path in use, so the connection is left where it is until it drops.
+        network.local = []
+        network.hasVPN = false
+        let before = server.signedInBy.count
+        host.networkChanged()
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertEqual(server.signedInBy.count, before)
+    }
 }
 
 private extension AgentServerConnection {
     func authorizedNothingYet(_ server: ScriptedServer) -> Bool { server.authorizedKeys.isEmpty }
 }
-
