@@ -760,6 +760,15 @@ What tvOS does differently, found the hard way:
 - No pasteboard, no swipe actions, no text selection, no ShareLink, no
   photo pickers, no Speech framework: Compat.swift and the build's selects
   (visor_services leaves NativeVisorDictationService out) cover them.
+- The TV's sidebar is the system's width (`navigationSplitViewColumnWidth`
+  is ignored) and lies OVER the detail's leading edge: the thread's column
+  (`TranscriptMetrics.maxContentWidth`) is centred clear of it, and its
+  rows show the folder's name and one line (`Screen.tv`).
+- A `@ViewBuilder` extension method that wraps `self` in a `VStack` with a
+  row above it crashed the TV app at launch (`destroy for AgentView`, an
+  over-release in `AgentScreen.body`), and whether it did changed with a
+  padding modifier. The same layout as a `ViewModifier` (ThreadBar) does
+  not: write a wrapping layout as a modifier type, not an inline builder.
 
 ## 6. Gotchas that cost time
 

@@ -93,14 +93,12 @@ struct AgentScreen: View {
         // The title is the session's; the inspector opens from an explicit
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { showInspector.toggle() } label: {
-                    Image(systemName: "info.circle")
-                }
-                .accessibilityLabel("Session details")
-                .accessibilityIdentifier("session-title")
+        .threadBar(title: sessionTitle) {
+            Button { showInspector.toggle() } label: {
+                Image(systemName: "info.circle")
             }
+            .accessibilityLabel("Session details")
+            .accessibilityIdentifier("session-title")
         }
         .adaptiveInspector(isPresented: $showInspector, compact: sizeClass == .compact) {
             if let info {
@@ -110,7 +108,6 @@ struct AgentScreen: View {
                                  end: { showInspector = false; host.end(sessionID); ended() })
             }
         }
-        .threadTitle(sessionTitle)
         // The terminal is black; a bar drawn over it keeps its title
         // legible only in the dark palette.
         .terminalBarScheme(controlsTerminal)

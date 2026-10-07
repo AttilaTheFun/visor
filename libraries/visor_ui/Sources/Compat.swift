@@ -73,15 +73,10 @@ extension View {
         #endif
     }
 
-    /// The thread's title in its bar, except on a TV, whose bar has no
-    /// background and whose list scrolls under it: the title would sit on
-    /// the messages. The session is the highlighted row of the sidebar.
-    @ViewBuilder func threadTitle(_ title: String) -> some View {
-        #if os(tvOS)
-        navigationTitle("")
-        #else
-        navigationTitle(title)
-        #endif
+    /// The thread's bar (ThreadBar): the navigation bar's title and
+    /// trailing control, or a TV's own row above the thread.
+    func threadBar<Trailing: View>(title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+        modifier(ThreadBar(title: title, trailing: trailing()))
     }
 
     /// A section header as written, not upper-cased.

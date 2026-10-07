@@ -33,7 +33,9 @@ struct SessionCardRow: View {
                             .accessibilityLabel("Looping")
                     }
                 }
-                Text(session.cwd)
+                // (A TV's sidebar, at the TV's type, has room for the
+                // folder's name and one line of the message.)
+                Text(Screen.tv ? Self.folderName(session.cwd) : session.cwd)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -43,7 +45,7 @@ struct SessionCardRow: View {
                     Text(session.preview ?? "No messages yet")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(Screen.tv ? 1 : 2)
                 }
                 // Between turns, what the agent is waiting on in the
                 // background: a monitor, a command, an agent of its own.
@@ -74,6 +76,11 @@ struct SessionCardRow: View {
             }
         }
         .accessibilityIdentifier("session-" + session.id)
+    }
+
+    /// The folder's own name: the last part of its path.
+    static func folderName(_ cwd: String) -> String {
+        cwd.split(separator: "/").last.map(String.init) ?? cwd
     }
 
     /// "Waiting on CI checks on PR #92" — the first, and how many more.
