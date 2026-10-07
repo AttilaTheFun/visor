@@ -43,15 +43,6 @@ swift_deps.configure_package(
     patch_args = ["-p1"],
     patches = ["//third_party/swift_packages:swiftterm.patch"],
 )
-
-# swift-nio-ssh keeps a host key's wire form to itself; the patch adds
-# `NIOSSHPublicKey.openSSHRepresentation`, so a client can keep a
-# computer's host key and compare it next time (offered upstream).
-swift_deps.configure_package(
-    name = "swift-nio-ssh",
-    patch_args = ["-p1"],
-    patches = ["//third_party/swift_packages:swift_nio_ssh.patch"],
-)
 use_repo(
     swift_deps,
     "swift_package",

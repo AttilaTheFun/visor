@@ -1,0 +1,13 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load("@rules_swift//swift:swift.bzl", "swift_test")
+
+swift_test(
+    name = "visor_ssh_tests",
+    copts = STRICT_SWIFT,
+    srcs = glob(["*.swift"]),
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        "//libraries/visor_ssh",
+        "@swiftpkg_swift_nio_ssh//:NIOSSH",
+    ],
+)

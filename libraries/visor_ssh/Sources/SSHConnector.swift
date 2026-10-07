@@ -17,13 +17,13 @@ public final class SSHConnector {
     nonisolated public init() {}
 
     /// A new Ed25519 private key, raw: what to keep.
-    public static func newPrivateKey() -> Data { Curve25519.Signing.PrivateKey().rawRepresentation }
+    public nonisolated static func newPrivateKey() -> Data { Curve25519.Signing.PrivateKey().rawRepresentation }
 
     /// The public half of a raw private key, as an `authorized_keys` line
     /// with `comment` after it; nil for bytes that are not a key.
-    public static func publicKeyLine(forPrivateKey raw: Data, comment: String) -> String? {
+    public nonisolated static func publicKeyLine(forPrivateKey raw: Data, comment: String) -> String? {
         guard let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw) else { return nil }
-        return NIOSSHPrivateKey(ed25519Key: key).publicKey.openSSHRepresentation + (comment.isEmpty ? "" : " " + comment)
+        return NIOSSHPrivateKey(ed25519Key: key).publicKey.openSSHLine + (comment.isEmpty ? "" : " " + comment)
     }
 
     /// Connects along `route` — each hop reached through the one before,
@@ -117,7 +117,7 @@ private final class HostKeyChecker: NIOSSHClientServerAuthenticationDelegate {
         self.outcome = outcome
     }
     func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
-        if outcome.take(hostKey.openSSHRepresentation) { return validationCompletePromise.succeed(()) }
+        if outcome.take(hostKey.openSSHLine) { return validationCompletePromise.succeed(()) }
         validationCompletePromise.fail(SSHError.hostKeyChanged)
         channel.close(promise: nil)
     }

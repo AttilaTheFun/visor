@@ -27,11 +27,11 @@ Third-party: SwiftTerm's portable emulator (through agent_ui's TerminalUI,
 from upstream github.com/migueldeicaza/SwiftTerm, which builds for Android
 since #733; rspm runs no SwiftPM plugins, so MODULE.bazel patches in what
 its build plugin generates, third_party/swift_packages/swiftterm.patch,
-made from the pinned revision), swift-nio-ssh 0.9 (the SSH client on
-Apple hosts; it keeps a host key's wire form to itself, so
-third_party/swift_packages/swift_nio_ssh.patch adds
-`NIOSSHPublicKey.openSSHRepresentation` for the kept host key — to be
-offered upstream), SQLite.swift 0.15.3 (the
+made from the pinned revision), swift-nio-ssh 0.9 (SSH for the client
+and the server, through libraries/visor_ssh; it parses OpenSSH key lines
+but writes none, so `NIOSSHPublicKey+OpenSSH.swift` writes the kept host
+key from the key's bytes, read through reflection — a line to offer
+upstream instead), SQLite.swift 0.15.3 (the
 caches), rules_swift_package_manager (rspm) brings SwiftPM packages into
 Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 `@swiftpkg_sqlite.swift//:SQLite`, `@swiftpkg_agent_ui//:AgentUI`.

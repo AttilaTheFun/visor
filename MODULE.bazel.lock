@@ -625,7 +625,7 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "97Cx3oE1dAcPSNsqqdpwN/hnA7HUd22kQXNxEB8IlNo=",
-        "usagesDigest": "axJny4aFO//IZPIjAI+t/43sW70lbcxiW+pov880TRY=",
+        "usagesDigest": "1WmCPxJgZCHpaBKcADTF/tZiEqVoJohkR8Lw6cLOJrk=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
@@ -685,19 +685,7 @@
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
-              "init_submodules": false,
               "make_files_read_only": false,
-              "recursive_init_submodules": true,
-              "patch_args": [
-                "-p1"
-              ],
-              "patch_cmds": [],
-              "patch_cmds_win": [],
-              "patch_tool": "",
-              "patches": [
-                "@@//third_party/swift_packages:swift_nio_ssh.patch"
-              ],
-              "publicly_expose_all_targets": false,
               "replace_scm_with_registry": false,
               "target_deps": {},
               "module_aliases": {},
