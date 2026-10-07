@@ -8,6 +8,7 @@ import VisorProtocol
 /// (the state dot or spinner, the archive box), 8pt, and the text. Rows
 /// have 8pt above and below.
 enum OutlineMetrics {
-    static let glyph: CGFloat = 16
-    static let gap: CGFloat = 8
+    // (A TV's glyphs are drawn at the TV's type, near twice a phone's.)
+    static let glyph: CGFloat = Screen.tv ? 30 : 16
+    static let gap: CGFloat = Screen.tv ? 14 : 8
 }

@@ -54,6 +54,31 @@ extension View {
         #endif
     }
 
+    /// Swipe actions on a list row, where rows swipe (not on a TV, whose
+    /// rows have the context menu instead).
+    @ViewBuilder func rowSwipeActions<Content: View>(edge: HorizontalEdge, allowsFullSwipe: Bool, @ViewBuilder content: () -> Content) -> some View {
+        #if os(tvOS)
+        self
+        #else
+        swipeActions(edge: edge, allowsFullSwipe: allowsFullSwipe, content: content)
+        #endif
+    }
+
+    /// Text the user can select a line out of, where the system lets them.
+    @ViewBuilder func selectableText() -> some View {
+        #if os(tvOS)
+        self
+        #else
+        textSelection(.enabled)
+        #endif
+    }
+
+    /// The thread's bar (ThreadBar): the navigation bar's title and
+    /// trailing control, or a TV's own row above the thread.
+    func threadBar<Trailing: View>(title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+        modifier(ThreadBar(title: title, trailing: trailing()))
+    }
+
     /// A section header as written, not upper-cased.
     @ViewBuilder func noHeaderCase() -> some View {
         #if canImport(UIKit) || canImport(AppKit)
@@ -94,6 +119,9 @@ func copyToPasteboard(_ text: String) {
     #if os(macOS)
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
+    #elseif os(tvOS)
+    // A TV has no pasteboard: nothing to copy to.
+    _ = text
     #else
     UIPasteboard.general.string = text
     #endif

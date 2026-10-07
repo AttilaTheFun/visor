@@ -27,6 +27,10 @@ jobs:
           //libraries/visor_ui
           //applications/visor_ios:ios_lib
           //applications/visor_ios:widget_lib
+      - name: Build (tvOS)
+        run: >
+          bazel build --platforms=@apple_support//platforms:tvos_sim_arm64
+          //applications/visor_tvos:tvos_lib
       - name: Test
         run: >
           bazel test --test_output=errors
@@ -61,6 +65,10 @@ jobs:
           //libraries/visor_ui
           //applications/visor_ios:ios_lib
           //applications/visor_ios:widget_lib
+      - name: Build (tvOS)
+        run: >
+          bazel build --platforms=@apple_support//platforms:tvos_sim_arm64
+          //applications/visor_tvos:tvos_lib
       - name: Test
         run: >
           bazel test --test_output=errors

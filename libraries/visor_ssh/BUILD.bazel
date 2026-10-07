@@ -16,6 +16,8 @@ swift_library(
     target_compatible_with = select({
         "@platforms//os:ios": [],
         "@platforms//os:macos": [],
+        "@platforms//os:tvos": [],
+        "@platforms//os:watchos": [],
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),

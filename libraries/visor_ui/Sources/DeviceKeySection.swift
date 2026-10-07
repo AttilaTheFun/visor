@@ -14,7 +14,7 @@ struct DeviceKeySection: View {
         Section {
             Text(key)
                 .font(.footnote.monospaced())
-                .textSelection(.enabled)
+                .selectableText()
                 .lineLimit(3)
                 .truncationMode(.middle)
             Button("Copy Key") { copyToPasteboard(key) }

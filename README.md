@@ -23,8 +23,8 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   code, and takes the network setting, the address a front of your own
   gives, and the TLS identity. The server knows nothing of what reaches
   it: a LAN, a VPN, a reverse proxy and a tunnel are all the same to it.
-- **applications/visor_ios**, **applications/visor_macos** — the client on
-  shared host sources: an inset grouped sidebar with a section per
+- **applications/visor_ios**, **applications/visor_macos**,
+  **applications/visor_tvos** — the client on shared host sources: an inset grouped sidebar with a section per
   computer (its connection state in the header, its sessions, its
   settings last), the transcript and composer from AgentUI. A computer
   is added by pasting its connection code or scanning its QR code
@@ -84,6 +84,7 @@ through rules_swift_package_manager from third_party/swift_packages.
 
     bazel build //applications/visor_menubar //applications/visor_macos
     bazel build --ios_multi_cpus=sim_arm64 //applications/visor_ios
+    bazel build --platforms=@apple_support//platforms:tvos_sim_arm64 //applications/visor_tvos
     bazel test //tests/...
     bazel run //:xcodeproj     # generates Visor.xcodeproj for Xcode (not committed)
 

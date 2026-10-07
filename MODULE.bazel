@@ -52,5 +52,17 @@ use_repo(
 )
 
 # The builder's own signing values (the Apple team), from .bazelrc.user.
+# The system SDKs rules_swift scans for explicit modules: the Mac's and the
+# iPhone's by default; the Apple TV's and the Watch's for the apps there.
+system_sdk = use_extension("@rules_swift//swift:extensions.bzl", "system_sdk")
+system_sdk.configure_sdks(
+    names = [
+        "AppleTVOS",
+        "AppleTVSimulator",
+        "WatchOS",
+        "WatchSimulator",
+    ],
+)
+
 signing = use_extension("//tools/signing:extension.bzl", "signing")
 use_repo(signing, "visor_signing")

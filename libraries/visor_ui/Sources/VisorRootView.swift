@@ -212,7 +212,7 @@ public struct VisorRootView: View {
     // MARK: Sidebar — computer, project, session
 
     private var sidebar: some View {
-        ListSearchChrome(text: $search, prompt: "Search sessions", composeLabel: "New session",
+        ListSearchChrome(text: $search, prompt: "Search sessions", title: "Sessions", composeLabel: "New session",
                          compose: store.servers.isEmpty ? nil : { composing = true }) {
             outline
         }
@@ -286,7 +286,7 @@ public struct VisorRootView: View {
             let which = SessionSelection(serverID: host.id, sessionID: card.session.id)
             SessionCardRow(session: card.session)
                 .tag(ContentSelection.session(which))
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                .rowSwipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
                         .tint(.orange)
                 }
@@ -309,7 +309,9 @@ public struct VisorRootView: View {
         HStack(spacing: OutlineMetrics.gap) {
             Image(systemName: "gearshape").foregroundColor(.secondary)
                 .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
-            Text("Computer Settings")
+            // (Under the computer's own heading, a TV's narrow sidebar
+            // says "Settings".)
+            Text(Screen.tv ? "Settings" : "Computer Settings")
             Spacer()
         }
         .tag(settings)

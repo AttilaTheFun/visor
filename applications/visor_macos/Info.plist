@@ -33,5 +33,9 @@
             </array>
         </dict>
     </array>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Dictate a message to the agent.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Turn what you say into the message.</string>
 </dict>
 </plist>
