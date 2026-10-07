@@ -11,10 +11,11 @@ import Foundation
 #endif
 import VisorClient
 
-/// A picture the transcript named, fetched from the computer that holds
-/// it. The reference is "<computer id>|<path>", because the transcript's
-/// image hook is one closure for the whole app and has to be told which
-/// machine to ask.
+/// An attachment the transcript named, on the computer that holds it: a
+/// picture fetched and drawn; a video or a file named on a tile, fetched
+/// only when opened. The reference is "<computer id>|<path>", because
+/// the transcript's image hook is one closure for the whole app and has
+/// to be told which machine to ask.
 @MainActor
 struct VisorImage: View {
     let reference: String
@@ -29,7 +30,9 @@ struct VisorImage: View {
 
     var body: some View {
         Group {
-            if let base64 {
+            if !AttachmentKind.isImage(path) {
+                AttachmentFileTile(name: AttachmentKind.fileName(path), isVideo: AttachmentKind.isVideo(path))
+            } else if let base64 {
                 Base64Image(base64: base64, key: reference, maxEdge: maxEdge)
             } else if failed {
                 // Nothing to show and nothing to be done about it here:
@@ -53,19 +56,22 @@ struct VisorImage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: reference) { await load() }
+        .task(id: reference) { if AttachmentKind.isImage(path) { await load() } }
     }
 
     #if os(iOS) || os(macOS)
-    /// The bytes behind a reference, for the viewer's share sheet.
+    /// The bytes behind a reference, for the system's preview and the
+    /// share sheet. A picture's are kept with the others drawn; a video's
+    /// or a file's (megabytes, shown once) are not.
     static func bytes(reference: String, store: VisorStore) async -> Data? {
         let parts = reference.split(separator: "|", maxSplits: 1)
         guard parts.count == 2, let host = store.server(for: String(parts[0])) else { return nil }
+        let path = String(parts[1])
         let base64: String
         if let cached = VisorImageCache.shared.data(for: reference) {
             base64 = cached
-        } else if let fetched = try? await host.fileData(path: String(parts[1])) {
-            VisorImageCache.shared.put(fetched, for: reference)
+        } else if let fetched = try? await host.fileData(path: path) {
+            if AttachmentKind.isImage(path) { VisorImageCache.shared.put(fetched, for: reference) }
             base64 = fetched
         } else {
             return nil

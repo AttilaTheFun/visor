@@ -25,6 +25,8 @@ struct AgentScreen: View {
     @State private var loopShown = false
     /// Pictures chosen for the next message, already on the computer.
     @State private var attachments: [PickedImage] = []
+    /// An attachment about to be sent, as a file for the system's preview.
+    @State private var previewFile: URL?
     /// The attach source open (files, the photo library, the camera).
     @State private var attachSource: AttachSource?
     @State private var taking = false
@@ -175,7 +177,8 @@ struct AgentScreen: View {
             },
             loadEarlier: transcript.hasEarlier ? { host.loadEarlier(sessionID) } : nil,
             suggestions: { [commands = host.sessionCommands[sessionID] ?? []] draft in Self.suggestions(for: draft, from: commands) },
-            pick: { draft = $0.text }
+            pick: { draft = $0.text },
+            dictation: DictationBridge.installed
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval,
@@ -274,7 +277,8 @@ struct AgentScreen: View {
             }
         } attachments: {
             ForEach(attachments) { picked in
-                AgentAttachmentTile(remove: { attachments.removeAll { $0.id == picked.id } }) {
+                AgentAttachmentTile(remove: { attachments.removeAll { $0.id == picked.id } },
+                                    open: { previewFile = picked.temporaryFile() }) {
                     if picked.isVideo {
                         // A frame of it, marked as a video.
                         ZStack {
@@ -304,6 +308,7 @@ struct AgentScreen: View {
             }
         }
         .attachmentPickers($attachSource, onPick: attach)
+        .filePreview($previewFile)
         // Files dropped on the chat are attached, as if picked.
         .attachmentDrop(onPick: attach)
         .alert("Goal", isPresented: Binding(get: { goalShown != nil }, set: { if !$0 { goalShown = nil } })) {

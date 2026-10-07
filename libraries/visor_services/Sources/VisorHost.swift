@@ -24,6 +24,9 @@ public enum VisorHost {
     /// The device's own networks, where the host tells them: which path
     /// fits where the device is, and when that changes.
     public static var network: (any VisorNetworkService)?
+    /// Dictation, where the host has a microphone and a recognizer: a
+    /// message spoken into the composer.
+    public static var dictation: (any VisorDictationService)?
 }
 
 /// Hands the client its services. An app calls this once, before it makes
@@ -32,7 +35,8 @@ public enum VisorHost {
 @MainActor
 public func installVisorServices(socket: any VisorSocketService, http: any VisorHTTPService, settings: any VisorSettingsService,
                                  notifications: (any VisorNotificationService)? = nil, widget: (any VisorWidgetService)? = nil,
-                                 ssh: (any VisorSSHService)? = nil, network: (any VisorNetworkService)? = nil) {
+                                 ssh: (any VisorSSHService)? = nil, network: (any VisorNetworkService)? = nil,
+                                 dictation: (any VisorDictationService)? = nil) {
     VisorHost.socket = socket
     VisorHost.http = http
     VisorHost.settings = settings
@@ -40,4 +44,5 @@ public func installVisorServices(socket: any VisorSocketService, http: any Visor
     VisorHost.widget = widget
     VisorHost.ssh = ssh
     VisorHost.network = network
+    VisorHost.dictation = dictation
 }

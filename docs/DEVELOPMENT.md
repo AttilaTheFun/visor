@@ -726,6 +726,19 @@ to look at. `SendIsImmediateTests` holds the client's half in CI: the sent
 message is in the thread before `sendMessage` returns, and a repeated
 message waits for its own row.
 
+### Opening frames look
+
+`tools/probes/frames/open_frames.sh <session id>` records the simulator
+while the iOS probe opens a session for the first time (the simulator
+erased first: nothing cached, the rows come from the first sync) and
+lays the frames around the tap out as contact sheets. The thread must
+appear once, at its end. Rows laid out from the top and scrolled to
+their end a frame later showed the thread's top for that frame — the
+flicker Logan saw on first opens (7 October); AgentUI's TranscriptView
+now keeps such rows invisible until the scroll has landed. A pixel
+measure would be fooled by the push animation under way at the same
+moment, so this is a look, not a gate.
+
 ## 6. Gotchas that cost time
 
 - A subagent's plain `sleep` is blocked by the harness; use

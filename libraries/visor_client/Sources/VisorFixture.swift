@@ -34,6 +34,7 @@ public enum VisorFixture {
     /// A small picture, the same bytes every run: four coloured blocks.
     static let picture = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABACAIAAABqVuVZAAAAfklEQVR42u3QAQkAIAwAsIcyi2gVe5jJBta5NS4MlmAx+i2lnVlKCBIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRL0cVDuWmJlLYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIE/Rv0AH3IYA5oDZ+mAAAAAElFTkSuQmCC"
     static let picturePath = "/Users/visor/Pictures/layout.png"
+    static let moviePath = "/Users/visor/Movies/banner.mov"
     static let now: Double = 1_790_000_000
 
     static var sessions: [SessionInfo] {
@@ -113,7 +114,7 @@ public enum VisorFixture {
 
         See [the sync notes](https://example.com/sync) for the retry rules.
         """),
-        TranscriptEntry(id: "f5", role: .user, text: "Here's the layout I want for the offline banner.", images: [picturePath],
+        TranscriptEntry(id: "f5", role: .user, text: "Here's the layout I want for the offline banner.", images: [picturePath, moviePath],
                         imageSizes: [ImageSize(width: 96, height: 64)]),
         TranscriptEntry(id: "f6", role: .user, text: "/goal Rows written offline are all on the server after reconnecting"),
         TranscriptEntry(id: "f7", role: .tool, text: "Rows written offline are all on the server after reconnecting", toolName: "goal"),
