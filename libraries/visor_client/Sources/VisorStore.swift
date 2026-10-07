@@ -62,8 +62,24 @@ public final class VisorStore: ObservableObject {
         for server in servers { observe(server); server.connect() }
         listenForNotifications()
         // Where the device is decides which path to each computer fits:
-        // a change is acted on at once.
-        VisorHost.network?.onChange = { [weak self] in self?.servers.forEach { $0.networkChanged() } }
+        // a change is acted on once the networks have settled. The path
+        // monitor speaks several times as it starts and as an interface
+        // comes up, and each word acted on restarted every sign-in.
+        VisorHost.network?.onChange = { [weak self] in self?.networksChanged() }
+    }
+
+    /// The pending reaction to the networks changing.
+    private var networksSettle: Task<Void, Never>?
+    /// How long the networks must stay as they are before it is acted on.
+    static let networkSettling: UInt64 = 400_000_000
+
+    func networksChanged() {
+        networksSettle?.cancel()
+        networksSettle = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.networkSettling)
+            guard !Task.isCancelled, let self else { return }
+            self.servers.forEach { $0.networkChanged() }
+        }
     }
 
     /// A push token arriving goes to every server; a notification the

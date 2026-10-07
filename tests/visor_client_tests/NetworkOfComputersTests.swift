@@ -298,6 +298,31 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(server.signedInBy.count, before)
     }
 
+    /// The networks speaking several times at once (the monitor starting,
+    /// an interface coming up) restart the sign-ins once, after they
+    /// settle, not once a word.
+    func testNetworkChangesAreActedOnOnceTheySettle() async throws {
+        let network = ScriptedNetwork()
+        VisorHost.network = network
+        defer { VisorHost.network = nil }
+        VisorHost.settings = MemorySettings()
+        let record = AgentServerRecord(name: "Mini", address: "http://192.168.4.52:7433", secret: "pw", provider: "scripted",
+                                       paths: ["http://100.90.45.11:7433"])
+        let server = scripted(record)
+        network.local = []
+        VisorHost.settings?.set(key: "hosts", value: JSONValue.array([record.json]).encoded())
+        let store = VisorStore()
+        for _ in 0..<5 { await settle() }
+        XCTAssertEqual(store.servers.first?.state, .connected)
+        let before = server.signedInBy.count
+        network.local = ["192.168.4.52"]
+        for _ in 0..<5 { network.onChange?() }
+        try await Task.sleep(nanoseconds: VisorStore.networkSettling + 200_000_000)
+        for _ in 0..<5 { await settle() }
+        XCTAssertEqual(server.signedInBy.count, before + 1, "one restart for five words")
+        XCTAssertEqual(server.signedInBy.last, "http://192.168.4.52:7433")
+    }
+
     /// A device's key as a link, scanned by a device that holds the
     /// computers: handed to every computer connected, which authorize it.
     func testAScannedKeyIsAuthorizedOnEveryComputerConnected() async {
