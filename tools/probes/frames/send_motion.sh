@@ -8,9 +8,9 @@
 #
 #   tools/probes/frames/send_motion.sh [host]     (default: this Mac's address)
 #
-# Needs: the server running on this Mac, a booted simulator the probe runs
-# on (rules_apple's "BAZEL_TEST_iPhone 17_27.0"; boot it with `xcrun simctl
-# boot`) whose Visor already knows this computer. The session is a throwaway,
+# Needs: the server running on this Mac and a booted simulator the probe
+# runs on (rules_apple's "BAZEL_TEST_iPhone 17_27.0"; boot it with `xcrun
+# simctl boot`). Its Visor is signed in to this computer if it is not yet. The session is a throwaway,
 # started over the API and ended afterwards. Contact sheets of the frames are
 # left in the output folder for a look (sheet.swift).
 set -euo pipefail
@@ -20,7 +20,13 @@ OUT="$(mktemp -d)/send"
 mkdir -p "$OUT"
 API=http://127.0.0.1:7433/api
 PW="${VISOR_TOKEN:-$(security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w 2>/dev/null || true)}"
-HOST="${1:-$(curl -s -H "Authorization: Bearer $PW" $API/code | python3 -c 'import json,sys,base64; t=json.load(sys.stdin)["text"]; t+="="*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t))["host"])')}"
+# The connection code, which the probe signs in with should the
+# simulator's Visor not know this computer yet (an erased simulator): it
+# carries the password, and is never printed.
+# (VISOR_PROBE_CODE, set, is the code to sign in with instead: a path of
+# another shape, such as a relay through a second server, which polls.)
+CODE_TEXT="${VISOR_PROBE_CODE:-$(curl -s -H "Authorization: Bearer $PW" $API/code | python3 -c 'import json,sys; print(json.load(sys.stdin)["text"])')}"
+HOST="${1:-$(python3 -c 'import json,sys,base64; t=sys.argv[1]; t+="="*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t))["host"])' "$CODE_TEXT")}"
 # Only the test runner's own simulator, by name: whatever else is booted
 # may be another agent's (one simulator per agent at a time).
 SIM_NAME="BAZEL_TEST_iPhone 17_27.0"
@@ -51,7 +57,7 @@ bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
   --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \
   --spawn_strategy=local --nocache_test_results --test_output=streamed \
   --test_filter=VisorProbe/testSendFrames --test_env=VISOR_FRAMES_SESSION=$SESSION \
-  "--test_env=VISOR_FRAMES_TEXT=$TEXT" --test_env=VISOR_PROBE_HOST=$HOST > "$OUT/test.txt" 2>&1 &
+  "--test_env=VISOR_FRAMES_TEXT=$TEXT" --test_env=VISOR_PROBE_HOST=$HOST "--test_env=VISOR_PROBE_CODE=$CODE_TEXT" > "$OUT/test.txt" 2>&1 &
 TEST=$!
 for _ in $(seq 1 600); do grep -q "VISOR_FRAMES end\|FAILED\|error:" "$OUT/test.txt" && break; sleep 1; done
 sleep 1; kill -INT $REC; sleep 3

@@ -15,8 +15,40 @@ final class VisorProbe: XCTestCase {
         let id = env["VISOR_FRAMES_SESSION"] ?? ""
         XCTAssertFalse(id.isEmpty, "VISOR_FRAMES_SESSION is required")
         let app = XCUIApplication()
+        // A fresh simulator's first launch asks about notifications: the
+        // question is answered, not left over the composer.
+        addUIInterruptionMonitor(withDescription: "notifications") { alert in
+            for name in ["Allow", "Open"] where alert.buttons[name].exists {
+                alert.buttons[name].tap()
+                return true
+            }
+            return false
+        }
         app.launch()
+        app.tap()
         let row = app.descendants(matching: .any).matching(identifier: "session-" + id).firstMatch
+        if !row.waitForExistence(timeout: 15) {
+            // No computer yet (an erased simulator): add the host by its
+            // address and password, as testSelectSession does.
+            let add = app.buttons["add-computer"].firstMatch
+            XCTAssertTrue(add.waitForExistence(timeout: 10), "no session row and no Add Computer row")
+            add.tap()
+            let host = app.textFields["host"].firstMatch
+            XCTAssertTrue(host.waitForExistence(timeout: 10), "no connect form")
+            host.tap()
+            if let code = env["VISOR_PROBE_CODE"], !code.isEmpty {
+                // The connection code, which carries the address and the
+                // password: typed, since a URL typed into the simulator
+                // loses the second slash of its "//" (http:/…), however
+                // it is typed.
+                host.typeText(code)
+            } else {
+                host.typeText(env["VISOR_PROBE_HOST"] ?? "my-mac.example.ts.net")
+                let secure = app.secureTextFields["password"].firstMatch
+                if secure.waitForExistence(timeout: 5) { secure.tap(); secure.typeText(env["VISOR_PROBE_PASSWORD"] ?? "") }
+            }
+            app.buttons["connect"].firstMatch.tap()
+        }
         XCTAssertTrue(row.waitForExistence(timeout: 30), "the session's row did not appear")
         row.tap()
         let composer = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
