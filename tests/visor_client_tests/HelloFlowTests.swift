@@ -132,6 +132,18 @@ final class MemorySettings: VisorSettingsService {
     func set(key: String, value: String) { values[key] = value }
 }
 
+/// Settings whose secrets refuse every write while `refusing`.
+@MainActor
+final class RefusingSecrets: VisorSettingsService {
+    var values: [String: String] = [:]
+    var secrets: [String: String] = [:]
+    var refusing = true
+    func get(key: String) -> String { values[key] ?? "" }
+    func set(key: String, value: String) { values[key] = value }
+    func secret(key: String) -> String { secrets[key] ?? "" }
+    func setSecret(key: String, value: String) { if !refusing { secrets[key] = value } }
+}
+
 @MainActor
 final class HelloFlowTests: XCTestCase {
     private var server: ScriptedServer!
@@ -414,6 +426,24 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertEqual(store.servers.map(\.record.name), ["Mini"])
         XCTAssertEqual(store.servers.first?.record.address, "http://mini.example:7433")
         XCTAssertEqual(store.servers.first?.record.secret, "pearl-grove")
+    }
+
+    /// A keychain that will not take a write (locked, or asking with no
+    /// one there to answer) loses nothing: the computers stay in the plain
+    /// settings, and are moved once it takes them.
+    func testARefusingKeychainLosesNoComputers() {
+        let settings = RefusingSecrets()
+        VisorHost.settings = settings
+        settings.values["hosts"] = #"[{"id":"h1","name":"Mini","host":"http://mini.example:7433","backend":"scripted"}]"#
+        let store = VisorStore()
+        XCTAssertEqual(store.servers.map(\.record.name), ["Mini"])
+        XCTAssertEqual(VisorStore().servers.map(\.record.name), ["Mini"])
+        XCTAssertTrue(settings.get(key: "hosts").contains("mini.example"))
+        // The keychain takes writes again: moved on the next read.
+        settings.refusing = false
+        XCTAssertEqual(VisorStore().servers.map(\.record.name), ["Mini"])
+        XCTAssertEqual(settings.get(key: "hosts"), "")
+        XCTAssertTrue(settings.secret(key: "hosts").contains("mini.example"))
     }
 
     func testAConnectionCodeAddsTheComputer() async {

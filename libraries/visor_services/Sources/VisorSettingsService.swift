@@ -18,17 +18,29 @@ public extension VisorSettingsService {
     /// others should not read — the computers it knows, the SSH host keys
     /// it trusts, its own id. On Apple that is the keychain, which keeps
     /// it when the app is deleted and installed again (and in an
-    /// encrypted backup). Read once from the plain settings, where an
-    /// earlier build kept it, and moved.
+    /// encrypted backup). Read from the plain settings where an earlier
+    /// build kept it (or where it went when the keychain would not take
+    /// it), and moved — the plain copy cleared only once the keychain
+    /// reads it back, so a keychain that refuses (locked, asking) loses
+    /// nothing.
     func kept(key: String) -> String {
         let value = secret(key: key)
         if !value.isEmpty { return value }
         let earlier = get(key: key)
         guard !earlier.isEmpty else { return "" }
         setSecret(key: key, value: earlier)
-        set(key: key, value: "")
+        if secret(key: key) == earlier { set(key: key, value: "") }
         return earlier
     }
 
-    func setKept(key: String, value: String) { setSecret(key: key, value: value) }
+    /// Keeps a setting with the secrets; in the plain settings instead
+    /// when the keychain does not take it, so it is never lost.
+    func setKept(key: String, value: String) {
+        setSecret(key: key, value: value)
+        if secret(key: key) == value {
+            if !get(key: key).isEmpty { set(key: key, value: "") }
+        } else {
+            set(key: key, value: value)
+        }
+    }
 }
