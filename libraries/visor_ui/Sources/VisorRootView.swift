@@ -67,6 +67,11 @@ public struct VisorRootView: View {
                 target.host.relocateProject(target.cwd, to: cwd)
             }
         }
+        .alert("SSH key", isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } })) {
+            Button("OK") { store.notice = nil }
+        } message: {
+            Text(store.notice ?? "")
+        }
         .alert("Rename Session", isPresented: presenting($renamingSession)) {
             TextField("Title", text: $nameDraft)
             Button("Cancel", role: .cancel) { renamingSession = nil }

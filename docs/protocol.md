@@ -81,7 +81,7 @@ under `/api`.
 | `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
 | `POST /sessions/<id>/acknowledge` | | the user has read the session's notice |
 | `GET /peers` | | `peers`: the server's `id`, `host`, own `addresses`, and its `peers` |
-| `POST /ssh/keys` | `text`: this device's SSH public key line | `ssh`; the key is in the user's `authorized_keys`, so the device comes in over SSH next |
+| `POST /ssh/keys` | `text`: an SSH public key line (this device's, or one scanned from another device's `visor://authorize?key=` QR code) | `ssh`; the key is in the user's `authorized_keys`, so that device comes in over SSH next |
 | `POST /peers` | `peers`: computers to tell the server of | `peers`; kept and passed on |
 | `POST /unlink` | `text`: a peer's id or address | forgets that peer |
 | `/peer/<id>/api/…` | any of the above | the peer's own answer, relayed |

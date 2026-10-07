@@ -270,6 +270,29 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(host.state, .connected)
         XCTAssertEqual(server.signedInBy.count, before)
     }
+
+    /// A device's key as a link, scanned by a device that holds the
+    /// computers: handed to every computer connected, which authorize it.
+    func testAScannedKeyIsAuthorizedOnEveryComputerConnected() async {
+        let link = SSHKeyLink(key: "ssh-ed25519 AAAAipad visor")
+        XCTAssertTrue(link.link.hasPrefix("visor://authorize?key="))
+        XCTAssertEqual(SSHKeyLink(parsing: " " + link.link + "\n"), link)
+        XCTAssertNil(SSHKeyLink(parsing: "visor://connect?code=abc"))
+        XCTAssertNil(ConnectionCode(parsing: link.link), "not a connection code")
+        VisorHost.settings = MemorySettings()
+        let a = AgentServerRecord(name: "A", address: "http://a:7433", secret: "a-pw", provider: "scripted")
+        let b = AgentServerRecord(name: "B", address: "http://b:7433", secret: "b-pw", provider: "scripted")
+        let serverA = scripted(a), serverB = scripted(b)
+        serverB.refused = ["http://b:7433"]
+        VisorHost.settings?.set(key: "hosts", value: JSONValue.array([a.json, b.json]).encoded())
+        let store = VisorStore()
+        for _ in 0..<5 { await settle() }
+        XCTAssertNil(store.open(link.link))
+        for _ in 0..<5 { await settle() }
+        XCTAssertEqual(serverA.authorizedKeys, ["ssh-ed25519 AAAAipad visor"])
+        XCTAssertTrue(serverB.authorizedKeys.isEmpty, "not connected: not handed the key")
+        XCTAssertEqual(store.notice, "The device's key is authorized on Scripted Mac: it can connect over SSH now.")
+    }
 }
 
 private extension AgentServerConnection {

@@ -418,7 +418,12 @@ Settings makes the SSH path on the same host the address and does that;
 the connection code carries every path (`ConnectionCode.paths`), and
 the SSH connection code (`preferringSSH`, in the menu bar and in
 Computer Settings) puts an SSH path first, so a new device scanned in
-with it comes in by another path once and uses SSH from then on.
+with it comes in by another path once and uses SSH from then on. With no
+other path (HTTP off everywhere), the new device shows its key as a QR
+code (`SSHKeyLink`, `visor://authorize?key=`, in the device key section);
+a device that holds the computers scans it and `VisorStore.authorize`
+hands the key to every computer connected, after which the new device
+scans the SSH connection code and comes in over SSH at once.
 
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line

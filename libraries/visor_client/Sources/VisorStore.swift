@@ -119,14 +119,50 @@ public final class VisorStore: ObservableObject {
         return server
     }
 
+    /// What the last `visor://authorize` link did: which computers took
+    /// the key, for the app to show; cleared once shown.
+    @Published public var notice: String?
+
     /// A connection code or a `visor://connect` link: the Mac it names is
-    /// added (or its password updated) and connected. Nil when the text
-    /// is neither.
+    /// added (or its password updated) and connected. A
+    /// `visor://authorize` link (another device's SSH key, scanned): the
+    /// key is handed to every computer connected here, so that device
+    /// comes in over SSH. Nil when the text is neither, or for a key.
     @discardableResult
     public func open(_ text: String) -> AgentServerConnection? {
+        if let link = SSHKeyLink(parsing: text) {
+            authorize(link.key)
+            return nil
+        }
         guard let code = ConnectionCode(parsing: text) else { return nil }
         addingServer = false
         return add(AgentServerRecord(name: code.name, address: code.host, secret: code.password, serverID: code.id, paths: code.paths))
+    }
+
+    /// Hands a device's SSH key to every computer connected here.
+    public func authorize(_ key: String) {
+        addingServer = false
+        let connected = servers.filter { $0.state == .connected }
+        guard !connected.isEmpty else {
+            notice = "No computer is connected to hand the key to."
+            return
+        }
+        Task { @MainActor in
+            var took: [String] = []
+            var refused: [String] = []
+            for server in connected {
+                do {
+                    try await server.server.authorizeSSHKey(key)
+                    took.append(server.record.name.isEmpty ? server.record.address : server.record.name)
+                } catch {
+                    refused.append(server.record.name.isEmpty ? server.record.address : server.record.name)
+                }
+            }
+            var lines: [String] = []
+            if !took.isEmpty { lines.append("The device's key is authorized on " + took.joined(separator: ", ") + ": it can connect over SSH now.") }
+            if !refused.isEmpty { lines.append("Not on " + refused.joined(separator: ", ") + ".") }
+            notice = lines.joined(separator: " ")
+        }
     }
 
     public func remove(_ server: AgentServerConnection) {
