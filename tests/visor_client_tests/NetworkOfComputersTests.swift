@@ -54,7 +54,8 @@ final class NetworkOfComputersTests: XCTestCase {
         host.connect()
         await settle()
         XCTAssertEqual(host.state, .connected)
-        XCTAssertEqual(server.signedInBy, ["http://10.0.0.2:7433", "logan@10.0.0.2", "http://100.90.45.11:7433"])
+        // (No SSH on this device: its SSH path is not tried.)
+        XCTAssertEqual(server.signedInBy, ["http://10.0.0.2:7433", "http://100.90.45.11:7433"])
         XCTAssertFalse(server.pauses.contains(2_000), "no retry wait between paths (the minute's poll aside)")
         XCTAssertEqual(host.path, "http://100.90.45.11:7433")
         XCTAssertEqual(host.record.address, "http://10.0.0.2:7433", "the record's address stands")
@@ -63,7 +64,7 @@ final class NetworkOfComputersTests: XCTestCase {
         host.connect()
         await settle()
         XCTAssertEqual(server.signedInBy.last, "http://100.90.45.11:7433", "the path that answered, first")
-        XCTAssertEqual(server.signedInBy.count, 4)
+        XCTAssertEqual(server.signedInBy.count, 3)
     }
 
     /// Every path refused: the wait, then the paths again from the start.
@@ -169,9 +170,11 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(server.signedInBy, ["ssh://logan@10.0.0.2", "http://10.0.0.2:7433", "ssh://logan@10.0.0.2"])
     }
 
-    /// Use SSH: the record's address becomes the SSH path on the same
-    /// host, the old one another path, and the key is handed over by it.
-    func testUseSSHSwitchesTheAddressAndEnrolls() async {
+    /// SSH is the way in wherever the device has it: a computer held by
+    /// its HTTP address, with SSH paths, is tried over SSH first; refused
+    /// (its key not known yet), it is reached over HTTP, hands its key
+    /// over, and is on SSH from then on, with no Use SSH asked for.
+    func testSSHIsTheWayInWhereTheDeviceHasIt() async {
         let ssh = ScriptedSSH()
         VisorHost.ssh = ssh
         defer { VisorHost.ssh = nil }
@@ -182,16 +185,39 @@ final class NetworkOfComputersTests: XCTestCase {
         server.onAuthorize = { server.refused = [] }
         let host = AgentServerConnection(record: record)
         host.connect()
-        await settle()
-        XCTAssertEqual(host.path, "http://10.0.0.2:7433")
-        XCTAssertTrue(host.authorizedNothingYet(server))
-        XCTAssertTrue(host.useSSH())
         for _ in 0..<5 { await settle() }
-        XCTAssertEqual(host.record.address, "ssh://logan@10.0.0.2", "the SSH path on the same host")
-        XCTAssertTrue(host.record.paths.contains("http://10.0.0.2:7433"))
+        XCTAssertEqual(server.signedInBy.prefix(3), ["ssh://logan@100.90.45.11", "ssh://logan@10.0.0.2", "http://10.0.0.2:7433"],
+                       "SSH before HTTP")
         XCTAssertEqual(server.authorizedKeys.count, 1)
-        XCTAssertEqual(host.path, "ssh://logan@10.0.0.2")
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertTrue(host.path.map { SSHAddress($0) != nil } ?? false, "on SSH once the key is known")
+        XCTAssertEqual(host.record.address, "http://10.0.0.2:7433", "the address stands; the order is the device's")
+        // Use SSH still makes the SSH path on the same host the address.
+        XCTAssertTrue(host.useSSH())
+        XCTAssertEqual(host.record.address, "ssh://logan@10.0.0.2")
         XCTAssertFalse(AgentServerConnection(record: AgentServerRecord(name: "", address: "http://x", provider: "scripted")).useSSH(), "no SSH path known")
+    }
+
+    /// At home SSH over the LAN, away SSH over the tailnet: HTTP over the
+    /// LAN does not come before SSH over the tailnet.
+    func testSSHComesBeforeHTTPOnEveryNetwork() {
+        let ssh = ScriptedSSH()
+        VisorHost.ssh = ssh
+        let network = ScriptedNetwork()
+        VisorHost.network = network
+        defer { VisorHost.ssh = nil; VisorHost.network = nil }
+        let record = AgentServerRecord(name: "Mini", address: "http://192.168.4.52:7433", secret: "pw", provider: "scripted",
+                                       paths: ["http://100.90.45.11:7433", "ssh://logan@100.90.45.11", "ssh://logan@192.168.4.52"])
+        let host = AgentServerConnection(record: record)
+        network.local = ["192.168.4.52"]
+        XCTAssertEqual(host.pathsToTry(), ["ssh://logan@192.168.4.52", "ssh://logan@100.90.45.11", "http://192.168.4.52:7433",
+                                           "http://100.90.45.11:7433"])
+        network.local = []
+        XCTAssertEqual(host.pathsToTry().prefix(2), ["ssh://logan@100.90.45.11", "http://100.90.45.11:7433"])
+        // Without SSH on the device, its SSH paths are not tried at all.
+        VisorHost.ssh = nil
+        network.local = ["192.168.4.52"]
+        XCTAssertEqual(host.pathsToTry(), ["http://192.168.4.52:7433", "http://100.90.45.11:7433"])
     }
 
     /// The connection code carries the paths; the SSH code puts one first.
@@ -235,7 +261,8 @@ final class NetworkOfComputersTests: XCTestCase {
     func testThePathThatFitsTheNetworkComesFirst() async {
         let network = ScriptedNetwork()
         VisorHost.network = network
-        defer { VisorHost.network = nil }
+        VisorHost.ssh = ScriptedSSH()
+        defer { VisorHost.network = nil; VisorHost.ssh = nil }
         let record = AgentServerRecord(name: "Mini", address: "ssh://logan@100.90.45.11", secret: "pw", provider: "scripted",
                                        paths: ["ssh://logan@192.168.4.52", "http://100.90.45.11:7433", "http://192.168.4.52:7433"])
         let server = scripted(record)
