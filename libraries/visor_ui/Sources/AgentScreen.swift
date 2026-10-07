@@ -393,12 +393,13 @@ struct AgentScreen: View {
     }
 
     /// The session's name, as the sidebar lists it.
-    /// The turn's status lines, and under them what the agent has in the
-    /// background (a turn's own line for the same work is not repeated).
+    /// The turn's status lines while the agent works; what it has in the
+    /// background between turns (the status row shows the last running
+    /// item, so the two are never mixed: a monitor must not hide the
+    /// thinking).
     private var statusItems: [StatusItem] {
-        let turn = transcript.turnStatus
-        let background = (info?.background ?? []).filter { item in !turn.contains { $0.id == item.id } }
-        return turn + background
+        if transcript.busy { return transcript.turnStatus }
+        return info?.background ?? []
     }
 
     private var sessionTitle: String {

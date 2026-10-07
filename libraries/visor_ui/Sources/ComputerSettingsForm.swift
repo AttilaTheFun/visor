@@ -20,19 +20,39 @@ struct ComputerSettingsForm: View {
     /// Whether the computer is reached over its own SSH.
     private var overSSH: Bool { SSHAddress(host.record.address) != nil }
 
-    /// The state, and for a connected computer the path it is connected
-    /// by: "Connected over SSH (ssh://logan@10.0.0.2), no password" or
-    /// "Connected over HTTP (http://10.0.0.2:7433), with the password".
-    private var connectedBy: String {
-        guard host.state == .connected, let path = host.path else { return host.state.label }
-        if SSHAddress(path) != nil { return "Connected over SSH (\(path)), signed in by this device's key." }
-        let relayed = path.contains("/peer/") ? ", through another computer" : ""
-        let how = host.record.authentication == NoAuthenticator.name ? "no sign-in asked" : "with the password"
-        return "Connected over \(path.lowercased().hasPrefix("https") ? "HTTPS" : "HTTP") (\(path))\(relayed), \(how)."
+    /// The transport a path is: SSH, HTTPS or HTTP, through another
+    /// computer when the path is a relay.
+    static func transport(of path: String) -> String {
+        if SSHAddress(path) != nil { return "SSH" }
+        let scheme = path.lowercased().hasPrefix("https") ? "HTTPS" : "HTTP"
+        return path.contains("/peer/") ? "\(scheme), through another computer" : scheme
+    }
+
+    /// How the connection signed in: by this device's key over SSH, else
+    /// as the record's authenticator says.
+    static func signIn(of path: String, record: AgentServerRecord) -> String {
+        if SSHAddress(path) != nil { return "This device's SSH key" }
+        return AgentServerAuthenticators.all.first { $0.id == record.authentication }?.title ?? "Password"
     }
 
     var body: some View {
         Form {
+            // What the connection is, in plain rows, before anything editable.
+            Section {
+                LabeledContent("Status", value: host.state.label)
+                if host.state == .connected, let path = host.path {
+                    LabeledContent("Transport", value: Self.transport(of: path))
+                    LabeledContent("Path", value: path)
+                    LabeledContent("Sign-in", value: Self.signIn(of: path, record: host.record))
+                    LabeledContent("Updates", value: host.live ? "Live" : "Polling")
+                }
+            } header: {
+                Text("Connection")
+            } footer: {
+                if host.state == .connected, !host.live {
+                    Text("Polling: this path carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn.")
+                }
+            }
             Section {
                 TitledField(title: "Name") { TextField("Name", text: $name) }
                 TitledField(title: "Address") {
@@ -44,12 +64,11 @@ struct ComputerSettingsForm: View {
             } header: {
                 Text("Computer")
             } footer: {
-                Text(host.state.wantsAuthentication
-                     ? (overSSH
-                        ? "The computer refused this device's key, or Visor Server refused the password. Put the key below in the user's authorized keys, check the password, and save."
-                        : "This computer does not know this device as its owner's. Type the password its Visor menu bar app shows and save.")
-                     : connectedBy + (host.state == .connected && !host.live
-                        ? " Followed by polling: this path carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn." : ""))
+                if host.state.wantsAuthentication {
+                    Text(overSSH
+                         ? "The computer refused this device's key, or Visor Server refused the password. Put the key below in the user's authorized keys, check the password, and save."
+                         : "This computer does not know this device as its owner's. Type the password its Visor menu bar app shows and save.")
+                }
             }
             if overSSH, VisorHost.ssh != nil { DeviceKeySection() }
             if !overSSH, VisorHost.ssh != nil, !host.sshPaths.isEmpty {
