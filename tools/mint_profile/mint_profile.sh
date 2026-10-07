@@ -12,6 +12,14 @@
 # app.entitlements), the App ID gets those capabilities (push) and the
 # profile carries them: what the wildcard profile cannot.
 #
+# A new device needs both profiles re-minted: the app's explicit one (this
+# script with the app's bundle id and entitlements, the device plugged in),
+# and the team's wildcard, which the widget uses. Once the app's own App ID
+# exists, minting the app's bundle id again keeps using the explicit
+# profile, so the wildcard is re-minted through a bundle id with no
+# capabilities of its own (any throwaway id, no entitlements file). The
+# device must be awake, unlocked and in Developer Mode.
+#
 # Xcode's own sign-in (Settings → Accounts) is not needed when an App Store
 # Connect API key is set: VISOR_ASC_KEY_PATH, VISOR_ASC_KEY_ID and
 # VISOR_ASC_ISSUER_ID, in the environment or in ~/.appstoreconnect/visor.env

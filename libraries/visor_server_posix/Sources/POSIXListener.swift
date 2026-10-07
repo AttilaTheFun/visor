@@ -8,14 +8,17 @@ import VisorServer
 final class POSIXListener: Listener {
     private let descriptor: Int32
     private let stopped = StopFlag()
+    /// The socket file, when that is what is listened on: removed at stop.
+    private let unixPath: String?
 
-    init(port: UInt16, everywhere: Bool, accept: @escaping @MainActor (any ByteStream) -> Void) throws {
-        let descriptor = visor_listen(port, everywhere ? 1 : 0)
+    init(port: UInt16, everywhere: Bool, unixPath: String? = nil, accept: @escaping @MainActor (any ByteStream) -> Void) throws {
+        let descriptor = unixPath.map { visor_listen_unix($0) } ?? visor_listen(port, everywhere ? 1 : 0)
         guard descriptor >= 0 else {
             throw NSError(domain: "Visor", code: Int(errno),
-                          userInfo: [NSLocalizedDescriptionKey: "port \(port): \(String(cString: strerror(errno)))"])
+                          userInfo: [NSLocalizedDescriptionKey: "\(unixPath ?? "port \(port)"): \(String(cString: strerror(errno)))"])
         }
         self.descriptor = descriptor
+        self.unixPath = unixPath
         let stopped = self.stopped
         let (connections, arrived) = AsyncStream.makeStream(of: Int32.self)
         Thread.detachNewThread {
@@ -38,6 +41,7 @@ final class POSIXListener: Listener {
     func stop() {
         stopped.set()
         visor_shutdown(descriptor)
+        if let unixPath { unlink(unixPath) }
     }
 }
 

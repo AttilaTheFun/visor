@@ -19,16 +19,17 @@ public final class HTTPServer {
 
     /// Serves one connection: the request, once whole, is answered and the
     /// connection closed.
-    func serve(_ stream: any ByteStream, received: Data) {
+    func serve(_ stream: any ByteStream, received: Data, trusted: Bool = false) {
         let exchange = Exchange()
         exchange.received = received
         let take: @MainActor (Data?) -> Void = { [weak self] chunk in
             guard let self, !exchange.answered else { return }
             if let chunk { exchange.received.append(chunk) } else if exchange.received.isEmpty { return stream.close() }
-            guard let request = Self.parse(exchange.received) else {
+            guard var request = Self.parse(exchange.received) else {
                 if chunk == nil { stream.close() }
                 return
             }
+            request.trusted = trusted
             exchange.answered = true
             if request.method == "OPTIONS" {
                 self.write(HTTPResponse(204), to: stream)
@@ -39,6 +40,14 @@ public final class HTTPServer {
         // What has arrived may already be the whole request.
         take(Data())
         if !exchange.answered { stream.receive(take) }
+    }
+
+    /// The path on a request's first line ("" when there is none yet).
+    nonisolated static func requestPath(_ received: Data) -> String {
+        guard let end = headerEnd(received) else { return "" }
+        let head = String(decoding: received[..<end], as: UTF8.self)
+        let line = head.split(separator: "\r\n", maxSplits: 1).first.map { $0.split(separator: " ") } ?? []
+        return line.count >= 2 ? String(line[1]) : ""
     }
 
     /// Where the head of a request ends (the blank line's first byte), or

@@ -99,7 +99,7 @@ final class PollingFallbackTests: XCTestCase {
     /// Lets the breath between one answer and the next ask pass (a host
     /// without a socket service paces it by the clock).
     private func breathe() async {
-        try? await Task.sleep(nanoseconds: UInt64(WireAgentServer.pollBreath + 200) * 1_000_000)
+        try? await Task.sleep(nanoseconds: UInt64(VisorAgentServer.pollBreath + 200) * 1_000_000)
         await settle()
     }
 
@@ -136,7 +136,7 @@ final class PollingFallbackTests: XCTestCase {
         XCTAssertEqual(host.state, .connected)
     }
 
-    /// A socket that never opens (a road with no WebSocket): after the
+    /// A socket that never opens (a path with no WebSocket): after the
     /// login's time, polling takes over, and the socket is tried again
     /// after a while.
     func testASocketThatNeverOpensGivesWayToPolling() async throws {
@@ -148,7 +148,7 @@ final class PollingFallbackTests: XCTestCase {
         await settle()
         XCTAssertEqual(host.state, .connecting)
         XCTAssertEqual(socket.opened, ["wss://mac.example/"])
-        socket.elapse(WireAgentServer.loginTimeout)
+        socket.elapse(VisorAgentServer.loginTimeout)
         await settle()
         XCTAssertEqual(host.state, .connected)
         XCTAssertFalse(host.live)
@@ -157,7 +157,7 @@ final class PollingFallbackTests: XCTestCase {
         // Later, the socket again: this time it opens, and the channel's
         // own welcome takes over.
         socket.opens = true
-        socket.elapse(WireAgentServer.socketRetryInterval)
+        socket.elapse(VisorAgentServer.socketRetryInterval)
         await settle()
         XCTAssertEqual(socket.opened.count, 2)
         XCTAssertEqual(host.state, .connected)

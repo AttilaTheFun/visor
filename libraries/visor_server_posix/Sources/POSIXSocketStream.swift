@@ -1,3 +1,4 @@
+import CVisorPOSIX
 import Foundation
 import VisorServer
 
@@ -11,6 +12,13 @@ final class POSIXSocketStream: ByteStream {
 
     init(_ socket: POSIXSocket) {
         self.socket = socket
+    }
+
+    var localAddress: String? {
+        var buffer = [CChar](repeating: 0, count: 64)
+        visor_local_address(self.socket.descriptor, &buffer, buffer.count)
+        let text = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        return text.isEmpty ? nil : text
     }
 
     func receive(_ chunk: @escaping @MainActor (Data?) -> Void) {

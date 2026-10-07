@@ -38,9 +38,11 @@ extension VisorServer {
         return ""
     }
 
-    /// Whether a request may be answered: the bearer is the password or a
-    /// token `hello` issued.
+    /// Whether a request may be answered: it came on a trusted connection
+    /// (the socket file, through SSH as this user), or the bearer is the
+    /// password or a token `hello` issued.
     func authorized(_ request: HTTPRequest) -> Bool {
+        if request.trusted || settings.asksNothing { return true }
         guard let bearer = request.authorization, !bearer.isEmpty else { return false }
         // The agent token too: the agents this server started (and the
         // tools they run, such as a deploy) hold it, and no one else.

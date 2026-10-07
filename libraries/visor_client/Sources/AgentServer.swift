@@ -101,6 +101,25 @@ public protocol AgentServer: AnyObject {
     /// Links another server to this one by its code, so the agents here
     /// reach the sessions there.
     func link(code: String) async throws
+
+    // MARK: The network of computers
+
+    /// What the server said of itself at the last sign-in: its id and
+    /// its own addresses. Nil before a sign-in, and for a server that
+    /// says nothing of the kind.
+    var identity: ServerIdentity? { get }
+    /// The address the server is reached at now, as a URL root: the
+    /// record's, or what a tunnel to it gives. Through it, other servers
+    /// it knows can be reached (`/peer/<id>` under it).
+    var reachedAt: String? { get }
+    /// The other computers the server knows, with how to reach them.
+    func peers() async throws -> [Peer]
+    /// Tells the server of other computers, so its agents reach them and
+    /// its peers learn of them.
+    func introduce(_ peers: [Peer]) async throws
+    /// Puts this device's SSH public key among the server's user's
+    /// authorized keys, so this device comes in over SSH from now on.
+    func authorizeSSHKey(_ line: String) async throws
 }
 
 public extension AgentServer {
@@ -108,4 +127,9 @@ public extension AgentServer {
     func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool { false }
     func connectionCode() async throws -> String { throw AgentServerError.unsupported }
     func link(code: String) async throws { throw AgentServerError.unsupported }
+    var identity: ServerIdentity? { nil }
+    var reachedAt: String? { nil }
+    func peers() async throws -> [Peer] { [] }
+    func introduce(_ peers: [Peer]) async throws { throw AgentServerError.unsupported }
+    func authorizeSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
 }

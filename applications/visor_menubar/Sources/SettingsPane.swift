@@ -1,7 +1,9 @@
 import AppKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import Network
 import SwiftUI
+import Synchronization
 import VisorProtocol
 import VisorServer
 import VisorServerApple
@@ -11,6 +13,9 @@ struct SettingsPane: View {
     @State private var draft = ""
     @State private var message: String?
     @State private var linkDraft = ""
+    /// Whether this Mac's sshd answers on port 22 (Remote Login), as last
+    /// checked; nil before the check.
+    @State private var remoteLogin: Bool?
     @State private var linkMessage: String?
     @State private var linking = false
     @State private var choosingKey = false
@@ -70,19 +75,54 @@ struct SettingsPane: View {
                      : "Clients that are already connected stay connected; new logins use the new password.")
                     .font(.caption).foregroundColor(.secondary)
                 if let message { Text(message).font(.caption).foregroundColor(.red) }
+                Picker("Clients show", selection: Binding(get: { server.settings.authentication },
+                                                           set: { server.settings.authentication = $0 })) {
+                    Text("The password").tag("password")
+                    Text("Nothing").tag("none")
+                }
+                Text(server.settings.asksNothing
+                     ? "Anyone who reaches the server is let in: keep it to paths of your own — this Mac, a VPN of yours, SSH, or a front that signs users in before it reaches Visor."
+                     : "A client signs in with the password (or a token it was given for it); SSH clients at the socket file need neither.")
+                    .font(.caption).foregroundColor(.secondary)
             } header: {
                 Text("Password")
             }
             Section {
-                Toggle("Reachable from the network", isOn: Binding(get: { server.settings.reachableFromNetwork },
-                                                                  set: { server.settings.reachableFromNetwork = $0 }))
-                Text(server.settings.reachableFromNetwork
-                     ? "The server listens on every interface, port \(String(server.port)): a LAN, a VPN or a tunnel reaches it directly, with the password."
-                     : "Only this Mac reaches the server, on 127.0.0.1:\(String(server.port)). A reverse proxy or a tunnel on this Mac is the road in; set its address below.")
-                    .font(.caption).foregroundColor(.secondary)
-                TextField("Address clients take (https://proxy.example.com/visor)", text: $publicAddress)
-                    .onSubmit { server.settings.publicAddress = publicAddress }
-                Text("What a proxy, a tunnel or a name on the network gives, scheme and all; the connection code carries it. Empty, the server guesses from its own addresses when the network reaches it. A front that passes no WebSockets still works: clients poll instead.")
+                let addresses = NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) }
+                pathRow("http://127.0.0.1:\(String(server.port))")
+                Text("This Mac: always on, for its own Visor and its agents' tools.").font(.caption).foregroundColor(.secondary)
+                Toggle("LAN", isOn: Binding(get: { server.settings.lan }, set: { server.settings.lan = $0 }))
+                if server.settings.lan {
+                    ForEach(addresses.filter { $0.kind == .lan }, id: \.address) { entry in
+                        pathRow("\(server.servesTLS ? "https" : "http")://\(entry.address):\(String(server.port))", note: entry.interface)
+                    }
+                }
+                Toggle("VPN", isOn: Binding(get: { server.settings.vpn }, set: { server.settings.vpn = $0 }))
+                if server.settings.vpn {
+                    ForEach(addresses.filter { $0.kind == .vpn }, id: \.address) { entry in
+                        pathRow("\(server.servesTLS ? "https" : "http")://\(entry.address):\(String(server.port))", note: entry.interface)
+                    }
+                }
+                Toggle("SSH", isOn: Binding(get: { server.settings.sshEnabled }, set: { server.settings.sshEnabled = $0 }))
+                if server.settings.sshEnabled {
+                    ForEach(server.sshPaths, id: \.self) { path in pathRow(path) }
+                    if remoteLogin == false {
+                        Text("Remote Login is off on this Mac, so nothing reaches these yet: turn it on in System Settings → General → Sharing.")
+                            .font(.caption).foregroundColor(.red)
+                    } else {
+                        Text("Through this Mac's Remote Login, as you: no password asked (the socket file ~/.visor/server.sock).")
+                            .font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                Toggle("Reverse proxy", isOn: Binding(get: { server.settings.proxyEnabled }, set: { server.settings.proxyEnabled = $0 }))
+                if server.settings.proxyEnabled {
+                    TextField("https://proxy.example.com/visor", text: $publicAddress)
+                        .onSubmit { server.settings.publicAddress = publicAddress }
+                    if !server.settings.publicAddress.isEmpty { pathRow(server.settings.publicAddress) }
+                    Text("A proxy, a tunnel or a name with certificates in front of this Mac, scheme and all; clients are told it first, and it is what the connection code carries. One that passes no WebSockets still works: clients poll. Press Return to apply.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                Text("Each path is a way in; what a client must show is the sign-in above. The LAN's and a VPN's addresses change with the network; this list is as it is now.")
                     .font(.caption).foregroundColor(.secondary)
                 TextField("TLS identity, a .p12 file (empty: plain, or TLS is the front's)", text: $tlsPath)
                     .onSubmit { server.settings.tlsIdentityPath = tlsPath }
@@ -92,29 +132,29 @@ struct SettingsPane: View {
                     .font(.caption).foregroundColor(.secondary)
                 if let error = server.lastError { Text(error).font(.caption).foregroundColor(.red) }
             } header: {
-                Text("Network")
+                Text("Network paths")
             }
             Section {
-                ForEach(server.links, id: \.host) { link in
+                ForEach(server.peers, id: \.self) { peer in
                     HStack {
                         VStack(alignment: .leading) {
-                            Text(link.name)
-                            Text(link.host).font(.caption).foregroundColor(.secondary)
+                            Text(peer.name)
+                            Text(peer.addresses.joined(separator: ", ")).font(.caption).foregroundColor(.secondary).lineLimit(1)
                         }
                         Spacer()
-                        Button("Unlink") { server.unlink(host: link.host) }
+                        Button("Forget") { server.forget(peer: peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id) }
                     }
                 }
                 HStack {
                     TextField("Another computer's connection code", text: $linkDraft)
-                    Button("Link") { link() }
+                    Button("Add") { link() }
                         .disabled(linking || linkDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                Text("The agents here can list, message and read the sessions on linked computers, and theirs the ones here. Paste the code on either computer: the link goes both ways.")
+                Text("The computers on the network: the agents here reach the sessions on each, and each reaches the ones here; a client of any of them learns of the rest, and is carried to one it cannot reach itself. A client that holds two computers introduces them; or paste a code here, once.")
                     .font(.caption).foregroundColor(.secondary)
                 if let linkMessage { Text(linkMessage).font(.caption).foregroundColor(.red) }
             } header: {
-                Text("Linked computers")
+                Text("Computers on the network")
             }
             Section {
                 let current = server.apnsKey
@@ -151,16 +191,10 @@ struct SettingsPane: View {
                 let name = url.deletingPathExtension().lastPathComponent
                 if name.hasPrefix("AuthKey_") { keyID = String(name.dropFirst(8)) }
             }
-            Section("Addresses") {
-                if let address = server.reachableAddress { Text("Clients are told \(address)") }
-                ForEach(NetworkAddresses.all(), id: \.address) { entry in
-                    Text("\(entry.address)  \(entry.name)")
-                }
-                Text(server.settings.reachableFromNetwork ? "Port \(String(server.port)) on each of these" : "Port \(String(server.port)), on this Mac only")
-            }
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 760)
+        .task { remoteLogin = await Self.sshdAnswers() }
         .onAppear {
             publicAddress = server.settings.publicAddress
             tlsPath = server.settings.tlsIdentityPath
@@ -170,13 +204,49 @@ struct SettingsPane: View {
         }
     }
 
+    /// Whether something listens on this Mac's port 22: a connection
+    /// tried for a moment.
+    private static func sshdAnswers() async -> Bool {
+        await withCheckedContinuation { done in
+            let connection = NWConnection(host: "127.0.0.1", port: 22, using: .tcp)
+            let answered = Mutex(false)
+            let finish: @Sendable (Bool) -> Void = { up in
+                guard answered.withLock({ was in defer { was = true }; return !was }) else { return }
+                connection.cancel()
+                done.resume(returning: up)
+            }
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready: finish(true)
+                case .failed, .cancelled: finish(false)
+                default: break
+                }
+            }
+            connection.start(queue: .global())
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) { finish(false) }
+        }
+    }
+
+    /// One path's address, selectable, with a Copy button.
+    private func pathRow(_ path: String, note: String = "") -> some View {
+        HStack {
+            Text(path).font(.caption.monospaced()).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+            if !note.isEmpty { Text(note).font(.caption).foregroundColor(.secondary) }
+            Spacer()
+            Button("Copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(path, forType: .string)
+            }
+        }
+    }
+
     private func link() {
         linking = true
         linkMessage = nil
         Task {
             linkMessage = await server.link(linkDraft)
             // Kept here, even if the other did not link back: the code is done with.
-            if let code = ConnectionCode(parsing: linkDraft), server.links.contains(where: { $0.host == code.host }) { linkDraft = "" }
+            if let code = ConnectionCode(parsing: linkDraft), server.peers.contains(where: { $0.isSame(as: code.peer) }) { linkDraft = "" }
             linking = false
         }
     }

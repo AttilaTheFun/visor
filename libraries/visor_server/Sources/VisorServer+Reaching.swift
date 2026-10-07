@@ -1,6 +1,6 @@
 // Where clients reach this server, as it can tell: the address set by
 // hand, else one made from how it listens and what addresses this
-// computer has. There is no road of the server's own: a network it is on
+// computer has. There is no path of the server's own: a network it is on
 // (a LAN, a VPN), a reverse proxy or a tunnel in front
 // of it are all the same to it, and the password is what lets a client in.
 
@@ -28,15 +28,42 @@ extension VisorServer {
         listenAgain()
     }
 
-    /// The address clients take: the one set by hand, else — when the
-    /// network reaches the server — its first address, with the scheme
-    /// and the port; nil when only this computer reaches it and nothing
-    /// was set (a front of your own, whose address is yours to set).
+    /// The address clients take: the proxy's when one is on, else the
+    /// first address of a path that is on — a VPN's before the LAN's,
+    /// as it reaches the computer from more places — with the scheme and
+    /// the port; nil when only this computer and SSH reach it.
     public var reachableAddress: String? {
         let set = settings.publicAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !set.isEmpty { return set }
-        guard settings.reachableFromNetwork, let first = ServerPlatform.current.host.addresses().first else { return nil }
-        return "\(servesTLS ? "https" : "http")://\(first):\(port)"
+        if settings.proxyEnabled, !set.isEmpty { return set }
+        return httpPaths.first
+    }
+
+    /// `http(s)://<address>:<port>` for each address on a path that is
+    /// on, the VPN's first.
+    public var httpPaths: [String] {
+        let scheme = servesTLS ? "https" : "http"
+        let addresses = ServerPlatform.current.host.networkAddresses()
+        let open = addresses.filter { $0.kind == .vpn && settings.vpn } + addresses.filter { $0.kind == .lan && settings.lan }
+        return open.map { "\(scheme)://\($0.address):\(port)" }
+    }
+
+    /// `ssh://<user>@<address>` for each of this computer's addresses,
+    /// while SSH clients are let in (its sshd listens on them all).
+    public var sshPaths: [String] {
+        guard settings.sshEnabled else { return [] }
+        let user = NSUserName()
+        guard !user.isEmpty else { return [] }
+        return ServerPlatform.current.host.networkAddresses().map { "ssh://\(user)@\($0.address)" }
+    }
+
+    /// Whether a connection that arrived on `localAddress` is let in: this
+    /// computer's own always, the socket file always, each network path
+    /// as set; an address of no known path is the LAN's.
+    func admits(localAddress: String?) -> Bool {
+        guard let localAddress, !NetworkAddress.isLoopback(localAddress) else { return true }
+        let known = ServerPlatform.current.host.networkAddresses().first { $0.address == localAddress }
+        let kind = known?.kind ?? NetworkAddress.kind(of: localAddress, on: "")
+        return kind == .vpn ? settings.vpn : settings.lan
     }
 
     /// Settings changed in a way that changes how the server listens: it

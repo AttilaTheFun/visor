@@ -1,5 +1,5 @@
 // A reverse proxy that carries HTTP only, to a staging server on 7533,
-// with any WebSocket upgrade refused — a road with no WebSockets.
+// with any WebSocket upgrade refused — a path with no WebSockets.
 import http from 'node:http';
 const listen = Number(process.env.PORT ?? 8099);
 const server = http.createServer((req, res) => {

@@ -31,7 +31,7 @@ extension VisorServer {
             guard envelope.type == "login" else { client.send(.error("Log in first")); return }
             let token = envelope.token ?? ""
             let byPassword = !password.isEmpty && (envelope.password ?? "") == password
-            guard byPassword || (!token.isEmpty && tokens.contains(token)) else {
+            guard client.trusted || settings.asksNothing || byPassword || (!token.isEmpty && tokens.contains(token)) else {
                 client.sendLast(.error("Wrong password"))
                 return
             }

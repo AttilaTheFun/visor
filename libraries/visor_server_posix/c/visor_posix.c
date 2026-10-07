@@ -10,6 +10,8 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <termios.h>
 #include <unistd.h>
@@ -118,6 +120,38 @@ int visor_listen(unsigned short port, int everywhere) {
         return -1;
     }
     return listener;
+}
+
+int visor_listen_unix(const char *path) {
+    struct sockaddr_un address;
+    if (strlen(path) >= sizeof address.sun_path) { errno = ENAMETOOLONG; return -1; }
+    int listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listener < 0) return -1;
+    (void)fcntl(listener, F_SETFD, FD_CLOEXEC);
+    unlink(path);
+    memset(&address, 0, sizeof address);
+    address.sun_family = AF_UNIX;
+    strncpy(address.sun_path, path, sizeof address.sun_path - 1);
+    if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || chmod(path, 0600) != 0 || listen(listener, 64) != 0) {
+        int error = errno;
+        close(listener);
+        errno = error;
+        return -1;
+    }
+    return listener;
+}
+
+void visor_local_address(int socket, char *out, size_t size) {
+    if (size == 0) return;
+    out[0] = 0;
+    struct sockaddr_storage address;
+    socklen_t length = sizeof address;
+    if (getsockname(socket, (struct sockaddr *)&address, &length) != 0) return;
+    if (address.ss_family == AF_INET) {
+        inet_ntop(AF_INET, &((struct sockaddr_in *)&address)->sin_addr, out, (socklen_t)size);
+    } else if (address.ss_family == AF_INET6) {
+        inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&address)->sin6_addr, out, (socklen_t)size);
+    }
 }
 
 int visor_accept(int listener) {

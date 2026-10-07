@@ -5,7 +5,7 @@ import Foundation
 /// One thing a turn is doing or has done, as streamed — the model
 /// thinking, a shell running, a monitor watching, a subagent working, a
 /// tool called, the task list as it stands. Ephemeral: never the record.
-public struct StatusItem: Codable, Equatable, Sendable, Identifiable {
+public struct StatusItem: Codable, Hashable, Sendable, Identifiable {
     public enum Kind: String, Codable, Sendable { case thinking, shell, monitor, subagent, tool, tasks }
     public var id: String
     public var kind: Kind

@@ -12,27 +12,43 @@ where the route names the type.
 
 The server has one listener (7433 by default), which tells a WebSocket
 upgrade from a request by its first bytes: the live channel at `/`, the
-REST side under `/api`. By default it listens on loopback only, so the
-road in from the network is something on the same computer — a reverse
-proxy, a tunnel — forwarding one address to it; opened to the network
-(`reachableFromNetwork`, in the menu bar app's Settings or
-`visor-server network on`), it listens on every interface, for a LAN, a
-VPN or a tunnel to reach directly. It serves plain TCP, or TLS with a
-PKCS#12 identity where the system can (the Mac); otherwise TLS is the
-front's. The server does not listen at all without a password set.
+REST side under `/api`. Its network paths are each on or off in the
+settings (the menu bar app's Settings; `visor-server lan|vpn|ssh on|off`,
+`address <url>`): this computer itself, always (loopback); the LAN; a
+VPN (a tailnet: the interfaces such networks make, or 100.64.0.0/10);
+the computer's own SSH (the socket file, below); and a reverse proxy or
+tunnel of your own, at the address you set, which clients are told
+first. With the LAN or a VPN on it listens on every interface and admits
+each connection by the address it arrived on. It serves plain TCP, or
+TLS with a PKCS#12 identity where the system can (the Mac); otherwise
+TLS is the front's. The server does not listen at all without a password
+set, unless it is set to ask nothing.
+With `sshEnabled` (the default; `visor-server ssh on|off`) it also
+serves the same on a socket file only its user can open,
+`~/.visor/server.sock`: a client that comes through the computer's own
+SSH as that user reaches it there (running `nc -U ~/.visor/server.sock`
+per connection) and is already signed in.
 
 A request is answered when `Authorization: Bearer` is the password from
-the menu bar app, or a token from `hello`. Nothing about the road is
-trusted: no header names a user, and every device signs in the same
-way, with the password the connection code carries. The API reads the
-same under a mount path a front forwards whole (`/visor/api/sessions`).
+the menu bar app, or a token from `hello` — or when it came on the
+socket file, where no bearer is needed — or when the server is set to
+ask nothing (`authentication: none` in its settings; `visor-server auth
+none`), the path being the proof: a LAN or VPN of one's own, SSH alone,
+or a front that signs users in before requests reach Visor. On the
+client, how it proves itself is apart from how it reaches the server: an
+authenticator (none, the password, or a fork's own — a company's SSO
+whose token goes in a header) gives the headers every request carries. Nothing else about the path is
+trusted: no header names a user, and every device on the network signs
+in the same way, with the password the connection code carries. The API
+reads the same under a mount path a front forwards whole
+(`/visor/api/sessions`).
 
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
 200 gives `host` (the Mac's name), `login` (whose it is) and `token` —
 then the WebSocket, logged in with `token` (or `password`).
 
-The WebSocket is an accessory. A client whose road does not carry
+The WebSocket is an accessory. A client whose path does not carry
 WebSockets (or whose host has no socket service) follows the server by
 polling instead, with the same effect a little later: the list of
 sessions (`GET /sessions?since=`) and each open session's state
@@ -46,7 +62,7 @@ none notifies itself.
 
 Computers are added by hand, in one step. The menu bar app shows a
 connection code — URL-safe base64 (no padding) of
-`{"v":1,"name":…,"host":<address>,"password":…}` — as a string to
+`{"v":1,"name":…,"host":<address>,"password":…,"id":…,"paths":[…]}` (`paths`: the server's other network paths, `ssh://` ones among them; the SSH code puts one of those in `host`) — as a string to
 copy and as a QR code of `visor://connect?code=<code>`. A client takes
 the code, the link, or an address typed by hand (`ConnectionCode` in
 libraries/visor_protocol; the apps register the `visor` URL scheme).
@@ -59,12 +75,16 @@ under `/api`.
 
 | method and path | body | answer |
 |---|---|---|
-| `GET /hello` | | `hello`: `host`, `login`, `token` — or 401 |
+| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id`, own `addresses` and `sshKey` (its SSH public key line) — or 401 |
 | `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
 | `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
 | `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
 | `POST /sessions/<id>/acknowledge` | | the user has read the session's notice |
-| `POST /unlink` | `text`: a linked computer's host | forgets that link |
+| `GET /peers` | | `peers`: the server's `id`, `host`, own `addresses`, and its `peers` |
+| `POST /ssh/keys` | `text`: an SSH public key line (this device's, or one scanned from another device's `visor://authorize?key=` QR code) | `ssh`; the key is in the user's `authorized_keys`, so that device comes in over SSH next |
+| `POST /peers` | `peers`: computers to tell the server of | `peers`; kept and passed on |
+| `POST /unlink` | `text`: a peer's id or address | forgets that peer |
+| `/peer/<id>/api/…` | any of the above | the peer's own answer, relayed |
 | `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript) | `sessions` with the new one |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
@@ -98,7 +118,7 @@ and `subscribe` and stream the rest.
 
 | type | fields | meaning |
 |---|---|---|
-| `login` | `token` (from `hello`) or `password` | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
+| `login` | `token` (from `hello`) or `password`; neither on the socket file | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
 | `start` | `id`, `agent` (`claude`/`codex`/`openrouter`, or `shell` for a terminal session), `cwd`, `title`, `skipPermissions` | Create a session (the client picks the id; an empty title means the agent's name, numbered). Nothing is spawned until the first `send` — for a terminal, until a window takes it (`mode`). The client is subscribed to it. |
 | `send` | `session`, `text` | A user turn. To a terminal session: the text typed into its shell and entered; nothing is written down. |
 | `stop` | `session` | Kill the agent's process; the transcript stays and the next `send` resumes the agent's own session. |
@@ -205,21 +225,39 @@ delivered as a new turn (queued while the other session works), prefixed
 `[Message from the Visor session "<title>" (<id>), not from the user. …]`.
 Node must be on the PATH (as it already is for approvals).
 
-Sessions on other computers are reachable once the computers are linked:
-Visor Server's Settings → Linked computers takes the other computer's
-connection code, keeps it in the keychain, and sends this computer's code to
-the other's `POST /api/link` (`{"type":"link","text":<code>}`), so the link
-goes both ways. `list_sessions` then lists each linked computer's sessions as
-`<computer>/<id>`, the computer's name in lower case with dashes
-(`logans-macbook-pro/1tzn…`). Asks about such a session are forwarded to that
-computer's `POST /api/agent`, over HTTPS with its password, as the same
-envelope with `client` set to the caller as `<computer>/<id>`, `title` its
-name and `host` its computer; the answer is the `agent_result`. Messages from
-another computer are prefixed `[Message from the Visor session "<title>"
-(<computer>/<id>) on <computer name>, not from the user. …]`, and are
-answered with `send_message` to that id.
+Sessions on other computers are reachable across the network of
+computers. Every server has an id (`hello` says it, with the server's own
+`addresses` and `sshKey`); each keeps its peers — `Peer`: `id`, `name`,
+`addresses`, `password`, `sshKey` — in the keychain. A server has an SSH
+key of its own; a computer that takes a peer in authorizes the peer's
+key, and reaches a peer whose path is `ssh://` through a tunnel to that
+peer's socket file, with no password, as a device does (on a Mac or
+Linux; a Windows server reaches peers over HTTP alone). A computer joins once, anywhere: its
+connection code (which carries its id) pasted into another's Settings,
+which sends this computer's code to its `POST /api/link`; or a client that
+holds two servers, which introduces each to the other through
+`POST /api/peers` (`{"type":"peers","peers":[…]}`). What a server is told
+it keeps and passes on to its other peers the same way, so what one learns
+all learn; nothing is passed on twice (a server takes in only what is
+news, and the `X-Visor-Relay` header names who told it). `GET /api/peers`
+gives a client the network as the server knows it: `id`, `host`,
+`addresses` (its own) and `peers`. `POST /api/unlink` (`text`: an id or an
+address) forgets one.
 
-A client connected to several computers links them all in one step (Link
-These Computers, in the sidebar): it takes each server's code from
-`GET /api/code` (`{"type":"code","text":<code>}`, for a client already let
-in) and gives each server the others' codes through `POST /api/link`.
+A server relays for its peers: `/peer/<id>/api/…` under a server is the
+peer's API, carried there (with the peer's password put in, down a path
+the server has — one of the peer's addresses, or another peer that reaches
+it) and the answer brought back; a WebSocket upgrade under `/peer/<id>/`
+is refused, so a client follows the peer by polling. A request names the
+servers it has passed through in `X-Visor-Relay`, and none carries it
+twice or further than three.
+
+`list_sessions` lists each peer's sessions as `<computer>/<id>`, the
+computer's name in lower case with dashes (`logans-macbook-pro/1tzn…`).
+Asks about such a session are forwarded to that computer's
+`POST /api/agent`, with its password, as the same envelope with `client`
+set to the caller as `<computer>/<id>`, `title` its name and `host` its
+computer; the answer is the `agent_result`. Messages from another computer
+are prefixed `[Message from the Visor session "<title>" (<computer>/<id>)
+on <computer name>, not from the user. …]`, and are answered with
+`send_message` to that id.

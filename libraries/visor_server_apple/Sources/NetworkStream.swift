@@ -13,6 +13,12 @@ final class NetworkStream: ByteStream {
         self.connection = connection
     }
 
+    var localAddress: String? {
+        guard case .hostPort(let host, _)? = connection.currentPath?.localEndpoint else { return nil }
+        // An address may carry its interface ("fe80::1%en0"): the address alone.
+        return String("\(host)".split(separator: "%").first ?? "")
+    }
+
     func receive(_ chunk: @escaping @MainActor (Data?) -> Void) {
         connection.stateUpdateHandler = { [weak self] state in
             MainActor.assumeIsolated {

@@ -204,6 +204,8 @@ public final class ClaudeProcess: AgentProcess {
             emit.yield(.thinking(true))
         case .limits(let limits):
             emit.yield(.limits(limits))
+        case .background(let items):
+            emit.yield(.background(items))
         case .result(let failure, let spent):
             if let spent { emit.yield(.spent(spent)) }
             // An interrupt ends the turn with an error result of its own

@@ -54,7 +54,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     }
     @Published public private(set) var state: State = .disconnected
     /// Whether the server is followed live over its channel, or by polling
-    /// (where the road carries no WebSocket): the same, more slowly.
+    /// (where the path carries no WebSocket): the same, more slowly.
     @Published public private(set) var live = true
     @Published public private(set) var sessions: [SessionInfo] = []
     @Published public private(set) var transcripts: [String: SessionTranscript] = [:]
@@ -73,6 +73,23 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     private var wantsConnection = false
     private var attempt = 0
     private var pendingSubscriptions: Set<String> = []
+    /// The paths to the server for this round of tries: the record's
+    /// (the one that answered last time first), then those through other
+    /// servers (`relayPaths`); `pathIndex` is the one being tried.
+    private var paths: [String] = []
+    private var pathIndex = 0
+    private var lastGoodPath: String?
+    /// The paths through other connected servers to this one, asked for
+    /// as a round of tries begins (the store knows the other servers).
+    var relayPaths: (() -> [String])?
+    /// Told when the server is connected and has said who it is (the
+    /// store learns its peers and introduces it to the others).
+    var onConnected: (() -> Void)?
+    /// The path the server was reached by, this time.
+    public private(set) var path: String?
+    /// This device's SSH key was handed to the server once this
+    /// connection, so a refusal after that is not tried again.
+    private var sshEnrolled = false
 
     public init(record: AgentServerRecord) {
         self.server = AgentServerProviders.server(for: record)
@@ -234,6 +251,8 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         note("connect asked for")
         wantsConnection = true
         attempt = 0
+        pathIndex = 0
+        path = nil
         open()
         startPolling()
     }
@@ -262,9 +281,12 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         state = .connecting
         let mine = generation
         let server = server
-        let record = record
+        if pathIndex == 0 || paths.isEmpty { paths = pathsToTry() }
+        let path = paths[min(pathIndex, paths.count - 1)]
+        var record = record
+        record.address = path
         let started = log.now()
-        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : ""))
+        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : "") + (path == self.record.address ? "" : " by \(path)"))
         signingIn = mine
         Task { [weak self] in
             do {
@@ -272,7 +294,11 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
                 self.signingIn = nil
                 self.note("signed in after \(self.log.since(started)) ms; opening the channel")
-                if let name, name != self.record.name { self.record.name = name }
+                self.path = path
+                self.lastGoodPath = path
+                self.pathIndex = 0
+                if let name { self.record.takeServerName(name) }
+                if let identity = server.identity { self.take(identity) }
                 self.openChannel(mine)
             } catch {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
@@ -299,6 +325,163 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
 
     /// How long a sign-in has to answer before the try is given up.
     static let signInTimeout: Int32 = 5_000
+
+    /// The paths for a round: the one that answered last time (while it
+    /// still fits where the device is), then the record's own paths
+    /// ranked by fit — a path on a network the device is on now first
+    /// (the LAN at home), then overlay-network ones (a tailnet) while the
+    /// device has such a network, then the rest, with the record's
+    /// address first among equals — then those through other servers.
+    private func pathsToTry() -> [String] {
+        var candidates: [String] = []
+        let own = record.allPaths
+        for fit in [PathFit.local, .overlay, .other, .unlikely] {
+            var tier = own.filter { Self.fit(of: $0) == fit }
+            // The one that answered last time first among its equals.
+            if let lastGoodPath, let index = tier.firstIndex(of: lastGoodPath) {
+                tier.remove(at: index)
+                tier.insert(lastGoodPath, at: 0)
+            }
+            candidates += tier
+        }
+        candidates += relayPaths?() ?? []
+        var out: [String] = []
+        for path in candidates where !out.contains(path) { out.append(path) }
+        return out.isEmpty ? [record.address] : out
+    }
+
+    /// How a path fits where the device is now.
+    enum PathFit { case local, overlay, other, unlikely }
+
+    static func fit(of path: String) -> PathFit {
+        guard let network = VisorHost.network, let host = Self.host(ofPath: path) else { return .other }
+        if network.isOnLocalNetwork(host) { return .local }
+        if Self.isOverlay(host) { return network.hasVPN ? .overlay : .unlikely }
+        if Self.isPrivate(host) { return .unlikely }
+        return .other
+    }
+
+    /// A path's host: the SSH target's, or the URL's.
+    static func host(ofPath path: String) -> String? {
+        if let ssh = SSHAddress(path) { return ssh.target.host }
+        return ServerAddress(path).flatMap { host(of: $0.root) }
+    }
+
+    /// 100.64.0.0/10: a tailnet's addresses.
+    static func isOverlay(_ host: String) -> Bool {
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 4 && parts[0] == 100 && (64...127).contains(parts[1])
+    }
+
+    /// 10/8, 172.16/12, 192.168/16: a LAN's addresses, reachable only from it.
+    static func isPrivate(_ host: String) -> Bool {
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return false }
+        return parts[0] == 10 || (parts[0] == 172 && (16...31).contains(parts[1])) || (parts[0] == 192 && parts[1] == 168)
+    }
+
+    /// The device's networks changed: a server not connected is tried
+    /// now, from the start; one connected by a path that no longer fits
+    /// best (over the tailnet, now that the LAN is back; over the LAN,
+    /// now left) is connected again by the one that does.
+    public func networkChanged() {
+        guard wantsConnection else { return }
+        let best = pathsToTry().first
+        if state == .connected, let path, path == best { return }
+        note("the networks changed: connecting by \(best ?? record.address)" + (state == .connected ? " instead of \(path ?? "")" : ""))
+        attempt = 0
+        lastGoodPath = nil
+        pathIndex = 0
+        open()
+    }
+
+    /// What the server said of itself: its id, and its own addresses as
+    /// more paths to it.
+    private func take(_ identity: ServerIdentity) {
+        var changed = false
+        if record.serverID != identity.id { record.serverID = identity.id; changed = true }
+        if record.learnPaths(identity.addresses) { changed = true }
+        if !identity.sshKey.isEmpty, record.serverKey != identity.sshKey { record.serverKey = identity.sshKey; changed = true }
+        if changed { onRecordChange?() }
+    }
+
+    /// Takes in what a peer says of this computer: its addresses as more
+    /// paths, its password when none is kept.
+    func learn(_ peer: Peer) {
+        update { record in
+            if record.serverID.isEmpty { record.serverID = peer.id }
+            record.learnPaths(peer.addresses)
+            if record.secret.isEmpty { record.secret = peer.password }
+        }
+    }
+
+    /// This computer as other servers should know it: by the addresses
+    /// its server gave for itself (never this device's path to it, which
+    /// may be its loopback or a relay).
+    var asPeer: Peer? {
+        guard !record.serverID.isEmpty else { return nil }
+        let own = record.allPaths.filter { !$0.contains("/peer/") && !$0.contains("127.0.0.1") && !$0.contains("localhost") }
+        guard !own.isEmpty else { return nil }
+        return Peer(id: record.serverID, name: record.name, addresses: own, password: record.secret, sshKey: record.serverKey)
+    }
+
+    public func peers() async throws -> [Peer] { try await server.peers() }
+    public func introduce(_ peers: [Peer]) async throws { try await server.introduce(peers) }
+
+    /// The server's SSH paths, as it and its peers said them.
+    public var sshPaths: [String] { record.allPaths.filter { SSHAddress($0) != nil } }
+
+    /// Makes SSH the way in: the record's address becomes the server's
+    /// SSH path (the one on the same host as now, else the first), the
+    /// address until now one of the other paths, and the connection is
+    /// made again — over SSH if the server knows this device's key, else
+    /// by another path first, after which the key is handed over and SSH
+    /// tried again (`enrollSSHIfWanted`). False when no SSH path is known.
+    @discardableResult
+    public func useSSH() -> Bool {
+        let host = ServerAddress(record.address).flatMap { Self.host(of: $0.root) }
+        guard let chosen = sshPaths.first(where: { SSHAddress($0)?.target.host == host }) ?? sshPaths.first else { return false }
+        update { record in
+            let before = record.address
+            record.address = chosen
+            record.learnPaths([before])
+        }
+        lastGoodPath = nil
+        sshEnrolled = false
+        connect()
+        return true
+    }
+
+    /// The host part of a URL root (`http://10.0.0.2:7433` → `10.0.0.2`).
+    static func host(of root: String) -> String? {
+        guard let range = root.range(of: "://") else { return nil }
+        let rest = root[range.upperBound...]
+        let hostPort = rest.prefix { $0 != "/" }
+        if hostPort.hasPrefix("[") { return String(hostPort.prefix { $0 != "]" }.dropFirst()) }
+        return String(hostPort.prefix { $0 != ":" })
+    }
+
+    /// Connected by another path while the address asks for SSH: this
+    /// device's key is handed to the server, and SSH tried again — once.
+    private func enrollSSHIfWanted() {
+        guard SSHAddress(record.address) != nil, let path, SSHAddress(path) == nil, !sshEnrolled,
+              let ssh = VisorHost.ssh else { return }
+        sshEnrolled = true
+        let server = server
+        let key = ssh.publicKey()
+        let mine = generation
+        Task { [weak self] in
+            do {
+                try await server.authorizeSSHKey(key)
+                guard let self, self.generation == mine else { return }
+                self.note("this device's SSH key was authorized; connecting over SSH")
+                self.lastGoodPath = nil
+                self.connect()
+            } catch {
+                self?.note("the SSH key was not authorized: \(error)")
+            }
+        }
+    }
     /// The try (by its generation) whose sign-in is still unanswered.
     private var signingIn: Int?
     private var log: ConnectionLog { ConnectionLog.shared }
@@ -415,6 +598,16 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             note("dropped: \(reason); not retrying")
             return
         }
+        // Another path to the same server is tried at once; the wait
+        // comes once every path has been.
+        if path == nil, pathIndex + 1 < paths.count {
+            pathIndex += 1
+            note("dropped: \(reason); trying \(paths[pathIndex])")
+            open()
+            return
+        }
+        pathIndex = 0
+        path = nil
         attempt += 1
         let wait = Int32(Self.retryDelay(afterAttempt: attempt) * 1000)
         note("dropped: \(reason); retry \(attempt) in \(wait / 1000) s")
@@ -433,12 +626,14 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             state = .connected
             live = true
             attempt = 0
-            if !name.isEmpty { record.name = name }
+            record.takeServerName(name)
             if !record.everConnected { record.everConnected = true }
             sessions = list
             saveCachedSessions()
             onSessionsChange?()
             self.catalogs = catalogs
+            onConnected?()
+            enrollSSHIfWanted()
             // Re-subscribe to whatever was open before the drop.
             for id in pendingSubscriptions.union(transcripts.keys) { server.subscribe(id) }
             pendingSubscriptions.removeAll()

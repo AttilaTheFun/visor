@@ -27,7 +27,11 @@ Third-party: SwiftTerm's portable emulator (through agent_ui's TerminalUI,
 from upstream github.com/migueldeicaza/SwiftTerm, which builds for Android
 since #733; rspm runs no SwiftPM plugins, so MODULE.bazel patches in what
 its build plugin generates, third_party/swift_packages/swiftterm.patch,
-made from the pinned revision), SQLite.swift 0.15.3 (the
+made from the pinned revision), swift-nio-ssh 0.9 (SSH for the client
+and the server, through libraries/visor_ssh; it parses OpenSSH key lines
+but writes none, so `NIOSSHPublicKey+OpenSSH.swift` writes the kept host
+key from the key's bytes, read through reflection — a line to offer
+upstream instead), SQLite.swift 0.15.3 (the
 caches), rules_swift_package_manager (rspm) brings SwiftPM packages into
 Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
 `@swiftpkg_sqlite.swift//:SQLite`, `@swiftpkg_agent_ui//:AgentUI`.
@@ -38,15 +42,19 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
    (`brew install bazelisk`); Bazel version from `.bazelversion`.
 2. Clone this repo; Bazel and SwiftPM fetch agent_ui and the third-party
    packages themselves. Clone open_router_cli beside it to build the CLI.
-3. A road from your devices to the Mac. The server has one listener,
-   port 7433 (the WebSocket at `/`, the REST side under `/api`), on
-   loopback by default; in Settings, "Reachable from the network" makes
-   it listen on every interface, for a LAN or a VPN to
-   reach it directly at `http://<address>:7433`, and "Address clients
-   take" names what a reverse proxy or a tunnel gives instead. TLS: a
+3. A network path from your devices to the Mac. The server has one
+   listener, port 7433 (the WebSocket at `/`, the REST side under
+   `/api`), and Settings → Network paths switches each path on, showing
+   its address to copy: this Mac (always, `http://127.0.0.1:7433`), the
+   LAN and a VPN (`http://<address>:7433` on each address of that kind;
+   a connection is admitted by the address it arrived on), SSH (on by
+   default: `ssh://<user>@<address>`, the Mac's Remote Login as you,
+   already signed in, served on `~/.visor/server.sock`), and a reverse
+   proxy or tunnel of your own at the URL you set, told to clients
+   first. None on: this Mac alone reaches the port. TLS: a
    PKCS#12 identity in Settings, or the front's. Every client, and every
    tool on the Mac (the probes), signs in with the password; the server
-   trusts nothing about the road.
+   trusts nothing about the path.
 4. Agents, each configured on its own — Visor holds no keys: `claude`
    (Claude Code CLI, logged in), `codex` (`codex login`; Visor drives
    `codex app-server`), `openrouter` (build open_router_cli with
@@ -189,14 +197,30 @@ shell | monitor | subagent | tool | tasks; running/done; TodoWrite → a
 tasks item with `[TaskItem]`) from `AgentEvent.thinking/.toolStarted/
 .toolFinished`, which all three processes emit (Claude: tool_use id ↔
 tool_result tool_use_id; Codex: item/started|completed by id; OpenRouter:
-call id). A streamed delta for a message the record already carries is
+call id). What the agent has in the background between turns — a command
+run in the background, a monitor, an agent of its own — is different:
+Claude Code reports the whole list whenever it changes
+(`system/background_tasks_changed` → `AgentEvent.background`), the
+session carries it (`SessionInfo.background: [StatusItem]`, cleared when
+its process starts over) and the sessions list broadcasts it; the
+sidebar row shows a clock and "Waiting on …" while the session is idle,
+and the chat's status lines carry the items under the turn's own. A
+streamed delta for a message the record already carries is
 ignored (both ends); the turn's end sweeps served streams.
 
 **Client** (`libraries/visor_client`): `AgentServerConnection` per server,
-over the provider's `AgentServer` (`WireAgentServer`: `hello`, ws(s) +
+over the provider's `AgentServer` (`VisorAgentServer`: `hello`, ws(s) +
 http(s) bearer at a `ServerAddress`, each operation mapped to the wire
-protocol in `WireAgentServer+Operations.swift`, and polling in its
-place when the socket cannot be had, `WireAgentServer+Polling.swift`; a
+protocol in `VisorAgentServer+Operations.swift`, and polling in its
+place when the socket cannot be had, `VisorAgentServer+Polling.swift`;
+an SSH address (`SSHAddress`, `user@host[:port]`, `?via=user@jump,…`
+for jump hosts) is the same server reached through the computer's own
+SSH, `VisorAgentServer+SSH.swift`: the route opened through the host's
+`VisorSSHService` with the device's key, each hop's host key kept in the
+settings the first time (`ssh.hostkey.<user@host:port>`) and compared
+after, the server's port 7433 forwarded from a local port, and `address`
+then `http://127.0.0.1:<port>` for everything else; only where
+`VisorHost.ssh` is set, so not on the web or Android yet; a
 fork's maps the same operations to its own service), `SessionTranscript`
 (entries, streams by message id, `sending` = optimistic rows that stay the
 last row until the record carries the same words at a later revision AND
@@ -242,8 +266,8 @@ and run the command in a terminal session.
 limit, so a try that hangs (a request riding a connection that died while
 the app was away) becomes a drop and a retry: the sign-in has 5 s
 (`signInTimeout`), the socket 4 s to open and have its login answered
-(`WireAgentServer.loginTimeout`). The heartbeat
-(`WireAgentServer.watch`): a `ping` envelope every 16 s, and a
+(`VisorAgentServer.loginTimeout`). The heartbeat
+(`VisorAgentServer.watch`): a `ping` envelope every 16 s, and a
 channel that says nothing for 8 s after one is closed and reported as
 dropped, so a socket that died quietly (a sleep, a change of network) is
 found in seconds rather than when TCP gives up. The poll
@@ -312,6 +336,95 @@ The session-side values a server hands back (`SessionInfo`,
 `TranscriptEntry`, the transcript and ephemeral envelopes) are the
 protocol library's, so a fork's server produces those from its own API.
 
+**The network of computers** (`VisorServer+Peers`, `+Relay`;
+`VisorStore`, `AgentServerConnection`): every server has an id
+(`ServerSettings.serverID`, made once) and keeps `peers: [Peer]` (id,
+name, addresses, password) in the secrets, from a code pasted in
+Settings, a client's `POST /api/peers`, or a peer passing on what it
+knows (`tellPeers`, after anything new: `adopt` says whether it was);
+`hello` and `GET /api/peers` carry the server's own addresses
+(`ownAddresses`: the public address, each address with the port while
+the network reaches it, `user@address` while SSH is let in). A server
+relays HTTP for a peer under `/peer/<id>/` (`relayTarget`, `relay`:
+the peer's password put in, `X-Visor-Relay` against circles, the first
+path that answers kept in `workingPaths`); an upgrade there is refused
+in `accept`, so the client polls. The agents' cross-computer calls take
+the same paths (`paths(to:)`, `call`). On the client, a record keeps
+`serverID` and `paths`; `AgentServerConnection` tries the paths of a
+round in turn (`pathsToTry`: the one that answered last, the record's,
+then `relayPaths` through the other connected servers, `/peer/<id>`
+under each), the next at once when one does not answer; on connecting,
+`VisorStore.joined` folds a duplicate record of the same computer,
+takes in the server's peers (`take`: a new record, or more paths for a
+known one) and introduces the servers to one another (`introduce`). The
+Link These Computers row is gone: holding two servers is the link.
+
+**Another kind of sign-in** (a fork whose users sign in with a
+company's SSO, the server itself being Visor's behind a front that
+checks the token): transport and sign-in are apart. The transport is the
+address (HTTP, HTTPS, the computer's SSH); the sign-in is an
+`AgentServerAuthenticator` (`libraries/visor_client`), named in the
+record (`authentication`: `password` unless said), which gives the
+headers every request carries from the record's `secret` — the password
+as a bearer, none as nothing, a fork's as whatever its front wants — and
+throws `needsAuthentication` when the user must sign in again (a token
+expired). A fork registers one (`AgentServerAuthenticators.register`)
+with its rows for the forms (`AgentServerAuthenticatorUIs.register`: a
+button that runs the SSO and sets `secret` to the token), and nothing
+else changes. The headers go on the REST calls and on the socket's
+opening request (`VisorHTTPService.request(…headers:)`,
+`VisorSocketService.open(url:headers:)`; a host with only the bearer
+forms sends the bearer out of them, a browser opens the socket without).
+The server's side is `ServerSettings.authentication`: `password` (the
+default), or `none`, which lets in whoever reaches it — for paths of
+one's own, or a front that has signed the user in.
+
+**Server to server over SSH** (`libraries/visor_ssh`, `visor_server_ssh`,
+`VisorServer+PeerSSH`): the SSH machinery over swift-nio-ssh is one
+library, `VisorSSH` (`SSHConnector.connect(route:privateKey:hostKeys:)`
+→ `SSHConnection.forward/attach`), used by the client's
+`NativeVisorSSHService` and by the server's platform (`ServerPlatform.ssh:
+PeerSSH?`, `ConnectorPeerSSH` on the Mac and Linux; nil on Windows). The
+server keeps a key of its own in the secrets (`ssh.serverKey`); its
+public line (`ownSSHKey`) goes out in `hello` and in `ownPeer.sshKey`, a
+client keeps it on the record (`serverKey`) and carries it when it
+introduces the server, and `adopt` authorizes a peer's key into
+`authorized_keys`. `paths(to:)` includes a peer's `ssh://` addresses
+where the system has SSH; `base(for:)` opens (and keeps, in
+`peerTunnels`) a tunnel through the peer's own SSH to its socket file
+and answers `http://127.0.0.1:<port>`, which `call` and `relay` use; a
+failed path drops its tunnel.
+
+**Which path fits where the device is** (`VisorNetworkService`,
+`NativeVisorNetworkService`; `AgentServerConnection.pathsToTry`, `fit(of:)`,
+`networkChanged`): the host says which hosts are on a network the device
+is on now (each interface's address and mask) and whether it has a
+tailnet address, and calls back when the networks change (NWPathMonitor).
+Paths are ranked local, overlay, other, unlikely (a LAN's address when
+away, a tailnet's with no tailnet) — the one that answered last first
+among its equals — and `VisorStore` has every connection re-rank on a
+change: a server connected by a path that is no longer the best is
+connected again by the one that is. A host without the service (the
+web, Android) tries paths in the order kept.
+
+**Bootstrapping SSH** (`VisorServer+SSHKeys`, `AgentServerConnection.
+useSSH`, `enrollSSHIfWanted`): a client that is in by any path hands its
+SSH public key to `POST /api/ssh/keys`, which puts it in the user's
+`authorized_keys` (0700/0600, once). A record whose address is an SSH
+path that refuses the device's key is not a sign-in to redo: the
+connection tries its other paths, and once in by one of them hands the
+key over and connects again over SSH, once. "Use SSH" in Computer
+Settings makes the SSH path on the same host the address and does that;
+the connection code carries every path (`ConnectionCode.paths`), and
+the SSH connection code (`preferringSSH`, in the menu bar and in
+Computer Settings) puts an SSH path first, so a new device scanned in
+with it comes in by another path once and uses SSH from then on. With no
+other path (HTTP off everywhere), the new device shows its key as a QR
+code (`SSHKeyLink`, `visor://authorize?key=`, in the device key section);
+a device that holds the computers scans it and `VisorStore.authorize`
+hands the key to every computer connected, after which the new device
+scans the SSH connection code and comes in over SSH at once.
+
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line
 preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:
@@ -330,8 +443,18 @@ bearer is the password, or a token `GET /api/hello` issued (kept in
 memory, 512 newest); no header names a user. The socket's `login` takes
 `token` or `password`. One listener (`FrontDoor` tells an upgrade from a
 request by its first bytes), on loopback or every interface
-(`ServerSettings.reachableFromNetwork`), plain or TLS (`tlsIdentityPath`,
-Apple only; elsewhere `ListeningError.tlsUnavailable`).
+(`ServerSettings.lan || vpn`; `admits(localAddress:)` closes a connection
+on a path that is off, `NetworkAddress.Kind` by interface or range),
+plain or TLS (`tlsIdentityPath`,
+Apple only; elsewhere `ListeningError.tlsUnavailable`); and a second on
+the socket file `VisorServer.socketPath` while `sshEnabled`
+(`ListeningOptions.unixPath`; Apple and POSIX, not Windows:
+`ListeningError.unixUnavailable`), whose connections are trusted —
+`HTTPRequest.trusted`, `ClientConnection.trusted`: no bearer, no
+password at login. The client over SSH tries the file first
+(`VisorAgentServer+SSH`: `nc -U` over an exec channel per connection,
+`VisorSSHSession.attach`) and falls back to the port with the password
+(`forward`) when hello fails there.
 Clients (`AgentServerConnection.open` → `AgentServer.authenticate`) do
 `hello` first — 401 → `AgentServerError.needsAuthentication` → state
 `.needsAuthentication`, no retry until the record changes — then the
@@ -378,7 +501,7 @@ conditional compilation and imports nothing of a system: what differs —
 listening on loopback, a shell on a pseudo-terminal, signals to process
 ids, where secrets are kept, outgoing HTTPS, signing pushes, reading a
 picture's header, word of a file being written, where the agents' tools
-are, the host's name and data directory, relaunching, the road in — is a
+are, the host's name and data directory, relaunching, the path in — is a
 protocol (`LoopbackListening`, `TerminalLaunching`, `ProcessSignals`,
 `SecretStore`, `HTTPFetching`, `PushSigning`, `ImageMeasuring`,
 `FileWatching`, `ToolLocating`, `HostDetails`, `ServerLifecycle`,
@@ -408,8 +531,10 @@ The command-line server keeps its sessions, secrets, pid file
 (`<pid> <port>`) and background log in `$XDG_DATA_HOME/visor`
 (`~/.local/share/visor`) or `%LOCALAPPDATA%\Visor`; `stop` asks the server
 through `POST /api/quit`, so it ends its agents first on every system.
-`visor-server network on` opens it to the network, `visor-server address
-<url>` names a front of your own; it serves no TLS (a proxy does). The Windows server
+`visor-server network on` opens it to the network, `visor-server ssh
+on|off` serves the socket file for SSH clients (Linux; not Windows),
+`visor-server address <url>` names a front of your own; it serves no TLS
+(a proxy does). The Windows server
 is built and tried in CI (a terminal session on ConPTY with PowerShell);
 it has not been run against real agents.
 
@@ -499,13 +624,31 @@ it has not been run against real agents.
   through `/api/quit`; `VISOR_SHELL=powershell` for a Windows server.
 - `node tools/probes/noweb_proxy.mjs` — a reverse proxy on 8099 that
   carries HTTP only (`/visor/api` → 7534, the rest → 7533, every WebSocket
-  upgrade refused): a road with no WebSockets in front of a staging
+  upgrade refused): a path with no WebSockets in front of a staging
   server. Then the polling fallback against it, over the native services:
   `bazel test //tests/visor_client_tests --test_filter=PollingProbeTests
   --test_env=VISOR_POLL_URL=http://127.0.0.1:8099/visor
   --test_env=VISOR_POLL_PASSWORD=staging --spawn_strategy=local
   --nocache_test_results` (skipped without the URL). It connects by
   polling, starts a throwaway session, watches it work and ends it.
+- SSH against a real `sshd`, over the native service (`SSHProbeTests`,
+  skipped without the address): a throwaway sshd of your own, so your
+  `~/.ssh` is not touched — `ssh-keygen -t ed25519 -N "" -f
+  /tmp/sshprobe/hostkey`, an empty `/tmp/sshprobe/authorized_keys` (mode
+  600), a config with `Port 2299`, `ListenAddress 127.0.0.1`, that
+  `HostKey` and `AuthorizedKeysFile`, `PasswordAuthentication no`,
+  `UsePAM no`, `StrictModes no`, `PerSourcePenalties no`, a `PidFile`
+  there; `/usr/sbin/sshd -D -e -f /tmp/sshprobe/sshd_config`. Then
+  `bazel test //tests/visor_client_tests --test_filter=SSHProbeTests
+  --test_env=VISOR_SSH_ADDRESS=$USER@127.0.0.1:2299
+  --test_env=VISOR_SSH_AUTHORIZED_KEYS=/tmp/sshprobe/authorized_keys
+  --test_env=VISOR_SSH_PASSWORD --nocache_test_results` with the local
+  server's password exported (and `VISOR_SSH_TARGET_PORT` if it is not
+  on 7433). The device's key is refused before it is in the file and
+  taken after; `hello` is answered through the forwarded port; another
+  host key is refused; the whole client connects over the provider and
+  sees the sessions; then the same through a jump host (the sshd jumped
+  through to itself). Kill the sshd by its pid file afterwards.
 - `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
   as its user would run it: a password, `run` checked with the terminal
   probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
@@ -643,6 +786,16 @@ From the code-quality pass of October 2026, found and left:
   a device to try them on (#79).
 - The openrouter CLI, signalled, leaves the command it was running; a
   reply interrupted mid-stream is not kept in its session.
+- SSH addresses work on Apple hosts only: the web has no SSH, and
+  Android's host (Isomer) does not provide a `VisorSSHService` yet; the
+  Linux and Windows clients, when there are some, can give one over
+  swift-nio-ssh. The address still needs Visor Server running on the
+  computer; a computer with only SSH could be served by starting the
+  command-line server there over an exec channel, which is not done.
+  The device's key is one per device, kept in the settings' secrets
+  (`ssh.key`); there is no way yet to see or forget a computer's kept
+  host key but forgetting the computer's record does not clear it
+  (`ssh.hostkey.<user@host:port>` in the settings).
 
 ## 8. Working conventions
 

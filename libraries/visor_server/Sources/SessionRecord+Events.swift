@@ -108,6 +108,11 @@ extension SessionRecord {
         case .commands(let list):
             commands = list
             return nil
+        case .background(let items):
+            guard info.background != items else { return nil }
+            info.background = items
+            // The sessions list carries it; the caller broadcasts that.
+            return nil
         case .spent(let total):
             let added = reportedUsage.map { total.continues(from: $0) ? total.since($0) : total } ?? total
             reportedUsage = total

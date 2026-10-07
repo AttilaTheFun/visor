@@ -118,6 +118,13 @@ public struct Envelope: Codable, Sendable {
     public var resumable: [ResumableSession]?
     /// The slash commands a session's agent takes (`commands`).
     public var commands: [SlashCommand]?
+    /// `hello` and `peers`: the server's own addresses, as clients read
+    /// them; `peers`: the other computers it knows (Peer).
+    public var addresses: [String]?
+    public var peers: [Peer]?
+    /// `hello`: the server's own SSH public key line, for a client that
+    /// introduces it to other servers.
+    public var sshKey: String?
     /// A device's push token, hex (`push`), with its kind ("ios", "macos")
     /// and service ("sandbox", "production").
     public var deviceToken: String?

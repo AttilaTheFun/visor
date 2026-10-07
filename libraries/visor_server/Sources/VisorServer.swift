@@ -46,13 +46,27 @@ public final class VisorServer {
         didSet {
             guard settings != oldValue else { return }
             settings.keep(at: Self.settingsURL)
-            if settings.reachableFromNetwork != oldValue.reachableFromNetwork || settings.tlsIdentityPath != oldValue.tlsIdentityPath {
+            if settings.reachableFromNetwork != oldValue.reachableFromNetwork || settings.tlsIdentityPath != oldValue.tlsIdentityPath
+                || settings.sshEnabled != oldValue.sshEnabled {
                 listenAgain()
             }
+            if settings.lan != oldValue.lan || settings.vpn != oldValue.vpn { refusedPaths.removeAll() }
+            // Asking nothing: a server with no password yet starts now.
+            if settings.asksNothing, !oldValue.asksNothing, listener == nil { start() }
         }
     }
-    /// The other computers' servers this one's agents reach (VisorServer+Links.swift).
-    public internal(set) var links: [ConnectionCode] = []
+    /// The other computers on the network, as this one knows them
+    /// (VisorServer+Peers.swift).
+    public internal(set) var peers: [Peer] = []
+    /// The path that last reached each peer, by its id: tried first.
+    var workingPaths: [String: String] = [:]
+    /// The SSH tunnels open to peers, by the path each is for: the
+    /// connection, and the base URL of the port here that reaches the
+    /// peer's socket file through it.
+    var peerTunnels: [String: (session: any PeerSSHSession, base: String)] = [:]
+    /// Addresses connections were refused on (a path that is off), each
+    /// logged once.
+    var refusedPaths: Set<String> = []
 
     /// The slash commands each agent listed when it last ran (VisorServer+Commands.swift).
     var knownCommands: [AgentKind: [SlashCommand]] = [:]
@@ -75,13 +89,15 @@ public final class VisorServer {
     /// Told of each silent push of a session's state (tests listen).
     var onStatusPush: ((_ session: String, _ status: String) -> Void)?
     var modelsRefresh: Task<Void, Never>?
-    /// Tokens handed out by `hello` to clients the road (or the password)
+    /// Tokens handed out by `hello` to clients the path (or the password)
     /// let in, for the socket's login; new each launch.
     var tokens: [String] = []
 
     public let port: UInt16
 
     var listener: (any Listener)?
+    /// The socket file SSH clients reach, while `settings.sshEnabled`.
+    var socketListener: (any Listener)?
     var http: HTTPServer?
     var connections: [ObjectIdentifier: ClientConnection] = [:]
 
@@ -97,7 +113,8 @@ public final class VisorServer {
         self.port = port
         Self.adoptFormerFolders()
         password = Self.keptPassword()
-        links = Self.keptLinks()
+        peers = Self.keptPeers()
+        if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()
     }
 
@@ -121,7 +138,7 @@ public final class VisorServer {
     /// address to give and a password is set.
     public var connectionCode: ConnectionCode? {
         guard !password.isEmpty, let address = reachableAddress else { return nil }
-        return ConnectionCode(name: hostName, host: address, password: password)
+        return ConnectionCode(name: hostName, host: address, password: password, id: id, paths: ownAddresses)
     }
 
     /// sessions.json in the platform's data directory (on a Mac

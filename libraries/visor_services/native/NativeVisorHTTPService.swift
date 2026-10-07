@@ -38,13 +38,17 @@ public final class NativeVisorHTTPService: VisorHTTPService {
     public func status(of error: Error) -> Int? { (error as? VisorHTTPFailure)?.status }
 
     public func request(method: String, url: String, body: String, authorization: String) async throws -> String {
+        try await request(method: method, url: url, body: body, headers: ["Authorization": "Bearer " + authorization])
+    }
+
+    public func request(method: String, url: String, body: String, headers: [String: String]) async throws -> String {
         guard let target = URL(string: url) else { throw VisorHTTPFailure(status: 0, body: "bad url") }
         var request = URLRequest(url: target)
         request.httpMethod = method
         // A transcript sync is held on the computer for a while before it
         // answers; the limit leaves room for that and the round trip.
         request.timeoutInterval = 45
-        request.setValue("Bearer " + authorization, forHTTPHeaderField: "Authorization")
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         if !body.isEmpty {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = Data(body.utf8)

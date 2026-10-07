@@ -15,7 +15,7 @@ public enum POSIXAddresses {
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             if getnameinfo(address, socklen_t(MemoryLayout<sockaddr_in>.size), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
                 let text = String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
-                if text != "127.0.0.1" { result.append(text) }
+                if text != "127.0.0.1", !text.hasPrefix("169.254.") { result.append(text) }
             }
         }
         // A VPN's address first: it reaches the computer from anywhere.

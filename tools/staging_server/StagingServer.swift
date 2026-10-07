@@ -23,6 +23,8 @@ struct StagingServer {
         // A Mac's platform, with its password in memory rather than the
         // keychain the installed server uses.
         ServerPlatform.current = .apple(secrets: MemorySecrets())
+        // Its socket file beside its data, not the installed server's.
+        VisorServer.socketPathOverride = "/tmp/visor-staging-\(port).sock"
 
         let server = VisorServer.staging(port: port, root: root, password: password)
         setlinebuf(stdout)

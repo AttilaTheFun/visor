@@ -47,6 +47,16 @@ struct TurnStatus: Equatable {
         }
     }
 
+    /// A background task's kind, by the types Claude Code gives them
+    /// (`local_bash`, `monitor`, `local_agent`, …).
+    static func kind(ofTask type: String) -> StatusItem.Kind {
+        let lowered = type.lowercased()
+        if lowered.contains("bash") || lowered.contains("shell") { return .shell }
+        if lowered.contains("monitor") { return .monitor }
+        if lowered.contains("agent") || lowered.contains("workflow") { return .subagent }
+        return .tool
+    }
+
     /// The task list a tool call writes, for the tools that write one:
     /// Claude Code's TodoWrite carries the whole list each time.
     static func tasks(named name: String, input: [String: Any]?) -> [TaskItem]? {

@@ -37,10 +37,18 @@ pid_t visor_spawn_detached(const char *path, char *const argv[], char *const env
 /// reusable at once). -1 with errno set.
 int visor_listen(unsigned short port, int everywhere);
 
+/// A Unix domain socket listening at `path` (a stale file there replaced;
+/// the new one readable and writable by its owner alone). -1 with errno set.
+int visor_listen_unix(const char *path);
+
 /// The next connection on a listening socket (close-on-exec, its writes
 /// given up after 30 seconds of a peer that reads nothing). -1 with errno
 /// set.
 int visor_accept(int listener);
+
+/// This computer's address a connected socket arrived on, as text into
+/// `out` (of `size`); "" for a socket file or when unknown.
+void visor_local_address(int socket, char *out, size_t size);
 
 /// Ends both directions of a socket, waking whoever is blocked on it.
 void visor_shutdown(int socket);

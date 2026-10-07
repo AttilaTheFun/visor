@@ -2,7 +2,7 @@
 // session's ephemeral state (what streams, the turn's status, busy, an
 // approval waiting, the queue, a notice), each held until it changes, as
 // the transcript's sync is. The socket is the quick way to hear these;
-// over a road that carries no WebSocket (a proxy that does not pass them,
+// over a path that carries no WebSocket (a proxy that does not pass them,
 // a network that drops them) the same arrives by asking again, and the
 // client works. Terminal bytes are the one thing only the channel carries.
 

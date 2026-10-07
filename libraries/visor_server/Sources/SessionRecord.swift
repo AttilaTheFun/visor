@@ -202,6 +202,8 @@ public final class SessionRecord {
     func replaceProcess(_ replacement: AgentProcess) {
         stopListening()
         process = replacement
+        // A new process starts with nothing in the background.
+        info.background = []
     }
 
     /// Hands each of the agent's events to `handle`, in order, from now

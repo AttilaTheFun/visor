@@ -3,7 +3,7 @@ import VisorServices
 
 // Each operation of the protocol, as the wire protocol carries it: the
 // live ones as envelopes over the socket, the one-shot ones as REST calls.
-extension WireAgentServer {
+extension VisorAgentServer {
     // MARK: Over the live channel
 
     // Over the channel; by polling, what has a one-shot form is asked
@@ -144,6 +144,26 @@ extension WireAgentServer {
         var body = Envelope(type: "link")
         body.text = code
         let reply = try await call("POST", "/link", body)
+        if let error = reply.error { throw AgentServerError.message(error) }
+    }
+
+    public func peers() async throws -> [Peer] {
+        let reply = try await call("GET", "/peers")
+        if let error = reply.error { throw AgentServerError.message(error) }
+        return reply.peers ?? []
+    }
+
+    public func introduce(_ peers: [Peer]) async throws {
+        var body = Envelope(type: "peers")
+        body.peers = peers
+        let reply = try await call("POST", "/peers", body)
+        if let error = reply.error { throw AgentServerError.message(error) }
+    }
+
+    public func authorizeSSHKey(_ line: String) async throws {
+        var body = Envelope(type: "ssh")
+        body.text = line
+        let reply = try await call("POST", "/ssh/keys", body)
         if let error = reply.error { throw AgentServerError.message(error) }
     }
 }

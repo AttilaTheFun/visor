@@ -1,7 +1,11 @@
 /// One HTTPS request (the REST side of the protocol). Returns the body for
 /// a 2xx status; throws with the status and body otherwise.
 public protocol VisorHTTPService: Sendable {
+    /// With a bearer token (`Authorization: Bearer <authorization>`).
     func request(method: String, url: String, body: String, authorization: String) async throws -> String
+    /// With whatever headers the authenticator gives. A host that has
+    /// only the bearer form sends the bearer out of these.
+    func request(method: String, url: String, body: String, headers: [String: String]) async throws -> String
     /// The HTTP status behind an error `request` threw, when it was one
     /// (a 401 is how a computer asks for a password).
     func status(of error: Error) -> Int?
@@ -14,6 +18,11 @@ public protocol VisorHTTPService: Sendable {
 
 public extension VisorHTTPService {
     func reset() {}
+    func request(method: String, url: String, body: String, headers: [String: String]) async throws -> String {
+        let bearer = headers.first { $0.key.lowercased() == "authorization" }?.value ?? ""
+        let token = bearer.lowercased().hasPrefix("bearer ") ? String(bearer.dropFirst(7)) : bearer
+        return try await request(method: method, url: url, body: body, authorization: token)
+    }
     /// A host whose errors read "HTTP <status>: …" needs nothing more.
     func status(of error: Error) -> Int? {
         // The standard library alone: this builds for the browser, whose

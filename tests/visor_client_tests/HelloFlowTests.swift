@@ -24,10 +24,28 @@ final class ScriptedServer: AgentServer {
     var hangs = false
     private var hung: [CheckedContinuation<Void, Never>] = []
 
+    /// The addresses signed in by, in order; those in `refused` fail.
+    var signedInBy: [String] = []
+    var refused: Set<String> = []
+    var identity: ServerIdentity?
+    var reachedAt: String? { signedInBy.last }
+    var peersAnswer: [Peer] = []
+    var introduced: [[Peer]] = []
+
     func authenticate(_ record: AgentServerRecord) async throws -> String? {
         if hangs { await withCheckedContinuation { hung.append($0) } }
+        signedInBy.append(record.address)
+        if refused.contains(record.address) { throw ScriptedFailure(status: 0) }
         return try signIn.get()
     }
+
+    func peers() async throws -> [Peer] { peersAnswer }
+    func introduce(_ peers: [Peer]) async throws { introduced.append(peers) }
+    /// The SSH keys handed over; `onAuthorize` is what the server does
+    /// with one (a test lets the SSH address in from then on).
+    var authorizedKeys: [String] = []
+    var onAuthorize: (() -> Void)?
+    func authorizeSSHKey(_ line: String) async throws { authorizedKeys.append(line); onAuthorize?() }
 
     func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
         channels += 1
@@ -101,7 +119,10 @@ struct ScriptedProvider: AgentServerProvider {
     let id = "scripted"
     let title = "Scripted"
     @MainActor static var server = ScriptedServer()
-    @MainActor func makeServer(for record: AgentServerRecord) -> any AgentServer { Self.server }
+    /// A server of its own for a record, by the record's id; the shared
+    /// one for the rest.
+    @MainActor static var servers: [String: ScriptedServer] = [:]
+    @MainActor func makeServer(for record: AgentServerRecord) -> any AgentServer { Self.servers[record.id] ?? Self.server }
 }
 
 @MainActor

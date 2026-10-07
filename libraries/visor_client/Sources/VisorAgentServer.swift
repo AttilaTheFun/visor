@@ -1,19 +1,20 @@
 import VisorProtocol
 import VisorServices
 
-/// A Visor server speaking the wire protocol (docs/protocol.md), wherever
-/// it is reached: a name on a network (HTTPS at the root), or any URL a
-/// proxy, a tunnel or a port gives (`ServerAddress`). `hello` over HTTP
-/// first — the server lets this device in on the road's word (its owner's
-/// device) or on the password, and hands back its name and a token —
-/// then the socket at the root for the live channel, logged in with the
-/// token, and `/api` for the one-shot calls, the password as the bearer
-/// token. Over the host's socket and HTTP services, so the same code runs
-/// in a browser.
+/// A Visor server speaking the wire protocol (docs/protocol.md), reached
+/// as its address says: a name on a network (HTTPS at the root), any
+/// http(s) URL a proxy, a tunnel or a port gives (`ServerAddress`), or
+/// the computer's own SSH (`SSHAddress`, `user@host`), through which the
+/// server is reached on its loopback (VisorAgentServer+SSH). `hello` over
+/// HTTP first — the server lets this device in on the password, and
+/// hands back its name and a token — then the socket at the root for the
+/// live channel, logged in with the token, and `/api` for the one-shot
+/// calls, the password as the bearer token. Over the host's socket and
+/// HTTP services, so the same code runs in a browser.
 ///
 /// The live channel is an accessory. Where it cannot be had — the host
-/// has no socket service, or the road does not carry WebSockets — the
-/// server is followed by polling instead (WireAgentServer+Polling): the
+/// has no socket service, or the path does not carry WebSockets — the
+/// server is followed by polling instead (VisorAgentServer+Polling): the
 /// list of sessions and each open session's state are asked for and held
 /// until they change, as the transcript always is. The socket is tried
 /// again now and then, and takes over when it opens.
@@ -24,7 +25,7 @@ import VisorServices
 /// a change of network) otherwise looks open until TCP gives up. The
 /// socket has 4 s to open and have its login answered. It is a message of
 /// the protocol, not a WebSocket ping frame, which a browser cannot send.
-public final class WireAgentServer: AgentServer {
+public final class VisorAgentServer: AgentServer {
     /// How often the channel is asked whether it is still there, and how
     /// long it has to say anything at all before it is taken as dropped.
     static let heartbeatInterval: Int32 = 16_000
@@ -38,11 +39,25 @@ public final class WireAgentServer: AgentServer {
     static let verifyTimeout: Int32 = 1_000
 
     private(set) var record: AgentServerRecord
-    /// Where the server is: the record's address, read as a URL.
-    var address: ServerAddress? { ServerAddress(record.address) }
+    /// The record's address as an SSH one, when it is one.
+    var sshAddress: SSHAddress? { SSHAddress(record.address) }
+    /// The SSH connection and the server's address through it, while open.
+    var tunnelSession: (any VisorSSHSession)?
+    var tunnel: ServerAddress?
+    /// Counts the tunnels asked for, so a sign-in overtaken by a newer
+    /// one closes its own connection rather than leaving it open.
+    var tunnelOpenings = 0
+    /// Where the server is: the record's address, read as a URL — or,
+    /// for an SSH address, the loopback port the tunnel gives, once open.
+    var address: ServerAddress? { sshAddress != nil ? tunnel : ServerAddress(record.address) }
     /// What `hello` gave for the channel's login.
     var token: String?
-    /// Following by polling instead of the channel (WireAgentServer+Polling).
+    public private(set) var identity: ServerIdentity?
+    public var reachedAt: String? { address?.root }
+    /// What the authenticator gave for the last sign-in, for the socket's
+    /// opening request (a front that checks headers sees them there too).
+    private var socketHeaders: [String: String] = [:]
+    /// Following by polling instead of the channel (VisorAgentServer+Polling).
     var polling: Polling?
     private var socketID: Int32?
     private var reader: Task<Void, Never>?
@@ -59,19 +74,38 @@ public final class WireAgentServer: AgentServer {
 
     public func authenticate(_ record: AgentServerRecord) async throws -> String? {
         self.record = record
+        if let sshAddress {
+            try await openTunnel(sshAddress)
+            // The socket file first, signed in by SSH alone; a server that
+            // does not serve it is reached at its port, with the password.
+            if let name = try? await hello() { return name }
+            try await fallBackToPort()
+        }
         do {
+            return try await hello()
+        } catch {
+            closeTunnel()
+            throw error
+        }
+    }
+
+    /// `hello`: the server's name, and the token for the channel's login.
+    /// A 401 is the server asking for a password.
+    private func hello() async throws -> String? {
+        do {
+            socketHeaders = try await AgentServerAuthenticators.authenticator(for: record).headers(for: record)
             let hello = try await call("GET", "/hello")
             token = hello.token
+            if let id = hello.id, !id.isEmpty { identity = ServerIdentity(id: id, addresses: hello.addresses ?? [], sshKey: hello.sshKey ?? "") }
             return hello.host.flatMap { $0.isEmpty ? nil : $0 }
         } catch {
-            // A 401 is the Mac asking for a password.
             if VisorHost.http?.status(of: error) == 401 { throw AgentServerError.needsAuthentication }
             throw error
         }
     }
 
     public func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
-        closeChannel()
+        closeSocket()
         guard let address else {
             Task { onEvent(.closed("Bad address")) }
             return
@@ -81,7 +115,7 @@ public final class WireAgentServer: AgentServer {
             poll(address, onEvent: onEvent)
             return
         }
-        let id = socket.open(url: address.socket)
+        let id = socket.open(url: address.socket, headers: socketHeaders)
         guard id >= 0 else {
             Task { onEvent(.closed("Bad address")) }
             return
@@ -113,7 +147,7 @@ public final class WireAgentServer: AgentServer {
                         self.socketID = nil
                         let reason = String(event.split(separator: " ", maxSplits: 1).last ?? "")
                         // Refused before it opened, while the server itself
-                        // answered `hello`: a road that carries no WebSocket.
+                        // answered `hello`: a path that carries no WebSocket.
                         // Polling takes over, and the socket is tried later.
                         if !self.loggedIn, let address = self.address {
                             self.heartbeat?.cancel()
@@ -145,7 +179,7 @@ public final class WireAgentServer: AgentServer {
         await socket.delay(milliseconds: Self.loginTimeout)
         guard socketID == id, !Task.isCancelled else { return }
         // A socket that opened and was not answered is a server that is
-        // not there: dropped. One that never opened at all is a road that
+        // not there: dropped. One that never opened at all is a path that
         // may carry no WebSocket: polling takes over, and the socket is
         // tried again later.
         if heard == 0 {
@@ -205,6 +239,13 @@ public final class WireAgentServer: AgentServer {
     }
 
     public func closeChannel() {
+        closeSocket()
+        closeTunnel()
+    }
+
+    /// Ends the channel, the socket or the polling, and leaves the tunnel
+    /// for the next channel.
+    private func closeSocket() {
         stopPolling()
         heartbeat?.cancel()
         heartbeat = nil
@@ -239,7 +280,8 @@ public final class WireAgentServer: AgentServer {
     func callText(_ method: String, _ path: String, body: String) async throws -> String {
         guard let http = VisorHost.http else { throw AgentServerError.message("No HTTP service on this host") }
         guard let address else { throw AgentServerError.message("Bad address") }
-        return try await http.request(method: method, url: address.api + path, body: body, authorization: record.secret)
+        let headers = try await AgentServerAuthenticators.authenticator(for: record).headers(for: record)
+        return try await http.request(method: method, url: address.api + path, body: body, headers: headers)
     }
 
     static func escape(_ text: String) -> String {

@@ -48,6 +48,7 @@ use_repo(
     "swift_package",
     "swiftpkg_agent_ui",
     "swiftpkg_sqlite.swift",
+    "swiftpkg_swift_nio_ssh",
 )
 
 # The builder's own signing values (the Apple team), from .bazelrc.user.

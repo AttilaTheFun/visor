@@ -37,4 +37,7 @@ public enum AgentEvent: Sendable {
     case plan(String, subscription: Bool)
     /// The account's windows and budgets as they stand.
     case limits([UsageLimit])
+    /// What the agent has running in the background, whole, whenever it
+    /// changes; empty when it waits on nothing.
+    case background([StatusItem])
 }

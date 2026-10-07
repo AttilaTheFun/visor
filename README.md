@@ -31,9 +31,23 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   (`visor://connect?code=…`). Each computer is one agent server; what
   the client does with a server — signing in, the live channel, and
   every operation on sessions, folders and files — is the `AgentServer`
-  protocol, and `WireAgentServer` (the wire protocol: `hello`, ws(s) +
-  http(s) with a bearer, at any URL or a bare name; followed by
-  polling where the road carries no WebSocket) is the one shipped. A fork that hosts agents on
+  protocol, and `VisorAgentServer` (the wire protocol: `hello`, ws(s) +
+  http(s) with a bearer, over HTTP, HTTPS or SSH as the address says;
+  followed by polling where the path carries no WebSocket) is the one
+  shipped. On a Mac or an iPhone the address can be the computer's own SSH
+  (Remote Login), `user@host[:port]`, through jump hosts if need be
+  (`?via=user@jump`): the client opens the connection with a key it
+  makes and keeps, and runs the same wire protocol through it. The
+  server lets such a client in without a password, at a socket file only
+  its user can open (Settings: "SSH, no password"), SSH having signed
+  the user in already; with that off, the port on the computer's
+  loopback, with the password. Nothing has to be open on the network
+  but SSH. The computers form a network: each server keeps its peers
+  and tells its clients and peers of them, a client of any of them
+  learns of the rest and is carried to one it cannot reach itself
+  (`/peer/<id>/…` under a server it can), and a client that holds two
+  servers introduces them. Servers reach one another over SSH too, each
+  with a key of its own that travels with its record. A fork that hosts agents on
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one
@@ -42,7 +56,8 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   own small JSON, with no Foundation, so the same code runs wherever the
   client is carried.
 - **libraries/visor_services** — what a host gives the client: a socket,
-  HTTP and settings. Apple implementations sit beside the protocols.
+  HTTP, settings and, where it has it, SSH. Apple implementations sit
+  beside the protocols.
 - **libraries/visor_client** — agent servers and their providers,
   connections, transcripts, the session cache.
 - **libraries/visor_ui** — the views, on AgentUI and NavigationUI.
@@ -107,9 +122,9 @@ you install it.
   login to your Mac.
 - **Who can reach it.** By default the server listens on this Mac's
   loopback address only, and a reverse proxy or a tunnel on the Mac is
-  the road in; opened to the network in Settings, it listens on every
+  the path in; opened to the network in Settings, it listens on every
   interface, for a LAN, a VPN or a tunnel to reach directly. Every
-  device signs in with the password; nothing about the road is trusted.
+  device signs in with the password; nothing about the path is trusted.
   Keeping the server off the public internet — on a VPN, behind a front
   that authenticates — is yours to do.
 - **The password and the connection code.** The connection code, and the

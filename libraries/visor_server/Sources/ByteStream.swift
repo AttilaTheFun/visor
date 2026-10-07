@@ -11,4 +11,11 @@ public protocol ByteStream: AnyObject {
     func send(_ data: Data, sent: (@MainActor () -> Void)?)
     /// Closes the connection. Nothing more is received.
     func close()
+    /// This computer's address the connection arrived on (which network
+    /// path it came by); nil where the system does not say.
+    var localAddress: String? { get }
+}
+
+public extension ByteStream {
+    var localAddress: String? { nil }
 }

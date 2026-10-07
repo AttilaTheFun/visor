@@ -30,7 +30,7 @@ final class ScriptedSocket: VisorSocketService {
     private var queue: [String] = []
     private var waiting: CheckedContinuation<String, Error>?
 
-    /// Whether a socket opens at all (a road that carries no WebSocket
+    /// Whether a socket opens at all (a path that carries no WebSocket
     /// leaves it hanging).
     var opens = true
 

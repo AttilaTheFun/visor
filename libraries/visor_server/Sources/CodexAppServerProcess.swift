@@ -183,9 +183,11 @@ public final class CodexAppServerProcess: AgentProcess {
         // A thread being resumed is picked up now, so the first turn does
         // not wait on it.
         if let threadID {
-            var params = threadParams()
-            params["threadId"] = threadID
             Task {
+                // Made in the task, so what is sent to the request is its
+                // own (Swift 6.2 will not send a captured variable).
+                var params = self.threadParams()
+                params["threadId"] = threadID
                 let reply = await self.request("thread/resume", params, of: child)
                 if let error = reply.error, self.child === child {
                     self.emit.yield(.failure("Codex could not resume the thread: \(error)"))

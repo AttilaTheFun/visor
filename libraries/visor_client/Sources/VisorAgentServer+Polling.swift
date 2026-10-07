@@ -11,7 +11,7 @@
 import VisorProtocol
 import VisorServices
 
-extension WireAgentServer {
+extension VisorAgentServer {
     /// How long the socket is left alone before it is tried again, and
     /// how many answers in a row the list may fail before the server is
     /// taken as gone.
@@ -72,7 +72,7 @@ extension WireAgentServer {
                 } catch {
                     guard !Task.isCancelled, self.polling === polling else { return }
                     // A refusal is the server asking for a password; the
-                    // road being down for a while is the channel dropping.
+                    // path being down for a while is the channel dropping.
                     if VisorHost.http?.status(of: error) == 401 {
                         self.stopPolling()
                         return onEvent(.refused("Wrong password"))

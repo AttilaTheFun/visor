@@ -43,6 +43,17 @@ extension View {
         #endif
     }
 
+    /// A short list of choices in a sheet: on the Mac a sheet gives a list
+    /// no height of its own, and it draws at none; a floor of a row each
+    /// (plus the chrome) shows it. A phone's sheet fills the screen anyway.
+    @ViewBuilder func choiceListInSheet(rows: Int) -> some View {
+        #if os(macOS)
+        frame(minWidth: 360, minHeight: CGFloat(rows) * 32 + 24)
+        #else
+        self
+        #endif
+    }
+
     /// A section header as written, not upper-cased.
     @ViewBuilder func noHeaderCase() -> some View {
         #if canImport(UIKit) || canImport(AppKit)

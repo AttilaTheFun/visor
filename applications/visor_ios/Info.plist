@@ -11,9 +11,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.21</string>
+    <string>0.22</string>
     <key>CFBundleVersion</key>
-    <string>21</string>
+    <string>22</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <!-- A server may be plain http:// and ws:// on a LAN or a VPN, which
@@ -27,6 +27,13 @@
     <string>Visor connects to Visor Server on your Mac.</string>
     <key>UILaunchScreen</key>
     <dict/>
+    <!-- More than one window on an iPad (and in Stage Manager): each a
+         scene of the same app, over the same computers. -->
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <true/>
+    </dict>
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
