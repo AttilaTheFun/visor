@@ -20,6 +20,11 @@
         <key>NSAllowsArbitraryLoads</key>
         <true/>
     </dict>
+    <!-- macOS refuses an app's connections to the LAN ("No route to
+         host") unless it says why it wants them and the user allows it:
+         a computer's LAN paths, SSH or HTTP, need this. -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Visor reaches your computers on your Wi-Fi.</string>
     <key>NSHumanReadableCopyright</key>
     <string></string>
     <key>CFBundleURLTypes</key>
