@@ -37,7 +37,9 @@ extension VisorAgentServer {
         } catch VisorSSHError.hostKeyChanged {
             throw AgentServerError.message("A host key on the way to \(address.target.host) has changed. If the computer was reinstalled, forget it here and add it again.")
         } catch VisorSSHError.keyRefused {
-            throw AgentServerError.needsAuthentication
+            // Not a sign-in to redo: another path may let the device in
+            // (and authorize its key for next time).
+            throw AgentServerError.message("\(address.target.host) does not know this device's SSH key yet")
         } catch VisorSSHError.unreachable(let why) {
             throw AgentServerError.message("\(address.target.host) was not reached over SSH: \(why)")
         }

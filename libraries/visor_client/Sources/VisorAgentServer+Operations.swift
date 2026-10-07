@@ -159,4 +159,11 @@ extension VisorAgentServer {
         let reply = try await call("POST", "/peers", body)
         if let error = reply.error { throw AgentServerError.message(error) }
     }
+
+    public func authorizeSSHKey(_ line: String) async throws {
+        var body = Envelope(type: "ssh")
+        body.text = line
+        let reply = try await call("POST", "/ssh/keys", body)
+        if let error = reply.error { throw AgentServerError.message(error) }
+    }
 }

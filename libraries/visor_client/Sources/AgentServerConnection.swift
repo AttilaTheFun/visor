@@ -87,6 +87,9 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     var onConnected: (() -> Void)?
     /// The path the server was reached by, this time.
     public private(set) var path: String?
+    /// This device's SSH key was handed to the server once this
+    /// connection, so a refusal after that is not tried again.
+    private var sshEnrolled = false
 
     public init(record: AgentServerRecord) {
         self.server = AgentServerProviders.server(for: record)
@@ -367,6 +370,61 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
 
     public func peers() async throws -> [Peer] { try await server.peers() }
     public func introduce(_ peers: [Peer]) async throws { try await server.introduce(peers) }
+
+    /// The server's SSH paths, as it and its peers said them.
+    public var sshPaths: [String] { record.allPaths.filter { SSHAddress($0) != nil } }
+
+    /// Makes SSH the way in: the record's address becomes the server's
+    /// SSH path (the one on the same host as now, else the first), the
+    /// address until now one of the other paths, and the connection is
+    /// made again — over SSH if the server knows this device's key, else
+    /// by another path first, after which the key is handed over and SSH
+    /// tried again (`enrollSSHIfWanted`). False when no SSH path is known.
+    @discardableResult
+    public func useSSH() -> Bool {
+        let host = ServerAddress(record.address).flatMap { Self.host(of: $0.root) }
+        guard let chosen = sshPaths.first(where: { SSHAddress($0)?.target.host == host }) ?? sshPaths.first else { return false }
+        update { record in
+            let before = record.address
+            record.address = chosen
+            record.learnPaths([before])
+        }
+        lastGoodPath = nil
+        sshEnrolled = false
+        connect()
+        return true
+    }
+
+    /// The host part of a URL root (`http://10.0.0.2:7433` → `10.0.0.2`).
+    static func host(of root: String) -> String? {
+        guard let range = root.range(of: "://") else { return nil }
+        let rest = root[range.upperBound...]
+        let hostPort = rest.prefix { $0 != "/" }
+        if hostPort.hasPrefix("[") { return String(hostPort.prefix { $0 != "]" }.dropFirst()) }
+        return String(hostPort.prefix { $0 != ":" })
+    }
+
+    /// Connected by another path while the address asks for SSH: this
+    /// device's key is handed to the server, and SSH tried again — once.
+    private func enrollSSHIfWanted() {
+        guard SSHAddress(record.address) != nil, let path, SSHAddress(path) == nil, !sshEnrolled,
+              let ssh = VisorHost.ssh else { return }
+        sshEnrolled = true
+        let server = server
+        let key = ssh.publicKey()
+        let mine = generation
+        Task { [weak self] in
+            do {
+                try await server.authorizeSSHKey(key)
+                guard let self, self.generation == mine else { return }
+                self.note("this device's SSH key was authorized; connecting over SSH")
+                self.lastGoodPath = nil
+                self.connect()
+            } catch {
+                self?.note("the SSH key was not authorized: \(error)")
+            }
+        }
+    }
     /// The try (by its generation) whose sign-in is still unanswered.
     private var signingIn: Int?
     private var log: ConnectionLog { ConnectionLog.shared }
@@ -518,6 +576,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             onSessionsChange?()
             self.catalogs = catalogs
             onConnected?()
+            enrollSSHIfWanted()
             // Re-subscribe to whatever was open before the drop.
             for id in pendingSubscriptions.union(transcripts.keys) { server.subscribe(id) }
             pendingSubscriptions.removeAll()

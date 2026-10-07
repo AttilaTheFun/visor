@@ -236,6 +236,44 @@ final class AuthTests: ServerTestCase {
         server.settings.authentication = "password"
         XCTAssertEqual(server.route(request("/api/sessions")).status, 401)
     }
+    /// A client that is in hands its SSH key over: kept once in the
+    /// authorized keys, the folder and file closed to others; junk is
+    /// refused; a stranger gets nothing. The connection code carries the
+    /// server's paths.
+    func testADeviceAuthorizesItsSSHKey() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("visor-keys-" + UUID().uuidString)
+        VisorServer.authorizedKeysPathOverride = folder.appendingPathComponent("ssh/authorized_keys").path
+        defer { VisorServer.authorizedKeysPathOverride = nil }
+        server.password = "pearl-grove"
+        func post(_ line: String, bearer: String? = "pearl-grove") -> Int {
+            var body = Envelope(type: "ssh")
+            body.text = line
+            var headers: [String: String] = [:]
+            if let bearer { headers["authorization"] = "Bearer " + bearer }
+            return server.route(HTTPRequest(method: "POST", path: "/api/ssh/keys", headers: headers, body: body.encoded())).status
+        }
+        let key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGqz1sYyl1Y1kK5lN0w0C5oZ6QwYyq3lQ1kDnq1Z2y7A visor"
+        XCTAssertEqual(post(key, bearer: nil), 401)
+        XCTAssertEqual(post(key), 200)
+        XCTAssertEqual(post(key), 200, "the same key again is no change")
+        XCTAssertEqual(post("ssh-ed25519 AAAAother visor"), 200)
+        XCTAssertEqual(post("rm -rf /"), 400)
+        XCTAssertEqual(post("ssh-ed25519 AAAA bad comment here"), 400)
+        let kept = try String(contentsOfFile: VisorServer.authorizedKeysPath, encoding: .utf8)
+        XCTAssertEqual(kept, key + "\nssh-ed25519 AAAAother visor\n")
+        let fileMode = try FileManager.default.attributesOfItem(atPath: VisorServer.authorizedKeysPath)[.posixPermissions] as? Int
+        let folderMode = try FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent("ssh").path)[.posixPermissions] as? Int
+        XCTAssertEqual(fileMode.map { $0 & 0o777 }, 0o600)
+        XCTAssertEqual(folderMode.map { $0 & 0o777 }, 0o700)
+
+        server.settings.proxyEnabled = true
+        server.settings.publicAddress = "https://proxy.example.com/visor"
+        server.settings.sshEnabled = true
+        let code = try XCTUnwrap(server.connectionCode)
+        XCTAssertEqual(code.host, "https://proxy.example.com/visor")
+        XCTAssertEqual(code.paths, server.ownAddresses.filter { $0 != code.host })
+        XCTAssertEqual(ConnectionCode(parsing: code.encoded)?.paths, code.paths)
+    }
 }
 
 /// A stream that keeps what is sent to it.

@@ -379,6 +379,19 @@ The server's side is `ServerSettings.authentication`: `password` (the
 default), or `none`, which lets in whoever reaches it — for paths of
 one's own, or a front that has signed the user in.
 
+**Bootstrapping SSH** (`VisorServer+SSHKeys`, `AgentServerConnection.
+useSSH`, `enrollSSHIfWanted`): a client that is in by any path hands its
+SSH public key to `POST /api/ssh/keys`, which puts it in the user's
+`authorized_keys` (0700/0600, once). A record whose address is an SSH
+path that refuses the device's key is not a sign-in to redo: the
+connection tries its other paths, and once in by one of them hands the
+key over and connects again over SSH, once. "Use SSH" in Computer
+Settings makes the SSH path on the same host the address and does that;
+the connection code carries every path (`ConnectionCode.paths`), and
+the SSH connection code (`preferringSSH`, in the menu bar and in
+Computer Settings) puts an SSH path first, so a new device scanned in
+with it comes in by another path once and uses SSH from then on.
+
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line
 preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:

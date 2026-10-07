@@ -90,10 +90,12 @@ public final class VisorStore: ObservableObject {
     /// Adds (or updates, by provider and address) a server and connects to it.
     @discardableResult
     public func add(_ record: AgentServerRecord) -> AgentServerConnection {
-        if let existing = servers.first(where: { $0.record.provider == record.provider && $0.record.address == record.address }) {
+        if let existing = servers.first(where: { $0.record.provider == record.provider && ($0.record.address == record.address || (!record.serverID.isEmpty && $0.record.serverID == record.serverID)) }) {
             existing.update { current in
                 current.secret = record.secret
                 if !record.name.isEmpty { current.name = record.name }
+                if current.serverID.isEmpty { current.serverID = record.serverID }
+                current.learnPaths(record.paths + [record.address])
             }
             existing.connect()
             save()
@@ -114,7 +116,7 @@ public final class VisorStore: ObservableObject {
     public func open(_ text: String) -> AgentServerConnection? {
         guard let code = ConnectionCode(parsing: text) else { return nil }
         addingServer = false
-        return add(AgentServerRecord(name: code.name, address: code.host, secret: code.password))
+        return add(AgentServerRecord(name: code.name, address: code.host, secret: code.password, serverID: code.id, paths: code.paths))
     }
 
     public func remove(_ server: AgentServerConnection) {

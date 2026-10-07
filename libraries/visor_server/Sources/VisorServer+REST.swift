@@ -105,6 +105,7 @@ extension VisorServer {
         case ("POST", 1, "unlink"): restUnlink(call)
         case ("GET", 1, "peers"): restPeers(call)
         case ("POST", 1, "peers"): restTakePeers(call)
+        case ("POST", 2, "ssh") where parts[1] == "keys": restAuthorizeSSHKey(call)
         case ("POST", 1, "restart"): restRestart(call)
         case ("POST", 1, "quit"): restQuit(call)
         case ("POST", 1, "sessions"): restStartSession(call)
@@ -145,6 +146,14 @@ extension VisorServer {
         e.addresses = ownAddresses
         e.peers = peers
         return .json(e.encoded())
+    }
+
+    /// A device's SSH public key (`text`), into this user's authorized
+    /// keys, so the device comes in over SSH next.
+    private func restAuthorizeSSHKey(_ call: RESTCall) -> HTTPResponse {
+        guard let line = call.body.text, !line.isEmpty else { return HTTPResponse(400, Envelope.error("A public key line is required").encoded()) }
+        if let problem = authorizeSSHKey(line) { return HTTPResponse(400, Envelope.error(problem).encoded()) }
+        return .json(Envelope(type: "ssh").encoded())
     }
 
     /// Computers a client or a peer tells this server of; what is news

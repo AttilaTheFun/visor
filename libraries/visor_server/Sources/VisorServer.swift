@@ -134,7 +134,7 @@ public final class VisorServer {
     /// address to give and a password is set.
     public var connectionCode: ConnectionCode? {
         guard !password.isEmpty, let address = reachableAddress else { return nil }
-        return ConnectionCode(name: hostName, host: address, password: password, id: id)
+        return ConnectionCode(name: hostName, host: address, password: password, id: id, paths: ownAddresses)
     }
 
     /// sessions.json in the platform's data directory (on a Mac

@@ -41,6 +41,14 @@ struct ComputerSettingsForm: View {
                         ? ". Followed by polling: this path carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn." : ""))
             }
             if overSSH, VisorHost.ssh != nil { DeviceKeySection() }
+            if !overSSH, VisorHost.ssh != nil, !host.sshPaths.isEmpty {
+                Section {
+                    Button("Use SSH") { host.useSSH() }
+                        .accessibilityIdentifier("use-ssh")
+                } footer: {
+                    Text("Makes the computer's own SSH the way in: this device's key is handed to the computer over the connection it has now, and the connection made again over SSH, with no password asked from then on.")
+                }
+            }
             if !host.record.paths.isEmpty || host.path != nil {
                 Section {
                     if let path = host.path, path != host.record.address {

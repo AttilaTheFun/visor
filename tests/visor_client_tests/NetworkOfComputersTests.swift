@@ -135,4 +135,75 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(host.state, .connected)
         XCTAssertEqual(host.path, "http://a:7433/peer/C")
     }
+
+    /// A record whose address is the computer's SSH, before the computer
+    /// knows this device's key: SSH refuses, another path lets the device
+    /// in, its key is handed over, and SSH is tried again and taken.
+    func testAComputerAskedForOverSSHEnrollsByAnotherPath() async {
+        let ssh = ScriptedSSH()
+        VisorHost.ssh = ssh
+        defer { VisorHost.ssh = nil }
+        let record = AgentServerRecord(name: "Mini", address: "ssh://logan@10.0.0.2", secret: "pw", provider: "scripted", paths: ["http://10.0.0.2:7433"])
+        let server = scripted(record)
+        server.refused = ["ssh://logan@10.0.0.2"]
+        server.onAuthorize = { server.refused = [] }
+        let host = AgentServerConnection(record: record)
+        host.connect()
+        for _ in 0..<5 { await settle() }
+        XCTAssertEqual(server.authorizedKeys, ["ssh-ed25519 AAAAdevice visor"])
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertEqual(host.path, "ssh://logan@10.0.0.2", "over SSH, once the key is known")
+        XCTAssertEqual(server.signedInBy, ["ssh://logan@10.0.0.2", "http://10.0.0.2:7433", "ssh://logan@10.0.0.2"])
+    }
+
+    /// Use SSH: the record's address becomes the SSH path on the same
+    /// host, the old one another path, and the key is handed over by it.
+    func testUseSSHSwitchesTheAddressAndEnrolls() async {
+        let ssh = ScriptedSSH()
+        VisorHost.ssh = ssh
+        defer { VisorHost.ssh = nil }
+        let record = AgentServerRecord(name: "Mini", address: "http://10.0.0.2:7433", secret: "pw", provider: "scripted",
+                                       paths: ["ssh://logan@100.90.45.11", "ssh://logan@10.0.0.2"])
+        let server = scripted(record)
+        server.refused = ["ssh://logan@10.0.0.2", "ssh://logan@100.90.45.11"]
+        server.onAuthorize = { server.refused = [] }
+        let host = AgentServerConnection(record: record)
+        host.connect()
+        await settle()
+        XCTAssertEqual(host.path, "http://10.0.0.2:7433")
+        XCTAssertTrue(host.authorizedNothingYet(server))
+        XCTAssertTrue(host.useSSH())
+        for _ in 0..<5 { await settle() }
+        XCTAssertEqual(host.record.address, "ssh://logan@10.0.0.2", "the SSH path on the same host")
+        XCTAssertTrue(host.record.paths.contains("http://10.0.0.2:7433"))
+        XCTAssertEqual(server.authorizedKeys.count, 1)
+        XCTAssertEqual(host.path, "ssh://logan@10.0.0.2")
+        XCTAssertFalse(AgentServerConnection(record: AgentServerRecord(name: "", address: "http://x", provider: "scripted")).useSSH(), "no SSH path known")
+    }
+
+    /// The connection code carries the paths; the SSH code puts one first.
+    func testTheCodeCarriesThePaths() {
+        let code = ConnectionCode(name: "Mini", host: "http://100.90.45.11:7433", password: "pw", id: "mini",
+                                  paths: ["http://192.168.4.52:7433", "ssh://logan@100.90.45.11", "http://100.90.45.11:7433"])
+        XCTAssertEqual(code.paths, ["http://192.168.4.52:7433", "ssh://logan@100.90.45.11"], "the host itself is not a path twice")
+        let read = ConnectionCode(parsing: code.link)
+        XCTAssertEqual(read, code)
+        XCTAssertEqual(read?.peer.addresses.count, 3)
+        let ssh = code.preferringSSH
+        XCTAssertEqual(ssh?.host, "ssh://logan@100.90.45.11")
+        XCTAssertEqual(ssh?.paths, ["http://100.90.45.11:7433", "http://192.168.4.52:7433"])
+        XCTAssertNil(ConnectionCode(name: "x", host: "http://a", password: "p").preferringSSH)
+        // Read into the store: the paths come along.
+        VisorHost.settings = MemorySettings()
+        let store = VisorStore()
+        let added = store.open(ssh!.link)
+        XCTAssertEqual(added?.record.address, "ssh://logan@100.90.45.11")
+        XCTAssertEqual(added?.record.paths, ["http://100.90.45.11:7433", "http://192.168.4.52:7433"])
+        XCTAssertEqual(added?.record.serverID, "mini")
+    }
 }
+
+private extension AgentServerConnection {
+    func authorizedNothingYet(_ server: ScriptedServer) -> Bool { server.authorizedKeys.isEmpty }
+}
+

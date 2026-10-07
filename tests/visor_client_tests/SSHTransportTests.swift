@@ -160,8 +160,9 @@ final class SSHTransportTests: XCTestCase {
     }
 
     /// A computer whose host key changed is refused with a message; one
-    /// that refuses the device's key is a sign-in to redo; a host with no
-    /// SSH says so; nothing is said over HTTP in any case.
+    /// that refuses the device's key says so (another path may let the
+    /// device in, and authorize its key); a host with no SSH says so;
+    /// nothing is said over HTTP in any case.
     func testWhatSSHRefusesIsSaidAsTheConnectionSaysIt() async throws {
         let server = VisorAgentServer(record: record())
         ssh.failure = .hostKeyChanged
@@ -175,7 +176,9 @@ final class SSHTransportTests: XCTestCase {
         do {
             _ = try await server.authenticate(record())
             XCTFail("signed in")
-        } catch AgentServerError.needsAuthentication {}
+        } catch AgentServerError.message(let text) {
+            XCTAssertTrue(text.contains("SSH key"), "another path may let the device in: \(text)")
+        }
         ssh.failure = .unreachable("connection refused")
         do {
             _ = try await server.authenticate(record())

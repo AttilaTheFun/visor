@@ -42,6 +42,10 @@ struct ConnectionCodeSection: View {
                         .accessibilityIdentifier("qr-code")
                 }
                 Button("Copy Connection Code") { copyToPasteboard(code.encoded) }
+                if let ssh = code.preferringSSH {
+                    Button("Copy SSH Connection Code") { copyToPasteboard(ssh.encoded) }
+                        .accessibilityIdentifier("copy-ssh-code")
+                }
             } else {
                 Text("This computer's password is not saved here, so there is no code to hand on.")
                     .foregroundColor(.secondary)
@@ -49,7 +53,7 @@ struct ConnectionCodeSection: View {
         } header: {
             Text("Connect another device")
         } footer: {
-            Text("Scan the QR code with another device's camera to add this computer there; it carries the address and the password, so show it only to your own devices.")
+            Text("Scan the QR code with another device's camera to add this computer there; it carries the address, the password and the other paths, so show it only to your own devices. The SSH code puts the computer's SSH first: the new device comes in by another path once, hands its key over, and uses SSH from then on.")
         }
         .task(id: host.state) {
             guard host.state == .connected, let text = try? await host.connectionCode() else { return }

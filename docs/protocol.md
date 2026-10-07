@@ -62,7 +62,7 @@ none notifies itself.
 
 Computers are added by hand, in one step. The menu bar app shows a
 connection code — URL-safe base64 (no padding) of
-`{"v":1,"name":…,"host":<address>,"password":…}` — as a string to
+`{"v":1,"name":…,"host":<address>,"password":…,"id":…,"paths":[…]}` (`paths`: the server's other network paths, `ssh://` ones among them; the SSH code puts one of those in `host`) — as a string to
 copy and as a QR code of `visor://connect?code=<code>`. A client takes
 the code, the link, or an address typed by hand (`ConnectionCode` in
 libraries/visor_protocol; the apps register the `visor` URL scheme).
@@ -81,6 +81,7 @@ under `/api`.
 | `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
 | `POST /sessions/<id>/acknowledge` | | the user has read the session's notice |
 | `GET /peers` | | `peers`: the server's `id`, `host`, own `addresses`, and its `peers` |
+| `POST /ssh/keys` | `text`: this device's SSH public key line | `ssh`; the key is in the user's `authorized_keys`, so the device comes in over SSH next |
 | `POST /peers` | `peers`: computers to tell the server of | `peers`; kept and passed on |
 | `POST /unlink` | `text`: a peer's id or address | forgets that peer |
 | `/peer/<id>/api/…` | any of the above | the peer's own answer, relayed |

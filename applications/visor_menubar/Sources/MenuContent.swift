@@ -28,6 +28,7 @@ struct MenuContent: View {
             Divider()
             if let code = server.connectionCode {
                 Button("Copy Connection Code") { copy(code.encoded) }
+                if let ssh = code.preferringSSH { Button("Copy SSH Connection Code") { copy(ssh.encoded) } }
                 Text("Paste it into Visor on a phone or another Mac, or scan the QR code in Settings")
             }
             if !server.password.isEmpty {

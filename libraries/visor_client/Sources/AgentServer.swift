@@ -117,6 +117,9 @@ public protocol AgentServer: AnyObject {
     /// Tells the server of other computers, so its agents reach them and
     /// its peers learn of them.
     func introduce(_ peers: [Peer]) async throws
+    /// Puts this device's SSH public key among the server's user's
+    /// authorized keys, so this device comes in over SSH from now on.
+    func authorizeSSHKey(_ line: String) async throws
 }
 
 public extension AgentServer {
@@ -128,4 +131,5 @@ public extension AgentServer {
     var reachedAt: String? { nil }
     func peers() async throws -> [Peer] { [] }
     func introduce(_ peers: [Peer]) async throws { throw AgentServerError.unsupported }
+    func authorizeSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
 }

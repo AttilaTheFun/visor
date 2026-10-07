@@ -41,6 +41,11 @@ final class ScriptedServer: AgentServer {
 
     func peers() async throws -> [Peer] { peersAnswer }
     func introduce(_ peers: [Peer]) async throws { introduced.append(peers) }
+    /// The SSH keys handed over; `onAuthorize` is what the server does
+    /// with one (a test lets the SSH address in from then on).
+    var authorizedKeys: [String] = []
+    var onAuthorize: (() -> Void)?
+    func authorizeSSHKey(_ line: String) async throws { authorizedKeys.append(line); onAuthorize?() }
 
     func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
         channels += 1
