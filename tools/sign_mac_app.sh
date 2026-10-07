@@ -79,6 +79,13 @@ with open(sys.argv[2], "wb") as f:
 PY
     ENTITLEMENTS=(--entitlements "$WANTED")
 fi
+# What the build embeds (a Swift runtime library a dependency needs,
+# ad-hoc signed as it comes) is signed first, each the same way, or
+# notarization refuses the app for it.
+if [ -d "$APP/Contents/Frameworks" ]; then
+    find "$APP/Contents/Frameworks" \( -name "*.dylib" -o -name "*.framework" \) -maxdepth 1 -print0 \
+        | xargs -0 -n 1 codesign --force --options runtime --timestamp --sign "$IDENTITY"
+fi
 codesign --force --options runtime --timestamp --sign "$IDENTITY" ${ENTITLEMENTS[@]+"${ENTITLEMENTS[@]}"} -r="$REQUIREMENT" "$APP"
 codesign --verify --strict "$APP"
 echo "Signed $(basename "$APP") with $(security find-identity -v -p codesigning | grep "$IDENTITY" | sed 's/.*"\(.*\)".*/\1/' | head -1)"
