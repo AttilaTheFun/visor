@@ -18,6 +18,7 @@ public struct HostDetails: Sendable {
         self.name = name
         self.dataDirectory = dataDirectory
         self.addresses = addresses
-        self.networkAddresses = networkAddresses ?? { addresses().map { NetworkAddress(address: $0) } }
+        let given = networkAddresses ?? { addresses().map { NetworkAddress(address: $0) } }
+        self.networkAddresses = { given().filter { !NetworkAddress.isLinkLocal($0.address) && !NetworkAddress.isLoopback($0.address) } }
     }
 }

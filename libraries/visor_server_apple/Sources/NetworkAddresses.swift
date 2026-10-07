@@ -15,7 +15,7 @@ public enum NetworkAddresses {
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             if getnameinfo(address, socklen_t(address.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
                 let text = String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
-                if text == "127.0.0.1" { continue }
+                if text == "127.0.0.1" || text.hasPrefix("169.254.") { continue }
                 result.append((String(cString: entry.ifa_name), text))
             }
         }

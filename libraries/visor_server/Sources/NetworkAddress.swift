@@ -32,6 +32,10 @@ public struct NetworkAddress: Equatable, Sendable {
         return (64...127).contains(parts[1])
     }
 
+    /// 169.254.0.0/16: an address a Mac gives an interface with no network
+    /// behind it; no path to anything.
+    public static func isLinkLocal(_ address: String) -> Bool { address.hasPrefix("169.254.") }
+
     /// Loopback: this computer's own path, always open.
     public static func isLoopback(_ address: String) -> Bool {
         address == "127.0.0.1" || address == "::1" || address.hasPrefix("127.")

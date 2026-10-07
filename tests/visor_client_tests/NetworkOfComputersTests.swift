@@ -201,6 +201,20 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(added?.record.paths, ["http://100.90.45.11:7433", "http://192.168.4.52:7433"])
         XCTAssertEqual(added?.record.serverID, "mini")
     }
+    /// A connection code for a computer held already puts its address
+    /// first: the SSH code switches a computer held over HTTP to SSH.
+    func testACodeForAComputerHeldSwitchesItsAddress() {
+        VisorHost.settings = MemorySettings()
+        let store = VisorStore()
+        let first = store.open(ConnectionCode(name: "Mini", host: "http://100.90.45.11:7433", password: "pw", id: "mini").link)
+        XCTAssertEqual(first?.record.address, "http://100.90.45.11:7433")
+        let ssh = ConnectionCode(name: "Mini", host: "ssh://logan@100.90.45.11", password: "pw", id: "mini", paths: ["http://100.90.45.11:7433"])
+        let again = store.open(ssh.link)
+        XCTAssertTrue(again === first, "the same computer, not another")
+        XCTAssertEqual(store.servers.count, 1)
+        XCTAssertEqual(again?.record.address, "ssh://logan@100.90.45.11")
+        XCTAssertTrue(again?.record.paths.contains("http://100.90.45.11:7433") == true)
+    }
 }
 
 private extension AgentServerConnection {

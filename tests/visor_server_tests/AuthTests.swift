@@ -109,6 +109,8 @@ final class AuthTests: ServerTestCase {
         XCTAssertFalse(server.admits(localAddress: "100.90.45.11"))
         XCTAssertTrue(server.admits(localAddress: "127.0.0.1"), "this computer always")
         XCTAssertEqual(NetworkAddress(address: "10.0.0.5", interface: "utun3").kind, .vpn)
+        XCTAssertTrue(NetworkAddress.isLinkLocal("169.254.179.38"))
+        XCTAssertFalse(ServerPlatform.current.host.networkAddresses().contains { NetworkAddress.isLinkLocal($0.address) })
         XCTAssertEqual(NetworkAddress(address: "192.168.1.5", interface: "en0").kind, .lan)
         server.settings.lan = true
         server.settings.vpn = true
