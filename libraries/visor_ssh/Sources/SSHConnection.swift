@@ -1,7 +1,8 @@
 // One SSH connection, to the last hop of its route: a listener on
-// 127.0.0.1 whose every connection becomes a direct-tcpip channel to a
-// port on the computer's loopback, the two glued together. Closing the
-// first hop's connection closes everything run through it.
+// 127.0.0.1 whose every connection becomes a channel to the computer — a
+// direct-tcpip channel to a port on its loopback, or a session channel
+// running a command there — the two glued together. Closing the first
+// hop's connection closes everything run through it.
 
 import Foundation
 import NIOCore
@@ -9,8 +10,9 @@ import NIOPosix
 import NIOSSH
 
 @MainActor
-final class NativeVisorSSHSession: VisorSSHSession {
-    let hostKeys: [String]
+public final class SSHConnection {
+    /// Each hop's host key, as a line to keep and compare next time.
+    public let hostKeys: [String]
     private let root: Channel
     private let handler: NIOLoopBound<NIOSSHHandler>
     private let group: MultiThreadedEventLoopGroup
@@ -23,7 +25,9 @@ final class NativeVisorSSHSession: VisorSSHSession {
         self.group = group
     }
 
-    func forward(toPort port: Int) async throws -> Int {
+    /// Reaches `port` on the computer's loopback through a port here, on
+    /// 127.0.0.1: the port, for as long as the connection is open.
+    public func forward(toPort port: Int) async throws -> Int {
         try await listen { local in
             let originator: SocketAddress
             do { originator = try local.remoteAddress ?? SocketAddress(ipAddress: "127.0.0.1", port: 0) } catch { return .failure(error) }
@@ -31,7 +35,10 @@ final class NativeVisorSSHSession: VisorSSHSession {
         }
     }
 
-    func attach(command: String) async throws -> Int {
+    /// Runs `command` on the computer for each connection to a port here,
+    /// on 127.0.0.1, the connection's bytes being the command's input and
+    /// output: the port, for as long as the connection is open.
+    public func attach(command: String) async throws -> Int {
         try await listen { _ in .success((.session, command)) }
     }
 
@@ -63,11 +70,11 @@ final class NativeVisorSSHSession: VisorSSHSession {
             }
             .bind(host: "127.0.0.1", port: 0).get()
         listeners.append(listener)
-        guard let bound = listener.localAddress?.port else { throw VisorSSHError.unreachable("no port") }
+        guard let bound = listener.localAddress?.port else { throw SSHError.unreachable("no port") }
         return bound
     }
 
-    func close() {
+    public func close() {
         for listener in listeners { listener.close(promise: nil) }
         listeners = []
         root.close(promise: nil)

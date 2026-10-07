@@ -2,6 +2,7 @@ import Foundation
 import os
 import VisorServer
 import VisorServerPOSIX
+import VisorServerSSH
 
 extension ServerPlatform {
     /// A Mac's, for the menu bar app (and the staging server): the Network
@@ -25,7 +26,8 @@ extension ServerPlatform {
                               addresses: { NetworkAddresses.all().map(\.address) },
                               networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } }),
             lifecycle: AppRelauncher(),
-            log: { line in logger.info("\(line, privacy: .public)") }
+            log: { line in logger.info("\(line, privacy: .public)") },
+            ssh: ConnectorPeerSSH()
         )
     }
 }

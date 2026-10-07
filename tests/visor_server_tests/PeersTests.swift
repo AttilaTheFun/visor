@@ -9,6 +9,33 @@ import VisorProtocol
 @testable import VisorServer
 import XCTest
 
+/// SSH to peers as the test scripts it: every connection is recorded;
+/// "attach" hands back the port of a server standing in for the peer's
+/// socket file (its trust stood in for by asking nothing).
+@MainActor
+final class ScriptedPeerSSH: PeerSSH {
+    var connections: [(user: String, host: String, port: Int, hostKey: String?)] = []
+    var portBehind = 0
+    var failure: PeerSSHError?
+    func newKey() -> Data { Data(repeating: 7, count: 32) }
+    func publicKeyLine(for key: Data) -> String? { "ssh-ed25519 AAAAserver" }
+    func connect(user: String, host: String, port: Int, key: Data, hostKey: String?) async throws -> any PeerSSHSession {
+        connections.append((user, host, port, hostKey))
+        if let failure { throw failure }
+        return ScriptedPeerSSHSession(port: portBehind)
+    }
+}
+
+@MainActor
+final class ScriptedPeerSSHSession: PeerSSHSession {
+    let hostKey = "ssh-ed25519 AAAAhost"
+    let port: Int
+    var closed = false
+    init(port: Int) { self.port = port }
+    func attach(command: String) async throws -> Int { port }
+    func close() { closed = true }
+}
+
 @MainActor
 final class PeersTests: ServerTestCase {
     private var here: VisorServer!
@@ -138,4 +165,67 @@ final class PeersTests: ServerTestCase {
         here.adopt(Peer(id: "far-id", name: "Far", addresses: ["http://10.255.255.1:7433"], password: "here-password"))
         XCTAssertEqual(here.paths(to: here.peers.first { $0.id == "far-id" }!), ["http://10.255.255.1:7433", "http://127.0.0.1:7985/peer/far-id"])
     }
+
+    /// A peer's server key travels with its record and is authorized when
+    /// the peer is taken in; this server's own key goes out with its
+    /// record and in hello.
+    func testAPeersSSHKeyIsAuthorizedWhenItIsTakenIn() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("visor-peerkeys-" + UUID().uuidString)
+        VisorServer.authorizedKeysPathOverride = folder.appendingPathComponent("authorized_keys").path
+        defer { VisorServer.authorizedKeysPathOverride = nil }
+        let ssh = ScriptedPeerSSH()
+        ServerPlatform.current.ssh = ssh
+        defer { ServerPlatform.current.ssh = nil }
+        XCTAssertEqual(here.ownSSHKey, "ssh-ed25519 AAAAserver visor-server test-mac")
+        XCTAssertEqual(here.ownPeer.sshKey, here.ownSSHKey)
+        let hello = Envelope.decode(here.route(HTTPRequest(method: "GET", path: "/api/hello", headers: ["authorization": "Bearer here-password"], body: "")).body)
+        XCTAssertEqual(hello?.sshKey, here.ownSSHKey)
+        let peer = Peer(id: "far-id", name: "Far", addresses: ["ssh://logan@10.0.0.7"], password: "", sshKey: "ssh-ed25519 AAAAfar visor-server far")
+        XCTAssertTrue(here.adopt(peer))
+        let kept = try String(contentsOfFile: VisorServer.authorizedKeysPath, encoding: .utf8)
+        XCTAssertEqual(kept, "ssh-ed25519 AAAAfar visor-server far\n")
+        XCTAssertEqual(Peer(json: peer.json)?.sshKey, peer.sshKey)
+        var merged = peer
+        XCTAssertTrue(merged.merge(Peer(id: "far-id", name: "Far", addresses: [], password: "", sshKey: "ssh-ed25519 AAAAnew")))
+        XCTAssertEqual(merged.sshKey, "ssh-ed25519 AAAAnew")
+    }
+
+    /// A peer whose path is SSH is reached through a tunnel to its socket
+    /// file, kept for the next call; a tunnel that fails is dropped.
+    func testAPeerOnAnSSHPathIsReachedThroughATunnel() async throws {
+        let ssh = ScriptedPeerSSH()
+        ssh.portBehind = 7985
+        ServerPlatform.current.ssh = ssh
+        defer { ServerPlatform.current.ssh = nil }
+        // The socket file asks nothing; so does the stand-in.
+        there.settings.authentication = "none"
+        let peer = Peer(id: there.id, name: "There", addresses: ["ssh://logan@127.0.0.1:2222"], password: "")
+        here.adopt(peer)
+        XCTAssertEqual(here.paths(to: peer), ["ssh://logan@127.0.0.1:2222"], "an SSH path counts where the system has SSH")
+        var ask = Envelope(type: "agent")
+        ask.mode = "sessions"
+        ask.id = "r1"
+        let answer = try await here.call(peer, path: "agent", ask)
+        XCTAssertEqual(answer.type, "agent_result", "answered by the other server, through the tunnel")
+        XCTAssertEqual(ssh.connections.count, 1)
+        XCTAssertEqual(ssh.connections[0].user, "logan")
+        XCTAssertEqual(ssh.connections[0].port, 2222)
+        XCTAssertNil(ssh.connections[0].hostKey)
+        XCTAssertEqual(here.peerTunnels["ssh://logan@127.0.0.1:2222"]?.base, "http://127.0.0.1:7985")
+        _ = try await here.call(peer, path: "agent", ask)
+        XCTAssertEqual(ssh.connections.count, 1, "the tunnel is kept")
+        XCTAssertEqual(here.workingPaths[there.id], "ssh://logan@127.0.0.1:2222")
+        // The host key is kept, and offered next time.
+        XCTAssertEqual(VisorServer.secrets.get("ssh.hostkey.logan@127.0.0.1:2222"), "ssh-ed25519 AAAAhost")
+        here.dropTunnel(for: "ssh://logan@127.0.0.1:2222")
+        _ = try await here.call(peer, path: "agent", ask)
+        XCTAssertEqual(ssh.connections.last?.hostKey, "ssh-ed25519 AAAAhost")
+        // A client read through here takes the same tunnel.
+        let relayed = await route(here, request("GET", "/peer/\(there.id)/api/hello", bearer: "here-password"))
+        XCTAssertEqual(relayed.status, 200)
+        // Without SSH on the system, an SSH path is no path.
+        ServerPlatform.current.ssh = nil
+        XCTAssertEqual(here.paths(to: peer), [])
+    }
 }
+

@@ -65,6 +65,7 @@ extension Envelope {
         e.folders = value["folders"].array?.compactMap(\.string)
         e.addresses = value["addresses"].array?.compactMap(\.string)
         e.peers = value["peers"].array?.compactMap(Peer.init(json:))
+        e.sshKey = value["sshKey"].string
         e.resumable = value["resumable"].array?.compactMap(ResumableSession.init(json:))
         e.deviceToken = value["deviceToken"].string
         e.platform = value["platform"].string
@@ -115,6 +116,7 @@ extension Envelope {
         if let folders { o["folders"] = .array(folders.map(JSONValue.string)) }
         if let addresses { o["addresses"] = .array(addresses.map(JSONValue.string)) }
         if let peers { o["peers"] = .array(peers.map(\.json)) }
+        put("sshKey", sshKey)
         if let resumable { o["resumable"] = .array(resumable.map(\.json)) }
         if let deviceToken { o["deviceToken"] = .string(deviceToken) }
         if let platform { o["platform"] = .string(platform) }

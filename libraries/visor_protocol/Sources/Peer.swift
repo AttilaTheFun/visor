@@ -10,12 +10,17 @@ public struct Peer: Codable, Equatable, Hashable, Sendable {
     public var name: String
     public var addresses: [String]
     public var password: String
+    /// The server's own SSH public key, as an `authorized_keys` line: a
+    /// peer that takes this computer in authorizes it, so this server
+    /// reaches that one through its SSH. "" for a server without one.
+    public var sshKey: String
 
-    public init(id: String, name: String, addresses: [String], password: String) {
+    public init(id: String, name: String, addresses: [String], password: String, sshKey: String = "") {
         self.id = id
         self.name = name
         self.addresses = addresses
         self.password = password
+        self.sshKey = sshKey
     }
 
     /// The same computer: by id when both have one, else by an address
@@ -34,6 +39,7 @@ public struct Peer: Codable, Equatable, Hashable, Sendable {
         if !other.name.isEmpty, other.name != name { name = other.name; changed = true }
         for address in other.addresses where !addresses.contains(address) { addresses.append(address); changed = true }
         if !other.password.isEmpty, other.password != password { password = other.password; changed = true }
+        if !other.sshKey.isEmpty, other.sshKey != sshKey { sshKey = other.sshKey; changed = true }
         return changed
     }
 }

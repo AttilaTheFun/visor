@@ -1,0 +1,23 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# SSH over swift-nio-ssh, for whoever needs a connection to a computer as a
+# user with a key: the client (a device's key, to a computer's own SSH) and
+# the server (its own key, to a peer's). A route of hops, each host key
+# seen handed back to be kept, and from the last hop a port here that
+# reaches a port there or a command run there.
+swift_library(
+    name = "visor_ssh",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorSSH",
+    target_compatible_with = select({
+        "@platforms//os:ios": [],
+        "@platforms//os:macos": [],
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = ["@swiftpkg_swift_nio_ssh//:NIOSSH"],
+)

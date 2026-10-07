@@ -4,9 +4,12 @@
 public struct ServerIdentity: Equatable, Sendable {
     public var id: String
     public var addresses: [String]
+    /// The server's own SSH public key line, "" for none.
+    public var sshKey: String
 
-    public init(id: String, addresses: [String]) {
+    public init(id: String, addresses: [String], sshKey: String = "") {
         self.id = id
         self.addresses = addresses
+        self.sshKey = sshKey
     }
 }

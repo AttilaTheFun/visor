@@ -134,6 +134,7 @@ extension VisorServer {
         var e = Envelope.hello(host: hostName, login: "", token: issueToken())
         e.id = id
         e.addresses = ownAddresses
+        e.sshKey = ownSSHKey
         return .json(e.encoded())
     }
 

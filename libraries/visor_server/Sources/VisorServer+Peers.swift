@@ -55,8 +55,8 @@ extension VisorServer {
         return out + httpPaths + sshPaths
     }
 
-    /// This computer as its peers should know it.
-    public var ownPeer: Peer { Peer(id: id, name: hostName, addresses: ownAddresses, password: password) }
+    /// This computer as its peers should know it, its SSH key with it.
+    public var ownPeer: Peer { Peer(id: id, name: hostName, addresses: ownAddresses, password: password, sshKey: ownSSHKey ?? "") }
 
     /// Takes in a connection code pasted here: the computer becomes a
     /// peer, is handed this computer's code so it knows this one back,
@@ -92,12 +92,18 @@ extension VisorServer {
     func adopt(_ peer: Peer) -> Bool {
         guard !peer.addresses.isEmpty, peer.id != id || id.isEmpty else { return false }
         if peer.id.isEmpty, !Set(peer.addresses).isDisjoint(with: ownAddresses) { return false }
+        let keyBefore = peers.first { $0.isSame(as: peer) }?.sshKey ?? ""
         if let index = peers.firstIndex(where: { $0.isSame(as: peer) }) {
             guard peers[index].merge(peer) else { return false }
         } else {
             peers.append(peer)
         }
         keepPeers()
+        // A peer's server comes in through this computer's SSH as a
+        // device does: whoever told of it was let in already.
+        if !peer.sshKey.isEmpty, peer.sshKey != keyBefore, let problem = authorizeSSHKey(peer.sshKey) {
+            Self.log("\(peer.name)'s SSH key was not taken: \(problem)")
+        }
         return true
     }
 
@@ -187,21 +193,28 @@ extension VisorServer {
         }
     }
 
-    /// The paths to a peer's REST side, as base URLs, the one that
-    /// answered last time first: its own addresses this server can use
-    /// (HTTP; it has no SSH), then through each other peer that was
-    /// reached (`/peer/<id>` there).
+    /// The paths to a peer's REST side, the one that answered last time
+    /// first: its own HTTP addresses, its SSH ones where this system has
+    /// SSH (`base(for:)` opens the tunnel), then through each other peer
+    /// that was reached (`/peer/<id>` there).
     func paths(to peer: Peer) -> [String] {
         var out = peer.addresses.compactMap { address -> String? in
             guard SSHAddress(address) == nil, let parsed = ServerAddress(address) else { return nil }
             return parsed.root
+        }
+        if ServerPlatform.current.ssh != nil {
+            out += peer.addresses.filter { SSHAddress($0) != nil }
         }
         if !peer.id.isEmpty {
             for other in peers where other.id != peer.id && !other.id.isEmpty {
                 if let known = workingPaths[other.id], !known.contains("/peer/") { out.append(known + "/peer/" + peer.id) }
             }
         }
-        if let known = workingPaths[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] { out.removeAll { $0 == known }; out.insert(known, at: 0) }
+        // The one that answered last time first, while it is still a path.
+        if let known = workingPaths[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id], let index = out.firstIndex(of: known) {
+            out.remove(at: index)
+            out.insert(known, at: 0)
+        }
         return out
     }
 
@@ -210,13 +223,15 @@ extension VisorServer {
     /// is on the way.
     func call(_ peer: Peer, path: String, _ envelope: Envelope) async throws -> Envelope {
         var lastError: Error = NSError(domain: "Visor", code: 0, userInfo: [NSLocalizedDescriptionKey: "no address to reach it at"])
-        for base in paths(to: peer) {
+        for way in paths(to: peer) {
             do {
+                let base = try await base(for: way)
                 let answer = try await Self.post(base + "/api/" + path, password: peer.password, envelope, relay: [id])
-                workingPaths[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] = base
+                workingPaths[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] = way
                 if peer.id.isEmpty { identify(peer, at: base) }
                 return answer
             } catch {
+                dropTunnel(for: way)
                 lastError = error
             }
         }

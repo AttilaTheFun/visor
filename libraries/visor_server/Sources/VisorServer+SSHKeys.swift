@@ -20,8 +20,9 @@ extension VisorServer {
     /// wants them (0700, 0600). Nil when done; otherwise what is wrong.
     func authorizeSSHKey(_ line: String) -> String? {
         let key = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Type, the key itself, and a comment of any words.
         let parts = key.split(separator: " ")
-        guard parts.count >= 2, parts.count <= 3, key.count < 4096, !key.contains("\n"),
+        guard parts.count >= 2, key.count < 4096, !key.contains("\n"),
               ["ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "sk-ssh-ed25519@openssh.com", "sk-ecdsa-sha2-nistp256@openssh.com"].contains(String(parts[0])),
               parts[1].allSatisfy({ $0.isLetter || $0.isNumber || $0 == "+" || $0 == "/" || $0 == "=" }) else {
             return "That is not a public key line."
@@ -38,7 +39,7 @@ extension VisorServer {
             kept += key + "\n"
             try kept.write(toFile: path, atomically: true, encoding: .utf8)
             try files.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
-            Self.log("an SSH key was authorized for \(parts.count == 3 ? String(parts[2]) : "a device")")
+            Self.log("an SSH key was authorized for \(parts.count > 2 ? parts[2...].joined(separator: " ") : "a device")")
             return nil
         } catch {
             return "The key could not be kept: \(error.localizedDescription)"

@@ -41,13 +41,17 @@ extension VisorServer {
         if let type = request.headers["content-type"] { headers["Content-Type"] = type }
         let candidates = paths(to: peer).filter { candidate in !passed.contains { candidate.contains("/peer/" + $0) } }
         Task { @MainActor in
-            for base in candidates {
+            for way in candidates {
+                guard let base = try? await self.base(for: way) else { continue }
                 let outgoing = OutgoingRequest(url: base + target.rest, method: request.method, headers: headers,
                                                body: Data(request.body.utf8), timeout: Self.relayTimeout)
-                guard let answer = try? await ServerPlatform.current.fetching.fetch(outgoing) else { continue }
+                guard let answer = try? await ServerPlatform.current.fetching.fetch(outgoing) else {
+                    self.dropTunnel(for: way)
+                    continue
+                }
                 // A path that answers at all is the path; what it answered
                 // is the peer's own answer, whatever the status.
-                self.workingPaths[peer.id] = base
+                self.workingPaths[peer.id] = way
                 return respond(HTTPResponse(answer.status, String(decoding: answer.body, as: UTF8.self)))
             }
             respond(HTTPResponse(502, Envelope.error("\(peer.name) is not reachable from here").encoded()))

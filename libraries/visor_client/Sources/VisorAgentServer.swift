@@ -96,7 +96,7 @@ public final class VisorAgentServer: AgentServer {
             socketHeaders = try await AgentServerAuthenticators.authenticator(for: record).headers(for: record)
             let hello = try await call("GET", "/hello")
             token = hello.token
-            if let id = hello.id, !id.isEmpty { identity = ServerIdentity(id: id, addresses: hello.addresses ?? []) }
+            if let id = hello.id, !id.isEmpty { identity = ServerIdentity(id: id, addresses: hello.addresses ?? [], sshKey: hello.sshKey ?? "") }
             return hello.host.flatMap { $0.isEmpty ? nil : $0 }
         } catch {
             if VisorHost.http?.status(of: error) == 401 { throw AgentServerError.needsAuthentication }

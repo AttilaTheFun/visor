@@ -17,8 +17,8 @@ swift_library(
     }),
     module_name = "VisorServices",
     deps = select({
-        "@platforms//os:ios": ["@swiftpkg_swift_nio_ssh//:NIOSSH"],
-        "@platforms//os:macos": ["@swiftpkg_swift_nio_ssh//:NIOSSH"],
+        "@platforms//os:ios": ["//libraries/visor_ssh"],
+        "@platforms//os:macos": ["//libraries/visor_ssh"],
         "//conditions:default": [],
     }),
 )

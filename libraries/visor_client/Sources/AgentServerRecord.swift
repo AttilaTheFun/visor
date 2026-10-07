@@ -33,10 +33,14 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     /// Other addresses it is reached at, as the server and its peers
     /// say: tried in turn when `address` does not answer.
     public var paths: [String]
+    /// The server's own SSH public key line, as its sign-in said it: what
+    /// another server is told when this one is introduced, so the two
+    /// reach each other over SSH. "" until known.
+    public var serverKey: String
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
                 provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", paths: [String] = [],
-                authentication: String = PasswordAuthenticator.name) {
+                authentication: String = PasswordAuthenticator.name, serverKey: String = "") {
         self.id = id
         self.name = name
         self.address = address
@@ -47,6 +51,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         self.renamed = renamed
         self.serverID = serverID
         self.paths = paths
+        self.serverKey = serverKey
     }
 
     /// Every address to try, the preferred first, without repeats.
@@ -110,7 +115,8 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     var json: JSONValue {
         .object(["id": .string(id), "name": .string(name), "address": .string(address), "secret": .string(secret),
                  "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed),
-                 "serverID": .string(serverID), "paths": .array(paths.map(JSONValue.string)), "authentication": .string(authentication)])
+                 "serverID": .string(serverID), "paths": .array(paths.map(JSONValue.string)), "authentication": .string(authentication),
+                 "serverKey": .string(serverKey)])
     }
 
     /// Reads a saved record; one saved by an earlier build, as a computer
@@ -123,6 +129,6 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
                   provider: json["provider"].string ?? json["backend"].string ?? VisorAgentServerProvider.name,
                   renamed: json["renamed"].bool ?? false, serverID: json["serverID"].string ?? "",
                   paths: (json["paths"].array ?? json["roads"].array)?.compactMap(\.string) ?? [],
-                  authentication: json["authentication"].string ?? PasswordAuthenticator.name)
+                  authentication: json["authentication"].string ?? PasswordAuthenticator.name, serverKey: json["serverKey"].string ?? "")
     }
 }

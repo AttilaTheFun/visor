@@ -345,6 +345,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         var changed = false
         if record.serverID != identity.id { record.serverID = identity.id; changed = true }
         if record.learnPaths(identity.addresses) { changed = true }
+        if !identity.sshKey.isEmpty, record.serverKey != identity.sshKey { record.serverKey = identity.sshKey; changed = true }
         if changed { onRecordChange?() }
     }
 
@@ -365,7 +366,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         guard !record.serverID.isEmpty else { return nil }
         let own = record.allPaths.filter { !$0.contains("/peer/") && !$0.contains("127.0.0.1") && !$0.contains("localhost") }
         guard !own.isEmpty else { return nil }
-        return Peer(id: record.serverID, name: record.name, addresses: own, password: record.secret)
+        return Peer(id: record.serverID, name: record.name, addresses: own, password: record.secret, sshKey: record.serverKey)
     }
 
     public func peers() async throws -> [Peer] { try await server.peers() }

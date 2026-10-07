@@ -60,6 +60,10 @@ public final class VisorServer {
     public internal(set) var peers: [Peer] = []
     /// The path that last reached each peer, by its id: tried first.
     var workingPaths: [String: String] = [:]
+    /// The SSH tunnels open to peers, by the path each is for: the
+    /// connection, and the base URL of the port here that reaches the
+    /// peer's socket file through it.
+    var peerTunnels: [String: (session: any PeerSSHSession, base: String)] = [:]
     /// Addresses connections were refused on (a path that is off), each
     /// logged once.
     var refusedPaths: Set<String> = []

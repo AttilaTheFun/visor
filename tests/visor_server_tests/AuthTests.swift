@@ -260,7 +260,8 @@ final class AuthTests: ServerTestCase {
         XCTAssertEqual(post(key), 200, "the same key again is no change")
         XCTAssertEqual(post("ssh-ed25519 AAAAother visor"), 200)
         XCTAssertEqual(post("rm -rf /"), 400)
-        XCTAssertEqual(post("ssh-ed25519 AAAA bad comment here"), 400)
+        XCTAssertEqual(post("ssh-ed25519 AAAA$not$base64"), 400)
+        XCTAssertEqual(post("ssh-ed25519"), 400)
         let kept = try String(contentsOfFile: VisorServer.authorizedKeysPath, encoding: .utf8)
         XCTAssertEqual(kept, key + "\nssh-ed25519 AAAAother visor\n")
         let fileMode = try FileManager.default.attributesOfItem(atPath: VisorServer.authorizedKeysPath)[.posixPermissions] as? Int

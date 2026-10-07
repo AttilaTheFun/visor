@@ -53,7 +53,11 @@ let system: [Target] = [
     .target(name: "CVisorPOSIX", path: "libraries/visor_server_posix/c"),
     .target(name: "VisorServerPOSIX", dependencies: ["CVisorPOSIX", "VisorServer"],
             path: "libraries/visor_server_posix/Sources", swiftSettings: strict),
-    .target(name: "VisorServerLinux", dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI", "VisorServerPOSIX"],
+    .target(name: "VisorSSH", dependencies: [.product(name: "NIOSSH", package: "swift-nio-ssh")],
+            path: "libraries/visor_ssh/Sources", swiftSettings: strict),
+    .target(name: "VisorServerSSH", dependencies: ["VisorServer", "VisorSSH"],
+            path: "libraries/visor_server_ssh/Sources", swiftSettings: strict),
+    .target(name: "VisorServerLinux", dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI", "VisorServerPOSIX", "VisorServerSSH"],
             path: "libraries/visor_server_linux/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerLinux"],
                       path: "applications/visor_server_linux", swiftSettings: strict),
@@ -73,6 +77,8 @@ let package = Package(
     dependencies: [
         // The message cache, where there is SQLite to keep it in.
         .package(url: "https://github.com/stephencelis/SQLite.swift.git", exact: "0.15.3"),
+        // SSH to peers (the server's own key, the peer's socket file).
+        .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.9.0"),
     ],
     targets: shared + system + tests
 )
