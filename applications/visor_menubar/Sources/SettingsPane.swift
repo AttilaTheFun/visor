@@ -1,7 +1,9 @@
 import AppKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import Network
 import SwiftUI
+import Synchronization
 import VisorProtocol
 import VisorServer
 import VisorServerApple
@@ -11,6 +13,9 @@ struct SettingsPane: View {
     @State private var draft = ""
     @State private var message: String?
     @State private var linkDraft = ""
+    /// Whether this Mac's sshd answers on port 22 (Remote Login), as last
+    /// checked; nil before the check.
+    @State private var remoteLogin: Bool?
     @State private var linkMessage: String?
     @State private var linking = false
     @State private var choosingKey = false
@@ -101,8 +106,13 @@ struct SettingsPane: View {
                 Toggle("SSH", isOn: Binding(get: { server.settings.sshEnabled }, set: { server.settings.sshEnabled = $0 }))
                 if server.settings.sshEnabled {
                     ForEach(server.sshPaths, id: \.self) { path in pathRow(path) }
-                    Text("Through this Mac's Remote Login, as you: no password asked (the socket file ~/.visor/server.sock).")
-                        .font(.caption).foregroundColor(.secondary)
+                    if remoteLogin == false {
+                        Text("Remote Login is off on this Mac, so nothing reaches these yet: turn it on in System Settings → General → Sharing.")
+                            .font(.caption).foregroundColor(.red)
+                    } else {
+                        Text("Through this Mac's Remote Login, as you: no password asked (the socket file ~/.visor/server.sock).")
+                            .font(.caption).foregroundColor(.secondary)
+                    }
                 }
                 Toggle("Reverse proxy", isOn: Binding(get: { server.settings.proxyEnabled }, set: { server.settings.proxyEnabled = $0 }))
                 if server.settings.proxyEnabled {
@@ -184,12 +194,36 @@ struct SettingsPane: View {
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 760)
+        .task { remoteLogin = await Self.sshdAnswers() }
         .onAppear {
             publicAddress = server.settings.publicAddress
             tlsPath = server.settings.tlsIdentityPath
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
+        }
+    }
+
+    /// Whether something listens on this Mac's port 22: a connection
+    /// tried for a moment.
+    private static func sshdAnswers() async -> Bool {
+        await withCheckedContinuation { done in
+            let connection = NWConnection(host: "127.0.0.1", port: 22, using: .tcp)
+            let answered = Mutex(false)
+            let finish: @Sendable (Bool) -> Void = { up in
+                guard answered.withLock({ was in defer { was = true }; return !was }) else { return }
+                connection.cancel()
+                done.resume(returning: up)
+            }
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready: finish(true)
+                case .failed, .cancelled: finish(false)
+                default: break
+                }
+            }
+            connection.start(queue: .global())
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) { finish(false) }
         }
     }
 
