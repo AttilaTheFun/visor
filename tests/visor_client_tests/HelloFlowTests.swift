@@ -387,13 +387,33 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertEqual(store.servers.first?.record.secret, "pearl-grove")
         XCTAssertEqual(store.servers.first?.record.address, "mini.example")
         XCTAssertEqual(store.servers.first?.record.provider, "scripted")
-        // Moved out of the record into the secrets, and read from there.
-        XCTAssertFalse(settings.values["hosts"]?.contains("pearl-grove") ?? true)
+        // Moved out of the record into the secrets, and read from there;
+        // the list itself moved out of the plain settings into the kept.
+        XCTAssertEqual(settings.get(key: "hosts"), "")
+        XCTAssertTrue(settings.kept(key: "hosts").contains("mini.example"))
+        XCTAssertFalse(settings.kept(key: "hosts").contains("pearl-grove"))
         XCTAssertEqual(settings.secret(key: "password.h1"), "pearl-grove")
         XCTAssertEqual(VisorStore().servers.first?.record.secret, "pearl-grove")
         // Removing the server forgets its secret.
         store.remove(store.servers[0])
         XCTAssertEqual(settings.secret(key: "password.h1"), "")
+    }
+
+    /// Deleting the app and installing it again clears its plain settings
+    /// (UserDefaults) and keeps its keychain: the computers, their
+    /// passwords and the device's id come back.
+    func testComputersSurviveAReinstall() {
+        let settings = MemorySettings()
+        VisorHost.settings = settings
+        settings.values["hosts"] = #"[{"id":"h1","name":"Mini","host":"http://mini.example:7433","backend":"scripted"}]"#
+        settings.setSecret(key: "password.h1", value: "pearl-grove")
+        _ = VisorStore()
+        // The reinstall: everything but the secrets gone.
+        settings.values = settings.values.filter { $0.key.hasPrefix("secret.") }
+        let store = VisorStore()
+        XCTAssertEqual(store.servers.map(\.record.name), ["Mini"])
+        XCTAssertEqual(store.servers.first?.record.address, "http://mini.example:7433")
+        XCTAssertEqual(store.servers.first?.record.secret, "pearl-grove")
     }
 
     func testAConnectionCodeAddsTheComputer() async {

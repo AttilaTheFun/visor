@@ -98,12 +98,13 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         renamed = !trimmed.isEmpty
     }
 
-    /// This device, as the servers know it: kept, so a server can tell
-    /// whose window a terminal is drawn for across launches.
+    /// This device, as the servers know it: kept (with the secrets, so a
+    /// reinstall keeps it too), so a server can tell whose window a
+    /// terminal is drawn for across launches.
     @MainActor public static let clientID: String = {
-        if let saved = VisorHost.settings?.get(key: "clientID"), !saved.isEmpty { return saved }
+        if let saved = VisorHost.settings?.kept(key: "clientID"), !saved.isEmpty { return saved }
         let fresh = newID()
-        VisorHost.settings?.set(key: "clientID", value: fresh)
+        VisorHost.settings?.setKept(key: "clientID", value: fresh)
         return fresh
     }()
 

@@ -42,7 +42,9 @@ public final class VisorStore: ObservableObject {
             addingServer = VisorFixture.screen == "connect"
             return
         }
-        let saved = VisorHost.settings?.get(key: key) ?? ""
+        // The computers are kept with the secrets (the keychain on Apple):
+        // they survive the app being deleted and installed again.
+        let saved = VisorHost.settings?.kept(key: key) ?? ""
         if !saved.isEmpty, let records = parseJSON(saved)?.array?.compactMap(AgentServerRecord.init(json:)) {
             var carried = false
             servers = records.map { record in
@@ -307,6 +309,6 @@ public final class VisorStore: ObservableObject {
             record.secret = ""
             return record.json
         }
-        VisorHost.settings?.set(key: key, value: JSONValue.array(records).encoded())
+        VisorHost.settings?.setKept(key: key, value: JSONValue.array(records).encoded())
     }
 }
