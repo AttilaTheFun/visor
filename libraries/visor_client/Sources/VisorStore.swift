@@ -87,15 +87,22 @@ public final class VisorStore: ObservableObject {
         servers.first { $0.record.address == computer } ?? servers.first { $0.record.name == computer }
     }
 
-    /// Adds (or updates, by provider and address) a server and connects to it.
+    /// Adds a server and connects to it — or, for one held already (the
+    /// same address, or the same server id), takes the new record in: the
+    /// password, the name, the paths, and the address, which the new
+    /// record puts first (an SSH connection code for a computer held
+    /// over HTTP makes SSH the way in).
     @discardableResult
     public func add(_ record: AgentServerRecord) -> AgentServerConnection {
         if let existing = servers.first(where: { $0.record.provider == record.provider && ($0.record.address == record.address || (!record.serverID.isEmpty && $0.record.serverID == record.serverID)) }) {
             existing.update { current in
                 current.secret = record.secret
-                if !record.name.isEmpty { current.name = record.name }
+                if !record.name.isEmpty, !current.renamed { current.name = record.name }
                 if current.serverID.isEmpty { current.serverID = record.serverID }
-                current.learnPaths(record.paths + [record.address])
+                let before = current.address
+                current.address = record.address
+                current.learnPaths(record.paths + [before])
+                current.authentication = record.authentication
             }
             existing.connect()
             save()
