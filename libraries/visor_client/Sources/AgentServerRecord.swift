@@ -13,8 +13,12 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     public var name: String
     /// Where the provider finds it.
     public var address: String
-    /// The credential the provider keeps, apart from the rest, as a secret.
+    /// The credential the provider keeps, apart from the rest, as a secret:
+    /// what the authenticator makes the headers from.
     public var secret: String
+    /// How the client proves itself (`AgentServerAuthenticators`): the
+    /// password unless said otherwise.
+    public var authentication: String
     /// Whether this server has answered a sign-in before (the sidebar's
     /// yellow "was reachable" badge rather than red "never").
     public var everConnected: Bool
@@ -31,11 +35,13 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     public var roads: [String]
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
-                provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", roads: [String] = []) {
+                provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", roads: [String] = [],
+                authentication: String = PasswordAuthenticator.name) {
         self.id = id
         self.name = name
         self.address = address
         self.secret = secret
+        self.authentication = authentication
         self.everConnected = everConnected
         self.provider = provider
         self.renamed = renamed
@@ -104,7 +110,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     var json: JSONValue {
         .object(["id": .string(id), "name": .string(name), "address": .string(address), "secret": .string(secret),
                  "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed),
-                 "serverID": .string(serverID), "roads": .array(roads.map(JSONValue.string))])
+                 "serverID": .string(serverID), "roads": .array(roads.map(JSONValue.string)), "authentication": .string(authentication)])
     }
 
     /// Reads a saved record; one saved by an earlier build, as a computer
@@ -116,6 +122,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
                   everConnected: json["everConnected"].bool ?? false,
                   provider: json["provider"].string ?? json["backend"].string ?? VisorAgentServerProvider.name,
                   renamed: json["renamed"].bool ?? false, serverID: json["serverID"].string ?? "",
-                  roads: json["roads"].array?.compactMap(\.string) ?? [])
+                  roads: json["roads"].array?.compactMap(\.string) ?? [],
+                  authentication: json["authentication"].string ?? PasswordAuthenticator.name)
     }
 }

@@ -10,10 +10,10 @@ import MessageCache
 import VisorProtocol
 
 extension VisorServer {
-    /// Listens once there is a password; without one the menu says so
-    /// and Settings is where to go.
+    /// Listens once there is a password (or nothing is asked); without
+    /// one the menu says so and Settings is where to go.
     public func start() {
-        guard listener == nil, !password.isEmpty else { return }
+        guard listener == nil, !password.isEmpty || settings.asksNothing else { return }
         // An agent that has gone leaves a pipe that cannot be written to:
         // that is an error to the write, not a signal that ends the app.
         ServerPlatform.current.processes.ignoreBrokenPipes()

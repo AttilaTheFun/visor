@@ -359,6 +359,26 @@ takes in the server's peers (`take`: a new record, or more roads for a
 known one) and introduces the servers to one another (`introduce`). The
 Link These Computers row is gone: holding two servers is the link.
 
+**Another kind of sign-in** (a fork whose users sign in with a
+company's SSO, the server itself being Visor's behind a front that
+checks the token): transport and sign-in are apart. The transport is the
+address (HTTP, HTTPS, the computer's SSH); the sign-in is an
+`AgentServerAuthenticator` (`libraries/visor_client`), named in the
+record (`authentication`: `password` unless said), which gives the
+headers every request carries from the record's `secret` — the password
+as a bearer, none as nothing, a fork's as whatever its front wants — and
+throws `needsAuthentication` when the user must sign in again (a token
+expired). A fork registers one (`AgentServerAuthenticators.register`)
+with its rows for the forms (`AgentServerAuthenticatorUIs.register`: a
+button that runs the SSO and sets `secret` to the token), and nothing
+else changes. The headers go on the REST calls and on the socket's
+opening request (`VisorHTTPService.request(…headers:)`,
+`VisorSocketService.open(url:headers:)`; a host with only the bearer
+forms sends the bearer out of them, a browser opens the socket without).
+The server's side is `ServerSettings.authentication`: `password` (the
+default), or `none`, which lets in whoever reaches it — for roads of
+one's own, or a front that has signed the user in.
+
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line
 preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:

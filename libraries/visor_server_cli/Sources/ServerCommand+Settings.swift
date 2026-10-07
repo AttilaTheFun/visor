@@ -68,6 +68,21 @@ extension ServerCommand {
               : "Clients through this computer's SSH need the password, from the server's next start.")
     }
 
+    /// Asks clients for the password, or nothing.
+    @MainActor
+    func auth(_ value: String?) throws {
+        var settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        switch value {
+        case "password": settings.authentication = "password"
+        case "none": settings.authentication = "none"
+        default: throw CommandLineError.usage("auth password, or auth none")
+        }
+        settings.keep(at: VisorServer.settingsURL)
+        print(settings.asksNothing
+              ? "Anyone who reaches the server is let in, from its next start: keep it to roads of your own."
+              : "Clients show the password, from the server's next start.")
+    }
+
     /// Shows or sets the address clients are told.
     @MainActor
     func address(_ value: String?) {

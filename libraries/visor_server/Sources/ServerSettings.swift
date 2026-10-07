@@ -28,6 +28,11 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     public var publicAddress = ""
     /// This server's id on the network of computers: made once, kept.
     public var serverID = ""
+    /// What a client must show: "password" (a bearer that is the
+    /// password, or a token hello gave), or "none" — anyone who reaches
+    /// the server is let in, the road being the proof (a LAN or a VPN of
+    /// one's own, SSH alone, a front of your own that signs users in).
+    public var authentication = "password"
 
     public init() {}
 
@@ -45,9 +50,13 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         tlsIdentityPath = try c.decodeIfPresent(String.self, forKey: .tlsIdentityPath) ?? ""
         publicAddress = try c.decodeIfPresent(String.self, forKey: .publicAddress) ?? ""
         serverID = try c.decodeIfPresent(String.self, forKey: .serverID) ?? ""
+        authentication = try c.decodeIfPresent(String.self, forKey: .authentication) ?? "password"
     }
 
     public func keep(at url: URL) {
         if let data = try? JSONEncoder().encode(self) { try? data.write(to: url, options: .atomic) }
     }
+
+    /// Whether anyone who reaches the server is let in.
+    public var asksNothing: Bool { authentication == "none" }
 }

@@ -34,6 +34,10 @@ public struct ServerCommand {
                    user can open, for clients that come through the
                    computer's own SSH: no password; `ssh off` leaves them
                    the port, with the password.
+          auth     `auth password` (the default) asks clients for the
+                   password; `auth none` lets in anyone who reaches the
+                   server — the road being the proof (a LAN or VPN of your
+                   own, SSH alone, a front that signs users in).
           address  Shows the address clients are told; `address <url>` sets
                    it (what a proxy, a tunnel or a name gives), `address -`
                    clears it. The server takes it when started again.
@@ -60,6 +64,7 @@ public struct ServerCommand {
             case "code": try code()
             case "network": try network(rest.first)
             case "ssh": try ssh(rest.first)
+            case "auth": try auth(rest.first)
             case "address": address(rest.first)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")

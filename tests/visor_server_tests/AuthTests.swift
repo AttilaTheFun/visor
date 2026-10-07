@@ -202,6 +202,20 @@ final class AuthTests: ServerTestCase {
             return String(decoding: answer, as: UTF8.self)
         }.value
     }
+    /// Set to ask nothing, the server lets in whoever reaches it — no
+    /// bearer, no password at login — and serves with no password set.
+    func testAServerAskingNothingLetsEveryoneIn() async {
+        server.settings.authentication = "none"
+        for _ in 0..<50 where !server.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
+        XCTAssertTrue(server.listening, "no password, and it serves")
+        XCTAssertEqual(server.route(request("/api/sessions")).status, 200)
+        XCTAssertEqual(server.route(request("/api/hello")).status, 200)
+        let client = ClientConnection(stream: RecordingStream())
+        server.handle(Envelope(type: "login"), from: client)
+        XCTAssertTrue(client.authenticated)
+        server.settings.authentication = "password"
+        XCTAssertEqual(server.route(request("/api/sessions")).status, 401)
+    }
 }
 
 /// A stream that keeps what is sent to it.

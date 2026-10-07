@@ -5,6 +5,10 @@
 public protocol VisorSocketService {
     /// Opens a socket to `url` (ws:// or wss://) and returns its id.
     func open(url: String) -> Int32
+    /// The same, with headers on the opening request (what the
+    /// authenticator gives; a front that checks them sees them). A host
+    /// that cannot send them (a browser) opens without.
+    func open(url: String, headers: [String: String]) -> Int32
     func send(id: Int32, text: String)
     func disconnect(id: Int32)
     func next(id: Int32) async throws -> String
@@ -19,4 +23,5 @@ public protocol VisorSocketService {
 
 public extension VisorSocketService {
     var dropsInBackground: Bool { false }
+    func open(url: String, headers: [String: String]) -> Int32 { open(url: url) }
 }

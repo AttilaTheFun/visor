@@ -51,6 +51,9 @@ public final class VisorAgentServer: AgentServer {
     var token: String?
     public private(set) var identity: ServerIdentity?
     public var reachedAt: String? { address?.root }
+    /// What the authenticator gave for the last sign-in, for the socket's
+    /// opening request (a front that checks headers sees them there too).
+    private var socketHeaders: [String: String] = [:]
     /// Following by polling instead of the channel (VisorAgentServer+Polling).
     var polling: Polling?
     private var socketID: Int32?
@@ -87,6 +90,7 @@ public final class VisorAgentServer: AgentServer {
     /// A 401 is the server asking for a password.
     private func hello() async throws -> String? {
         do {
+            socketHeaders = try await AgentServerAuthenticators.authenticator(for: record).headers(for: record)
             let hello = try await call("GET", "/hello")
             token = hello.token
             if let id = hello.id, !id.isEmpty { identity = ServerIdentity(id: id, addresses: hello.addresses ?? []) }
@@ -108,7 +112,7 @@ public final class VisorAgentServer: AgentServer {
             poll(address, onEvent: onEvent)
             return
         }
-        let id = socket.open(url: address.socket)
+        let id = socket.open(url: address.socket, headers: socketHeaders)
         guard id >= 0 else {
             Task { onEvent(.closed("Bad address")) }
             return
@@ -273,7 +277,8 @@ public final class VisorAgentServer: AgentServer {
     func callText(_ method: String, _ path: String, body: String) async throws -> String {
         guard let http = VisorHost.http else { throw AgentServerError.message("No HTTP service on this host") }
         guard let address else { throw AgentServerError.message("Bad address") }
-        return try await http.request(method: method, url: address.api + path, body: body, authorization: record.secret)
+        let headers = try await AgentServerAuthenticators.authenticator(for: record).headers(for: record)
+        return try await http.request(method: method, url: address.api + path, body: body, headers: headers)
     }
 
     static func escape(_ text: String) -> String {

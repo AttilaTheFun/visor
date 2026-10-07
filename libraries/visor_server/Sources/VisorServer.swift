@@ -50,6 +50,8 @@ public final class VisorServer {
                 || settings.sshEnabled != oldValue.sshEnabled {
                 listenAgain()
             }
+            // Asking nothing: a server with no password yet starts now.
+            if settings.asksNothing, !oldValue.asksNothing, listener == nil { start() }
         }
     }
     /// The other computers on the network, as this one knows them

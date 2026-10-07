@@ -70,6 +70,15 @@ struct SettingsPane: View {
                      : "Clients that are already connected stay connected; new logins use the new password.")
                     .font(.caption).foregroundColor(.secondary)
                 if let message { Text(message).font(.caption).foregroundColor(.red) }
+                Picker("Clients show", selection: Binding(get: { server.settings.authentication },
+                                                           set: { server.settings.authentication = $0 })) {
+                    Text("The password").tag("password")
+                    Text("Nothing").tag("none")
+                }
+                Text(server.settings.asksNothing
+                     ? "Anyone who reaches the server is let in: keep it to roads of your own — this Mac, a VPN of yours, SSH, or a front that signs users in before it reaches Visor."
+                     : "A client signs in with the password (or a token it was given for it); SSH clients at the socket file need neither.")
+                    .font(.caption).foregroundColor(.secondary)
             } header: {
                 Text("Password")
             }

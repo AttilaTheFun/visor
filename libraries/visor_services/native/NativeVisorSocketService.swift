@@ -30,11 +30,15 @@ public final class NativeVisorSocketService: VisorSocketService {
         session = URLSession(configuration: configuration)
     }
 
-    public func open(url: String) -> Int32 {
+    public func open(url: String) -> Int32 { open(url: url, headers: [:]) }
+
+    public func open(url: String, headers: [String: String]) -> Int32 {
         guard let target = URL(string: url) else { return -1 }
         let id = nextID
         nextID += 1
-        let task = session.webSocketTask(with: target)
+        var request = URLRequest(url: target)
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
+        let task = session.webSocketTask(with: request)
         let socket = Socket(task: task)
         sockets[id] = socket
         task.resume()

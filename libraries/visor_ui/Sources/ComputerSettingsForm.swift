@@ -14,6 +14,7 @@ struct ComputerSettingsForm: View {
     @State private var name = ""
     @State private var address = ""
     @State private var password = ""
+    @State private var authentication = PasswordAuthenticator.name
     /// The connection log as it was when this page opened.
     @State private var log = ""
     /// Whether the computer is reached over its own SSH.
@@ -28,7 +29,7 @@ struct ComputerSettingsForm: View {
                         .autocorrectionDisabled()
                         .keyboardTypeURL()
                 }
-                TitledField(title: "Password (if asked)") { PasswordField("Only if the computer asks", text: $password) }
+                AuthenticationRows(address: address.trimmed, authentication: $authentication, secret: $password)
             } header: {
                 Text("Computer")
             } footer: {
@@ -83,6 +84,7 @@ struct ComputerSettingsForm: View {
             name = host.record.name
             address = host.record.address
             password = host.record.secret
+            authentication = host.record.authentication
         }
     }
 
@@ -92,6 +94,7 @@ struct ComputerSettingsForm: View {
             record.rename(to: name)
             record.address = address.trimmed
             record.secret = password
+            record.authentication = authentication
         }
         host.connect()
     }

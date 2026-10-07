@@ -16,6 +16,7 @@ struct ConnectForm: View {
     let connect: (AgentServerRecord) -> Void
     @State private var entry = ""
     @State private var password = ""
+    @State private var authentication = PasswordAuthenticator.name
     /// What was typed or pasted, read as a connection code when it is one.
     private var code: ConnectionCode? { ConnectionCode(parsing: entry) }
     /// What was typed, read as an SSH address when it is one.
@@ -43,10 +44,7 @@ struct ConnectForm: View {
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 } else if !entry.trimmed.isEmpty {
-                    TitledField(title: "Password (if asked)") {
-                        PasswordField("Only if the computer asks", text: $password)
-                            .accessibilityIdentifier("password")
-                    }
+                    AuthenticationRows(address: entry.trimmed, authentication: $authentication, secret: $password)
                 }
             } header: {
                 Text("Computer")
@@ -71,7 +69,7 @@ struct ConnectForm: View {
         if let code {
             connect(AgentServerRecord(name: code.name, address: code.host, secret: code.password))
         } else {
-            connect(AgentServerRecord(name: entry.trimmed, address: entry.trimmed, secret: password))
+            connect(AgentServerRecord(name: entry.trimmed, address: entry.trimmed, secret: password, authentication: authentication))
         }
     }
 }

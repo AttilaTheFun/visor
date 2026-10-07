@@ -28,7 +28,13 @@ per connection) and is already signed in.
 
 A request is answered when `Authorization: Bearer` is the password from
 the menu bar app, or a token from `hello` — or when it came on the
-socket file, where no bearer is needed. Nothing else about the road is
+socket file, where no bearer is needed — or when the server is set to
+ask nothing (`authentication: none` in its settings; `visor-server auth
+none`), the road being the proof: a LAN or VPN of one's own, SSH alone,
+or a front that signs users in before requests reach Visor. On the
+client, how it proves itself is apart from how it reaches the server: an
+authenticator (none, the password, or a fork's own — a company's SSO
+whose token goes in a header) gives the headers every request carries. Nothing else about the road is
 trusted: no header names a user, and every device on the network signs
 in the same way, with the password the connection code carries. The API
 reads the same under a mount path a front forwards whole
