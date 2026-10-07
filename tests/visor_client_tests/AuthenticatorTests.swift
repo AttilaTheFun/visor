@@ -37,12 +37,23 @@ struct BadgeAuthenticator: AgentServerAuthenticator {
 @MainActor
 final class AuthenticatorTests: XCTestCase {
     private var http: HeaderKeepingHTTP!
+    /// The host's services as they were, put back after: other tests
+    /// install their own and should not meet these.
+    private var previousHTTP: (any VisorHTTPService)?
+    private var previousSettings: (any VisorSettingsService)?
 
     override func setUp() async throws {
         try await super.setUp()
+        previousHTTP = VisorHost.http
+        previousSettings = VisorHost.settings
         http = HeaderKeepingHTTP()
         VisorHost.http = http
         VisorHost.settings = MemorySettings()
+    }
+
+    override func tearDown() async throws {
+        VisorHost.http = previousHTTP
+        VisorHost.settings = previousSettings
     }
 
     func testThePasswordGoesAsABearerAndNoneSendsNothing() async throws {
