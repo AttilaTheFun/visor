@@ -39,15 +39,15 @@ extension VisorServer {
         }
         var headers = ["Authorization": "Bearer \(peer.password)", "X-Visor-Relay": (passed + [id]).joined(separator: ",")]
         if let type = request.headers["content-type"] { headers["Content-Type"] = type }
-        let paths = paths(to: peer).filter { road in !passed.contains { road.contains("/peer/" + $0) } }
+        let candidates = paths(to: peer).filter { candidate in !passed.contains { candidate.contains("/peer/" + $0) } }
         Task { @MainActor in
-            for road in paths {
-                let outgoing = OutgoingRequest(url: road + target.rest, method: request.method, headers: headers,
+            for base in candidates {
+                let outgoing = OutgoingRequest(url: base + target.rest, method: request.method, headers: headers,
                                                body: Data(request.body.utf8), timeout: Self.relayTimeout)
                 guard let answer = try? await ServerPlatform.current.fetching.fetch(outgoing) else { continue }
                 // A path that answers at all is the path; what it answered
                 // is the peer's own answer, whatever the status.
-                self.workingPaths[peer.id] = road
+                self.workingPaths[peer.id] = base
                 return respond(HTTPResponse(answer.status, String(decoding: answer.body, as: UTF8.self)))
             }
             respond(HTTPResponse(502, Envelope.error("\(peer.name) is not reachable from here").encoded()))

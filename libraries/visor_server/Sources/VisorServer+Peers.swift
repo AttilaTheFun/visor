@@ -198,7 +198,7 @@ extension VisorServer {
         }
         if !peer.id.isEmpty {
             for other in peers where other.id != peer.id && !other.id.isEmpty {
-                if let road = workingPaths[other.id], !road.contains("/peer/") { out.append(road + "/peer/" + peer.id) }
+                if let known = workingPaths[other.id], !known.contains("/peer/") { out.append(known + "/peer/" + peer.id) }
             }
         }
         if let known = workingPaths[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] { out.removeAll { $0 == known }; out.insert(known, at: 0) }
@@ -210,11 +210,11 @@ extension VisorServer {
     /// is on the way.
     func call(_ peer: Peer, path: String, _ envelope: Envelope) async throws -> Envelope {
         var lastError: Error = NSError(domain: "Visor", code: 0, userInfo: [NSLocalizedDescriptionKey: "no address to reach it at"])
-        for road in paths(to: peer) {
+        for base in paths(to: peer) {
             do {
-                let answer = try await Self.post(road + "/api/" + path, password: peer.password, envelope, relay: [id])
-                workingPaths[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] = road
-                if peer.id.isEmpty { identify(peer, at: road) }
+                let answer = try await Self.post(base + "/api/" + path, password: peer.password, envelope, relay: [id])
+                workingPaths[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] = base
+                if peer.id.isEmpty { identify(peer, at: base) }
                 return answer
             } catch {
                 lastError = error
@@ -225,9 +225,9 @@ extension VisorServer {
 
     /// A peer from before ids: asked for its hello, which says who it is
     /// (its id and addresses; its name stays as the code gave it).
-    private func identify(_ peer: Peer, at road: String) {
+    private func identify(_ peer: Peer, at base: String) {
         Task { @MainActor in
-            let request = OutgoingRequest(url: road + "/api/hello", headers: ["Authorization": "Bearer \(peer.password)"])
+            let request = OutgoingRequest(url: base + "/api/hello", headers: ["Authorization": "Bearer \(peer.password)"])
             guard let answer = try? await ServerPlatform.current.fetching.fetch(request), answer.status == 200,
                   let hello = Envelope.decode(String(decoding: answer.body, as: UTF8.self)), let learned = hello.id, !learned.isEmpty else { return }
             self.adopt(Peer(id: learned, name: peer.name, addresses: peer.addresses + (hello.addresses ?? []), password: peer.password))
