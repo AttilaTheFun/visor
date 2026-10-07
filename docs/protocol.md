@@ -75,7 +75,7 @@ under `/api`.
 
 | method and path | body | answer |
 |---|---|---|
-| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id` and own `addresses` — or 401 |
+| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id`, own `addresses` and `sshKey` (its SSH public key line) — or 401 |
 | `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
 | `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
 | `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
@@ -227,8 +227,12 @@ Node must be on the PATH (as it already is for approvals).
 
 Sessions on other computers are reachable across the network of
 computers. Every server has an id (`hello` says it, with the server's own
-`addresses`); each keeps its peers — `Peer`: `id`, `name`, `addresses`,
-`password` — in the keychain. A computer joins once, anywhere: its
+`addresses` and `sshKey`); each keeps its peers — `Peer`: `id`, `name`,
+`addresses`, `password`, `sshKey` — in the keychain. A server has an SSH
+key of its own; a computer that takes a peer in authorizes the peer's
+key, and reaches a peer whose path is `ssh://` through a tunnel to that
+peer's socket file, with no password, as a device does (on a Mac or
+Linux; a Windows server reaches peers over HTTP alone). A computer joins once, anywhere: its
 connection code (which carries its id) pasted into another's Settings,
 which sends this computer's code to its `POST /api/link`; or a client that
 holds two servers, which introduces each to the other through

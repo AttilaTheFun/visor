@@ -46,7 +46,8 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   and tells its clients and peers of them, a client of any of them
   learns of the rest and is carried to one it cannot reach itself
   (`/peer/<id>/…` under a server it can), and a client that holds two
-  servers introduces them. A fork that hosts agents on
+  servers introduces them. Servers reach one another over SSH too, each
+  with a key of its own that travels with its record. A fork that hosts agents on
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one

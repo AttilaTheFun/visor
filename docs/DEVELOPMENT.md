@@ -379,6 +379,22 @@ The server's side is `ServerSettings.authentication`: `password` (the
 default), or `none`, which lets in whoever reaches it — for paths of
 one's own, or a front that has signed the user in.
 
+**Server to server over SSH** (`libraries/visor_ssh`, `visor_server_ssh`,
+`VisorServer+PeerSSH`): the SSH machinery over swift-nio-ssh is one
+library, `VisorSSH` (`SSHConnector.connect(route:privateKey:hostKeys:)`
+→ `SSHConnection.forward/attach`), used by the client's
+`NativeVisorSSHService` and by the server's platform (`ServerPlatform.ssh:
+PeerSSH?`, `ConnectorPeerSSH` on the Mac and Linux; nil on Windows). The
+server keeps a key of its own in the secrets (`ssh.serverKey`); its
+public line (`ownSSHKey`) goes out in `hello` and in `ownPeer.sshKey`, a
+client keeps it on the record (`serverKey`) and carries it when it
+introduces the server, and `adopt` authorizes a peer's key into
+`authorized_keys`. `paths(to:)` includes a peer's `ssh://` addresses
+where the system has SSH; `base(for:)` opens (and keeps, in
+`peerTunnels`) a tunnel through the peer's own SSH to its socket file
+and answers `http://127.0.0.1:<port>`, which `call` and `relay` use; a
+failed path drops its tunnel.
+
 **Bootstrapping SSH** (`VisorServer+SSHKeys`, `AgentServerConnection.
 useSSH`, `enrollSSHIfWanted`): a client that is in by any path hands its
 SSH public key to `POST /api/ssh/keys`, which puts it in the user's
