@@ -176,7 +176,7 @@ final class PeersTests: ServerTestCase {
         let ssh = ScriptedPeerSSH()
         ServerPlatform.current.ssh = ssh
         defer { ServerPlatform.current.ssh = nil }
-        XCTAssertEqual(here.ownSSHKey, "ssh-ed25519 AAAAserver visor-server test-mac")
+        XCTAssertEqual(here.ownSSHKey, "ssh-ed25519 AAAAserver visor-server " + VisorServer.slug(here.hostName))
         XCTAssertEqual(here.ownPeer.sshKey, here.ownSSHKey)
         let hello = Envelope.decode(here.route(HTTPRequest(method: "GET", path: "/api/hello", headers: ["authorization": "Bearer here-password"], body: "")).body)
         XCTAssertEqual(hello?.sshKey, here.ownSSHKey)
