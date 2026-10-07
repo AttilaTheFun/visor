@@ -141,6 +141,19 @@ int visor_listen_unix(const char *path) {
     return listener;
 }
 
+void visor_local_address(int socket, char *out, size_t size) {
+    if (size == 0) return;
+    out[0] = 0;
+    struct sockaddr_storage address;
+    socklen_t length = sizeof address;
+    if (getsockname(socket, (struct sockaddr *)&address, &length) != 0) return;
+    if (address.ss_family == AF_INET) {
+        inet_ntop(AF_INET, &((struct sockaddr_in *)&address)->sin_addr, out, (socklen_t)size);
+    } else if (address.ss_family == AF_INET6) {
+        inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&address)->sin6_addr, out, (socklen_t)size);
+    }
+}
+
 int visor_accept(int listener) {
     int connection;
     do {

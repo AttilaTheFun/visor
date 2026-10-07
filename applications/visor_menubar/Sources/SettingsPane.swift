@@ -83,21 +83,36 @@ struct SettingsPane: View {
                 Text("Password")
             }
             Section {
-                Toggle("HTTP, with the password", isOn: Binding(get: { server.settings.reachableFromNetwork },
-                                                                set: { server.settings.reachableFromNetwork = $0 }))
-                Text(server.settings.reachableFromNetwork
-                     ? "The server listens on every interface, port \(String(server.port)): the LAN, a VPN or a tunnel reaches it directly, with the password."
-                     : "Off: only this Mac reaches the port, on 127.0.0.1:\(String(server.port)). A reverse proxy or a tunnel on this Mac is the road in; set its address below.")
-                    .font(.caption).foregroundColor(.secondary)
-                Toggle("SSH, no password", isOn: Binding(get: { server.settings.sshEnabled },
-                                                         set: { server.settings.sshEnabled = $0 }))
-                Text(server.settings.sshEnabled
-                     ? "A client that comes through this Mac's Remote Login as you (its address user@host) is already you: it reaches the server at ~/.visor/server.sock with no password."
-                     : "Off: a client that comes through Remote Login reaches the port on this Mac, with the password.")
-                    .font(.caption).foregroundColor(.secondary)
-                TextField("Address clients take (https://proxy.example.com/visor)", text: $publicAddress)
-                    .onSubmit { server.settings.publicAddress = publicAddress }
-                Text("What a proxy, a tunnel or a name on the network gives, scheme and all; the connection code carries it. Empty, the server guesses from its own addresses when the network reaches it. A front that passes no WebSockets still works: clients poll instead.")
+                let addresses = NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) }
+                pathRow("http://127.0.0.1:\(String(server.port))")
+                Text("This Mac: always on, for its own Visor and its agents' tools.").font(.caption).foregroundColor(.secondary)
+                Toggle("LAN", isOn: Binding(get: { server.settings.lan }, set: { server.settings.lan = $0 }))
+                if server.settings.lan {
+                    ForEach(addresses.filter { $0.kind == .lan }, id: \.address) { entry in
+                        pathRow("\(server.servesTLS ? "https" : "http")://\(entry.address):\(String(server.port))", note: entry.interface)
+                    }
+                }
+                Toggle("VPN", isOn: Binding(get: { server.settings.vpn }, set: { server.settings.vpn = $0 }))
+                if server.settings.vpn {
+                    ForEach(addresses.filter { $0.kind == .vpn }, id: \.address) { entry in
+                        pathRow("\(server.servesTLS ? "https" : "http")://\(entry.address):\(String(server.port))", note: entry.interface)
+                    }
+                }
+                Toggle("SSH", isOn: Binding(get: { server.settings.sshEnabled }, set: { server.settings.sshEnabled = $0 }))
+                if server.settings.sshEnabled {
+                    ForEach(server.sshPaths, id: \.self) { path in pathRow(path) }
+                    Text("Through this Mac's Remote Login, as you: no password asked (the socket file ~/.visor/server.sock).")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                Toggle("Reverse proxy", isOn: Binding(get: { server.settings.proxyEnabled }, set: { server.settings.proxyEnabled = $0 }))
+                if server.settings.proxyEnabled {
+                    TextField("https://proxy.example.com/visor", text: $publicAddress)
+                        .onSubmit { server.settings.publicAddress = publicAddress }
+                    if !server.settings.publicAddress.isEmpty { pathRow(server.settings.publicAddress) }
+                    Text("A proxy, a tunnel or a name with certificates in front of this Mac, scheme and all; clients are told it first, and it is what the connection code carries. One that passes no WebSockets still works: clients poll. Press Return to apply.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                Text("Each path is a way in; what a client must show is the sign-in above. The LAN's and a VPN's addresses change with the network; this list is as it is now.")
                     .font(.caption).foregroundColor(.secondary)
                 TextField("TLS identity, a .p12 file (empty: plain, or TLS is the front's)", text: $tlsPath)
                     .onSubmit { server.settings.tlsIdentityPath = tlsPath }
@@ -107,7 +122,7 @@ struct SettingsPane: View {
                     .font(.caption).foregroundColor(.secondary)
                 if let error = server.lastError { Text(error).font(.caption).foregroundColor(.red) }
             } header: {
-                Text("Network")
+                Text("Network paths")
             }
             Section {
                 ForEach(server.peers, id: \.self) { peer in
@@ -166,13 +181,6 @@ struct SettingsPane: View {
                 let name = url.deletingPathExtension().lastPathComponent
                 if name.hasPrefix("AuthKey_") { keyID = String(name.dropFirst(8)) }
             }
-            Section("Addresses") {
-                if let address = server.reachableAddress { Text("Clients are told \(address)") }
-                ForEach(NetworkAddresses.all(), id: \.address) { entry in
-                    Text("\(entry.address)  \(entry.name)")
-                }
-                Text(server.settings.reachableFromNetwork ? "Port \(String(server.port)) on each of these" : "Port \(String(server.port)), on this Mac only")
-            }
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 760)
@@ -182,6 +190,19 @@ struct SettingsPane: View {
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
+        }
+    }
+
+    /// One path's address, selectable, with a Copy button.
+    private func pathRow(_ path: String, note: String = "") -> some View {
+        HStack {
+            Text(path).font(.caption.monospaced()).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+            if !note.isEmpty { Text(note).font(.caption).foregroundColor(.secondary) }
+            Spacer()
+            Button("Copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(path, forType: .string)
+            }
         }
     }
 

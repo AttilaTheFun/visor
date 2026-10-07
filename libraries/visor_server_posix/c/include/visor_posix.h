@@ -46,6 +46,10 @@ int visor_listen_unix(const char *path);
 /// set.
 int visor_accept(int listener);
 
+/// This computer's address a connected socket arrived on, as text into
+/// `out` (of `size`); "" for a socket file or when unknown.
+void visor_local_address(int socket, char *out, size_t size);
+
 /// Ends both directions of a socket, waking whoever is blocked on it.
 void visor_shutdown(int socket);
 

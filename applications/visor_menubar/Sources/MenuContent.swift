@@ -21,9 +21,9 @@ struct MenuContent: View {
             // server's own guess when the network reaches it.
             if let address = server.reachableAddress {
                 Button("\(address)") { copy(address) }
-                Text(server.settings.reachableFromNetwork ? "Reachable from the network, port \(String(server.port))" : "Through a front of your own on this Mac")
+                Text("What clients are told; every network path is in Settings")
             } else {
-                Text("Only this Mac reaches it: open it to the network, or set an address, in Settings")
+                Text("Only this Mac and SSH reach it: open a network path in Settings")
             }
             Divider()
             if let code = server.connectionCode {

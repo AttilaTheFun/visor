@@ -1,7 +1,7 @@
 // Relaying for a peer: a client that reaches this server but not the
 // peer (a phone on the LAN, the peer on the VPN) reads the peer's API
 // here, under `/peer/<id>/…`, and this server carries each request
-// there — with the peer's password, down a road it has — and the answer
+// there — with the peer's password, down a path it has — and the answer
 // back. HTTP only: a WebSocket upgrade there is refused, so the client
 // follows the peer by polling, as behind any front without WebSockets.
 // A request names the servers it has passed through (`X-Visor-Relay`),
@@ -39,15 +39,15 @@ extension VisorServer {
         }
         var headers = ["Authorization": "Bearer \(peer.password)", "X-Visor-Relay": (passed + [id]).joined(separator: ",")]
         if let type = request.headers["content-type"] { headers["Content-Type"] = type }
-        let roads = roads(to: peer).filter { road in !passed.contains { road.contains("/peer/" + $0) } }
+        let paths = paths(to: peer).filter { road in !passed.contains { road.contains("/peer/" + $0) } }
         Task { @MainActor in
-            for road in roads {
+            for road in paths {
                 let outgoing = OutgoingRequest(url: road + target.rest, method: request.method, headers: headers,
                                                body: Data(request.body.utf8), timeout: Self.relayTimeout)
                 guard let answer = try? await ServerPlatform.current.fetching.fetch(outgoing) else { continue }
-                // A road that answers at all is the road; what it answered
+                // A path that answers at all is the path; what it answered
                 // is the peer's own answer, whatever the status.
-                self.workingRoads[peer.id] = road
+                self.workingPaths[peer.id] = road
                 return respond(HTTPResponse(answer.status, String(decoding: answer.body, as: UTF8.self)))
             }
             respond(HTTPResponse(502, Envelope.error("\(peer.name) is not reachable from here").encoded()))

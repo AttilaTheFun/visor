@@ -7,7 +7,7 @@
 // one step: its connection code (pasted, or a scanned QR code's
 // `visor://connect?code=` link) carries its name, address and password.
 // Adding one adds this device to its network: the server tells of the
-// other computers it knows, each is added here with every road to it
+// other computers it knows, each is added here with every path to it
 // (its own addresses, and through any server here that reaches it), and
 // the servers this device holds are introduced to one another, so their
 // agents reach each other's sessions with nothing more to do.
@@ -146,18 +146,18 @@ public final class VisorStore: ObservableObject {
         }
     }
 
-    /// Two records of one computer (added by two roads before either had
-    /// said its id): the other's roads are kept here, the other goes.
+    /// Two records of one computer (added by two paths before either had
+    /// said its id): the other's paths are kept here, the other goes.
     private func fold(_ server: AgentServerConnection) {
         let id = server.record.serverID
         guard !id.isEmpty else { return }
         for other in servers where other !== server && other.record.serverID == id {
-            server.update { $0.learnRoads(other.record.allRoads) }
+            server.update { $0.learnPaths(other.record.allPaths) }
             remove(other)
         }
     }
 
-    /// What a server says of another computer: more roads (and the
+    /// What a server says of another computer: more paths (and the
     /// password, if none is kept) for one held here, or a new one, added
     /// and connected — by one of its own addresses, or through the server
     /// that told of it.
@@ -167,7 +167,7 @@ public final class VisorStore: ObservableObject {
             known.learn(peer)
             return
         }
-        let record = AgentServerRecord(name: peer.name, address: first, secret: peer.password, serverID: peer.id, roads: Array(peer.addresses.dropFirst()))
+        let record = AgentServerRecord(name: peer.name, address: first, secret: peer.password, serverID: peer.id, paths: Array(peer.addresses.dropFirst()))
         let added = AgentServerConnection(record: record)
         servers.append(added)
         observe(added)
@@ -175,9 +175,9 @@ public final class VisorStore: ObservableObject {
         save()
     }
 
-    /// The roads to a server through the others connected here: each
+    /// The paths to a server through the others connected here: each
     /// carries requests to a computer it knows (`/peer/<id>` under it).
-    func relayRoads(to target: AgentServerConnection) -> [String] {
+    func relayPaths(to target: AgentServerConnection) -> [String] {
         let id = target.record.serverID
         guard !id.isEmpty else { return [] }
         return servers.filter { $0 !== target && $0.state == .connected && $0.record.serverID != id }
@@ -225,9 +225,9 @@ public final class VisorStore: ObservableObject {
             self.save()
         }
         server.onSessionsChange = { [weak self] in self?.publishWidget() }
-        server.relayRoads = { [weak self, weak server] in
+        server.relayPaths = { [weak self, weak server] in
             guard let self, let server else { return [] }
-            return self.relayRoads(to: server)
+            return self.relayPaths(to: server)
         }
         server.onConnected = { [weak self, weak server] in
             guard let self, let server else { return }

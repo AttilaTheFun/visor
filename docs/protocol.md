@@ -12,14 +12,17 @@ where the route names the type.
 
 The server has one listener (7433 by default), which tells a WebSocket
 upgrade from a request by its first bytes: the live channel at `/`, the
-REST side under `/api`. By default it listens on loopback only, so the
-road in from the network is something on the same computer — a reverse
-proxy, a tunnel — forwarding one address to it; opened to the network
-(`reachableFromNetwork`, in the menu bar app's Settings or
-`visor-server network on`), it listens on every interface, for a LAN, a
-VPN or a tunnel to reach directly. It serves plain TCP, or TLS with a
-PKCS#12 identity where the system can (the Mac); otherwise TLS is the
-front's. The server does not listen at all without a password set.
+REST side under `/api`. Its network paths are each on or off in the
+settings (the menu bar app's Settings; `visor-server lan|vpn|ssh on|off`,
+`address <url>`): this computer itself, always (loopback); the LAN; a
+VPN (a tailnet: the interfaces such networks make, or 100.64.0.0/10);
+the computer's own SSH (the socket file, below); and a reverse proxy or
+tunnel of your own, at the address you set, which clients are told
+first. With the LAN or a VPN on it listens on every interface and admits
+each connection by the address it arrived on. It serves plain TCP, or
+TLS with a PKCS#12 identity where the system can (the Mac); otherwise
+TLS is the front's. The server does not listen at all without a password
+set, unless it is set to ask nothing.
 With `sshEnabled` (the default; `visor-server ssh on|off`) it also
 serves the same on a socket file only its user can open,
 `~/.visor/server.sock`: a client that comes through the computer's own

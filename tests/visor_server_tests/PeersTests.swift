@@ -22,6 +22,7 @@ final class PeersTests: ServerTestCase {
         VisorServer.socketPathOverride = "/tmp/visor-peers-\(getpid()).sock"
         here = VisorServer(port: 7984)
         here.settings.sshEnabled = false
+        here.settings.proxyEnabled = true
         here.settings.publicAddress = "http://127.0.0.1:7984"
         here.password = "here-password"
         // The other server keeps its own settings and secrets.
@@ -31,6 +32,7 @@ final class PeersTests: ServerTestCase {
         VisorServer.secrets = MemorySecrets()
         there = VisorServer(port: 7985)
         there.settings.sshEnabled = false
+        there.settings.proxyEnabled = true
         there.settings.publicAddress = "http://127.0.0.1:7985"
         there.password = "there-password"
         for _ in 0..<50 where !(here.listening && there.listening) { try? await Task.sleep(nanoseconds: 50_000_000) }
@@ -126,14 +128,14 @@ final class PeersTests: ServerTestCase {
         let carried = await route(here, request("GET", "/peer/\(there.id)/api/hello", bearer: "here-password"))
         XCTAssertEqual(carried.status, 200, carried.body)
         XCTAssertEqual(Envelope.decode(carried.body)?.id, there.id, "the other server's own answer")
-        XCTAssertEqual(here.workingRoads[there.id], "http://127.0.0.1:7985")
+        XCTAssertEqual(here.workingPaths[there.id], "http://127.0.0.1:7985")
         let unknown = await route(here, request("GET", "/peer/nobody/api/hello", bearer: "here-password"))
         XCTAssertEqual(unknown.status, 404)
         let circle = await route(here, request("GET", "/peer/\(there.id)/api/hello", bearer: "here-password", relay: "x,\(here.id)"))
         XCTAssertEqual(circle.status, 508)
-        // Through the other, a far one it reaches: the road is a relay too.
+        // Through the other, a far one it reaches: the path is a relay too.
         there.adopt(Peer(id: "far-id", name: "Far", addresses: ["http://127.0.0.1:7984"], password: "here-password"))
         here.adopt(Peer(id: "far-id", name: "Far", addresses: ["http://10.255.255.1:7433"], password: "here-password"))
-        XCTAssertEqual(here.roads(to: here.peers.first { $0.id == "far-id" }!), ["http://10.255.255.1:7433", "http://127.0.0.1:7985/peer/far-id"])
+        XCTAssertEqual(here.paths(to: here.peers.first { $0.id == "far-id" }!), ["http://10.255.255.1:7433", "http://127.0.0.1:7985/peer/far-id"])
     }
 }

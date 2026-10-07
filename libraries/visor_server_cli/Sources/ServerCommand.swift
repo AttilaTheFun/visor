@@ -27,9 +27,13 @@ public struct ServerCommand {
           password Shows the password (making one if there is none);
                    `password <new>` sets it.
           code     Shows the connection code a client adds this computer with.
-          network  `network on` lets the network reach the server directly
-                   (every interface); `network off` (the default) keeps it to
-                   this computer, with a reverse proxy or a tunnel in front.
+          lan      `lan on` lets the LAN reach the server's port; `lan off`
+                   (the default) does not.
+          vpn      `vpn on` lets a VPN (a tailnet) reach the port; `vpn off`
+                   (the default) does not.
+          network  `network on|off`: the LAN and a VPN both at once. Off, only
+                   this computer reaches the port, with a reverse proxy or
+                   a tunnel in front, or SSH.
           ssh      `ssh on` (the default) also serves a socket file only this
                    user can open, for clients that come through the
                    computer's own SSH: no password; `ssh off` leaves them
@@ -38,9 +42,10 @@ public struct ServerCommand {
                    password; `auth none` lets in anyone who reaches the
                    server — the road being the proof (a LAN or VPN of your
                    own, SSH alone, a front that signs users in).
-          address  Shows the address clients are told; `address <url>` sets
-                   it (what a proxy, a tunnel or a name gives), `address -`
-                   clears it. The server takes it when started again.
+          address  Shows the reverse proxy's or tunnel's address, the one
+                   clients are told first; `address <url>` sets it and turns
+                   that path on, `address -` turns it off. The server takes
+                   it when started again.
 
         Options for run and start:
           --port <n>   The port, for the socket and the REST side alike (7433).
@@ -63,6 +68,8 @@ public struct ServerCommand {
             case "password": password(rest.first)
             case "code": try code()
             case "network": try network(rest.first)
+            case "lan": try path(.lan, rest.first)
+            case "vpn": try path(.vpn, rest.first)
             case "ssh": try ssh(rest.first)
             case "auth": try auth(rest.first)
             case "address": address(rest.first)

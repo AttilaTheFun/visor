@@ -54,7 +54,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     }
     @Published public private(set) var state: State = .disconnected
     /// Whether the server is followed live over its channel, or by polling
-    /// (where the road carries no WebSocket): the same, more slowly.
+    /// (where the path carries no WebSocket): the same, more slowly.
     @Published public private(set) var live = true
     @Published public private(set) var sessions: [SessionInfo] = []
     @Published public private(set) var transcripts: [String: SessionTranscript] = [:]
@@ -73,20 +73,20 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     private var wantsConnection = false
     private var attempt = 0
     private var pendingSubscriptions: Set<String> = []
-    /// The roads to the server for this round of tries: the record's
+    /// The paths to the server for this round of tries: the record's
     /// (the one that answered last time first), then those through other
-    /// servers (`relayRoads`); `roadIndex` is the one being tried.
-    private var roads: [String] = []
-    private var roadIndex = 0
-    private var lastGoodRoad: String?
-    /// The roads through other connected servers to this one, asked for
+    /// servers (`relayPaths`); `pathIndex` is the one being tried.
+    private var paths: [String] = []
+    private var pathIndex = 0
+    private var lastGoodPath: String?
+    /// The paths through other connected servers to this one, asked for
     /// as a round of tries begins (the store knows the other servers).
-    var relayRoads: (() -> [String])?
+    var relayPaths: (() -> [String])?
     /// Told when the server is connected and has said who it is (the
     /// store learns its peers and introduces it to the others).
     var onConnected: (() -> Void)?
-    /// The road the server was reached by, this time.
-    public private(set) var road: String?
+    /// The path the server was reached by, this time.
+    public private(set) var path: String?
 
     public init(record: AgentServerRecord) {
         self.server = AgentServerProviders.server(for: record)
@@ -248,8 +248,8 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         note("connect asked for")
         wantsConnection = true
         attempt = 0
-        roadIndex = 0
-        road = nil
+        pathIndex = 0
+        path = nil
         open()
         startPolling()
     }
@@ -278,12 +278,12 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         state = .connecting
         let mine = generation
         let server = server
-        if roadIndex == 0 || roads.isEmpty { roads = roadsToTry() }
-        let road = roads[min(roadIndex, roads.count - 1)]
+        if pathIndex == 0 || paths.isEmpty { paths = pathsToTry() }
+        let path = paths[min(pathIndex, paths.count - 1)]
         var record = record
-        record.address = road
+        record.address = path
         let started = log.now()
-        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : "") + (road == self.record.address ? "" : " by \(road)"))
+        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : "") + (path == self.record.address ? "" : " by \(path)"))
         signingIn = mine
         Task { [weak self] in
             do {
@@ -291,9 +291,9 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
                 self.signingIn = nil
                 self.note("signed in after \(self.log.since(started)) ms; opening the channel")
-                self.road = road
-                self.lastGoodRoad = road
-                self.roadIndex = 0
+                self.path = path
+                self.lastGoodPath = path
+                self.pathIndex = 0
                 if let name { self.record.takeServerName(name) }
                 if let identity = server.identity { self.take(identity) }
                 self.openChannel(mine)
@@ -323,44 +323,44 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// How long a sign-in has to answer before the try is given up.
     static let signInTimeout: Int32 = 5_000
 
-    /// The roads for a round: the one that answered last time, the
-    /// record's address, its other roads, then those through other
+    /// The paths for a round: the one that answered last time, the
+    /// record's address, its other paths, then those through other
     /// servers.
-    private func roadsToTry() -> [String] {
+    private func pathsToTry() -> [String] {
         var candidates: [String] = []
-        if let lastGoodRoad { candidates.append(lastGoodRoad) }
-        candidates += record.allRoads
-        candidates += relayRoads?() ?? []
+        if let lastGoodPath { candidates.append(lastGoodPath) }
+        candidates += record.allPaths
+        candidates += relayPaths?() ?? []
         var out: [String] = []
-        for road in candidates where !out.contains(road) { out.append(road) }
+        for path in candidates where !out.contains(path) { out.append(path) }
         return out.isEmpty ? [record.address] : out
     }
 
     /// What the server said of itself: its id, and its own addresses as
-    /// more roads to it.
+    /// more paths to it.
     private func take(_ identity: ServerIdentity) {
         var changed = false
         if record.serverID != identity.id { record.serverID = identity.id; changed = true }
-        if record.learnRoads(identity.addresses) { changed = true }
+        if record.learnPaths(identity.addresses) { changed = true }
         if changed { onRecordChange?() }
     }
 
     /// Takes in what a peer says of this computer: its addresses as more
-    /// roads, its password when none is kept.
+    /// paths, its password when none is kept.
     func learn(_ peer: Peer) {
         update { record in
             if record.serverID.isEmpty { record.serverID = peer.id }
-            record.learnRoads(peer.addresses)
+            record.learnPaths(peer.addresses)
             if record.secret.isEmpty { record.secret = peer.password }
         }
     }
 
     /// This computer as other servers should know it: by the addresses
-    /// its server gave for itself (never this device's road to it, which
+    /// its server gave for itself (never this device's path to it, which
     /// may be its loopback or a relay).
     var asPeer: Peer? {
         guard !record.serverID.isEmpty else { return nil }
-        let own = record.allRoads.filter { !$0.contains("/peer/") && !$0.contains("127.0.0.1") && !$0.contains("localhost") }
+        let own = record.allPaths.filter { !$0.contains("/peer/") && !$0.contains("127.0.0.1") && !$0.contains("localhost") }
         guard !own.isEmpty else { return nil }
         return Peer(id: record.serverID, name: record.name, addresses: own, password: record.secret)
     }
@@ -483,16 +483,16 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             note("dropped: \(reason); not retrying")
             return
         }
-        // Another road to the same server is tried at once; the wait
-        // comes once every road has been.
-        if road == nil, roadIndex + 1 < roads.count {
-            roadIndex += 1
-            note("dropped: \(reason); trying \(roads[roadIndex])")
+        // Another path to the same server is tried at once; the wait
+        // comes once every path has been.
+        if path == nil, pathIndex + 1 < paths.count {
+            pathIndex += 1
+            note("dropped: \(reason); trying \(paths[pathIndex])")
             open()
             return
         }
-        roadIndex = 0
-        road = nil
+        pathIndex = 0
+        path = nil
         attempt += 1
         let wait = Int32(Self.retryDelay(afterAttempt: attempt) * 1000)
         note("dropped: \(reason); retry \(attempt) in \(wait / 1000) s")

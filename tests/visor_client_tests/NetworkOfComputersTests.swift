@@ -1,7 +1,7 @@
 // The network of computers, as the client sees it: a server is reached
-// by whichever of its roads answers, the next tried at once when one
+// by whichever of its paths answers, the next tried at once when one
 // does not; a server says who it is and where it is reached, which the
-// record keeps; a server's peers are added here with every road to them,
+// record keeps; a server's peers are added here with every path to them,
 // one reached through another when its own addresses do not answer; and
 // the servers held here are introduced to one another.
 
@@ -33,11 +33,11 @@ final class NetworkOfComputersTests: XCTestCase {
     }
 
     /// The record's address first; when it does not answer, the next
-    /// road at once, with no wait between; the one that answered is
+    /// path at once, with no wait between; the one that answered is
     /// tried first the next time.
-    func testTheRoadsAreTriedInTurn() async {
+    func testThePathsAreTriedInTurn() async {
         let record = AgentServerRecord(name: "Mini", address: "http://10.0.0.2:7433", secret: "pw", provider: "scripted",
-                                       roads: ["logan@10.0.0.2", "http://100.90.45.11:7433"])
+                                       paths: ["logan@10.0.0.2", "http://100.90.45.11:7433"])
         let server = scripted(record)
         server.refused = ["http://10.0.0.2:7433", "logan@10.0.0.2"]
         let host = AgentServerConnection(record: record)
@@ -45,20 +45,20 @@ final class NetworkOfComputersTests: XCTestCase {
         await settle()
         XCTAssertEqual(host.state, .connected)
         XCTAssertEqual(server.signedInBy, ["http://10.0.0.2:7433", "logan@10.0.0.2", "http://100.90.45.11:7433"])
-        XCTAssertFalse(server.pauses.contains(2_000), "no retry wait between roads (the minute's poll aside)")
-        XCTAssertEqual(host.road, "http://100.90.45.11:7433")
+        XCTAssertFalse(server.pauses.contains(2_000), "no retry wait between paths (the minute's poll aside)")
+        XCTAssertEqual(host.path, "http://100.90.45.11:7433")
         XCTAssertEqual(host.record.address, "http://10.0.0.2:7433", "the record's address stands")
 
         host.disconnect()
         host.connect()
         await settle()
-        XCTAssertEqual(server.signedInBy.last, "http://100.90.45.11:7433", "the road that answered, first")
+        XCTAssertEqual(server.signedInBy.last, "http://100.90.45.11:7433", "the path that answered, first")
         XCTAssertEqual(server.signedInBy.count, 4)
     }
 
-    /// Every road refused: the wait, then the roads again from the start.
+    /// Every path refused: the wait, then the paths again from the start.
     func testEveryRoadRefusedMeansTheWait() async {
-        let record = AgentServerRecord(name: "Mini", address: "http://a", secret: "pw", provider: "scripted", roads: ["http://b"])
+        let record = AgentServerRecord(name: "Mini", address: "http://a", secret: "pw", provider: "scripted", paths: ["http://b"])
         let server = scripted(record)
         server.refused = ["http://a", "http://b"]
         let host = AgentServerConnection(record: record)
@@ -74,7 +74,7 @@ final class NetworkOfComputersTests: XCTestCase {
     }
 
     /// What the server says of itself is kept: its id, and its own
-    /// addresses as more roads.
+    /// addresses as more paths.
     func testTheServerSaysWhoItIs() async {
         let record = AgentServerRecord(name: "", address: "http://127.0.0.1:7433", secret: "pw", provider: "scripted")
         let server = scripted(record)
@@ -83,9 +83,9 @@ final class NetworkOfComputersTests: XCTestCase {
         host.connect()
         await settle()
         XCTAssertEqual(host.record.serverID, "mini-id")
-        XCTAssertEqual(host.record.roads, ["http://100.90.45.11:7433", "logan@100.90.45.11"])
-        XCTAssertEqual(host.asPeer?.addresses, ["http://100.90.45.11:7433", "logan@100.90.45.11"], "never the loopback road")
-        XCTAssertEqual(AgentServerRecord(json: host.record.json)?.roads, host.record.roads)
+        XCTAssertEqual(host.record.paths, ["http://100.90.45.11:7433", "logan@100.90.45.11"])
+        XCTAssertEqual(host.asPeer?.addresses, ["http://100.90.45.11:7433", "logan@100.90.45.11"], "never the loopback path")
+        XCTAssertEqual(AgentServerRecord(json: host.record.json)?.paths, host.record.paths)
         XCTAssertEqual(AgentServerRecord(json: host.record.json)?.serverID, "mini-id")
     }
 
@@ -103,11 +103,11 @@ final class NetworkOfComputersTests: XCTestCase {
         VisorHost.settings?.set(key: "hosts", value: JSONValue.array([a.json, b.json]).encoded())
         let store = VisorStore()
         for _ in 0..<10 { await settle() }
-        // C was added, with its own road and a road through A.
+        // C was added, with its own path and a path through A.
         let c = try XCTUnwrap(store.servers.first { $0.record.serverID == "C" })
         XCTAssertEqual(c.record.address, "http://c:7433")
         XCTAssertEqual(c.record.secret, "c-pw")
-        XCTAssertEqual(store.relayRoads(to: c), ["http://a:7433/peer/C", "http://b:7433/peer/C"])
+        XCTAssertEqual(store.relayPaths(to: c), ["http://a:7433/peer/C", "http://b:7433/peer/C"])
         // Each told of the others (more than once is no harm: a server
         // takes in only what is news).
         XCTAssertEqual(Set(serverA.introduced.flatMap { $0 }.map(\.id)), ["B", "C"])
@@ -116,23 +116,23 @@ final class NetworkOfComputersTests: XCTestCase {
         // Told again of C by B: more of the same, not another record.
         store.take(Peer(id: "C", name: "C", addresses: ["http://c:7433", "logan@c"], password: ""), from: store.servers[1])
         XCTAssertEqual(store.servers.filter { $0.record.serverID == "C" }.count, 1)
-        XCTAssertEqual(c.record.roads, ["logan@c"])
+        XCTAssertEqual(c.record.paths, ["logan@c"])
         XCTAssertEqual(c.record.secret, "c-pw", "an empty password is not news")
         // A's own peer entry is never added as another computer.
         store.take(Peer(id: "A", name: "A", addresses: ["http://a:7433"], password: "a-pw"), from: store.servers[1])
         XCTAssertEqual(store.servers.count, 3)
     }
 
-    /// A computer reached by a relay road, its own not answering.
-    func testAComputerIsReachedThroughAnotherWhenItsOwnRoadsDoNot() async {
+    /// A computer reached by a relay path, its own not answering.
+    func testAComputerIsReachedThroughAnotherWhenItsOwnPathsDoNot() async {
         let record = AgentServerRecord(name: "C", address: "http://c:7433", secret: "pw", provider: "scripted", serverID: "C")
         let server = scripted(record)
         server.refused = ["http://c:7433"]
         let host = AgentServerConnection(record: record)
-        host.relayRoads = { ["http://a:7433/peer/C"] }
+        host.relayPaths = { ["http://a:7433/peer/C"] }
         host.connect()
         await settle()
         XCTAssertEqual(host.state, .connected)
-        XCTAssertEqual(host.road, "http://a:7433/peer/C")
+        XCTAssertEqual(host.path, "http://a:7433/peer/C")
     }
 }

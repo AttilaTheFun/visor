@@ -88,6 +88,7 @@ final class LinkedMessagingTests: ServerTestCase {
         VisorServer.storeRoot = VisorServer.storeRoot?.appendingPathComponent("there")
         try? FileManager.default.createDirectory(at: VisorServer.storeRoot!, withIntermediateDirectories: true)
         there = VisorServer(port: 7982)
+        there.settings.proxyEnabled = true
         there.settings.publicAddress = "other-mac.example.ts.net"
         there.password = "there-password"
     }
@@ -151,6 +152,7 @@ final class LinkedMessagingTests: ServerTestCase {
     /// its code, and gives each the other's.
     func testAClientLinksTheComputersItHolds() async {
         here.password = "here-password"
+        here.settings.proxyEnabled = true
         here.settings.publicAddress = "this-mac.example.ts.net"
         func request(_ method: String, _ path: String, _ password: String, body: String = "") -> HTTPRequest {
             HTTPRequest(method: method, path: path, headers: ["authorization": "Bearer " + password], body: body)
@@ -177,6 +179,7 @@ final class LinkedMessagingTests: ServerTestCase {
     func testLinksAreKeptAndTheLinkGoesBothWays() async {
         for _ in 0..<50 where !there.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
         here.password = "here-password"
+        here.settings.proxyEnabled = true
         here.settings.publicAddress = "this-mac.example.ts.net"
         let code = ConnectionCode(name: "Other Mac", host: "http://127.0.0.1:\(there.port)", password: "there-password")
         let result = await here.link(code.encoded)

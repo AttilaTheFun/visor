@@ -44,23 +44,15 @@ extension VisorServer {
         Self.secrets.set("peers", peers.map { $0.json.encoded() }.joined(separator: "\n"))
     }
 
-    /// This server's own addresses, as clients read them: the one set by
-    /// hand, each of this computer's addresses with the port while the
-    /// network reaches it, and `user@address` for its SSH while SSH
-    /// clients are let in. What its peers and clients are told.
+    /// This server's own addresses, as clients read them: its network
+    /// paths that are on — the proxy's URL, `http(s)://` on each address
+    /// of the LAN and the VPN, `ssh://user@` on each address. What its
+    /// peers and clients are told.
     public var ownAddresses: [String] {
         var out: [String] = []
         let set = settings.publicAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !set.isEmpty { out.append(set) }
-        let addresses = ServerPlatform.current.host.addresses()
-        if settings.reachableFromNetwork {
-            out += addresses.map { "\(servesTLS ? "https" : "http")://\($0):\(port)" }
-        }
-        if settings.sshEnabled {
-            let user = NSUserName()
-            if !user.isEmpty { out += addresses.map { "\(user)@\($0)" } }
-        }
-        return out
+        if settings.proxyEnabled, !set.isEmpty { out.append(set) }
+        return out + httpPaths + sshPaths
     }
 
     /// This computer as its peers should know it.
@@ -89,7 +81,7 @@ extension VisorServer {
     /// Forgets a peer, by its id or an address of its.
     public func forget(peer key: String) {
         peers.removeAll { $0.id == key || $0.addresses.contains(key) }
-        workingRoads.removeValue(forKey: key)
+        workingPaths.removeValue(forKey: key)
         keepPeers()
     }
 
@@ -195,33 +187,33 @@ extension VisorServer {
         }
     }
 
-    /// The roads to a peer's REST side, as base URLs, the one that
+    /// The paths to a peer's REST side, as base URLs, the one that
     /// answered last time first: its own addresses this server can use
     /// (HTTP; it has no SSH), then through each other peer that was
     /// reached (`/peer/<id>` there).
-    func roads(to peer: Peer) -> [String] {
+    func paths(to peer: Peer) -> [String] {
         var out = peer.addresses.compactMap { address -> String? in
             guard SSHAddress(address) == nil, let parsed = ServerAddress(address) else { return nil }
             return parsed.root
         }
         if !peer.id.isEmpty {
             for other in peers where other.id != peer.id && !other.id.isEmpty {
-                if let road = workingRoads[other.id], !road.contains("/peer/") { out.append(road + "/peer/" + peer.id) }
+                if let road = workingPaths[other.id], !road.contains("/peer/") { out.append(road + "/peer/" + peer.id) }
             }
         }
-        if let known = workingRoads[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] { out.removeAll { $0 == known }; out.insert(known, at: 0) }
+        if let known = workingPaths[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] { out.removeAll { $0 == known }; out.insert(known, at: 0) }
         return out
     }
 
     /// One request to a peer's REST side, with its password, down the
-    /// first road that answers; a peer from before ids is asked who it
+    /// first path that answers; a peer from before ids is asked who it
     /// is on the way.
     func call(_ peer: Peer, path: String, _ envelope: Envelope) async throws -> Envelope {
         var lastError: Error = NSError(domain: "Visor", code: 0, userInfo: [NSLocalizedDescriptionKey: "no address to reach it at"])
-        for road in roads(to: peer) {
+        for road in paths(to: peer) {
             do {
                 let answer = try await Self.post(road + "/api/" + path, password: peer.password, envelope, relay: [id])
-                workingRoads[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] = road
+                workingPaths[peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id] = road
                 if peer.id.isEmpty { identify(peer, at: road) }
                 return answer
             } catch {

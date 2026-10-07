@@ -115,6 +115,14 @@ extension VisorServer {
     /// a request of the REST side. A trusted one (the socket file) is let
     /// in without the password.
     func accept(_ stream: any ByteStream, trusted: Bool = false) {
+        // A path that is off: the connection is closed unanswered.
+        if !trusted, !admits(localAddress: stream.localAddress) {
+            if let address = stream.localAddress, refusedPaths.insert(address).inserted {
+                Self.log("a connection on \(address) was refused: that network path is off")
+            }
+            stream.close()
+            return
+        }
         FrontDoor(stream: stream, socket: { [weak self] stream, received in
             // A peer's channel is not carried: the client polls the peer
             // through here instead.

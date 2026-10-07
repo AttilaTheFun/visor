@@ -50,6 +50,7 @@ public final class VisorServer {
                 || settings.sshEnabled != oldValue.sshEnabled {
                 listenAgain()
             }
+            if settings.lan != oldValue.lan || settings.vpn != oldValue.vpn { refusedPaths.removeAll() }
             // Asking nothing: a server with no password yet starts now.
             if settings.asksNothing, !oldValue.asksNothing, listener == nil { start() }
         }
@@ -57,8 +58,11 @@ public final class VisorServer {
     /// The other computers on the network, as this one knows them
     /// (VisorServer+Peers.swift).
     public internal(set) var peers: [Peer] = []
-    /// The road that last reached each peer, by its id: tried first.
-    var workingRoads: [String: String] = [:]
+    /// The path that last reached each peer, by its id: tried first.
+    var workingPaths: [String: String] = [:]
+    /// Addresses connections were refused on (a path that is off), each
+    /// logged once.
+    var refusedPaths: Set<String> = []
 
     /// The slash commands each agent listed when it last ran (VisorServer+Commands.swift).
     var knownCommands: [AgentKind: [SlashCommand]] = [:]

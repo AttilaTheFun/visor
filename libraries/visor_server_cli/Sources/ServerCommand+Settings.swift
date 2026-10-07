@@ -16,41 +16,54 @@ extension ServerCommand {
             print("The server is not running.")
         }
         let settings = ServerSettings.kept(at: VisorServer.settingsURL)
-        if settings.reachableFromNetwork {
-            let addresses = platform.host.addresses()
-            print("The network reaches it directly" + (addresses.isEmpty ? "." : ", at " + addresses.joined(separator: ", ") + "."))
-        } else {
-            print("Only this computer reaches it: a reverse proxy or a tunnel here is the road in (`network on` opens it to the network).")
+        let addresses = platform.host.networkAddresses()
+        for kind in [NetworkAddress.Kind.lan, .vpn] {
+            let on = kind == .lan ? settings.lan : settings.vpn
+            let own = addresses.filter { $0.kind == kind }.map { "http://\($0.address):\(Envelope.defaultPort)" }
+            print("\(kind == .lan ? "LAN" : "VPN"): " + (on ? (own.isEmpty ? "on, no address of that kind now." : "on, at " + own.joined(separator: ", ") + ".") : "off (`\(kind.rawValue) on` opens it)."))
         }
         print(settings.sshEnabled
               ? "Clients through this computer's SSH reach it at \(VisorServer.socketPath) without a password."
               : "Clients through this computer's SSH reach the port, with the password (`ssh on` lets them in without).")
-        if settings.publicAddress.isEmpty {
-            print("Clients are told " + (Self.reachableAddress(platform, settings).map { "\($0)." } ?? "no address: `address <url>` sets one."))
-        } else {
-            print("Clients are told \(settings.publicAddress) (set by hand).")
-        }
+        print("Reverse proxy: " + (settings.proxyEnabled && !settings.publicAddress.isEmpty ? "on, at \(settings.publicAddress)." : "off (`address <url>` sets one)."))
+        print("Clients are told " + (Self.reachableAddress(platform, settings).map { "\($0)." } ?? "no address: only this computer and SSH reach the server."))
     }
 
     /// The address clients are told, as the server would make it.
     static func reachableAddress(_ platform: ServerPlatform, _ settings: ServerSettings, port: UInt16 = Envelope.defaultPort) -> String? {
         let set = settings.publicAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !set.isEmpty { return set }
-        guard settings.reachableFromNetwork, let first = platform.host.addresses().first else { return nil }
-        return "http://\(first):\(port)"
+        if settings.proxyEnabled, !set.isEmpty { return set }
+        let addresses = platform.host.networkAddresses()
+        let open = addresses.filter { $0.kind == .vpn && settings.vpn } + addresses.filter { $0.kind == .lan && settings.lan }
+        return open.first.map { "http://\($0.address):\(port)" }
     }
 
-    /// Opens the server to the network, or keeps it to this computer.
+    /// Opens the server to the LAN and a VPN both, or keeps it to this computer.
     @MainActor
     func network(_ value: String?) throws {
         var settings = ServerSettings.kept(at: VisorServer.settingsURL)
         switch value {
-        case "on": settings.reachableFromNetwork = true
-        case "off": settings.reachableFromNetwork = false
+        case "on": settings.lan = true; settings.vpn = true
+        case "off": settings.lan = false; settings.vpn = false
         default: throw CommandLineError.usage("network on, or network off")
         }
         settings.keep(at: VisorServer.settingsURL)
-        print(settings.reachableFromNetwork ? "The network reaches the server directly, from its next start." : "Only this computer reaches the server, from its next start.")
+        print(settings.reachableFromNetwork ? "The LAN and a VPN reach the server directly, from its next start." : "Only this computer reaches the server's port, from its next start.")
+    }
+
+    /// Opens one network path, or closes it.
+    @MainActor
+    func path(_ kind: NetworkAddress.Kind, _ value: String?) throws {
+        var settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        let on: Bool
+        switch value {
+        case "on": on = true
+        case "off": on = false
+        default: throw CommandLineError.usage("\(kind.rawValue) on, or \(kind.rawValue) off")
+        }
+        if kind == .lan { settings.lan = on } else { settings.vpn = on }
+        settings.keep(at: VisorServer.settingsURL)
+        print("\(kind == .lan ? "The LAN" : "A VPN") \(on ? "reaches" : "no longer reaches") the server's port, from its next start.")
     }
 
     /// Lets SSH clients in without a password, or not.
@@ -79,7 +92,7 @@ extension ServerCommand {
         }
         settings.keep(at: VisorServer.settingsURL)
         print(settings.asksNothing
-              ? "Anyone who reaches the server is let in, from its next start: keep it to roads of your own."
+              ? "Anyone who reaches the server is let in, from its next start: keep it to network paths of your own."
               : "Clients show the password, from the server's next start.")
     }
 
@@ -88,12 +101,17 @@ extension ServerCommand {
     func address(_ value: String?) {
         var settings = ServerSettings.kept(at: VisorServer.settingsURL)
         guard let value else {
-            print(settings.publicAddress.isEmpty ? "No address is set: clients are told the server's own guess, if the network reaches it." : settings.publicAddress)
+            print(settings.publicAddress.isEmpty ? "No reverse proxy address is set." : settings.publicAddress + (settings.proxyEnabled ? "" : " (off)"))
             return
         }
-        settings.publicAddress = value == "-" ? "" : value
+        if value == "-" {
+            settings.proxyEnabled = false
+        } else {
+            settings.publicAddress = value
+            settings.proxyEnabled = true
+        }
         settings.keep(at: VisorServer.settingsURL)
-        print(settings.publicAddress.isEmpty ? "Address cleared." : "Clients will be told \(settings.publicAddress), from the server's next start.")
+        print(settings.proxyEnabled ? "Clients will be told \(settings.publicAddress) first, from the server's next start." : "The reverse proxy path is off.")
     }
 
     /// Shows the password, making one if there is none; or sets it.

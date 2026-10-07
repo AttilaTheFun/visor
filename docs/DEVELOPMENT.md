@@ -42,16 +42,16 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
    (`brew install bazelisk`); Bazel version from `.bazelversion`.
 2. Clone this repo; Bazel and SwiftPM fetch agent_ui and the third-party
    packages themselves. Clone open_router_cli beside it to build the CLI.
-3. A road from your devices to the Mac. The server has one listener,
-   port 7433 (the WebSocket at `/`, the REST side under `/api`), on
-   loopback by default; in Settings, "HTTP, with the password" makes
-   it listen on every interface, for a LAN or a VPN to
-   reach it directly at `http://<address>:7433`, and "Address clients
-   take" names what a reverse proxy or a tunnel gives instead. "SSH, no
-   password" (on by default) serves the same on `~/.visor/server.sock`,
-   for a client that comes through the Mac's Remote Login as you
-   (address `user@host`), already signed in. Neither on: this Mac alone
-   reaches the port. TLS: a
+3. A network path from your devices to the Mac. The server has one
+   listener, port 7433 (the WebSocket at `/`, the REST side under
+   `/api`), and Settings → Network paths switches each path on, showing
+   its address to copy: this Mac (always, `http://127.0.0.1:7433`), the
+   LAN and a VPN (`http://<address>:7433` on each address of that kind;
+   a connection is admitted by the address it arrived on), SSH (on by
+   default: `ssh://<user>@<address>`, the Mac's Remote Login as you,
+   already signed in, served on `~/.visor/server.sock`), and a reverse
+   proxy or tunnel of your own at the URL you set, told to clients
+   first. None on: this Mac alone reaches the port. TLS: a
    PKCS#12 identity in Settings, or the front's. Every client, and every
    tool on the Mac (the probes), signs in with the password; the server
    trusts nothing about the road.
@@ -347,15 +347,15 @@ knows (`tellPeers`, after anything new: `adopt` says whether it was);
 the network reaches it, `user@address` while SSH is let in). A server
 relays HTTP for a peer under `/peer/<id>/` (`relayTarget`, `relay`:
 the peer's password put in, `X-Visor-Relay` against circles, the first
-road that answers kept in `workingRoads`); an upgrade there is refused
+road that answers kept in `workingPaths`); an upgrade there is refused
 in `accept`, so the client polls. The agents' cross-computer calls take
-the same roads (`roads(to:)`, `call`). On the client, a record keeps
-`serverID` and `roads`; `AgentServerConnection` tries the roads of a
-round in turn (`roadsToTry`: the one that answered last, the record's,
-then `relayRoads` through the other connected servers, `/peer/<id>`
+the same paths (`paths(to:)`, `call`). On the client, a record keeps
+`serverID` and `paths`; `AgentServerConnection` tries the paths of a
+round in turn (`pathsToTry`: the one that answered last, the record's,
+then `relayPaths` through the other connected servers, `/peer/<id>`
 under each), the next at once when one does not answer; on connecting,
 `VisorStore.joined` folds a duplicate record of the same computer,
-takes in the server's peers (`take`: a new record, or more roads for a
+takes in the server's peers (`take`: a new record, or more paths for a
 known one) and introduces the servers to one another (`introduce`). The
 Link These Computers row is gone: holding two servers is the link.
 
@@ -376,7 +376,7 @@ opening request (`VisorHTTPService.request(…headers:)`,
 `VisorSocketService.open(url:headers:)`; a host with only the bearer
 forms sends the bearer out of them, a browser opens the socket without).
 The server's side is `ServerSettings.authentication`: `password` (the
-default), or `none`, which lets in whoever reaches it — for roads of
+default), or `none`, which lets in whoever reaches it — for paths of
 one's own, or a front that has signed the user in.
 
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
@@ -397,7 +397,9 @@ bearer is the password, or a token `GET /api/hello` issued (kept in
 memory, 512 newest); no header names a user. The socket's `login` takes
 `token` or `password`. One listener (`FrontDoor` tells an upgrade from a
 request by its first bytes), on loopback or every interface
-(`ServerSettings.reachableFromNetwork`), plain or TLS (`tlsIdentityPath`,
+(`ServerSettings.lan || vpn`; `admits(localAddress:)` closes a connection
+on a path that is off, `NetworkAddress.Kind` by interface or range),
+plain or TLS (`tlsIdentityPath`,
 Apple only; elsewhere `ListeningError.tlsUnavailable`); and a second on
 the socket file `VisorServer.socketPath` while `sshEnabled`
 (`ListeningOptions.unixPath`; Apple and POSIX, not Windows:

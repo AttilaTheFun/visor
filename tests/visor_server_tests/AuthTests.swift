@@ -87,14 +87,32 @@ final class AuthTests: ServerTestCase {
     /// with the port; an address set by hand is told instead.
     func testTheAddressClientsAreTold() async {
         server.password = "pearl-grove"
-        server.settings.reachableFromNetwork = true
+        server.settings.lan = true
+        server.settings.vpn = true
         for _ in 0..<50 where !server.listening { try? await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertTrue(server.listening)
-        if let first = ServerPlatform.current.host.addresses().first {
-            XCTAssertEqual(server.reachableAddress, "http://\(first):7997")
-        } else {
+        if ServerPlatform.current.host.addresses().isEmpty {
             XCTAssertNil(server.reachableAddress, "no network at all")
+        } else {
+            XCTAssertEqual(server.reachableAddress, server.httpPaths.first)
+            XCTAssertTrue(server.reachableAddress?.hasSuffix(":7997") == true)
         }
+        // Each path admits its own connections, and only while on.
+        XCTAssertTrue(server.admits(localAddress: nil))
+        XCTAssertTrue(server.admits(localAddress: "127.0.0.1"))
+        XCTAssertTrue(server.admits(localAddress: "192.168.1.20"))
+        XCTAssertTrue(server.admits(localAddress: "100.90.45.11"))
+        server.settings.lan = false
+        XCTAssertFalse(server.admits(localAddress: "192.168.1.20"))
+        XCTAssertTrue(server.admits(localAddress: "100.90.45.11"), "a VPN's range")
+        server.settings.vpn = false
+        XCTAssertFalse(server.admits(localAddress: "100.90.45.11"))
+        XCTAssertTrue(server.admits(localAddress: "127.0.0.1"), "this computer always")
+        XCTAssertEqual(NetworkAddress(address: "10.0.0.5", interface: "utun3").kind, .vpn)
+        XCTAssertEqual(NetworkAddress(address: "192.168.1.5", interface: "en0").kind, .lan)
+        server.settings.lan = true
+        server.settings.vpn = true
+        server.settings.proxyEnabled = true
         server.settings.publicAddress = "https://proxy.example.com/visor"
         XCTAssertEqual(server.reachableAddress, "https://proxy.example.com/visor")
         XCTAssertEqual(server.connectionCode?.host, "https://proxy.example.com/visor")
@@ -105,6 +123,7 @@ final class AuthTests: ServerTestCase {
     func testConnectionCodeCarriesAddressAndPassword() async {
         XCTAssertNil(server.connectionCode)
         server.password = "pearl-grove"
+        server.settings.proxyEnabled = true
         server.settings.publicAddress = "this-mac.example.ts.net"
         let code = server.connectionCode
         XCTAssertEqual(code?.host, "this-mac.example.ts.net")
@@ -137,9 +156,10 @@ final class AuthTests: ServerTestCase {
         server.handle(Envelope(type: "login"), from: plain)
         XCTAssertFalse(plain.authenticated)
 
-        let older = try JSONDecoder().decode(ServerSettings.self, from: Data(#"{"reachableFromNetwork":true}"#.utf8))
+        let older = try JSONDecoder().decode(ServerSettings.self, from: Data(#"{"reachableFromNetwork":true,"publicAddress":"https://p.example"}"#.utf8))
         XCTAssertTrue(older.sshEnabled)
-        XCTAssertTrue(older.reachableFromNetwork)
+        XCTAssertTrue(older.lan && older.vpn, "the network was both paths")
+        XCTAssertTrue(older.proxyEnabled, "an address set was a proxy in use")
         var off = ServerSettings()
         off.sshEnabled = false
         let kept = try JSONDecoder().decode(ServerSettings.self, from: JSONEncoder().encode(off))

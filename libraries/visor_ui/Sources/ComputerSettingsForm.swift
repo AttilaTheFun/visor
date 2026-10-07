@@ -38,21 +38,21 @@ struct ComputerSettingsForm: View {
                         ? "The computer refused this device's key, or Visor Server refused the password. Put the key below in the user's authorized keys, check the password, and save."
                         : "This computer does not know this device as its owner's. Type the password its Visor menu bar app shows and save.")
                      : host.state.label + (host.state == .connected && !host.live
-                        ? ". Followed by polling: this road carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn." : ""))
+                        ? ". Followed by polling: this path carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn." : ""))
             }
             if overSSH, VisorHost.ssh != nil { DeviceKeySection() }
-            if !host.record.roads.isEmpty || host.road != nil {
+            if !host.record.paths.isEmpty || host.path != nil {
                 Section {
-                    if let road = host.road, road != host.record.address {
-                        Text("Reached by \(road)").font(.footnote)
+                    if let path = host.path, path != host.record.address {
+                        Text("Reached by \(path)").font(.footnote)
                     }
-                    ForEach(host.record.roads, id: \.self) { road in
-                        Text(road).font(.footnote.monospaced()).foregroundColor(.secondary).lineLimit(1).truncationMode(.middle)
+                    ForEach(host.record.paths, id: \.self) { path in
+                        Text(path).font(.footnote.monospaced()).foregroundColor(.secondary).lineLimit(1).truncationMode(.middle)
                     }
                 } header: {
-                    Text("Other roads")
+                    Text("Network paths")
                 } footer: {
-                    Text("Addresses this computer and the others say it is reached at, tried in turn when the one above does not answer — and, last, through any other computer here that reaches it.")
+                    Text("The other ways this computer is reached, as it and the others say: tried in turn when the address above does not answer — and, last, through any other computer here that reaches it.")
                 }
             }
             Section {
