@@ -395,6 +395,18 @@ where the system has SSH; `base(for:)` opens (and keeps, in
 and answers `http://127.0.0.1:<port>`, which `call` and `relay` use; a
 failed path drops its tunnel.
 
+**Which path fits where the device is** (`VisorNetworkService`,
+`NativeVisorNetworkService`; `AgentServerConnection.pathsToTry`, `fit(of:)`,
+`networkChanged`): the host says which hosts are on a network the device
+is on now (each interface's address and mask) and whether it has a
+tailnet address, and calls back when the networks change (NWPathMonitor).
+Paths are ranked local, overlay, other, unlikely (a LAN's address when
+away, a tailnet's with no tailnet) — the one that answered last first
+among its equals — and `VisorStore` has every connection re-rank on a
+change: a server connected by a path that is no longer the best is
+connected again by the one that is. A host without the service (the
+web, Android) tries paths in the order kept.
+
 **Bootstrapping SSH** (`VisorServer+SSHKeys`, `AgentServerConnection.
 useSSH`, `enrollSSHIfWanted`): a client that is in by any path hands its
 SSH public key to `POST /api/ssh/keys`, which puts it in the user's
