@@ -20,6 +20,17 @@ struct ComputerSettingsForm: View {
     /// Whether the computer is reached over its own SSH.
     private var overSSH: Bool { SSHAddress(host.record.address) != nil }
 
+    /// The state, and for a connected computer the path it is connected
+    /// by: "Connected over SSH (ssh://logan@10.0.0.2), no password" or
+    /// "Connected over HTTP (http://10.0.0.2:7433), with the password".
+    private var connectedBy: String {
+        guard host.state == .connected, let path = host.path else { return host.state.label }
+        if SSHAddress(path) != nil { return "Connected over SSH (\(path)), signed in by this device's key." }
+        let relayed = path.contains("/peer/") ? ", through another computer" : ""
+        let how = host.record.authentication == NoAuthenticator.name ? "no sign-in asked" : "with the password"
+        return "Connected over \(path.lowercased().hasPrefix("https") ? "HTTPS" : "HTTP") (\(path))\(relayed), \(how)."
+    }
+
     var body: some View {
         Form {
             Section {
@@ -37,8 +48,8 @@ struct ComputerSettingsForm: View {
                      ? (overSSH
                         ? "The computer refused this device's key, or Visor Server refused the password. Put the key below in the user's authorized keys, check the password, and save."
                         : "This computer does not know this device as its owner's. Type the password its Visor menu bar app shows and save.")
-                     : host.state.label + (host.state == .connected && !host.live
-                        ? ". Followed by polling: this path carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn." : ""))
+                     : connectedBy + (host.state == .connected && !host.live
+                        ? " Followed by polling: this path carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn." : ""))
             }
             if overSSH, VisorHost.ssh != nil { DeviceKeySection() }
             if !overSSH, VisorHost.ssh != nil, !host.sshPaths.isEmpty {
