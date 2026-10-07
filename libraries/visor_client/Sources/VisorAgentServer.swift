@@ -44,6 +44,9 @@ public final class VisorAgentServer: AgentServer {
     /// The SSH connection and the server's address through it, while open.
     var tunnelSession: (any VisorSSHSession)?
     var tunnel: ServerAddress?
+    /// Counts the tunnels asked for, so a sign-in overtaken by a newer
+    /// one closes its own connection rather than leaving it open.
+    var tunnelOpenings = 0
     /// Where the server is: the record's address, read as a URL — or,
     /// for an SSH address, the loopback port the tunnel gives, once open.
     var address: ServerAddress? { sshAddress != nil ? tunnel : ServerAddress(record.address) }

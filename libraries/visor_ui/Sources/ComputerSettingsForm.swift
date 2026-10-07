@@ -73,8 +73,10 @@ struct ComputerSettingsForm: View {
             if overSSH, VisorHost.ssh != nil { DeviceKeySection() }
             if !overSSH, VisorHost.ssh != nil, !host.sshPaths.isEmpty {
                 Section {
-                    Button("Use SSH") { host.useSSH() }
-                        .accessibilityIdentifier("use-ssh")
+                    Button("Use SSH") {
+                        if host.useSSH() { address = host.record.address }
+                    }
+                    .accessibilityIdentifier("use-ssh")
                 } footer: {
                     Text("Makes the computer's own SSH the way in: this device's key is handed to the computer over the connection it has now, and the connection made again over SSH, with no password asked from then on.")
                 }
@@ -119,11 +121,17 @@ struct ComputerSettingsForm: View {
         .insetGroupedForm()
         .onAppear {
             log = ConnectionLog.shared.text
-            name = host.record.name
-            address = host.record.address
-            password = host.record.secret
-            authentication = host.record.authentication
+            load()
         }
+        .onChange(of: host.record.address) { load() }
+    }
+
+    /// The fields from the record.
+    private func load() {
+        name = host.record.name
+        address = host.record.address
+        password = host.record.secret
+        authentication = host.record.authentication
     }
 
     private func save() {

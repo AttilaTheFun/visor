@@ -25,6 +25,8 @@ extension VisorAgentServer {
     /// tunnel's. `fallBackToPort` reaches the port instead.
     func openTunnel(_ address: SSHAddress) async throws {
         closeTunnel()
+        tunnelOpenings += 1
+        let opening = tunnelOpenings
         guard let ssh = VisorHost.ssh else { throw AgentServerError.message("This app cannot reach a computer over SSH") }
         let route = address.route
         let known: [String?] = route.map { hop in
@@ -45,6 +47,12 @@ extension VisorAgentServer {
         }
         for (index, hop) in route.enumerated() where known[index] == nil && session.hostKeys.count > index && !session.hostKeys[index].isEmpty {
             VisorHost.settings?.set(key: SSHAddress.hostKeySetting(hop), value: session.hostKeys[index])
+        }
+        // A sign-in that began after this one owns the tunnel now: this
+        // connection is not left open with nothing to carry.
+        guard opening == tunnelOpenings else {
+            session.close()
+            throw AgentServerError.message("Signing in again")
         }
         do {
             let port = try await session.attach(command: Self.attachCommand)
