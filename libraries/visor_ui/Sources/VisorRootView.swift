@@ -129,6 +129,7 @@ public struct VisorRootView: View {
         } message: {
             Text("\(troubled?.host.record.name ?? "The computer") can no longer find \(troubled?.cwd ?? "this folder"). Locate it if it was renamed or moved, or delete the project and the \(troubled?.sessionCount ?? 0) session\(troubled?.sessionCount == 1 ? "" : "s") in it if it is gone for good.")
         }
+        .task { await openProbeSession() }
         .onAppear {
             openFixtureScreen()
             // The transcript's image hook is one closure for the whole
@@ -182,6 +183,24 @@ public struct VisorRootView: View {
 
     /// Screenshot tests: straight to the screen asked for, without the
     /// animation of getting there (VisorFixture).
+    /// For a recording of a session's first open (tools/probes/frames): the
+    /// session named at launch (`-visor.probe.open <session id>`), opened
+    /// a few seconds in, once its computer has listed it, as a tap in the
+    /// sidebar would.
+    private func openProbeSession() async {
+        let id = VisorFixture.probeSession
+        guard !id.isEmpty else { return }
+        for _ in 0..<40 {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if let host = store.servers.first(where: { $0.sessions.contains { $0.id == id } }) {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                selection = .session(SessionSelection(serverID: host.id, sessionID: id))
+                if compact { compactColumn = .detail }
+                return
+            }
+        }
+    }
+
     private func openFixtureScreen() {
         let screen = VisorFixture.screen
         guard !screen.isEmpty else { return }

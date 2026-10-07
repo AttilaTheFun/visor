@@ -16,6 +16,9 @@ public enum VisorFixture {
     @MainActor public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
     /// The screen to open on: sessions, chat, goal, inspector, models,
     /// search or connect ("" for the app's own first screen).
+    /// A session to open a few seconds after launch, for a recording of
+    /// its first open (`-visor.probe.open <session id>`); "" for none.
+    @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }
     @MainActor public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
 
     public static let serverID = "fixture"
