@@ -13,12 +13,16 @@ swift_library(
     srcs = glob(["Sources/*.swift"]) + select({
         "@platforms//os:ios": glob(["native/*.swift"]),
         "@platforms//os:macos": glob(["native/*.swift"]),
+        "@platforms//os:tvos": glob(["native/*.swift"]),
+        "@platforms//os:watchos": glob(["native/*.swift"]),
         "//conditions:default": [],
     }),
     module_name = "VisorServices",
     deps = select({
         "@platforms//os:ios": ["//libraries/visor_ssh"],
         "@platforms//os:macos": ["//libraries/visor_ssh"],
+        "@platforms//os:tvos": ["//libraries/visor_ssh"],
+        "@platforms//os:watchos": ["//libraries/visor_ssh"],
         "//conditions:default": [],
     }),
 )

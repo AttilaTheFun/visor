@@ -286,7 +286,7 @@ public struct VisorRootView: View {
             let which = SessionSelection(serverID: host.id, sessionID: card.session.id)
             SessionCardRow(session: card.session)
                 .tag(ContentSelection.session(which))
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                .rowSwipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
                         .tint(.orange)
                 }

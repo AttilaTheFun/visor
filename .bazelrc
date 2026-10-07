@@ -4,3 +4,4 @@ build --macos_minimum_os=15.0
 build --ios_minimum_os=18.0
 # Your own settings, such as the signing team (tools/signing).
 try-import %workspace%/.bazelrc.user
+build --tvos_minimum_os=26.0

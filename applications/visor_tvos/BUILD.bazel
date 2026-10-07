@@ -1,0 +1,32 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load("@rules_apple//apple:tvos.bzl", "tvos_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Change to your own bundle id.
+BUNDLE_ID = "com.LoganShire.VisorClient.tvOS"
+
+# The client on an Apple TV: the same client and views as the Mac and the
+# phone — the split view across the screen, driven by the remote's focus —
+# with the composer's dictation through the system keyboard.
+swift_library(
+    name = "tvos_lib",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/**/*.swift"]),
+    module_name = "VisorTVOSHost",
+    deps = [
+        "//libraries/visor_client",
+        "//libraries/visor_services",
+        "//libraries/visor_ui",
+    ],
+)
+
+tvos_application(
+    name = "visor_tvos",
+    bundle_id = BUNDLE_ID,
+    families = ["tv"],
+    infoplists = ["Info.plist"],
+    minimum_os_version = "26.0",
+    deps = [":tvos_lib"],
+)

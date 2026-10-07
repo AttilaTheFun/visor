@@ -1,6 +1,6 @@
-diff -ruN a/Package.swift b/Package.swift
---- a/Package.swift
-+++ b/Package.swift
+diff -ruN st-a/Package.swift st-b/Package.swift
+--- st-a/Package.swift	2026-10-07 12:39:53
++++ st-b/Package.swift	2026-10-07 12:39:53
 @@ -87,10 +87,10 @@
          "Mac/README.md",
          "Apple/Metal/Shaders.metal",
@@ -16,9 +16,9 @@ diff -ruN a/Package.swift b/Package.swift
  )
  
  #if os(Windows)
-diff -ruN a/Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift b/Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift
---- a/Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift
-+++ b/Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift
+diff -ruN st-a/Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift st-b/Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift
+--- st-a/Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift	1969-12-31 19:00:00
++++ st-b/Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift	2026-10-07 12:39:53
 @@ -0,0 +1,33 @@
 +#if !SWIFTTERM_EMBEDDED
 +// This file is generated. Do not edit it.
@@ -53,9 +53,9 @@ diff -ruN a/Sources/SwiftTerm/Generated/SwiftTermBuildInfo.swift b/Sources/Swift
 +}
 +
 +#endif
-diff -ruN a/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift b/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift
---- a/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift
-+++ b/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift
+diff -ruN st-a/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift st-b/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift
+--- st-a/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift	1969-12-31 19:00:00
++++ st-b/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift	2026-10-07 12:39:53
 @@ -0,0 +1,303 @@
 +#if !SWIFTTERM_EMBEDDED
 +// This file is generated from `swifterm-terminfo`. Do not edit it.
@@ -360,3 +360,37 @@ diff -ruN a/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift b/Sources/SwiftT
 +}
 +
 +#endif
+diff -ruN st-a/Sources/SwiftTerm/HeadlessTerminal.swift st-b/Sources/SwiftTerm/HeadlessTerminal.swift
+--- st-a/Sources/SwiftTerm/HeadlessTerminal.swift	2026-10-07 12:39:53
++++ st-b/Sources/SwiftTerm/HeadlessTerminal.swift	2026-10-07 12:40:20
+@@ -5,7 +5,7 @@
+ //  Created by Miguel de Icaza on 4/5/20.
+ //
+ #if !SWIFTTERM_EMBEDDED
+-#if !os(iOS) && !os(Windows) && !os(WASI) && !os(Android)
++#if !os(iOS) && !os(tvOS) && !os(Windows) && !os(WASI) && !os(Android)
+ import Foundation
+ 
+ ///
+diff -ruN st-a/Sources/SwiftTerm/LocalProcess.swift st-b/Sources/SwiftTerm/LocalProcess.swift
+--- st-a/Sources/SwiftTerm/LocalProcess.swift	2026-10-07 12:39:53
++++ st-b/Sources/SwiftTerm/LocalProcess.swift	2026-10-07 12:39:53
+@@ -8,7 +8,7 @@
+ //
+ #if !SWIFTTERM_EMBEDDED
+ // Android apps, like iOS ones, do not spawn local processes on a PTY.
+-#if !os(WASI) && !os(iOS) && !os(Windows) && !os(Android)
++#if !os(WASI) && !os(iOS) && !os(tvOS) && !os(Windows) && !os(Android)
+ import Foundation
+ import Dispatch
+ #if canImport(Darwin)
+diff -ruN st-a/Sources/SwiftTerm/iOS/SwiftUITerminalView.swift st-b/Sources/SwiftTerm/iOS/SwiftUITerminalView.swift
+--- st-a/Sources/SwiftTerm/iOS/SwiftUITerminalView.swift	2026-10-07 12:39:53
++++ st-b/Sources/SwiftTerm/iOS/SwiftUITerminalView.swift	2026-10-07 12:39:53
+@@ -1,5 +1,5 @@
+ #if !SWIFTTERM_EMBEDDED
+-#if canImport(UIKit) && DEBUG
++#if canImport(UIKit) && !os(tvOS) && DEBUG
+ import SwiftUI
+ 
+ // Internal, for testing - look at SwiftTermApp for a proper binding

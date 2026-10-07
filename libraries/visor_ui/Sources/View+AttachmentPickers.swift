@@ -48,12 +48,16 @@ extension View {
     }
 
     /// Files dropped here are attached as if picked.
-    func attachmentDrop(onPick: @escaping ([PickedImage]) -> Void) -> some View {
+    @ViewBuilder func attachmentDrop(onPick: @escaping ([PickedImage]) -> Void) -> some View {
+        #if os(tvOS)
+        self
+        #else
         dropDestination(for: URL.self) { urls, _ in
             let picked = PickedImage.read(urls)
             if !picked.isEmpty { onPick(picked) }
             return !picked.isEmpty
         }
+        #endif
     }
 }
 
@@ -62,7 +66,7 @@ extension View {
 private struct AttachmentPickers: ViewModifier {
     @Binding var source: AttachSource?
     let onPick: ([PickedImage]) -> Void
-    #if !os(macOS)
+    #if os(iOS)
     @State private var selection: [PhotosPickerItem] = []
     #endif
 
@@ -71,12 +75,16 @@ private struct AttachmentPickers: ViewModifier {
     }
 
     func body(content: Content) -> some View {
+        #if os(tvOS)
+        // A TV picks nothing: no files, no library, no camera.
+        content
+        #else
         content
             .fileImporter(isPresented: open(.files), allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
                 let picked = PickedImage.read((try? result.get()) ?? [])
                 if !picked.isEmpty { onPick(picked) }
             }
-            #if !os(macOS)
+            #if os(iOS)
             .photosPicker(isPresented: open(.library), selection: $selection, maxSelectionCount: 4,
                           matching: .any(of: [.images, .videos]))
             .onChange(of: selection) { _, items in
@@ -96,9 +104,10 @@ private struct AttachmentPickers: ViewModifier {
                 if let url { onPick(PickedImage.read([url])) }
             }
             #endif
+        #endif
     }
 
-    #if !os(macOS)
+    #if os(iOS)
     /// What to call a photo or video from the library on the computer.
     private static func name(of item: PhotosPickerItem, index: Int) -> String {
         #if os(iOS)

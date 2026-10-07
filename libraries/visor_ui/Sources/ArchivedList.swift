@@ -28,11 +28,11 @@ struct ArchivedList: View {
             ForEach(sessions) { session in
                 ArchivedRow(session: session)
                     .accessibilityIdentifier("archived-session-" + session.id)
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    .rowSwipeActions(edge: .leading, allowsFullSwipe: true) {
                         Button { host.unarchive(session.id) } label: { Label("Unarchive", systemImage: "tray.and.arrow.up") }
                             .tint(.green)
                     }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    .rowSwipeActions(edge: .trailing, allowsFullSwipe: false) {
                         // An ordinary button tinted red, not the destructive
                         // role: that role readies SwiftUI's row-removal
                         // animation as the action appears, which stalled the

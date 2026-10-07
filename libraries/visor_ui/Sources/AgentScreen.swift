@@ -211,15 +211,11 @@ struct AgentScreen: View {
                     // "Opus 5 High": the model, then how hard it is being
                     // asked to think, in grey so the two read apart. After
                     // a fallback, the model the turn ran on, marked.
+                    let effort = Text(info.effort.map { " " + AgentCatalog.effortTitle($0) } ?? "").foregroundColor(.secondary)
                     if let fallback {
-                        Text(Image(systemName: "arrow.down.circle.fill")).foregroundColor(.orange)
-                            + Text(" " + fallback.title)
-                            + Text(info.effort.map { " " + AgentCatalog.effortTitle($0) } ?? "")
-                                .foregroundColor(.secondary)
+                        Text("\(Text(Image(systemName: "arrow.down.circle.fill")).foregroundColor(.orange)) \(fallback.title)\(effort)")
                     } else {
-                        Text(host.modelTitle(for: info))
-                            + Text(info.effort.map { " " + AgentCatalog.effortTitle($0) } ?? "")
-                                .foregroundColor(.secondary)
+                        Text("\(host.modelTitle(for: info))\(effort)")
                     }
                 }
                 .lineLimit(1)
