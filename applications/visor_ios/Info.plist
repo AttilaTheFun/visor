@@ -27,6 +27,13 @@
     <string>Visor connects to Visor Server on your Mac.</string>
     <key>UILaunchScreen</key>
     <dict/>
+    <!-- More than one window on an iPad (and in Stage Manager): each a
+         scene of the same app, over the same computers. -->
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <true/>
+    </dict>
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
