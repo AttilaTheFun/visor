@@ -7,9 +7,10 @@ import VisorServices
 /// long it took, each channel opened, answered and dropped, each retry and
 /// how long it waits. Kept so that "this server took eight seconds to come
 /// back" can be read off rather than guessed at: the server's settings
-/// page exports it. The newest lines are kept, in memory and — when the
-/// app leaves the front — in the host's settings, so the log of one run is
-/// there in the next.
+/// page exports it. The newest lines are kept, in memory and in the host's
+/// settings — when the app leaves the front, and a few seconds after any
+/// line (a Mac's window may never leave the front) — so the log of one run
+/// is there in the next, and readable while it runs.
 @MainActor
 public final class ConnectionLog {
     public static let shared = ConnectionLog()
@@ -22,6 +23,8 @@ public final class ConnectionLog {
     /// The time, for the lines and for durations; a test sets its own.
     var now: () -> Double = { Date().timeIntervalSince1970 }
     private var loaded = false
+    /// The save a few seconds after a line, while one is due.
+    private var keeping: Task<Void, Never>?
 
     public init() {}
 
@@ -31,6 +34,13 @@ public final class ConnectionLog {
         load()
         lines.append(Self.stamp(now()) + "  " + subject + ": " + message)
         if lines.count > Self.limit { lines.removeFirst(lines.count - Self.limit) }
+        if keeping == nil {
+            keeping = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                self?.keeping = nil
+                self?.keep()
+            }
+        }
     }
 
     /// The whole log, oldest line first, under a line saying which zone
