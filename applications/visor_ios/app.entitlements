@@ -7,6 +7,9 @@
     <key>keychain-access-groups</key>
     <array>
         <string>$(AppIdentifierPrefix)com.LoganShire.VisorClient.shared</string>
+        <!-- Where it says which build is installed, for an updater app of
+             the same team (InstalledBuildReport). -->
+        <string>$(AppIdentifierPrefix)com.LoganShire.Installed</string>
     </array>
 </dict>
 </plist>

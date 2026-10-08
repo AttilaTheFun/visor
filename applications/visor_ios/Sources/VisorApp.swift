@@ -26,6 +26,8 @@ struct VisorApp: App {
             VisorHost.notifications?.requestPermission()
             // A token for pushes, which each computer is given.
             VisorHost.notifications?.registerForRemoteNotifications()
+            // Which build this is, for an updater app of the same team.
+            Task.detached(priority: .utility) { InstalledBuildReport.write() }
         }
         _store = StateObject(wrappedValue: VisorStore())
     }
