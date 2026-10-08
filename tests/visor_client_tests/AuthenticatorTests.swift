@@ -73,7 +73,10 @@ final class AuthenticatorTests: XCTestCase {
     /// when it has nothing to send.
     func testAForksAuthenticatorGivesItsOwnHeaders() async throws {
         AgentServerAuthenticators.register(BadgeAuthenticator())
-        XCTAssertEqual(AgentServerAuthenticators.all.map(\.id), ["password", "none", "badge"])
+        // The shipped first, the fork's after (other tests register theirs).
+        let ids = AgentServerAuthenticators.all.map(\.id)
+        XCTAssertEqual(Array(ids.prefix(2)), ["password", "none"])
+        XCTAssertEqual(ids.last, "badge")
         let badge = AgentServerRecord(name: "Sandbox", address: "https://agents.example.com/visor", secret: "t0k", authentication: "badge")
         _ = try await VisorAgentServer(record: badge).authenticate(badge)
         XCTAssertEqual(http.headers.last, ["X-Badge": "t0k"])

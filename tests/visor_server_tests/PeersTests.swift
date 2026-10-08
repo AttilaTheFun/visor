@@ -96,6 +96,34 @@ final class PeersTests: ServerTestCase {
         XCTAssertEqual(ConnectionCode(parsing: there.connectionCode!.encoded)?.id, there.id)
     }
 
+    /// A server that stands alone: its sign-in says so and gives no
+    /// addresses or key, its peers are told to no one, introductions are
+    /// refused, it relays nothing, and its code carries the one address
+    /// and how to sign in.
+    func testAServerThatStandsAloneSharesNothing() async throws {
+        here.settings.standalone = true
+        var told = Envelope(type: "peers")
+        told.peers = [there.ownPeer]
+        _ = await route(here, request("POST", "/api/peers", bearer: "here-password", body: told.encoded()))
+        XCTAssertTrue(here.peers.isEmpty, "introductions refused")
+        let hello = Envelope.decode(here.route(request("GET", "/api/hello", bearer: "here-password")).body)
+        XCTAssertEqual(hello?.standalone, true)
+        XCTAssertNil(hello?.addresses)
+        XCTAssertNil(hello?.sshKey)
+        let peers = Envelope.decode(await route(here, request("GET", "/api/peers", bearer: "here-password")).body)
+        XCTAssertEqual(peers?.addresses, [])
+        XCTAssertEqual(peers?.peers?.count, 0)
+        let relayed = await route(here, request("GET", "/peer/\(there.id)/api/hello", bearer: "here-password"))
+        XCTAssertEqual(relayed.status, 404)
+        XCTAssertEqual(here.connectionCode?.paths, [])
+        XCTAssertEqual(here.connectionCode?.auth, "password")
+        XCTAssertEqual(ConnectionCode(parsing: here.connectionCode!.encoded)?.auth, "password")
+        // Not standing alone: the hello says nothing of it.
+        here.settings.standalone = false
+        XCTAssertNil(Envelope.decode(here.route(request("GET", "/api/hello", bearer: "here-password")).body)?.standalone)
+        XCTAssertEqual(ServerSettings.kept(at: VisorServer.settingsURL).standalone, false)
+    }
+
     /// What is said of a computer is taken in once, more of it merged,
     /// this computer itself never; the peers are kept; and a peer from
     /// before ids reads back from the links.

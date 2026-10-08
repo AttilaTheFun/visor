@@ -3,8 +3,13 @@
 /// files have, how the system is asked about one that is elsewhere, and
 /// how one is started.
 public protocol ToolLocating: Sendable {
-    /// Directories looked in directly, in order.
+    /// Directories looked in directly, in order, after the server's own
+    /// search path.
     var directories: [String] { get }
+    /// The directories on the search path in `environment` (its PATH), in
+    /// order: whoever starts the server can put a tool there — a wrapper
+    /// script — and it is found before the usual directories.
+    func searchPath(_ environment: [String: String]) -> [String]
     /// The file names a tool may have ("claude"; "claude.exe" or
     /// "claude.cmd" where programs carry their kind in their name).
     func fileNames(for tool: String) -> [String]

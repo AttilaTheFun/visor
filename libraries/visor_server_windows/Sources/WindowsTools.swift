@@ -20,6 +20,11 @@ public struct WindowsTools: ToolLocating {
         return directories + ["C:\\Program Files\\nodejs", "C:\\Program Files\\Git\\cmd"]
     }
 
+    public func searchPath(_ environment: [String: String]) -> [String] {
+        let path = environment.first { $0.key.caseInsensitiveCompare("PATH") == .orderedSame }?.value ?? ""
+        return path.split(separator: ";").map(String.init).filter { !$0.isEmpty }
+    }
+
     public func fileNames(for tool: String) -> [String] {
         [tool + ".exe", tool + ".cmd", tool + ".bat", tool]
     }

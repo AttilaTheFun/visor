@@ -77,6 +77,26 @@ public protocol AgentServer: AnyObject {
     /// The sessions that ran in a folder follow it to where it moved.
     func relocateSessions(from cwd: String, to destination: String) async throws -> [SessionInfo]
 
+    // MARK: New sessions, where the server sets them up its own way
+
+    /// How a new session is set up here: in a folder (a computer's), or
+    /// from the server's own choices, and whether only with its first
+    /// message.
+    var starting: SessionStarting { get }
+    /// The named choices a new session starts from, when
+    /// `starting.fromChoices`.
+    func startChoices() async throws -> [StartChoice]
+    /// Starts a session with its first message, for a server whose
+    /// sessions start only with one (`starting.withFirstMessage`): the
+    /// session started, whose id may be the server's own rather than
+    /// `id`. By default, started and then sent the message.
+    func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool,
+                      firstMessage: String) async throws -> SessionInfo
+    /// Whether the server keeps its sessions' titles, archive and ending
+    /// itself. One that does not has them kept on this device, by record
+    /// (renaming, archiving and removing work the same to the user).
+    var managesSessions: Bool { get }
+
     // MARK: Folders and files
 
     func folders(at path: String) async throws -> FolderListing
@@ -123,6 +143,16 @@ public protocol AgentServer: AnyObject {
 }
 
 public extension AgentServer {
+    var starting: SessionStarting { .inFolders }
+    func startChoices() async throws -> [StartChoice] { [] }
+    func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool,
+                      firstMessage: String) async throws -> SessionInfo {
+        let started = try await startSession(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions, resume: nil)
+        let sent = try await sendMessage(id, text: firstMessage, images: [])
+        return (sent + started).first { $0.id == id }
+            ?? SessionInfo(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions, created: 0)
+    }
+    var managesSessions: Bool { true }
     func verifyChannel() async -> Bool { true }
     func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool { false }
     func connectionCode() async throws -> String { throw AgentServerError.unsupported }

@@ -81,6 +81,15 @@ final class ParserTests: XCTestCase {
         XCTAssertTrue(ClaudeSessionFiles.projectDirectoryName(for: link.path).hasSuffix("-real-folder"))
     }
 
+    func testClaudesFolderIsItsConfigDirWhenSet() {
+        let home = URL(fileURLWithPath: "/Users/me")
+        XCTAssertEqual(ClaudeSessionFiles.configDirectory(home: home, environment: [:]).path, "/Users/me/.claude")
+        XCTAssertEqual(ClaudeSessionFiles.configDirectory(home: home, environment: ["CLAUDE_CONFIG_DIR": ""]).path,
+                       "/Users/me/.claude")
+        XCTAssertEqual(ClaudeSessionFiles.configDirectory(home: home, environment: ["CLAUDE_CONFIG_DIR": "/srv/claude"]).path,
+                       "/srv/claude")
+    }
+
     func testTailFollowsAppends() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("tail-\(UUID().uuidString).jsonl")
         try "".write(to: url, atomically: true, encoding: .utf8)

@@ -14,6 +14,10 @@ public struct MacTools: ToolLocating {
         ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.claude/local", "\(home)/.npm-global/bin", "/usr/bin"]
     }
 
+    public func searchPath(_ environment: [String: String]) -> [String] {
+        (environment["PATH"] ?? "").split(separator: ":").map(String.init).filter { $0.hasPrefix("/") }
+    }
+
     public func fileNames(for tool: String) -> [String] { [tool] }
 
     public func ask(for tool: String) async -> String? {

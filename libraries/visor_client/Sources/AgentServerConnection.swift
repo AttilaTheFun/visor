@@ -56,7 +56,22 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// Whether the server is followed live over its channel, or by polling
     /// (where the path carries no WebSocket): the same, more slowly.
     @Published public private(set) var live = true
-    @Published public private(set) var sessions: [SessionInfo] = []
+    @Published public internal(set) var sessions: [SessionInfo] = [] {
+        // A server that keeps no titles or archive of its own: what the
+        // user did here is laid over every list it sends.
+        didSet {
+            if let localEdits {
+                let edited = localEdits.apply(to: sessions)
+                if edited != sessions { sessions = edited }
+            }
+        }
+    }
+    /// The renames, archiving and removals kept on this device, for a
+    /// server that keeps none (`AgentServer.managesSessions` false).
+    var localEdits: LocalSessionEdits?
+    /// The server's own choices a new session starts from, when it starts
+    /// them so (`starting.fromChoices`): asked for on each connect.
+    @Published public internal(set) var startChoices: [StartChoice] = []
     @Published public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
     @Published public private(set) var catalogs: [AgentCatalog] = []
@@ -95,6 +110,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         self.server = AgentServerProviders.server(for: record)
         self.record = record
         self.recordID = record.id
+        if !server.managesSessions { localEdits = loadLocalEdits() }
         loadProjects()
         loadCachedSessions()
     }
@@ -230,7 +246,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     }
 
     /// The sessions an answer named, into the list.
-    private func take(_ list: [SessionInfo], replacing: Bool) {
+    func take(_ list: [SessionInfo], replacing: Bool) {
         if replacing {
             sessions = list
             return
@@ -299,6 +315,17 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
                 self.pathIndex = 0
                 if let name { self.record.takeServerName(name) }
                 if let identity = server.identity { self.take(identity) }
+                // Standing alone, signed in by a path that is not its
+                // address (one learned before it said so): that sign-in is
+                // let go, and it is reached at its address from now on.
+                if self.isolated, path != self.record.address {
+                    self.note("stands alone: reached at \(self.record.address) only, not by \(path)")
+                    self.lastGoodPath = nil
+                    self.paths = []
+                    server.closeChannel()
+                    self.connect()
+                    return
+                }
                 self.openChannel(mine)
             } catch {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
@@ -336,6 +363,8 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// tailnet's) before any other, the rest only when SSH does not
     /// answer. A device without SSH (a browser) skips SSH paths.
     func pathsToTry() -> [String] {
+        // Standing alone: the address it was added at, and no other.
+        if isolated { return [record.address] }
         var candidates: [String] = []
         let canSSH = VisorHost.ssh != nil
         let own = record.allPaths.filter { canSSH || SSHAddress($0) == nil }
@@ -357,6 +386,14 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         var out: [String] = []
         for path in candidates where !out.contains(path) { out.append(path) }
         return out.isEmpty ? [record.address] : out
+    }
+
+    /// The server stands alone — it says so, or its authenticator makes
+    /// it so (`AgentServerAuthenticator.isolated`): reached only at the
+    /// record's address, its other paths, its peers and its credential
+    /// kept from everything else.
+    public var isolated: Bool {
+        record.standalone || AgentServerAuthenticators.authenticator(for: record).isolated
     }
 
     /// How a path fits where the device is now.
@@ -409,6 +446,16 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     private func take(_ identity: ServerIdentity) {
         var changed = false
         if record.serverID != identity.id { record.serverID = identity.id; changed = true }
+        if record.standalone != identity.standalone {
+            record.standalone = identity.standalone
+            changed = true
+        }
+        // Standing alone: the paths learned before it said so go too.
+        if isolated {
+            if !record.paths.isEmpty { record.paths = []; changed = true }
+            if changed { onRecordChange?() }
+            return
+        }
         if record.learnPaths(identity.addresses) { changed = true }
         if !identity.sshKey.isEmpty, record.serverKey != identity.sshKey { record.serverKey = identity.sshKey; changed = true }
         if changed { onRecordChange?() }
@@ -417,6 +464,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// Takes in what a peer says of this computer: its addresses as more
     /// paths, its password when none is kept.
     func learn(_ peer: Peer) {
+        guard !isolated else { return }
         update { record in
             if record.serverID.isEmpty { record.serverID = peer.id }
             record.learnPaths(peer.addresses)
@@ -428,7 +476,8 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// its server gave for itself (never this device's path to it, which
     /// may be its loopback or a relay).
     var asPeer: Peer? {
-        guard !record.serverID.isEmpty else { return nil }
+        // Standing alone, its address and credential go to no one.
+        guard !record.serverID.isEmpty, !isolated else { return nil }
         let own = record.allPaths.filter { !$0.contains("/peer/") && !$0.contains("127.0.0.1") && !$0.contains("localhost") }
         guard !own.isEmpty else { return nil }
         return Peer(id: record.serverID, name: record.name, addresses: own, password: record.secret, sshKey: record.serverKey)
@@ -474,7 +523,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// being the way in where the device has it): this device's key is
     /// handed to the server, and SSH tried again — once.
     private func enrollSSHIfWanted() {
-        guard !sshPaths.isEmpty, let path, SSHAddress(path) == nil, !path.contains("/peer/"), !sshEnrolled,
+        guard !isolated, !sshPaths.isEmpty, let path, SSHAddress(path) == nil, !path.contains("/peer/"), !sshEnrolled,
               let ssh = VisorHost.ssh else { return }
         sshEnrolled = true
         let server = server
@@ -650,6 +699,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             askEarlierAgain()
             // A folder may have been renamed or moved while we were away.
             Task { await refreshMissing() }
+            if server.starting.fromChoices { Task { await loadStartChoices() } }
             registerForPush()
         case .catalogs(let catalogs):
             self.catalogs = catalogs
@@ -760,21 +810,6 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         if state == .connected { server.subscribe(sessionID) } else { pendingSubscriptions.insert(sessionID) }
     }
 
-    public func start(agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String? = nil) -> String {
-        let id = AgentServerRecord.newID()
-        let transcript = transcript(for: id)
-        transcript.loaded = true
-        // Subscribe once the server has the session.
-        perform({ [weak self] in
-            let list = try await self?.server.startSession(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions,
-                                                           resume: resume) ?? []
-            self?.take(list, replacing: false)
-        }) { [weak self] in
-            self?.subscribe(id)
-        }
-        return id
-    }
-
     /// Takes a terminal session for this window, at this size. Whichever
     /// window had it stops being drawn for: a terminal is one size, for
     /// one window. The shell keeps running throughout.
@@ -858,7 +893,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             Project(cwd: cwd,
                     sessions: activeSessions.filter { $0.cwd == cwd },
                     archived: archivedSessions.filter { $0.cwd == cwd },
-                    alias: projectAliases[cwd],
+                    alias: projectAliases[cwd] ?? startChoices.first { $0.id == cwd }?.title,
                     missing: missingProjects.contains(cwd))
         }
     }
@@ -905,7 +940,8 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// Asks the server which of our folders are still there. Cheap (one
     /// question per project) and only worth doing when connected.
     public func refreshMissing() async {
-        guard state == .connected else { return }
+        // A server's own choices are not folders to look for.
+        guard state == .connected, !server.starting.fromChoices else { return }
         var gone: Set<String> = []
         for cwd in Set(projects.map(\.cwd)) {
             guard let there = try? await folderExists(cwd) else { continue }
@@ -1107,18 +1143,25 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     }
 
     public func rename(_ sessionID: String, title: String) {
+        guard localEdits == nil else { return editLocally { $0.titles[sessionID] = title } }
         act(.rename(title: title), on: sessionID)
     }
 
-    public func archive(_ sessionID: String) { act(.archive, on: sessionID) }
+    public func archive(_ sessionID: String) {
+        guard localEdits == nil else { return editLocally { $0.archived.insert(sessionID) } }
+        act(.archive, on: sessionID)
+    }
 
-    public func unarchive(_ sessionID: String) { act(.unarchive, on: sessionID) }
+    public func unarchive(_ sessionID: String) {
+        guard localEdits == nil else { return editLocally { $0.archived.remove(sessionID) } }
+        act(.unarchive, on: sessionID)
+    }
 
     public var activeSessions: [SessionInfo] { sessions.filter { !$0.archived } }
     public var archivedSessions: [SessionInfo] { sessions.filter(\.archived) }
 
     public func end(_ sessionID: String) {
-        act(.end, on: sessionID)
+        if localEdits == nil { act(.end, on: sessionID) } else { editLocally { $0.removed.insert(sessionID) } }
         transcripts.removeValue(forKey: sessionID)
         syncing.removeValue(forKey: sessionID)?.cancel()
         let cache = Self.cache, key = cacheKey(sessionID)

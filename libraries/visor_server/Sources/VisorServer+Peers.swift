@@ -119,6 +119,8 @@ extension VisorServer {
     /// Tells every peer (but `except`) of all this computer knows: itself
     /// and its peers.
     func tellPeers(except: String?) {
+        // Standing alone, it tells no one of itself or of anyone.
+        guard !isStandalone else { return }
         var e = Envelope(type: "peers")
         e.peers = [ownPeer] + peers
         for peer in peers where peer.id != except && !peer.id.isEmpty {

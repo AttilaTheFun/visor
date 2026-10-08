@@ -8,6 +8,12 @@ struct ServerOptions: Sendable {
     var after: Int32?
     /// The sessions to carry on (`--resume-sessions`, read by the server).
     var resume: String?
+    /// Settings to keep before it runs: `--auth`, `--lan`, `--vpn`,
+    /// `--ssh`, `--address`, `--standalone`, as the commands of those
+    /// names keep them (the flag without its dashes, and its value).
+    var settings: [(String, String)] = []
+    /// The password to set before it runs.
+    var password: String?
 
     /// None given.
     init() {}
@@ -26,6 +32,9 @@ struct ServerOptions: Sendable {
                 guard let pid = Int32(value) else { throw .usage("--after takes a process id") }
                 after = pid
             case "--resume-sessions": resume = value
+            case "--password": password = value
+            case "--auth", "--lan", "--vpn", "--ssh", "--address", "--standalone":
+                settings.append((String(flag.dropFirst(2)), value))
             default: throw .usage("unknown option \(flag)")
             }
         }
@@ -38,6 +47,8 @@ struct ServerOptions: Sendable {
         if let log { out += ["--log", log] }
         if let after { out += ["--after", String(after)] }
         if let resume { out += ["--resume-sessions", resume] }
+        if let password { out += ["--password", password] }
+        for (name, value) in settings { out += ["--" + name, value] }
         return out
     }
 }

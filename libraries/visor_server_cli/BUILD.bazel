@@ -1,0 +1,18 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# The command-line server (`visor-server` and its commands), given a
+# system: Linux's and Windows' through SwiftPM (Package.swift), the
+# Mac's here (applications/visor_server_mac).
+swift_library(
+    name = "visor_server_cli",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorServerCLI",
+    deps = [
+        "//libraries/visor_protocol",
+        "//libraries/visor_server",
+    ],
+)

@@ -125,6 +125,10 @@ public struct Envelope: Codable, Sendable {
     /// `hello`: the server's own SSH public key line, for a client that
     /// introduces it to other servers.
     public var sshKey: String?
+    /// `hello`: the server stands alone — reached only at the address a
+    /// client added it at (a front of its own: an authenticating proxy),
+    /// its own addresses and the computers it knows not shared.
+    public var standalone: Bool?
     /// A device's push token, hex (`push`), with its kind ("ios", "macos")
     /// and service ("sandbox", "production").
     public var deviceToken: String?

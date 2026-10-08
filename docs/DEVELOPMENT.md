@@ -330,8 +330,17 @@ an `AgentServerProviderUI` in VisorUI (`AgentServerProviderUIs.register`)
 whose `addView` is the sign-in — any view; it calls `add` with the
 `AgentServerRecord` once the user is in, `address` and `secret` meaning
 whatever the provider wants — and whose `settingsView` is the saved
-server's detail. With one provider the add sheet is its sign-in; with
-more, a list of providers first. A record's `provider` id picks both.
+server's detail. With one provider view the add sheet is its sign-in;
+with more, a list of them first. A record's `provider` id picks its
+settings view; an add view may add another provider's records (a front's
+entry, registered under an id of its own, that adds Visor Server
+records). How a server sets up new sessions is its `starting`: in folders
+(a computer's), or from its own `startChoices` (a hosted backend's
+templates, whose id goes in `cwd`), and only with a first message
+(`startSession(…firstMessage:)`; the server may give the session an id of
+its own); the compose sheet follows. A server whose `managesSessions` is
+false has renaming, archiving and removing kept on the device for its
+record (`LocalSessionEdits`), laid over every list it sends.
 The session-side values a server hands back (`SessionInfo`,
 `TranscriptEntry`, the transcript and ephemeral envelopes) are the
 protocol library's, so a fork's server produces those from its own API.
@@ -371,7 +380,13 @@ throws `needsAuthentication` when the user must sign in again (a token
 expired). A fork registers one (`AgentServerAuthenticators.register`)
 with its rows for the forms (`AgentServerAuthenticatorUIs.register`: a
 button that runs the SSO and sets `secret` to the token), and nothing
-else changes. The headers go on the REST calls and on the socket's
+else changes. An authenticator may also find the other servers behind
+its front once one has connected (`discover(from:)`: the store adds
+those it does not hold), say every server it signs in to stands alone
+(`isolated`), and, having signed in once for many records (one SSO
+session per front, its token its own), call
+`AgentServerAuthenticators.signedIn(_:serving:)` so that every record
+waiting for it connects again. The headers go on the REST calls and on the socket's
 opening request (`VisorHTTPService.request(…headers:)`,
 `VisorSocketService.open(url:headers:)`; a host with only the bearer
 forms sends the bearer out of them, a browser opens the socket without).
@@ -518,14 +533,20 @@ same way. The platforms:
   terminals, signals, loopback sockets and daemons, with the calls whose
   shape differs between macOS and Linux in C (`c/visor_posix.c`), so the
   Swift is the same on both;
-- Linux's and Windows's (libraries/visor_server_linux, …_windows), each a
-  `CommandLineSystem` for `visor-server` (libraries/visor_server_cli: run,
-  start, stop, status, password, code): POSIX and FoundationNetworking;
+- Linux's, Windows's and a headless Mac's (libraries/visor_server_linux,
+  …_windows, …_mac), each a `CommandLineSystem` for `visor-server`
+  (libraries/visor_server_cli: run, start, stop, status, password, code):
+  POSIX and FoundationNetworking;
   Winsock, ConPTY, the Win32 process calls. Neither sends pushes yet
   (`pushSigning` is nil), pictures are measured from their headers
   (`HeaderImageMeasuring`), files are polled (`PollingFileWatching`), the
   password is in a file only its user reads (`FileSecrets`), and Windows
-  keeps the message cache in memory (no SQLite there).
+  keeps the message cache in memory (no SQLite there). The Mac's
+  (`//applications/visor_server_mac:visor-server`, no menu bar app) is
+  POSIX with the Mac's own fetching, push signing, picture measuring and
+  file watching, its data in `$VISOR_DATA_DIR` or
+  `~/Library/Application Support/visor-server`; it does not take the SSH
+  socket file from a server already answering there.
 
 The command-line server keeps its sessions, secrets, pid file
 (`<pid> <port>`) and background log in `$XDG_DATA_HOME/visor`
@@ -533,7 +554,11 @@ The command-line server keeps its sessions, secrets, pid file
 through `POST /api/quit`, so it ends its agents first on every system.
 `visor-server network on` opens it to the network, `visor-server ssh
 on|off` serves the socket file for SSH clients (Linux; not Windows),
-`visor-server address <url>` names a front of your own; it serves no TLS
+`visor-server address <url>` names a front of your own, `visor-server
+standalone on` keeps it to itself (see the protocol's network of
+computers); `run` and `start` take the same as options (`--password`,
+`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`), for a
+server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server
 is built and tried in CI (a terminal session on ConPTY with PowerShell);
 it has not been run against real agents.

@@ -41,7 +41,7 @@ enum SessionCatalog {
         // alone, so a rename never hides them from `codex resume`.
         guard agent != .codex, !id.isEmpty, !cwd.isEmpty else { return false }
         let files = FileManager.default
-        let root = home.appendingPathComponent(".claude/projects")
+        let root = ClaudeSessionFiles.projectsRoot(home: home)
         let target = root.appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd))
         let wanted = target.appendingPathComponent(id + ".jsonl")
         guard !files.fileExists(atPath: wanted.path) else { return false }
@@ -57,7 +57,7 @@ enum SessionCatalog {
     }
 
     private static func claude(cwd: String?) -> [ResumableSession] {
-        let root = home.appendingPathComponent(".claude/projects")
+        let root = ClaudeSessionFiles.projectsRoot(home: home)
         var directories: [URL] = []
         // Looking in one folder's own directory is itself the filter: what
         // is in there belongs to it. Comparing the `cwd` recorded inside as

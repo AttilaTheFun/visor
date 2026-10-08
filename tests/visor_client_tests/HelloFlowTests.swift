@@ -97,9 +97,22 @@ final class ScriptedServer: AgentServer {
     func sendInput(_ session: String, data: String) {}
     func resize(_ session: String, cols: Int, rows: Int) {}
 
-    func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
+    /// The sessions started, and the messages sent (session, text).
+    var started: [(id: String, cwd: String)] = []
+    var sent: [(String, String)] = []
+    func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] {
+        started.append((id, cwd))
+        return [SessionInfo(id: id, agent: agent, cwd: cwd, title: title, created: 0)]
+    }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] { actions.append((action, session)); return [] }
-    func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { [] }
+    func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { sent.append((session, text)); return [] }
+
+    /// How it sets up new sessions, its choices, and whether it keeps
+    /// titles and an archive of its own.
+    var starting = SessionStarting.inFolders
+    var choices: [StartChoice] = []
+    func startChoices() async throws -> [StartChoice] { choices }
+    var managesSessions = true
     func transcript(of session: String, since revision: Int, generation: Int) async throws -> Envelope {
         // Nothing moves: held, as a server holds it.
         while !Task.isCancelled { try await Task.sleep(nanoseconds: 60_000_000_000) }

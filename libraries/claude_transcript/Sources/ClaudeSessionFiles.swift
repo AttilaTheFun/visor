@@ -1,5 +1,6 @@
-// Where Claude Code keeps a session: ~/.claude/projects/<the folder's path
-// with "/", "." and "_" as "-">/<session id>.jsonl. The folder is fixed
+// Where Claude Code keeps a session: <its config folder>/projects/<the
+// folder's path with "/", "." and "_" as "-">/<session id>.jsonl — the
+// config folder ~/.claude, or $CLAUDE_CONFIG_DIR when it is set. The folder is fixed
 // when the session starts and kept through renames, so a session whose
 // folder moved is looked for everywhere before it is given up on.
 
@@ -15,7 +16,18 @@ public enum ClaudeSessionFiles {
     private static let homeDirectory = Mutex(FileManager.default.homeDirectoryForCurrentUser)
 
     public static func projectsRoot(home: URL = ClaudeSessionFiles.home) -> URL {
-        home.appendingPathComponent(".claude/projects")
+        configDirectory(home: home).appendingPathComponent("projects")
+    }
+
+    /// Claude Code's own folder: $CLAUDE_CONFIG_DIR when it is set (as
+    /// Claude Code reads it, and the agents this server starts inherit
+    /// it), else ~/.claude under `home`.
+    public static func configDirectory(home: URL = ClaudeSessionFiles.home,
+                                       environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
+        if let set = environment["CLAUDE_CONFIG_DIR"], !set.isEmpty {
+            return URL(fileURLWithPath: (set as NSString).expandingTildeInPath, isDirectory: true)
+        }
+        return home.appendingPathComponent(".claude", isDirectory: true)
     }
 
     /// The project directory's name for a folder.

@@ -10,4 +10,13 @@ public protocol Listening: Sendable {
     /// TLS was asked for where the system cannot serve it.
     @MainActor
     func listen(_ options: ListeningOptions, accept: @escaping @MainActor (any ByteStream) -> Void) throws -> any Listener
+    /// Whether another server listens at the socket file `path` now: one
+    /// already there is left alone rather than replaced (a second server
+    /// on the computer — a headless one, a test — would otherwise take the
+    /// installed server's SSH clients and leave them a dead file).
+    func answers(unixPath path: String) -> Bool
+}
+
+public extension Listening {
+    func answers(unixPath path: String) -> Bool { false }
 }

@@ -1,7 +1,9 @@
 // The one compose, beside the search: everything a session needs before it
 // exists — which server, which folder, which harness (an agent, or a
 // terminal on the computer), and what to call
-// it. The folder is picked from the computer's projects or browsed for.
+// it. The folder is picked from the computer's projects or browsed for; a
+// server that sets sessions up its own way offers its named choices in
+// place of folders, and asks for the first message the session starts with.
 // Sessions start in auto mode (no permission prompts — nobody is at the
 // computer to answer them); the chat's model sheet switches to manual.
 
@@ -26,18 +28,33 @@ struct ComposeSessionSheet: View {
     @State private var resumableLoad: Task<Void, Never>?
     @State private var loadingResumable = false
     @State private var resumeID = ""
+    /// Asking the computer to start it; the sheet waits, and keeps what
+    /// went wrong rather than opening a session that is not there.
+    @State private var waiting = false
+    @State private var failure: String?
+    /// The server's choice, where it offers choices in place of folders.
+    @State private var choiceID = ""
+    /// The first message, where the server starts a session only with one.
+    @State private var message = ""
 
     /// Only a computer that is answering can start a session.
     private var host: AgentServerConnection? {
         store.connectedServers.first { $0.id == serverID } ?? store.connectedServers.first
     }
+    private var starting: SessionStarting { host?.starting ?? .inFolders }
+    /// Where the session starts: the folder, or the server's choice.
+    private var place: String { starting.fromChoices ? choiceID : cwd.trimmed }
+    /// Picking up an agent's own session needs a folder to look in and a
+    /// session that starts without a message.
+    private var canResume: Bool { !agent.isShell && starting == .inFolders }
     private var available: Set<AgentKind> {
         Set((host?.catalogs ?? []).filter(\.available).map(\.agent))
     }
     private var ready: Bool {
         // A terminal needs a server that has them (one from before 0.18
         // would start an agent instead).
-        host != nil && !cwd.trimmed.isEmpty && !(resuming && resumeID.trimmed.isEmpty)
+        host != nil && !waiting && !place.isEmpty && !(resuming && canResume && resumeID.trimmed.isEmpty)
+            && (!starting.withFirstMessage || !message.trimmed.isEmpty)
             && (!agent.isShell || available.contains(.shell))
     }
 
@@ -61,7 +78,19 @@ struct ComposeSessionSheet: View {
                         .pickerStyle(.menu)
                         .accessibilityIdentifier("computer")
                     }
-                    if host != nil {
+                    if let host, starting.fromChoices {
+                        if host.startChoices.isEmpty {
+                            Text("No choices from this server yet.").foregroundColor(.secondary)
+                        } else {
+                            Picker("Start from", selection: $choiceID) {
+                                ForEach(host.startChoices) { choice in
+                                    Text(choice.title).tag(choice.id)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .accessibilityIdentifier("choice")
+                        }
+                    } else if host != nil {
                         // One row: the folder's path, which opens the
                         // folder browser.
                         Button { browsing = true } label: {
@@ -91,7 +120,7 @@ struct ComposeSessionSheet: View {
                     }
                     .pickerStyle(.menu)
                     // A terminal has no conversation to pick up.
-                    if !agent.isShell {
+                    if canResume {
                         Picker("Conversation", selection: $resuming) {
                             Text("New").tag(false)
                             Text("Resume").tag(true)
@@ -99,7 +128,7 @@ struct ComposeSessionSheet: View {
                         .pickerStyle(.segmented)
                     }
                 }
-                if resuming && !agent.isShell {
+                if resuming && canResume {
                     Section {
                         TextField("Session id", text: $resumeID)
                             .autocorrectionDisabled()
@@ -141,16 +170,39 @@ struct ComposeSessionSheet: View {
                 } footer: {
                     Text("Optional.")
                 }
-
+                if starting.withFirstMessage {
+                    Section {
+                        TextField("What the agent should do", text: $message, axis: .vertical)
+                            .lineLimit(3...8)
+                            .accessibilityIdentifier("first-message")
+                    } header: {
+                        Text("First message")
+                    } footer: {
+                        Text("This server starts a session with its first message.")
+                    }
+                }
+                if let failure {
+                    Section {
+                        Text(failure)
+                            .foregroundColor(.red)
+                            .accessibilityIdentifier("start-error")
+                    } header: {
+                        Text("Could not start")
+                    }
+                }
             }
             .navigationTitle("New Session")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Start", action: start)
-                        .disabled(!ready)
-                        .accessibilityIdentifier("start")
+                    if waiting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Start", action: start)
+                            .disabled(!ready)
+                            .accessibilityIdentifier("start")
+                    }
                 }
             }
         }
@@ -166,12 +218,16 @@ struct ComposeSessionSheet: View {
         .onAppear {
             if host?.id != serverID { serverID = store.connectedServers.first?.id ?? "" }
             if cwd.isEmpty { useHome() }
+            useChoices()
             if !available.contains(agent), let first = AgentKind.allCases.first(where: available.contains) { agent = first }
         }
         .onChange(of: serverID) {
             useHome()
+            choiceID = ""
+            useChoices()
             resumable = []
         }
+        .onChange(of: host?.startChoices ?? []) { useChoices() }
         .onChange(of: resuming) { if resuming { loadResumable() } }
         .onChange(of: agent) {
             if agent.isShell { resuming = false }
@@ -189,7 +245,7 @@ struct ComposeSessionSheet: View {
     }
 
     private var defaultTitle: String {
-        let siblings = host?.projects.first { $0.cwd == cwd }?.sessions.filter { $0.agent == agent }.count ?? 0
+        let siblings = host?.projects.first { $0.cwd == place }?.sessions.filter { $0.agent == agent }.count ?? 0
         return "\(agent.title) \(siblings + 1)"
     }
 
@@ -202,6 +258,14 @@ struct ComposeSessionSheet: View {
             guard let resolved = try? await host.folders(at: "~").path, !resolved.isEmpty, cwd == "~" else { return }
             cwd = resolved
         }
+    }
+
+    /// The server's first choice, once it has said them; asked for when it
+    /// has not.
+    private func useChoices() {
+        guard let host, starting.fromChoices else { return }
+        if host.startChoices.isEmpty { Task { await host.loadStartChoices() } }
+        if !host.startChoices.contains(where: { $0.id == choiceID }) { choiceID = host.startChoices.first?.id ?? "" }
     }
 
     /// The sessions to resume for the agent and folder as they stand: an
@@ -220,10 +284,21 @@ struct ComposeSessionSheet: View {
 
     private func start() {
         guard let host else { return }
-        host.addProject(cwd)
-        let id = host.start(agent: agent, cwd: cwd, title: title.trimmed, skipPermissions: true,
-                            resume: resuming && !agent.isShell ? resumeID.trimmed : nil)
-        dismiss()
-        started(host.id, id)
+        waiting = true
+        failure = nil
+        let place = place
+        Task {
+            do {
+                let id = try await host.start(agent: agent, cwd: place, title: title.trimmed, skipPermissions: true,
+                                              resume: resuming && canResume ? resumeID.trimmed : nil,
+                                              firstMessage: starting.withFirstMessage ? message.trimmed : nil)
+                host.addProject(place)
+                dismiss()
+                started(host.id, id)
+            } catch {
+                failure = "\(error)"
+                waiting = false
+            }
+        }
     }
 }

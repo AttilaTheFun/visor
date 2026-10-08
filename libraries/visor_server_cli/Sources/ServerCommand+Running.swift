@@ -24,6 +24,8 @@ extension ServerCommand {
         }
         let port = options.port ?? Envelope.defaultPort
         try? FileManager.default.createDirectory(at: system.dataDirectory, withIntermediateDirectories: true)
+        // Settings given with the run, kept as their commands keep them.
+        for (name, value) in options.settings { try apply(name, value) }
         try? Data("\(ProcessInfo.processInfo.processIdentifier) \(port)\n".utf8).write(to: pidFile)
 
         let server = VisorServer(port: port)
@@ -36,8 +38,11 @@ extension ServerCommand {
             }
         }
         log.write("Visor server on \(platform.host.name), keeping its sessions in \(system.dataDirectory.path)")
-        if server.password.isEmpty {
-            // Setting it starts the server.
+        // Setting the password starts the server; so does start(), once.
+        if let given = options.password, !given.isEmpty, given != server.password {
+            server.password = given
+            log.write("the password given with the run is set")
+        } else if server.password.isEmpty {
             server.password = Self.newPassword()
             log.write("made a password: `visor-server password` shows it")
         } else {
@@ -45,6 +50,20 @@ extension ServerCommand {
         }
         if options.log == nil { Task { await announce(server) } }
         while true { try? await Task.sleep(for: .seconds(3600)) }
+    }
+
+    /// One setting given with a run, kept as its command keeps it.
+    @MainActor
+    private func apply(_ name: String, _ value: String) throws {
+        switch name {
+        case "auth": try auth(value)
+        case "lan": try path(.lan, value)
+        case "vpn": try path(.vpn, value)
+        case "ssh": try ssh(value)
+        case "address": address(value)
+        case "standalone": try standalone(value)
+        default: throw CommandLineError.usage("unknown option --\(name)")
+        }
     }
 
     /// The code a client adds this computer with. (Only to a terminal: the
