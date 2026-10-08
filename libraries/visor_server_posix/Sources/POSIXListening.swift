@@ -11,4 +11,6 @@ public struct POSIXListening: Listening {
         guard options.tls == nil else { throw ListeningError.tlsUnavailable }
         return try POSIXListener(port: options.port, everywhere: options.everywhere, unixPath: options.unixPath, accept: accept)
     }
+
+    public func answers(unixPath path: String) -> Bool { POSIXUnixSocket.answers(path) }
 }

@@ -59,6 +59,12 @@ extension VisorServer {
         guard settings.sshEnabled, socketListener == nil else { return }
         let path = Self.socketPath
         let folder = (path as NSString).deletingLastPathComponent
+        // Another server answers there (the installed one, with this one a
+        // headless or a test server beside it): its SSH clients stay its.
+        if ServerPlatform.current.listening.answers(unixPath: path) {
+            Self.log("not listening for SSH clients: another server answers at \(path); this one keeps to its port")
+            return
+        }
         do {
             try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             socketListener = try ServerPlatform.current.listening.listen(ListeningOptions(port: port, unixPath: path)) { [weak self] stream in

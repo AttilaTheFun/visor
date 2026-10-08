@@ -1,0 +1,27 @@
+load("@rules_apple//apple:macos.bzl", "macos_command_line_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# visor-server for a Mac without the menu bar app: the command-line server
+# (libraries/visor_server_cli) with the Mac's system. Configured by its
+# commands, or by options on `run` (`--auth`, `--standalone`, …), and
+# VISOR_DATA_DIR / VISOR_STANDALONE in its environment.
+#
+#   bazel build -c opt //applications/visor_server_mac:visor-server
+swift_library(
+    name = "visor_server_mac_lib",
+    copts = STRICT_SWIFT,
+    srcs = ["main.swift"],
+    module_name = "VisorServerMacMain",
+    deps = [
+        "//libraries/visor_server_cli",
+        "//libraries/visor_server_mac",
+    ],
+)
+
+macos_command_line_application(
+    name = "visor-server",
+    bundle_id = "com.LoganShire.VisorServer.headless",
+    minimum_os_version = "15.0",
+    deps = [":visor_server_mac_lib"],
+)

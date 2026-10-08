@@ -46,10 +46,21 @@ public struct ServerCommand {
                    clients are told first; `address <url>` sets it and turns
                    that path on, `address -` turns it off. The server takes
                    it when started again.
+          standalone
+                   `standalone on`: reached only at the address each client
+                   added it at (behind a front of its own), its other
+                   addresses and its peers shared with no one;
+                   `standalone off` (the default) shares them. Also
+                   VISOR_STANDALONE=1.
 
         Options for run and start:
           --port <n>   The port, for the socket and the REST side alike (7433).
           --log <file> Where its lines go (start: visor-server.log in its folder).
+        Settings for this server, kept as the command of the same name keeps
+        them, before it runs (for a server a script or a sandbox starts):
+          --password <word>          --auth password|none
+          --lan on|off  --vpn on|off  --ssh on|off
+          --address <url>|-          --standalone on|off
         """
 
     /// Runs the command; what it returns is the process's exit status.
@@ -73,6 +84,7 @@ public struct ServerCommand {
             case "ssh": try ssh(rest.first)
             case "auth": try auth(rest.first)
             case "address": address(rest.first)
+            case "standalone": try standalone(rest.first)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")
             }

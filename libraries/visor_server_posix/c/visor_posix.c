@@ -141,6 +141,19 @@ int visor_listen_unix(const char *path) {
     return listener;
 }
 
+int visor_unix_answers(const char *path) {
+    struct sockaddr_un address;
+    if (strlen(path) >= sizeof address.sun_path) return 0;
+    int probe = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (probe < 0) return 0;
+    memset(&address, 0, sizeof address);
+    address.sun_family = AF_UNIX;
+    strncpy(address.sun_path, path, sizeof address.sun_path - 1);
+    int answers = connect(probe, (struct sockaddr *)&address, sizeof address) == 0;
+    close(probe);
+    return answers;
+}
+
 void visor_local_address(int socket, char *out, size_t size) {
     if (size == 0) return;
     out[0] = 0;

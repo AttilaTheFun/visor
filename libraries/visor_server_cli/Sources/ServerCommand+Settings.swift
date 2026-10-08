@@ -96,6 +96,21 @@ extension ServerCommand {
               : "Clients show the password, from the server's next start.")
     }
 
+    /// Makes the server stand alone, or not.
+    @MainActor
+    func standalone(_ value: String?) throws {
+        var settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        switch value {
+        case "on": settings.standalone = true
+        case "off": settings.standalone = false
+        default: throw CommandLineError.usage("standalone on, or standalone off")
+        }
+        settings.keep(at: VisorServer.settingsURL)
+        print(settings.standalone
+              ? "The server stands alone from its next start: reached only at the address each client added it at, its other addresses and its peers shared with no one."
+              : "The server shares its addresses and its peers again, from its next start.")
+    }
+
     /// Shows or sets the address clients are told.
     @MainActor
     func address(_ value: String?) {

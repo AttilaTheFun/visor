@@ -1,0 +1,24 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# The command-line server's system on a Mac: no menu bar app, no keychain
+# prompts — POSIX sockets, terminals and signals, secrets in a file, the
+# Mac's own fetching, push signing, images, file watching and tools. For a
+# server a script or a sandbox starts (applications/visor_server_mac).
+swift_library(
+    name = "visor_server_mac",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorServerMac",
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        "//libraries/claude_transcript",
+        "//libraries/visor_server",
+        "//libraries/visor_server_apple",
+        "//libraries/visor_server_cli",
+        "//libraries/visor_server_posix",
+        "//libraries/visor_server_ssh",
+    ],
+)

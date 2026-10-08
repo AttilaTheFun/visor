@@ -41,6 +41,10 @@ int visor_listen(unsigned short port, int everywhere);
 /// the new one readable and writable by its owner alone). -1 with errno set.
 int visor_listen_unix(const char *path);
 
+/// Whether something listens at the Unix domain socket `path` now: 1 when a
+/// connection to it is taken, 0 otherwise (no file, a stale one).
+int visor_unix_answers(const char *path);
+
 /// The next connection on a listening socket (close-on-exec, its writes
 /// given up after 30 seconds of a peer that reads nothing). -1 with errno
 /// set.
