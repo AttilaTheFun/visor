@@ -68,7 +68,8 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
    (`tools/sign_mac_app.sh`), copy it to `/Applications/Visor Server.app`,
    open it: Settings opens on its
    own and a password MUST be saved before it serves (a generated one is
-   offered). Then the clients: `tools/deploy_clients.sh [iPhone UDID]`.
+   offered). Then the clients: `tools/deploy_clients.sh --publish <notes.md>`
+   (or `[iPhone UDID]` to install over USB/LAN for debugging).
    Clients add a Mac with its connection code: the menu bar's "Copy
    Connection Code", or the QR code in its Settings scanned with a
    phone's camera (opens `visor://connect?code=…`).
@@ -581,8 +582,13 @@ it has not been run against real agents.
   stays quit. A server started from the disk image, or from a quarantined
   copy (App Translocation), cannot install over itself: run it from
   /Applications.
-- Deploy clients: `tools/deploy_clients.sh <UDID>`. A running Mac
-  client keeps old code until relaunched (the script relaunches it).
+- Deploy clients: `tools/deploy_clients.sh --publish <notes.md>` for a
+  build meant for use: the iPhone build goes to the update server
+  (updater-server, AttilaTheFun/updater) with its release notes (a
+  one-line summary, then "What's new" and "What to test"), and the phone
+  installs it from Updater. `tools/deploy_clients.sh <UDID>` installs over
+  USB or the LAN instead, for debugging. A running Mac client keeps old
+  code until relaunched (the script relaunches it).
 - agent_ui changes: commit+push there, put the revision in
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
