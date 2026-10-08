@@ -17,4 +17,21 @@ public enum AgentServerAuthenticators {
     public static func authenticator(for record: AgentServerRecord) -> any AgentServerAuthenticator {
         registry.first { $0.id == record.authentication } ?? registry[0]
     }
+
+    /// What is told of a sign-in: the store, which reconnects the records
+    /// that were waiting for it.
+    private static var listeners: [@MainActor (String, (AgentServerRecord) -> Bool) -> Void] = []
+
+    static func whenSignedIn(_ listener: @escaping @MainActor (String, (AgentServerRecord) -> Bool) -> Void) {
+        listeners.append(listener)
+    }
+
+    /// An authenticator signed in once for many records (one SSO session
+    /// for every server behind a front, its token kept by the
+    /// authenticator): every record that signs in by it, and that
+    /// `serving` takes, and that waits for a sign-in is connected again —
+    /// with nothing to save in each one's settings.
+    public static func signedIn(_ authenticatorID: String, serving: (AgentServerRecord) -> Bool = { _ in true }) {
+        for listener in listeners { listener(authenticatorID, serving) }
+    }
 }

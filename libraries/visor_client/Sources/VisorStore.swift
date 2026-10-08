@@ -61,6 +61,7 @@ public final class VisorStore: ObservableObject {
         }
         for server in servers { observe(server); server.connect() }
         listenForNotifications()
+        AgentServerAuthenticators.whenSignedIn { [weak self] id, serving in self?.signedIn(id, serving: serving) }
         // Where the device is decides which path to each computer fits:
         // a change is acted on once the networks have settled. The path
         // monitor speaks several times as it starts and as an interface
@@ -117,7 +118,7 @@ public final class VisorStore: ObservableObject {
     /// (a code that said, the form); false leaves a held computer's own.
     @discardableResult
     public func add(_ record: AgentServerRecord, authenticationGiven: Bool = true) -> AgentServerConnection {
-        if let existing = servers.first(where: { $0.record.provider == record.provider && ($0.record.address == record.address || (!record.serverID.isEmpty && $0.record.serverID == record.serverID)) }) {
+        if let existing = held(record) {
             let isolated = existing.isolated
             existing.update { current in
                 if !record.name.isEmpty, !current.renamed { current.name = record.name }
@@ -209,12 +210,33 @@ public final class VisorStore: ObservableObject {
 
     public func server(for id: String) -> AgentServerConnection? { servers.first { $0.id == id } }
 
-    /// A server connected and said who it is: another record of the same
-    /// computer is folded into it, the computers it knows are taken in,
-    /// and it and the others here are introduced to one another.
+    /// The server held here that a record is of: the same kind, at the
+    /// same address or with the same server id.
+    private func held(_ record: AgentServerRecord) -> AgentServerConnection? {
+        servers.first { $0.record.provider == record.provider
+            && ($0.record.address == record.address || (!record.serverID.isEmpty && $0.record.serverID == record.serverID)) }
+    }
+
+    /// An authenticator signed in for many records: those of them that
+    /// were waiting for it connect again.
+    private func signedIn(_ authenticatorID: String, serving: (AgentServerRecord) -> Bool) {
+        for server in servers where server.record.authentication == authenticatorID && serving(server.record) {
+            switch server.state {
+            case .needsAuthentication, .failed: server.connect()
+            default: break
+            }
+        }
+    }
+
+    /// A server connected and said who it is: the other servers its way of
+    /// signing in reaches are added; another record of the same computer
+    /// is folded into it, the computers it knows are taken in, and it and
+    /// the others here are introduced to one another.
     private func joined(_ server: AgentServerConnection) async {
+        guard !VisorFixture.active else { return }
+        await discover(from: server)
         // A server that stands alone shares nothing and is told nothing.
-        guard !VisorFixture.active, !server.isolated else { return }
+        guard !server.isolated else { return }
         fold(server)
         if let peers = try? await server.peers() {
             for peer in peers { take(peer, from: server) }
@@ -224,6 +246,13 @@ public final class VisorStore: ObservableObject {
         if let me = server.asPeer {
             for other in servers where other !== server && other.state == .connected && !other.isolated { try? await other.introduce([me]) }
         }
+    }
+
+    /// The servers behind the same front as this one, as its
+    /// authenticator finds them: those not held here are added.
+    private func discover(from server: AgentServerConnection) async {
+        let found = (try? await AgentServerAuthenticators.authenticator(for: server.record).discover(from: server.record)) ?? []
+        for record in found where held(record) == nil { add(record) }
     }
 
     /// Two records of one computer (added by two paths before either had

@@ -8,6 +8,8 @@ import VisorClient
 public enum AgentServerProviderUIs {
     private static var registry: [any AgentServerProviderUI] = [VisorAgentServerProviderUI()]
 
+    /// The entries of the add sheet: each provider's views, and those that
+    /// add another provider's records.
     public static var all: [any AgentServerProviderUI] { registry }
 
     public static func register(_ ui: any AgentServerProviderUI) {
@@ -15,10 +17,10 @@ public enum AgentServerProviderUIs {
         registry.append(ui)
     }
 
-    /// What adding a server is called: the one provider's words ("Add
+    /// What adding a server is called: the one entry's words ("Add
     /// Computer"), or "Add Agent Server" when there is a choice.
     public static var addTitle: String {
-        AgentServerProviders.all.count == 1 ? ui(for: AgentServerProviders.all[0].id).addTitle : "Add Agent Server"
+        registry.count == 1 ? registry[0].addTitle : "Add Agent Server"
     }
 
     /// The views for a provider; an unknown one gets the first's.

@@ -24,10 +24,16 @@ public protocol AgentServerAuthenticator {
     /// says itself (a front that cannot change the server behind it):
     /// reached only at its record's address, nothing about it shared.
     var isolated: Bool { get }
+    /// The other servers this way of signing in reaches, asked once a
+    /// server signed in to by it has connected (every server behind the
+    /// same front): those the store does not hold are added, so one
+    /// sign-in shows every computer.
+    func discover(from record: AgentServerRecord) async throws -> [AgentServerRecord]
 }
 
 public extension AgentServerAuthenticator {
     var isolated: Bool { false }
+    func discover(from record: AgentServerRecord) async throws -> [AgentServerRecord] { [] }
 }
 
 /// No proof asked: the path is the proof (a LAN, a VPN of one's own, the
