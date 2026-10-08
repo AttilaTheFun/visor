@@ -16,6 +16,9 @@ public enum VisorFixture {
     @MainActor public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
     /// The screen to open on: sessions, chat, goal, inspector, models,
     /// search or connect ("" for the app's own first screen).
+    /// A session to open a few seconds after launch, for a recording of
+    /// its first open (`-visor.probe.open <session id>`); "" for none.
+    @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }
     @MainActor public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
 
     public static let serverID = "fixture"
@@ -34,6 +37,7 @@ public enum VisorFixture {
     /// A small picture, the same bytes every run: four coloured blocks.
     static let picture = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABACAIAAABqVuVZAAAAfklEQVR42u3QAQkAIAwAsIcyi2gVe5jJBta5NS4MlmAx+i2lnVlKCBIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRL0cVDuWmJlLYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIE/Rv0AH3IYA5oDZ+mAAAAAElFTkSuQmCC"
     static let picturePath = "/Users/visor/Pictures/layout.png"
+    static let moviePath = "/Users/visor/Movies/banner.mov"
     static let now: Double = 1_790_000_000
 
     static var sessions: [SessionInfo] {
@@ -113,7 +117,7 @@ public enum VisorFixture {
 
         See [the sync notes](https://example.com/sync) for the retry rules.
         """),
-        TranscriptEntry(id: "f5", role: .user, text: "Here's the layout I want for the offline banner.", images: [picturePath],
+        TranscriptEntry(id: "f5", role: .user, text: "Here's the layout I want for the offline banner.", images: [picturePath, moviePath],
                         imageSizes: [ImageSize(width: 96, height: 64)]),
         TranscriptEntry(id: "f6", role: .user, text: "/goal Rows written offline are all on the server after reconnecting"),
         TranscriptEntry(id: "f7", role: .tool, text: "Rows written offline are all on the server after reconnecting", toolName: "goal"),

@@ -30,7 +30,9 @@ extension VisorAgentServer {
         guard let ssh = VisorHost.ssh else { throw AgentServerError.message("This app cannot reach a computer over SSH") }
         let route = address.route
         let known: [String?] = route.map { hop in
-            let kept = VisorHost.settings?.get(key: SSHAddress.hostKeySetting(hop)) ?? ""
+            // Trusted host keys are kept with the secrets: a reinstall
+            // does not have to trust a computer anew.
+            let kept = VisorHost.settings?.kept(key: SSHAddress.hostKeySetting(hop)) ?? ""
             return kept.isEmpty ? nil : kept
         }
         let session: any VisorSSHSession
@@ -46,7 +48,7 @@ extension VisorAgentServer {
             throw AgentServerError.message("\(address.target.host) was not reached over SSH: \(why)")
         }
         for (index, hop) in route.enumerated() where known[index] == nil && session.hostKeys.count > index && !session.hostKeys[index].isEmpty {
-            VisorHost.settings?.set(key: SSHAddress.hostKeySetting(hop), value: session.hostKeys[index])
+            VisorHost.settings?.setKept(key: SSHAddress.hostKeySetting(hop), value: session.hostKeys[index])
         }
         // A sign-in that began after this one owns the tunnel now: this
         // connection is not left open with nothing to carry.

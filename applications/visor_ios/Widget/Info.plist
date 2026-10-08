@@ -7,9 +7,9 @@
     <key>CFBundleDisplayName</key>
     <string>Visor</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.22</string>
+    <string>0.23</string>
     <key>CFBundleVersion</key>
-    <string>22</string>
+    <string>23</string>
     <key>NSExtension</key>
     <dict>
         <key>NSExtensionPointIdentifier</key>

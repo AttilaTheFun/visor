@@ -326,17 +326,26 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// How long a sign-in has to answer before the try is given up.
     static let signInTimeout: Int32 = 5_000
 
-    /// The paths for a round: the one that answered last time (while it
-    /// still fits where the device is), then the record's own paths
-    /// ranked by fit — a path on a network the device is on now first
-    /// (the LAN at home), then overlay-network ones (a tailnet) while the
-    /// device has such a network, then the rest, with the record's
-    /// address first among equals — then those through other servers.
-    private func pathsToTry() -> [String] {
+    /// The paths for a round: the record's own paths ranked by fit — a
+    /// path on a network the device is on now first (the LAN at home),
+    /// then overlay-network ones (a tailnet) while the device has such a
+    /// network, then the rest, with the one that answered last time and
+    /// then the record's address first among equals — then those through
+    /// other servers. Where the device has SSH and the computer an SSH
+    /// path, SSH is the way in: its paths that fit (the LAN's, the
+    /// tailnet's) before any other, the rest only when SSH does not
+    /// answer. A device without SSH (a browser) skips SSH paths.
+    func pathsToTry() -> [String] {
         var candidates: [String] = []
-        let own = record.allPaths
-        for fit in [PathFit.local, .overlay, .other, .unlikely] {
-            var tier = own.filter { Self.fit(of: $0) == fit }
+        let canSSH = VisorHost.ssh != nil
+        let own = record.allPaths.filter { canSSH || SSHAddress($0) == nil }
+        let preferSSH = canSSH && own.contains { SSHAddress($0) != nil }
+        let tiers: [(PathFit, Bool?)] = preferSSH
+            ? [(.local, true), (.overlay, true), (.local, false), (.overlay, false), (.other, true), (.other, false),
+               (.unlikely, true), (.unlikely, false)]
+            : [(.local, nil), (.overlay, nil), (.other, nil), (.unlikely, nil)]
+        for (fit, ssh) in tiers {
+            var tier = own.filter { Self.fit(of: $0) == fit && (ssh == nil || (SSHAddress($0) != nil) == ssh) }
             // The one that answered last time first among its equals.
             if let lastGoodPath, let index = tier.firstIndex(of: lastGoodPath) {
                 tier.remove(at: index)
@@ -461,10 +470,11 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         return String(hostPort.prefix { $0 != ":" })
     }
 
-    /// Connected by another path while the address asks for SSH: this
-    /// device's key is handed to the server, and SSH tried again — once.
+    /// Connected by another path while the computer has SSH paths (SSH
+    /// being the way in where the device has it): this device's key is
+    /// handed to the server, and SSH tried again — once.
     private func enrollSSHIfWanted() {
-        guard SSHAddress(record.address) != nil, let path, SSHAddress(path) == nil, !sshEnrolled,
+        guard !sshPaths.isEmpty, let path, SSHAddress(path) == nil, !path.contains("/peer/"), !sshEnrolled,
               let ssh = VisorHost.ssh else { return }
         sshEnrolled = true
         let server = server

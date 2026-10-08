@@ -132,6 +132,18 @@ final class MemorySettings: VisorSettingsService {
     func set(key: String, value: String) { values[key] = value }
 }
 
+/// Settings whose secrets refuse every write while `refusing`.
+@MainActor
+final class RefusingSecrets: VisorSettingsService {
+    var values: [String: String] = [:]
+    var secrets: [String: String] = [:]
+    var refusing = true
+    func get(key: String) -> String { values[key] ?? "" }
+    func set(key: String, value: String) { values[key] = value }
+    func secret(key: String) -> String { secrets[key] ?? "" }
+    func setSecret(key: String, value: String) { if !refusing { secrets[key] = value } }
+}
+
 @MainActor
 final class HelloFlowTests: XCTestCase {
     private var server: ScriptedServer!
@@ -387,13 +399,51 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertEqual(store.servers.first?.record.secret, "pearl-grove")
         XCTAssertEqual(store.servers.first?.record.address, "mini.example")
         XCTAssertEqual(store.servers.first?.record.provider, "scripted")
-        // Moved out of the record into the secrets, and read from there.
-        XCTAssertFalse(settings.values["hosts"]?.contains("pearl-grove") ?? true)
+        // Moved out of the record into the secrets, and read from there;
+        // the list itself moved out of the plain settings into the kept.
+        XCTAssertEqual(settings.get(key: "hosts"), "")
+        XCTAssertTrue(settings.kept(key: "hosts").contains("mini.example"))
+        XCTAssertFalse(settings.kept(key: "hosts").contains("pearl-grove"))
         XCTAssertEqual(settings.secret(key: "password.h1"), "pearl-grove")
         XCTAssertEqual(VisorStore().servers.first?.record.secret, "pearl-grove")
         // Removing the server forgets its secret.
         store.remove(store.servers[0])
         XCTAssertEqual(settings.secret(key: "password.h1"), "")
+    }
+
+    /// Deleting the app and installing it again clears its plain settings
+    /// (UserDefaults) and keeps its keychain: the computers, their
+    /// passwords and the device's id come back.
+    func testComputersSurviveAReinstall() {
+        let settings = MemorySettings()
+        VisorHost.settings = settings
+        settings.values["hosts"] = #"[{"id":"h1","name":"Mini","host":"http://mini.example:7433","backend":"scripted"}]"#
+        settings.setSecret(key: "password.h1", value: "pearl-grove")
+        _ = VisorStore()
+        // The reinstall: everything but the secrets gone.
+        settings.values = settings.values.filter { $0.key.hasPrefix("secret.") }
+        let store = VisorStore()
+        XCTAssertEqual(store.servers.map(\.record.name), ["Mini"])
+        XCTAssertEqual(store.servers.first?.record.address, "http://mini.example:7433")
+        XCTAssertEqual(store.servers.first?.record.secret, "pearl-grove")
+    }
+
+    /// A keychain that will not take a write (locked, or asking with no
+    /// one there to answer) loses nothing: the computers stay in the plain
+    /// settings, and are moved once it takes them.
+    func testARefusingKeychainLosesNoComputers() {
+        let settings = RefusingSecrets()
+        VisorHost.settings = settings
+        settings.values["hosts"] = #"[{"id":"h1","name":"Mini","host":"http://mini.example:7433","backend":"scripted"}]"#
+        let store = VisorStore()
+        XCTAssertEqual(store.servers.map(\.record.name), ["Mini"])
+        XCTAssertEqual(VisorStore().servers.map(\.record.name), ["Mini"])
+        XCTAssertTrue(settings.get(key: "hosts").contains("mini.example"))
+        // The keychain takes writes again: moved on the next read.
+        settings.refusing = false
+        XCTAssertEqual(VisorStore().servers.map(\.record.name), ["Mini"])
+        XCTAssertEqual(settings.get(key: "hosts"), "")
+        XCTAssertTrue(settings.secret(key: "hosts").contains("mini.example"))
     }
 
     func testAConnectionCodeAddsTheComputer() async {

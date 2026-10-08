@@ -16,16 +16,12 @@ extension TranscriptMessage {
         case .assistant: role = .assistant
         case .tool: role = .tool
         }
-        // Pictures are shown; a video is named under the words, as the
-        // transcript has no player.
-        let pictures = entry.images.indices.filter { AttachmentKind.isImage(entry.images[$0]) }
-        let videos = entry.images.filter { !AttachmentKind.isImage($0) }
-            .map { (AttachmentKind.isVideo($0) ? "Video: " : "File: ") + AttachmentKind.fileName($0) }
-        let text = ([entry.text] + videos).filter { !$0.isEmpty }.joined(separator: "\n")
-        self.init(id: id ?? entry.id, role: role, text: text, activities: entry.activities, toolName: entry.toolName,
-                  imageURLs: pictures.map { host + "|" + entry.images[$0] },
-                  imageSizes: pictures.map { index in
-                      index < entry.imageSizes.count
+        // Every attachment is a tile: a picture drawn, a video or a file
+        // named (VisorImage), each opened whole by the system's preview.
+        self.init(id: id ?? entry.id, role: role, text: entry.text, activities: entry.activities, toolName: entry.toolName,
+                  imageURLs: entry.images.map { host + "|" + $0 },
+                  imageSizes: entry.images.indices.map { index in
+                      index < entry.imageSizes.count && AttachmentKind.isImage(entry.images[index])
                           ? CGSize(width: CGFloat(entry.imageSizes[index].width), height: CGFloat(entry.imageSizes[index].height))
                           : nil
                   })

@@ -121,7 +121,7 @@ final class SSHTransportTests: XCTestCase {
         XCTAssertEqual(ssh.connects.count, 1)
         XCTAssertEqual(ssh.connects[0].route, [VisorSSHHop(user: "logan", host: "mini.local", port: 22)])
         XCTAssertEqual(ssh.connects[0].hostKeys, [nil])
-        XCTAssertEqual(settings.get(key: "ssh.hostkey.logan@mini.local:22"), "ssh-ed25519 AAAAhost mini")
+        XCTAssertEqual(settings.kept(key: "ssh.hostkey.logan@mini.local:22"), "ssh-ed25519 AAAAhost mini")
         XCTAssertEqual(ssh.sessions[0].attached, ["nc -U ~/.visor/server.sock"])
         XCTAssertEqual(ssh.sessions[0].forwarded, [], "the port is not needed")
         XCTAssertEqual(http.urls, ["http://127.0.0.1:60001/api/hello"])
@@ -155,8 +155,8 @@ final class SSHTransportTests: XCTestCase {
         _ = try await server.authenticate(record("logan@10.0.0.2?via=logan@jump.example:2200"))
         XCTAssertEqual(ssh.connects[0].route, [VisorSSHHop(user: "logan", host: "jump.example", port: 2200), VisorSSHHop(user: "logan", host: "10.0.0.2", port: 22)])
         XCTAssertEqual(ssh.connects[0].hostKeys, [nil, nil])
-        XCTAssertEqual(settings.get(key: "ssh.hostkey.logan@jump.example:2200"), "ssh-ed25519 AAAAjump")
-        XCTAssertEqual(settings.get(key: "ssh.hostkey.logan@10.0.0.2:22"), "ssh-ed25519 AAAAhost mini")
+        XCTAssertEqual(settings.kept(key: "ssh.hostkey.logan@jump.example:2200"), "ssh-ed25519 AAAAjump")
+        XCTAssertEqual(settings.kept(key: "ssh.hostkey.logan@10.0.0.2:22"), "ssh-ed25519 AAAAhost mini")
     }
 
     /// A computer whose host key changed is refused with a message; one

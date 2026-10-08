@@ -4,6 +4,9 @@
 
 import AgentUI
 import SwiftUI
+#if canImport(QuickLook)
+import QuickLook
+#endif
 
 extension View {
     /// The inset-grouped form: iOS's default; the Mac's needs asking, and a
@@ -49,6 +52,16 @@ extension View {
     @ViewBuilder func choiceListInSheet(rows: Int) -> some View {
         #if os(macOS)
         frame(minWidth: 360, minHeight: CGFloat(rows) * 32 + 24)
+        #else
+        self
+        #endif
+    }
+
+    /// The system's preview of a file (Quick Look: pictures zoom, videos
+    /// play, documents open), where the system has one; nothing elsewhere.
+    @ViewBuilder func filePreview(_ file: Binding<URL?>) -> some View {
+        #if canImport(QuickLook)
+        quickLookPreview(file)
         #else
         self
         #endif

@@ -726,7 +726,30 @@ to look at. `SendIsImmediateTests` holds the client's half in CI: the sent
 message is in the thread before `sendMessage` returns, and a repeated
 message waits for its own row.
 
+### Opening frames look
+
+`tools/probes/frames/open_frames.sh <session id>` records the simulator
+while the iOS probe opens a session for the first time (the simulator
+erased first: nothing cached, the rows come from the first sync) and
+lays the frames around the tap out as contact sheets. The thread must
+appear once, at its end. Rows laid out from the top and scrolled to
+their end a frame later showed the thread's top for that frame — the
+flicker Logan saw on first opens (7 October); AgentUI's TranscriptView
+now keeps such rows invisible until the scroll has landed. A pixel
+measure would be fooled by the push animation under way at the same
+moment, so this is a look, not a gate.
+
 ## 6. Gotchas that cost time
+
+- A Mac app that reaches LAN addresses needs NSLocalNetworkUsageDescription
+  and the user's yes (System Settings → Privacy & Security → Local
+  Network). Without it macOS refuses its connections with "No route to
+  host" (errno 65) and never asks, while Terminal reaches the same address:
+  the Mac client's LAN paths failed that way until 0.23.
+- The client's connection log is in UserDefaults while it runs
+  (`defaults read com.LoganShire.VisorClient.macOS visor.connectionLog`),
+  and a failed keychain call is in the system log
+  (`log show --predicate 'subsystem == "com.LoganShire.VisorClient"'`).
 
 - A subagent's plain `sleep` is blocked by the harness; use
   `python3 -c "import time; time.sleep(N)"` to make one actually wait.

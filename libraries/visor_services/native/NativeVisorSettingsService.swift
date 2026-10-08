@@ -1,5 +1,6 @@
 #if canImport(Darwin)
 import Foundation
+import os
 import Security
 
 @MainActor
@@ -14,8 +15,11 @@ public final class NativeVisorSettingsService: VisorSettingsService {
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return "" }
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else {
+            if status != errSecItemNotFound { Self.problem("read", key, status) }
+            return ""
+        }
         return String(decoding: data, as: UTF8.self)
     }
 
@@ -24,13 +28,27 @@ public final class NativeVisorSettingsService: VisorSettingsService {
         guard !value.isEmpty else { SecItemDelete(query as CFDictionary); return }
         let data = Data(value.utf8)
         let update = [kSecValueData as String: data] as CFDictionary
-        if SecItemUpdate(query as CFDictionary, update) == errSecItemNotFound {
+        let updated = SecItemUpdate(query as CFDictionary, update)
+        if updated == errSecItemNotFound {
             var add = query
             add[kSecValueData as String] = data
             add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            SecItemAdd(add as CFDictionary, nil)
+            let added = SecItemAdd(add as CFDictionary, nil)
+            if added != errSecSuccess { Self.problem("add", key, added) }
+        } else if updated != errSecSuccess {
+            Self.problem("update", key, updated)
         }
     }
+
+    /// A keychain call that failed, in the system log (the item's account
+    /// and the status, never its value): what to read when a setting does
+    /// not stick.
+    private static func problem(_ what: String, _ key: String, _ status: OSStatus) {
+        let message = (SecCopyErrorMessageString(status, nil) as String?) ?? ""
+        logger.error("keychain \(what, privacy: .public) \(key, privacy: .public) failed: \(status, privacy: .public) \(message, privacy: .public)")
+    }
+
+    private static let logger = Logger(subsystem: "com.LoganShire.VisorClient", category: "keychain")
 
     private static func query(_ key: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
