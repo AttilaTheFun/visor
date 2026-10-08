@@ -56,7 +56,22 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// Whether the server is followed live over its channel, or by polling
     /// (where the path carries no WebSocket): the same, more slowly.
     @Published public private(set) var live = true
-    @Published public private(set) var sessions: [SessionInfo] = []
+    @Published public internal(set) var sessions: [SessionInfo] = [] {
+        // A server that keeps no titles or archive of its own: what the
+        // user did here is laid over every list it sends.
+        didSet {
+            if let localEdits {
+                let edited = localEdits.apply(to: sessions)
+                if edited != sessions { sessions = edited }
+            }
+        }
+    }
+    /// The renames, archiving and removals kept on this device, for a
+    /// server that keeps none (`AgentServer.managesSessions` false).
+    var localEdits: LocalSessionEdits?
+    /// The server's own choices a new session starts from, when it starts
+    /// them so (`starting.fromChoices`): asked for on each connect.
+    @Published public internal(set) var startChoices: [StartChoice] = []
     @Published public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
     @Published public private(set) var catalogs: [AgentCatalog] = []
@@ -95,6 +110,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         self.server = AgentServerProviders.server(for: record)
         self.record = record
         self.recordID = record.id
+        if !server.managesSessions { localEdits = loadLocalEdits() }
         loadProjects()
         loadCachedSessions()
     }
@@ -230,7 +246,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     }
 
     /// The sessions an answer named, into the list.
-    private func take(_ list: [SessionInfo], replacing: Bool) {
+    func take(_ list: [SessionInfo], replacing: Bool) {
         if replacing {
             sessions = list
             return
@@ -683,6 +699,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             askEarlierAgain()
             // A folder may have been renamed or moved while we were away.
             Task { await refreshMissing() }
+            if server.starting.fromChoices { Task { await loadStartChoices() } }
             registerForPush()
         case .catalogs(let catalogs):
             self.catalogs = catalogs
@@ -793,21 +810,6 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         if state == .connected { server.subscribe(sessionID) } else { pendingSubscriptions.insert(sessionID) }
     }
 
-    /// Starts a session and returns its id once the server has it,
-    /// subscribed; what went wrong is thrown, for whoever asked to show
-    /// (the compose sheet keeps it, rather than opening a session that is
-    /// not there).
-    @discardableResult
-    public func start(id: String = AgentServerRecord.newID(), agent: AgentKind, cwd: String, title: String,
-                      skipPermissions: Bool, resume: String? = nil) async throws -> String {
-        let list = try await server.startSession(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions,
-                                                 resume: resume)
-        transcript(for: id).loaded = true
-        take(list, replacing: false)
-        subscribe(id)
-        return id
-    }
-
     /// Takes a terminal session for this window, at this size. Whichever
     /// window had it stops being drawn for: a terminal is one size, for
     /// one window. The shell keeps running throughout.
@@ -891,7 +893,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
             Project(cwd: cwd,
                     sessions: activeSessions.filter { $0.cwd == cwd },
                     archived: archivedSessions.filter { $0.cwd == cwd },
-                    alias: projectAliases[cwd],
+                    alias: projectAliases[cwd] ?? startChoices.first { $0.id == cwd }?.title,
                     missing: missingProjects.contains(cwd))
         }
     }
@@ -938,7 +940,8 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// Asks the server which of our folders are still there. Cheap (one
     /// question per project) and only worth doing when connected.
     public func refreshMissing() async {
-        guard state == .connected else { return }
+        // A server's own choices are not folders to look for.
+        guard state == .connected, !server.starting.fromChoices else { return }
         var gone: Set<String> = []
         for cwd in Set(projects.map(\.cwd)) {
             guard let there = try? await folderExists(cwd) else { continue }
@@ -1140,18 +1143,25 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     }
 
     public func rename(_ sessionID: String, title: String) {
+        guard localEdits == nil else { return editLocally { $0.titles[sessionID] = title } }
         act(.rename(title: title), on: sessionID)
     }
 
-    public func archive(_ sessionID: String) { act(.archive, on: sessionID) }
+    public func archive(_ sessionID: String) {
+        guard localEdits == nil else { return editLocally { $0.archived.insert(sessionID) } }
+        act(.archive, on: sessionID)
+    }
 
-    public func unarchive(_ sessionID: String) { act(.unarchive, on: sessionID) }
+    public func unarchive(_ sessionID: String) {
+        guard localEdits == nil else { return editLocally { $0.archived.remove(sessionID) } }
+        act(.unarchive, on: sessionID)
+    }
 
     public var activeSessions: [SessionInfo] { sessions.filter { !$0.archived } }
     public var archivedSessions: [SessionInfo] { sessions.filter(\.archived) }
 
     public func end(_ sessionID: String) {
-        act(.end, on: sessionID)
+        if localEdits == nil { act(.end, on: sessionID) } else { editLocally { $0.removed.insert(sessionID) } }
         transcripts.removeValue(forKey: sessionID)
         syncing.removeValue(forKey: sessionID)?.cancel()
         let cache = Self.cache, key = cacheKey(sessionID)
