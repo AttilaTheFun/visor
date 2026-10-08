@@ -113,17 +113,27 @@ public final class VisorStore: ObservableObject {
     /// password, the name, the paths, and the address, which the new
     /// record puts first (an SSH connection code for a computer held
     /// over HTTP makes SSH the way in).
+    /// `authenticationGiven`: whether `record.authentication` was chosen
+    /// (a code that said, the form); false leaves a held computer's own.
     @discardableResult
-    public func add(_ record: AgentServerRecord) -> AgentServerConnection {
+    public func add(_ record: AgentServerRecord, authenticationGiven: Bool = true) -> AgentServerConnection {
         if let existing = servers.first(where: { $0.record.provider == record.provider && ($0.record.address == record.address || (!record.serverID.isEmpty && $0.record.serverID == record.serverID)) }) {
+            let isolated = existing.isolated
             existing.update { current in
-                current.secret = record.secret
                 if !record.name.isEmpty, !current.renamed { current.name = record.name }
                 if current.serverID.isEmpty { current.serverID = record.serverID }
+                // Standing alone: its address and its way of signing in
+                // stand; the password is taken if it signs in by one.
+                if isolated {
+                    if current.authentication == PasswordAuthenticator.name, !record.secret.isEmpty { current.secret = record.secret }
+                    return
+                }
+                current.secret = record.secret
                 let before = current.address
                 current.address = record.address
                 current.learnPaths(record.paths + [before])
-                current.authentication = record.authentication
+                // A code that does not say how to sign in leaves it as it is.
+                if authenticationGiven { current.authentication = record.authentication }
             }
             existing.connect()
             save()
@@ -154,13 +164,16 @@ public final class VisorStore: ObservableObject {
         }
         guard let code = ConnectionCode(parsing: text) else { return nil }
         addingServer = false
-        return add(AgentServerRecord(name: code.name, address: code.host, secret: code.password, serverID: code.id, paths: code.paths))
+        let record = AgentServerRecord(name: code.name, address: code.host, secret: code.password, serverID: code.id, paths: code.paths,
+                                       authentication: code.auth.isEmpty ? PasswordAuthenticator.name : code.auth)
+        return add(record, authenticationGiven: !code.auth.isEmpty)
     }
 
     /// Hands a device's SSH key to every computer connected here.
     public func authorize(_ key: String) {
         addingServer = false
-        let connected = servers.filter { $0.state == .connected }
+        // Not to a server that stands alone: nothing goes to it from here.
+        let connected = servers.filter { $0.state == .connected && !$0.isolated }
         guard !connected.isEmpty else {
             notice = "No computer is connected to hand the key to."
             return
@@ -200,15 +213,16 @@ public final class VisorStore: ObservableObject {
     /// computer is folded into it, the computers it knows are taken in,
     /// and it and the others here are introduced to one another.
     private func joined(_ server: AgentServerConnection) async {
-        guard !VisorFixture.active else { return }
+        // A server that stands alone shares nothing and is told nothing.
+        guard !VisorFixture.active, !server.isolated else { return }
         fold(server)
         if let peers = try? await server.peers() {
             for peer in peers { take(peer, from: server) }
         }
-        let others = servers.filter { $0 !== server }.compactMap(\.asPeer)
+        let others = servers.filter { $0 !== server && !$0.isolated }.compactMap(\.asPeer)
         if !others.isEmpty { try? await server.introduce(others) }
         if let me = server.asPeer {
-            for other in servers where other !== server && other.state == .connected { try? await other.introduce([me]) }
+            for other in servers where other !== server && other.state == .connected && !other.isolated { try? await other.introduce([me]) }
         }
     }
 
@@ -228,7 +242,7 @@ public final class VisorStore: ObservableObject {
     /// and connected — by one of its own addresses, or through the server
     /// that told of it.
     func take(_ peer: Peer, from teller: AgentServerConnection) {
-        guard let first = peer.addresses.first, peer.id.isEmpty || peer.id != teller.record.serverID else { return }
+        guard !teller.isolated, let first = peer.addresses.first, peer.id.isEmpty || peer.id != teller.record.serverID else { return }
         if let known = servers.first(where: { $0.record.isSame(as: peer) }) {
             known.learn(peer)
             return
@@ -245,8 +259,8 @@ public final class VisorStore: ObservableObject {
     /// carries requests to a computer it knows (`/peer/<id>` under it).
     func relayPaths(to target: AgentServerConnection) -> [String] {
         let id = target.record.serverID
-        guard !id.isEmpty else { return [] }
-        return servers.filter { $0 !== target && $0.state == .connected && $0.record.serverID != id }
+        guard !id.isEmpty, !target.isolated else { return [] }
+        return servers.filter { $0 !== target && $0.state == .connected && $0.record.serverID != id && !$0.isolated }
             .compactMap { other in other.server.reachedAt.map { $0 + "/peer/" + id } }
     }
 

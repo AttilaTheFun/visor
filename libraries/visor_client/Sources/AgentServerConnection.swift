@@ -299,6 +299,17 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
                 self.pathIndex = 0
                 if let name { self.record.takeServerName(name) }
                 if let identity = server.identity { self.take(identity) }
+                // Standing alone, signed in by a path that is not its
+                // address (one learned before it said so): that sign-in is
+                // let go, and it is reached at its address from now on.
+                if self.isolated, path != self.record.address {
+                    self.note("stands alone: reached at \(self.record.address) only, not by \(path)")
+                    self.lastGoodPath = nil
+                    self.paths = []
+                    server.closeChannel()
+                    self.connect()
+                    return
+                }
                 self.openChannel(mine)
             } catch {
                 guard let self, self.generation == mine, self.wantsConnection else { return }
@@ -336,6 +347,8 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// tailnet's) before any other, the rest only when SSH does not
     /// answer. A device without SSH (a browser) skips SSH paths.
     func pathsToTry() -> [String] {
+        // Standing alone: the address it was added at, and no other.
+        if isolated { return [record.address] }
         var candidates: [String] = []
         let canSSH = VisorHost.ssh != nil
         let own = record.allPaths.filter { canSSH || SSHAddress($0) == nil }
@@ -357,6 +370,14 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         var out: [String] = []
         for path in candidates where !out.contains(path) { out.append(path) }
         return out.isEmpty ? [record.address] : out
+    }
+
+    /// The server stands alone — it says so, or its authenticator makes
+    /// it so (`AgentServerAuthenticator.isolated`): reached only at the
+    /// record's address, its other paths, its peers and its credential
+    /// kept from everything else.
+    public var isolated: Bool {
+        record.standalone || AgentServerAuthenticators.authenticator(for: record).isolated
     }
 
     /// How a path fits where the device is now.
@@ -409,6 +430,16 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     private func take(_ identity: ServerIdentity) {
         var changed = false
         if record.serverID != identity.id { record.serverID = identity.id; changed = true }
+        if record.standalone != identity.standalone {
+            record.standalone = identity.standalone
+            changed = true
+        }
+        // Standing alone: the paths learned before it said so go too.
+        if isolated {
+            if !record.paths.isEmpty { record.paths = []; changed = true }
+            if changed { onRecordChange?() }
+            return
+        }
         if record.learnPaths(identity.addresses) { changed = true }
         if !identity.sshKey.isEmpty, record.serverKey != identity.sshKey { record.serverKey = identity.sshKey; changed = true }
         if changed { onRecordChange?() }
@@ -417,6 +448,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// Takes in what a peer says of this computer: its addresses as more
     /// paths, its password when none is kept.
     func learn(_ peer: Peer) {
+        guard !isolated else { return }
         update { record in
             if record.serverID.isEmpty { record.serverID = peer.id }
             record.learnPaths(peer.addresses)
@@ -428,7 +460,8 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// its server gave for itself (never this device's path to it, which
     /// may be its loopback or a relay).
     var asPeer: Peer? {
-        guard !record.serverID.isEmpty else { return nil }
+        // Standing alone, its address and credential go to no one.
+        guard !record.serverID.isEmpty, !isolated else { return nil }
         let own = record.allPaths.filter { !$0.contains("/peer/") && !$0.contains("127.0.0.1") && !$0.contains("localhost") }
         guard !own.isEmpty else { return nil }
         return Peer(id: record.serverID, name: record.name, addresses: own, password: record.secret, sshKey: record.serverKey)
@@ -474,7 +507,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// being the way in where the device has it): this device's key is
     /// handed to the server, and SSH tried again — once.
     private func enrollSSHIfWanted() {
-        guard !sshPaths.isEmpty, let path, SSHAddress(path) == nil, !path.contains("/peer/"), !sshEnrolled,
+        guard !isolated, !sshPaths.isEmpty, let path, SSHAddress(path) == nil, !path.contains("/peer/"), !sshEnrolled,
               let ssh = VisorHost.ssh else { return }
         sshEnrolled = true
         let server = server

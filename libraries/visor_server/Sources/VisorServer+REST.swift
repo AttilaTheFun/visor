@@ -133,8 +133,13 @@ extension VisorServer {
     private func restHello(_ call: RESTCall) -> HTTPResponse {
         var e = Envelope.hello(host: hostName, login: "", token: issueToken())
         e.id = id
-        e.addresses = ownAddresses
-        e.sshKey = ownSSHKey
+        if isStandalone {
+            // Reached only where the client found it: nothing more to learn.
+            e.standalone = true
+        } else {
+            e.addresses = ownAddresses
+            e.sshKey = ownSSHKey
+        }
         return .json(e.encoded())
     }
 
@@ -144,8 +149,9 @@ extension VisorServer {
         var e = Envelope(type: "peers")
         e.id = id
         e.host = hostName
-        e.addresses = ownAddresses
-        e.peers = peers
+        // Standing alone: no addresses, no computers, to anyone.
+        e.addresses = isStandalone ? [] : ownAddresses
+        e.peers = isStandalone ? [] : peers
         return .json(e.encoded())
     }
 
@@ -162,6 +168,8 @@ extension VisorServer {
     /// relay header so it is not told back.
     private func restTakePeers(_ call: RESTCall) -> HTTPResponse {
         guard let told = call.body.peers, !told.isEmpty else { return HTTPResponse(400, Envelope.error("Peers are required").encoded()) }
+        // Standing alone, it is introduced to no one.
+        guard !isStandalone else { return .json(Envelope(type: "peers").encoded()) }
         let teller = call.request.headers["x-visor-relay"]?.split(separator: ",").last.map(String.init)
         adopt(told, from: teller)
         return .json(Envelope(type: "peers").encoded())

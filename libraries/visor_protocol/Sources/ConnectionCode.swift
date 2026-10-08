@@ -17,13 +17,18 @@ public struct ConnectionCode: Equatable, Sendable {
     /// The server's other network paths, as clients read them (`ssh://`
     /// ones among them), after `host`, the one to try first.
     public var paths: [String]
+    /// How a client signs in (an authenticator's id: "password", "none",
+    /// a fork's own), when the code says; "" for a code that does not,
+    /// which leaves a computer held already as it signs in.
+    public var auth: String
 
-    public init(name: String, host: String, password: String, id: String = "", paths: [String] = []) {
+    public init(name: String, host: String, password: String, id: String = "", paths: [String] = [], auth: String = "") {
         self.name = name
         self.host = host
         self.password = password
         self.id = id
         self.paths = paths.filter { $0 != host }
+        self.auth = auth
     }
 
     /// The computer as a peer: every address the code carries.
@@ -34,7 +39,7 @@ public struct ConnectionCode: Equatable, Sendable {
     /// when the code carries no SSH path.
     public var preferringSSH: ConnectionCode? {
         guard let ssh = ([host] + paths).first(where: { $0.hasPrefix("ssh://") }) else { return nil }
-        return ConnectionCode(name: name, host: ssh, password: password, id: id, paths: ([host] + paths).filter { $0 != ssh })
+        return ConnectionCode(name: name, host: ssh, password: password, id: id, paths: ([host] + paths).filter { $0 != ssh }, auth: auth)
     }
 
     public static let scheme = "visor"
@@ -44,6 +49,7 @@ public struct ConnectionCode: Equatable, Sendable {
         var fields: [String: JSONValue] = ["v": .number(1), "name": .string(name), "host": .string(host), "password": .string(password)]
         if !id.isEmpty { fields["id"] = .string(id) }
         if !paths.isEmpty { fields["paths"] = .array(paths.map(JSONValue.string)) }
+        if !auth.isEmpty { fields["auth"] = .string(auth) }
         return Base64URL.encode(Array(JSONValue.object(fields).encoded().utf8))
     }
 
@@ -64,6 +70,6 @@ public struct ConnectionCode: Equatable, Sendable {
               let json = parseJSON(String(decoding: bytes, as: UTF8.self)),
               let host = json["host"].string, !host.isEmpty else { return nil }
         self.init(name: json["name"].string ?? host, host: host, password: json["password"].string ?? "", id: json["id"].string ?? "",
-                  paths: json["paths"].array?.compactMap(\.string) ?? [])
+                  paths: json["paths"].array?.compactMap(\.string) ?? [], auth: json["auth"].string ?? "")
     }
 }

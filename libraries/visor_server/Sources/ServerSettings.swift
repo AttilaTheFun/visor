@@ -41,11 +41,16 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// the server is let in, the path being the proof (a LAN or a VPN of
     /// one's own, SSH alone, a front of your own that signs users in).
     public var authentication = "password"
+    /// The server stands alone: reached only at the address each client
+    /// added it at (a front it sits behind: an authenticating proxy), its
+    /// own addresses, its SSH key and the computers it knows told to no
+    /// one, introductions refused. Also on with VISOR_STANDALONE=1.
+    public var standalone = false
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
-        case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication
+        case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -58,6 +63,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         try c.encode(publicAddress, forKey: .publicAddress)
         try c.encode(serverID, forKey: .serverID)
         try c.encode(authentication, forKey: .authentication)
+        try c.encode(standalone, forKey: .standalone)
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -78,6 +84,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         tlsIdentityPath = try c.decodeIfPresent(String.self, forKey: .tlsIdentityPath) ?? ""
         publicAddress = try c.decodeIfPresent(String.self, forKey: .publicAddress) ?? ""
         proxyEnabled = try c.decodeIfPresent(Bool.self, forKey: .proxyEnabled) ?? !publicAddress.isEmpty
+        standalone = try c.decodeIfPresent(Bool.self, forKey: .standalone) ?? false
         serverID = try c.decodeIfPresent(String.self, forKey: .serverID) ?? ""
         authentication = try c.decodeIfPresent(String.self, forKey: .authentication) ?? "password"
     }

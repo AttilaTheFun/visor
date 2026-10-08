@@ -37,10 +37,14 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     /// another server is told when this one is introduced, so the two
     /// reach each other over SSH. "" until known.
     public var serverKey: String
+    /// The server said it stands alone: reached only at `address`, its
+    /// other paths not learned or tried, it and its peers not shared.
+    public var standalone: Bool
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
                 provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", paths: [String] = [],
-                authentication: String = PasswordAuthenticator.name, serverKey: String = "") {
+                authentication: String = PasswordAuthenticator.name, serverKey: String = "", standalone: Bool = false) {
+        self.standalone = standalone
         self.id = id
         self.name = name
         self.address = address
@@ -117,7 +121,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         .object(["id": .string(id), "name": .string(name), "address": .string(address), "secret": .string(secret),
                  "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed),
                  "serverID": .string(serverID), "paths": .array(paths.map(JSONValue.string)), "authentication": .string(authentication),
-                 "serverKey": .string(serverKey)])
+                 "serverKey": .string(serverKey), "standalone": .bool(standalone)])
     }
 
     /// Reads a saved record; one saved by an earlier build, as a computer
@@ -130,6 +134,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
                   provider: json["provider"].string ?? json["backend"].string ?? VisorAgentServerProvider.name,
                   renamed: json["renamed"].bool ?? false, serverID: json["serverID"].string ?? "",
                   paths: (json["paths"].array ?? json["roads"].array)?.compactMap(\.string) ?? [],
-                  authentication: json["authentication"].string ?? PasswordAuthenticator.name, serverKey: json["serverKey"].string ?? "")
+                  authentication: json["authentication"].string ?? PasswordAuthenticator.name, serverKey: json["serverKey"].string ?? "",
+                  standalone: json["standalone"].bool ?? false)
     }
 }

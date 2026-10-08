@@ -30,6 +30,11 @@ extension VisorServer {
 
     /// Carries a request to the peer and its answer back.
     func relay(_ target: (id: String, rest: String), _ request: HTTPRequest, respond: @escaping (HTTPResponse) -> Void) {
+        // Standing alone, it carries nothing to other computers.
+        guard !isStandalone else {
+            respond(HTTPResponse(404, Envelope.error("This server stands alone: it reaches no other computer").encoded()))
+            return
+        }
         guard let peer = peers.first(where: { $0.id == target.id }) else {
             return respond(HTTPResponse(404, Envelope.error("No such computer on the network").encoded()))
         }

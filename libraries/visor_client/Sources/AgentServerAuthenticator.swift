@@ -20,6 +20,14 @@ public protocol AgentServerAuthenticator {
     /// Throws `AgentServerError.needsAuthentication` when the user must
     /// sign in first (a token that has expired, a password not typed).
     func headers(for record: AgentServerRecord) async throws -> [String: String]
+    /// Whether a server signed in to this way stands alone whatever it
+    /// says itself (a front that cannot change the server behind it):
+    /// reached only at its record's address, nothing about it shared.
+    var isolated: Bool { get }
+}
+
+public extension AgentServerAuthenticator {
+    var isolated: Bool { false }
 }
 
 /// No proof asked: the path is the proof (a LAN, a VPN of one's own, the

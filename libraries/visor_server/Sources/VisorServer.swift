@@ -138,7 +138,16 @@ public final class VisorServer {
     /// address to give and a password is set.
     public var connectionCode: ConnectionCode? {
         guard !password.isEmpty, let address = reachableAddress else { return nil }
-        return ConnectionCode(name: hostName, host: address, password: password, id: id, paths: ownAddresses)
+        // Standing alone: the one address, none of the others.
+        return ConnectionCode(name: hostName, host: address, password: password, id: id, paths: isStandalone ? [] : ownAddresses,
+                              auth: settings.authentication)
+    }
+
+    /// Whether the server stands alone (`ServerSettings.standalone`, or
+    /// VISOR_STANDALONE=1 in its environment, for a server a sandbox
+    /// starts).
+    public var isStandalone: Bool {
+        settings.standalone || ProcessInfo.processInfo.environment["VISOR_STANDALONE"] == "1"
     }
 
     /// sessions.json in the platform's data directory (on a Mac
