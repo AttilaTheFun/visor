@@ -62,7 +62,7 @@ none notifies itself.
 
 Computers are added by hand, in one step. The menu bar app shows a
 connection code — URL-safe base64 (no padding) of
-`{"v":1,"name":…,"host":<address>,"password":…,"id":…,"paths":[…]}` (`paths`: the server's other network paths, `ssh://` ones among them; the SSH code puts one of those in `host`) — as a string to
+`{"v":1,"name":…,"host":<address>,"password":…,"id":…,"paths":[…],"auth":…}` (`paths`: the server's other network paths, `ssh://` ones among them; the SSH code puts one of those in `host`; `auth`, optional: how a client signs in — `password`, `none`, or a fork's authenticator — and a code without it leaves a computer already held signing in as it did) — as a string to
 copy and as a QR code of `visor://connect?code=<code>`. A client takes
 the code, the link, or an address typed by hand (`ConnectionCode` in
 libraries/visor_protocol; the apps register the `visor` URL scheme).
@@ -75,7 +75,7 @@ under `/api`.
 
 | method and path | body | answer |
 |---|---|---|
-| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id`, own `addresses` and `sshKey` (its SSH public key line) — or 401 |
+| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id`, own `addresses` and `sshKey` (its SSH public key line) — or, from a server that stands alone, `standalone: true` and neither addresses nor key — or 401 |
 | `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
 | `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
 | `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
@@ -243,6 +243,17 @@ news, and the `X-Visor-Relay` header names who told it). `GET /api/peers`
 gives a client the network as the server knows it: `id`, `host`,
 `addresses` (its own) and `peers`. `POST /api/unlink` (`text`: an id or an
 address) forgets one.
+
+A server can stand alone (its `standalone` setting, `visor-server
+standalone on`, or `VISOR_STANDALONE=1`): one reached only through a
+front, which must not be reached around it. Its `hello` says
+`standalone: true` and gives no addresses or key; its `GET /api/peers`
+lists none; it takes in no peers, tells none, and relays nothing (404).
+A client then reaches it only at the address it was added at, learns no
+paths for it, takes in no computers from it, introduces it to no one and
+gives its credential to no other server. An authenticator can say the
+same of every server it signs in to (`isolated`), for a front that cannot
+change the server behind it.
 
 A server relays for its peers: `/peer/<id>/api/…` under a server is the
 peer's API, carried there (with the peer's password put in, down a path
