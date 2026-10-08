@@ -298,6 +298,12 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         let mine = generation
         let server = server
         if pathIndex == 0 || paths.isEmpty { paths = pathsToTry() }
+        guard !paths.isEmpty else {
+            note("no path this device can take: the computer is known only over SSH")
+            wantsConnection = false
+            state = .failed("This computer is reached only over SSH, which this app cannot use. Add it by its connection code (not the SSH one), or by its URL.")
+            return
+        }
         let path = paths[min(pathIndex, paths.count - 1)]
         var record = record
         record.address = path
@@ -385,7 +391,10 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         candidates += relayPaths?() ?? []
         var out: [String] = []
         for path in candidates where !out.contains(path) { out.append(path) }
-        return out.isEmpty ? [record.address] : out
+        // Nothing found: the address — unless it is SSH, which this
+        // device cannot take (it is no URL either). Then none.
+        if out.isEmpty, canSSH || SSHAddress(record.address) == nil { return [record.address] }
+        return out
     }
 
     /// The server stands alone — it says so, or its authenticator makes

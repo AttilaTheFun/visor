@@ -115,9 +115,13 @@ public final class VisorStore: ObservableObject {
     /// record puts first (an SSH connection code for a computer held
     /// over HTTP makes SSH the way in).
     /// `authenticationGiven`: whether `record.authentication` was chosen
-    /// (a code that said, the form); false leaves a held computer's own.
+    /// (a code that said, the form); false, or none named (a code that
+    /// did not say), leaves a held computer's own, and a new one signs in
+    /// by password.
     @discardableResult
     public func add(_ record: AgentServerRecord, authenticationGiven: Bool = true) -> AgentServerConnection {
+        let authenticationGiven = authenticationGiven && !record.authentication.isEmpty
+        var record = record
         if let existing = held(record) {
             let isolated = existing.isolated
             existing.update { current in
@@ -140,6 +144,7 @@ public final class VisorStore: ObservableObject {
             save()
             return existing
         }
+        if record.authentication.isEmpty { record.authentication = PasswordAuthenticator.name }
         let server = AgentServerConnection(record: record)
         servers.append(server)
         observe(server)
@@ -165,9 +170,7 @@ public final class VisorStore: ObservableObject {
         }
         guard let code = ConnectionCode(parsing: text) else { return nil }
         addingServer = false
-        let record = AgentServerRecord(name: code.name, address: code.host, secret: code.password, serverID: code.id, paths: code.paths,
-                                       authentication: code.auth.isEmpty ? PasswordAuthenticator.name : code.auth)
-        return add(record, authenticationGiven: !code.auth.isEmpty)
+        return add(AgentServerRecord(code: code))
     }
 
     /// Hands a device's SSH key to every computer connected here.
