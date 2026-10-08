@@ -25,7 +25,7 @@ final class PollingProbeTests: XCTestCase {
         try await until("connected by polling") { host.state == .connected && !host.live }
         XCTAssertFalse(host.record.name.isEmpty)
 
-        let id = host.start(agent: .claude, cwd: "/tmp/visor-probe", title: "probe-polling", skipPermissions: true)
+        let id = try await host.start(agent: .claude, cwd: "/tmp/visor-probe", title: "probe-polling", skipPermissions: true)
         try await until("the session is listed") { host.sessions.contains { $0.id == id } }
         host.sendMessage(id, text: "Reply with exactly the word ONE.")
         try await until("the session is seen working", seconds: 30) { host.transcripts[id]?.busy == true }

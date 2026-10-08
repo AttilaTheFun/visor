@@ -2,7 +2,9 @@ import XCTest
 
 /// Drives the phone client in the simulator, for looking at it and for
 /// recording it: a send (for the send-motion check), the composer, the
-/// archive list, the terminal, and the snapshot fixture's screens.
+/// archive list, the terminal, and the snapshot fixture's screens. On the
+/// main actor, where XCUIApplication is.
+@MainActor
 final class VisorProbe: XCTestCase {
     private let outDir = "/private/tmp/visor_probe"
 

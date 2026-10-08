@@ -26,6 +26,10 @@ struct ComposeSessionSheet: View {
     @State private var resumableLoad: Task<Void, Never>?
     @State private var loadingResumable = false
     @State private var resumeID = ""
+    /// Asking the computer to start it; the sheet waits, and keeps what
+    /// went wrong rather than opening a session that is not there.
+    @State private var starting = false
+    @State private var failure: String?
 
     /// Only a computer that is answering can start a session.
     private var host: AgentServerConnection? {
@@ -37,7 +41,7 @@ struct ComposeSessionSheet: View {
     private var ready: Bool {
         // A terminal needs a server that has them (one from before 0.18
         // would start an agent instead).
-        host != nil && !cwd.trimmed.isEmpty && !(resuming && resumeID.trimmed.isEmpty)
+        host != nil && !starting && !cwd.trimmed.isEmpty && !(resuming && resumeID.trimmed.isEmpty)
             && (!agent.isShell || available.contains(.shell))
     }
 
@@ -141,16 +145,28 @@ struct ComposeSessionSheet: View {
                 } footer: {
                     Text("Optional.")
                 }
-
+                if let failure {
+                    Section {
+                        Text(failure)
+                            .foregroundColor(.red)
+                            .accessibilityIdentifier("start-error")
+                    } header: {
+                        Text("Could not start")
+                    }
+                }
             }
             .navigationTitle("New Session")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Start", action: start)
-                        .disabled(!ready)
-                        .accessibilityIdentifier("start")
+                    if starting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Start", action: start)
+                            .disabled(!ready)
+                            .accessibilityIdentifier("start")
+                    }
                 }
             }
         }
@@ -220,10 +236,19 @@ struct ComposeSessionSheet: View {
 
     private func start() {
         guard let host else { return }
-        host.addProject(cwd)
-        let id = host.start(agent: agent, cwd: cwd, title: title.trimmed, skipPermissions: true,
-                            resume: resuming && !agent.isShell ? resumeID.trimmed : nil)
-        dismiss()
-        started(host.id, id)
+        starting = true
+        failure = nil
+        Task {
+            do {
+                let id = try await host.start(agent: agent, cwd: cwd, title: title.trimmed, skipPermissions: true,
+                                              resume: resuming && !agent.isShell ? resumeID.trimmed : nil)
+                host.addProject(cwd)
+                dismiss()
+                started(host.id, id)
+            } catch {
+                failure = "\(error)"
+                starting = false
+            }
+        }
     }
 }

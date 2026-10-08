@@ -793,18 +793,18 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         if state == .connected { server.subscribe(sessionID) } else { pendingSubscriptions.insert(sessionID) }
     }
 
-    public func start(agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String? = nil) -> String {
-        let id = AgentServerRecord.newID()
-        let transcript = transcript(for: id)
-        transcript.loaded = true
-        // Subscribe once the server has the session.
-        perform({ [weak self] in
-            let list = try await self?.server.startSession(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions,
-                                                           resume: resume) ?? []
-            self?.take(list, replacing: false)
-        }) { [weak self] in
-            self?.subscribe(id)
-        }
+    /// Starts a session and returns its id once the server has it,
+    /// subscribed; what went wrong is thrown, for whoever asked to show
+    /// (the compose sheet keeps it, rather than opening a session that is
+    /// not there).
+    @discardableResult
+    public func start(id: String = AgentServerRecord.newID(), agent: AgentKind, cwd: String, title: String,
+                      skipPermissions: Bool, resume: String? = nil) async throws -> String {
+        let list = try await server.startSession(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions,
+                                                 resume: resume)
+        transcript(for: id).loaded = true
+        take(list, replacing: false)
+        subscribe(id)
         return id
     }
 

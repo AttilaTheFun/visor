@@ -13,6 +13,10 @@ public struct LinuxTools: ToolLocating {
         ["\(home)/.local/bin", "\(home)/.claude/local", "\(home)/.npm-global/bin", "/usr/local/bin", "/usr/bin", "/bin", "/snap/bin"]
     }
 
+    public func searchPath(_ environment: [String: String]) -> [String] {
+        (environment["PATH"] ?? "").split(separator: ":").map(String.init).filter { $0.hasPrefix("/") }
+    }
+
     public func fileNames(for tool: String) -> [String] { [tool] }
 
     public func ask(for tool: String) async -> String? {

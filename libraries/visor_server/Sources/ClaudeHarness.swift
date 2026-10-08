@@ -1,3 +1,4 @@
+import ClaudeTranscript
 import Foundation
 import Synchronization
 import VisorProtocol
@@ -122,10 +123,12 @@ public final class ClaudeHarness: AgentHarness {
     }
 
     /// The model Claude Code is set to use (`model` in
-    /// ~/.claude/settings.json, else ANTHROPIC_MODEL); nil leaves it to the
+    /// settings.json in Claude Code's folder — ~/.claude, or
+    /// $CLAUDE_CONFIG_DIR — else ANTHROPIC_MODEL); nil leaves it to the
     /// account's default, which a session reports once it runs.
     static func configuredModel() -> String? {
-        let file = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
+        let file = ClaudeSessionFiles.configDirectory(home: FileManager.default.homeDirectoryForCurrentUser)
+            .appendingPathComponent("settings.json")
         if let data = try? Data(contentsOf: file),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let model = object["model"] as? String, !model.isEmpty { return model }
