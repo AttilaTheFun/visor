@@ -66,6 +66,9 @@ public final class AgentServerConnection: Identifiable {
                 let edited = localEdits.apply(to: sessions)
                 if edited != sessions { sessions = edited }
             }
+            // Each open session's own, for its chat (`SessionTranscript.info`).
+            let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            for (id, transcript) in transcripts { transcript.info = byID[id] }
         }
     }
     /// The renames, archiving and removals kept on this device, for a
@@ -779,6 +782,7 @@ public final class AgentServerConnection: Identifiable {
                 try? cache.setSyncState(state, for: key)
             }
         }
+        transcript.info = sessions.first { $0.id == sessionID }
         transcripts[sessionID] = transcript
         startSyncing(sessionID, transcript)
         return transcript

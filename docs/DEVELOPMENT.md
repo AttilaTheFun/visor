@@ -845,9 +845,15 @@ From the code-quality pass of October 2026, found and left:
   `host|path`, a notification's target as `computer/session`.
 - `AgentScreen`'s initializer calls `host.transcript(for:)`, which starts
   the session's sync: building the view is what subscribes it.
-- `SessionTranscript` throttles its own `objectWillChange` (one change
-  told per frame of `SessionTranscript.frame`); it is tied to the send
-  motion fix and measured by `send_motion.sh`.
+- `SessionTranscript` tells views of its changes a frame at a time
+  (`SessionTranscript.frame`, through one tracked `tick`), and a send
+  starts the frame over (`flush`), so the computer's answer to it lands
+  after the thread has moved for it, not in the middle. The chat reads its
+  session's `SessionInfo` through the transcript (`info`), not the
+  connection's whole list, which changes whenever any session on the
+  computer does. Both are measured by `send_motion.sh`: an answer landing
+  mid-slide shows as a stutter in its steps (−11, −4, −13) rather than a
+  step down.
 - `VisorServer` and `SessionRecord` are `ObservableObject`s. The server is
   Apple-only and could use Observation; the client cannot until Isomer has
   it.
