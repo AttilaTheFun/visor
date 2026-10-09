@@ -76,6 +76,10 @@ public final class SessionTranscript {
     @ObservationIgnored private var displayIDs: [String: String] = [:]
     public func displayID(of entry: TranscriptEntry) -> String { displayIDs[entry.id] ?? entry.id }
 
+    /// The ids of the rows the thread shows, in order: the record's under
+    /// their display ids, then what was just sent and is shown.
+    var shownIDs: [String] { _entries.map(displayID(of:)) + _sending.filter(\.shown).map(\.id) }
+
     /// A rebuilt set of rows: a row that is new here and has the same role
     /// and words as one that went takes that one's display id.
     private func carryDisplayIDs(from old: [TranscriptEntry], to new: [TranscriptEntry]) {

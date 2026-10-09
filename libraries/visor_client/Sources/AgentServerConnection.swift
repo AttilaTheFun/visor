@@ -799,13 +799,21 @@ public final class AgentServerConnection: Identifiable {
     private func startSyncing(_ sessionID: String, _ transcript: SessionTranscript) {
         guard syncing[sessionID] == nil else { return }
         let server = server
-        syncing[sessionID] = Task { [weak transcript] in
+        syncing[sessionID] = Task { [weak self, weak transcript] in
             while !Task.isCancelled {
                 guard let transcript else { return }
                 let revision = transcript.revision
                 do {
                     let envelope = try await server.transcript(of: sessionID, since: revision, generation: transcript.generation)
-                    if transcript.takes(envelope) { transcript.sync(envelope) }
+                    guard transcript.takes(envelope) else { continue }
+                    let shown = transcript.shownIDs, generation = transcript.generation
+                    let whole = envelope.reset == true || envelope.generation.map { $0 != generation } ?? false
+                    transcript.sync(envelope)
+                    if let change = ThreadChange(before: shown, after: transcript.shownIDs, whole: whole,
+                                                 generation: (generation, transcript.generation),
+                                                 revision: (revision, transcript.revision)) {
+                        self?.note("thread \(sessionID.prefix(8)): \(change)")
+                    }
                 } catch {
                     // The server is away, or a hold timed out on the way:
                     // ask again shortly.

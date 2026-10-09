@@ -64,6 +64,7 @@ extension AgentServerConnection {
         }
         let page = Array(rows.suffix(Self.earlierPage))
         let added = transcript.putEarlier(page, more: more || rows.count > page.count)
+        note("thread \(sessionID.prefix(8)): \(added) earlier rows put in above")
         // Nothing new (a server before 0.19 answers a row past its own
         // with rows the thread has): asking again would bring the same, so
         // the thread goes no further back rather than spin for ever.
