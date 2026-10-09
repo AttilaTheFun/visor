@@ -13,6 +13,11 @@
 # measured after the send (default 1.6; the probe stays 20 s), to take in
 # the rows that arrive later in the turn. VISOR_FRAMES_READ=1 sends from
 # up the thread (the keyboard up), as after reading a long reply.
+# VISOR_FRAMES_AWAY=<seconds> leaves the app with the message typed and
+# sends it the moment the app is back, while it reconnects.
+# VISOR_FRAMES_RESUME=<claude session id> (with VISOR_FRAMES_CWD, its
+# folder) starts the throwaway session from that conversation instead of a
+# first prompt: a long thread, more rows than a client is served at once.
 #
 # Needs: the server running on this Mac and a booted simulator the probe
 # runs on (rules_apple's "BAZEL_TEST_iPhone 17_27.0"; boot it with `xcrun
@@ -45,15 +50,29 @@ swiftc -O -o "$OUT/sheet" $HERE/sheet.swift
 bazel build //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 2>&1 | grep -E "error:|Build completed" || true
 
 # A throwaway session with a thread long enough to scroll.
-WORK="$(mktemp -d)"
+WORK="${VISOR_FRAMES_CWD:-$(mktemp -d)}"
 call() { curl -s -H "Authorization: Bearer $PW" -H 'Content-Type: application/json' "$@"; }
-SESSION="$(call -X POST $API/sessions -d "{\"type\":\"start\",\"agent\":\"claude\",\"cwd\":\"$WORK\",\"title\":\"Send probe\",\"skipPermissions\":true,\"model\":\"${VISOR_FRAMES_MODEL:-haiku}\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sessions"][0]["id"])')"
+SESSION="$(call -X POST $API/sessions -d "{\"type\":\"start\",\"agent\":\"claude\",\"cwd\":\"$WORK\",\"title\":\"Send probe\",\"skipPermissions\":true,\"model\":\"${VISOR_FRAMES_MODEL:-haiku}\",\"resume\":\"${VISOR_FRAMES_RESUME:-}\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sessions"][0]["id"])')"
 trap 'call -X DELETE $API/sessions/$SESSION >/dev/null; pkill -INT -f recordVideo 2>/dev/null || true' EXIT
-call -X POST $API/sessions/$SESSION/send -d '{"type":"send","text":"Print the numbers 1 to 60, each on its own line, then two short paragraphs about bananas. No tools."}' >/dev/null
+[ -n "${VISOR_FRAMES_RESUME:-}" ] || call -X POST $API/sessions/$SESSION/send -d '{"type":"send","text":"Print the numbers 1 to 60, each on its own line, then two short paragraphs about bananas. No tools."}' >/dev/null
 for _ in $(seq 1 60); do
   sleep 2
   [ "$(call $API/sessions | python3 -c "import json,sys; print([s.get('busy') for s in json.load(sys.stdin)['sessions'] if s['id']=='$SESSION'][0])")" = "False" ] && break
 done
+
+# VISOR_FRAMES_REORDER=1: a second throwaway session is used after the
+# first, so the first is no longer the newest in the list, and the send
+# moves its row to the top (as after a while away, other agents working).
+OTHER=""
+if [ "${VISOR_FRAMES_REORDER:-0}" = "1" ]; then
+  OTHER="$(call -X POST $API/sessions -d "{\"type\":\"start\",\"agent\":\"claude\",\"cwd\":\"$WORK\",\"title\":\"Send probe (other)\",\"skipPermissions\":true,\"model\":\"haiku\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sessions"][0]["id"])')"
+  trap 'call -X DELETE $API/sessions/$SESSION >/dev/null; call -X DELETE $API/sessions/$OTHER >/dev/null; pkill -INT -f recordVideo 2>/dev/null || true' EXIT
+  call -X POST $API/sessions/$OTHER/send -d '{"type":"send","text":"Reply with the word ok."}' >/dev/null
+  for _ in $(seq 1 30); do
+    sleep 2
+    [ "$(call $API/sessions | python3 -c "import json,sys; print([s.get('busy') for s in json.load(sys.stdin)['sessions'] if s['id']=='$OTHER'][0])")" = "False" ] && break
+  done
+fi
 
 TEXT="${VISOR_FRAMES_TEXT:-Thanks for that. Now I would like you to reply with exactly the word banana and nothing else at all, please. This message is deliberately long so that it wraps over several lines in the composer on a phone, the way a real message does when it describes a bug in detail.}"
 python3 -c 'import time; print(time.time())' > "$OUT/rec-start"
@@ -62,7 +81,7 @@ REC=$!
 bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
   --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \
   --spawn_strategy=local --nocache_test_results --test_output=streamed \
-  --test_filter=VisorProbe/testSendFrames --test_env=VISOR_FRAMES_SESSION=$SESSION --test_env=VISOR_FRAMES_READ=${VISOR_FRAMES_READ:-0} \
+  --test_filter=VisorProbe/testSendFrames --test_env=VISOR_FRAMES_SESSION=$SESSION --test_env=VISOR_FRAMES_READ=${VISOR_FRAMES_READ:-0} --test_env=VISOR_FRAMES_AWAY=${VISOR_FRAMES_AWAY:-0} \
   "--test_env=VISOR_FRAMES_TEXT=$TEXT" --test_env=VISOR_PROBE_HOST=$HOST "--test_env=VISOR_PROBE_CODE=$CODE_TEXT" > "$OUT/test.txt" 2>&1 &
 TEST=$!
 for _ in $(seq 1 600); do grep -q "VISOR_FRAMES end\|FAILED\|error:" "$OUT/test.txt" && break; sleep 1; done

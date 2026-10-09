@@ -74,6 +74,15 @@ final class VisorProbe: XCTestCase {
             Thread.sleep(forTimeInterval: 1.5)
             NSLog("VISOR_FRAMES read")
         }
+        if let away = env["VISOR_FRAMES_AWAY"].flatMap(Double.init), away > 0 {
+            // Away and back, the message typed, and sent the moment the
+            // app is in front again: while it opens its channels afresh.
+            XCUIDevice.shared.press(.home)
+            Thread.sleep(forTimeInterval: away)
+            NSLog("VISOR_FRAMES back")
+            app.activate()
+            Thread.sleep(forTimeInterval: 0.3)
+        }
         NSLog("VISOR_FRAMES send")
         app.buttons["Send"].firstMatch.tap()
         if env["VISOR_FRAMES_SCROLL"] == "1" {
