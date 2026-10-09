@@ -269,6 +269,28 @@ final class VisorProbe: XCTestCase {
         }
     }
 
+    /// Learning that there are rows before the thread's moves nothing in
+    /// it: the fixture's chat opens with none known, and ten seconds on its
+    /// sync says there are some, as a server's first answer after a launch
+    /// can. The row standing for them is put in at the top when that
+    /// happens if it is not there already, and every row under it moved
+    /// down: the thread jumped on the first send after a launch (Visor 0.26).
+    func testLearningOfEarlierRowsMovesNothing() throws {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "learns-earlier"]
+        app.launch()
+        let last = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Rows now sync in the background, and the banner'")).firstMatch
+        XCTAssertTrue(last.waitForExistence(timeout: 5), "the chat's last row did not appear")
+        // Settled on its last row; the word of earlier rows not yet come.
+        Thread.sleep(forTimeInterval: 1)
+        let before = last.frame
+        Thread.sleep(forTimeInterval: 10)
+        XCTAssertTrue(last.exists, "the thread moved its last row out of view when it learned of earlier rows")
+        XCTAssertEqual(last.frame.minY, before.minY, accuracy: 0.5, "the thread moved when it learned of earlier rows")
+        app.terminate()
+    }
+
     /// The fixture's chat as drawn — a long bullet that starts in bold
     /// wraps rather than stopping at "…" — and the send button taking a
     /// tap beside its circle, in the room around it, not only on it.

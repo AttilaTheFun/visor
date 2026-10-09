@@ -71,7 +71,19 @@ final class FixtureAgentServer: AgentServer {
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { [] }
 
     func transcript(of session: String, since revision: Int, generation: Int) async throws -> Envelope {
-        if revision == 1 {
+        if revision == 1, VisorFixture.screen == "learns-earlier", session == VisorFixture.chatSession {
+            // The held sync answered ten seconds on with no row changed but
+            // word of earlier rows, as a server's first answer after a
+            // launch can (often the one to a send): the thread must not
+            // move for it.
+            try await Task.sleep(nanoseconds: 10_000_000_000)
+            var e = Envelope.transcript(session: session, entries: [], streaming: "", activity: nil, busy: false, error: nil)
+            e.revision = 2
+            e.generation = 1
+            e.more = true
+            return Self.wire(e)
+        }
+        if revision >= 1 {
             // Up to date: held, as a server holds it, until asked to stop.
             while !Task.isCancelled { try await Task.sleep(nanoseconds: 60_000_000_000) }
             throw CancellationError()

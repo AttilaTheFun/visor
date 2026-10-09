@@ -772,6 +772,28 @@ to look at. `SendIsImmediateTests` holds the client's half in CI: the sent
 message is in the thread before `sendMessage` returns, and a repeated
 message waits for its own row.
 
+Its options give the send other shapes (each in the script's header): a
+model and message (`VISOR_FRAMES_MODEL`, `VISOR_FRAMES_TEXT`) and a longer
+measure (`VISOR_FRAMES_AFTER`) for turns with tools and long replies;
+sending from up the thread (`VISOR_FRAMES_READ`); the moment the app is
+back from the background (`VISOR_FRAMES_AWAY`); after the app is ended
+and launched again onto the thread it kept (`VISOR_FRAMES_RELAUNCH`); a
+long thread, from a conversation file the session resumes
+(`VISOR_FRAMES_RESUME`, `VISOR_FRAMES_CWD`). The relaunch onto a long
+thread is what found the jump on the first send after a launch (0.26).
+
+The iOS probe's `testLearningOfEarlierRowsMovesNothing` guards that jump
+with no computer: the fixture's `learns-earlier` screen opens the chat
+with no earlier rows known and, ten seconds on, answers its sync with
+word of some, as a server's first answer after a launch can; the test
+fails if the last row moves. Run it after touching the thread's rows or
+its scrolling:
+`bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64
+--ios_simulator_device="iPhone 17" --ios_simulator_version=27.0
+--spawn_strategy=local --test_filter=VisorProbe/testLearningOfEarlierRowsMovesNothing`.
+`tools/probes/resync.mjs` (REST only) reports rows from before a send
+that the send replaces on the server.
+
 ### Opening frames look
 
 `tools/probes/frames/open_frames.sh <session id>` records the simulator
