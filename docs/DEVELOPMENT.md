@@ -390,6 +390,14 @@ waiting for it connects again. The headers go on the REST calls and on the socke
 opening request (`VisorHTTPService.request(…headers:)`,
 `VisorSocketService.open(url:headers:)`; a host with only the bearer
 forms sends the bearer out of them, a browser opens the socket without).
+**Onboarding** (`VisorOnboarding`, visor_ui): what a new user is shown
+before the app is set up, in place of everything else while its
+`isNeeded(store)` says so. The default (`DefaultOnboarding`) shows while
+there are no computers and the app has no account: Visor Server on a
+computer, a VPN of one's own to reach it away from home, and Add Computer.
+A fork with a more involved setup sets `VisorOnboardings.current` at
+launch. `-visor.fixture snapshot -visor.fixture.screen onboarding` shows it.
+
 **An account for the whole app** (a fork whose one single sign-on reaches
 several servers behind its front): a `VisorAccount` set at launch as
 `VisorAccounts.current`. Signed out, `VisorRootView` shows its sign-in

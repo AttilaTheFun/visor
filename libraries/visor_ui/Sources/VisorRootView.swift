@@ -42,10 +42,26 @@ public struct VisorRootView: View {
     private var compact: Bool { sizeClass == .compact }
     private var searching: Bool { !search.trimmed.isEmpty }
 
-    /// The app's account's sign-in while no one is signed in (a fork's,
-    /// or the fixture's); the computers otherwise.
+    /// The onboarding while it is needed (the default one: while there
+    /// are no computers); then the app's account's sign-in while no one is
+    /// signed in (a fork's, or the fixture's); the computers otherwise.
+    /// Adding a computer is open to all three.
     public var body: some View {
-        if let account = VisorAccounts.current, !store.accountSignedIn {
+        root
+            .sheet(isPresented: Binding(get: { store.addingServer }, set: { store.addingServer = $0 })) {
+                AddAgentServerSheet { record in
+                    store.add(record)
+                    store.addingServer = false
+                } cancel: {
+                    store.addingServer = false
+                }
+            }
+    }
+
+    @ViewBuilder private var root: some View {
+        if VisorFixture.screen == "onboarding" || VisorOnboardings.current.isNeeded(store) {
+            VisorOnboardings.current.view(store)
+        } else if let account = VisorAccounts.current, !store.accountSignedIn {
             AccountSignInView(account: account)
         } else {
             computers
@@ -57,14 +73,6 @@ public struct VisorRootView: View {
             sidebar
         } detail: {
             detailView
-        }
-        .sheet(isPresented: Binding(get: { store.addingServer }, set: { store.addingServer = $0 })) {
-            AddAgentServerSheet { record in
-                store.add(record)
-                store.addingServer = false
-            } cancel: {
-                store.addingServer = false
-            }
         }
         .sheet(isPresented: $composing) {
             ComposeSessionSheet(store: store) { serverID, id in
