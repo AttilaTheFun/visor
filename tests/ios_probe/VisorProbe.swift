@@ -64,6 +64,16 @@ final class VisorProbe: XCTestCase {
         NSLog("VISOR_FRAMES type")
         composer.typeText(env["VISOR_FRAMES_TEXT"] ?? "Reply with exactly the word banana")
         Thread.sleep(forTimeInterval: 1)
+        if env["VISOR_FRAMES_READ"] == "1" {
+            // Up the thread, keyboard and all, as when reading a long reply
+            // from its start before sending: the message is sent from there.
+            for _ in 0..<2 {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
+            }
+            Thread.sleep(forTimeInterval: 1.5)
+            NSLog("VISOR_FRAMES read")
+        }
         NSLog("VISOR_FRAMES send")
         app.buttons["Send"].firstMatch.tap()
         if env["VISOR_FRAMES_SCROLL"] == "1" {
