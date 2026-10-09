@@ -1,5 +1,6 @@
-import SwiftUI
 import MessageCache
+import Observation
+import SwiftUI
 import VisorProtocol
 import VisorServices
 
@@ -11,16 +12,23 @@ import VisorServices
 /// view redrawn for each, each redraw scrolling and animating, jumps.
 /// The first change after a quiet frame is told at once; the rest of a
 /// frame's changes are told together at its end.
+///
+/// Observed (Observation) through one counter, `tick`, advanced when views
+/// are told: every property a view reads touches it, and the state itself
+/// is kept untracked, so a frame's changes reach a view once.
 @MainActor
-public final class SessionTranscript: ObservableObject {
+@Observable
+public final class SessionTranscript {
+    /// Advanced when views are told of changes (`announce`).
+    private var tick = 0
     /// How often, at most, views are told of changes (nanoseconds).
     public static var frame: UInt64 = 500_000_000
     /// A frame is running: changes wait for its end.
-    private var framing = false
+    @ObservationIgnored private var framing = false
     /// Something changed since views were last told.
-    private var dirty = false
+    @ObservationIgnored private var dirty = false
     /// How many times views have been told, for tests.
-    private(set) var announced = 0
+    @ObservationIgnored private(set) var announced = 0
     /// Whether a frame is running, for tests.
     var inFrame: Bool { framing }
 
@@ -34,7 +42,7 @@ public final class SessionTranscript: ObservableObject {
     private func announce() {
         dirty = false
         announced += 1
-        objectWillChange.send()
+        tick &+= 1
     }
 
     private func startFrame() {
@@ -56,7 +64,7 @@ public final class SessionTranscript: ObservableObject {
     /// its copies — the one sent from here, the computer's copy, the
     /// agent's own record of it — so the view sees one row that changes,
     /// not one removed and another inserted.
-    private var displayIDs: [String: String] = [:]
+    @ObservationIgnored private var displayIDs: [String: String] = [:]
     public func displayID(of entry: TranscriptEntry) -> String { displayIDs[entry.id] ?? entry.id }
 
     /// A rebuilt set of rows: a row that is new here and has the same role
@@ -81,29 +89,61 @@ public final class SessionTranscript: ObservableObject {
 
     /// The record's rows, as synced: all the thread shows. What streams
     /// is not kept or drawn — the sync answers as soon as the record moves.
-    public var entries: [TranscriptEntry] = [] { didSet { changed() } }
-    public var activity: String? { didSet { changed() } }
-    public var busy = false { didSet { changed() } }
-    public var error: String? { didSet { changed() } }
+    @ObservationIgnored private var _entries: [TranscriptEntry] = []
+    public var entries: [TranscriptEntry] {
+        get { _ = tick; return _entries }
+        set { _entries = newValue; changed() }
+    }
+    @ObservationIgnored private var _activity: String? = nil
+    public var activity: String? {
+        get { _ = tick; return _activity }
+        set { _activity = newValue; changed() }
+    }
+    @ObservationIgnored private var _busy: Bool = false
+    public var busy: Bool {
+        get { _ = tick; return _busy }
+        set { _busy = newValue; changed() }
+    }
+    @ObservationIgnored private var _error: String? = nil
+    public var error: String? {
+        get { _ = tick; return _error }
+        set { _error = newValue; changed() }
+    }
     /// A tool call waiting for Allow or Deny.
-    public var pendingApproval: ApprovalRequest? { didSet { changed() } }
+    @ObservationIgnored private var _pendingApproval: ApprovalRequest? = nil
+    public var pendingApproval: ApprovalRequest? {
+        get { _ = tick; return _pendingApproval }
+        set { _pendingApproval = newValue; changed() }
+    }
     /// The transcript has been replayed once; before that the view shows a spinner.
-    public var loaded = false { didSet { changed() } }
+    @ObservationIgnored private var _loaded: Bool = false
+    public var loaded: Bool {
+        get { _ = tick; return _loaded }
+        set { _loaded = newValue; changed() }
+    }
     /// The revision of the rows held, from the last sync; what the next
     /// sync asks to go past.
-    public var revision = 0
+    @ObservationIgnored public var revision = 0
     /// Whether the thread goes back further than what has been sent.
-    public var hasEarlier = false { didSet { changed() } }
+    @ObservationIgnored private var _hasEarlier: Bool = false
+    public var hasEarlier: Bool {
+        get { _ = tick; return _hasEarlier }
+        set { _hasEarlier = newValue; changed() }
+    }
     /// A page of earlier rows is on its way (from the cache or the server).
-    var loadingEarlier = false
+    @ObservationIgnored var loadingEarlier = false
     /// The row the server was asked for the rows before, until it answers.
-    var earlierAsked: String?
+    @ObservationIgnored var earlierAsked: String?
     /// The server has said there is nothing before the first row shown.
-    var reachedStart = false
+    @ObservationIgnored var reachedStart = false
     /// Something to tell the user about the session, until they
     /// acknowledge it: that it was forked elsewhere and the chat now
     /// follows the newer branch.
-    public var notice: String? { didSet { changed() } }
+    @ObservationIgnored private var _notice: String? = nil
+    public var notice: String? {
+        get { _ = tick; return _notice }
+        set { _notice = newValue; changed() }
+    }
     /// A message sent from here and not yet on the record: the composer
     /// shows it as sending until the synced record carries it.
     public struct Outgoing: Identifiable, Equatable {
@@ -122,14 +162,18 @@ public final class SessionTranscript: ObservableObject {
         /// said twice is two messages).
         public var had: Set<String> = []
     }
-    public var sending: [Outgoing] = [] { didSet { changed() } }
+    @ObservationIgnored private var _sending: [Outgoing] = []
+    public var sending: [Outgoing] {
+        get { _ = tick; return _sending }
+        set { _sending = newValue; changed() }
+    }
 
     /// The generation of the rows held; a different one in an answer means
     /// the rows were rebuilt and the answer is the whole, not a delta.
-    public var generation = -1
+    @ObservationIgnored public var generation = -1
     /// Told what a sync brought — the whole, or rows new or changed — so
     /// the cache keeps it. Set by the connection that owns this.
-    var keep: ((_ whole: Bool, _ rows: [TranscriptEntry], _ state: SyncState) -> Void)?
+    @ObservationIgnored var keep: ((_ whole: Bool, _ rows: [TranscriptEntry], _ state: SyncState) -> Void)?
 
     /// Whether a sync's answer brings anything: the first answer, rows
     /// past the revision held, or the rows as a whole in another
@@ -242,19 +286,23 @@ public final class SessionTranscript: ObservableObject {
     /// each chunk and whether it replaces everything before it (a replay
     /// of the whole screen, sent when this window takes the terminal or
     /// subscribes again).
-    public private(set) var terminalBacklog: [String] = []
-    public var onTerminalBytes: ((_ chunk: String, _ startsOver: Bool) -> Void)?
+    @ObservationIgnored public private(set) var terminalBacklog: [String] = []
+    @ObservationIgnored public var onTerminalBytes: ((_ chunk: String, _ startsOver: Bool) -> Void)?
 
     public init() {}
 
     /// The newest status label, and the wait before it is shown.
-    private var latestActivity: String?
-    private var activityFlush: Task<Void, Never>?
+    @ObservationIgnored private var latestActivity: String?
+    @ObservationIgnored private var activityFlush: Task<Void, Never>?
     /// Everything streamed as status this turn that is not part of the
     /// record — the tool calls, subagents, shells and thinking as they
     /// were announced — in order, for the footer under the thread. Cleared
     /// when the turn ends: the record's rows carry what was done.
-    public var turnStatus: [StatusItem] = [] { didSet { changed() } }
+    @ObservationIgnored private var _turnStatus: [StatusItem] = []
+    public var turnStatus: [StatusItem] {
+        get { _ = tick; return _turnStatus }
+        set { _turnStatus = newValue; changed() }
+    }
 
     /// Status labels come in bursts — a tool call a moment — and a row
     /// redrawn for each one flickers, its spinner with it. The first label

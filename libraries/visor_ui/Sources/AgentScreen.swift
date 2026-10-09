@@ -15,9 +15,9 @@ import VisorProtocol
 
 @MainActor
 struct AgentScreen: View {
-    @ObservedObject var host: AgentServerConnection
+    var host: AgentServerConnection
     let sessionID: String
-    @ObservedObject private var transcript: SessionTranscript
+    private let transcript: SessionTranscript
     @State private var draft = ""
     @State private var showModels = false
     /// The goal whose words are being shown, with a way to clear it.
@@ -40,10 +40,10 @@ struct AgentScreen: View {
     let ended: () -> Void
 
     init(host: AgentServerConnection, sessionID: String, ended: @escaping () -> Void = {}) {
-        self._host = ObservedObject(wrappedValue: host)
+        self.host = host
         self.sessionID = sessionID
         self.ended = ended
-        self._transcript = ObservedObject(wrappedValue: host.transcript(for: sessionID))
+        self.transcript = host.transcript(for: sessionID)
     }
 
     private var info: SessionInfo? { host.sessions.first { $0.id == sessionID } }
@@ -214,15 +214,11 @@ struct AgentScreen: View {
                     // "Opus 5 High": the model, then how hard it is being
                     // asked to think, in grey so the two read apart. After
                     // a fallback, the model the turn ran on, marked.
+                    let effort = Text(info.effort.map { " " + AgentCatalog.effortTitle($0) } ?? "").foregroundColor(.secondary)
                     if let fallback {
-                        Text(Image(systemName: "arrow.down.circle.fill")).foregroundColor(.orange)
-                            + Text(" " + fallback.title)
-                            + Text(info.effort.map { " " + AgentCatalog.effortTitle($0) } ?? "")
-                                .foregroundColor(.secondary)
+                        Text("\(Text(Image(systemName: "arrow.down.circle.fill")).foregroundColor(.orange)) \(fallback.title)\(effort)")
                     } else {
-                        Text(host.modelTitle(for: info))
-                            + Text(info.effort.map { " " + AgentCatalog.effortTitle($0) } ?? "")
-                                .foregroundColor(.secondary)
+                        Text("\(host.modelTitle(for: info))\(effort)")
                     }
                 }
                 .lineLimit(1)

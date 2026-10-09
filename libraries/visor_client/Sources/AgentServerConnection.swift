@@ -4,13 +4,15 @@
 // session the UI observes. Reconnects with a short backoff while the app
 // is open. No Combine: observation is SwiftUI's, waiting is async/await.
 
-import SwiftUI
 import MessageCache
+import Observation
+import SwiftUI
 import VisorProtocol
 import VisorServices
 
 @MainActor
-public final class AgentServerConnection: ObservableObject, Identifiable {
+@Observable
+public final class AgentServerConnection: Identifiable {
     public enum State: Equatable {
         case disconnected
         case connecting
@@ -49,14 +51,14 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
         }
     }
 
-    @Published public var record: AgentServerRecord {
+    public var record: AgentServerRecord {
         didSet { onRecordChange?() }
     }
-    @Published public private(set) var state: State = .disconnected
+    public private(set) var state: State = .disconnected
     /// Whether the server is followed live over its channel, or by polling
     /// (where the path carries no WebSocket): the same, more slowly.
-    @Published public private(set) var live = true
-    @Published public internal(set) var sessions: [SessionInfo] = [] {
+    public private(set) var live = true
+    public internal(set) var sessions: [SessionInfo] = [] {
         // A server that keeps no titles or archive of its own: what the
         // user did here is laid over every list it sends.
         didSet {
@@ -71,12 +73,12 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     var localEdits: LocalSessionEdits?
     /// The server's own choices a new session starts from, when it starts
     /// them so (`starting.fromChoices`): asked for on each connect.
-    @Published public internal(set) var startChoices: [StartChoice] = []
-    @Published public private(set) var transcripts: [String: SessionTranscript] = [:]
+    public internal(set) var startChoices: [StartChoice] = []
+    public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
-    @Published public private(set) var catalogs: [AgentCatalog] = []
+    public private(set) var catalogs: [AgentCatalog] = []
     /// The store saves when the address or credentials change.
-    var onRecordChange: (() -> Void)?
+    @ObservationIgnored var onRecordChange: (() -> Void)?
 
     public nonisolated var id: String { recordID }
     private nonisolated let recordID: String
@@ -96,10 +98,10 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     private var lastGoodPath: String?
     /// The paths through other connected servers to this one, asked for
     /// as a round of tries begins (the store knows the other servers).
-    var relayPaths: (() -> [String])?
+    @ObservationIgnored var relayPaths: (() -> [String])?
     /// Told when the server is connected and has said who it is (the
     /// store learns its peers and introduces it to the others).
-    var onConnected: (() -> Void)?
+    @ObservationIgnored var onConnected: (() -> Void)?
     /// The path the server was reached by, this time.
     public private(set) var path: String?
     /// This device's SSH key was handed to the server once this
@@ -117,10 +119,10 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
 
     /// Told when the server sends a new list of its sessions (the store
     /// keeps the home screen's widget up to date by it).
-    var onSessionsChange: (() -> Void)?
+    @ObservationIgnored var onSessionsChange: (() -> Void)?
 
     /// The last command that failed, for the UI.
-    @Published public var commandError: String?
+    public var commandError: String?
 
     /// The server's subfolders of `path` (the picker); the resolved path comes back too.
     public func folders(at path: String) async throws -> (path: String, folders: [String]) {
@@ -887,11 +889,11 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     }
 
     /// Folders the user added without a session yet (kept on this device).
-    @Published public private(set) var knownProjects: [String] = []
+    public private(set) var knownProjects: [String] = []
     /// The names the user gave folders, by path (this device only).
-    @Published public private(set) var projectAliases: [String: String] = [:]
+    public private(set) var projectAliases: [String: String] = [:]
     /// Folders the server says are no longer there.
-    @Published public private(set) var missingProjects: Set<String> = []
+    public private(set) var missingProjects: Set<String> = []
 
     /// The server's projects: every known folder and every folder with a
     /// live session, in the order they were added.
@@ -1087,7 +1089,7 @@ public final class AgentServerConnection: ObservableObject, Identifiable {
     /// The slash commands each open session's agent takes, asked once,
     /// when the session is opened: what a draft that begins with a slash
     /// is completed from, and where a message is split at a command.
-    @Published public internal(set) var sessionCommands: [String: [SlashCommand]] = [:]
+    public internal(set) var sessionCommands: [String: [SlashCommand]] = [:]
 
     private func loadCommands(for sessionID: String) async -> [SlashCommand] {
         if let known = sessionCommands[sessionID] { return known }

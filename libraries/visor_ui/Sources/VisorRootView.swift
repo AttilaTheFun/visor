@@ -14,7 +14,7 @@ import VisorProtocol
 
 @MainActor
 public struct VisorRootView: View {
-    @EnvironmentObject private var store: VisorStore
+    @Environment(VisorStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.scenePhase) private var scenePhase
     /// The app has been in the background since it was last in front.
@@ -48,7 +48,7 @@ public struct VisorRootView: View {
         } detail: {
             detailView
         }
-        .sheet(isPresented: $store.addingServer) {
+        .sheet(isPresented: Binding(get: { store.addingServer }, set: { store.addingServer = $0 })) {
             AddAgentServerSheet { record in
                 store.add(record)
                 store.addingServer = false

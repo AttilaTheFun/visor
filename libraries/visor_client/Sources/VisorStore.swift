@@ -13,21 +13,23 @@
 // agents reach each other's sessions with nothing more to do.
 
 import MessageCache
+import Observation
 import SwiftUI
 import VisorProtocol
 import VisorServices
 
 @MainActor
-public final class VisorStore: ObservableObject {
-    @Published public private(set) var servers: [AgentServerConnection] = []
+@Observable
+public final class VisorStore {
+    public private(set) var servers: [AgentServerConnection] = []
     /// The add sheet is open. Held here because the Mac opens it from its
     /// menu bar, which is a scene away from the view.
-    @Published public var addingServer = false
+    public var addingServer = false
     /// A session a notification the user opened is about, for the view to
     /// open; cleared once it has.
-    @Published public var opening: NotificationTarget?
+    public var opening: NotificationTarget?
     /// Bumped when a server's record changes, so views of the store refresh.
-    @Published private var revision = 0
+    private var revision = 0
     /// Under the key an earlier build saved its computers.
     private let key = "hosts"
 
@@ -155,7 +157,7 @@ public final class VisorStore: ObservableObject {
 
     /// What the last `visor://authorize` link did: which computers took
     /// the key, for the app to show; cleared once shown.
-    @Published public var notice: String?
+    public var notice: String?
 
     /// A connection code or a `visor://connect` link: the Mac it names is
     /// added (or its password updated) and connected. A

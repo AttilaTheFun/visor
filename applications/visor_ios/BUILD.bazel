@@ -93,7 +93,7 @@ ios_extension(
         "ipad",
     ],
     infoplists = ["Widget/Info.plist"],
-    minimum_os_version = "18.0",
+    minimum_os_version = "26.0",
     provisioning_profile = select({
         "@apple_support//constraints:device": ":xcode_managed_profile",
         "//conditions:default": None,
@@ -115,7 +115,7 @@ ios_application(
         "ipad",
     ],
     infoplists = ["Info.plist"],
-    minimum_os_version = "18.0",
+    minimum_os_version = "26.0",
     provisioning_profile = select({
         "@apple_support//constraints:device": ":app_profile",
         "//conditions:default": None,

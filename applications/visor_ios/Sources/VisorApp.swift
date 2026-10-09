@@ -9,7 +9,7 @@ import VisorUI
 #if os(iOS)
 @main
 struct VisorApp: App {
-    @StateObject private var store: VisorStore
+    @State private var store: VisorStore
     /// Where the system hands over the push token and the notification
     /// the user opened (PushDelegate).
     @UIApplicationDelegateAdaptor(PushDelegate.self) private var pushDelegate
@@ -27,13 +27,13 @@ struct VisorApp: App {
             // A token for pushes, which each computer is given.
             VisorHost.notifications?.registerForRemoteNotifications()
         }
-        _store = StateObject(wrappedValue: VisorStore())
+        _store = State(initialValue: VisorStore())
     }
 
     var body: some Scene {
         WindowGroup {
             VisorRootView()
-                .environmentObject(store)
+                .environment(store)
                 // visor://connect?code=… — scanning a Mac's QR code with
                 // the camera opens this, and adds that computer.
                 .onOpenURL { url in store.open(url.absoluteString) }

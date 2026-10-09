@@ -16,11 +16,11 @@ import VisorProtocol
 
 @MainActor
 struct TerminalPane: View {
-    @ObservedObject var host: AgentServerConnection
+    var host: AgentServerConnection
     let sessionID: String
     /// The user chose to take it from another window.
     let useHere: Bool
-    @StateObject private var screen = TerminalScreen()
+    @State private var screen = TerminalScreen()
     /// Taking it from another window, until it is this one's.
     @State private var takingOver = false
     @Environment(\.horizontalSizeClass) private var sizeClass

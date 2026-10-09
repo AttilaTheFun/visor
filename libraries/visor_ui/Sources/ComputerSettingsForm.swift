@@ -9,7 +9,7 @@ import VisorServices
 
 @MainActor
 struct ComputerSettingsForm: View {
-    @ObservedObject var host: AgentServerConnection
+    var host: AgentServerConnection
     let forget: () -> Void
     @State private var name = ""
     @State private var address = ""

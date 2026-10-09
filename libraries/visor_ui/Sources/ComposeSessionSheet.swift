@@ -14,7 +14,7 @@ import VisorProtocol
 
 @MainActor
 struct ComposeSessionSheet: View {
-    @ObservedObject var store: VisorStore
+    var store: VisorStore
     /// The computer and the new session's id.
     let started: (String, String) -> Void
     @Environment(\.dismiss) private var dismiss

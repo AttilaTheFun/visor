@@ -9,7 +9,7 @@ import VisorProtocol
 
 @MainActor
 struct SessionInspector: View {
-    @ObservedObject var host: AgentServerConnection
+    var host: AgentServerConnection
     let session: SessionInfo
     /// A sheet, not a pane: a phone. Only then is there a Done button —
     /// a pane is closed from the toolbar's inspector button.
