@@ -11,7 +11,7 @@
     <key>CFBundleShortVersionString</key>
     <string>0.25</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <!-- The app it takes over from, by bundle id: an update from it
          installs this beside it and removes it (Server.relaunch). -->
     <key>VisorReplaces</key>

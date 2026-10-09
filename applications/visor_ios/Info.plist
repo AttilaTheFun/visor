@@ -13,7 +13,7 @@
     <key>CFBundleShortVersionString</key>
     <string>0.25</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <!-- A server may be plain http:// and ws:// on a LAN or a VPN, which

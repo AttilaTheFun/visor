@@ -11,7 +11,7 @@
     <key>CFBundleShortVersionString</key>
     <string>0.25</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <!-- A server may be plain http:// on a LAN or a VPN, which ATS would
          otherwise refuse as cleartext. Arbitrary loads alone: with
          NSAllowsLocalNetworking beside it, ATS ignores it. -->
