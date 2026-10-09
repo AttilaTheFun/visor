@@ -35,8 +35,10 @@ struct DefaultOnboardingView: View {
                 }
                 Section {
                     Text("In Visor Server's menu, Copy Connection Code and paste it here, or open its Settings and scan the QR code with this device's camera.")
+                    // The same name as the list's row: the probes add a
+                    // computer by it, whichever of the two is showing.
                     Button("Add Computer…") { store.addingServer = true }
-                        .accessibilityIdentifier("onboarding-add-computer")
+                        .accessibilityIdentifier("add-computer")
                 } header: {
                     Text("3. Add it here").noHeaderCase()
                 }

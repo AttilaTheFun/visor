@@ -27,7 +27,9 @@ final class VisorProbe: XCTestCase {
             return false
         }
         app.launch()
-        app.tap()
+        // An interaction, for the monitor to answer the question: on the
+        // status bar, since the middle of a long list is a session's row.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         let row = app.descendants(matching: .any).matching(identifier: "session-" + id).firstMatch
         if !row.waitForExistence(timeout: 15) {
             // No computer yet (an erased simulator): add the host by its
@@ -129,7 +131,9 @@ final class VisorProbe: XCTestCase {
             return false
         }
         app.launch()
-        app.tap()
+        // An interaction, for the monitor to answer the question: on the
+        // status bar, since the middle of a long list is a session's row.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         let row = app.descendants(matching: .any).matching(identifier: "session-" + id).firstMatch
         if !row.waitForExistence(timeout: 15) {
             // No computer yet: add the host — by its connection code
