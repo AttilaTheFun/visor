@@ -8,6 +8,11 @@
 #
 #   tools/probes/frames/send_motion.sh [host]     (default: this Mac's address)
 #
+# VISOR_FRAMES_MODEL (default haiku) and VISOR_FRAMES_TEXT give a turn of
+# another shape (thinking, tool calls); VISOR_FRAMES_AFTER, the seconds
+# measured after the send (default 1.6; the probe stays 20 s), to take in
+# the rows that arrive later in the turn.
+#
 # Needs: the server running on this Mac and a booted simulator the probe
 # runs on (rules_apple's "BAZEL_TEST_iPhone 17_27.0"; boot it with `xcrun
 # simctl boot`). Its Visor is signed in to this computer if it is not yet. The session is a throwaway,
@@ -41,7 +46,7 @@ bazel build //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 2>&1 | grep
 # A throwaway session with a thread long enough to scroll.
 WORK="$(mktemp -d)"
 call() { curl -s -H "Authorization: Bearer $PW" -H 'Content-Type: application/json' "$@"; }
-SESSION="$(call -X POST $API/sessions -d "{\"type\":\"start\",\"agent\":\"claude\",\"cwd\":\"$WORK\",\"title\":\"Send probe\",\"skipPermissions\":true,\"model\":\"haiku\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sessions"][0]["id"])')"
+SESSION="$(call -X POST $API/sessions -d "{\"type\":\"start\",\"agent\":\"claude\",\"cwd\":\"$WORK\",\"title\":\"Send probe\",\"skipPermissions\":true,\"model\":\"${VISOR_FRAMES_MODEL:-haiku}\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sessions"][0]["id"])')"
 trap 'call -X DELETE $API/sessions/$SESSION >/dev/null; pkill -INT -f recordVideo 2>/dev/null || true' EXIT
 call -X POST $API/sessions/$SESSION/send -d '{"type":"send","text":"Print the numbers 1 to 60, each on its own line, then two short paragraphs about bananas. No tools."}' >/dev/null
 for _ in $(seq 1 60); do
@@ -49,7 +54,7 @@ for _ in $(seq 1 60); do
   [ "$(call $API/sessions | python3 -c "import json,sys; print([s.get('busy') for s in json.load(sys.stdin)['sessions'] if s['id']=='$SESSION'][0])")" = "False" ] && break
 done
 
-TEXT="Thanks for that. Now I would like you to reply with exactly the word banana and nothing else at all, please. This message is deliberately long so that it wraps over several lines in the composer on a phone, the way a real message does when it describes a bug in detail."
+TEXT="${VISOR_FRAMES_TEXT:-Thanks for that. Now I would like you to reply with exactly the word banana and nothing else at all, please. This message is deliberately long so that it wraps over several lines in the composer on a phone, the way a real message does when it describes a bug in detail.}"
 python3 -c 'import time; print(time.time())' > "$OUT/rec-start"
 xcrun simctl io "$SIM" recordVideo --codec h264 --force "$OUT/send.mov" > "$OUT/rec.log" 2>&1 &
 REC=$!
@@ -80,4 +85,4 @@ PY
 )"
 "$OUT/sheet" "$OUT/send.mov" "$(python3 -c "print($SEND - 0.1)")" "$(python3 -c "print($SEND + 1.1)")" 30 "$OUT/frames" 9 2 >/dev/null
 echo "Send at ${SEND}s; frames in $OUT"
-"$OUT/motion" "$OUT/send.mov" "$(python3 -c "print($SEND - 0.2)")" "$(python3 -c "print($SEND + 1.6)")"
+"$OUT/motion" "$OUT/send.mov" "$(python3 -c "print($SEND - 0.2)")" "$(python3 -c "print($SEND + ${VISOR_FRAMES_AFTER:-1.6})")"
