@@ -8,7 +8,7 @@ import VisorUI
 #if os(macOS)
 @main
 struct VisorMacApp: App {
-    @StateObject private var store: VisorStore
+    @State private var store: VisorStore
     /// Where the system hands over the push token and the notification
     /// the user opened (MacPushDelegate).
     @NSApplicationDelegateAdaptor(MacPushDelegate.self) private var pushDelegate
@@ -23,7 +23,7 @@ struct VisorMacApp: App {
             // (The push token is asked for once launched: MacPushDelegate.)
             VisorHost.notifications?.requestPermission()
         }
-        _store = StateObject(wrappedValue: VisorStore())
+        _store = State(initialValue: VisorStore())
     }
 
     /// The bundle id this app had before: its saved computers and its
@@ -50,7 +50,7 @@ struct VisorMacApp: App {
     var body: some Scene {
         WindowGroup {
             VisorRootView()
-                .environmentObject(store)
+                .environment(store)
                 .frame(minWidth: 720, minHeight: 480)
                 // visor://connect?code=… — a connection code from a QR
                 // code or a link adds that computer.

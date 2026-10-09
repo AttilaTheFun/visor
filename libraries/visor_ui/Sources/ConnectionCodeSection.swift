@@ -12,7 +12,7 @@ import VisorProtocol
 
 @MainActor
 struct ConnectionCodeSection: View {
-    @ObservedObject var host: AgentServerConnection
+    var host: AgentServerConnection
     @State private var shown = false
     /// The server's own code, once asked for.
     @State private var fromServer: ConnectionCode?

@@ -13,23 +13,29 @@
 // agents reach each other's sessions with nothing more to do.
 
 import MessageCache
+import Observation
 import SwiftUI
 import VisorProtocol
 import VisorServices
 
 @MainActor
-public final class VisorStore: ObservableObject {
-    @Published public private(set) var servers: [AgentServerConnection] = []
+@Observable
+public final class VisorStore {
+    public private(set) var servers: [AgentServerConnection] = []
     /// The add sheet is open. Held here because the Mac opens it from its
     /// menu bar, which is a scene away from the view.
-    @Published public var addingServer = false
+    public var addingServer = false
     /// A session a notification the user opened is about, for the view to
     /// open; cleared once it has.
-    @Published public var opening: NotificationTarget?
+    public var opening: NotificationTarget?
     /// Bumped when a server's record changes, so views of the store refresh.
-    @Published private var revision = 0
+    private var revision = 0
     /// Under the key an earlier build saved its computers.
     private let key = "hosts"
+    /// Whether the app's account (`VisorAccounts.current`) is signed in;
+    /// false where there is none. While it is not, a view shows the
+    /// account's sign-in in place of the computers.
+    public internal(set) var accountSignedIn = false
 
     public init() {
         // Screenshot tests: only the canned server, its rows in memory,
@@ -60,6 +66,7 @@ public final class VisorStore: ObservableObject {
             if carried { save() }
         }
         for server in servers { observe(server); server.connect() }
+        startAccount()
         listenForNotifications()
         AgentServerAuthenticators.whenSignedIn { [weak self] id, serving in self?.signedIn(id, serving: serving) }
         // Where the device is decides which path to each computer fits:
@@ -115,9 +122,13 @@ public final class VisorStore: ObservableObject {
     /// record puts first (an SSH connection code for a computer held
     /// over HTTP makes SSH the way in).
     /// `authenticationGiven`: whether `record.authentication` was chosen
-    /// (a code that said, the form); false leaves a held computer's own.
+    /// (a code that said, the form); false, or none named (a code that
+    /// did not say), leaves a held computer's own, and a new one signs in
+    /// by password.
     @discardableResult
     public func add(_ record: AgentServerRecord, authenticationGiven: Bool = true) -> AgentServerConnection {
+        let authenticationGiven = authenticationGiven && !record.authentication.isEmpty
+        var record = record
         if let existing = held(record) {
             let isolated = existing.isolated
             existing.update { current in
@@ -140,6 +151,7 @@ public final class VisorStore: ObservableObject {
             save()
             return existing
         }
+        if record.authentication.isEmpty { record.authentication = PasswordAuthenticator.name }
         let server = AgentServerConnection(record: record)
         servers.append(server)
         observe(server)
@@ -150,7 +162,7 @@ public final class VisorStore: ObservableObject {
 
     /// What the last `visor://authorize` link did: which computers took
     /// the key, for the app to show; cleared once shown.
-    @Published public var notice: String?
+    public var notice: String?
 
     /// A connection code or a `visor://connect` link: the Mac it names is
     /// added (or its password updated) and connected. A
@@ -165,9 +177,7 @@ public final class VisorStore: ObservableObject {
         }
         guard let code = ConnectionCode(parsing: text) else { return nil }
         addingServer = false
-        let record = AgentServerRecord(name: code.name, address: code.host, secret: code.password, serverID: code.id, paths: code.paths,
-                                       authentication: code.auth.isEmpty ? PasswordAuthenticator.name : code.auth)
-        return add(record, authenticationGiven: !code.auth.isEmpty)
+        return add(AgentServerRecord(code: code))
     }
 
     /// Hands a device's SSH key to every computer connected here.

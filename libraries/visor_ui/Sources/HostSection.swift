@@ -8,7 +8,7 @@ import VisorProtocol
 /// header follow the connection and the sessions as they change.
 @MainActor
 struct HostSection<Rows: View>: View {
-    @ObservedObject var host: AgentServerConnection
+    var host: AgentServerConnection
     @ViewBuilder let rows: (AgentServerConnection) -> Rows
 
     var body: some View {

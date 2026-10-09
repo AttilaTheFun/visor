@@ -14,7 +14,7 @@ import VisorProtocol
 
 @MainActor
 public struct VisorRootView: View {
-    @EnvironmentObject private var store: VisorStore
+    @Environment(VisorStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.scenePhase) private var scenePhase
     /// The app has been in the background since it was last in front.
@@ -42,13 +42,23 @@ public struct VisorRootView: View {
     private var compact: Bool { sizeClass == .compact }
     private var searching: Bool { !search.trimmed.isEmpty }
 
+    /// The app's account's sign-in while no one is signed in (a fork's,
+    /// or the fixture's); the computers otherwise.
     public var body: some View {
+        if let account = VisorAccounts.current, !store.accountSignedIn {
+            AccountSignInView(account: account)
+        } else {
+            computers
+        }
+    }
+
+    private var computers: some View {
         SplitView(columns: $columns, compactColumn: $compactColumn) {
             sidebar
         } detail: {
             detailView
         }
-        .sheet(isPresented: $store.addingServer) {
+        .sheet(isPresented: Binding(get: { store.addingServer }, set: { store.addingServer = $0 })) {
             AddAgentServerSheet { record in
                 store.add(record)
                 store.addingServer = false
@@ -258,6 +268,7 @@ public struct VisorRootView: View {
                     Text("Messages").noHeaderCase()
                 }
             }
+            if let account = VisorAccounts.current { AccountSection(account: account) }
             // Always last: where another computer comes from.
             Section {
                 Button { store.addingServer = true } label: {

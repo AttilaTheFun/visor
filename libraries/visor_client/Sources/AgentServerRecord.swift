@@ -40,11 +40,16 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     /// The server said it stands alone: reached only at `address`, its
     /// other paths not learned or tried, it and its peers not shared.
     public var standalone: Bool
+    /// One of the app's account's servers (`VisorAccount`): added when it
+    /// signs in, gone when it signs out, not added or forgotten by hand.
+    public var fromAccount: Bool
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
                 provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", paths: [String] = [],
-                authentication: String = PasswordAuthenticator.name, serverKey: String = "", standalone: Bool = false) {
+                authentication: String = PasswordAuthenticator.name, serverKey: String = "", standalone: Bool = false,
+                fromAccount: Bool = false) {
         self.standalone = standalone
+        self.fromAccount = fromAccount
         self.id = id
         self.name = name
         self.address = address
@@ -121,7 +126,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         .object(["id": .string(id), "name": .string(name), "address": .string(address), "secret": .string(secret),
                  "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed),
                  "serverID": .string(serverID), "paths": .array(paths.map(JSONValue.string)), "authentication": .string(authentication),
-                 "serverKey": .string(serverKey), "standalone": .bool(standalone)])
+                 "serverKey": .string(serverKey), "standalone": .bool(standalone), "fromAccount": .bool(fromAccount)])
     }
 
     /// Reads a saved record; one saved by an earlier build, as a computer
@@ -135,6 +140,6 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
                   renamed: json["renamed"].bool ?? false, serverID: json["serverID"].string ?? "",
                   paths: (json["paths"].array ?? json["roads"].array)?.compactMap(\.string) ?? [],
                   authentication: json["authentication"].string ?? PasswordAuthenticator.name, serverKey: json["serverKey"].string ?? "",
-                  standalone: json["standalone"].bool ?? false)
+                  standalone: json["standalone"].bool ?? false, fromAccount: json["fromAccount"].bool ?? false)
     }
 }

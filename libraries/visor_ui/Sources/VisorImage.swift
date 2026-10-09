@@ -21,7 +21,7 @@ struct VisorImage: View {
     let reference: String
     /// The longest side it may take; 0 for as much room as there is.
     var maxEdge: CGFloat = 0
-    @ObservedObject var store: VisorStore
+    var store: VisorStore
     @State private var base64: String?
     @State private var failed = false
 

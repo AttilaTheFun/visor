@@ -6,7 +6,7 @@ import VisorProtocol
 /// sidebar: its provider's form.
 @MainActor
 struct ComputerSettingsView: View {
-    @ObservedObject var host: AgentServerConnection
+    var host: AgentServerConnection
     let forget: () -> Void
 
     var body: some View {

@@ -40,7 +40,7 @@ struct ConnectForm: View {
                     .accessibilityIdentifier("paste-code")
                 }
                 if let code {
-                    Text("\(code.name) at \(ServerAddress(code.host)?.display ?? code.host)")
+                    Text(Self.summary(of: code, canSSH: VisorHost.ssh != nil))
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 } else if !entry.trimmed.isEmpty {
@@ -67,9 +67,20 @@ struct ConnectForm: View {
     private func submit() {
         guard !entry.trimmed.isEmpty, ssh == nil || VisorHost.ssh != nil else { return }
         if let code {
-            connect(AgentServerRecord(name: code.name, address: code.host, secret: code.password))
+            // The whole code: its id and every path, not its first alone.
+            connect(AgentServerRecord(code: code))
         } else {
             connect(AgentServerRecord(name: entry.trimmed, address: entry.trimmed, secret: password, authentication: authentication))
         }
+    }
+
+    /// What a code adds, as the form says it: the computer and the first
+    /// path this device can take to it — over SSH when it has SSH, the
+    /// URL otherwise.
+    static func summary(of code: ConnectionCode, canSSH: Bool) -> String {
+        let paths = ([code.host] + code.paths).filter { canSSH || SSHAddress($0) == nil }
+        guard let first = paths.first else { return "\(code.name), over SSH only, which this app cannot use" }
+        if let ssh = SSHAddress(first) { return "\(code.name) over SSH, \(ssh.display)" }
+        return "\(code.name) at \(ServerAddress(first)?.display ?? first)"
     }
 }

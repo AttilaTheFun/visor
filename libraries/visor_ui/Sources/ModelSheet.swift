@@ -10,7 +10,7 @@ import VisorProtocol
 
 @MainActor
 struct ModelSheet: View {
-    @ObservedObject var host: AgentServerConnection
+    var host: AgentServerConnection
     let session: SessionInfo
     @Environment(\.dismiss) private var dismiss
     @State private var browsingAll = false

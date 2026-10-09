@@ -8,7 +8,7 @@ import VisorProtocol
 
 @MainActor
 struct ProjectSettingsView: View {
-    @ObservedObject var host: AgentServerConnection
+    var host: AgentServerConnection
     let project: AgentServerConnection.Project
     let rename: () -> Void
     let locate: () -> Void

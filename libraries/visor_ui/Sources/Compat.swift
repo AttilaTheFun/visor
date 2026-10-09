@@ -34,15 +34,15 @@ extension View {
         frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
     }
 
-    /// The sidebar's list: inset grouped on a phone, the sidebar style on
-    /// the Mac, plain where neither exists.
+    /// The sidebar's list: inset grouped, as every SwiftUI draws it (the
+    /// web's and Isomer's on a phone too), and the sidebar style on the Mac.
     @ViewBuilder func insetGroupedList() -> some View {
-        #if os(iOS)
-        listStyle(.insetGrouped)
-        #elseif os(macOS)
+        // The Mac's SwiftUI has no inset-grouped list: its sidebar is the
+        // same thing there. Every other SwiftUI draws inset-grouped.
+        #if os(macOS)
         listStyle(.sidebar)
         #else
-        listStyle(.plain)
+        listStyle(.insetGrouped)
         #endif
     }
 
@@ -69,35 +69,26 @@ extension View {
 
     /// A section header as written, not upper-cased.
     @ViewBuilder func noHeaderCase() -> some View {
-        #if canImport(UIKit) || canImport(AppKit)
         textCase(nil)
-        #else
-        self
-        #endif
     }
 }
 
-/// The connection log handed to the system's share sheet as a text file
-/// (AirDrop, Files, Mail), where there is one; nothing elsewhere, where
-/// copying it is the way out.
-@MainActor @ViewBuilder func connectionLogShareLink(_ text: String) -> some View {
-    #if os(iOS) || os(macOS)
-    ShareLink(item: ConnectionLogFile(text: text), preview: SharePreview("Visor connection log")) {
+/// The connection log handed to the system's share sheet as text (Mail,
+/// Messages, Notes; the web's share or clipboard, Android's chooser), the
+/// same on every SwiftUI.
+@MainActor func connectionLogShareLink(_ text: String) -> some View {
+    ShareLink(item: text, preview: SharePreview("Visor connection log")) {
         Text("Share Connection Log")
     }
-    #else
-    EmptyView()
-    #endif
 }
 
-/// What the system pasteboard holds as text, where there is one.
+/// What the system pasteboard holds as text: AppKit's on the Mac, UIKit's
+/// everywhere else (which the portable SwiftUI has too).
 @MainActor func pasteboardString() -> String? {
-    #if os(iOS)
-    return UIPasteboard.general.string
-    #elseif os(macOS)
+    #if os(macOS)
     return NSPasteboard.general.string(forType: .string)
     #else
-    return nil
+    return UIPasteboard.general.string
     #endif
 }
 

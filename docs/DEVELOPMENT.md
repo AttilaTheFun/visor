@@ -390,6 +390,19 @@ waiting for it connects again. The headers go on the REST calls and on the socke
 opening request (`VisorHTTPService.request(…headers:)`,
 `VisorSocketService.open(url:headers:)`; a host with only the bearer
 forms sends the bearer out of them, a browser opens the socket without).
+**An account for the whole app** (a fork whose one single sign-on reaches
+several servers behind its front): a `VisorAccount` set at launch as
+`VisorAccounts.current`. Signed out, `VisorRootView` shows its sign-in
+(`AccountSignInView`) in place of the computers; signed in, the store adds
+the servers its `servers()` lists (`fromAccount`, named as the account
+names them, signed in to by `AccountAuthenticator`, which asks the
+account's `headers(for:)`), follows `VisorAccounts.changed()`, and takes
+them away at Sign Out (the sidebar's `AccountSection`). None by default;
+`-visor.account fixture` (or `fixture-signed-in`) uses `FixtureAccount`,
+three canned computers behind one front. The client's models are
+`@Observable` (the iPhone app targets iOS 26); `SessionTranscript` keeps
+its state untracked behind one counter, so views hear of a frame's changes
+once.
 The server's side is `ServerSettings.authentication`: `password` (the
 default), or `none`, which lets in whoever reaches it — for paths of
 one's own, or a front that has signed the user in.
