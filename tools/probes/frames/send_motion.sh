@@ -15,6 +15,8 @@
 # up the thread (the keyboard up), as after reading a long reply.
 # VISOR_FRAMES_AWAY=<seconds> leaves the app with the message typed and
 # sends it the moment the app is back, while it reconnects.
+# VISOR_FRAMES_RELAUNCH=1 opens the session, ends the app and launches it
+# again, and sends from the thread opened from what the app kept.
 # VISOR_FRAMES_RESUME=<claude session id> (with VISOR_FRAMES_CWD, its
 # folder) starts the throwaway session from that conversation instead of a
 # first prompt: a long thread, more rows than a client is served at once.
@@ -81,7 +83,7 @@ REC=$!
 bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
   --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \
   --spawn_strategy=local --nocache_test_results --test_output=streamed \
-  --test_filter=VisorProbe/testSendFrames --test_env=VISOR_FRAMES_SESSION=$SESSION --test_env=VISOR_FRAMES_READ=${VISOR_FRAMES_READ:-0} --test_env=VISOR_FRAMES_AWAY=${VISOR_FRAMES_AWAY:-0} \
+  --test_filter=VisorProbe/testSendFrames --test_env=VISOR_FRAMES_SESSION=$SESSION --test_env=VISOR_FRAMES_READ=${VISOR_FRAMES_READ:-0} --test_env=VISOR_FRAMES_AWAY=${VISOR_FRAMES_AWAY:-0} --test_env=VISOR_FRAMES_RELAUNCH=${VISOR_FRAMES_RELAUNCH:-0} \
   "--test_env=VISOR_FRAMES_TEXT=$TEXT" --test_env=VISOR_PROBE_HOST=$HOST "--test_env=VISOR_PROBE_CODE=$CODE_TEXT" > "$OUT/test.txt" 2>&1 &
 TEST=$!
 for _ in $(seq 1 600); do grep -q "VISOR_FRAMES end\|FAILED\|error:" "$OUT/test.txt" && break; sleep 1; done

@@ -58,6 +58,18 @@ final class VisorProbe: XCTestCase {
         let composer = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 15), "no composer")
         Thread.sleep(forTimeInterval: 3)
+        if env["VISOR_FRAMES_RELAUNCH"] == "1" {
+            // The thread seen once and kept; then the app launched afresh
+            // (an update, or iOS ending it while away) and the session
+            // opened from what was kept.
+            app.terminate()
+            app.launch()
+            NSLog("VISOR_FRAMES relaunched")
+            XCTAssertTrue(row.waitForExistence(timeout: 30), "the session's row did not appear again")
+            row.tap()
+            XCTAssertTrue(composer.waitForExistence(timeout: 15), "no composer again")
+            Thread.sleep(forTimeInterval: 3)
+        }
         NSLog("VISOR_FRAMES tap-composer")
         composer.tap()
         Thread.sleep(forTimeInterval: 2)
@@ -101,6 +113,9 @@ final class VisorProbe: XCTestCase {
             NSLog("VISOR_FRAMES back")
         }
         Thread.sleep(forTimeInterval: 20)
+        // To the background, where the app keeps its connection log.
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1)
         NSLog("VISOR_FRAMES end")
     }
 
