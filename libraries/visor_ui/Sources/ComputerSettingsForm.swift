@@ -99,7 +99,10 @@ struct ComputerSettingsForm: View {
                 Button("Save and reconnect", action: save)
                     .disabled(address.trimmed.isEmpty)
                 Button("Reconnect") { host.connect() }
-                Button("Forget this computer", role: .destructive, action: forget)
+                // The account's computers come and go with its sign-in.
+                if !host.record.fromAccount {
+                    Button("Forget this computer", role: .destructive, action: forget)
+                }
             }
             ConnectionCodeSection(host: host)
             // What the client did about its connections, to send to

@@ -42,7 +42,17 @@ public struct VisorRootView: View {
     private var compact: Bool { sizeClass == .compact }
     private var searching: Bool { !search.trimmed.isEmpty }
 
+    /// The app's account's sign-in while no one is signed in (a fork's,
+    /// or the fixture's); the computers otherwise.
     public var body: some View {
+        if let account = VisorAccounts.current, !store.accountSignedIn {
+            AccountSignInView(account: account)
+        } else {
+            computers
+        }
+    }
+
+    private var computers: some View {
         SplitView(columns: $columns, compactColumn: $compactColumn) {
             sidebar
         } detail: {
@@ -258,6 +268,7 @@ public struct VisorRootView: View {
                     Text("Messages").noHeaderCase()
                 }
             }
+            if let account = VisorAccounts.current { AccountSection(account: account) }
             // Always last: where another computer comes from.
             Section {
                 Button { store.addingServer = true } label: {

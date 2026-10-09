@@ -32,6 +32,10 @@ public final class VisorStore {
     private var revision = 0
     /// Under the key an earlier build saved its computers.
     private let key = "hosts"
+    /// Whether the app's account (`VisorAccounts.current`) is signed in;
+    /// false where there is none. While it is not, a view shows the
+    /// account's sign-in in place of the computers.
+    public internal(set) var accountSignedIn = false
 
     public init() {
         // Screenshot tests: only the canned server, its rows in memory,
@@ -62,6 +66,7 @@ public final class VisorStore {
             if carried { save() }
         }
         for server in servers { observe(server); server.connect() }
+        startAccount()
         listenForNotifications()
         AgentServerAuthenticators.whenSignedIn { [weak self] id, serving in self?.signedIn(id, serving: serving) }
         // Where the device is decides which path to each computer fits:
