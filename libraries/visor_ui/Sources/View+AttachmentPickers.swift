@@ -20,10 +20,10 @@ import ImageIO
 
 extension View {
     /// Whether this host offers a choice of camera, photo library and
-    /// files (a phone), rather than going straight to files (a Mac, a
-    /// browser).
+    /// files (a phone, the Isomer builds as well), rather than going
+    /// straight to files (a Mac).
     static var offersAttachMenu: Bool {
-        #if os(macOS) || arch(wasm32)
+        #if os(macOS)
         false
         #else
         true

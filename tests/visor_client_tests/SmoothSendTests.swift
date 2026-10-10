@@ -87,8 +87,9 @@ final class SmoothSendTests: XCTestCase {
     }
 
     func testABurstIsToldAFrameAtATime() async {
+        let usual = SessionTranscript.frame
         SessionTranscript.frame = 60_000_000
-        defer { SessionTranscript.frame = 500_000_000 }
+        defer { SessionTranscript.frame = usual }
         let t = SessionTranscript()
         let start = t.announced
 
@@ -120,8 +121,9 @@ final class SmoothSendTests: XCTestCase {
     /// whole frame from the send, not until the frame already running
     /// ends (in the middle of the thread moving for the send).
     func testASendStartsTheFrameOver() async {
+        let usual = SessionTranscript.frame
         SessionTranscript.frame = 200_000_000
-        defer { SessionTranscript.frame = 500_000_000 }
+        defer { SessionTranscript.frame = usual }
         let t = SessionTranscript()
         t.busy = true
         try? await Task.sleep(nanoseconds: 120_000_000)
@@ -134,11 +136,31 @@ final class SmoothSendTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(ContinuousClock.now - sent, .milliseconds(200))
     }
 
+    /// The first answer of a thread opening is told at once, even in the
+    /// middle of a frame: it is what "Loading…" waits for.
+    func testTheFirstAnswerIsToldAtOnce() {
+        let usual = SessionTranscript.frame
+        SessionTranscript.frame = 5_000_000_000
+        defer { SessionTranscript.frame = usual }
+        let t = SessionTranscript()
+        t.busy = true
+        XCTAssertTrue(t.inFrame)
+        let start = t.announced
+        var envelope = Envelope.transcript(session: "s", entries: [TranscriptEntry(id: "a", role: .user, text: "Hi")],
+                                           streaming: "", activity: nil, busy: false, error: nil)
+        envelope.revision = 1
+        envelope.generation = 1
+        t.sync(envelope)
+        XCTAssertTrue(t.loaded)
+        XCTAssertEqual(t.announced, start + 1)
+    }
+
     /// The chat's session, through its transcript: a change to another
     /// session on the computer tells it nothing; one to its own is told.
     func testTheChatIsToldOfItsOwnSessionOnly() async {
+        let usual = SessionTranscript.frame
         SessionTranscript.frame = 60_000_000
-        defer { SessionTranscript.frame = 500_000_000 }
+        defer { SessionTranscript.frame = usual }
         AgentServerConnection.cache = .inMemory()
         ScriptedProvider.server = ScriptedServer()
         AgentServerProviders.register(ScriptedProvider())

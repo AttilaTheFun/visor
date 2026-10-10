@@ -7,7 +7,7 @@
 #   tools/ios_ui_tests.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
-CASES="VisorProbe/testLearningOfEarlierRowsMovesNothing"
+CASES="VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo"
 LOG="$(mktemp)"
 bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
   --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \

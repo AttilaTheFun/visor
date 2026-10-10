@@ -21,6 +21,8 @@ public struct VisorRootView: View {
     @State private var wasInBackground = false
     @State private var columns: NavigationSplitViewVisibility = .all
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
+    /// What the open session's screen calls when its session is ended.
+    @State private var endSession = ViewAction()
     @State private var composing = false
     @State private var renamingSession: SessionTarget?
     @State private var renamingProject: ProjectTarget?
@@ -47,7 +49,10 @@ public struct VisorRootView: View {
     /// signed in (a fork's, or the fixture's); the computers otherwise.
     /// Adding a computer is open to all three.
     public var body: some View {
-        root
+        // What the open session's screen calls when the session is ended
+        // there: held across passes, so the screen compares equal.
+        endSession.run = { selection = nil }
+        return root
             .sheet(isPresented: Binding(get: { store.addingServer }, set: { store.addingServer = $0 })) {
                 AddAgentServerSheet { record in
                     store.add(record)
@@ -165,7 +170,7 @@ public struct VisorRootView: View {
             #endif
         }
         .onChange(of: selection) { _, value in
-            if compact { compactColumn = value == nil ? .sidebar : .detail }
+            if compact, compactColumn != (value == nil ? .sidebar : .detail) { compactColumn = value == nil ? .sidebar : .detail }
             // Which session is on screen, so a notification about it, with
             // the app in front, is not shown over it.
             store.noteViewing(serverID: value?.session?.serverID, sessionID: value?.session?.sessionID)
@@ -226,7 +231,7 @@ public struct VisorRootView: View {
         still.disablesAnimations = true
         withTransaction(still) {
             switch screen {
-            case "chat", "inspector", "models", "learns-earlier":
+            case "chat", "inspector", "models", "learns-earlier", "arrivals":
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
                 if compact { compactColumn = .detail }
             case "goal", "earlier":
@@ -261,7 +266,12 @@ public struct VisorRootView: View {
     /// removed. The last section adds a computer. Search narrows the rows
     /// in every section at once.
     private var outline: some View {
-        List(selection: $selection) {
+        // The selection and, on a phone, the column it shows, in one write:
+        // set one after the other (the column in onChange), each was a pass.
+        List(selection: Binding(get: { selection }, set: { value in
+            selection = value
+            if compact, compactColumn != (value == nil ? .sidebar : .detail) { compactColumn = value == nil ? .sidebar : .detail }
+        })) {
             ForEach(store.servers) { host in
                 HostSection(host: host) { host in hostRows(host) }
             }
@@ -429,7 +439,7 @@ public struct VisorRootView: View {
                 ArchivedList(host: host, cwd: nil, openProject: { selection = .project(serverID: serverID, cwd: $0) })
                     .id(serverID + "|archive")
             } else if let which = selection?.session, let host = store.server(for: which.serverID) {
-                AgentScreen(host: host, sessionID: which.sessionID, ended: { selection = nil })
+                AgentScreen(host: host, sessionID: which.sessionID, ended: endSession)
                     .id(which)
             } else {
                 EmptyDetail(title: "Nothing selected",

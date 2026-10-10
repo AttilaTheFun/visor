@@ -8,8 +8,11 @@ import VisorProtocol
 @MainActor
 struct ApprovalControls: View {
     let request: ApprovalRequest
-    let allow: () -> Void
-    let deny: () -> Void
+    /// Where the answer goes: the computer and the session, compared by
+    /// identity and value rather than two closures, which never compare
+    /// equal.
+    let host: AgentServerConnection
+    let sessionID: String
 
     var body: some View {
         HStack(spacing: 8) {
@@ -21,8 +24,10 @@ struct ApprovalControls: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Button("Deny", action: deny).agentPillButton().accessibilityIdentifier("deny")
-            Button("Allow", action: allow).agentPillButton().foregroundColor(.green).accessibilityIdentifier("allow")
+            Button("Deny") { host.approve(sessionID, id: request.id, allow: false) }
+                .agentPillButton().accessibilityIdentifier("deny")
+            Button("Allow") { host.approve(sessionID, id: request.id, allow: true) }
+                .agentPillButton().foregroundColor(.green).accessibilityIdentifier("allow")
         }
     }
 }

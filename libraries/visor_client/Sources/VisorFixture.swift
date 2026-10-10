@@ -16,8 +16,9 @@ public enum VisorFixture {
     @MainActor public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
     /// The screen to open on: sessions, chat, goal, inspector, models,
     /// search or connect ("" for the app's own first screen); also earlier
-    /// (a page of earlier rows goes in) and learns-earlier (the chat, told
-    /// ten seconds on that there are rows before it).
+    /// (a page of earlier rows goes in), learns-earlier (the chat, told
+    /// ten seconds on that there are rows before it) and arrivals (the
+    /// chat, with rows coming in twelve and twenty seconds on).
     /// A session to open a few seconds after launch, for a recording of
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }

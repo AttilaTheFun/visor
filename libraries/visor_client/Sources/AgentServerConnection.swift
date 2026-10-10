@@ -77,7 +77,10 @@ public final class AgentServerConnection: Identifiable {
     /// The server's own choices a new session starts from, when it starts
     /// them so (`starting.fromChoices`): asked for on each connect.
     public internal(set) var startChoices: [StartChoice] = []
-    public private(set) var transcripts: [String: SessionTranscript] = [:]
+    /// Not observed: no view reads the dictionary, and its first write for
+    /// a session happens while the screen that opens it is being built,
+    /// which invalidated the screen's parent for one more pass.
+    @ObservationIgnored public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
     public private(set) var catalogs: [AgentCatalog] = []
     /// The store saves when the address or credentials change.

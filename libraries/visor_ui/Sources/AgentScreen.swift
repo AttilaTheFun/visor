@@ -37,12 +37,19 @@ struct AgentScreen: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The session was ended from here: the screen has nothing left to show.
-    let ended: () -> Void
+    /// Held by the caller across its passes, not a closure, so the screen
+    /// compares equal when its computer and session are the same: given a
+    /// closure, the whole chat was evaluated again on every pass of the
+    /// root (each change to the sidebar's sessions, from any session).
+    let ended: ViewAction
 
-    init(host: AgentServerConnection, sessionID: String, ended: @escaping () -> Void = {}) {
+    /// `ended` nil: nothing to do when the session is ended here. (Made in
+    /// the body, not as a default argument: compiled in the Swift 5 mode, a
+    /// default argument is not on the main actor, and the action is.)
+    init(host: AgentServerConnection, sessionID: String, ended: ViewAction? = nil) {
         self.host = host
         self.sessionID = sessionID
-        self.ended = ended
+        self.ended = ended ?? ViewAction()
         self.transcript = host.transcript(for: sessionID)
     }
 
@@ -111,7 +118,7 @@ struct AgentScreen: View {
                 SessionInspector(host: host, session: info, compact: sizeClass == .compact,
                                  close: { showInspector = false },
                                  archive: { showInspector = false; host.archive(sessionID) },
-                                 end: { showInspector = false; host.end(sessionID); ended() })
+                                 end: { showInspector = false; host.end(sessionID); ended.run() })
             }
         }
         .navigationTitle(sessionTitle)
@@ -122,7 +129,9 @@ struct AgentScreen: View {
         // The draft is kept as it is typed, and taken up again when the
         // session is opened again (SavedDrafts).
         .onAppear { if draft.isEmpty { draft = SavedDrafts.draft(server: host.record.id, session: sessionID) } }
-        .onChange(of: draft) { _, now in SavedDrafts.keep(now, server: host.record.id, session: sessionID) }
+        // Kept by a view of its own that reads the draft: read here (an
+        // onChange of it), each keystroke evaluated the whole screen again.
+        .background(DraftKeeper(draft: $draft, server: host.record.id, session: sessionID))
         .onAppear {
             host.subscribe(sessionID)
             // Screenshot tests: the inspector or the model picker, open —
@@ -178,14 +187,14 @@ struct AgentScreen: View {
                 host.stop(sessionID)
             },
             loadEarlier: transcript.hasEarlier ? { host.loadEarlier(sessionID) } : nil,
-            suggestions: { [commands = host.sessionCommands[sessionID] ?? []] draft in Self.suggestions(for: draft, from: commands) },
+            // Read when the draft asks for them, not here: read here, their
+            // coming (after the screen opened) was a pass of the whole chat.
+            suggestions: { [host, sessionID] draft in Self.suggestions(for: draft, from: host.sessionCommands[sessionID] ?? []) },
             pick: { draft = $0.text },
             dictation: DictationBridge.installed
         ) {
             if let approval = transcript.pendingApproval {
-                ApprovalControls(request: approval,
-                                 allow: { host.approve(sessionID, id: approval.id, allow: true) },
-                                 deny: { host.approve(sessionID, id: approval.id, allow: false) })
+                ApprovalControls(request: approval, host: host, sessionID: sessionID)
             } else if let info {
                 // Pictures, before anything else in the row: what you are
                 // about to say, then how it is being said.
@@ -431,5 +440,18 @@ struct AgentScreen: View {
         // The pictures travel beside the words: the transcript shows them,
         // and the host names their paths to the agent.
         host.sendMessage(sessionID, text: text, images: paths)
+    }
+}
+
+/// Keeps the draft as it is typed (SavedDrafts): a view of its own reading
+/// it, so the screen around it does not.
+private struct DraftKeeper: View {
+    @Binding var draft: String
+    let server: String
+    let session: String
+
+    var body: some View {
+        Color.clear.frame(width: 0, height: 0)
+            .onChange(of: draft) { _, now in SavedDrafts.keep(now, server: server, session: session) }
     }
 }
