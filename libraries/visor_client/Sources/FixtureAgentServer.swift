@@ -83,6 +83,20 @@ final class FixtureAgentServer: AgentServer {
             e.more = true
             return Self.wire(e)
         }
+        if VisorFixture.screen == "arrivals", session == VisorFixture.chatSession, revision == 1 || revision == 2 {
+            // Rows come in as a reply would: two twelve seconds on, one
+            // more eight seconds after, each after the last there was.
+            try await Task.sleep(nanoseconds: revision == 1 ? 12_000_000_000 : 8_000_000_000)
+            let rows = revision == 1
+                ? [TranscriptEntry(id: "arrival-1", role: .user, text: "Run them now, please."),
+                   TranscriptEntry(id: "arrival-2", role: .assistant, text: "Running the sync tests now.")]
+                : [TranscriptEntry(id: "arrival-3", role: .assistant, text: "All 42 sync tests pass, offline rows included.")]
+            var e = Envelope.transcript(session: session, entries: rows, streaming: "", activity: nil, busy: false, error: nil)
+            e.after = revision == 1 ? [VisorFixture.transcript.last?.id ?? "", "arrival-1"] : ["arrival-2"]
+            e.revision = revision + 1
+            e.generation = 1
+            return Self.wire(e)
+        }
         if revision >= 1 {
             // Up to date: held, as a server holds it, until asked to stop.
             while !Task.isCancelled { try await Task.sleep(nanoseconds: 60_000_000_000) }
