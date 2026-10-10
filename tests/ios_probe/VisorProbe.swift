@@ -291,6 +291,66 @@ final class VisorProbe: XCTestCase {
         app.terminate()
     }
 
+    /// Rows coming in while the thread is read further up move nothing in
+    /// it: the fixture's chat, scrolled up, gets two rows twelve seconds on
+    /// and one more eight seconds after. What was read stays where it was,
+    /// a pill says how many came in below and goes a few seconds later, and
+    /// its tap takes the thread down to the newest.
+    func testRowsArrivingWhileReadingAboveMoveNothing() throws {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "arrivals"]
+        app.launch()
+        let last = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Rows now sync in the background, and the banner'")).firstMatch
+        XCTAssertTrue(last.waitForExistence(timeout: 8), "the chat's last row did not appear")
+        Thread.sleep(forTimeInterval: 1)
+        // Up the thread, as when reading: its end out of view.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)))
+        Thread.sleep(forTimeInterval: 1.5)
+        // A row in view to watch: the first of these that can be seen.
+        let read = ["layout I want for the offline banner", "Rows written offline are all on the server", "the sync notes", "Found it."]
+            .lazy.map { app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", $0)).firstMatch }
+            .first { $0.exists && $0.isHittable }
+        let watched = try XCTUnwrap(read, "no row in view after scrolling up")
+        let before = watched.frame
+        let pill = app.buttons["new-rows-pill"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 20), "no pill when rows came in below")
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        shot(app, "arrivals-pill")
+        XCTAssertTrue(pill.label.contains("2 new messages"), pill.label)
+        XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when rows came in below")
+        XCTAssertTrue(pill.waitForNonExistence(timeout: 7), "the pill stayed")
+        // The third row: the pill again, and its tap goes down to it.
+        XCTAssertTrue(pill.waitForExistence(timeout: 12), "no pill for the third row")
+        XCTAssertTrue(pill.label.contains("1 new message"), pill.label)
+        XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when the third row came in")
+        pill.tap()
+        let newest = app.staticTexts["All 42 sync tests pass, offline rows included."]
+        XCTAssertTrue(newest.waitForExistence(timeout: 3), "the newest row is not in the thread")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(newest.isHittable, "the pill's tap did not take the thread down to the newest row")
+        XCTAssertFalse(pill.exists, "the pill stayed after its tap")
+        app.terminate()
+    }
+
+    /// Rows coming in while the thread is at its end are scrolled to, and
+    /// there is no pill.
+    func testRowsArrivingAtTheEndAreScrolledTo() throws {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "arrivals"]
+        app.launch()
+        let last = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Rows now sync in the background, and the banner'")).firstMatch
+        XCTAssertTrue(last.waitForExistence(timeout: 8), "the chat's last row did not appear")
+        let arrived = app.staticTexts["Running the sync tests now."]
+        XCTAssertTrue(arrived.waitForExistence(timeout: 20), "the rows that came in are not in the thread")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(arrived.isHittable, "the thread did not go down to the rows that came in")
+        XCTAssertFalse(app.buttons["new-rows-pill"].exists, "a pill while at the end")
+        app.terminate()
+    }
+
     /// The fixture's chat as drawn — a long bullet that starts in bold
     /// wraps rather than stopping at "…" — and the send button taking a
     /// tap beside its circle, in the room around it, not only on it.

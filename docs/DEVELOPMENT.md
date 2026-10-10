@@ -794,6 +794,16 @@ or:
 `bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64
 --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0
 --spawn_strategy=local --test_filter=VisorProbe/testLearningOfEarlierRowsMovesNothing`.
+
+The thread follows its end only while the end is in view (AgentUI 0.29):
+rows that come in while it is read further up leave what is read where it
+is, and a pill above the composer counts them. The fixture's `arrivals`
+screen brings rows in twelve and twenty seconds after it opens;
+`testRowsArrivingWhileReadingAboveMoveNothing` scrolls up and checks that
+nothing moves, the pill's count, its going, and its tap;
+`testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
+rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and CI).
+
 `tools/probes/resync.mjs` (REST only) reports rows from before a send
 that the send replaces on the server.
 
@@ -871,7 +881,8 @@ From the code-quality pass of October 2026, found and left:
 - `AgentScreen`'s initializer calls `host.transcript(for:)`, which starts
   the session's sync: building the view is what subscribes it.
 - `SessionTranscript` tells views of its changes a frame at a time
-  (`SessionTranscript.frame`, through one tracked `tick`), and a send
+  (`SessionTranscript.frame`, a second since 0.29: longer than the
+  thread's own motions; through one tracked `tick`), and a send
   starts the frame over (`flush`), so the computer's answer to it lands
   after the thread has moved for it, not in the middle. The chat reads its
   session's `SessionInfo` through the transcript (`info`), not the
