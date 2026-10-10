@@ -37,9 +37,13 @@ struct AgentScreen: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The session was ended from here: the screen has nothing left to show.
-    let ended: () -> Void
+    /// Held by the caller across its passes, not a closure, so the screen
+    /// compares equal when its computer and session are the same: given a
+    /// closure, the whole chat was evaluated again on every pass of the
+    /// root (each change to the sidebar's sessions, from any session).
+    let ended: ViewAction
 
-    init(host: AgentServerConnection, sessionID: String, ended: @escaping () -> Void = {}) {
+    init(host: AgentServerConnection, sessionID: String, ended: ViewAction = ViewAction()) {
         self.host = host
         self.sessionID = sessionID
         self.ended = ended
@@ -111,7 +115,7 @@ struct AgentScreen: View {
                 SessionInspector(host: host, session: info, compact: sizeClass == .compact,
                                  close: { showInspector = false },
                                  archive: { showInspector = false; host.archive(sessionID) },
-                                 end: { showInspector = false; host.end(sessionID); ended() })
+                                 end: { showInspector = false; host.end(sessionID); ended.run() })
             }
         }
         .navigationTitle(sessionTitle)
@@ -178,14 +182,14 @@ struct AgentScreen: View {
                 host.stop(sessionID)
             },
             loadEarlier: transcript.hasEarlier ? { host.loadEarlier(sessionID) } : nil,
-            suggestions: { [commands = host.sessionCommands[sessionID] ?? []] draft in Self.suggestions(for: draft, from: commands) },
+            // Read when the draft asks for them, not here: read here, their
+            // coming (after the screen opened) was a pass of the whole chat.
+            suggestions: { [host, sessionID] draft in Self.suggestions(for: draft, from: host.sessionCommands[sessionID] ?? []) },
             pick: { draft = $0.text },
             dictation: DictationBridge.installed
         ) {
             if let approval = transcript.pendingApproval {
-                ApprovalControls(request: approval,
-                                 allow: { host.approve(sessionID, id: approval.id, allow: true) },
-                                 deny: { host.approve(sessionID, id: approval.id, allow: false) })
+                ApprovalControls(request: approval, host: host, sessionID: sessionID)
             } else if let info {
                 // Pictures, before anything else in the row: what you are
                 // about to say, then how it is being said.
