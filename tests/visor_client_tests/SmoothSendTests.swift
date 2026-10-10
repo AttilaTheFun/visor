@@ -115,6 +115,52 @@ final class SmoothSendTests: XCTestCase {
         t.flush()
         XCTAssertEqual(t.announced - start, 4)
     }
+
+    /// A send starts the frame over: the computer's answer to it waits a
+    /// whole frame from the send, not until the frame already running
+    /// ends (in the middle of the thread moving for the send).
+    func testASendStartsTheFrameOver() async {
+        SessionTranscript.frame = 200_000_000
+        defer { SessionTranscript.frame = 500_000_000 }
+        let t = SessionTranscript()
+        t.busy = true
+        try? await Task.sleep(nanoseconds: 120_000_000)
+        let start = t.announced
+        let sent = ContinuousClock.now
+        t.flush()
+        t.activity = "Thinking…"
+        XCTAssertEqual(t.announced, start)
+        await until { t.announced > start }
+        XCTAssertGreaterThanOrEqual(ContinuousClock.now - sent, .milliseconds(200))
+    }
+
+    /// The chat's session, through its transcript: a change to another
+    /// session on the computer tells it nothing; one to its own is told.
+    func testTheChatIsToldOfItsOwnSessionOnly() async {
+        SessionTranscript.frame = 60_000_000
+        defer { SessionTranscript.frame = 500_000_000 }
+        AgentServerConnection.cache = .inMemory()
+        ScriptedProvider.server = ScriptedServer()
+        AgentServerProviders.register(ScriptedProvider())
+        let host = AgentServerConnection(record: AgentServerRecord(name: "Mac", address: "mac.example", provider: "scripted"))
+        func info(_ id: String, _ title: String) -> SessionInfo {
+            SessionInfo(id: id, agent: .claude, cwd: "/tmp", title: title, created: 0)
+        }
+        host.take([info("s", "Mine")], replacing: true)
+        let t = host.transcript(for: "s")
+        XCTAssertEqual(t.info?.title, "Mine")
+        await until { !t.inFrame }
+        let start = t.announced
+
+        host.take([info("s", "Mine"), info("other", "Busy elsewhere")], replacing: true)
+        host.take([info("other", "Still busy")], replacing: false)
+        XCTAssertEqual(t.announced, start)
+        XCTAssertFalse(t.inFrame)
+
+        host.take([info("s", "Renamed")], replacing: false)
+        XCTAssertEqual(t.info?.title, "Renamed")
+        XCTAssertEqual(t.announced, start + 1)
+    }
 }
 
 /// A message sent to an idle agent is in the thread at once, and its copy

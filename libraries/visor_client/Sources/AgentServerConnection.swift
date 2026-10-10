@@ -66,6 +66,9 @@ public final class AgentServerConnection: Identifiable {
                 let edited = localEdits.apply(to: sessions)
                 if edited != sessions { sessions = edited }
             }
+            // Each open session's own, for its chat (`SessionTranscript.info`).
+            let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            for (id, transcript) in transcripts { transcript.info = byID[id] }
         }
     }
     /// The renames, archiving and removals kept on this device, for a
@@ -779,6 +782,7 @@ public final class AgentServerConnection: Identifiable {
                 try? cache.setSyncState(state, for: key)
             }
         }
+        transcript.info = sessions.first { $0.id == sessionID }
         transcripts[sessionID] = transcript
         startSyncing(sessionID, transcript)
         return transcript
@@ -795,13 +799,21 @@ public final class AgentServerConnection: Identifiable {
     private func startSyncing(_ sessionID: String, _ transcript: SessionTranscript) {
         guard syncing[sessionID] == nil else { return }
         let server = server
-        syncing[sessionID] = Task { [weak transcript] in
+        syncing[sessionID] = Task { [weak self, weak transcript] in
             while !Task.isCancelled {
                 guard let transcript else { return }
                 let revision = transcript.revision
                 do {
                     let envelope = try await server.transcript(of: sessionID, since: revision, generation: transcript.generation)
-                    if transcript.takes(envelope) { transcript.sync(envelope) }
+                    guard transcript.takes(envelope) else { continue }
+                    let shown = transcript.shownIDs, generation = transcript.generation
+                    let whole = envelope.reset == true || envelope.generation.map { $0 != generation } ?? false
+                    transcript.sync(envelope)
+                    if let change = ThreadChange(before: shown, after: transcript.shownIDs, whole: whole,
+                                                 generation: (generation, transcript.generation),
+                                                 revision: (revision, transcript.revision)) {
+                        self?.note("thread \(sessionID.prefix(8)): \(change)")
+                    }
                 } catch {
                     // The server is away, or a hold timed out on the way:
                     // ask again shortly.

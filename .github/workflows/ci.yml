@@ -37,6 +37,20 @@ jobs:
           //tests/message_cache_tests
           //tests/claude_transcript_tests
 
+  # The phone app itself, in the simulator: the probe's cases that need no
+  # computer, on the snapshot fixture. The thread must not move when it
+  # learns there are rows before it (the jump on the first send after a
+  # launch, 0.26). A simulator build needs no signing team.
+  ios-ui:
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      # Judged by what the tests say, not Bazel's exit: xcodebuild's
+      # teardown can hang well past a pass (tools/ios_ui_tests.sh).
+      - name: UI tests (iOS simulator)
+        run: tools/ios_ui_tests.sh
+
   # The same on Xcode 26 (GitHub's macOS 26 image): the toolchain a year
   # behind, which forks and contributors may still be on.
   xcode26:

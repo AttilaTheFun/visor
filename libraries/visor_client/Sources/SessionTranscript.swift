@@ -11,7 +11,9 @@ import VisorServices
 /// it, the agent's own record of it, thinking, the reply starting — and a
 /// view redrawn for each, each redraw scrolling and animating, jumps.
 /// The first change after a quiet frame is told at once; the rest of a
-/// frame's changes are told together at its end.
+/// frame's changes are told together at its end. What the user just did
+/// starts a frame over (`flush`): what the computer says back to a send
+/// waits until the thread has finished moving for it.
 ///
 /// Observed (Observation) through one counter, `tick`, advanced when views
 /// are told: every property a view reads touches it, and the state itself
@@ -31,6 +33,8 @@ public final class SessionTranscript {
     @ObservationIgnored private(set) var announced = 0
     /// Whether a frame is running, for tests.
     var inFrame: Bool { framing }
+    /// What ends the frame running.
+    @ObservationIgnored private var frameEnds: Task<Void, Never>?
 
     /// Every change comes here.
     private func changed() {
@@ -47,17 +51,22 @@ public final class SessionTranscript {
 
     private func startFrame() {
         framing = true
-        Task { [weak self] in
+        frameEnds?.cancel()
+        frameEnds = Task { [weak self] in
             try? await Task.sleep(nanoseconds: SessionTranscript.frame)
-            guard let self else { return }
+            guard !Task.isCancelled, let self else { return }
             if self.dirty { self.announce(); self.startFrame() } else { self.framing = false }
         }
     }
 
     /// Tells views now, whatever the frame: for what the user just did.
+    /// A frame starts from here: the computer's answer to a send — its
+    /// copy of the message, the turn starting, thinking — is told a whole
+    /// frame later, once the thread has moved for the send, not whenever
+    /// the frame that was running ends, which is in the middle of it.
     public func flush() {
-        guard dirty else { return }
-        announce()
+        if dirty { announce() }
+        startFrame()
     }
 
     /// The id a row is shown under. A message keeps one identity through
@@ -66,6 +75,10 @@ public final class SessionTranscript {
     /// not one removed and another inserted.
     @ObservationIgnored private var displayIDs: [String: String] = [:]
     public func displayID(of entry: TranscriptEntry) -> String { displayIDs[entry.id] ?? entry.id }
+
+    /// The ids of the rows the thread shows, in order: the record's under
+    /// their display ids, then what was just sent and is shown.
+    var shownIDs: [String] { _entries.map(displayID(of:)) + _sending.filter(\.shown).map(\.id) }
 
     /// A rebuilt set of rows: a row that is new here and has the same role
     /// and words as one that went takes that one's display id.
@@ -89,6 +102,20 @@ public final class SessionTranscript {
 
     /// The record's rows, as synced: all the thread shows. What streams
     /// is not kept or drawn — the sync answers as soon as the record moves.
+    /// The session as the computer's list has it, told with the rest of
+    /// the transcript a frame at a time: the chat reads it here, not in
+    /// the list, which changes whenever any session on the computer does
+    /// anything and would redraw the thread each time.
+    @ObservationIgnored private var _info: SessionInfo? = nil
+    public var info: SessionInfo? {
+        get { _ = tick; return _info }
+        set {
+            guard newValue != _info else { return }
+            _info = newValue
+            changed()
+        }
+    }
+
     @ObservationIgnored private var _entries: [TranscriptEntry] = []
     public var entries: [TranscriptEntry] {
         get { _ = tick; return _entries }

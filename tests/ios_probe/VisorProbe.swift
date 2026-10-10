@@ -27,7 +27,9 @@ final class VisorProbe: XCTestCase {
             return false
         }
         app.launch()
-        app.tap()
+        // An interaction, for the monitor to answer the question: on the
+        // status bar, since the middle of a long list is a session's row.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         let row = app.descendants(matching: .any).matching(identifier: "session-" + id).firstMatch
         if !row.waitForExistence(timeout: 15) {
             // No computer yet (an erased simulator): add the host by its
@@ -56,12 +58,43 @@ final class VisorProbe: XCTestCase {
         let composer = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 15), "no composer")
         Thread.sleep(forTimeInterval: 3)
+        if env["VISOR_FRAMES_RELAUNCH"] == "1" {
+            // The thread seen once and kept; then the app launched afresh
+            // (an update, or iOS ending it while away) and the session
+            // opened from what was kept.
+            app.terminate()
+            app.launch()
+            NSLog("VISOR_FRAMES relaunched")
+            XCTAssertTrue(row.waitForExistence(timeout: 30), "the session's row did not appear again")
+            row.tap()
+            XCTAssertTrue(composer.waitForExistence(timeout: 15), "no composer again")
+            Thread.sleep(forTimeInterval: 3)
+        }
         NSLog("VISOR_FRAMES tap-composer")
         composer.tap()
         Thread.sleep(forTimeInterval: 2)
         NSLog("VISOR_FRAMES type")
         composer.typeText(env["VISOR_FRAMES_TEXT"] ?? "Reply with exactly the word banana")
         Thread.sleep(forTimeInterval: 1)
+        if env["VISOR_FRAMES_READ"] == "1" {
+            // Up the thread, keyboard and all, as when reading a long reply
+            // from its start before sending: the message is sent from there.
+            for _ in 0..<2 {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
+            }
+            Thread.sleep(forTimeInterval: 1.5)
+            NSLog("VISOR_FRAMES read")
+        }
+        if let away = env["VISOR_FRAMES_AWAY"].flatMap(Double.init), away > 0 {
+            // Away and back, the message typed, and sent the moment the
+            // app is in front again: while it opens its channels afresh.
+            XCUIDevice.shared.press(.home)
+            Thread.sleep(forTimeInterval: away)
+            NSLog("VISOR_FRAMES back")
+            app.activate()
+            Thread.sleep(forTimeInterval: 0.3)
+        }
         NSLog("VISOR_FRAMES send")
         app.buttons["Send"].firstMatch.tap()
         if env["VISOR_FRAMES_SCROLL"] == "1" {
@@ -80,6 +113,9 @@ final class VisorProbe: XCTestCase {
             NSLog("VISOR_FRAMES back")
         }
         Thread.sleep(forTimeInterval: 20)
+        // To the background, where the app keeps its connection log.
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1)
         NSLog("VISOR_FRAMES end")
     }
 
@@ -129,7 +165,9 @@ final class VisorProbe: XCTestCase {
             return false
         }
         app.launch()
-        app.tap()
+        // An interaction, for the monitor to answer the question: on the
+        // status bar, since the middle of a long list is a session's row.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         let row = app.descendants(matching: .any).matching(identifier: "session-" + id).firstMatch
         if !row.waitForExistence(timeout: 15) {
             // No computer yet: add the host — by its connection code
@@ -229,6 +267,28 @@ final class VisorProbe: XCTestCase {
             shot(app, "fixture-" + screen)
             app.terminate()
         }
+    }
+
+    /// Learning that there are rows before the thread's moves nothing in
+    /// it: the fixture's chat opens with none known, and ten seconds on its
+    /// sync says there are some, as a server's first answer after a launch
+    /// can. The row standing for them is put in at the top when that
+    /// happens if it is not there already, and every row under it moved
+    /// down: the thread jumped on the first send after a launch (Visor 0.26).
+    func testLearningOfEarlierRowsMovesNothing() throws {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "learns-earlier"]
+        app.launch()
+        let last = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Rows now sync in the background, and the banner'")).firstMatch
+        XCTAssertTrue(last.waitForExistence(timeout: 5), "the chat's last row did not appear")
+        // Settled on its last row; the word of earlier rows not yet come.
+        Thread.sleep(forTimeInterval: 1)
+        let before = last.frame
+        Thread.sleep(forTimeInterval: 10)
+        XCTAssertTrue(last.exists, "the thread moved its last row out of view when it learned of earlier rows")
+        XCTAssertEqual(last.frame.minY, before.minY, accuracy: 0.5, "the thread moved when it learned of earlier rows")
+        app.terminate()
     }
 
     /// The fixture's chat as drawn — a long bullet that starts in bold

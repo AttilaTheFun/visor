@@ -46,7 +46,9 @@ struct AgentScreen: View {
         self.transcript = host.transcript(for: sessionID)
     }
 
-    private var info: SessionInfo? { host.sessions.first { $0.id == sessionID } }
+    /// The session as the computer lists it, through the transcript: told
+    /// with the thread's own changes, not each time the list changes.
+    private var info: SessionInfo? { transcript.info }
 
     /// While a draft is a slash and the start of a command's name, the
     /// commands it could be, best first: names that begin with what is

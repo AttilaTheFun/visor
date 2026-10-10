@@ -390,6 +390,14 @@ waiting for it connects again. The headers go on the REST calls and on the socke
 opening request (`VisorHTTPService.request(…headers:)`,
 `VisorSocketService.open(url:headers:)`; a host with only the bearer
 forms sends the bearer out of them, a browser opens the socket without).
+**Onboarding** (`VisorOnboarding`, visor_ui): what a new user is shown
+before the app is set up, in place of everything else while its
+`isNeeded(store)` says so. The default (`DefaultOnboarding`) shows while
+there are no computers and the app has no account: Visor Server on a
+computer, a VPN of one's own to reach it away from home, and Add Computer.
+A fork with a more involved setup sets `VisorOnboardings.current` at
+launch. `-visor.fixture snapshot -visor.fixture.screen onboarding` shows it.
+
 **An account for the whole app** (a fork whose one single sign-on reaches
 several servers behind its front): a `VisorAccount` set at launch as
 `VisorAccounts.current`. Signed out, `VisorRootView` shows its sign-in
@@ -764,6 +772,31 @@ to look at. `SendIsImmediateTests` holds the client's half in CI: the sent
 message is in the thread before `sendMessage` returns, and a repeated
 message waits for its own row.
 
+Its options give the send other shapes (each in the script's header): a
+model and message (`VISOR_FRAMES_MODEL`, `VISOR_FRAMES_TEXT`) and a longer
+measure (`VISOR_FRAMES_AFTER`) for turns with tools and long replies;
+sending from up the thread (`VISOR_FRAMES_READ`); the moment the app is
+back from the background (`VISOR_FRAMES_AWAY`); after the app is ended
+and launched again onto the thread it kept (`VISOR_FRAMES_RELAUNCH`); a
+long thread, from a conversation file the session resumes
+(`VISOR_FRAMES_RESUME`, `VISOR_FRAMES_CWD`). The relaunch onto a long
+thread is what found the jump on the first send after a launch (0.26).
+
+The iOS probe's `testLearningOfEarlierRowsMovesNothing` guards that jump
+with no computer: the fixture's `learns-earlier` screen opens the chat
+with no earlier rows known and, ten seconds on, answers its sync with
+word of some, as a server's first answer after a launch can; the test
+fails if the last row moves. CI runs it (the `ios-ui` job, in the
+simulator, through `tools/ios_ui_tests.sh`, which goes by what the tests
+say because xcodebuild's teardown can hang past a pass). To run it here,
+after touching the thread's rows or its scrolling, `tools/ios_ui_tests.sh`
+or:
+`bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64
+--ios_simulator_device="iPhone 17" --ios_simulator_version=27.0
+--spawn_strategy=local --test_filter=VisorProbe/testLearningOfEarlierRowsMovesNothing`.
+`tools/probes/resync.mjs` (REST only) reports rows from before a send
+that the send replaces on the server.
+
 ### Opening frames look
 
 `tools/probes/frames/open_frames.sh <session id>` records the simulator
@@ -837,9 +870,15 @@ From the code-quality pass of October 2026, found and left:
   `host|path`, a notification's target as `computer/session`.
 - `AgentScreen`'s initializer calls `host.transcript(for:)`, which starts
   the session's sync: building the view is what subscribes it.
-- `SessionTranscript` throttles its own `objectWillChange` (one change
-  told per frame of `SessionTranscript.frame`); it is tied to the send
-  motion fix and measured by `send_motion.sh`.
+- `SessionTranscript` tells views of its changes a frame at a time
+  (`SessionTranscript.frame`, through one tracked `tick`), and a send
+  starts the frame over (`flush`), so the computer's answer to it lands
+  after the thread has moved for it, not in the middle. The chat reads its
+  session's `SessionInfo` through the transcript (`info`), not the
+  connection's whole list, which changes whenever any session on the
+  computer does. Both are measured by `send_motion.sh`: an answer landing
+  mid-slide shows as a stutter in its steps (−11, −4, −13) rather than a
+  step down.
 - `VisorServer` and `SessionRecord` are `ObservableObject`s. The server is
   Apple-only and could use Observation; the client cannot until Isomer has
   it.

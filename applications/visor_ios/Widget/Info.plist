@@ -2,18 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>
-    <string>VisorWidget</string>
-    <key>CFBundleDisplayName</key>
-    <string>Visor</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.25</string>
-    <key>CFBundleVersion</key>
-    <string>2</string>
-    <key>NSExtension</key>
-    <dict>
-        <key>NSExtensionPointIdentifier</key>
-        <string>com.apple.widgetkit-extension</string>
-    </dict>
+	<key>CFBundleDisplayName</key>
+	<string>Visor</string>
+	<key>CFBundleName</key>
+	<string>VisorWidget</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.26</string>
+	<key>CFBundleVersion</key>
+	<string>5</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.widgetkit-extension</string>
+	</dict>
 </dict>
 </plist>

@@ -8,6 +8,8 @@ swift_test(
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//:swift_ui",
+        "//libraries/visor_client",
+        "//libraries/visor_services",
         "//libraries/visor_ui",
     ],
 )
