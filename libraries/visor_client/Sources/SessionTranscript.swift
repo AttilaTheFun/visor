@@ -216,6 +216,10 @@ public final class SessionTranscript {
     }
 
     func sync(_ envelope: Envelope) {
+        // The first answer is what an opening thread waits for ("Loading…"):
+        // told at once, as a send is, not at the end of a frame already
+        // running.
+        let first = !_loaded
         let rows = envelope.entries ?? []
         let whole: Bool
         var kept = rows
@@ -280,6 +284,7 @@ public final class SessionTranscript {
         loaded = true
         keep?(whole, kept, SyncState(revision: revision, generation: generation))
         settleSending()
+        if first { flush() }
     }
 
     /// Rows from before the first shown, put in front of it; `more`, whether

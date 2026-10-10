@@ -136,6 +136,25 @@ final class SmoothSendTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(ContinuousClock.now - sent, .milliseconds(200))
     }
 
+    /// The first answer of a thread opening is told at once, even in the
+    /// middle of a frame: it is what "Loading…" waits for.
+    func testTheFirstAnswerIsToldAtOnce() {
+        let usual = SessionTranscript.frame
+        SessionTranscript.frame = 5_000_000_000
+        defer { SessionTranscript.frame = usual }
+        let t = SessionTranscript()
+        t.busy = true
+        XCTAssertTrue(t.inFrame)
+        let start = t.announced
+        var envelope = Envelope.transcript(session: "s", entries: [TranscriptEntry(id: "a", role: .user, text: "Hi")],
+                                           streaming: "", activity: nil, busy: false, error: nil)
+        envelope.revision = 1
+        envelope.generation = 1
+        t.sync(envelope)
+        XCTAssertTrue(t.loaded)
+        XCTAssertEqual(t.announced, start + 1)
+    }
+
     /// The chat's session, through its transcript: a change to another
     /// session on the computer tells it nothing; one to its own is told.
     func testTheChatIsToldOfItsOwnSessionOnly() async {
