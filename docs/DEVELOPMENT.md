@@ -786,8 +786,9 @@ The iOS probe's `testLearningOfEarlierRowsMovesNothing` guards that jump
 with no computer: the fixture's `learns-earlier` screen opens the chat
 with no earlier rows known and, ten seconds on, answers its sync with
 word of some, as a server's first answer after a launch can; the test
-fails if the last row moves. Run it after touching the thread's rows or
-its scrolling:
+fails if the last row moves. CI runs it (the `ios-ui` job, in the
+simulator); to run it here, after touching the thread's rows or its
+scrolling:
 `bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64
 --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0
 --spawn_strategy=local --test_filter=VisorProbe/testLearningOfEarlierRowsMovesNothing`.
