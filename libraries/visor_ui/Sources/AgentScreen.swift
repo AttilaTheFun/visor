@@ -43,10 +43,13 @@ struct AgentScreen: View {
     /// root (each change to the sidebar's sessions, from any session).
     let ended: ViewAction
 
-    init(host: AgentServerConnection, sessionID: String, ended: ViewAction = ViewAction()) {
+    /// `ended` nil: nothing to do when the session is ended here. (Made in
+    /// the body, not as a default argument: compiled in the Swift 5 mode, a
+    /// default argument is not on the main actor, and the action is.)
+    init(host: AgentServerConnection, sessionID: String, ended: ViewAction? = nil) {
         self.host = host
         self.sessionID = sessionID
-        self.ended = ended
+        self.ended = ended ?? ViewAction()
         self.transcript = host.transcript(for: sessionID)
     }
 
