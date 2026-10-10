@@ -129,7 +129,9 @@ struct AgentScreen: View {
         // The draft is kept as it is typed, and taken up again when the
         // session is opened again (SavedDrafts).
         .onAppear { if draft.isEmpty { draft = SavedDrafts.draft(server: host.record.id, session: sessionID) } }
-        .onChange(of: draft) { _, now in SavedDrafts.keep(now, server: host.record.id, session: sessionID) }
+        // Kept by a view of its own that reads the draft: read here (an
+        // onChange of it), each keystroke evaluated the whole screen again.
+        .background(DraftKeeper(draft: $draft, server: host.record.id, session: sessionID))
         .onAppear {
             host.subscribe(sessionID)
             // Screenshot tests: the inspector or the model picker, open —
@@ -438,5 +440,18 @@ struct AgentScreen: View {
         // The pictures travel beside the words: the transcript shows them,
         // and the host names their paths to the agent.
         host.sendMessage(sessionID, text: text, images: paths)
+    }
+}
+
+/// Keeps the draft as it is typed (SavedDrafts): a view of its own reading
+/// it, so the screen around it does not.
+private struct DraftKeeper: View {
+    @Binding var draft: String
+    let server: String
+    let session: String
+
+    var body: some View {
+        Color.clear.frame(width: 0, height: 0)
+            .onChange(of: draft) { _, now in SavedDrafts.keep(now, server: server, session: session) }
     }
 }
