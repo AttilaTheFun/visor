@@ -92,6 +92,20 @@ extension View {
     #endif
 }
 
+extension Color {
+    /// The fill of an inset-grouped list's row, as the system draws it
+    /// (UIKit's grouped cell color, which the portable SwiftUI has too):
+    /// beneath a row that draws its own background, the sidebar's. The
+    /// Mac's sidebar rows have none.
+    static var groupedRowFill: Color {
+        #if os(macOS)
+        .clear
+        #else
+        Color(uiColor: .secondarySystemGroupedBackground)
+        #endif
+    }
+}
+
 /// The system pasteboard: AppKit's on the Mac, UIKit's everywhere else
 /// (which the portable SwiftUI has too: the browser's clipboard, Android's).
 func copyToPasteboard(_ text: String) {

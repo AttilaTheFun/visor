@@ -14,6 +14,7 @@ struct AccountSection: View {
                 Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right").rowLabel()
             }
             .buttonStyle(.plain)
+            .sidebarRow()
             .accessibilityIdentifier("account-sign-out")
         } header: {
             Text("Signed in with \(account.title)").noHeaderCase()

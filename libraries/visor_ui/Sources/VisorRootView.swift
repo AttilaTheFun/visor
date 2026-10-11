@@ -280,7 +280,7 @@ public struct VisorRootView: View {
                 Section {
                     ForEach(messageHits, id: \.hit.id) { item in
                         MessageHitRow(hit: item.hit, computer: store.servers.count > 1 ? item.host.record.name : nil)
-                            .tag(ContentSelection.session(SessionSelection(serverID: item.host.id, sessionID: item.hit.session)))
+                            .sidebarRow(.session(SessionSelection(serverID: item.host.id, sessionID: item.hit.session)), selection: selection)
                     }
                 } header: {
                     Text("Messages").noHeaderCase()
@@ -293,6 +293,7 @@ public struct VisorRootView: View {
                     Label(AgentServerProviderUIs.addTitle + "…", systemImage: "plus").rowLabel()
                 }
                 .buttonStyle(.plain)
+                .sidebarRow()
                 .accessibilityIdentifier("add-computer")
             }
         }
@@ -327,13 +328,14 @@ public struct VisorRootView: View {
         // session named so says nothing.
         if cards.isEmpty && archived.isEmpty && !(searching && messageHits.contains { $0.host === host }) {
             Text(searching ? "Nothing matches “\(search.trimmed)”." : "No sessions yet — tap compose to start one.")
-                .foregroundColor(.secondary)
                 .font(.footnote)
+                .foregroundStyle(.secondary)
+                .sidebarRow()
         }
         ForEach(cards) { card in
             let which = SessionSelection(serverID: host.id, sessionID: card.session.id)
-            SessionCardRow(session: card.session)
-                .tag(ContentSelection.session(which))
+            SessionCardRow(session: card.session, selected: selection == .session(which))
+                .sidebarRow(.session(which), selection: selection)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
                         .tint(.orange)
@@ -344,23 +346,23 @@ public struct VisorRootView: View {
         // holds, wherever they ran.
         if !archived.isEmpty {
             HStack(spacing: OutlineMetrics.gap) {
-                Image(systemName: "archivebox").foregroundColor(.secondary)
+                Image(systemName: "archivebox").foregroundStyle(.secondary)
                     .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
                 Text("Archived").lineLimit(1)
                 Spacer()
-                Text("\(archived.count)").foregroundColor(.secondary)
+                Text("\(archived.count)").foregroundStyle(.secondary)
             }
-            .tag(ContentSelection.hostArchive(serverID: host.id))
+            .sidebarRow(.hostArchive(serverID: host.id), selection: selection)
             .accessibilityIdentifier("archived-" + host.record.name)
         }
         let settings = ContentSelection.computer(serverID: host.id)
         HStack(spacing: OutlineMetrics.gap) {
-            Image(systemName: "gearshape").foregroundColor(.secondary)
+            Image(systemName: "gearshape").foregroundStyle(.secondary)
                 .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
             Text("Computer Settings")
             Spacer()
         }
-        .tag(settings)
+        .sidebarRow(settings, selection: selection)
         .accessibilityIdentifier("computer-settings-" + host.record.name)
     }
 

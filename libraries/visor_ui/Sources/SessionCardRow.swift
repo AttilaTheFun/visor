@@ -11,13 +11,15 @@ import VisorProtocol
 @MainActor
 struct SessionCardRow: View {
     let session: SessionInfo
+    /// The selected row: on the highlight, its marks are white too.
+    var selected = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     if session.agent.isShell {
-                        Image(systemName: "terminal").font(.caption).foregroundColor(.secondary)
+                        Image(systemName: "terminal").font(.caption).foregroundStyle(.secondary)
                             .accessibilityLabel("Terminal")
                     }
                     Text(session.title.isEmpty ? session.agent.title : session.title)
@@ -25,24 +27,24 @@ struct SessionCardRow: View {
                         .lineLimit(1)
                     // Working toward a goal, or looping: marked in the list.
                     if session.goal != nil {
-                        Image(systemName: "flag.fill").font(.caption).foregroundColor(.accentColor)
+                        Image(systemName: "flag.fill").font(.caption).foregroundStyle(mark)
                             .accessibilityLabel("Working toward a goal")
                     }
                     if session.loopWake != nil || session.loopCron != nil {
-                        Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundColor(.accentColor)
+                        Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(mark)
                             .accessibilityLabel("Looping")
                     }
                 }
                 Text(session.cwd)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 // A terminal has no messages: its folder says where it is.
                 if !session.agent.isShell {
                     Text(session.preview ?? "No messages yet")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
                 // Between turns, what the agent is waiting on in the
@@ -50,7 +52,7 @@ struct SessionCardRow: View {
                 if !session.busy, let waiting = Self.waitingLine(session.background) {
                     Text(waiting)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .accessibilityIdentifier("waiting-" + session.id)
                 }
@@ -59,22 +61,25 @@ struct SessionCardRow: View {
             if session.busy {
                 // Screenshot tests want the same pixels every run.
                 if VisorFixture.active {
-                    Image(systemName: "ellipsis.circle.fill").foregroundColor(.secondary)
+                    Image(systemName: "ellipsis.circle.fill").foregroundStyle(.secondary)
                         .accessibilityLabel("Working")
                 } else {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.small).tint(selected ? Color.white : nil)
                         .accessibilityLabel("Working")
                 }
             } else if session.pendingApproval != nil {
                 Image(systemName: "hand.raised.fill").foregroundColor(.yellow)
                     .accessibilityLabel("Waiting for approval")
             } else if !session.background.isEmpty {
-                Image(systemName: "clock").foregroundColor(.secondary)
+                Image(systemName: "clock").foregroundStyle(.secondary)
                     .accessibilityLabel("Waiting on background work")
             }
         }
         .accessibilityIdentifier("session-" + session.id)
     }
+
+    /// The goal's and the loop's marks: the accent, white on the highlight.
+    private var mark: Color { selected ? .white : .accentColor }
 
     /// "Waiting on CI checks on PR #92" — the first, and how many more.
     static func waitingLine(_ background: [StatusItem]) -> String? {
