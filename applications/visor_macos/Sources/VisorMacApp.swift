@@ -31,11 +31,17 @@ struct VisorMacApp: App {
     static let formerBundleID = "com.LoganShire.Visor.macOS"
 
     static func adoptFormerApp() {
-        guard Bundle.main.bundleIdentifier != formerBundleID,
-              UserDefaults.standard.string(forKey: "visor.hosts") == nil,
-              let former = UserDefaults(suiteName: formerBundleID) else { return }
-        for (key, value) in former.dictionaryRepresentation() where key.hasPrefix("visor.") {
-            UserDefaults.standard.set(value, forKey: key)
+        // Once: the computers have moved to the keychain since, so their
+        // absence from the settings says nothing about whether this ran.
+        let settings = UserDefaults.standard
+        guard Bundle.main.bundleIdentifier != formerBundleID, !settings.bool(forKey: "visor.adoptedFormerApp") else { return }
+        settings.set(true, forKey: "visor.adoptedFormerApp")
+        // What the former app kept, and only what this one lacks: not a
+        // suite's whole view, which holds this launch's arguments too (a
+        // `-visor.fixture` launch would be kept as the app's own setting).
+        let own = Bundle.main.bundleIdentifier.flatMap(settings.persistentDomain(forName:)) ?? [:]
+        for (key, value) in settings.persistentDomain(forName: formerBundleID) ?? [:] where key.hasPrefix("visor.") && own[key] == nil {
+            settings.set(value, forKey: key)
         }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         if let current = Bundle.main.bundleIdentifier {
