@@ -12,7 +12,7 @@ struct MenuContent: View {
         Group {
             if server.password.isEmpty {
                 Text("Not serving: set a password first")
-                SettingsLink { Text("Set a password in Settings…") }
+                Button("Set a password in Settings…") { AppDelegate.openSettings() }
             } else {
                 Text(server.listening ? "Visor is serving on port \(String(server.port))" : "Visor is not listening")
             }
@@ -48,7 +48,9 @@ struct MenuContent: View {
             }
             Button("Copy session table") { copy(server.sessionTable()) }
             Divider()
-            SettingsLink { Text("Settings…") }
+            // Not SettingsLink: it opens the window behind other apps'.
+            Button("Settings…") { AppDelegate.openSettings() }
+                .keyboardShortcut(",")
             Button("Quit Visor") { server.quit() }
                 .keyboardShortcut("q")
         }

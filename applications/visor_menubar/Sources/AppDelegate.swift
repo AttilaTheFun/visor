@@ -29,9 +29,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
+    /// Opens Settings in front of every other app's windows. The app has no
+    /// Dock icon, and opening a window does not bring it forward: Settings
+    /// opened behind whatever was in use, to be dug out from under it.
     static func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
         // SwiftUI's Settings scene answers the standard action.
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        bringSettingsForward()
+    }
+
+    /// The Settings window, once SwiftUI has made it (a moment after the
+    /// action), made key and ordered in front of other apps' windows.
+    private static func bringSettingsForward() {
+        Task { @MainActor in
+            for _ in 0..<20 {
+                if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" }),
+                   window.isVisible {
+                    NSApp.activate(ignoringOtherApps: true)
+                    window.makeKeyAndOrderFront(nil)
+                    window.orderFrontRegardless()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
     }
 }
