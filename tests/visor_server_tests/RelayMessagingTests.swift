@@ -258,10 +258,15 @@ final class RelayMessagingTests: ServerTestCase {
         here.settings.publicAddress = "https://mini.example.ts.net"
         let answer = here.route(HTTPRequest(method: "GET", path: "/api/codes", headers: ["authorization": "Bearer here-password"], body: ""))
         XCTAssertEqual(answer.status, 200)
+        // The same codes as the menu bar's, read back (each encoding may
+        // order the code's fields its own way).
         let codes = Envelope.decode(answer.body)?.codes
-        XCTAssertEqual(codes, here.connectionCodes)
-        XCTAssertEqual(codes?.qr, here.connectionCode?.encoded)
-        XCTAssertEqual(ConnectionCode(parsing: codes?.https ?? "")?.host, "https://mini.example.ts.net")
+        let read = { (code: String?) in code.flatMap(ConnectionCode.init(parsing:)) }
+        XCTAssertNotNil(read(codes?.qr))
+        XCTAssertEqual(read(codes?.qr), here.connectionCode)
+        XCTAssertEqual(read(codes?.https), read(here.connectionCodes?.https))
+        XCTAssertEqual(read(codes?.https)?.host, "https://mini.example.ts.net")
+        XCTAssertNil(codes?.ssh)
         XCTAssertEqual(here.route(HTTPRequest(method: "GET", path: "/api/codes", headers: [:], body: "")).status, 401)
     }
 }
