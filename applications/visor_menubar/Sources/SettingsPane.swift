@@ -23,6 +23,10 @@ struct SettingsPane: View {
     @State private var publicAddress = ""
     @State private var tlsPath = ""
     @State private var tlsPassword = ""
+    /// The field being edited, so leaving it applies what was typed: an
+    /// address that only Return applied was easy to leave unapplied.
+    @FocusState private var editing: EditedField?
+    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword }
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
@@ -117,18 +121,21 @@ struct SettingsPane: View {
                 Toggle("Reverse proxy", isOn: Binding(get: { server.settings.proxyEnabled }, set: { server.settings.proxyEnabled = $0 }))
                 if server.settings.proxyEnabled {
                     TextField("https://proxy.example.com/visor", text: $publicAddress)
-                        .onSubmit { server.settings.publicAddress = publicAddress }
+                        .focused($editing, equals: .publicAddress)
+                        .onSubmit { apply(.publicAddress) }
                     if !server.settings.publicAddress.isEmpty { pathRow(server.settings.publicAddress) }
-                    Text("A proxy, a tunnel or a name with certificates in front of this Mac, scheme and all; clients are told it first, and it is what the connection code carries. One that passes no WebSockets still works: clients poll. Press Return to apply.")
+                    Text("A proxy, a tunnel or a name with certificates in front of this Mac, scheme and all; clients are told it first, and it is what the connection code carries. One that passes no WebSockets still works: clients poll. Applied on Return, or on leaving the field.")
                         .font(.caption).foregroundColor(.secondary)
                 }
                 Text("Each path is a way in; what a client must show is the sign-in above. The LAN's and a VPN's addresses change with the network; this list is as it is now.")
                     .font(.caption).foregroundColor(.secondary)
                 TextField("TLS identity, a .p12 file (empty: plain, or TLS is the front's)", text: $tlsPath)
-                    .onSubmit { server.settings.tlsIdentityPath = tlsPath }
+                    .focused($editing, equals: .tlsPath)
+                    .onSubmit { apply(.tlsPath) }
                 SecureField("The .p12 file's password", text: $tlsPassword)
-                    .onSubmit { server.settings.tlsIdentityPath = tlsPath; server.setTLSPassword(tlsPassword) }
-                Text(server.servesTLS ? "Serving TLS with the identity above." : "Serving plain TCP: TLS, if any, is the front's. Press Return in a field to apply it.")
+                    .focused($editing, equals: .tlsPassword)
+                    .onSubmit { apply(.tlsPassword) }
+                Text(server.servesTLS ? "Serving TLS with the identity above." : "Serving plain TCP: TLS, if any, is the front's. A field applies on Return, or on leaving it.")
                     .font(.caption).foregroundColor(.secondary)
                 if let error = server.lastError { Text(error).font(.caption).foregroundColor(.red) }
             } header: {
@@ -201,6 +208,30 @@ struct SettingsPane: View {
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
+        }
+        // Leaving a field applies it, as Return does; so does closing the
+        // window with one still being edited.
+        .onChange(of: editing) { left, _ in if let left { apply(left) } }
+        .onDisappear {
+            apply(.publicAddress)
+            apply(.tlsPath)
+        }
+    }
+
+    /// What was typed in a field, applied: on Return, on leaving the field,
+    /// and when the window closes. Only a change is written: each write
+    /// saves the settings and may start the listener again.
+    private func apply(_ field: EditedField) {
+        switch field {
+        case .publicAddress:
+            if server.settings.publicAddress != publicAddress { server.settings.publicAddress = publicAddress }
+        case .tlsPath:
+            if server.settings.tlsIdentityPath != tlsPath { server.settings.tlsIdentityPath = tlsPath }
+        case .tlsPassword:
+            // The identity with its password, as Return always applied them.
+            guard !tlsPassword.isEmpty else { return }
+            server.settings.tlsIdentityPath = tlsPath
+            server.setTLSPassword(tlsPassword)
         }
     }
 
