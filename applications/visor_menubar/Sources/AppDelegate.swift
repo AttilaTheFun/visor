@@ -30,29 +30,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Opens Settings in front of every other app's windows. The app has no
-    /// Dock icon, and opening a window does not bring it forward: Settings
-    /// opened behind whatever was in use, to be dug out from under it.
+    /// Dock icon, and macOS does not bring such an app forward, however it
+    /// asks (activating it, ordering the window front: tried in 0.30 (1),
+    /// and Settings still opened behind): while Settings is open the app is
+    /// a regular one, Dock icon and all, and goes back to the menu bar
+    /// alone when Settings closes.
     static func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate()
         // SwiftUI's Settings scene answers the standard action.
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         bringSettingsForward()
     }
 
     /// The Settings window, once SwiftUI has made it (a moment after the
-    /// action), made key and ordered in front of other apps' windows.
+    /// action): made key, in front, and watched for its closing.
     private static func bringSettingsForward() {
         Task { @MainActor in
-            for _ in 0..<20 {
-                if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" }),
-                   window.isVisible {
-                    NSApp.activate(ignoringOtherApps: true)
+            for _ in 0..<40 {
+                // The only titled window the app has (the menu's is not).
+                if let window = NSApp.windows.first(where: { $0.isVisible && $0.styleMask.contains(.titled) }) {
+                    NSApp.activate()
                     window.makeKeyAndOrderFront(nil)
                     window.orderFrontRegardless()
+                    await backToTheMenuBar(when: window)
                     return
                 }
                 try? await Task.sleep(nanoseconds: 50_000_000)
             }
+            // No window came: nothing to keep a Dock icon for.
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
+    /// The menu bar alone again once `window` closes.
+    private static func backToTheMenuBar(when window: NSWindow) async {
+        for await _ in NotificationCenter.default.notifications(named: NSWindow.willCloseNotification, object: window) {
+            NSApp.setActivationPolicy(.accessory)
+            return
         }
     }
 }
