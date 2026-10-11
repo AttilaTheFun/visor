@@ -7,8 +7,15 @@
 #   tools/ios_ui_tests.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
-CASES="VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo"
+CASES="VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning"
 LOG="$(mktemp)"
+# The permission prompts undecided again (the dictation case answers one):
+# on the simulator the tests run on, when it exists already (CI's is new).
+SIM="$(xcrun simctl list devices | grep -F "BAZEL_TEST_iPhone 17_27.0 (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
+if [ -n "$SIM" ]; then
+  xcrun simctl boot "$SIM" 2>/dev/null || true
+  xcrun simctl privacy "$SIM" reset all com.LoganShire.VisorClient.iOS 2>/dev/null || true
+fi
 bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
   --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \
   --spawn_strategy=local --nocache_test_results --test_output=streamed \

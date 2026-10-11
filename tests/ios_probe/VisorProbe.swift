@@ -351,6 +351,29 @@ final class VisorProbe: XCTestCase {
         app.terminate()
     }
 
+    /// Refusing dictation leaves the app running: the system's answer to
+    /// the speech recognition prompt comes on a queue of its own, and a
+    /// handler for it built on the main actor trapped there (0.29). Needs
+    /// the prompt undecided (tools/ios_ui_tests.sh resets the simulator's
+    /// permissions first; CI's simulator is new each run).
+    func testRefusingDictationLeavesTheAppRunning() throws {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        let mic = app.buttons["dictate"]
+        XCTAssertTrue(mic.waitForExistence(timeout: 10), "no microphone in the composer")
+        mic.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let refuse = springboard.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Don'")).firstMatch
+        XCTAssertTrue(refuse.waitForExistence(timeout: 10), "no permission prompt: reset the simulator's permissions first")
+        refuse.tap()
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertEqual(app.state, .runningForeground, "the app ended when dictation was refused")
+        XCTAssertTrue(mic.exists, "the composer is gone after dictation was refused")
+        app.terminate()
+    }
+
     /// The fixture's chat as drawn — a long bullet that starts in bold
     /// wraps rather than stopping at "…" — and the send button taking a
     /// tap beside its circle, in the room around it, not only on it.
