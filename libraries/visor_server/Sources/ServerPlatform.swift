@@ -34,14 +34,12 @@ public struct ServerPlatform: Sendable {
     public var lifecycle: any ServerLifecycle
     /// What the server says it is doing, a line at a time.
     public var log: @Sendable (String) -> Void
-    /// SSH to peers, where the system has it (PeerSSH); nil elsewhere.
-    public var ssh: (any PeerSSH)?
 
     public init(listening: any Listening, terminals: any TerminalLaunching, processes: any ProcessSignals,
                 secrets: any SecretStore, fetching: any HTTPFetching, pushSigning: (any PushSigning)?,
                 images: any ImageMeasuring, files: any FileWatching, tools: any ToolLocating, host: HostDetails,
                 lifecycle: any ServerLifecycle,
-                log: @escaping @Sendable (String) -> Void, ssh: (any PeerSSH)? = nil) {
+                log: @escaping @Sendable (String) -> Void) {
         self.listening = listening
         self.terminals = terminals
         self.processes = processes
@@ -54,7 +52,6 @@ public struct ServerPlatform: Sendable {
         self.host = host
         self.lifecycle = lifecycle
         self.log = log
-        self.ssh = ssh
     }
 
     private static let given = Mutex<ServerPlatform?>(nil)

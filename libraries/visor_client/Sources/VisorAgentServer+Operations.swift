@@ -122,7 +122,7 @@ extension VisorAgentServer {
         }
     }
 
-    // MARK: Pushes and links
+    // MARK: Pushes and codes
 
     public func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool {
         var e = Envelope(type: "push")
@@ -134,29 +134,36 @@ extension VisorAgentServer {
         return try await call("POST", "/push", e).exists ?? false
     }
 
-    public func connectionCode() async throws -> String {
-        let reply = try await call("GET", "/code")
-        guard let code = reply.text, !code.isEmpty else { throw AgentServerError.message("No connection code") }
-        return code
+    public func connectionCodes() async throws -> ConnectionCodes {
+        let reply = try await call("GET", "/codes")
+        guard let codes = reply.codes else { throw AgentServerError.message(reply.error ?? "No connection code") }
+        return codes
     }
 
-    public func link(code: String) async throws {
-        var body = Envelope(type: "link")
-        body.text = code
-        let reply = try await call("POST", "/link", body)
+    // MARK: The relay
+
+    public var relays: Bool { true }
+
+    public func relay(_ report: DirectoryReport) async throws -> [RelayMessage] {
+        var body = Envelope(type: "relay")
+        body.report = report
+        let reply = try await call("POST", "/relay", body)
         if let error = reply.error { throw AgentServerError.message(error) }
+        return reply.relayed ?? []
     }
 
-    public func peers() async throws -> [Peer] {
-        let reply = try await call("GET", "/peers")
-        if let error = reply.error { throw AgentServerError.message(error) }
-        return reply.peers ?? []
+    public func deliver(_ message: RelayMessage) async throws -> RelayReceipt {
+        var body = Envelope(type: "relay")
+        body.relayed = [message]
+        let reply = try await call("POST", "/relay/deliver", body)
+        guard let receipt = reply.receipt else { throw AgentServerError.message(reply.error ?? "No receipt") }
+        return receipt
     }
 
-    public func introduce(_ peers: [Peer]) async throws {
-        var body = Envelope(type: "peers")
-        body.peers = peers
-        let reply = try await call("POST", "/peers", body)
+    public func confirm(_ receipt: RelayReceipt) async throws {
+        var body = Envelope(type: "relay")
+        body.receipt = receipt
+        let reply = try await call("POST", "/relay/receipt", body)
         if let error = reply.error { throw AgentServerError.message(error) }
     }
 

@@ -28,9 +28,6 @@ final class ScriptedServer: AgentServer {
     var signedInBy: [String] = []
     var refused: Set<String> = []
     var identity: ServerIdentity?
-    var reachedAt: String? { signedInBy.last }
-    var peersAnswer: [Peer] = []
-    var introduced: [[Peer]] = []
 
     func authenticate(_ record: AgentServerRecord) async throws -> String? {
         if hangs { await withCheckedContinuation { hung.append($0) } }
@@ -39,8 +36,31 @@ final class ScriptedServer: AgentServer {
         return try signIn.get()
     }
 
-    func peers() async throws -> [Peer] { peersAnswer }
-    func introduce(_ peers: [Peer]) async throws { introduced.append(peers) }
+    /// The relay, as a server would keep it: the reports it was given,
+    /// the messages it has for the servers reported, what was carried to
+    /// it (each taken once, by id), and the receipts brought back.
+    var relays = true
+    var reports: [DirectoryReport] = []
+    var outbox: [RelayMessage] = []
+    var taken: [String: RelayReceipt] = [:]
+    var carriedHere: [RelayMessage] = []
+    var receipts: [RelayReceipt] = []
+    /// A server from before the relay: refuses every report.
+    var refusesReports = false
+    func relay(_ report: DirectoryReport) async throws -> [RelayMessage] {
+        if refusesReports { throw ScriptedFailure(status: 404) }
+        reports.append(report)
+        let reached = Set(report.servers.map(\.id))
+        return outbox.filter { reached.contains($0.to.server) && !receipts.map(\.message).contains($0.id) }
+    }
+    func deliver(_ message: RelayMessage) async throws -> RelayReceipt {
+        carriedHere.append(message)
+        if let receipt = taken[message.id] { return receipt }
+        let receipt = RelayReceipt(message: message.id, outcome: .sent)
+        taken[message.id] = receipt
+        return receipt
+    }
+    func confirm(_ receipt: RelayReceipt) async throws { receipts.append(receipt) }
     /// The SSH keys handed over; `onAuthorize` is what the server does
     /// with one (a test lets the SSH address in from then on).
     var authorizedKeys: [String] = []

@@ -107,8 +107,8 @@ extension ServerCommand {
         }
         settings.keep(at: VisorServer.settingsURL)
         print(settings.standalone
-              ? "The server stands alone from its next start: reached only at the address each client added it at, its other addresses and its peers shared with no one."
-              : "The server shares its addresses and its peers again, from its next start.")
+              ? "The server stands alone from its next start: reached only at the address each client added it at, its other addresses shared with no one, and kept out of the relay between computers."
+              : "The server shares its addresses and joins the relay again, from its next start.")
     }
 
     /// Shows or sets the address clients are told.

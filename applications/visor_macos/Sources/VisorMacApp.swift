@@ -18,7 +18,7 @@ struct VisorMacApp: App {
         // The host's services first: the store connects through them.
         installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService(),
                              notifications: NativeVisorNotificationService(), ssh: NativeVisorSSHService(), network: NativeVisorNetworkService(),
-                             dictation: NativeVisorDictationService())
+                             dictation: NativeVisorDictationService(), deviceName: Host.current().localizedName ?? "")
         if !VisorFixture.active {
             // (The push token is asked for once launched: MacPushDelegate.)
             VisorHost.notifications?.requestPermission()

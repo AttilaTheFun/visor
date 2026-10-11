@@ -20,12 +20,10 @@ struct ComputerSettingsForm: View {
     /// Whether the computer is reached over its own SSH.
     private var overSSH: Bool { SSHAddress(host.record.address) != nil }
 
-    /// The transport a path is: SSH, HTTPS or HTTP, through another
-    /// computer when the path is a relay.
+    /// The transport a path is: SSH, HTTPS or HTTP.
     static func transport(of path: String) -> String {
         if SSHAddress(path) != nil { return "SSH" }
-        let scheme = path.lowercased().hasPrefix("https") ? "HTTPS" : "HTTP"
-        return path.contains("/peer/") ? "\(scheme), through another computer" : scheme
+        return path.lowercased().hasPrefix("https") ? "HTTPS" : "HTTP"
     }
 
     /// How the connection signed in: by this device's key over SSH, else
@@ -92,7 +90,7 @@ struct ComputerSettingsForm: View {
                 } header: {
                     Text("Network paths")
                 } footer: {
-                    Text("The other ways this computer is reached, as it and the others say: tried in turn when the address above does not answer — and, last, through any other computer here that reaches it.")
+                    Text("The other ways this computer is reached, as it says: tried in turn when the address above does not answer.")
                 }
             }
             Section {
@@ -102,6 +100,16 @@ struct ComputerSettingsForm: View {
                 // The account's computers come and go with its sign-in.
                 if !host.record.fromAccount {
                     Button("Forget this computer", role: .destructive, action: forget)
+                }
+            }
+            if host.offersRelay {
+                Section {
+                    Toggle("Carry Agents' Messages", isOn: relay)
+                        .accessibilityIdentifier("relay-toggle")
+                } header: {
+                    Text("Messages between computers")
+                } footer: {
+                    Text("This device tells the computer which other computers it is connected to and their sessions, so the agents here can message the sessions there, and it carries those messages. No address or password goes from one computer to another. Off: the computer is told nothing by this device.")
                 }
             }
             ConnectionCodeSection(host: host)
@@ -127,6 +135,10 @@ struct ComputerSettingsForm: View {
             load()
         }
         .onChange(of: host.record.address) { load() }
+    }
+
+    private var relay: Binding<Bool> {
+        Binding(get: { host.relayEnabled }, set: { on in host.update { $0.relay = on } })
     }
 
     /// The fields from the record.

@@ -27,6 +27,9 @@ public enum VisorHost {
     /// Dictation, where the host has a microphone and a recognizer: a
     /// message spoken into the composer.
     public static var dictation: (any VisorDictationService)?
+    /// What the device is called (its owner's name for it, where the host
+    /// knows one): how the servers it reports to name it to their agents.
+    public static var deviceName = ""
 }
 
 /// Hands the client its services. An app calls this once, before it makes
@@ -36,7 +39,7 @@ public enum VisorHost {
 public func installVisorServices(socket: any VisorSocketService, http: any VisorHTTPService, settings: any VisorSettingsService,
                                  notifications: (any VisorNotificationService)? = nil, widget: (any VisorWidgetService)? = nil,
                                  ssh: (any VisorSSHService)? = nil, network: (any VisorNetworkService)? = nil,
-                                 dictation: (any VisorDictationService)? = nil) {
+                                 dictation: (any VisorDictationService)? = nil, deviceName: String = "") {
     VisorHost.socket = socket
     VisorHost.http = http
     VisorHost.settings = settings
@@ -45,4 +48,5 @@ public func installVisorServices(socket: any VisorSocketService, http: any Visor
     VisorHost.ssh = ssh
     VisorHost.network = network
     VisorHost.dictation = dictation
+    VisorHost.deviceName = deviceName
 }

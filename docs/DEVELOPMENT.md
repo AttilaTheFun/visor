@@ -345,28 +345,36 @@ The session-side values a server hands back (`SessionInfo`,
 `TranscriptEntry`, the transcript and ephemeral envelopes) are the
 protocol library's, so a fork's server produces those from its own API.
 
-**The network of computers** (`VisorServer+Peers`, `+Relay`;
-`VisorStore`, `AgentServerConnection`): every server has an id
-(`ServerSettings.serverID`, made once) and keeps `peers: [Peer]` (id,
-name, addresses, password) in the secrets, from a code pasted in
-Settings, a client's `POST /api/peers`, or a peer passing on what it
-knows (`tellPeers`, after anything new: `adopt` says whether it was);
-`hello` and `GET /api/peers` carry the server's own addresses
-(`ownAddresses`: the public address, each address with the port while
-the network reaches it, `user@address` while SSH is let in). A server
-relays HTTP for a peer under `/peer/<id>/` (`relayTarget`, `relay`:
-the peer's password put in, `X-Visor-Relay` against circles, the first
-path that answers kept in `workingPaths`); an upgrade there is refused
-in `accept`, so the client polls. The agents' cross-computer calls take
-the same paths (`paths(to:)`, `call`). On the client, a record keeps
-`serverID` and `paths`; `AgentServerConnection` tries the paths of a
-round in turn (`pathsToTry`: the one that answered last, the record's,
-then `relayPaths` through the other connected servers, `/peer/<id>`
-under each), the next at once when one does not answer; on connecting,
-`VisorStore.joined` folds a duplicate record of the same computer,
-takes in the server's peers (`take`: a new record, or more paths for a
-known one) and introduces the servers to one another (`introduce`). The
-Link These Computers row is gone: holding two servers is the link.
+**Agents across computers** (`VisorServer+AgentAsks`, `+Directory`,
+`+RelayOutbox`, `+RelayDelivery`, `+RelayRoutes`; `RelayCourier` in the
+client): servers never talk to one another. Every server has an id
+(`ServerSettings.serverID`, made once; `hello` carries it and the server's
+own addresses, `ownAddresses`: the public address, each address with the
+port while the network reaches it, `ssh://user@address` while SSH is let
+in). The client's `RelayCourier`, owned by `VisorStore`, reports to each
+server that takes part what the device is connected to (`report()`: the
+servers taking part and their sessions, archived and terminals left out)
+every 20 s, when a server connects (`joined`), when a record changes, and
+at once for a server's `relay` push (`AgentServerEvent.relay`, the
+connection's `onRelay`); the server keeps it by client id
+(`directory`, ten minutes) and answers with its outbox's messages for the
+servers named, which the courier carries (`deliver`, then `confirm` back
+to the source). A server's `answerAgent` answers its own sessions as
+before (`agentReply`, `answer`); one on another server becomes a
+`RelayRecord` in `relayOutbox` (kept in `relay-outbox.json`, expired after
+a day, dropped a day after it finished), and the asking agent waits on
+`awaitRelay` (8 s for a send, 20 for a read; tests shorten them) or is
+given the message id for `message_status`. The destination's
+`takeRelayed` keeps every receipt in `relayLedger` (`relay-ledger.json`,
+two days), so a message carried twice is answered from it. Taking part is
+the record's `relay` (nil: `RelayCourier.onByDefault`; the toggle in a
+computer's settings), never for a server that stands alone or an
+`isolated` authenticator's; a server turned off is sent one empty report.
+Enrolling a device is by the server's own codes (`GET /api/codes`,
+`ConnectionCodes`: the QR code's and one leading with each kind of path),
+shown the same by the menu bar app (its menu and Settings) and by a
+client's computer settings (`ConnectionCodeSection`), so a code can go
+from the menu bar to a Mac's client to a phone.
 
 **Another kind of sign-in** (a fork whose users sign in with a
 company's SSO, the server itself being Visor's behind a front that
@@ -414,22 +422,6 @@ once.
 The server's side is `ServerSettings.authentication`: `password` (the
 default), or `none`, which lets in whoever reaches it — for paths of
 one's own, or a front that has signed the user in.
-
-**Server to server over SSH** (`libraries/visor_ssh`, `visor_server_ssh`,
-`VisorServer+PeerSSH`): the SSH machinery over swift-nio-ssh is one
-library, `VisorSSH` (`SSHConnector.connect(route:privateKey:hostKeys:)`
-→ `SSHConnection.forward/attach`), used by the client's
-`NativeVisorSSHService` and by the server's platform (`ServerPlatform.ssh:
-PeerSSH?`, `ConnectorPeerSSH` on the Mac and Linux; nil on Windows). The
-server keeps a key of its own in the secrets (`ssh.serverKey`); its
-public line (`ownSSHKey`) goes out in `hello` and in `ownPeer.sshKey`, a
-client keeps it on the record (`serverKey`) and carries it when it
-introduces the server, and `adopt` authorizes a peer's key into
-`authorized_keys`. `paths(to:)` includes a peer's `ssh://` addresses
-where the system has SSH; `base(for:)` opens (and keeps, in
-`peerTunnels`) a tunnel through the peer's own SSH to its socket file
-and answers `http://127.0.0.1:<port>`, which `call` and `relay` use; a
-failed path drops its tunnel.
 
 **Which path fits where the device is** (`VisorNetworkService`,
 `NativeVisorNetworkService`; `AgentServerConnection.pathsToTry`, `fit(of:)`,

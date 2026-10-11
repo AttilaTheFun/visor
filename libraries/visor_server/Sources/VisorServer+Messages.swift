@@ -295,24 +295,13 @@ extension VisorServer {
             reply.error = "Not an agent of this computer"
             return reply
         }
-        let name = caller.info.title.isEmpty ? caller.info.agent.title : caller.info.title
-        return answer(envelope, from: caller.info.id, named: name, on: nil)
+        return answer(envelope, from: caller.info.id, named: caller.displayName, on: nil)
     }
 
-    /// The same asks from an agent on a linked computer, which that
-    /// computer's server forwards (`POST /api/agent`): `client` is the
-    /// caller as `<computer>/<id>`, `title` its name, `host` the computer.
-    func linkedAgentReply(_ envelope: Envelope) -> Envelope {
-        guard let caller = envelope.client, caller.contains("/") else {
-            var reply = Envelope(type: "agent_result")
-            reply.id = envelope.id
-            reply.error = "Not an agent of a linked computer"
-            return reply
-        }
-        return answer(envelope, from: caller, named: envelope.title ?? caller, on: envelope.host)
-    }
-
-    func answer(_ envelope: Envelope, from caller: String, named name: String, on computer: String?) -> Envelope {
+    /// The ask answered for this server's sessions: from one of its own
+    /// agents, or (`computer` set) from an agent on another server whose
+    /// message a client carried here.
+    func answer(_ envelope: Envelope, from caller: String, named name: String, on computer: RelayEndpoint?) -> Envelope {
         var reply = Envelope(type: "agent_result")
         reply.id = envelope.id
         let others = sessions.filter { $0.info.id != caller && !$0.info.ended && !$0.info.archived }
@@ -320,7 +309,7 @@ extension VisorServer {
         case "sessions":
             reply.text = others.isEmpty ? "No other sessions." : others.map { record in
                 let info = record.info
-                return "\(info.id) — \(info.title.isEmpty ? info.agent.title : info.title) (\(info.agent.title), \(info.busy ? "working" : "idle")) in \(info.cwd)"
+                return "\(info.id) — \(record.displayName) (\(info.agent.title), \(info.busy ? "working" : "idle")) in \(info.cwd)"
             }.joined(separator: "\n")
         case "send":
             guard let target = others.first(where: { $0.info.id == envelope.session }) else {
@@ -338,12 +327,17 @@ extension VisorServer {
                 return reply
             }
             // Marked as another agent's, so it is not taken for the user's.
-            let marked = "[Message from the Visor session “\(name)” (\(caller))\(computer.map { " on \($0)" } ?? ""), not from the user. "
-                + "To answer, use send_message to that session.]\n\n" + text
+            let marked = if let computer {
+                "[Message from the Visor session “\(name)” (\(caller)) on \(computer.serverName), not from the user. "
+                    + "To answer, use send_message with session \(caller) and server \(computer.server).]\n\n" + text
+            } else {
+                "[Message from the Visor session “\(name)” (\(caller)), not from the user. "
+                    + "To answer, use send_message to that session.]\n\n" + text
+            }
             let busy = target.info.busy
             deliver(marked, to: target)
-            let targetName = target.info.title.isEmpty ? target.info.agent.title : target.info.title
-            reply.text = busy ? "Queued for \(targetName): it is working and takes it when its turn ends." : "Sent to \(targetName)."
+            reply.text = busy ? "Queued for \(target.displayName): it is working and takes it when its turn ends." : "Sent to \(target.displayName)."
+            reply.busy = busy
         case "read":
             guard let target = others.first(where: { $0.info.id == envelope.session }) else {
                 reply.error = "No other session with that id; list_sessions names them."

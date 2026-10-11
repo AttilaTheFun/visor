@@ -1,9 +1,7 @@
-// The network of computers, as the client sees it: a server is reached
-// by whichever of its paths answers, the next tried at once when one
-// does not; a server says who it is and where it is reached, which the
-// record keeps; a server's peers are added here with every path to them,
-// one reached through another when its own addresses do not answer; and
-// the servers held here are introduced to one another.
+// A computer's network paths, as the client sees them: a server is reached
+// by whichever of its paths answers, the next tried at once when one does
+// not; and a server says who it is and where it is reached, which the
+// record keeps.
 
 import Foundation
 @testable import VisorClient
@@ -89,65 +87,14 @@ final class NetworkOfComputersTests: XCTestCase {
     func testTheServerSaysWhoItIs() async {
         let record = AgentServerRecord(name: "", address: "http://127.0.0.1:7433", secret: "pw", provider: "scripted")
         let server = scripted(record)
-        server.identity = ServerIdentity(id: "mini-id", addresses: ["http://100.90.45.11:7433", "logan@100.90.45.11"], sshKey: "ssh-ed25519 AAAAmini visor-server")
+        server.identity = ServerIdentity(id: "mini-id", addresses: ["http://100.90.45.11:7433", "logan@100.90.45.11"])
         let host = AgentServerConnection(record: record)
         host.connect()
         await settle()
         XCTAssertEqual(host.record.serverID, "mini-id")
-        XCTAssertEqual(host.record.serverKey, "ssh-ed25519 AAAAmini visor-server")
-        XCTAssertEqual(host.asPeer?.sshKey, "ssh-ed25519 AAAAmini visor-server", "introduced with its key")
-        XCTAssertEqual(AgentServerRecord(json: host.record.json)?.serverKey, host.record.serverKey)
         XCTAssertEqual(host.record.paths, ["http://100.90.45.11:7433", "logan@100.90.45.11"])
-        XCTAssertEqual(host.asPeer?.addresses, ["http://100.90.45.11:7433", "logan@100.90.45.11"], "never the loopback path")
         XCTAssertEqual(AgentServerRecord(json: host.record.json)?.paths, host.record.paths)
         XCTAssertEqual(AgentServerRecord(json: host.record.json)?.serverID, "mini-id")
-    }
-
-    /// Two servers held: each is introduced to the other; a computer one
-    /// of them knows is added with its own addresses and, those not
-    /// answering, reached through the server that knows it.
-    func testServersAreIntroducedAndTheirPeersAdded() async throws {
-        VisorHost.settings = MemorySettings()
-        let a = AgentServerRecord(name: "A", address: "http://a:7433", secret: "a-pw", provider: "scripted")
-        let b = AgentServerRecord(name: "B", address: "http://b:7433", secret: "b-pw", provider: "scripted")
-        let serverA = scripted(a), serverB = scripted(b)
-        serverA.identity = ServerIdentity(id: "A", addresses: ["http://a:7433"])
-        serverB.identity = ServerIdentity(id: "B", addresses: ["http://b:7433"])
-        serverA.peersAnswer = [Peer(id: "C", name: "C", addresses: ["http://c:7433"], password: "c-pw")]
-        VisorHost.settings?.set(key: "hosts", value: JSONValue.array([a.json, b.json]).encoded())
-        let store = VisorStore()
-        for _ in 0..<10 { await settle() }
-        // C was added, with its own path and a path through A.
-        let c = try XCTUnwrap(store.servers.first { $0.record.serverID == "C" })
-        XCTAssertEqual(c.record.address, "http://c:7433")
-        XCTAssertEqual(c.record.secret, "c-pw")
-        XCTAssertEqual(store.relayPaths(to: c), ["http://a:7433/peer/C", "http://b:7433/peer/C"])
-        // Each told of the others (more than once is no harm: a server
-        // takes in only what is news).
-        XCTAssertEqual(Set(serverA.introduced.flatMap { $0 }.map(\.id)), ["B", "C"])
-        XCTAssertEqual(Set(serverB.introduced.flatMap { $0 }.map(\.id)), ["A", "C"])
-        XCTAssertEqual(serverB.introduced.flatMap { $0 }.first { $0.id == "A" }?.password, "a-pw")
-        // Told again of C by B: more of the same, not another record.
-        store.take(Peer(id: "C", name: "C", addresses: ["http://c:7433", "logan@c"], password: ""), from: store.servers[1])
-        XCTAssertEqual(store.servers.filter { $0.record.serverID == "C" }.count, 1)
-        XCTAssertEqual(c.record.paths, ["logan@c"])
-        XCTAssertEqual(c.record.secret, "c-pw", "an empty password is not news")
-        // A's own peer entry is never added as another computer.
-        store.take(Peer(id: "A", name: "A", addresses: ["http://a:7433"], password: "a-pw"), from: store.servers[1])
-        XCTAssertEqual(store.servers.count, 3)
-    }
-
-    /// A computer reached by a relay path, its own not answering.
-    func testAComputerIsReachedThroughAnotherWhenItsOwnPathsDoNot() async {
-        let record = AgentServerRecord(name: "C", address: "http://c:7433", secret: "pw", provider: "scripted", serverID: "C")
-        let server = scripted(record)
-        server.refused = ["http://c:7433"]
-        let host = AgentServerConnection(record: record)
-        host.relayPaths = { ["http://a:7433/peer/C"] }
-        host.connect()
-        await settle()
-        XCTAssertEqual(host.state, .connected)
-        XCTAssertEqual(host.path, "http://a:7433/peer/C")
     }
 
     /// A record whose address is the computer's SSH, before the computer
@@ -220,14 +167,25 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(host.pathsToTry(), ["http://192.168.4.52:7433", "http://100.90.45.11:7433"])
     }
 
-    /// The connection code carries the paths; the SSH code puts one first.
+    /// The connection code carries the paths; the SSH code puts one first,
+    /// and so for HTTP and HTTPS.
     func testTheCodeCarriesThePaths() {
         let code = ConnectionCode(name: "Mini", host: "http://100.90.45.11:7433", password: "pw", id: "mini",
                                   paths: ["http://192.168.4.52:7433", "ssh://logan@100.90.45.11", "http://100.90.45.11:7433"])
         XCTAssertEqual(code.paths, ["http://192.168.4.52:7433", "ssh://logan@100.90.45.11"], "the host itself is not a path twice")
         let read = ConnectionCode(parsing: code.link)
         XCTAssertEqual(read, code)
-        XCTAssertEqual(read?.peer.addresses.count, 3)
+        XCTAssertEqual(read.map { [$0.host] + $0.paths }?.count, 3)
+        // The codes the menu bar app and the computer's settings show: the
+        // QR code's, and one leading with each kind of path it has.
+        let codes = ConnectionCodes(code)
+        XCTAssertEqual(codes.qr, code.encoded)
+        XCTAssertEqual(codes.link, code.link)
+        XCTAssertEqual(codes.http, code.encoded, "it leads with HTTP already")
+        XCTAssertNil(codes.https)
+        XCTAssertEqual(codes.ssh, code.preferringSSH?.encoded)
+        XCTAssertEqual(ConnectionCode(parsing: ConnectionCodes(ConnectionCode(name: "x", host: "mini.example.ts.net", password: "p",
+                                                                              paths: ["logan@10.0.0.2"])).ssh ?? "")?.host, "logan@10.0.0.2")
         let ssh = code.preferringSSH
         XCTAssertEqual(ssh?.host, "ssh://logan@100.90.45.11")
         XCTAssertEqual(ssh?.paths, ["http://100.90.45.11:7433", "http://192.168.4.52:7433"])

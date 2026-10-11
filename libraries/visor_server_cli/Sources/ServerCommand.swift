@@ -49,8 +49,9 @@ public struct ServerCommand {
           standalone
                    `standalone on`: reached only at the address each client
                    added it at (behind a front of its own), its other
-                   addresses and its peers shared with no one;
-                   `standalone off` (the default) shares them. Also
+                   addresses shared with no one, and out of the relay
+                   between computers; `standalone off` (the default)
+                   shares them. Also
                    VISOR_STANDALONE=1.
 
         Options for run and start:

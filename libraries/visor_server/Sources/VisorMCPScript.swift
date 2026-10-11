@@ -7,7 +7,9 @@ enum VisorMCPScript {
     static let source = #"""
 // Visor's MCP server, run by every agent session the menu bar app starts.
 // Its tools let a session see the other sessions on this computer and on
-// the computers linked to it, message them, and read what they said. In manual mode Claude also calls
+// the computers Visor's clients report, message them, read what they said,
+// and ask what became of a message sent to another computer (carried
+// there by a client connected to both). In manual mode Claude also calls
 // `approve` (--permission-prompt-tool mcp__visor__approve) whenever a tool
 // needs permission, which the phone shows until the user taps Allow or
 // Deny. Every call goes to the menu bar app over its WebSocket.
@@ -22,16 +24,17 @@ const approvals = process.env.VISOR_APPROVALS === "1";
 const tools = [
   {
     name: "list_sessions",
-    description: "Lists the other agent sessions Visor runs on this computer and on the computers linked to it (in Visor Server's Settings): id, title, agent, whether it is working, and its folder. A session on another computer has an id of the form computer/id.",
+    description: "Lists the other agent sessions Visor runs on this computer, and those on the other computers a Visor client connected to this one reports (the phone or Mac the user runs Visor on): id, title, agent, whether it is working; each computer with its name and server id.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "send_message",
-    description: "Sends a message to another Visor session, as a new turn for that agent. It is marked as coming from this session, not the user. If the session is working, the message waits for its turn to end.",
+    description: "Sends a message to another Visor session, as a new turn for that agent. It is marked as coming from this session, not the user. If the session is working, the message waits for its turn to end. A session on another computer is reached through a Visor client connected to both: the answer says whether it was taken, or that it waits for such a client (kept for a day), with a message id for message_status.",
     inputSchema: {
       type: "object",
       properties: {
         session: { type: "string", description: "The session's id, from list_sessions." },
+        server: { type: "string", description: "The id (or name) of the computer the session is on, from list_sessions. Needed only when two computers have a session of that id; omit it for this computer." },
         text: { type: "string", description: "What to say." },
       },
       required: ["session", "text"],
@@ -39,14 +42,26 @@ const tools = [
   },
   {
     name: "read_messages",
-    description: "Reads the latest messages of another Visor session (the user's, the agent's and tool results), oldest first.",
+    description: "Reads the latest messages of another Visor session (the user's, the agent's and tool results), oldest first. On another computer, the read is carried by a Visor client connected to both; if none carries it within a few seconds, the answer gives a message id for message_status.",
     inputSchema: {
       type: "object",
       properties: {
         session: { type: "string", description: "The session's id, from list_sessions." },
+        server: { type: "string", description: "The id (or name) of the computer the session is on, from list_sessions. Needed only when two computers have a session of that id." },
         count: { type: "number", description: "How many messages, 1 to 50. Defaults to 10." },
       },
       required: ["session"],
+    },
+  },
+  {
+    name: "message_status",
+    description: "Tells what became of a message (or read) sent to a session on another computer: waiting for a Visor client connected to both computers, sent, queued while that agent works, read (with what it found), not taken, or expired after a day.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message_id: { type: "string", description: "The message id send_message or read_messages gave." },
+      },
+      required: ["message_id"],
     },
   },
 ];
@@ -80,12 +95,13 @@ function handle(line) {
     send({ jsonrpc: "2.0", id, result: { tools: approvals ? [approveTool, ...tools] : tools } });
   } else if (method === "tools/call" && params?.name !== "approve") {
     const args = params?.arguments || {};
-    const mode = { list_sessions: "sessions", send_message: "send", read_messages: "read" }[params?.name];
+    const mode = { list_sessions: "sessions", send_message: "send", read_messages: "read", message_status: "status" }[params?.name];
     if (!mode) {
       send({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: `No tool ${params?.name}` }] } });
       return;
     }
-    call({ mode, session: args.session, text: args.text, rows: args.count === undefined ? undefined : Math.round(Number(args.count)) })
+    call({ mode, session: args.session, server: args.server, messageID: args.message_id, text: args.text,
+           rows: args.count === undefined ? undefined : Math.round(Number(args.count)) })
       .then(({ ok, text }) => send({ jsonrpc: "2.0", id, result: { isError: !ok, content: [{ type: "text", text }] } }));
   } else if (method === "tools/call") {
     ask(params?.arguments || {}).then((allow) => {

@@ -22,11 +22,6 @@ extension VisorServer {
     }
 
     func route(_ request: HTTPRequest, respond: @escaping (HTTPResponse) -> Void) {
-        // A peer's API, read here and carried there.
-        if let target = Self.relayTarget(request.path) {
-            guard authorized(request) else { return respond(refusal(request)) }
-            return relay(target, request, respond: respond)
-        }
         let path = Self.apiPath(request.path.split(separator: "?").first.map(String.init) ?? request.path)
         let parts = path.split(separator: "/").map(String.init)
         if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "commands", authorized(request) {
@@ -96,15 +91,14 @@ extension VisorServer {
         case ("GET", 1, "file"): restReadFile(call)
         case ("POST", 1, "file"): restSaveFile(call)
         case ("POST", 1, "relocate"): restRelocateSessions(call)
-        case ("POST", 1, "agent"): restLinkedAgent(call)
         case ("GET", 1, "code"): restCode(call)
+        case ("GET", 1, "codes"): restCodes(call)
+        case ("POST", 1, "relay"): restRelay(call)
+        case ("POST", 2, "relay") where parts[1] == "deliver": restRelayDeliver(call)
+        case ("POST", 2, "relay") where parts[1] == "receipt": restRelayReceipt(call)
         case ("POST", 2, "push") where parts[1] == "key": restSetPushKey(call)
         case ("POST", 2, "push") where parts[1] == "test": restTestPush(call)
         case ("POST", 1, "push"): restRegisterPushDevice(call)
-        case ("POST", 1, "link"): restLinkBack(call)
-        case ("POST", 1, "unlink"): restUnlink(call)
-        case ("GET", 1, "peers"): restPeers(call)
-        case ("POST", 1, "peers"): restTakePeers(call)
         case ("POST", 2, "ssh") where parts[1] == "keys": restAuthorizeSSHKey(call)
         case ("POST", 1, "restart"): restRestart(call)
         case ("POST", 1, "quit"): restQuit(call)
@@ -138,20 +132,7 @@ extension VisorServer {
             e.standalone = true
         } else {
             e.addresses = ownAddresses
-            e.sshKey = ownSSHKey
         }
-        return .json(e.encoded())
-    }
-
-    /// The network as this server knows it: itself, and its peers with
-    /// their addresses and passwords (the client is let in already).
-    private func restPeers(_ call: RESTCall) -> HTTPResponse {
-        var e = Envelope(type: "peers")
-        e.id = id
-        e.host = hostName
-        // Standing alone: no addresses, no computers, to anyone.
-        e.addresses = isStandalone ? [] : ownAddresses
-        e.peers = isStandalone ? [] : peers
         return .json(e.encoded())
     }
 
@@ -161,18 +142,6 @@ extension VisorServer {
         guard let line = call.body.text, !line.isEmpty else { return HTTPResponse(400, Envelope.error("A public key line is required").encoded()) }
         if let problem = authorizeSSHKey(line) { return HTTPResponse(400, Envelope.error(problem).encoded()) }
         return .json(Envelope(type: "ssh").encoded())
-    }
-
-    /// Computers a client or a peer tells this server of; what is news
-    /// is kept and passed on. The teller, when a peer, is named in the
-    /// relay header so it is not told back.
-    private func restTakePeers(_ call: RESTCall) -> HTTPResponse {
-        guard let told = call.body.peers, !told.isEmpty else { return HTTPResponse(400, Envelope.error("Peers are required").encoded()) }
-        // Standing alone, it is introduced to no one.
-        guard !isStandalone else { return .json(Envelope(type: "peers").encoded()) }
-        let teller = call.request.headers["x-visor-relay"]?.split(separator: ",").last.map(String.init)
-        adopt(told, from: teller)
-        return .json(Envelope(type: "peers").encoded())
     }
 
     /// Rows whose words match, across every session: `q` is the
@@ -256,14 +225,9 @@ extension VisorServer {
         return .json(e.encoded())
     }
 
-    /// An agent on a linked computer asking about the sessions here.
-    private func restLinkedAgent(_ call: RESTCall) -> HTTPResponse {
-        return .json(linkedAgentReply(call.body).encoded())
-    }
-
-    /// This computer's connection code, for a client that holds
-    /// several to link them (it is let in already, so the password
-    /// the code carries is no news to it).
+    /// This computer's connection code, as its QR code shows it (the
+    /// client is let in already, so the password the code carries is no
+    /// news to it).
     private func restCode(_ call: RESTCall) -> HTTPResponse {
         guard let code = connectionCode else { return HTTPResponse(503, Envelope.error("No connection code yet").encoded()) }
         var e = Envelope(type: "code")
@@ -296,22 +260,6 @@ extension VisorServer {
         var reply = Envelope(type: "push")
         reply.exists = apnsKey.configured
         return .json(reply.encoded())
-    }
-
-    /// Forgets a peer, by its id or an address its code named (`text`).
-    private func restUnlink(_ call: RESTCall) -> HTTPResponse {
-        guard let key = call.body.text, !key.isEmpty else { return HTTPResponse(400, Envelope.error("The computer to forget is required").encoded()) }
-        forget(peer: key)
-        return .json(Envelope(type: "unlink").encoded())
-    }
-
-    /// A computer this one's code was pasted into, linking back: a peer.
-    private func restLinkBack(_ call: RESTCall) -> HTTPResponse {
-        guard let code = call.body.text.flatMap(ConnectionCode.init(parsing:)) else {
-            return HTTPResponse(400, Envelope.error("A connection code is required").encoded())
-        }
-        adopt([code.peer], from: code.id.isEmpty ? nil : code.id)
-        return .json(Envelope(type: "link").encoded())
     }
 
     /// The one call an agent can make to replace the server it runs

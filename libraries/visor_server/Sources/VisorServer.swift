@@ -55,15 +55,20 @@ public final class VisorServer {
             if settings.asksNothing, !oldValue.asksNothing, listener == nil { start() }
         }
     }
-    /// The other computers on the network, as this one knows them
-    /// (VisorServer+Peers.swift).
-    public internal(set) var peers: [Peer] = []
-    /// The path that last reached each peer, by its id: tried first.
-    var workingPaths: [String: String] = [:]
-    /// The SSH tunnels open to peers, by the path each is for: the
-    /// connection, and the base URL of the port here that reaches the
-    /// peer's socket file through it.
-    var peerTunnels: [String: (session: any PeerSSHSession, base: String)] = [:]
+    /// What each client connected here last said it is connected to, by
+    /// the client's id (VisorServer+Directory.swift).
+    var directory: [String: ClientDirectoryEntry] = [:]
+    /// What the agents here sent to sessions on other servers, by message
+    /// id, until a client carries each and brings back what became of it
+    /// (VisorServer+RelayOutbox.swift).
+    var relayOutbox: [String: RelayRecord] = VisorServer.keptRelayOutbox()
+    /// What became of each message carried here from another server, by
+    /// its id, so one carried twice is taken once
+    /// (VisorServer+RelayDelivery.swift).
+    var relayLedger: [String: RelayLedgerEntry] = VisorServer.keptRelayLedger()
+    /// Agents waiting to hear what became of a message they sent
+    /// elsewhere: by message id, then by waiter.
+    var relayWaiters: [String: [String: (RelayRecord) -> Void]] = [:]
     /// Addresses connections were refused on (a path that is off), each
     /// logged once.
     var refusedPaths: Set<String> = []
@@ -113,7 +118,6 @@ public final class VisorServer {
         self.port = port
         Self.adoptFormerFolders()
         password = Self.keptPassword()
-        peers = Self.keptPeers()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()
     }

@@ -6,11 +6,10 @@
 // A server is added through its provider's own sign-in. For a Mac that is
 // one step: its connection code (pasted, or a scanned QR code's
 // `visor://connect?code=` link) carries its name, address and password.
-// Adding one adds this device to its network: the server tells of the
-// other computers it knows, each is added here with every path to it
-// (its own addresses, and through any server here that reaches it), and
-// the servers this device holds are introduced to one another, so their
-// agents reach each other's sessions with nothing more to do.
+// The servers this device holds stay apart from one another: none learns
+// another's address or password. Their agents reach each other's sessions
+// through this device instead (RelayCourier), which tells each server what
+// it is connected to and carries the messages between them.
 
 import MessageCache
 import Observation
@@ -32,6 +31,8 @@ public final class VisorStore {
     private var revision = 0
     /// Under the key an earlier build saved its computers.
     private let key = "hosts"
+    /// Carries the agents' messages between the servers held here.
+    @ObservationIgnored private(set) lazy var courier = RelayCourier { [weak self] in self?.servers ?? [] }
     /// Whether the app's account (`VisorAccounts.current`) is signed in;
     /// false where there is none. While it is not, a view shows the
     /// account's sign-in in place of the computers.
@@ -68,6 +69,7 @@ public final class VisorStore {
         for server in servers { observe(server); server.connect() }
         startAccount()
         listenForNotifications()
+        courier.start()
         AgentServerAuthenticators.whenSignedIn { [weak self] id, serving in self?.signedIn(id, serving: serving) }
         // Where the device is decides which path to each computer fits:
         // a change is acted on once the networks have settled. The path
@@ -239,23 +241,14 @@ public final class VisorStore {
     }
 
     /// A server connected and said who it is: the other servers its way of
-    /// signing in reaches are added; another record of the same computer
-    /// is folded into it, the computers it knows are taken in, and it and
-    /// the others here are introduced to one another.
+    /// signing in reaches are added, another record of the same computer
+    /// is folded into it, and every server here hears of it in the next
+    /// report (it may be the second end some message waits for).
     private func joined(_ server: AgentServerConnection) async {
         guard !VisorFixture.active else { return }
         await discover(from: server)
-        // A server that stands alone shares nothing and is told nothing.
-        guard !server.isolated else { return }
-        fold(server)
-        if let peers = try? await server.peers() {
-            for peer in peers { take(peer, from: server) }
-        }
-        let others = servers.filter { $0 !== server && !$0.isolated }.compactMap(\.asPeer)
-        if !others.isEmpty { try? await server.introduce(others) }
-        if let me = server.asPeer {
-            for other in servers where other !== server && other.state == .connected && !other.isolated { try? await other.introduce([me]) }
-        }
+        if !server.isolated { fold(server) }
+        await courier.connected(server)
     }
 
     /// The servers behind the same front as this one, as its
@@ -274,33 +267,6 @@ public final class VisorStore {
             server.update { $0.learnPaths(other.record.allPaths) }
             remove(other)
         }
-    }
-
-    /// What a server says of another computer: more paths (and the
-    /// password, if none is kept) for one held here, or a new one, added
-    /// and connected — by one of its own addresses, or through the server
-    /// that told of it.
-    func take(_ peer: Peer, from teller: AgentServerConnection) {
-        guard !teller.isolated, let first = peer.addresses.first, peer.id.isEmpty || peer.id != teller.record.serverID else { return }
-        if let known = servers.first(where: { $0.record.isSame(as: peer) }) {
-            known.learn(peer)
-            return
-        }
-        let record = AgentServerRecord(name: peer.name, address: first, secret: peer.password, serverID: peer.id, paths: Array(peer.addresses.dropFirst()))
-        let added = AgentServerConnection(record: record)
-        servers.append(added)
-        observe(added)
-        added.connect()
-        save()
-    }
-
-    /// The paths to a server through the others connected here: each
-    /// carries requests to a computer it knows (`/peer/<id>` under it).
-    func relayPaths(to target: AgentServerConnection) -> [String] {
-        let id = target.record.serverID
-        guard !id.isEmpty, !target.isolated else { return [] }
-        return servers.filter { $0 !== target && $0.state == .connected && $0.record.serverID != id && !$0.isolated }
-            .compactMap { other in other.server.reachedAt.map { $0 + "/peer/" + id } }
     }
 
     /// The app came back to the front: every server is tried or checked
@@ -342,11 +308,13 @@ public final class VisorStore {
             guard let self else { return }
             self.revision += 1
             self.save()
+            // Turned on or off for the relay, or named anew: said now.
+            Task { await self.courier.exchangeAll() }
         }
         server.onSessionsChange = { [weak self] in self?.publishWidget() }
-        server.relayPaths = { [weak self, weak server] in
-            guard let self, let server else { return [] }
-            return self.relayPaths(to: server)
+        server.onRelay = { [weak self, weak server] in
+            guard let self, let server else { return }
+            Task { await self.courier.nudged(by: server) }
         }
         server.onConnected = { [weak self, weak server] in
             guard let self, let server else { return }

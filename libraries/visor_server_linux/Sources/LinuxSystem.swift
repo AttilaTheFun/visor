@@ -3,7 +3,6 @@ import Foundation
 import VisorServer
 import VisorServerCLI
 import VisorServerPOSIX
-import VisorServerSSH
 
 /// The command-line server on Linux: the XDG data directory, a daemon
 /// started as a new session, the stop signals, and its own binary replaced
@@ -40,8 +39,7 @@ public struct LinuxSystem: CommandLineSystem {
             tools: LinuxTools(),
             host: HostDetails(name: ProcessInfo.processInfo.hostName, dataDirectory: data, addresses: { POSIXAddresses.all() }),
             lifecycle: lifecycle,
-            log: log,
-            ssh: ConnectorPeerSSH()
+            log: log
         )
     }
 

@@ -12,6 +12,8 @@ import VisorProtocol
 @MainActor
 public final class SessionRecord {
     public internal(set) var info: SessionInfo
+    /// What the session is called: its title, or its agent's name.
+    var displayName: String { info.title.isEmpty ? info.agent.title : info.title }
 
     public internal(set) var entries: [TranscriptEntry] = [] {
         didSet {

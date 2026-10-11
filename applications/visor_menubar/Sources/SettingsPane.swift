@@ -12,12 +12,9 @@ struct SettingsPane: View {
     var server: VisorServer
     @State private var draft = ""
     @State private var message: String?
-    @State private var linkDraft = ""
     /// Whether this Mac's sshd answers on port 22 (Remote Login), as last
     /// checked; nil before the check.
     @State private var remoteLogin: Bool?
-    @State private var linkMessage: String?
-    @State private var linking = false
     @State private var choosingKey = false
     @State private var keyPEM = ""
     @State private var publicAddress = ""
@@ -34,9 +31,9 @@ struct SettingsPane: View {
     var body: some View {
         Form {
             Section {
-                if let code = server.connectionCode {
+                if let codes = server.connectionCodes {
                     HStack(alignment: .top, spacing: 16) {
-                        if let image = QRCode.image(for: code.link) {
+                        if let image = QRCode.image(for: codes.link) {
                             Image(nsImage: image)
                                 .interpolation(.none)
                                 .resizable()
@@ -46,18 +43,22 @@ struct SettingsPane: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Scan with a phone's camera, or copy the code and paste it into Visor on another device (Computers → Add Computer).")
                                 .font(.caption).foregroundColor(.secondary)
-                            Text(code.encoded)
+                            Text(codes.qr)
                                 .font(.caption.monospaced())
                                 .textSelection(.enabled)
                                 .lineLimit(4)
                                 .truncationMode(.middle)
-                            Button("Copy Code") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(code.encoded, forType: .string)
+                            ForEach(ConnectionPath.allCases, id: \.self) { kind in
+                                if let code = codes.code(for: kind) {
+                                    Button("Copy \(kind.title) Code") {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(code, forType: .string)
+                                    }
+                                }
                             }
                         }
                     }
-                    Text("The code holds this Mac's address and password: share it only with your own devices.")
+                    Text("The code holds this Mac's address and password: share it only with your own devices. Each copy leads with that kind of path (the others follow it); a device that has this Mac shows the same codes in its settings, to hand it on.")
                         .font(.caption).foregroundColor(.secondary)
                 } else {
                     Text(server.password.isEmpty ? "Set a password below to get a connection code." : "Open the server to the network, or set an address, below, to get a connection code.")
@@ -140,28 +141,6 @@ struct SettingsPane: View {
                 if let error = server.lastError { Text(error).font(.caption).foregroundColor(.red) }
             } header: {
                 Text("Network paths")
-            }
-            Section {
-                ForEach(server.peers, id: \.self) { peer in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(peer.name)
-                            Text(peer.addresses.joined(separator: ", ")).font(.caption).foregroundColor(.secondary).lineLimit(1)
-                        }
-                        Spacer()
-                        Button("Forget") { server.forget(peer: peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id) }
-                    }
-                }
-                HStack {
-                    TextField("Another computer's connection code", text: $linkDraft)
-                    Button("Add") { link() }
-                        .disabled(linking || linkDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                Text("The computers on the network: the agents here reach the sessions on each, and each reaches the ones here; a client of any of them learns of the rest, and is carried to one it cannot reach itself. A client that holds two computers introduces them; or paste a code here, once.")
-                    .font(.caption).foregroundColor(.secondary)
-                if let linkMessage { Text(linkMessage).font(.caption).foregroundColor(.red) }
-            } header: {
-                Text("Computers on the network")
             }
             Section {
                 let current = server.apnsKey
@@ -268,17 +247,6 @@ struct SettingsPane: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(path, forType: .string)
             }
-        }
-    }
-
-    private func link() {
-        linking = true
-        linkMessage = nil
-        Task {
-            linkMessage = await server.link(linkDraft)
-            // Kept here, even if the other did not link back: the code is done with.
-            if let code = ConnectionCode(parsing: linkDraft), server.peers.contains(where: { $0.isSame(as: code.peer) }) { linkDraft = "" }
-            linking = false
         }
     }
 
