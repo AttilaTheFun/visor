@@ -798,7 +798,7 @@ or:
 The thread follows its end only while the end is in view (AgentUI 0.29):
 rows that come in while it is read further up leave what is read where it
 is, and a pill above the composer counts them. The fixture's `arrivals`
-screen brings rows in twelve and twenty seconds after it opens;
+screen brings rows in twelve and twenty-six seconds after it opens;
 `testRowsArrivingWhileReadingAboveMoveNothing` scrolls up and checks that
 nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the

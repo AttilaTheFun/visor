@@ -78,10 +78,11 @@ public final class NativeVisorDictationService: VisorDictationService {
     }
 
     /// Asks for speech recognition, outside the main actor: the system
-    /// answers on a queue of its own (TCC's), and a handler built on the
-    /// main actor — even marked Sendable, even in a nonisolated async
-    /// function, which runs on its caller's actor — trapped when called
-    /// there, whatever the user answered (0.29, _dispatch_assert_queue_fail).
+    /// answers on a queue of its own (TCC's), and the handler as it was,
+    /// written in this main-actor class, took its isolation (the Speech
+    /// framework's handler is not Sendable) and trapped when called there,
+    /// whatever the user answered (0.29, _dispatch_assert_queue_fail). Built
+    /// in a nonisolated synchronous function, as a system callback is here.
     nonisolated private static func askForSpeech(_ continuation: CheckedContinuation<Bool, Never>) {
         SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
     }
