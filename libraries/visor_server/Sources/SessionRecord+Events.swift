@@ -116,6 +116,7 @@ extension SessionRecord {
             // The sessions list carries it; the caller broadcasts that.
             return nil
         case .goal(let goal, let met):
+            goalReported = true
             goalMet = met
             info.goal = goal
             // The sessions list carries it; the caller broadcasts that.

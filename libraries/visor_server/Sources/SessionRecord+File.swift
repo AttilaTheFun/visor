@@ -186,7 +186,7 @@ extension SessionRecord {
         let file = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
         let row = rowText.trimmingCharacters(in: .whitespacesAndNewlines)
         return file == row || (!row.isEmpty && file.hasPrefix(row + "\n\nAttached "))
-            || (row.isEmpty && file.hasPrefix("Attached "))
+            || (row.isEmpty && file.hasPrefix("Attached ")) || CommandWords.same(file, row)
     }
 
     /// Puts one row from the file into the transcript: a new row goes on the

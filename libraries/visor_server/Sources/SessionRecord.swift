@@ -147,6 +147,9 @@ public final class SessionRecord {
     /// The agent said its last goal was met (Codex, which says so rather
     /// than writing a row for it).
     var goalMet = false
+    /// The agent says its goal itself (Codex): what it says, not the
+    /// transcript's marks, is the session's goal.
+    var goalReported = false
     /// The agent's running total as it last reported it: what the next
     /// report is measured from (`info.usage` is what was added up).
     var reportedUsage: SessionUsage?

@@ -25,7 +25,8 @@ extension SessionRecord {
             }
         }
         var next = info
-        if let goalMark { next.goal = goalMark }
+        // An agent that says its goal itself (Codex) is taken at its word.
+        if let goalMark, !goalReported { next.goal = goalMark }
         if let loopMark { next.loopWake = loopMark.wake; next.loopCron = loopMark.cron }
         guard next.goal != info.goal || next.loopWake != info.loopWake || next.loopCron != info.loopCron else { return }
         info = next
@@ -44,6 +45,12 @@ extension SessionRecord {
     /// The goal a row says the session has now (nil: none), if it is a goal's.
     static func goal(of row: TranscriptEntry) -> String?? {
         if row.role == .user, row.text == "/goal clear" || row.text.hasPrefix("/goal clear ") { return .some(nil) }
+        // A goal set as the user typed it ("/goal …"; pausing and resuming
+        // keep the goal there is).
+        if row.role == .user, row.text.hasPrefix("/goal ") {
+            let objective = row.text.dropFirst(6).trimmingCharacters(in: .whitespacesAndNewlines)
+            return ["", "pause", "resume"].contains(objective) ? nil : .some(objective)
+        }
         guard row.role == .tool else { return nil }
         switch row.toolName {
         case "goal": return .some(row.text)

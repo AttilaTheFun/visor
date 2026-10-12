@@ -313,6 +313,7 @@ public final class SessionTranscript {
         guard !sending.isEmpty else { return }
         func matched(_ text: String, _ recorded: String) -> Bool {
             recorded == text || recorded.hasPrefix(text + "\n\nAttached ") || (text.isEmpty && recorded.hasPrefix("Attached "))
+                || CommandWords.same(recorded, text)
         }
         sending.removeAll { out in
             guard revision > out.sinceRevision,
