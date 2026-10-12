@@ -331,6 +331,8 @@ extension VisorServer {
             // The agent's own id appears with the first turn; the
             // transcript is written down whenever a turn ends.
             record.refreshResume()
+            // A turn the agent began itself is owed as one sent is.
+            if busy { record.interrupted = true }
             if !busy { record.interrupted = false; saveArchive() }
             broadcastSessions()
             // An archived session takes no turns, and one whose last

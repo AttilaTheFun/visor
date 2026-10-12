@@ -45,6 +45,10 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     /// to begin (`stopWhenBegun`).
     private var turnStarting = false
     private var stopWhenBegun = false
+    /// A turn is running: one sent, or one claude began itself (when a
+    /// background task it started finishes, it carries on without a
+    /// message — measured), which `system/init` says as it does any turn.
+    private var working = false
     /// The id of the assistant message whose words are streaming now,
     /// from its message_start; each delta is named with it.
     private var streamingMessageID = ""
@@ -70,6 +74,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             "message": ["role": "user", "content": [["type": "text", "text": text]]],
         ])
         turnStarting = true
+        working = true
         emit.yield(.busy(true))
         emit.yield(.activity("Thinking…"))
     }
@@ -137,6 +142,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     private func release() -> (any AgentChild)? {
         guard let child else { return nil }
         self.child = nil
+        working = false
         emit.yield(.activity(nil))
         emit.yield(.memory(nil))
         emit.yield(.busy(false))
@@ -180,6 +186,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         interrupting = false
         turnStarting = false
         stopWhenBegun = false
+        working = false
         let tool = self.tool
         // Everything it says, in order, and then how it ended.
         Task { [weak self] in
@@ -190,6 +197,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             let exit = await child.exit.value
             guard let self, self.child === child else { return }
             self.child = nil
+            self.working = false
             self.emit.yield(.activity(nil))
             self.emit.yield(.memory(nil))
             self.emit.yield(.busy(false))
@@ -220,6 +228,13 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             // The turn has begun: an interrupt asked for before it is sent.
             turnStarting = false
             if stopWhenBegun { interrupt() }
+            // One claude began itself: the session is working, as for one
+            // sent.
+            if !working {
+                working = true
+                emit.yield(.busy(true))
+                emit.yield(.activity("Thinking…"))
+            }
             if let session {
                 resumeID = session
                 emit.yield(.session(session))
@@ -260,6 +275,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         case .result(let failure, let spent):
             turnStarting = false
             stopWhenBegun = false
+            working = false
             if let spent { emit.yield(.spent(spent)) }
             // An interrupt ends the turn with an error result of its own
             // (error_during_execution); that is the stop the user asked
