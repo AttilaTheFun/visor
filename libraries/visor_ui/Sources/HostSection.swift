@@ -21,7 +21,7 @@ struct HostSection<Rows: View>: View {
                     .lineLimit(1)
                 Spacer()
             }
-            .font(.subheadline)
+            // The list's own header font, as its other sections have.
             .noHeaderCase()
             // A little room around the title, more than the list's own:
             // it heads the computer's whole section.

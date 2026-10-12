@@ -36,6 +36,10 @@ public struct VisorRootView: View {
     /// What the sidebar has selected: a session, or a project's archive.
     @State private var selection: ContentSelection?
     @State private var search = ""
+    /// The sidebar's list holds the keyboard: the selection is drawn in the
+    /// accent (on the Mac an unfocused list draws it grey) and the arrow
+    /// keys move through it, as in Mail.
+    @FocusState private var sidebarFocused: Bool
     /// Messages matching the search, from every computer connected.
     @State private var messageHits: [(host: AgentServerConnection, hit: SearchHit)] = []
 
@@ -253,10 +257,23 @@ public struct VisorRootView: View {
 
     // MARK: Sidebar — computer, project, session
 
+    /// In one column (a phone) the list is titled, with search and compose
+    /// in the bar at the bottom, as Messages has them; beside the detail
+    /// (an iPad, the Mac) it has no title, and compose sits at the top with
+    /// the sidebar's own button, over the search.
     private var sidebar: some View {
-        ListSearchChrome(text: $search, prompt: "Search sessions", composeLabel: "New session",
-                         compose: store.servers.isEmpty ? nil : { composing = true }) {
+        let compose: (() -> Void)? = store.servers.isEmpty ? nil : { composing = true }
+        return ListSearchChrome(text: $search, prompt: "Search sessions", composeLabel: "New session",
+                                compose: compact ? compose : nil) {
             outline
+        }
+        .navigationTitle(compact ? "Sessions" : "")
+        .toolbar {
+            if !compact, let compose {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("New session", systemImage: "square.and.pencil", action: compose)
+                }
+            }
         }
     }
 
@@ -296,9 +313,16 @@ public struct VisorRootView: View {
                 .accessibilityIdentifier("add-computer")
             }
         }
-        .insetGroupedList()
+        .sidebarListStyle(compact: compact)
+        .focused($sidebarFocused)
+        // Once the window is up and the search field has let the keyboard
+        // go (ListSearchChrome takes it back from the field AppKit gives it
+        // to).
+        .task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            sidebarFocused = true
+        }
         .task(id: search.trimmed) { await searchMessages(search.trimmed) }
-        .navigationTitle("Sessions")
         .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 440)
     }
 

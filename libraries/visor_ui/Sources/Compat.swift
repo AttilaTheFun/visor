@@ -34,8 +34,22 @@ extension View {
         frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
     }
 
-    /// The sidebar's list: inset grouped, as every SwiftUI draws it (the
-    /// web's and Isomer's on a phone too), and the sidebar style on the Mac.
+    /// The sidebar's list: rows on the list's own ground, a row filled
+    /// only while it is selected or pressed — the system's sidebar beside
+    /// the detail (with its rounded selection), a plain list in one column,
+    /// as Messages has them; never cards, which the sidebar style turns
+    /// into in one column.
+    @ViewBuilder func sidebarListStyle(compact: Bool) -> some View {
+        if compact {
+            listStyle(.plain)
+        } else {
+            listStyle(.sidebar)
+        }
+    }
+
+    /// A list in the detail (an archive): inset grouped, as every SwiftUI
+    /// draws it (the web's and Isomer's on a phone too), and the sidebar
+    /// style on the Mac, which has no inset-grouped list.
     @ViewBuilder func insetGroupedList() -> some View {
         // The Mac's SwiftUI has no inset-grouped list: its sidebar is the
         // same thing there. Every other SwiftUI draws inset-grouped.
