@@ -110,14 +110,22 @@ actor SessionIndexer {
         return ((attributes[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0, (attributes[.size] as? NSNumber)?.uint64Value ?? 0)
     }
 
+    /// How much of the file a catch-up reads and writes down at a time: a
+    /// conversation runs to hundreds of megabytes, and what is read is
+    /// kept as it goes, so a reading cut short carries on from there.
+    static let piece = 16 << 20
+
     /// Reads what the file holds past where the cache stopped — all of
     /// it, for a file the cache has not seen, or one that is not the file
-    /// it was — and writes it down.
+    /// it was — and writes it down, a piece at a time. The file is known by
+    /// its inode, so a second name for it (a renamed folder's link) reads
+    /// on from where the first left off.
     private func catchUp() {
         let facts = fileFacts()
         let identity = "\(facts.inode)/\(Self.reading)"
-        if let kept = store.sourceState(of: sessionID), kept.path == url.path, kept.identity == identity, kept.bytes <= facts.size {
+        if let kept = store.sourceState(of: sessionID), kept.identity == identity, kept.bytes <= facts.size {
             state = kept
+            state.path = url.path
             // Reading on from where the cache stopped: a log that is a list
             // links its next line to the last one kept.
             parser.resume(after: store.nodes(in: sessionID).last?.key)
@@ -128,25 +136,39 @@ actor SessionIndexer {
         guard facts.size > state.bytes, let handle = try? FileHandle(forReadingFrom: url) else { return }
         defer { try? handle.close() }
         try? handle.seek(toOffset: state.bytes)
-        guard let data = try? handle.readToEnd(), let last = data.lastIndex(of: 0x0A) else { return }
-        let whole = data[..<last]
-        let lines = parser.lines(in: Data(whole))
-        var lineRecords: [SourceNode] = []
-        var rowRecords: [PlacedMessage] = []
-        for line in lines {
-            let seq = state.nextSeq
-            state.nextSeq += 1
-            lineRecords.append(SourceNode(seq: seq, key: line.uuid, parentKey: line.parentUuid, kind: line.type, isPrompt: line.isPrompt))
-            note(prompt: line)
-            guard let record = line.record else { continue }
-            for row in assembler.rows(for: record) {
-                rowRecords.append(PlacedMessage(message: row, seq: seq, sourceKey: line.uuid))
-            }
-        }
-        state.bytes += UInt64(last + 1)
         let started = Date()
-        do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { VisorServer.log("index: ingest \(self.sessionID): \(String(describing: error))") }
-        VisorServer.log("index: caught up \(self.sessionID): \(lineRecords.count) lines, \(rowRecords.count) rows, \(Int(Date().timeIntervalSince(started) * 1000)) ms writing")
+        var lineCount = 0, rowCount = 0
+        var carried = Data()
+        while true {
+            let piece = (try? handle.read(upToCount: Self.piece)) ?? Data()
+            let data = carried + piece
+            guard let last = data.lastIndex(of: 0x0A) else {
+                if piece.isEmpty { break }
+                carried = data
+                continue
+            }
+            var lineRecords: [SourceNode] = []
+            var rowRecords: [PlacedMessage] = []
+            for line in parser.lines(in: Data(data[..<last])) {
+                let seq = state.nextSeq
+                state.nextSeq += 1
+                lineRecords.append(SourceNode(seq: seq, key: line.uuid, parentKey: line.parentUuid, kind: line.type, isPrompt: line.isPrompt))
+                note(prompt: line)
+                guard let record = line.record else { continue }
+                for row in assembler.rows(for: record) {
+                    rowRecords.append(PlacedMessage(message: row, seq: seq, sourceKey: line.uuid))
+                }
+            }
+            state.bytes += UInt64(last - data.startIndex + 1)
+            do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch {
+                VisorServer.log("index: ingest \(self.sessionID): \(String(describing: error))")
+            }
+            lineCount += lineRecords.count
+            rowCount += rowRecords.count
+            carried = Data(data[(last + 1)...])
+            if piece.isEmpty { break }
+        }
+        VisorServer.log("index: caught up \(self.sessionID): \(lineCount) lines, \(rowCount) rows, \(Int(Date().timeIntervalSince(started) * 1000)) ms")
     }
 
     /// The branch, from the tree the cache holds, and the rows to show.

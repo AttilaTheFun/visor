@@ -123,8 +123,10 @@ public final class SessionRecord {
     /// only the ones the file does not carry.
     /// The file into the cache and to here, off the main thread.
     var indexer: SessionIndexer?
-    /// Finding the file, then hearing what the indexer says of it.
+    /// Finding the file, then hearing what the indexer says of it; the
+    /// conversation it is the file of.
     var following: Task<Void, Never>?
+    var followed: String?
     /// Whether the cache holds rows before the first one here.
     var moreBefore = false
 

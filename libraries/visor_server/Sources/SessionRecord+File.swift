@@ -27,6 +27,7 @@ extension SessionRecord {
     func followFile() {
         guard let id = process.resumeID else { return }
         stopFollowing()
+        followed = id
         let agent = info.agent, cwd = info.cwd, session = info.id
         following = Task { [weak self] in
             // Not written yet (the agent announces its id before its first
@@ -64,6 +65,7 @@ extension SessionRecord {
         following?.cancel()
         following = nil
         indexer = nil
+        followed = nil
     }
 
     /// The file as read: the conversation is the branch that holds its

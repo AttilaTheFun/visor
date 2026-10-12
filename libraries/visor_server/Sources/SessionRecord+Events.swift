@@ -101,9 +101,11 @@ extension SessionRecord {
             if let limit { info.contextLimit = limit }
             // The sessions list carries it; the caller broadcasts that.
             return nil
-        case .session:
+        case .session(let id):
             refreshResume()
-            followFile()
+            // Said at each turn's start: the file is followed again only
+            // for a conversation it is not following already.
+            if indexer == nil || followed != id { followFile() }
             return nil
         case .commands(let list):
             commands = list
