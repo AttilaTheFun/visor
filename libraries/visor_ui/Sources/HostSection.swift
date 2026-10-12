@@ -23,11 +23,6 @@ struct HostSection<Rows: View>: View {
             }
             // The list's own header font, as its other sections have.
             .noHeaderCase()
-            // A little room around the title, more than the list's own:
-            // it heads the computer's whole section.
-            .padding(.horizontal, 4)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
             // The dot is the state (why it is red is in the computer's
             // settings); VoiceOver reads it out.
             .accessibilityElement(children: .combine)
