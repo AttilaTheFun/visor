@@ -18,6 +18,10 @@ struct SessionInspector: View {
     let archive: () -> Void
     let end: () -> Void
     @State private var title = ""
+    /// The session's title as last put in the field: what is typed is a
+    /// rename only where it differs from this, so a field left as it was
+    /// never renames the session back.
+    @State private var shown = ""
     /// The pause after typing before the title is saved.
     @State private var titleSave: Task<Void, Never>?
 
@@ -94,17 +98,26 @@ struct SessionInspector: View {
                 }
             }
         }
-        .onAppear { title = session.title }
+        .onAppear {
+            title = session.title
+            shown = session.title
+        }
+        // Renamed elsewhere (the sidebar, another device): the field
+        // follows, unless a name of the user's own is being typed in it.
+        .onChange(of: session.title) {
+            if title == shown { title = session.title }
+            shown = session.title
+        }
         .onDisappear {
             titleSave?.cancel()
             saveTitle()
         }
     }
 
-    /// Renames the session to what is typed, when that is a new name.
+    /// Renames the session to what is typed, when the user typed a new name.
     private func saveTitle() {
         let trimmed = title.trimmed
-        guard !trimmed.isEmpty, trimmed != session.title else { return }
+        guard !trimmed.isEmpty, trimmed != session.title, title != shown else { return }
         host.rename(session.id, title: trimmed)
     }
 }
