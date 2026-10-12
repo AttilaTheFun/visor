@@ -48,7 +48,7 @@ extension VisorServer {
     /// path anywhere, in a folder of this user's alone — or where a test
     /// or a staging server puts its own, away from the installed server's.
     public static var socketPath: String {
-        socketPathOverride ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".visor/server.sock").path
+        socketPathOverride ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".visor/server.sock", isDirectory: false).path
     }
     public static var socketPathOverride: String?
 

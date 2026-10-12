@@ -163,13 +163,13 @@ public final class VisorServer {
     static var storeURL: URL {
         let base = storeRoot ?? ServerPlatform.current.host.dataDirectory
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base.appendingPathComponent("sessions.json")
+        return base.appendingPathComponent("sessions.json", isDirectory: false)
     }
 
     /// Beside the sessions: the slash commands each agent last listed.
-    static var commandsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("commands.json") }
+    static var commandsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("commands.json", isDirectory: false) }
     /// And each agent's account, as its sessions last said.
-    static var accountsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("accounts.json") }
+    static var accountsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("accounts.json", isDirectory: false) }
 
     /// What a session is told when its turn was cut off by a restart. It
     /// arrives as a user turn, which is what it is: the agent's own process

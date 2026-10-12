@@ -25,7 +25,7 @@ extension VisorServer {
 
     func loadSessions() {
         var stored: [StoredSession] = []
-        let legacy = Self.storeURL.deletingLastPathComponent().appendingPathComponent("archive.json")
+        let legacy = Self.storeURL.deletingLastPathComponent().appendingPathComponent("archive.json", isDirectory: false)
         for url in [Self.storeURL, legacy] {
             guard let data = try? Data(contentsOf: url), data.count > 2 else { continue }
             do {
@@ -44,7 +44,7 @@ extension VisorServer {
                 // the whole record of every session, and a decoding change
                 // once turned it into "[]".
                 let kept = url.deletingLastPathComponent()
-                    .appendingPathComponent(url.lastPathComponent + ".unreadable")
+                    .appendingPathComponent(url.lastPathComponent + ".unreadable", isDirectory: false)
                 try? FileManager.default.removeItem(at: kept)
                 try? FileManager.default.copyItem(at: url, to: kept)
                 storeIsReadable = false
@@ -125,7 +125,7 @@ extension VisorServer {
             let data = try JSONEncoder().encode(stored)
             // Yesterday's file is kept beside today's. It costs nothing and
             // it is the difference between a bad write and a lost afternoon.
-            let backup = Self.storeURL.deletingLastPathComponent().appendingPathComponent("sessions.previous.json")
+            let backup = Self.storeURL.deletingLastPathComponent().appendingPathComponent("sessions.previous.json", isDirectory: false)
             if let existing = try? Data(contentsOf: Self.storeURL), existing.count > 2, existing != data {
                 try? existing.write(to: backup, options: .atomic)
             }

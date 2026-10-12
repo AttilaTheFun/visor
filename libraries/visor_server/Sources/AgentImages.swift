@@ -11,7 +11,7 @@ enum AgentImages {
     /// Where pictures live: beside the session store, so removing Visor's
     /// data directory takes them with it.
     static var directory: URL {
-        let base = ServerPlatform.current.host.dataDirectory.appendingPathComponent("images")
+        let base = ServerPlatform.current.host.dataDirectory.appendingPathComponent("images", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
@@ -35,7 +35,7 @@ enum AgentImages {
         } else {
             filename = "\(digest).\(suffix)"
         }
-        let file = directory.appendingPathComponent(filename)
+        let file = directory.appendingPathComponent(filename, isDirectory: false)
         if FileManager.default.fileExists(atPath: file.path) { return file.path }
         guard (try? data.write(to: file, options: .atomic)) != nil else { return nil }
         return file.path

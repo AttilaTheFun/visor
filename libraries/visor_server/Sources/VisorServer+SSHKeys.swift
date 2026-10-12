@@ -12,7 +12,7 @@ extension VisorServer {
     /// Where the keys go: this user's, or where a test puts them.
     public static var authorizedKeysPathOverride: String?
     static var authorizedKeysPath: String {
-        authorizedKeysPathOverride ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ssh/authorized_keys").path
+        authorizedKeysPathOverride ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ssh/authorized_keys", isDirectory: false).path
     }
 
     /// Takes a public key line (`ssh-ed25519 AAAA… comment`) into the

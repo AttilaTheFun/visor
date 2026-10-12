@@ -8,7 +8,7 @@ import Foundation
 import VisorProtocol
 
 extension VisorServer {
-    public static var settingsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("settings.json") }
+    public static var settingsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("settings.json", isDirectory: false) }
 
     /// The identity to serve TLS with, read from the file set; nil for
     /// none, or a file that cannot be read (said in `lastError`).

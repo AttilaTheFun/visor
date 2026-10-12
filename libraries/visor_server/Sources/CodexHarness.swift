@@ -91,7 +91,7 @@ public final class CodexHarness: AgentHarness {
     static func catalog() -> AgentCatalog {
         let home = FileManager.default.homeDirectoryForCurrentUser
         var models: [AgentModel] = []
-        if let data = try? Data(contentsOf: home.appendingPathComponent(".codex/models_cache.json")),
+        if let data = try? Data(contentsOf: home.appendingPathComponent(".codex/models_cache.json", isDirectory: false)),
            let object = try? JSONSerialization.jsonObject(with: data),
            let list = ((object as? [String: Any])?["models"] as? [[String: Any]]) ?? (object as? [[String: Any]]) {
             for entry in list where (entry["visibility"] as? String ?? "list") == "list" {
@@ -103,7 +103,7 @@ public final class CodexHarness: AgentHarness {
             }
         }
         var defaultModel: String?
-        if let config = try? String(contentsOf: home.appendingPathComponent(".codex/config.toml"), encoding: .utf8) {
+        if let config = try? String(contentsOf: home.appendingPathComponent(".codex/config.toml", isDirectory: false), encoding: .utf8) {
             for line in config.split(separator: "\n") {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if trimmed.hasPrefix("model ="), let quote = trimmed.firstIndex(of: "\"") {

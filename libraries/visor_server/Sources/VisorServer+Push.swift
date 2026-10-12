@@ -17,7 +17,7 @@ import VisorProtocol
 extension VisorServer {
     // MARK: Devices
 
-    static var pushDevicesURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("push.json") }
+    static var pushDevicesURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("push.json", isDirectory: false) }
 
     static func keptPushDevices() -> [PushDevice] {
         guard let data = try? Data(contentsOf: pushDevicesURL) else { return [] }
