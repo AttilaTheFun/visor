@@ -280,7 +280,7 @@ public struct VisorRootView: View {
                 Section {
                     ForEach(messageHits, id: \.hit.id) { item in
                         MessageHitRow(hit: item.hit, computer: store.servers.count > 1 ? item.host.record.name : nil)
-                            .sidebarRow(.session(SessionSelection(serverID: item.host.id, sessionID: item.hit.session)), selection: selection)
+                            .tag(ContentSelection.session(SessionSelection(serverID: item.host.id, sessionID: item.hit.session)))
                     }
                 } header: {
                     Text("Messages").noHeaderCase()
@@ -293,7 +293,6 @@ public struct VisorRootView: View {
                     Label(AgentServerProviderUIs.addTitle + "…", systemImage: "plus").rowLabel()
                 }
                 .buttonStyle(.plain)
-                .sidebarRow()
                 .accessibilityIdentifier("add-computer")
             }
         }
@@ -330,12 +329,11 @@ public struct VisorRootView: View {
             Text(searching ? "Nothing matches “\(search.trimmed)”." : "No sessions yet — tap compose to start one.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-                .sidebarRow()
         }
         ForEach(cards) { card in
             let which = SessionSelection(serverID: host.id, sessionID: card.session.id)
             SessionCardRow(session: card.session, selected: selection == .session(which))
-                .sidebarRow(.session(which), selection: selection)
+                .tag(ContentSelection.session(which))
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
                         .tint(.orange)
@@ -352,7 +350,7 @@ public struct VisorRootView: View {
                 Spacer()
                 Text("\(archived.count)").foregroundStyle(.secondary)
             }
-            .sidebarRow(.hostArchive(serverID: host.id), selection: selection)
+            .tag(ContentSelection.hostArchive(serverID: host.id))
             .accessibilityIdentifier("archived-" + host.record.name)
         }
         let settings = ContentSelection.computer(serverID: host.id)
@@ -362,7 +360,7 @@ public struct VisorRootView: View {
             Text("Computer Settings")
             Spacer()
         }
-        .sidebarRow(settings, selection: selection)
+        .tag(settings)
         .accessibilityIdentifier("computer-settings-" + host.record.name)
     }
 

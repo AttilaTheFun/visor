@@ -11,7 +11,8 @@ import VisorProtocol
 @MainActor
 struct SessionCardRow: View {
     let session: SessionInfo
-    /// The selected row: on the highlight, its marks are white too.
+    /// The row is the selected one: its marks take its words' color, which
+    /// the system's selection sets (white on the accent's fill).
     var selected = false
 
     var body: some View {
@@ -64,7 +65,7 @@ struct SessionCardRow: View {
                     Image(systemName: "ellipsis.circle.fill").foregroundStyle(.secondary)
                         .accessibilityLabel("Working")
                 } else {
-                    ProgressView().controlSize(.small).tint(selected ? Color.white : nil)
+                    ProgressView().controlSize(.small)
                         .accessibilityLabel("Working")
                 }
             } else if session.pendingApproval != nil {
@@ -78,8 +79,9 @@ struct SessionCardRow: View {
         .accessibilityIdentifier("session-" + session.id)
     }
 
-    /// The goal's and the loop's marks: the accent, white on the highlight.
-    private var mark: Color { selected ? .white : .accentColor }
+    /// The goal's and the loop's marks: the accent, or the words' color on
+    /// the selection.
+    private var mark: AnyShapeStyle { selected ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor) }
 
     /// "Waiting on CI checks on PR #92" — the first, and how many more.
     static func waitingLine(_ background: [StatusItem]) -> String? {
