@@ -109,7 +109,7 @@ under `/api`.
 | `POST /migration/write` | `migration` (the plan's `id`), `file`, `offset`, `data` | `migration` with the next `offset`; a piece must follow on from the last |
 | `POST /migration/clone` | `migration`, `steps` (the one) | `migration`, or the git error (the client then copies the project instead) |
 | `POST /migration/unpack` | `migration`, `file`, `steps` (the one) | `migration`, once the project is unpacked where its step says |
-| `POST /migration/finish` | `migration`, `steps` (those chosen) | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here looks for them, the chosen folders made, and the session started resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from |
+| `POST /migration/finish` | `migration`, `steps` (those chosen), `cwd` (the folder the session runs in there, when the user chose one rather than the plan's: one of its projects, or another) | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here looks for them, the chosen folders made, and the session started resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from |
 
 Moving a session (`SessionMigration` in the client): the client asks the
 session's server for an offer and the other for a plan, the user chooses

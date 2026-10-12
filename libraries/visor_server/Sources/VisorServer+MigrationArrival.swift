@@ -134,11 +134,19 @@ extension VisorServer {
 
     /// The end of a move: the conversation's files put where the agent here
     /// looks for them, the folders the chosen steps make (`steps`), and
-    /// the session started on the same conversation, told where it came
-    /// from. The new session's id is in `session`.
+    /// the session started on the same conversation in the folder the user
+    /// chose (`cwd`; the plan's, the same place under this home folder,
+    /// when none), told where it came from. The new session's id is in
+    /// `session`.
     func migrationFinish(_ body: Envelope) async -> Envelope {
         guard let id = body.migration, let move = migrationsIn[id] else { return .error("That move has ended; start it again.") }
-        let offer = move.offer, plan = move.plan
+        let offer = move.offer
+        var plan = move.plan
+        if let chosen = body.cwd?.trimmingCharacters(in: .whitespacesAndNewlines), !chosen.isEmpty {
+            let expanded = (chosen as NSString).expandingTildeInPath
+            guard expanded.hasPrefix("/") else { return .error("\(chosen) is not a folder's full path.") }
+            plan.cwd = expanded.count > 1 && expanded.hasSuffix("/") ? String(expanded.dropLast()) : expanded
+        }
         let files = FileManager.default
         let chosen = Set((body.steps ?? []).map(\.path))
         for step in plan.steps where step.action == .create && chosen.contains(step.path) {

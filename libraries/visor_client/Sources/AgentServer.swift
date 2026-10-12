@@ -158,9 +158,10 @@ public protocol AgentServer: AnyObject {
     func migrationClone(_ plan: String, step: MigrationStep) async throws
     /// Unpacks a project carried here where its step says.
     func migrationUnpack(_ plan: String, file: String, step: MigrationStep) async throws
-    /// Ends a move here, making the chosen steps' folders: the new
-    /// session's id, and the server's sessions.
-    func migrationFinish(_ plan: String, steps: [MigrationStep]) async throws -> (session: String, sessions: [SessionInfo])
+    /// Ends a move here, making the chosen steps' folders, the session run
+    /// in `cwd` (the plan's when nil): the new session's id, and the
+    /// server's sessions.
+    func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo])
 
     // MARK: Identity and SSH
 
@@ -201,7 +202,7 @@ public extension AgentServer {
     func migrationWrite(_ plan: String, file: String, offset: Int, data: String) async throws { throw AgentServerError.unsupported }
     func migrationClone(_ plan: String, step: MigrationStep) async throws { throw AgentServerError.unsupported }
     func migrationUnpack(_ plan: String, file: String, step: MigrationStep) async throws { throw AgentServerError.unsupported }
-    func migrationFinish(_ plan: String, steps: [MigrationStep]) async throws -> (session: String, sessions: [SessionInfo]) {
+    func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo]) {
         throw AgentServerError.unsupported
     }
     var identity: ServerIdentity? { nil }

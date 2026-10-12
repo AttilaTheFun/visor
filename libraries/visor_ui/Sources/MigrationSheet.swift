@@ -14,6 +14,10 @@ struct MigrationSheet: View {
     /// Opens the session where it moved.
     let open: (String) -> Void
     @Environment(\.dismiss) private var dismiss
+    /// The user is typing the folder the session runs in.
+    @State private var typing = false
+    /// The picker's choice for a folder typed: no path begins so.
+    private static let other = "other"
 
     var body: some View {
         NavigationStack {
@@ -60,7 +64,22 @@ struct MigrationSheet: View {
             Section {
                 LabeledContent("From", value: migration.from.record.name)
                 LabeledContent("To", value: migration.to.record.name)
-                LabeledContent("Folder", value: plan.cwd)
+                // Where it runs there: where it ran, or one of the projects
+                // it brings (a session started in the home folder can live
+                // in its repository from here on), or a folder typed.
+                Picker("Runs In", selection: Binding(get: { typing || !migration.folders.contains(migration.cwd) ? Self.other : migration.cwd },
+                                                     set: { choice in
+                                                         typing = choice == Self.other
+                                                         if !typing { migration.cwd = choice }
+                                                     })) {
+                    ForEach(migration.folders, id: \.self) { folder in Text(folder).tag(folder) }
+                    Text("Other…").tag(Self.other)
+                }
+                if typing || !migration.folders.contains(migration.cwd) {
+                    TextField("A folder on \(migration.to.record.name)", text: Binding(get: { migration.cwd }, set: { migration.cwd = $0 }))
+                        .autocorrectionDisabled()
+                        .keyboardTypeURL()
+                }
                 LabeledContent("Conversation", value: Self.size(offer.size))
             } footer: {
                 if !plan.agentInstalled {

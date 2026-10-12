@@ -62,10 +62,11 @@ extension VisorAgentServer {
         _ = try await step("unpack", body)
     }
 
-    public func migrationFinish(_ plan: String, steps: [MigrationStep]) async throws -> (session: String, sessions: [SessionInfo]) {
+    public func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo]) {
         var body = Envelope(type: "migration")
         body.migration = plan
         body.steps = steps
+        body.cwd = cwd
         let reply = try await step("finish", body)
         guard let session = reply.session else { throw AgentServerError.message("No session was started") }
         return (session, reply.sessions ?? [])

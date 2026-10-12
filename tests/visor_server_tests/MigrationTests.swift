@@ -164,6 +164,37 @@ final class MigrationTests: ServerTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
     }
 
+    func testASessionMovesIntoTheFolderTheUserChose() async throws {
+        // Started in the home folder; to live in its repository from here on.
+        let repository = try await repository("noson")
+        let file = try conversationFile(cwd: home, other: repository)
+        let info = SessionInfo(id: "H", agent: .claude, cwd: home.path, title: "Noson", created: 0)
+        server.sessions = [SessionRecord(info: info, process: ClaudeProcess(cwd: home.path, skipPermissions: true, resume: conversation))]
+        var ask = Envelope(type: "migration")
+        ask.session = "H"
+        let offered = await server.migrationOffer(ask)
+        let offer = try XCTUnwrap(offered.offer, offered.message ?? "no offer")
+        XCTAssertTrue(offer.projects.contains { $0.path == repository.path })
+        var planning = Envelope(type: "migration")
+        planning.offer = offer
+        let planned = await server.migrationPlan(planning)
+        let plan = try XCTUnwrap(planned.plan, planned.message ?? "no plan")
+        for conversationFile in offer.files { carry(conversationFile, offer: offer.token, plan: plan.id) }
+        var finishing = Envelope(type: "migration")
+        finishing.migration = plan.id
+        finishing.steps = plan.steps
+        finishing.cwd = repository.path
+        let finished = await server.migrationFinish(finishing)
+        XCTAssertNotEqual(finished.type, "error", finished.message ?? "")
+        let moved = try XCTUnwrap(server.session(finished.session))
+        XCTAssertEqual(moved.info.cwd, repository.path)
+        // Claude looks for the conversation under the folder it runs in.
+        let placed = ClaudeSessionFiles.projectsRoot(home: home)
+            .appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: repository.path))
+            .appendingPathComponent(conversation + ".jsonl")
+        XCTAssertEqual(try Data(contentsOf: placed), try Data(contentsOf: file))
+    }
+
     func testAnOfferNeedsAConversation() async {
         server.sessions = [SessionRecord(info: SessionInfo(id: "N", agent: .claude, cwd: "/tmp", title: "New", created: 0),
                                          process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))]

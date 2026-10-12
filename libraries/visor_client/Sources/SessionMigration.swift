@@ -33,6 +33,20 @@ public final class SessionMigration: Identifiable {
     public private(set) var plan: MigrationPlan?
     /// The plan's steps as the user has them: each chosen or not.
     public var steps: [MigrationStep] = []
+    /// Where the session runs on the other computer: the plan's folder
+    /// (where it ran, under that home folder) unless the user chooses one
+    /// of the projects it brings, or another folder.
+    public var cwd = ""
+
+    /// The folders the session could run in: its own, and each repository
+    /// it brings or finds there.
+    public var folders: [String] {
+        var seen: [String] = []
+        for folder in [plan?.cwd ?? ""] + steps.filter({ $0.action != .create }).map(\.path) where !folder.isEmpty && !seen.contains(folder) {
+            seen.append(folder)
+        }
+        return seen
+    }
     /// What is being done now, and how far the move has come (0 to 1).
     public private(set) var doing = ""
     public private(set) var progress = 0.0
@@ -52,7 +66,7 @@ public final class SessionMigration: Identifiable {
     /// Whether the user may leave a step out: not the session's own folder,
     /// nor a project that is there already.
     public func isOptional(_ step: MigrationStep) -> Bool {
-        step.project != steps.first?.project && step.action != .present
+        step.project != steps.first?.project && step.action != .present && step.path != cwd
     }
 
     /// The offer, and the other server's plan for it.
@@ -64,6 +78,7 @@ public final class SessionMigration: Identifiable {
             self.offer = offer
             self.plan = plan
             steps = plan.steps
+            cwd = plan.cwd
             phase = .ready
         } catch {
             phase = .failed(Self.words(error))
@@ -86,7 +101,8 @@ public final class SessionMigration: Identifiable {
     }
 
     private func move(_ offer: MigrationOffer, _ plan: MigrationPlan) async throws -> String {
-        let chosen = steps.filter(\.chosen)
+        // The project the session runs in comes with it.
+        let chosen = steps.filter { $0.chosen || $0.path == cwd }
         let copies = chosen.filter { $0.action == .copy }
         let clones = chosen.filter { $0.action == .clone }
         let sizes = Dictionary(offer.projects.map { ($0.path, $0.size) }, uniquingKeysWith: { first, _ in first })
@@ -108,7 +124,7 @@ public final class SessionMigration: Identifiable {
         }
         for step in copies { try await copy(step, offer: offer, plan: plan) }
         doing = "Starting the session on \(to.record.name)"
-        let (moved, sessions) = try await to.server.migrationFinish(plan.id, steps: chosen)
+        let (moved, sessions) = try await to.server.migrationFinish(plan.id, steps: chosen, cwd: cwd == plan.cwd ? nil : cwd)
         to.take(sessions, replacing: true)
         progress = 1
         return moved
