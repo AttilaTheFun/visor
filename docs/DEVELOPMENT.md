@@ -522,7 +522,12 @@ Settings" last (edit or remove). Compose offers only
 (required), the network (whose the Mac is, the front's state).
 `POST /api/restart {path, session}` installs a bundle over itself via
 a detached relauncher and resumes named sessions with a nudge
-("[Visor] The Visor server restarted while you were working…").
+("[Visor] The Visor server restarted while you were working…"). The
+relauncher (`AppRelauncher`) keeps the running bundle aside (`Previous/` in
+the data directory) and watches the new one for two minutes: if it quits,
+crashes or never answers on its port, the previous build is put back and
+opened, carrying the same sessions, and `relaunch-rollback.txt` says why,
+which the server shows in its menu (`updateNotice`) once.
 
 **The server on every system.** `libraries/visor_server` has no
 conditional compilation and imports nothing of a system: what differs —

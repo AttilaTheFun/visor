@@ -23,6 +23,10 @@ public final class VisorServer {
     public internal(set) var listening = false
 
     public internal(set) var lastError: String?
+    /// An update that did not stay up and was rolled back, as the
+    /// relauncher said (VisorServer+Rollback.swift): shown until the next
+    /// update.
+    public internal(set) var updateNotice: String?
     /// Required: the server does not listen without one. Every client and
     /// every tool on this computer signs in with it; the connection code
     /// carries it.
@@ -120,6 +124,7 @@ public final class VisorServer {
         password = Self.keptPassword()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()
+        takeRollbackNote()
     }
 
     /// A server apart from the user's own: its own port, a folder of its
