@@ -19,6 +19,10 @@ extension VisorServer {
             if !record.isBound { bind(record) }
             hostable.adopt(child, carried: host.carried ?? [:])
             child.limit(AgentChildren.memoryLimit)
+            // Its file is followed from now, as an agent started here has
+            // its followed once it names its session: where the
+            // conversation stands is kept up with while the agent works.
+            record.followFile()
             Self.log("picked up the agent of \(record.info.title) (\(record.info.id))")
             // Still working on the turn it had when the last launch went:
             // it says when that ends, as ever (unless what it said was
