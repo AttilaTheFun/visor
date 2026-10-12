@@ -53,7 +53,6 @@ public final class VisorAgentServer: AgentServer {
     /// What `hello` gave for the channel's login.
     var token: String?
     public private(set) var identity: ServerIdentity?
-    public var reachedAt: String? { address?.root }
     /// What the authenticator gave for the last sign-in, for the socket's
     /// opening request (a front that checks headers sees them there too).
     private var socketHeaders: [String: String] = [:]
@@ -97,7 +96,7 @@ public final class VisorAgentServer: AgentServer {
             let hello = try await call("GET", "/hello")
             token = hello.token
             if let id = hello.id, !id.isEmpty {
-                identity = ServerIdentity(id: id, addresses: hello.addresses ?? [], sshKey: hello.sshKey ?? "", standalone: hello.standalone ?? false)
+                identity = ServerIdentity(id: id, addresses: hello.addresses ?? [], standalone: hello.standalone ?? false)
             }
             return hello.host.flatMap { $0.isEmpty ? nil : $0 }
         } catch {
@@ -232,6 +231,7 @@ public final class VisorAgentServer: AgentServer {
         case "welcome": return .welcome(name: envelope.host ?? "", sessions: envelope.sessions ?? [], catalogs: envelope.catalogs ?? [])
         case "sessions": return .sessions(envelope.sessions ?? [])
         case "catalogs": return .catalogs(envelope.catalogs ?? [])
+        case "relay": return .relay
         case "account":
             guard let account = envelope.account, let agent = envelope.agent else { return nil }
             return .account(account, of: agent)

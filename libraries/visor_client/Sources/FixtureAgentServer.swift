@@ -85,8 +85,10 @@ final class FixtureAgentServer: AgentServer {
         }
         if VisorFixture.screen == "arrivals", session == VisorFixture.chatSession, revision == 1 || revision == 2 {
             // Rows come in as a reply would: two twelve seconds on, one
-            // more eight seconds after, each after the last there was.
-            try await Task.sleep(nanoseconds: revision == 1 ? 12_000_000_000 : 8_000_000_000)
+            // more fourteen seconds after (room for the pill, which stays
+            // four, to go between them on a slow machine), each after the
+            // last there was.
+            try await Task.sleep(nanoseconds: revision == 1 ? 12_000_000_000 : 14_000_000_000)
             let rows = revision == 1
                 ? [TranscriptEntry(id: "arrival-1", role: .user, text: "Run them now, please."),
                    TranscriptEntry(id: "arrival-2", role: .assistant, text: "Running the sync tests now.")]

@@ -293,7 +293,7 @@ final class VisorProbe: XCTestCase {
 
     /// Rows coming in while the thread is read further up move nothing in
     /// it: the fixture's chat, scrolled up, gets two rows twelve seconds on
-    /// and one more eight seconds after. What was read stays where it was,
+    /// and one more fourteen seconds after. What was read stays where it was,
     /// a pill says how many came in below and goes a few seconds later, and
     /// its tap takes the thread down to the newest.
     func testRowsArrivingWhileReadingAboveMoveNothing() throws {
@@ -320,9 +320,9 @@ final class VisorProbe: XCTestCase {
         shot(app, "arrivals-pill")
         XCTAssertTrue(pill.label.contains("2 new messages"), pill.label)
         XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when rows came in below")
-        XCTAssertTrue(pill.waitForNonExistence(timeout: 7), "the pill stayed")
+        XCTAssertTrue(pill.waitForNonExistence(timeout: 9), "the pill stayed")
         // The third row: the pill again, and its tap goes down to it.
-        XCTAssertTrue(pill.waitForExistence(timeout: 12), "no pill for the third row")
+        XCTAssertTrue(pill.waitForExistence(timeout: 18), "no pill for the third row")
         XCTAssertTrue(pill.label.contains("1 new message"), pill.label)
         XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when the third row came in")
         pill.tap()
@@ -348,6 +348,29 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 1)
         XCTAssertTrue(arrived.isHittable, "the thread did not go down to the rows that came in")
         XCTAssertFalse(app.buttons["new-rows-pill"].exists, "a pill while at the end")
+        app.terminate()
+    }
+
+    /// Refusing dictation leaves the app running: the system's answer to
+    /// the speech recognition prompt comes on a queue of its own, and a
+    /// handler for it built on the main actor trapped there (0.29). Needs
+    /// the prompt undecided (tools/ios_ui_tests.sh resets the simulator's
+    /// permissions first; CI's simulator is new each run).
+    func testRefusingDictationLeavesTheAppRunning() throws {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        let mic = app.buttons["dictate"]
+        XCTAssertTrue(mic.waitForExistence(timeout: 10), "no microphone in the composer")
+        mic.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let refuse = springboard.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Don'")).firstMatch
+        XCTAssertTrue(refuse.waitForExistence(timeout: 10), "no permission prompt: reset the simulator's permissions first")
+        refuse.tap()
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertEqual(app.state, .runningForeground, "the app ended when dictation was refused")
+        XCTAssertTrue(mic.exists, "the composer is gone after dictation was refused")
         app.terminate()
     }
 

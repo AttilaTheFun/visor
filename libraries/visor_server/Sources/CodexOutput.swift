@@ -6,12 +6,17 @@ import VisorProtocol
 enum CodexOutput: Sendable {
     /// The answer to a request of ours: the thread or turn it names, or
     /// what went wrong.
-    case reply(id: Int, thread: String?, turn: String?, error: String?)
+    case reply(id: Int, thread: String?, turn: String?, error: String?, goal: CodexGoal??)
     /// The app server asking us something (an approval).
     case asked(id: Int, method: String)
     case text(item: String, String)
     case toolStarted(id: String, name: String, label: String)
     case reasoningStarted
+    /// A turn began: one asked for, or one Codex started itself (working
+    /// toward its goal, a review).
+    case turnStarted(id: String)
+    /// The thread's goal as it is now; nil once it is cleared.
+    case goal(CodexGoal?)
     case itemCompleted(id: String, reasoning: Bool)
     /// The turn ended; with what went wrong, unless it was interrupted.
     case turnCompleted(failure: String?)
@@ -28,9 +33,12 @@ enum CodexOutput: Sendable {
         guard let object = JSON.object(line) else { return [] }
         if let id = object["id"] as? Int, object["method"] == nil {
             let result = object["result"] as? [String: Any]
+            // A goal's answers carry the goal (null when there is none).
+            let goal: CodexGoal?? = result?.keys.contains("goal") == true ? .some(CodexGoal(result?["goal"])) : .none
             var outputs: [CodexOutput] = [.reply(id: id, thread: (result?["thread"] as? [String: Any])?["id"] as? String,
                                                   turn: (result?["turn"] as? [String: Any])?["id"] as? String,
-                                                  error: object["error"].map(describe))]
+                                                  error: object["error"].map(describe), goal: goal)]
+            if case .some(let now) = goal { outputs.append(.goal(now)) }
             // The account's reads, told by what they hold.
             if let account = result?["account"] as? [String: Any], let type = account["type"] as? String {
                 switch type {
@@ -68,6 +76,14 @@ enum CodexOutput: Sendable {
         case "item/completed":
             guard let item = params["item"] as? [String: Any], let id = item["id"] as? String else { return [] }
             return [.itemCompleted(id: id, reasoning: item["type"] as? String == "reasoning")]
+        case "turn/started":
+            guard let id = (params["turn"] as? [String: Any])?["id"] as? String else { return [] }
+            return [.turnStarted(id: id)]
+        case "thread/goal/updated":
+            guard let goal = CodexGoal(params["goal"]) else { return [] }
+            return [.goal(goal)]
+        case "thread/goal/cleared":
+            return [.goal(nil)]
         case "turn/completed":
             let turn = params["turn"] as? [String: Any] ?? [:]
             var failure: String?

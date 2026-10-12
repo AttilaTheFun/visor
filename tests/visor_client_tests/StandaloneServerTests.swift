@@ -1,7 +1,7 @@
 // Servers that stand alone: reached only at the address they were added
-// at, their own paths not learned, their peers not taken in, neither
-// introduced to the others nor the others to them, their credential sent
-// nowhere — whether the server says so or its authenticator does. And a
+// at, their own paths not learned, kept out of the relay (neither told of
+// the others nor told of to them) — whether the server says so or its
+// authenticator does. And a
 // connection code that does not say how to sign in leaves a held
 // computer's sign-in as it is.
 
@@ -66,7 +66,7 @@ final class StandaloneServerTests: XCTestCase {
         XCTAssertTrue(host.record.standalone)
         XCTAssertEqual(host.record.paths, [], "the learned paths are gone, and none is learned")
         XCTAssertEqual(host.pathsToTry(), ["https://front.example.com/visor"])
-        XCTAssertNil(host.asPeer, "its address and credential go to no one")
+        XCTAssertFalse(host.relayEnabled, "out of the relay")
         XCTAssertTrue(server.authorizedKeys.isEmpty, "no SSH key enrolled")
         XCTAssertEqual(AgentServerRecord(json: host.record.json)?.standalone, true)
     }
@@ -83,32 +83,24 @@ final class StandaloneServerTests: XCTestCase {
         for _ in 0..<5 { await settle() }
         XCTAssertEqual(server.signedInBy, ["https://front.example.com/visor"])
         XCTAssertEqual(host.pathsToTry(), ["https://front.example.com/visor"])
-        XCTAssertNil(host.asPeer)
+        XCTAssertFalse(host.relayEnabled)
     }
 
-    /// In the store: a server that stands alone is not asked for its
-    /// peers, is not introduced to the others nor they to it, and is no
-    /// relay to anything.
-    func testAServerThatStandsAloneSharesNothingInTheStore() async throws {
+    /// In the store: a server that stands alone is told nothing of the
+    /// others, and the others are told nothing of it.
+    func testAServerThatStandsAloneIsKeptOutOfTheRelay() async throws {
         let a = AgentServerRecord(name: "Sandbox", address: "https://front.example.com/visor", secret: "a-pw", provider: "scripted")
         let b = AgentServerRecord(name: "Mini", address: "http://b:7433", secret: "b-pw", provider: "scripted")
         let serverA = scripted(a), serverB = scripted(b)
         serverA.identity = ServerIdentity(id: "A", addresses: [], standalone: true)
         serverB.identity = ServerIdentity(id: "B", addresses: ["http://b:7433"])
-        serverA.peersAnswer = [Peer(id: "C", name: "C", addresses: ["http://c:7433"], password: "c-pw")]
         VisorHost.settings?.set(key: "hosts", value: JSONValue.array([a.json, b.json]).encoded())
         let store = VisorStore()
         for _ in 0..<10 { await settle() }
-        XCTAssertEqual(store.servers.count, 2, "its peers are not taken in")
-        XCTAssertTrue(serverA.introduced.isEmpty, "the others are not introduced to it")
-        XCTAssertFalse(serverB.introduced.flatMap { $0 }.contains { $0.id == "A" }, "it is introduced to no one")
-        let sandbox = try XCTUnwrap(store.servers.first { $0.record.serverID == "A" })
-        let mini = try XCTUnwrap(store.servers.first { $0.record.serverID == "B" })
-        XCTAssertEqual(store.relayPaths(to: sandbox), [])
-        XCTAssertFalse(store.relayPaths(to: mini).contains { $0.hasPrefix("https://front.example.com") }, "it relays nothing")
-        // Told of it by another: nothing learned.
-        store.take(Peer(id: "A", name: "Sandbox", addresses: ["http://10.0.0.9:7433"], password: "x"), from: mini)
-        XCTAssertEqual(sandbox.record.paths, [])
+        await store.courier.exchangeAll()
+        XCTAssertTrue(serverA.reports.isEmpty, "it is told nothing")
+        XCTAssertFalse(serverB.reports.isEmpty)
+        XCTAssertFalse(serverB.reports.flatMap(\.servers).contains { $0.id == "A" }, "it is told of to no one")
     }
 
     /// Added again from a code: a code that does not say how to sign in

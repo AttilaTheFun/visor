@@ -25,11 +25,15 @@ public protocol AgentHarness: AnyObject, Sendable {
     /// Makes the session's history findable where the folder now is; a
     /// no-op where the agent resumes by id regardless of folder.
     func adoptHistory(id: String, cwd: String)
+    /// The slash commands its sessions take before the agent has listed
+    /// its own (or where it lists none): the harness's.
+    var commands: [SlashCommand] { get }
 }
 
 public extension AgentHarness {
     /// Installed on the login shell's PATH.
     var available: Bool { ToolPath.resolve(tool) != nil }
+    var commands: [SlashCommand] { [] }
     func adoptHistory(id: String, cwd: String) { _ = SessionCatalog.adoptHistory(agent: kind, id: id, cwd: cwd) }
     func resumable(cwd: String) -> [ResumableSession] { SessionCatalog.resumable(agent: kind, cwd: cwd) }
     func transcript(id: String, cwd: String, limit: Int) -> [TranscriptEntry] {

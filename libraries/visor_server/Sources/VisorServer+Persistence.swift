@@ -60,6 +60,10 @@ extension VisorServer {
             info.ended = false
             // A terminal is drawn for a client that is no longer here.
             info.mode = .chat
+            // What ran in the background ran in an agent that has gone
+            // (an agent says its list when one changes, not when it
+            // starts with none, so a kept list would stay up for good).
+            info.background = []
             // An agent of ours that outlived the app (we were killed
             // outright, or quit before it went): it still holds the
             // session, so it goes before anything resumes into it.

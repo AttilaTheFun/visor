@@ -19,7 +19,7 @@ struct MessageHitRow: View {
                    hit.title.isEmpty ? AttachmentKind.fileName(hit.cwd) : hit.title] + (computer.map { [$0] } ?? []))
                 .joined(separator: " · "))
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
         .padding(.vertical, 2)

@@ -75,16 +75,16 @@ under `/api`.
 
 | method and path | body | answer |
 |---|---|---|
-| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id`, own `addresses` and `sshKey` (its SSH public key line) — or, from a server that stands alone, `standalone: true` and neither addresses nor key — or 401 |
+| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id` and own `addresses` — or, from a server that stands alone, `standalone: true` and no addresses — or 401 |
 | `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
 | `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
 | `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
 | `POST /sessions/<id>/acknowledge` | | the user has read the session's notice |
-| `GET /peers` | | `peers`: the server's `id`, `host`, own `addresses`, and its `peers` |
 | `POST /ssh/keys` | `text`: an SSH public key line (this device's, or one scanned from another device's `visor://authorize?key=` QR code) | `ssh`; the key is in the user's `authorized_keys`, so that device comes in over SSH next |
-| `POST /peers` | `peers`: computers to tell the server of | `peers`; kept and passed on |
-| `POST /unlink` | `text`: a peer's id or address | forgets that peer |
-| `/peer/<id>/api/…` | any of the above | the peer's own answer, relayed |
+| `GET /codes` | | `codes`: the server's connection codes — `qr` (the QR code's), and `http`, `https`, `ssh` (each leading with that kind of path; absent when it has none) |
+| `POST /relay` | `report`: the client's `DirectoryReport` | `relay` with `relayed`: the messages waiting for the servers the report names |
+| `POST /relay/deliver` | `relayed`: one `RelayMessage` | `relay` with `receipt`: what became of it — the same however often it is carried; 409 for a message to another server |
+| `POST /relay/receipt` | `receipt`: what became of a message from this server | `relay` |
 | `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript) | `sessions` with the new one |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
@@ -215,60 +215,62 @@ workspace-write sandbox.
 
 Every Claude and Codex session the menu bar app starts gets the same MCP
 server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`), with
-three tools: `list_sessions`, `send_message(session, text)` and
-`read_messages(session, count)`. Each call is a WebSocket connection from the
-script to the app carrying
-`{"type":"agent","token":<agent token>,"client":<calling session>,"mode":"sessions"|"send"|"read","session":<other session>,"text":…,"rows":<count>,"id":…}`,
-answered with `{"type":"agent_result","id":…,"text":…}` or `…,"error":…}`.
+four tools: `list_sessions`, `send_message(session, server?, text)`,
+`read_messages(session, server?, count)` and `message_status(message_id)`.
+Each call is a WebSocket connection from the script to the app carrying
+`{"type":"agent","token":<agent token>,"client":<calling session>,"mode":"sessions"|"send"|"read"|"status","session":<other session>,"server":<its server's id or name>,"messageID":…,"text":…,"rows":<count>,"id":…}`,
+answered with `{"type":"agent_result","id":…,"text":…,"messageID":…}` or `…,"error":…}`.
 A session is never offered itself, nor ended or archived ones. A message is
 delivered as a new turn (queued while the other session works), prefixed
 `[Message from the Visor session "<title>" (<id>), not from the user. …]`.
 Node must be on the PATH (as it already is for approvals).
 
-Sessions on other computers are reachable across the network of
-computers. Every server has an id (`hello` says it, with the server's own
-`addresses` and `sshKey`); each keeps its peers — `Peer`: `id`, `name`,
-`addresses`, `password`, `sshKey` — in the keychain. A server has an SSH
-key of its own; a computer that takes a peer in authorizes the peer's
-key, and reaches a peer whose path is `ssh://` through a tunnel to that
-peer's socket file, with no password, as a device does (on a Mac or
-Linux; a Windows server reaches peers over HTTP alone). A computer joins once, anywhere: its
-connection code (which carries its id) pasted into another's Settings,
-which sends this computer's code to its `POST /api/link`; or a client that
-holds two servers, which introduces each to the other through
-`POST /api/peers` (`{"type":"peers","peers":[…]}`). What a server is told
-it keeps and passes on to its other peers the same way, so what one learns
-all learn; nothing is passed on twice (a server takes in only what is
-news, and the `X-Visor-Relay` header names who told it). `GET /api/peers`
-gives a client the network as the server knows it: `id`, `host`,
-`addresses` (its own) and `peers`. `POST /api/unlink` (`text`: an id or an
-address) forgets one.
+Sessions on other computers are reached through a client connected to
+both: servers never talk to one another, and none learns another's address
+or password. Every server, client and session has an id and a name. A
+client tells each server it is connected to what it is connected to, every
+20 seconds and whenever a server connects or a record changes
+(`POST /api/relay` with a `DirectoryReport`: `client`, `clientName`, and
+`servers`, each `DirectoryServer` an `id`, `name` and `sessions`, each
+`DirectorySession` an `id`, `name`, `agent` and `busy`; archived sessions
+and terminals left out). A server keeps the last report of each client by
+the client's id, for ten minutes; `list_sessions` gives this server's
+sessions and then each other server's as last reported, with who reported
+it and how long ago.
+
+An ask about a session on another server (named by `server`, by id or by
+name — two servers of one name are an error naming their ids — or found
+by the session's id alone; a `<computer>/<id>` from before ids still
+reads) goes into this server's relay outbox as a `RelayMessage`: `id`,
+`kind` (`send` or `read`), `from` and `to` (`RelayEndpoint`: `server`,
+`serverName`, `session`, `sessionName`), `text`, `rows`, `created`,
+`expires` (a day on). The outbox is kept on disk. The server tells the
+clients on a live channel to come for it (`{"type":"relay"}`), and answers
+a client's next report with the messages for the servers it named. The
+client carries each to its server (`POST /api/relay/deliver`), which takes
+it once — it keeps what became of each message by id for two days, so two
+clients racing to carry one, or one carrying it again, change nothing —
+and answers with a `RelayReceipt`: `message`, `outcome` (`sent`, `queued`
+while the agent works, `read` with the rows in `text`, `failed` with why),
+which the client brings back (`POST /api/relay/receipt`). The first
+receipt is kept; the agent that asked is answered with it (a send waits up
+to 8 seconds, a read 20), or told the message waits, with its id for
+`message_status` (`waiting`, `sent`, `queued`, `read`, `failed`, or
+`expired` after a day uncarried). A message carried from another server is
+prefixed `[Message from the Visor session "<title>" (<id>) on <computer>,
+not from the user. To answer, use send_message with session <id> and
+server <server id>.]`.
+
+A client takes part with each server unless its user turned that off for
+that computer (`AgentServerRecord.relay`; on by default, and a fork may
+turn the default off with `RelayCourier.onByDefault`): one turned off is
+told once that the client reports nothing, then nothing more, and is left
+out of what the others are told.
 
 A server can stand alone (its `standalone` setting, `visor-server
 standalone on`, or `VISOR_STANDALONE=1`): one reached only through a
 front, which must not be reached around it. Its `hello` says
-`standalone: true` and gives no addresses or key; its `GET /api/peers`
-lists none; it takes in no peers, tells none, and relays nothing (404).
-A client then reaches it only at the address it was added at, learns no
-paths for it, takes in no computers from it, introduces it to no one and
-gives its credential to no other server. An authenticator can say the
-same of every server it signs in to (`isolated`), for a front that cannot
-change the server behind it.
-
-A server relays for its peers: `/peer/<id>/api/…` under a server is the
-peer's API, carried there (with the peer's password put in, down a path
-the server has — one of the peer's addresses, or another peer that reaches
-it) and the answer brought back; a WebSocket upgrade under `/peer/<id>/`
-is refused, so a client follows the peer by polling. A request names the
-servers it has passed through in `X-Visor-Relay`, and none carries it
-twice or further than three.
-
-`list_sessions` lists each peer's sessions as `<computer>/<id>`, the
-computer's name in lower case with dashes (`logans-macbook-pro/1tzn…`).
-Asks about such a session are forwarded to that computer's
-`POST /api/agent`, with its password, as the same envelope with `client`
-set to the caller as `<computer>/<id>`, `title` its name and `host` its
-computer; the answer is the `agent_result`. Messages from another computer
-are prefixed `[Message from the Visor session "<title>" (<computer>/<id>)
-on <computer name>, not from the user. …]`, and are answered with
-`send_message` to that id.
+`standalone: true` and gives no addresses. A client then reaches it only
+at the address it was added at, learns no paths for it, and keeps it out
+of the relay. An authenticator can say the same of every server it signs
+in to (`isolated`), for a front that cannot change the server behind it.

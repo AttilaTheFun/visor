@@ -130,12 +130,6 @@ extension VisorServer {
             return
         }
         FrontDoor(stream: stream, socket: { [weak self] stream, received in
-            // A peer's channel is not carried: the client polls the peer
-            // through here instead.
-            if Self.relayTarget(HTTPServer.requestPath(received)) != nil {
-                stream.send(Data("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".utf8)) { stream.close() }
-                return
-            }
             self?.acceptClient(stream, received: received, trusted: trusted)
         }, http: { [weak self] stream, received in
             self?.http?.serve(stream, received: received, trusted: trusted)

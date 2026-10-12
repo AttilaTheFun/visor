@@ -72,11 +72,19 @@ public final class NativeVisorDictationService: VisorDictationService {
         switch SFSpeechRecognizer.authorizationStatus() {
         case .authorized: return true
         case .notDetermined:
-            return await withCheckedContinuation { continuation in
-                SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
-            }
+            return await withCheckedContinuation { Self.askForSpeech($0) }
         default: return false
         }
+    }
+
+    /// Asks for speech recognition, outside the main actor: the system
+    /// answers on a queue of its own (TCC's), and the handler as it was,
+    /// written in this main-actor class, took its isolation (the Speech
+    /// framework's handler is not Sendable) and trapped when called there,
+    /// whatever the user answered (0.29, _dispatch_assert_queue_fail). Built
+    /// in a nonisolated synchronous function, as a system callback is here.
+    nonisolated private static func askForSpeech(_ continuation: CheckedContinuation<Bool, Never>) {
+        SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
     }
 
     private static func microphoneAuthorized() async -> Bool {

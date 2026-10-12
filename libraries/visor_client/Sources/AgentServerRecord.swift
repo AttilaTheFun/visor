@@ -27,28 +27,30 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     /// Whether the user gave it its name: then the server's own name,
     /// which a sign-in gives, does not replace it.
     public var renamed: Bool
-    /// The server's id on the network of computers, once a sign-in has
-    /// said it; "" before, and for a server from before ids.
+    /// The server's own id, once a sign-in has said it; "" before, and for
+    /// a server from before ids.
     public var serverID: String
-    /// Other addresses it is reached at, as the server and its peers
-    /// say: tried in turn when `address` does not answer.
+    /// Other addresses it is reached at, as the server says: tried in
+    /// turn when `address` does not answer.
     public var paths: [String]
-    /// The server's own SSH public key line, as its sign-in said it: what
-    /// another server is told when this one is introduced, so the two
-    /// reach each other over SSH. "" until known.
-    public var serverKey: String
     /// The server said it stands alone: reached only at `address`, its
-    /// other paths not learned or tried, it and its peers not shared.
+    /// other paths not learned or tried, and kept out of the relay.
     public var standalone: Bool
+    /// Whether this device takes part in the relay with this server
+    /// (RelayCourier): tells it the other computers it is connected to and
+    /// their sessions, and carries its agents' messages to them. Nil: as
+    /// the app's default (`RelayCourier.onByDefault`).
+    public var relay: Bool?
     /// One of the app's account's servers (`VisorAccount`): added when it
     /// signs in, gone when it signs out, not added or forgotten by hand.
     public var fromAccount: Bool
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
                 provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", paths: [String] = [],
-                authentication: String = PasswordAuthenticator.name, serverKey: String = "", standalone: Bool = false,
+                authentication: String = PasswordAuthenticator.name, standalone: Bool = false, relay: Bool? = nil,
                 fromAccount: Bool = false) {
         self.standalone = standalone
+        self.relay = relay
         self.fromAccount = fromAccount
         self.id = id
         self.name = name
@@ -60,7 +62,6 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         self.renamed = renamed
         self.serverID = serverID
         self.paths = paths
-        self.serverKey = serverKey
     }
 
     /// Every address to try, the preferred first, without repeats.
@@ -70,7 +71,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         return out
     }
 
-    /// Takes in addresses the server or its peers say it is reached at.
+    /// Takes in addresses the server says it is reached at.
     /// Whether any was new.
     @discardableResult
     public mutating func learnPaths(_ addresses: [String]) -> Bool {
@@ -80,13 +81,6 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
             learned = true
         }
         return learned
-    }
-
-    /// Whether this is the same computer as `peer`: by id when both have
-    /// one, else by an address in common.
-    public func isSame(as peer: Peer) -> Bool {
-        if !serverID.isEmpty, !peer.id.isEmpty { return serverID == peer.id }
-        return !Set(allPaths).isDisjoint(with: peer.addresses)
     }
 
     /// The server's own name, as a sign-in gives it: taken unless the
@@ -123,10 +117,13 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     }
 
     var json: JSONValue {
-        .object(["id": .string(id), "name": .string(name), "address": .string(address), "secret": .string(secret),
-                 "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed),
-                 "serverID": .string(serverID), "paths": .array(paths.map(JSONValue.string)), "authentication": .string(authentication),
-                 "serverKey": .string(serverKey), "standalone": .bool(standalone), "fromAccount": .bool(fromAccount)])
+        var fields: [String: JSONValue] = [
+            "id": .string(id), "name": .string(name), "address": .string(address), "secret": .string(secret),
+            "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed),
+            "serverID": .string(serverID), "paths": .array(paths.map(JSONValue.string)), "authentication": .string(authentication),
+            "standalone": .bool(standalone), "fromAccount": .bool(fromAccount)]
+        if let relay { fields["relay"] = .bool(relay) }
+        return .object(fields)
     }
 
     /// Reads a saved record; one saved by an earlier build, as a computer
@@ -139,7 +136,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
                   provider: json["provider"].string ?? json["backend"].string ?? VisorAgentServerProvider.name,
                   renamed: json["renamed"].bool ?? false, serverID: json["serverID"].string ?? "",
                   paths: (json["paths"].array ?? json["roads"].array)?.compactMap(\.string) ?? [],
-                  authentication: json["authentication"].string ?? PasswordAuthenticator.name, serverKey: json["serverKey"].string ?? "",
-                  standalone: json["standalone"].bool ?? false, fromAccount: json["fromAccount"].bool ?? false)
+                  authentication: json["authentication"].string ?? PasswordAuthenticator.name,
+                  standalone: json["standalone"].bool ?? false, relay: json["relay"].bool, fromAccount: json["fromAccount"].bool ?? false)
     }
 }

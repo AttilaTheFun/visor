@@ -4,7 +4,6 @@ import VisorServer
 import VisorServerApple
 import VisorServerCLI
 import VisorServerPOSIX
-import VisorServerSSH
 
 /// The command-line server on a Mac, without the menu bar app: its data
 /// in ~/Library/Application Support/visor-server (or VISOR_DATA_DIR, for a
@@ -41,8 +40,7 @@ public struct MacSystem: CommandLineSystem {
                               addresses: { NetworkAddresses.all().map(\.address) },
                               networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } }),
             lifecycle: lifecycle,
-            log: log,
-            ssh: ConnectorPeerSSH()
+            log: log
         )
     }
 

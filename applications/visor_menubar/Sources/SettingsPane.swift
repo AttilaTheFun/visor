@@ -12,17 +12,18 @@ struct SettingsPane: View {
     var server: VisorServer
     @State private var draft = ""
     @State private var message: String?
-    @State private var linkDraft = ""
     /// Whether this Mac's sshd answers on port 22 (Remote Login), as last
     /// checked; nil before the check.
     @State private var remoteLogin: Bool?
-    @State private var linkMessage: String?
-    @State private var linking = false
     @State private var choosingKey = false
     @State private var keyPEM = ""
     @State private var publicAddress = ""
     @State private var tlsPath = ""
     @State private var tlsPassword = ""
+    /// The field being edited, so leaving it applies what was typed: an
+    /// address that only Return applied was easy to leave unapplied.
+    @FocusState private var editing: EditedField?
+    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword }
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
@@ -30,9 +31,9 @@ struct SettingsPane: View {
     var body: some View {
         Form {
             Section {
-                if let code = server.connectionCode {
+                if let codes = server.connectionCodes {
                     HStack(alignment: .top, spacing: 16) {
-                        if let image = QRCode.image(for: code.link) {
+                        if let image = QRCode.image(for: codes.link) {
                             Image(nsImage: image)
                                 .interpolation(.none)
                                 .resizable()
@@ -42,18 +43,22 @@ struct SettingsPane: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Scan with a phone's camera, or copy the code and paste it into Visor on another device (Computers → Add Computer).")
                                 .font(.caption).foregroundColor(.secondary)
-                            Text(code.encoded)
+                            Text(codes.qr)
                                 .font(.caption.monospaced())
                                 .textSelection(.enabled)
                                 .lineLimit(4)
                                 .truncationMode(.middle)
-                            Button("Copy Code") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(code.encoded, forType: .string)
+                            ForEach(ConnectionPath.allCases, id: \.self) { kind in
+                                if let code = codes.code(for: kind) {
+                                    Button("Copy \(kind.title) Code") {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(code, forType: .string)
+                                    }
+                                }
                             }
                         }
                     }
-                    Text("The code holds this Mac's address and password: share it only with your own devices.")
+                    Text("The code holds this Mac's address and password: share it only with your own devices. Each copy leads with that kind of path (the others follow it); a device that has this Mac shows the same codes in its settings, to hand it on.")
                         .font(.caption).foregroundColor(.secondary)
                 } else {
                     Text(server.password.isEmpty ? "Set a password below to get a connection code." : "Open the server to the network, or set an address, below, to get a connection code.")
@@ -117,44 +122,25 @@ struct SettingsPane: View {
                 Toggle("Reverse proxy", isOn: Binding(get: { server.settings.proxyEnabled }, set: { server.settings.proxyEnabled = $0 }))
                 if server.settings.proxyEnabled {
                     TextField("https://proxy.example.com/visor", text: $publicAddress)
-                        .onSubmit { server.settings.publicAddress = publicAddress }
+                        .focused($editing, equals: .publicAddress)
+                        .onSubmit { apply(.publicAddress) }
                     if !server.settings.publicAddress.isEmpty { pathRow(server.settings.publicAddress) }
-                    Text("A proxy, a tunnel or a name with certificates in front of this Mac, scheme and all; clients are told it first, and it is what the connection code carries. One that passes no WebSockets still works: clients poll. Press Return to apply.")
+                    Text("A proxy, a tunnel or a name with certificates in front of this Mac, scheme and all; clients are told it first, and it is what the connection code carries. One that passes no WebSockets still works: clients poll. Applied on Return, or on leaving the field.")
                         .font(.caption).foregroundColor(.secondary)
                 }
                 Text("Each path is a way in; what a client must show is the sign-in above. The LAN's and a VPN's addresses change with the network; this list is as it is now.")
                     .font(.caption).foregroundColor(.secondary)
                 TextField("TLS identity, a .p12 file (empty: plain, or TLS is the front's)", text: $tlsPath)
-                    .onSubmit { server.settings.tlsIdentityPath = tlsPath }
+                    .focused($editing, equals: .tlsPath)
+                    .onSubmit { apply(.tlsPath) }
                 SecureField("The .p12 file's password", text: $tlsPassword)
-                    .onSubmit { server.settings.tlsIdentityPath = tlsPath; server.setTLSPassword(tlsPassword) }
-                Text(server.servesTLS ? "Serving TLS with the identity above." : "Serving plain TCP: TLS, if any, is the front's. Press Return in a field to apply it.")
+                    .focused($editing, equals: .tlsPassword)
+                    .onSubmit { apply(.tlsPassword) }
+                Text(server.servesTLS ? "Serving TLS with the identity above." : "Serving plain TCP: TLS, if any, is the front's. A field applies on Return, or on leaving it.")
                     .font(.caption).foregroundColor(.secondary)
                 if let error = server.lastError { Text(error).font(.caption).foregroundColor(.red) }
             } header: {
                 Text("Network paths")
-            }
-            Section {
-                ForEach(server.peers, id: \.self) { peer in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(peer.name)
-                            Text(peer.addresses.joined(separator: ", ")).font(.caption).foregroundColor(.secondary).lineLimit(1)
-                        }
-                        Spacer()
-                        Button("Forget") { server.forget(peer: peer.id.isEmpty ? (peer.addresses.first ?? "") : peer.id) }
-                    }
-                }
-                HStack {
-                    TextField("Another computer's connection code", text: $linkDraft)
-                    Button("Add") { link() }
-                        .disabled(linking || linkDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                Text("The computers on the network: the agents here reach the sessions on each, and each reaches the ones here; a client of any of them learns of the rest, and is carried to one it cannot reach itself. A client that holds two computers introduces them; or paste a code here, once.")
-                    .font(.caption).foregroundColor(.secondary)
-                if let linkMessage { Text(linkMessage).font(.caption).foregroundColor(.red) }
-            } header: {
-                Text("Computers on the network")
             }
             Section {
                 let current = server.apnsKey
@@ -202,6 +188,30 @@ struct SettingsPane: View {
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
         }
+        // Leaving a field applies it, as Return does; so does closing the
+        // window with one still being edited.
+        .onChange(of: editing) { left, _ in if let left { apply(left) } }
+        .onDisappear {
+            apply(.publicAddress)
+            apply(.tlsPath)
+        }
+    }
+
+    /// What was typed in a field, applied: on Return, on leaving the field,
+    /// and when the window closes. Only a change is written: each write
+    /// saves the settings and may start the listener again.
+    private func apply(_ field: EditedField) {
+        switch field {
+        case .publicAddress:
+            if server.settings.publicAddress != publicAddress { server.settings.publicAddress = publicAddress }
+        case .tlsPath:
+            if server.settings.tlsIdentityPath != tlsPath { server.settings.tlsIdentityPath = tlsPath }
+        case .tlsPassword:
+            // The identity with its password, as Return always applied them.
+            guard !tlsPassword.isEmpty else { return }
+            server.settings.tlsIdentityPath = tlsPath
+            server.setTLSPassword(tlsPassword)
+        }
     }
 
     /// Whether something listens on this Mac's port 22: a connection
@@ -237,17 +247,6 @@ struct SettingsPane: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(path, forType: .string)
             }
-        }
-    }
-
-    private func link() {
-        linking = true
-        linkMessage = nil
-        Task {
-            linkMessage = await server.link(linkDraft)
-            // Kept here, even if the other did not link back: the code is done with.
-            if let code = ConnectionCode(parsing: linkDraft), server.peers.contains(where: { $0.isSame(as: code.peer) }) { linkDraft = "" }
-            linking = false
         }
     }
 

@@ -116,27 +116,34 @@ public protocol AgentServer: AnyObject {
     /// pushes: then it says what happened, and the device does not say it
     /// too. A server without pushes answers false.
     func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool
-    /// The server's connection code, for linking servers to one another.
-    func connectionCode() async throws -> String
-    /// Links another server to this one by its code, so the agents here
-    /// reach the sessions there.
-    func link(code: String) async throws
+    /// The server's connection codes, as the server itself shows them: the
+    /// one its QR code carries, and one leading with each kind of path, so
+    /// a device that has the server can hand it on to another.
+    func connectionCodes() async throws -> ConnectionCodes
 
-    // MARK: The network of computers
+    // MARK: The relay (RelayCourier)
+
+    /// Whether the server takes part in the relay: its agents message
+    /// sessions on the other servers this device is connected to, the
+    /// messages carried by this device.
+    var relays: Bool { get }
+    /// Tells the server what this device is connected to: the messages
+    /// its agents wrote for sessions on those servers come back, for this
+    /// device to carry.
+    func relay(_ report: DirectoryReport) async throws -> [RelayMessage]
+    /// A message carried here from another server: what became of it.
+    /// The same message carried again is answered the same, not taken
+    /// twice.
+    func deliver(_ message: RelayMessage) async throws -> RelayReceipt
+    /// What became of a message from this server, where it went.
+    func confirm(_ receipt: RelayReceipt) async throws
+
+    // MARK: Identity and SSH
 
     /// What the server said of itself at the last sign-in: its id and
     /// its own addresses. Nil before a sign-in, and for a server that
     /// says nothing of the kind.
     var identity: ServerIdentity? { get }
-    /// The address the server is reached at now, as a URL root: the
-    /// record's, or what a tunnel to it gives. Through it, other servers
-    /// it knows can be reached (`/peer/<id>` under it).
-    var reachedAt: String? { get }
-    /// The other computers the server knows, with how to reach them.
-    func peers() async throws -> [Peer]
-    /// Tells the server of other computers, so its agents reach them and
-    /// its peers learn of them.
-    func introduce(_ peers: [Peer]) async throws
     /// Puts this device's SSH public key among the server's user's
     /// authorized keys, so this device comes in over SSH from now on.
     func authorizeSSHKey(_ line: String) async throws
@@ -155,11 +162,11 @@ public extension AgentServer {
     var managesSessions: Bool { true }
     func verifyChannel() async -> Bool { true }
     func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool { false }
-    func connectionCode() async throws -> String { throw AgentServerError.unsupported }
-    func link(code: String) async throws { throw AgentServerError.unsupported }
+    func connectionCodes() async throws -> ConnectionCodes { throw AgentServerError.unsupported }
+    var relays: Bool { false }
+    func relay(_ report: DirectoryReport) async throws -> [RelayMessage] { throw AgentServerError.unsupported }
+    func deliver(_ message: RelayMessage) async throws -> RelayReceipt { throw AgentServerError.unsupported }
+    func confirm(_ receipt: RelayReceipt) async throws { throw AgentServerError.unsupported }
     var identity: ServerIdentity? { nil }
-    var reachedAt: String? { nil }
-    func peers() async throws -> [Peer] { [] }
-    func introduce(_ peers: [Peer]) async throws { throw AgentServerError.unsupported }
     func authorizeSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
 }

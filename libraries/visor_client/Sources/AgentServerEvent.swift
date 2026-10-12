@@ -20,6 +20,9 @@ public enum AgentServerEvent: Sendable {
     case refused(String)
     /// The server answered the sign-in with some other error.
     case failed(String)
+    /// The server has messages for this device to carry to other servers
+    /// (RelayCourier): come for them now.
+    case relay
     /// The channel closed, with the reason.
     case closed(String)
     /// How the server is being followed: live over its channel, or by

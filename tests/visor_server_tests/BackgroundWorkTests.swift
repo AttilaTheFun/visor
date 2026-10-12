@@ -1,7 +1,8 @@
 // What an agent has running in the background between turns — a command
 // it put there, a monitor, an agent of its own — as Claude Code reports
 // the whole list whenever it changes: kept on the session, sent with the
-// list, gone when the list is empty or the process starts over.
+// list, gone when the list is empty, the process starts over, or the
+// server does.
 
 import Foundation
 import VisorProtocol
@@ -67,5 +68,20 @@ final class BackgroundWorkTests: ServerTestCase {
         XCTAssertEqual(session.info.background, items, "a turn ending does not end it")
         session.replaceProcess(ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))
         XCTAssertEqual(session.info.background, [])
+    }
+
+    /// A server started again finds nothing in the background: it ran in
+    /// agents that went with the last one, and the new agent, starting with
+    /// none, has no change to say (11 Oct: a wait the restart had ended
+    /// showed on the phone after the handover).
+    func testAServerStartedAgainFindsNothingInTheBackground() {
+        let session = record("A")
+        server.sessions = [session]
+        server.handle(.background([StatusItem(id: "b1", kind: .shell, label: "Wait for the other Mac", running: true)]), from: session)
+        server.saveArchive()
+        server.stop()
+        server = VisorServer(port: 7981)
+        XCTAssertEqual(server.sessions.map(\.info.id), ["A"])
+        XCTAssertEqual(server.sessions.first?.info.background, [])
     }
 }

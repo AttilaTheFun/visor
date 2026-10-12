@@ -18,9 +18,10 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   when opened to the network, plain or over TLS with a PKCS#12 identity.
   A password (required — Settings opens on first launch until one is
   set) is what every client signs in with. The menu shows the address
-  clients take, the password, Copy Connection Code, the connected
-  clients and the sessions; Settings shows the connection code as a QR
-  code, and takes the network setting, the address a front of your own
+  clients take, the password, a copy of the connection code leading with
+  each kind of path (HTTP, HTTPS, SSH), the connected clients and the
+  sessions; Settings shows the connection code as a QR code, and takes
+  the network setting, the address a front of your own
   gives, and the TLS identity. The server knows nothing of what reaches
   it: a LAN, a VPN, a reverse proxy and a tunnel are all the same to it.
 - **applications/visor_ios**, **applications/visor_macos** — the client on
@@ -42,12 +43,12 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   its user can open (Settings: "SSH, no password"), SSH having signed
   the user in already; with that off, the port on the computer's
   loopback, with the password. Nothing has to be open on the network
-  but SSH. The computers form a network: each server keeps its peers
-  and tells its clients and peers of them, a client of any of them
-  learns of the rest and is carried to one it cannot reach itself
-  (`/peer/<id>/…` under a server it can), and a client that holds two
-  servers introduces them. Servers reach one another over SSH too, each
-  with a key of its own that travels with its record. A fork that hosts agents on
+  but SSH. A computer's settings show its codes and QR code as its menu
+  bar app does, to add it on another device. The agents on one computer
+  message the sessions on another through a client connected to both:
+  the client tells each server what it is connected to and carries the
+  messages, and no server learns another's address or password (it can
+  be turned off per computer). A fork that hosts agents on
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one

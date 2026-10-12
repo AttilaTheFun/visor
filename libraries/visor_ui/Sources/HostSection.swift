@@ -21,7 +21,7 @@ struct HostSection<Rows: View>: View {
                     .lineLimit(1)
                 Spacer()
             }
-            .font(.subheadline)
+            // The list's own header font, as its other sections have.
             .noHeaderCase()
             // The dot is the state (why it is red is in the computer's
             // settings); VoiceOver reads it out.

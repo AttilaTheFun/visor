@@ -18,7 +18,7 @@ public enum VisorFixture {
     /// search or connect ("" for the app's own first screen); also earlier
     /// (a page of earlier rows goes in), learns-earlier (the chat, told
     /// ten seconds on that there are rows before it) and arrivals (the
-    /// chat, with rows coming in twelve and twenty seconds on).
+    /// chat, with rows coming in twelve and twenty-six seconds on).
     /// A session to open a few seconds after launch, for a recording of
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }

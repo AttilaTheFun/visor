@@ -19,6 +19,5 @@ swift_library(
         "//libraries/visor_server_apple",
         "//libraries/visor_server_cli",
         "//libraries/visor_server_posix",
-        "//libraries/visor_server_ssh",
     ],
 )

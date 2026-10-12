@@ -118,16 +118,28 @@ public struct Envelope: Codable, Sendable {
     public var resumable: [ResumableSession]?
     /// The slash commands a session's agent takes (`commands`).
     public var commands: [SlashCommand]?
-    /// `hello` and `peers`: the server's own addresses, as clients read
-    /// them; `peers`: the other computers it knows (Peer).
+    /// `hello`: the server's own addresses, as clients read them.
     public var addresses: [String]?
-    public var peers: [Peer]?
-    /// `hello`: the server's own SSH public key line, for a client that
-    /// introduces it to other servers.
-    public var sshKey: String?
+    /// An agent's request about a session on another server: that server,
+    /// by its id or its name ("" or nil: this one).
+    public var server: String?
+    /// A relayed message's id: what an agent asks after (`message_status`).
+    public var messageID: String?
+    /// `POST /api/relay`: the client's report of the servers and sessions
+    /// it is connected to.
+    public var report: DirectoryReport?
+    /// Relayed messages: in the answer to `POST /api/relay`, those waiting
+    /// for a server the client reported; in `POST /api/relay/deliver`, the
+    /// one being delivered.
+    public var relayed: [RelayMessage]?
+    /// `POST /api/relay/deliver`'s answer and `POST /api/relay/receipt`'s
+    /// body: what became of a relayed message.
+    public var receipt: RelayReceipt?
+    /// `GET /api/codes`: the server's connection codes.
+    public var codes: ConnectionCodes?
     /// `hello`: the server stands alone — reached only at the address a
     /// client added it at (a front of its own: an authenticating proxy),
-    /// its own addresses and the computers it knows not shared.
+    /// its own addresses not shared, and kept out of the relay.
     public var standalone: Bool?
     /// A device's push token, hex (`push`), with its kind ("ios", "macos")
     /// and service ("sandbox", "production").

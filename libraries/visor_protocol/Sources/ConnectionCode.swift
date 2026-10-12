@@ -31,15 +31,17 @@ public struct ConnectionCode: Equatable, Sendable {
         self.auth = auth
     }
 
-    /// The computer as a peer: every address the code carries.
-    public var peer: Peer { Peer(id: id, name: name, addresses: [host] + paths, password: password) }
-
     /// The same code with an SSH path first: for a device that should
     /// come in over SSH, bootstrapping over another path if it must. Nil
     /// when the code carries no SSH path.
-    public var preferringSSH: ConnectionCode? {
-        guard let ssh = ([host] + paths).first(where: { $0.hasPrefix("ssh://") }) else { return nil }
-        return ConnectionCode(name: name, host: ssh, password: password, id: id, paths: ([host] + paths).filter { $0 != ssh }, auth: auth)
+    public var preferringSSH: ConnectionCode? { preferring(.ssh) }
+
+    /// The same code with its first path of `kind` first, the rest after
+    /// it in their order; nil when it carries none of that kind.
+    public func preferring(_ kind: ConnectionPath) -> ConnectionCode? {
+        let all = [host] + paths
+        guard let first = all.first(where: kind.matches) else { return nil }
+        return ConnectionCode(name: name, host: first, password: password, id: id, paths: all.filter { $0 != first }, auth: auth)
     }
 
     public static let scheme = "visor"

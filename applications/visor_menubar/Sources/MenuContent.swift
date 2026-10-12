@@ -12,7 +12,7 @@ struct MenuContent: View {
         Group {
             if server.password.isEmpty {
                 Text("Not serving: set a password first")
-                SettingsLink { Text("Set a password in Settings…") }
+                Button("Set a password in Settings…") { AppDelegate.openSettings() }
             } else {
                 Text(server.listening ? "Visor is serving on port \(String(server.port))" : "Visor is not listening")
             }
@@ -26,10 +26,12 @@ struct MenuContent: View {
                 Text("Only this Mac and SSH reach it: open a network path in Settings")
             }
             Divider()
-            if let code = server.connectionCode {
-                Button("Copy Connection Code") { copy(code.encoded) }
-                if let ssh = code.preferringSSH { Button("Copy SSH Connection Code") { copy(ssh.encoded) } }
-                Text("Paste it into Visor on a phone or another Mac, or scan the QR code in Settings")
+            if let codes = server.connectionCodes {
+                Button("Show QR Code…") { AppDelegate.openSettings() }
+                ForEach(ConnectionPath.allCases, id: \.self) { kind in
+                    if let code = codes.code(for: kind) { Button("Copy \(kind.title) Connection Code") { copy(code) } }
+                }
+                Text("Scan it, or paste a code into Visor on a phone or another Mac")
             }
             if !server.password.isEmpty {
                 Button("Password: \(server.password)") { copy(server.password) }
@@ -48,7 +50,9 @@ struct MenuContent: View {
             }
             Button("Copy session table") { copy(server.sessionTable()) }
             Divider()
-            SettingsLink { Text("Settings…") }
+            // Not SettingsLink: it opens the window behind other apps'.
+            Button("Settings…") { AppDelegate.openSettings() }
+                .keyboardShortcut(",")
             Button("Quit Visor") { server.quit() }
                 .keyboardShortcut("q")
         }

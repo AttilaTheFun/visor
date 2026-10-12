@@ -12,6 +12,8 @@ import VisorProtocol
 @MainActor
 public final class SessionRecord {
     public internal(set) var info: SessionInfo
+    /// What the session is called: its title, or its agent's name.
+    var displayName: String { info.title.isEmpty ? info.agent.title : info.title }
 
     public internal(set) var entries: [TranscriptEntry] = [] {
         didSet {
@@ -118,6 +120,9 @@ public final class SessionRecord {
 
     /// What the user is told about the session until they acknowledge it.
     var notice: String?
+    /// The agent said its last goal was met (Codex, which says so rather
+    /// than writing a row for it).
+    var goalMet = false
     /// The agent's running total as it last reported it: what the next
     /// report is measured from (`info.usage` is what was added up).
     var reportedUsage: SessionUsage?

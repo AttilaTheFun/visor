@@ -64,8 +64,12 @@ extension Envelope {
         e.images = value["images"].array?.compactMap(\.string)
         e.folders = value["folders"].array?.compactMap(\.string)
         e.addresses = value["addresses"].array?.compactMap(\.string)
-        e.peers = value["peers"].array?.compactMap(Peer.init(json:))
-        e.sshKey = value["sshKey"].string
+        e.server = value["server"].string
+        e.messageID = value["messageID"].string
+        e.report = DirectoryReport(json: value["report"])
+        e.relayed = value["relayed"].array?.compactMap(RelayMessage.init(json:))
+        e.receipt = RelayReceipt(json: value["receipt"])
+        e.codes = ConnectionCodes(json: value["codes"])
         e.standalone = value["standalone"].bool
         e.resumable = value["resumable"].array?.compactMap(ResumableSession.init(json:))
         e.deviceToken = value["deviceToken"].string
@@ -116,8 +120,11 @@ extension Envelope {
         if let images, !images.isEmpty { o["images"] = .array(images.map(JSONValue.string)) }
         if let folders { o["folders"] = .array(folders.map(JSONValue.string)) }
         if let addresses { o["addresses"] = .array(addresses.map(JSONValue.string)) }
-        if let peers { o["peers"] = .array(peers.map(\.json)) }
-        put("sshKey", sshKey)
+        put("server", server); put("messageID", messageID)
+        if let report { o["report"] = report.json }
+        if let relayed { o["relayed"] = .array(relayed.map(\.json)) }
+        if let receipt { o["receipt"] = receipt.json }
+        if let codes { o["codes"] = codes.json }
         putBool("standalone", standalone)
         if let resumable { o["resumable"] = .array(resumable.map(\.json)) }
         if let deviceToken { o["deviceToken"] = .string(deviceToken) }

@@ -113,6 +113,14 @@ extension SessionRecord {
             info.background = items
             // The sessions list carries it; the caller broadcasts that.
             return nil
+        case .goal(let goal, let met):
+            goalMet = met
+            info.goal = goal
+            // The sessions list carries it; the caller broadcasts that.
+            return nil
+        case .notice(let words):
+            notice = words
+            return ephemeralEnvelope
         case .spent(let total):
             let added = reportedUsage.map { total.continues(from: $0) ? total.since($0) : total } ?? total
             reportedUsage = total

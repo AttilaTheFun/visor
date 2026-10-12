@@ -96,18 +96,18 @@ public final class AgentServerConnection: Identifiable {
     private var wantsConnection = false
     private var attempt = 0
     private var pendingSubscriptions: Set<String> = []
-    /// The paths to the server for this round of tries: the record's
-    /// (the one that answered last time first), then those through other
-    /// servers (`relayPaths`); `pathIndex` is the one being tried.
+    /// The paths to the server for this round of tries, the one that
+    /// answered last time first; `pathIndex` is the one being tried.
     private var paths: [String] = []
     private var pathIndex = 0
     private var lastGoodPath: String?
-    /// The paths through other connected servers to this one, asked for
-    /// as a round of tries begins (the store knows the other servers).
-    @ObservationIgnored var relayPaths: (() -> [String])?
     /// Told when the server is connected and has said who it is (the
-    /// store learns its peers and introduces it to the others).
+    /// store folds other records of it into this one, and the relay
+    /// reports to it).
     @ObservationIgnored var onConnected: (() -> Void)?
+    /// Told when the server has messages for this device to carry
+    /// (RelayCourier).
+    @ObservationIgnored var onRelay: (() -> Void)?
     /// The path the server was reached by, this time.
     public private(set) var path: String?
     /// This device's SSH key was handed to the server once this
@@ -208,15 +208,20 @@ public final class AgentServerConnection: Identifiable {
         try await server.commands(for: sessionID)
     }
 
-    /// The server's connection code, for linking servers.
-    public func connectionCode() async throws -> String {
-        try await server.connectionCode()
+    /// The server's connection codes, as it shows them itself: what this
+    /// device shows to add the server on another.
+    public func connectionCodes() async throws -> ConnectionCodes {
+        try await server.connectionCodes()
     }
 
-    /// Links another server to this one by its code, so the agents here
-    /// reach its sessions.
-    public func link(code: String) async throws {
-        try await server.link(code: code)
+    /// Whether the relay is there to take part in: the server has one, and
+    /// does not stand alone.
+    public var offersRelay: Bool { server.relays && !isolated }
+
+    /// Whether this device takes part in the relay with this server: the
+    /// record's choice, else the app's default.
+    public var relayEnabled: Bool {
+        offersRelay && (record.relay ?? RelayCourier.onByDefault)
     }
 
     /// Creates the folder (and its parents) on the server.
@@ -371,8 +376,7 @@ public final class AgentServerConnection: Identifiable {
     /// path on a network the device is on now first (the LAN at home),
     /// then overlay-network ones (a tailnet) while the device has such a
     /// network, then the rest, with the one that answered last time and
-    /// then the record's address first among equals — then those through
-    /// other servers. Where the device has SSH and the computer an SSH
+    /// then the record's address first among equals. Where the device has SSH and the computer an SSH
     /// path, SSH is the way in: its paths that fit (the LAN's, the
     /// tailnet's) before any other, the rest only when SSH does not
     /// answer. A device without SSH (a browser) skips SSH paths.
@@ -396,7 +400,6 @@ public final class AgentServerConnection: Identifiable {
             }
             candidates += tier
         }
-        candidates += relayPaths?() ?? []
         var out: [String] = []
         for path in candidates where !out.contains(path) { out.append(path) }
         // Nothing found: the address — unless it is SSH, which this
@@ -407,8 +410,8 @@ public final class AgentServerConnection: Identifiable {
 
     /// The server stands alone — it says so, or its authenticator makes
     /// it so (`AgentServerAuthenticator.isolated`): reached only at the
-    /// record's address, its other paths, its peers and its credential
-    /// kept from everything else.
+    /// record's address, its other paths kept from everything else, and
+    /// out of the relay.
     public var isolated: Bool {
         record.standalone || AgentServerAuthenticators.authenticator(for: record).isolated
     }
@@ -474,36 +477,10 @@ public final class AgentServerConnection: Identifiable {
             return
         }
         if record.learnPaths(identity.addresses) { changed = true }
-        if !identity.sshKey.isEmpty, record.serverKey != identity.sshKey { record.serverKey = identity.sshKey; changed = true }
         if changed { onRecordChange?() }
     }
 
-    /// Takes in what a peer says of this computer: its addresses as more
-    /// paths, its password when none is kept.
-    func learn(_ peer: Peer) {
-        guard !isolated else { return }
-        update { record in
-            if record.serverID.isEmpty { record.serverID = peer.id }
-            record.learnPaths(peer.addresses)
-            if record.secret.isEmpty { record.secret = peer.password }
-        }
-    }
-
-    /// This computer as other servers should know it: by the addresses
-    /// its server gave for itself (never this device's path to it, which
-    /// may be its loopback or a relay).
-    var asPeer: Peer? {
-        // Standing alone, its address and credential go to no one.
-        guard !record.serverID.isEmpty, !isolated else { return nil }
-        let own = record.allPaths.filter { !$0.contains("/peer/") && !$0.contains("127.0.0.1") && !$0.contains("localhost") }
-        guard !own.isEmpty else { return nil }
-        return Peer(id: record.serverID, name: record.name, addresses: own, password: record.secret, sshKey: record.serverKey)
-    }
-
-    public func peers() async throws -> [Peer] { try await server.peers() }
-    public func introduce(_ peers: [Peer]) async throws { try await server.introduce(peers) }
-
-    /// The server's SSH paths, as it and its peers said them.
+    /// The server's SSH paths, as it said them.
     public var sshPaths: [String] { record.allPaths.filter { SSHAddress($0) != nil } }
 
     /// Makes SSH the way in: the record's address becomes the server's
@@ -540,7 +517,7 @@ public final class AgentServerConnection: Identifiable {
     /// being the way in where the device has it): this device's key is
     /// handed to the server, and SSH tried again — once.
     private func enrollSSHIfWanted() {
-        guard !isolated, !sshPaths.isEmpty, let path, SSHAddress(path) == nil, !path.contains("/peer/"), !sshEnrolled,
+        guard !isolated, !sshPaths.isEmpty, let path, SSHAddress(path) == nil, !sshEnrolled,
               let ssh = VisorHost.ssh else { return }
         sshEnrolled = true
         let server = server
@@ -720,6 +697,8 @@ public final class AgentServerConnection: Identifiable {
             registerForPush()
         case .catalogs(let catalogs):
             self.catalogs = catalogs
+        case .relay:
+            onRelay?()
         case .transport(let live):
             if self.live != live { note(live ? "following live" : "following by polling") }
             self.live = live
