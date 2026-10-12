@@ -13,6 +13,10 @@ import PhotosUI
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif
+// Isomer's camera (`cameraCapture`) is the Isomer module's: Isomer's SwiftUI has only Apple's API.
+#if canImport(Isomer)
+import Isomer
+#endif
 #if os(iOS) || os(macOS)
 import AVFoundation
 import ImageIO
