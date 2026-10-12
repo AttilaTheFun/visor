@@ -56,6 +56,41 @@ extension VisorServer {
         agentsEnded = true
     }
 
+    /// Whether agents run under hosts of their own: VISOR_DETACH_AGENT_HOST
+    /// when it is set (0, false, no or off is off; anything else is on),
+    /// else the setting — on unless turned off — on a system that has a
+    /// host. (Windows has none: its agents are the server's own children
+    /// unless told otherwise, and then cannot start.)
+    static func detachesAgents(_ settings: ServerSettings, environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        if let given = detachingSet(in: environment) { return given }
+        return settings.detachAgents && ServerPlatform.current.agentHosts != nil
+    }
+
+    /// What VISOR_DETACH_AGENT_HOST says, when it is set: the setting is
+    /// then shown as set there.
+    public static func detachingSet(in environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool? {
+        guard let given = environment["VISOR_DETACH_AGENT_HOST"]?.trimmingCharacters(in: .whitespaces).lowercased(), !given.isEmpty else { return nil }
+        return !["0", "false", "no", "off"].contains(given)
+    }
+
+    /// Agents from here on are started as the server is set; a server set
+    /// to detach them that cannot says so, in its menu and its log, rather
+    /// than starting them some other way.
+    func applyAgentDetaching() {
+        let detach = Self.detachesAgents(settings)
+        AgentChildren.detach = detach
+        guard detach else {
+            Self.log("agents run as the server's own children")
+            return
+        }
+        if let problem = AgentChildren.hostProblem() {
+            lastError = AgentChildren.undetachable(problem)
+            Self.log("agents cannot be detached: \(problem)")
+        } else {
+            Self.log("agents run apart from the server, under \(ServerPlatform.current.agentHosts?.program ?? "their hosts")")
+        }
+    }
+
     /// A new limit for every session's agent and what it runs.
     func setAgentMemoryLimit(_ bytes: UInt64) {
         AgentChildren.memoryLimit = bytes

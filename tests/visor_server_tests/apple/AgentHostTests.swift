@@ -18,7 +18,8 @@ final class AgentHostTests: ServerTestCase {
     override func setUp() async throws {
         let environment = ProcessInfo.processInfo.environment
         let program = "\(environment["TEST_SRCDIR"] ?? "")/\(environment["TEST_WORKSPACE"] ?? "")/applications/visor_agent_host/visor-agent-host"
-        hosting = try XCTUnwrap(POSIXAgentHosting(program: program), "the host program is built beside the tests")
+        hosting = POSIXAgentHosting(program: program)
+        XCTAssertNil(hosting.problem(), "the host program is built beside the tests")
         folder = URL(fileURLWithPath: "/tmp/vh-" + String(UUID().uuidString.prefix(8)), isDirectory: true)
     }
 
@@ -95,6 +96,31 @@ final class AgentHostTests: ServerTestCase {
         var heard = lines(of: child).makeAsyncIterator()
         let ended = await heard.next()
         XCTAssertEqual(ended, "ended 143", "the agent lives on; what it ran was stopped")
+        await child.end(grace: .seconds(1))
+    }
+
+    func testDetachingIsTheSettingUnlessTheEnvironmentSays() {
+        var settings = ServerSettings()
+        XCTAssertTrue(settings.detachAgents, "on unless turned off")
+        // The tests' platform has no host, as Windows has none: off unless told.
+        XCTAssertFalse(VisorServer.detachesAgents(settings, environment: [:]))
+        XCTAssertTrue(VisorServer.detachesAgents(settings, environment: ["VISOR_DETACH_AGENT_HOST": "1"]))
+        settings.detachAgents = false
+        XCTAssertFalse(VisorServer.detachesAgents(settings, environment: ["VISOR_DETACH_AGENT_HOST": "0"]))
+        XCTAssertEqual(VisorServer.detachingSet(in: ["VISOR_DETACH_AGENT_HOST": "false"]), false)
+        XCTAssertEqual(VisorServer.detachingSet(in: ["VISOR_DETACH_AGENT_HOST": "true"]), true)
+        XCTAssertNil(VisorServer.detachingSet(in: [:]))
+    }
+
+    func testAnAgentThatCannotBeDetachedIsNotStartedAnotherWay() async throws {
+        AgentChildren.detach = true
+        defer { AgentChildren.detach = false }
+        XCTAssertThrowsError(try AgentChildren.start(executable: "/bin/cat", arguments: [], directory: "/tmp", environment: [:], session: "s")) { error in
+            XCTAssertTrue(error.localizedDescription.contains("VISOR_DETACH_AGENT_HOST=0"), error.localizedDescription)
+        }
+        // Without a session (nothing to pick up again) it is a child.
+        let child = try AgentChildren.start(executable: "/bin/cat", arguments: [], directory: "/tmp", environment: [:], session: nil)
+        XCTAssertTrue(child is PipedChild)
         await child.end(grace: .seconds(1))
     }
 }

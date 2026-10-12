@@ -143,6 +143,19 @@ struct SettingsPane: View {
                 Text("Network paths")
             }
             Section {
+                // Set in the environment, the environment's word stands.
+                let given = VisorServer.detachingSet()
+                Toggle("Run agents apart from the server", isOn: Binding(get: { given ?? server.settings.detachAgents },
+                                                                          set: { server.settings.detachAgents = $0 }))
+                    .disabled(given != nil)
+                Text(given != nil
+                     ? "Set by VISOR_DETACH_AGENT_HOST in Visor Server's environment."
+                     : "Each session's agent runs under a host of its own, so restarting or updating Visor Server leaves it working, and one that runs away cannot take the server down. Off, agents are the server's own children: a restart stops them. Applies to agents started from now on.")
+                    .font(.caption).foregroundColor(.secondary)
+            } header: {
+                Text("Agents")
+            }
+            Section {
                 let current = server.apnsKey
                 Text(current.configured
                      ? "Key \(current.keyID) is set; \(server.pushDeviceCount) device\(server.pushDeviceCount == 1 ? "" : "s") asked for notifications."

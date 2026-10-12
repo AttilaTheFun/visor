@@ -7,18 +7,19 @@ import VisorServer
 public struct POSIXAgentHosting: AgentHosting {
     public let program: String
 
-    /// Hosts run by `program`; nil when it is not there or does not run
-    /// (a build without it, a copy the system will not start), and agents
-    /// are then the server's own children.
-    public init?(program: String) {
-        guard FileManager.default.isExecutableFile(atPath: program),
-              output(of: program, ["--version"]) != nil else { return nil }
+    public init(program: String) {
         self.program = program
+    }
+
+    public func problem() -> String? {
+        guard FileManager.default.isExecutableFile(atPath: program) else { return "there is no agent host at \(program)" }
+        guard output(of: program, ["--version"]) != nil else { return "the agent host at \(program) does not run" }
+        return nil
     }
 
     /// The host program beside the running one: how the command-line
     /// server carries it.
-    public static func beside(_ executable: String) -> POSIXAgentHosting? {
+    public static func beside(_ executable: String) -> POSIXAgentHosting {
         let folder = URL(fileURLWithPath: executable).resolvingSymlinksInPath().deletingLastPathComponent()
         return POSIXAgentHosting(program: folder.appendingPathComponent("visor-agent-host", isDirectory: false).path)
     }

@@ -62,6 +62,13 @@ public struct ServerCommand {
           --password <word>          --auth password|none
           --lan on|off  --vpn on|off  --ssh on|off
           --address <url>|-          --standalone on|off
+        In its environment:
+          VISOR_DETACH_AGENT_HOST=0|1
+                       1 (the default): each session's agent runs under
+                       visor-agent-host, beside this program, apart from the
+                       server, so a restart leaves it working; an agent that
+                       cannot be is not started. 0: agents are the server's
+                       own children. (Windows has no host: 0 unless set.)
         """
 
     /// Runs the command; what it returns is the process's exit status.

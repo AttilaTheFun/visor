@@ -55,6 +55,7 @@ public final class VisorServer {
                 listenAgain()
             }
             if settings.lan != oldValue.lan || settings.vpn != oldValue.vpn { refusedPaths.removeAll() }
+            if settings.detachAgents != oldValue.detachAgents { applyAgentDetaching() }
             // Asking nothing: a server with no password yet starts now.
             if settings.asksNothing, !oldValue.asksNothing, listener == nil { start() }
         }
@@ -129,6 +130,7 @@ public final class VisorServer {
         Self.adoptFormerFolders()
         password = Self.keptPassword()
         agentToken = Self.keptAgentToken()
+        applyAgentDetaching()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()
         takeRollbackNote()

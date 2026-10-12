@@ -541,8 +541,15 @@ crashes or never answers on its port, the previous build is put back and
 opened, carrying the same sessions, and `relaunch-rollback.txt` says why,
 which the server shows in its menu (`updateNotice`) once.
 
-**Agents apart from the server.** Every chat agent runs under a host of
-its own, `visor-agent-host` (libraries/visor_agent_host; in the bundle at
+**Agents apart from the server.** Unless turned off — Visor Server's
+"Run agents apart from the server" (`ServerSettings.detachAgents`, on by
+default), or `VISOR_DETACH_AGENT_HOST=0` in a server's environment, which
+overrides the setting — every chat agent runs under a host of its own,
+`visor-agent-host`. An agent that is to be detached and cannot be (no host
+program, one that does not run) is not started some other way: it fails,
+saying how to turn detaching off, and the menu says so too. Windows has no
+host, so its agents are the server's own children unless the variable
+says 1. The host is libraries/visor_agent_host (in the bundle at
 `Contents/Helpers`, signed with the app by tools/sign_mac_app.sh). The
 server starts the host as its child — so the agent keeps the app's
 privacy grants (a launchd job would not: a job reading ~/Downloads is
