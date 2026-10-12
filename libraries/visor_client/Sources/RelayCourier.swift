@@ -85,11 +85,16 @@ public final class RelayCourier {
     /// the terminals).
     func report() -> DirectoryReport {
         let servers = participants.map { connection in
-            DirectoryServer(id: connection.record.serverID, name: connection.record.name, sessions: connection.sessions
+            DirectoryServer(id: connection.record.serverID, name: connection.record.name, version: connection.serverVersion, sessions: connection.sessions
                 .filter { !$0.archived && !$0.agent.isShell }
                 .map { DirectorySession(id: $0.id, name: $0.title.isEmpty ? $0.agent.title : $0.title, agent: $0.agent.title, busy: $0.busy) })
         }
-        return DirectoryReport(client: AgentServerRecord.clientID, clientName: VisorHost.deviceName, servers: servers)
+        return DirectoryReport(client: AgentServerRecord.clientID, clientName: VisorHost.deviceName, clientVersion: Self.said(VisorHost.appVersion),
+                               clientPlatform: Self.said(VisorHost.platformName), servers: servers)
+    }
+
+    /// What the host said, or nothing.
+    private static func said(_ value: String) -> String? { value.isEmpty ? nil : value
     }
 
     /// Every server that takes part, told and asked; one turned off since

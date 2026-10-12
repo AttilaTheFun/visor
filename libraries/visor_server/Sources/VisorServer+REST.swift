@@ -96,6 +96,7 @@ extension VisorServer {
         case ("POST", 1, "relocate"): restRelocateSessions(call)
         case ("GET", 1, "code"): restCode(call)
         case ("GET", 1, "codes"): restCodes(call)
+        case ("GET", 1, "versions"): restVersions(call)
         case ("POST", 1, "relay"): restRelay(call)
         case ("POST", 2, "relay") where parts[1] == "deliver": restRelayDeliver(call)
         case ("POST", 2, "relay") where parts[1] == "receipt": restRelayReceipt(call)
@@ -130,6 +131,7 @@ extension VisorServer {
     private func restHello(_ call: RESTCall) -> HTTPResponse {
         var e = Envelope.hello(host: hostName, login: "", token: issueToken())
         e.id = id
+        e.version = Self.version
         if isStandalone {
             // Reached only where the client found it: nothing more to learn.
             e.standalone = true

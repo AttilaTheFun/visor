@@ -83,6 +83,8 @@ public final class AgentServerConnection: Identifiable {
     @ObservationIgnored public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
     public private(set) var catalogs: [AgentCatalog] = []
+    /// The Visor Server it runs, as it said at sign-in ("0.31 (8)").
+    public private(set) var serverVersion: String?
     /// The store saves when the address or credentials change.
     @ObservationIgnored var onRecordChange: (() -> Void)?
 
@@ -464,6 +466,7 @@ public final class AgentServerConnection: Identifiable {
     /// What the server said of itself: its id, and its own addresses as
     /// more paths to it.
     private func take(_ identity: ServerIdentity) {
+        serverVersion = identity.version
         var changed = false
         if record.serverID != identity.id { record.serverID = identity.id; changed = true }
         if record.standalone != identity.standalone {

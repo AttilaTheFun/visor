@@ -4,6 +4,9 @@ import Foundation
 public struct HostDetails: Sendable {
     /// Its name, as a client shows it ("Logan's Mac mini").
     public var name: String
+    /// The server's own version and build, as installed and running
+    /// ("0.31 (8)"); empty where the binary does not say.
+    public var version: String
     /// Where the server keeps its sessions, pictures and settings.
     public var dataDirectory: URL
     /// This computer's addresses on its networks (IPv4, loopback left
@@ -13,9 +16,10 @@ public struct HostDetails: Sendable {
     /// a system that names no interfaces tells them apart by range.
     public var networkAddresses: @Sendable () -> [NetworkAddress]
 
-    public init(name: String, dataDirectory: URL, addresses: @escaping @Sendable () -> [String] = { [] },
+    public init(name: String, version: String = "", dataDirectory: URL, addresses: @escaping @Sendable () -> [String] = { [] },
                 networkAddresses: (@Sendable () -> [NetworkAddress])? = nil) {
         self.name = name
+        self.version = version
         self.dataDirectory = dataDirectory
         self.addresses = addresses
         let given = networkAddresses ?? { addresses().map { NetworkAddress(address: $0) } }

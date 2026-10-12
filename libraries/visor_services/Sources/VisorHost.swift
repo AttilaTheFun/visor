@@ -30,6 +30,11 @@ public enum VisorHost {
     /// What the device is called (its owner's name for it, where the host
     /// knows one): how the servers it reports to name it to their agents.
     public static var deviceName = ""
+    /// The Visor app this is, as installed and running ("0.31 (8)"), and
+    /// the system it runs on ("iOS", "macOS"): told to the servers it
+    /// reports to, so each knows which builds are out there.
+    public static var appVersion = ""
+    public static var platformName = ""
 }
 
 /// Hands the client its services. An app calls this once, before it makes
@@ -39,7 +44,8 @@ public enum VisorHost {
 public func installVisorServices(socket: any VisorSocketService, http: any VisorHTTPService, settings: any VisorSettingsService,
                                  notifications: (any VisorNotificationService)? = nil, widget: (any VisorWidgetService)? = nil,
                                  ssh: (any VisorSSHService)? = nil, network: (any VisorNetworkService)? = nil,
-                                 dictation: (any VisorDictationService)? = nil, deviceName: String = "") {
+                                 dictation: (any VisorDictationService)? = nil, deviceName: String = "", appVersion: String = "",
+                                 platformName: String = "") {
     VisorHost.socket = socket
     VisorHost.http = http
     VisorHost.settings = settings
@@ -49,4 +55,6 @@ public func installVisorServices(socket: any VisorSocketService, http: any Visor
     VisorHost.network = network
     VisorHost.dictation = dictation
     VisorHost.deviceName = deviceName
+    VisorHost.appVersion = appVersion
+    VisorHost.platformName = platformName
 }

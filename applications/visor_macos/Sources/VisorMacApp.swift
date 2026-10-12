@@ -13,12 +13,20 @@ struct VisorMacApp: App {
     /// the user opened (MacPushDelegate).
     @NSApplicationDelegateAdaptor(MacPushDelegate.self) private var pushDelegate
 
+    /// This app's version and build ("0.31 (8)").
+    static var bundleVersion: String {
+        guard let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return "" }
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        return build.map { "\(short) (\($0))" } ?? short
+    }
+
     init() {
         Self.adoptFormerApp()
         // The host's services first: the store connects through them.
         installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService(),
                              notifications: NativeVisorNotificationService(), ssh: NativeVisorSSHService(), network: NativeVisorNetworkService(),
-                             dictation: NativeVisorDictationService(), deviceName: Host.current().localizedName ?? "")
+                             dictation: NativeVisorDictationService(), deviceName: Host.current().localizedName ?? "",
+                             appVersion: Self.bundleVersion, platformName: "macOS")
         if !VisorFixture.active {
             // (The push token is asked for once launched: MacPushDelegate.)
             VisorHost.notifications?.requestPermission()

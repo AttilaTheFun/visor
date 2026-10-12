@@ -44,6 +44,7 @@ struct ComputerSettingsForm: View {
                     LabeledContent("Sign-in", value: Self.signIn(of: path, record: host.record))
                     LabeledContent("Updates", value: host.live ? "Live" : "Polling")
                 }
+                if let version = host.serverVersion { LabeledContent("Visor Server", value: version) }
             } header: {
                 Text("Connection")
             } footer: {

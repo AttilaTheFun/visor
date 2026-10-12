@@ -96,7 +96,7 @@ public final class VisorAgentServer: AgentServer {
             let hello = try await call("GET", "/hello")
             token = hello.token
             if let id = hello.id, !id.isEmpty {
-                identity = ServerIdentity(id: id, addresses: hello.addresses ?? [], standalone: hello.standalone ?? false)
+                identity = ServerIdentity(id: id, addresses: hello.addresses ?? [], standalone: hello.standalone ?? false, version: hello.version)
             }
             return hello.host.flatMap { $0.isEmpty ? nil : $0 }
         } catch {

@@ -75,14 +75,15 @@ under `/api`.
 
 | method and path | body | answer |
 |---|---|---|
-| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id` and own `addresses` — or, from a server that stands alone, `standalone: true` and no addresses — or 401 |
+| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `version` (its build, "0.31 (9)"), its `id` and own `addresses` — or, from a server that stands alone, `standalone: true` and no addresses — or 401 |
 | `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
 | `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
 | `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
 | `POST /sessions/<id>/acknowledge` | | the user has read the session's notice |
 | `POST /ssh/keys` | `text`: an SSH public key line (this device's, or one scanned from another device's `visor://authorize?key=` QR code) | `ssh`; the key is in the user's `authorized_keys`, so that device comes in over SSH next |
 | `GET /codes` | | `codes`: the server's connection codes — `qr` (the QR code's), and `http`, `https`, `ssh` (each leading with that kind of path; absent when it has none) |
-| `POST /relay` | `report`: the client's `DirectoryReport` | `relay` with `relayed`: the messages waiting for the servers the report names |
+| `POST /relay` | `report`: the client's `DirectoryReport` — its `client` id and `clientName`, its `clientVersion` and `clientPlatform`, and each server it is connected to with that server's `version` and sessions | `relay` with `relayed`: the messages waiting for the servers the report names |
+| `GET /versions` | | the builds as this server knows them: its own (`server`: `id`, `name`, `version`), its `clients` (`name`, `platform`, `version`, when they `reported`), and the other `servers` (`id`, `name`, `version`, `reportedBy`, `reported`) as its clients reported them; agents get the same in `list_sessions` |
 | `POST /relay/deliver` | `relayed`: one `RelayMessage` | `relay` with `receipt`: what became of it — the same however often it is carried; 409 for a message to another server |
 | `POST /relay/receipt` | `receipt`: what became of a message from this server | `relay` |
 | `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |

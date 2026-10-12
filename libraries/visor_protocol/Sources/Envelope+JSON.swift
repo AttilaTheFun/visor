@@ -76,6 +76,7 @@ extension Envelope {
         e.platform = value["platform"].string
         e.pushEnvironment = value["pushEnvironment"].string
         e.pushTopic = value["pushTopic"].string
+        e.version = value["version"].string
         e.migration = value["migration"].string
         e.offer = MigrationOffer(json: value["offer"])
         e.plan = MigrationPlan(json: value["plan"])
@@ -137,6 +138,7 @@ extension Envelope {
         if let platform { o["platform"] = .string(platform) }
         if let pushEnvironment { o["pushEnvironment"] = .string(pushEnvironment) }
         if let pushTopic { o["pushTopic"] = .string(pushTopic) }
+        if let version { o["version"] = .string(version) }
         if let migration { o["migration"] = .string(migration) }
         if let offer { o["offer"] = offer.json }
         if let plan { o["plan"] = plan.json }
