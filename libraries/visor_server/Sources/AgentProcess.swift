@@ -55,10 +55,16 @@ public protocol AgentProcess: AnyObject {
     /// The running agent's pid, written down so a later launch can
     /// recognise one of ours that outlived us.
     var processID: Int32? { get }
+    /// Sets a goal carried from another computer (a session moved here),
+    /// paused, so nothing runs until the user carries on with it. Whether
+    /// the agent keeps goals.
+    func carryGoal(_ objective: String) -> Bool
 }
 
 public extension AgentProcess {
     func startsTurn(_ text: String) -> Bool { true }
+
+    func carryGoal(_ objective: String) -> Bool { false }
 
     /// Without its own way to end a turn, an interrupt is a stop: the
     /// process goes, and the next message spawns another that resumes.

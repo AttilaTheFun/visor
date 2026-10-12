@@ -18,6 +18,7 @@ swift_library(
     module_name = "VisorServer",
     deps = [
         "//:foundation",
+        "//libraries/agent_host_wire",
         "//libraries/claude_transcript",
         "//libraries/message_cache",
         "//libraries/visor_protocol",

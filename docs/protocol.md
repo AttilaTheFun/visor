@@ -89,6 +89,7 @@ under `/api`.
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript) | `sessions` with the new one |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
 | `POST /sessions/{id}/stop` `…/archive` `…/unarchive` | | same |
+| `POST /sessions/{id}/restartAgent` | | same: the session's agent is ended and a new one made on the same conversation; a turn it was working on is carried on by a nudge that goes first |
 | `POST /sessions/{id}/permissions` | `skipPermissions` | same |
 | `POST /sessions/{id}/settings` | `model`, `effort` | same |
 | `POST /sessions/{id}/approve` | `id`, `allow` | same |
@@ -99,6 +100,22 @@ under `/api`.
 | `GET /resumable?agent=&cwd=` | | `resumable`: the agent's own sessions started in `cwd` (Claude's `~/.claude/projects`, Codex's `~/.codex/sessions`), newest first, `id`/`title` (first prompt)/`timestamp` |
 | `POST /restart` | `path` (a new build to install over this one, optional), `session` (one to carry on besides the busy ones) | `restart`: the sessions carried on; the server then relaunches |
 | `POST /quit` | | `quit`; the server then ends its agents (what was running is written down as running, for the next start) and exits — how `visor-server stop` stops it |
+| `POST /migration/offer` | `session` | `migration` with `offer`: the session (`cwd` absolute), the agent's own id for its conversation (`resumeID`), the computer's name (`from`) and home folder, the conversation's `files` (`id`, `place` under the agent's folder — `{project}` for Claude's project folder — `size`, `packed`), and its `projects` (the session's own folder first, then the git repositories under the home folder its conversation names most: `remote`, `branch`, `commit`, `unshared`, `size`, `mentions`) |
+| `POST /migration/read` | `migration` (the offer's `token`), `file` (`id`, and in `size` how much is wanted), `offset` | `migration` with `data` (base64, at most 4 MB) and `offset` (where the next piece starts) |
+| `POST /migration/pack` | `migration`, `path` (a project of the offer's) | `migration` with `file`: the project packed (what git tracks and does not ignore, and its `.git`), to read like the others |
+| `POST /migration/plan` | `offer` | `migration` with `plan`: its `id`, where the session runs here (`cwd`: the same place under this home folder), `agentInstalled`, and a `step` per project — `present`, `clone`, `copy` or `create`, with a `note` and whether it is `chosen` |
+| `POST /migration/write` | `migration` (the plan's `id`), `file`, `offset`, `data` | `migration` with the next `offset`; a piece must follow on from the last |
+| `POST /migration/clone` | `migration`, `steps` (the one) | `migration`, or the git error (the client then copies the project instead) |
+| `POST /migration/unpack` | `migration`, `file`, `steps` (the one) | `migration`, once the project is unpacked where its step says |
+| `POST /migration/finish` | `migration`, `steps` (those chosen) | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here looks for them, the chosen folders made, and the session started resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from |
+
+Moving a session (`SessionMigration` in the client): the client asks the
+session's server for an offer and the other for a plan, the user chooses
+which projects to bring, and the client carries each file across a piece
+at a time (read from the one, written to the other), has projects cloned
+(or packed, carried and unpacked when they cannot be), then finishes. The
+session where it was is left as it was, for the user to remove. A refusal
+at any step is a 400 with an `error` envelope saying why.
 
 A client asks `GET /sessions` once a minute as the backup for the socket:
 the list is taken as a `sessions` broadcast would be, and an answer while
@@ -196,6 +213,23 @@ tool's output; the transcript view hides them, the assistant's
   and the thread's tokens (`total`); `account/read` and
   `account/rateLimits/read`, asked at launch, and
   `account/rateLimits/updated` give the plan, its windows and credits.
+
+Each agent runs under a host of its own, `visor-agent-host` (on a Mac in
+Visor Server's bundle under `Contents/Helpers`; beside the command-line
+server elsewhere), so the server can restart, update or crash while it
+works. The host starts the agent on pipes, keeps its latest 32 MB of
+output numbered by line, and listens on a socket in the data folder's
+`hosts/`; the server talks to it in frames (libraries/agent_host_wire:
+the host's `hello`, the agent's lines, errors and exit, notices; the
+server's `attach` from a line, input, end of input, signals, a memory
+limit, `release`). Going for a restart, the server lets its hosts go and
+writes down each socket and the next line it had not heard; the next
+launch connects again and is sent what it missed, so a turn in flight
+carries on. A plain quit still ends the agents. Each host also guards its
+agent's memory: past the limit (half the computer's memory), the process
+holding the most in the agent's tree — usually a command it ran — is
+stopped, and the session is told; `memory` in a session's info is what
+the agent and what it runs use now.
 
 ## Approvals (manual mode)
 

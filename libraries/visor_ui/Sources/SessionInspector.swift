@@ -59,6 +59,8 @@ struct SessionInspector: View {
                         LabeledContent("Folder", value: session.cwd)
                         LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
                         LabeledContent("State", value: session.busy ? "Working" : (session.archived ? "Archived" : "Idle"))
+                        // The agent and what it runs, as its host says.
+                        if let memory = session.memory { LabeledContent("Memory", value: MigrationSheet.size(Int(clamping: memory))) }
                         // To carry the conversation on in the agent's own
                         // interface: end this session, open a terminal
                         // session, and run this there.

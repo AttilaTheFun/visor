@@ -14,7 +14,7 @@ import Foundation
 import VisorProtocol
 
 @MainActor
-public final class ClaudeProcess: AgentProcess {
+public final class ClaudeProcess: AgentProcess, HostableProcess {
     public let events: AsyncStream<AgentEvent>
     private let emit: AsyncStream<AgentEvent>.Continuation
 
@@ -27,7 +27,7 @@ public final class ClaudeProcess: AgentProcess {
     public var approvalEnvironment: [String: String] = [:]
     /// The running agent. One that was stopped is no longer this, and what
     /// it still says is not passed on.
-    private var child: PipedChild?
+    private var child: (any AgentChild)?
     public private(set) var resumeID: String?
     public var resumeCommand: String? {
         guard let id = resumeID else { return nil }
@@ -76,7 +76,16 @@ public final class ClaudeProcess: AgentProcess {
 
     public var processID: Int32? { running()?.pid }
 
-    private func running() -> PipedChild? {
+    var hostedChild: HostedChild? { running() as? HostedChild }
+    var carried: [String: String] { [:] }
+
+    /// An agent left running by an earlier launch: heard from here on.
+    func adopt(_ child: HostedChild, carried: [String: String]) {
+        self.child = child
+        follow(child)
+    }
+
+    private func running() -> (any AgentChild)? {
         guard let child, child.isRunning else { return nil }
         return child
     }
@@ -109,15 +118,16 @@ public final class ClaudeProcess: AgentProcess {
 
     /// Lets go of the running agent, for whoever is ending it: from here
     /// the session is idle, and the agent's exit is expected.
-    private func release() -> PipedChild? {
+    private func release() -> (any AgentChild)? {
         guard let child else { return nil }
         self.child = nil
         emit.yield(.activity(nil))
+        emit.yield(.memory(nil))
         emit.yield(.busy(false))
         return child
     }
 
-    private func spawn() throws -> PipedChild {
+    private func spawn() throws -> any AgentChild {
         guard let executable = ToolPath.resolve(tool) else { throw AgentProcessError.toolMissing(tool) }
         var args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
         // Visor's MCP server: the other sessions, and in manual mode the
@@ -137,9 +147,15 @@ public final class ClaudeProcess: AgentProcess {
         // The agent is told which session it is, so it can name itself
         // when it asks the server to restart (VISOR_SESSION).
         let environment = ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
-        let child = try PipedChild(executable: executable, arguments: args,
-                                   directory: (cwd as NSString).expandingTildeInPath, environment: environment)
+        let child = try AgentChildren.start(executable: executable, arguments: args, directory: (cwd as NSString).expandingTildeInPath,
+                                            environment: environment, session: approvalEnvironment["VISOR_SESSION"])
         self.child = child
+        follow(child)
+        return child
+    }
+
+    /// Hears the agent: everything it says, in order, and then how it ended.
+    private func follow(_ child: any AgentChild) {
         interrupting = false
         let tool = self.tool
         // Everything it says, in order, and then how it ended.
@@ -152,6 +168,7 @@ public final class ClaudeProcess: AgentProcess {
             guard let self, self.child === child else { return }
             self.child = nil
             self.emit.yield(.activity(nil))
+            self.emit.yield(.memory(nil))
             self.emit.yield(.busy(false))
             if exit.status != 0, !exit.signaled { self.emit.yield(.failure("\(tool) exited with status \(exit.status)")) }
         }
@@ -161,7 +178,15 @@ public final class ClaudeProcess: AgentProcess {
                 if self.child === child { self.emit.yield(.failure(line)) }
             }
         }
-        return child
+        Task { [weak self] in
+            for await notice in child.notices {
+                guard let self else { return }
+                if self.child === child { self.emit.yield(.notice(notice)) }
+            }
+        }
+        (child as? HostedChild)?.onMemory = { [weak self] bytes in
+            if let self, self.child === child { self.emit.yield(.memory(Int64(clamping: bytes))) }
+        }
     }
 
     private func take(_ output: ClaudeOutput) {

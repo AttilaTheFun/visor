@@ -10,7 +10,7 @@ import Foundation
 import VisorProtocol
 
 @MainActor
-public final class CodexAppServerProcess: AgentProcess {
+public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     /// The answer to a request: what it names, or what went wrong. A
     /// request whose app server went away is answered with that.
     struct Reply {
@@ -31,7 +31,7 @@ public final class CodexAppServerProcess: AgentProcess {
     private let cwd: String
     /// The running app server. One that was stopped is no longer this, and
     /// what it still says is not passed on.
-    private var child: PipedChild?
+    private var child: (any AgentChild)?
     var threadID: String?
     private var turnID: String?
     private var nextRequestID = 1
@@ -55,9 +55,24 @@ public final class CodexAppServerProcess: AgentProcess {
     }
     public var processID: Int32? { running()?.pid }
 
-    func running() -> PipedChild? {
+    func running() -> (any AgentChild)? {
         guard let child, child.isRunning else { return nil }
         return child
+    }
+
+    var hostedChild: HostedChild? { running() as? HostedChild }
+    /// The turn in flight, which an interrupt names.
+    var carried: [String: String] { turnID.map { ["turn": $0] } ?? [:] }
+
+    /// An app server left running by an earlier launch: already started,
+    /// its thread already resumed, so only heard from here on. Its
+    /// requests are numbered apart from the earlier launch's, whose
+    /// answers may still come.
+    func adopt(_ child: HostedChild, carried: [String: String]) {
+        self.child = child
+        turnID = carried["turn"]
+        nextRequestID = Int.random(in: 1_000_000...1_000_000_000)
+        follow(child)
     }
 
     // MARK: Turns
@@ -78,7 +93,7 @@ public final class CodexAppServerProcess: AgentProcess {
     }
 
     /// Starts the turn: on the thread there is, or on one started for it.
-    private func turn(_ text: String, on child: PipedChild) async {
+    private func turn(_ text: String, on child: any AgentChild) async {
         guard let threadID = await thread(on: child) else {
             emit.yield(.busy(false))
             return
@@ -100,7 +115,7 @@ public final class CodexAppServerProcess: AgentProcess {
     /// The thread there is, or one started now: the first turn (or a goal
     /// set before any) starts it, and later ones ride on it. Nil, said as
     /// a failure, when it cannot be started.
-    func thread(on child: PipedChild) async -> String? {
+    func thread(on child: any AgentChild) async -> String? {
         if let threadID { return threadID }
         let reply = await request("thread/start", threadParams(), of: child)
         guard self.child === child else { return nil }
@@ -132,12 +147,13 @@ public final class CodexAppServerProcess: AgentProcess {
 
     /// Lets go of the running app server, for whoever is ending it: from
     /// here the session is idle, and nothing asked of it will be answered.
-    private func release() -> PipedChild? {
+    private func release() -> (any AgentChild)? {
         guard let child else { return nil }
         self.child = nil
         turnID = nil
         abandonRequests()
         emit.yield(.activity(nil))
+        emit.yield(.memory(nil))
         emit.yield(.busy(false))
         return child
     }
@@ -162,34 +178,15 @@ public final class CodexAppServerProcess: AgentProcess {
         return params
     }
 
-    func spawn() throws -> PipedChild {
+    func spawn() throws -> any AgentChild {
         guard let executable = ToolPath.resolve("codex") else { throw AgentProcessError.toolMissing("codex") }
         // Visor's MCP server: the other sessions.
-        let child = try PipedChild(executable: executable, arguments: ["app-server"] + VisorMCP.codexArguments(approvalEnvironment),
-                                   directory: (cwd as NSString).expandingTildeInPath,
-                                   environment: ToolPath.environment().merging(approvalEnvironment) { _, ours in ours })
+        let child = try AgentChildren.start(executable: executable, arguments: ["app-server"] + VisorMCP.codexArguments(approvalEnvironment),
+                                            directory: (cwd as NSString).expandingTildeInPath,
+                                            environment: ToolPath.environment().merging(approvalEnvironment) { _, ours in ours },
+                                            session: approvalEnvironment["VISOR_SESSION"])
         self.child = child
-        // Everything it says, in order, and then that it is gone.
-        Task { [weak self] in
-            for await output in child.output.lines({ CodexOutput.parse($0) }) {
-                guard let self else { return }
-                if self.child === child { self.take(output, from: child) }
-            }
-            let exit = await child.exit.value
-            guard let self, self.child === child else { return }
-            self.child = nil
-            self.turnID = nil
-            self.abandonRequests()
-            self.emit.yield(.failure("Codex's app server exited (status \(exit.status))."))
-            self.emit.yield(.activity(nil))
-            self.emit.yield(.busy(false))
-        }
-        Task { [weak self] in
-            for await line in child.errors.lines({ $0.contains("ERROR") ? [$0] : [] }) {
-                guard let self else { return }
-                if self.child === child { self.emit.yield(.failure(line)) }
-            }
-        }
+        follow(child)
         Task {
             _ = await self.request("initialize", ["clientInfo": ["name": "visor", "version": "1"]], of: child)
             // How the account is paid for and how near its limits it is;
@@ -217,8 +214,43 @@ public final class CodexAppServerProcess: AgentProcess {
         return child
     }
 
+    /// Hears the app server: everything it says, in order, and then that
+    /// it is gone.
+    private func follow(_ child: any AgentChild) {
+        Task { [weak self] in
+            for await output in child.output.lines({ CodexOutput.parse($0) }) {
+                guard let self else { return }
+                if self.child === child { self.take(output, from: child) }
+            }
+            let exit = await child.exit.value
+            guard let self, self.child === child else { return }
+            self.child = nil
+            self.turnID = nil
+            self.abandonRequests()
+            self.emit.yield(.failure("Codex's app server exited (status \(exit.status))."))
+            self.emit.yield(.activity(nil))
+            self.emit.yield(.memory(nil))
+            self.emit.yield(.busy(false))
+        }
+        Task { [weak self] in
+            for await line in child.errors.lines({ $0.contains("ERROR") ? [$0] : [] }) {
+                guard let self else { return }
+                if self.child === child { self.emit.yield(.failure(line)) }
+            }
+        }
+        Task { [weak self] in
+            for await notice in child.notices {
+                guard let self else { return }
+                if self.child === child { self.emit.yield(.notice(notice)) }
+            }
+        }
+        (child as? HostedChild)?.onMemory = { [weak self] bytes in
+            if let self, self.child === child { self.emit.yield(.memory(Int64(clamping: bytes))) }
+        }
+    }
+
     /// Asks the app server something and waits for its answer.
-    func request(_ method: String, _ params: sending [String: Any], of child: PipedChild) async -> Reply {
+    func request(_ method: String, _ params: sending [String: Any], of child: any AgentChild) async -> Reply {
         guard self.child === child else { return Reply(error: "Codex's app server is gone") }
         let id = nextRequestID
         nextRequestID += 1
@@ -226,7 +258,7 @@ public final class CodexAppServerProcess: AgentProcess {
         return await withCheckedContinuation { replies[id] = $0 }
     }
 
-    private func take(_ output: CodexOutput, from child: PipedChild) {
+    private func take(_ output: CodexOutput, from child: any AgentChild) {
         switch output {
         case .reply(let id, let thread, let turn, let error, let goal):
             replies.removeValue(forKey: id)?.resume(returning: Reply(thread: thread, turn: turn, error: error, goal: goal))

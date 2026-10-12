@@ -24,6 +24,9 @@ extension VisorServer {
     func route(_ request: HTTPRequest, respond: @escaping (HTTPResponse) -> Void) {
         let path = Self.apiPath(request.path.split(separator: "?").first.map(String.init) ?? request.path)
         let parts = path.split(separator: "/").map(String.init)
+        if request.method == "POST", parts.count == 2, parts[0] == "migration", authorized(request) {
+            return routeMigration(parts[1], body: Envelope.decodeBody(request.body), respond: respond)
+        }
         if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "commands", authorized(request) {
             guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
             var e = Envelope(type: "commands")
@@ -308,7 +311,8 @@ extension VisorServer {
 
     private func restSessionAction(_ call: RESTCall) -> HTTPResponse {
         let action = call.parts[2]
-        guard ["send", "stop", "unqueue", "archive", "unarchive", "permissions", "settings", "approve", "rename", "mode", "acknowledge"].contains(action) else {
+        guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "permissions", "settings", "approve", "rename", "mode",
+               "acknowledge"].contains(action) else {
             return HTTPResponse(404, "{\"error\":\"unknown action\"}")
         }
         guard let record = session(call.parts[1]) else { return HTTPResponse(404, "{\"error\":\"no such session\"}") }

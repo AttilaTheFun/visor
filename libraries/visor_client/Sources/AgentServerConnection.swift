@@ -1111,6 +1111,13 @@ public final class AgentServerConnection: Identifiable {
 
     public func stop(_ sessionID: String) { act(.stop, on: sessionID) }
 
+    /// Ends the session's agent and starts it again on the same
+    /// conversation: what to do with one that is stuck, or holds too much.
+    public func restartAgent(_ sessionID: String) { act(.restartAgent, on: sessionID) }
+
+    /// Whether sessions move to and from this server (SessionMigration).
+    public var migrates: Bool { server.migrates }
+
     /// Drops a message that is waiting for the turn to end — one of them,
     /// or all of them when `text` is nil.
     public func unqueue(_ sessionID: String, text: String? = nil) {

@@ -81,6 +81,10 @@ public final class SessionRecord {
     var listening: Task<Void, Never>?
     var isBound: Bool { listening != nil }
 
+    /// The host an earlier launch left the agent under, until this one
+    /// has picked it up or found it gone (VisorServer+Hosts.swift).
+    var leftHost: StoredHost?
+
     /// The agent that ran before this one has been told to go and is not
     /// yet gone: what is said waits, so that two agents never hold the
     /// session at once.
@@ -173,7 +177,14 @@ public final class SessionRecord {
     var stored: StoredSession {
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
-        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage)
+        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host)
+    }
+
+    /// The agent's host as it stands, for the next launch to pick up (or
+    /// the one an earlier launch left, until it is picked up).
+    var host: StoredHost? {
+        guard let hostable = process as? HostableProcess, let child = hostable.hostedChild else { return leftHost }
+        return StoredHost(socket: child.socket, line: child.nextLine, carried: hostable.carried)
     }
 
     /// The session's resume command, refreshed from the process (the id is

@@ -1,0 +1,26 @@
+load("@rules_apple//apple:macos.bzl", "macos_command_line_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# visor-agent-host, the program each session's agent runs under
+# (libraries/visor_agent_host): carried in Visor Server's bundle, under
+# Contents/Helpers, and beside the command-line server.
+swift_library(
+    name = "visor_agent_host_lib",
+    copts = STRICT_SWIFT,
+    srcs = ["main.swift"],
+    module_name = "VisorAgentHostMain",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_agent_host",
+    ],
+)
+
+macos_command_line_application(
+    name = "visor-agent-host",
+    bundle_id = "com.LoganShire.VisorServer.agentHost",
+    minimum_os_version = "15.0",
+    deps = [":visor_agent_host_lib"],
+)

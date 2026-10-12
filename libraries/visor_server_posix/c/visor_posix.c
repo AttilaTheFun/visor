@@ -8,7 +8,17 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
+#include <sys/wait.h>
+#ifdef __APPLE__
+#include <libproc.h>
+#include <sys/proc_info.h>
+#include <sys/resource.h>
+#include <sys/sysctl.h>
+#else
+#include <dirent.h>
+#endif
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
@@ -76,6 +86,137 @@ pid_t visor_spawn_on_terminal(const char *path, char *const argv[], char *const 
     _exit(127);
 }
 
+pid_t visor_spawn_piped(const char *path, char *const argv[], char *const envp[], const char *directory, int pipes[3]) {
+    int input[2], output[2], errors[2];
+    if (pipe(input) != 0) return -1;
+    if (pipe(output) != 0) { close(input[0]); close(input[1]); return -1; }
+    if (pipe(errors) != 0) { close(input[0]); close(input[1]); close(output[0]); close(output[1]); return -1; }
+    int highest = visor_highest_descriptor();
+    pid_t pid = fork();
+    if (pid == 0) {
+        // The child.
+        setpgid(0, 0);
+        if (dup2(input[0], 0) < 0 || dup2(output[1], 1) < 0 || dup2(errors[1], 2) < 0) _exit(126);
+        visor_start_clean(highest);
+        if (directory) (void)chdir(directory);
+        execve(path, argv, envp);
+        _exit(127);
+    }
+    int error = errno;
+    close(input[0]);
+    close(output[1]);
+    close(errors[1]);
+    if (pid < 0) {
+        close(input[1]);
+        close(output[0]);
+        close(errors[0]);
+        errno = error;
+        return -1;
+    }
+    // Its group from here as well, so a signal to the group straight
+    // after this cannot miss it.
+    setpgid(pid, pid);
+    pipes[0] = input[1];
+    pipes[1] = output[0];
+    pipes[2] = errors[0];
+    for (int i = 0; i < 3; i++) (void)fcntl(pipes[i], F_SETFD, FD_CLOEXEC);
+    return pid;
+}
+
+int visor_wait(pid_t pid, int *status, int *signaled) {
+    int raw = 0;
+    pid_t ended;
+    do {
+        ended = waitpid(pid, &raw, 0);
+    } while (ended < 0 && errno == EINTR);
+    if (ended < 0) return -1;
+    *signaled = WIFSIGNALED(raw) ? 1 : 0;
+    *status = WIFSIGNALED(raw) ? WTERMSIG(raw) : WEXITSTATUS(raw);
+    return 0;
+}
+
+#ifdef __APPLE__
+int visor_processes(struct visor_process *out, int capacity) {
+    int room = proc_listallpids(0, 0) + 64;
+    if (room <= 64) return -1;
+    pid_t *pids = calloc((size_t)room, sizeof(pid_t));
+    if (!pids) return -1;
+    int found = proc_listallpids(pids, room * (int)sizeof(pid_t));
+    int count = 0;
+    for (int i = 0; i < found && count < capacity; i++) {
+        struct proc_bsdinfo info;
+        if (proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &info, sizeof info) != sizeof info) continue;
+        struct rusage_info_v2 usage;
+        unsigned long long memory = 0;
+        if (proc_pid_rusage(pids[i], RUSAGE_INFO_V2, (rusage_info_t *)&usage) == 0) memory = usage.ri_phys_footprint;
+        out[count].pid = pids[i];
+        out[count].parent = (pid_t)info.pbi_ppid;
+        out[count].memory = memory;
+        strncpy(out[count].name, info.pbi_name[0] ? info.pbi_name : info.pbi_comm, sizeof out[count].name - 1);
+        out[count].name[sizeof out[count].name - 1] = 0;
+        count++;
+    }
+    free(pids);
+    return count;
+}
+
+unsigned long long visor_physical_memory(void) {
+    unsigned long long memory = 0;
+    size_t size = sizeof memory;
+    if (sysctlbyname("hw.memsize", &memory, &size, 0, 0) != 0) return 0;
+    return memory;
+}
+#else
+int visor_processes(struct visor_process *out, int capacity) {
+    DIR *proc = opendir("/proc");
+    if (!proc) return -1;
+    long page = sysconf(_SC_PAGESIZE);
+    int count = 0;
+    struct dirent *entry;
+    while ((entry = readdir(proc)) && count < capacity) {
+        char *end;
+        long pid = strtol(entry->d_name, &end, 10);
+        if (*end || pid <= 0) continue;
+        char path[64], line[512];
+        snprintf(path, sizeof path, "/proc/%ld/stat", pid);
+        FILE *file = fopen(path, "r");
+        if (!file) continue;
+        size_t length = fread(line, 1, sizeof line - 1, file);
+        fclose(file);
+        line[length] = 0;
+        // "pid (name) state ppid …": the name may hold spaces and parens.
+        char *open = strchr(line, '('), *close = strrchr(line, ')');
+        if (!open || !close || close < open) continue;
+        char state;
+        int parent;
+        if (sscanf(close + 1, " %c %d", &state, &parent) != 2) continue;
+        unsigned long long memory = 0;
+        snprintf(path, sizeof path, "/proc/%ld/statm", pid);
+        file = fopen(path, "r");
+        if (file) {
+            unsigned long size = 0, resident = 0;
+            if (fscanf(file, "%lu %lu", &size, &resident) == 2) memory = (unsigned long long)resident * (unsigned long long)page;
+            fclose(file);
+        }
+        out[count].pid = (pid_t)pid;
+        out[count].parent = (pid_t)parent;
+        out[count].memory = memory;
+        size_t name = (size_t)(close - open - 1);
+        if (name >= sizeof out[count].name) name = sizeof out[count].name - 1;
+        memcpy(out[count].name, open + 1, name);
+        out[count].name[name] = 0;
+        count++;
+    }
+    closedir(proc);
+    return count;
+}
+
+unsigned long long visor_physical_memory(void) {
+    long pages = sysconf(_SC_PHYS_PAGES), size = sysconf(_SC_PAGESIZE);
+    return pages > 0 && size > 0 ? (unsigned long long)pages * (unsigned long long)size : 0;
+}
+#endif
+
 int visor_set_terminal_size(int terminal, unsigned short cols, unsigned short rows) {
     struct winsize size;
     memset(&size, 0, sizeof size);
@@ -139,6 +280,26 @@ int visor_listen_unix(const char *path) {
         return -1;
     }
     return listener;
+}
+
+int visor_connect_unix(const char *path) {
+    struct sockaddr_un address;
+    if (strlen(path) >= sizeof address.sun_path) { errno = ENAMETOOLONG; return -1; }
+    int connection = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (connection < 0) return -1;
+    (void)fcntl(connection, F_SETFD, FD_CLOEXEC);
+    memset(&address, 0, sizeof address);
+    address.sun_family = AF_UNIX;
+    strncpy(address.sun_path, path, sizeof address.sun_path - 1);
+    if (connect(connection, (struct sockaddr *)&address, sizeof address) != 0) {
+        int error = errno;
+        close(connection);
+        errno = error;
+        return -1;
+    }
+    struct timeval patience = {30, 0};
+    setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
+    return connection;
 }
 
 int visor_unix_answers(const char *path) {

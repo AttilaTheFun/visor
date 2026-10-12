@@ -121,6 +121,9 @@ extension SessionRecord {
         case .notice(let words):
             notice = words
             return ephemeralEnvelope
+        case .memory(let bytes):
+            info.memory = bytes
+            return nil
         case .spent(let total):
             let added = reportedUsage.map { total.continues(from: $0) ? total.since($0) : total } ?? total
             reportedUsage = total

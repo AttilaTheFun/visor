@@ -126,6 +126,21 @@ extension VisorServer {
         }
     }
 
+    /// Ends the session's agent and makes a new one on the same
+    /// conversation, as the user asked: the new one starts with the next
+    /// message, and a turn the old one was working on is carried on by a
+    /// nudge that goes first.
+    func restartAgent(_ record: SessionRecord) {
+        Self.log("restarting the agent of \(record.info.title) (\(record.info.id))")
+        let working = record.info.busy
+        rebuild(record)
+        if working {
+            record.enqueue(Self.restartNudge, images: [], first: true)
+            saveArchive()
+        }
+        broadcastSessions()
+    }
+
     /// The agent before this one is gone: what waited for that goes over.
     func release(_ record: SessionRecord) {
         record.held = false
@@ -271,7 +286,7 @@ extension VisorServer {
         case .context, .session, .background, .goal:
             // These land in the session list, not an envelope.
             broadcastSessions()
-        case .spent:
+        case .spent, .memory:
             broadcastSessionsSoon()
         case .plan(let plan, let subscription):
             keepPlan(plan, subscription: subscription, for: record.info.agent)

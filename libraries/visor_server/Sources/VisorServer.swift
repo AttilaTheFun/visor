@@ -73,6 +73,10 @@ public final class VisorServer {
     /// Agents waiting to hear what became of a message they sent
     /// elsewhere: by message id, then by waiter.
     var relayWaiters: [String: [String: (RelayRecord) -> Void]] = [:]
+    /// Sessions moving to other servers, by their offers' tokens, and
+    /// moving here, by their plans' ids (VisorServer+Migration.swift).
+    var migrationsOut: [String: OutgoingMigration] = [:]
+    var migrationsIn: [String: IncomingMigration] = [:]
     /// Addresses connections were refused on (a path that is off), each
     /// logged once.
     var refusedPaths: Set<String> = []
@@ -182,6 +186,13 @@ public final class VisorServer {
     static let resumeNudge = """
         [Visor] The Visor server restarted while you were working, so that turn was cut short \
         and whatever you were part-way through did not finish. Pick it up from where you left \
+        off, checking the state of anything you had started before you carry on.
+        """
+
+    /// What an agent restarted from a client is told, when it was working.
+    static let restartNudge = """
+        [Visor] Your process was restarted from Visor while you were working, so that turn was cut \
+        short and whatever you were part-way through did not finish. Pick it up from where you left \
         off, checking the state of anything you had started before you carry on.
         """
 

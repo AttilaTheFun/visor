@@ -10,6 +10,9 @@ public enum SessionAction: Equatable, Sendable {
     case rename(title: String)
     case archive
     case unarchive
+    /// Ends the session's agent and starts it again on the same
+    /// conversation; a turn it was working on is carried on.
+    case restartAgent
     /// Ends the session and its agent.
     case end
 }

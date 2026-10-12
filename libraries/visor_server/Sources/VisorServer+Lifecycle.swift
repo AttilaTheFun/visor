@@ -24,10 +24,12 @@ extension VisorServer {
             return problem
         }
         Self.log("relaunching\(build.map { " into \($0)" } ?? "")")
-        // Once the answer to whoever asked has gone out.
+        // Once the answer to whoever asked has gone out. The agents under
+        // hosts work on, for the next launch to pick up.
         Task {
             try? await Task.sleep(for: .milliseconds(600))
-            quit()
+            await leaveAgents()
+            ServerPlatform.current.lifecycle.terminate()
         }
         return nil
     }

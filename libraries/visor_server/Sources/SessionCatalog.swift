@@ -21,7 +21,9 @@ enum SessionCatalog {
         }
     }
 
-    private static let home = FileManager.default.homeDirectoryForCurrentUser
+    /// The user's home, where the agents keep their stores: Claude's
+    /// files' own, which a test can move.
+    static var home: URL { ClaudeSessionFiles.home }
 
     /// Puts a session's history where its folder looks for it.
     ///

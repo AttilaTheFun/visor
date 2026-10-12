@@ -63,6 +63,7 @@ extension VisorServer {
         case "archive": performArchive(envelope)
         case "unarchive": performUnarchive(envelope)
         case "restart": performRestart(envelope, from: client)
+        case "restartAgent": performRestartAgent(envelope)
         case "end": performEnd(envelope)
         // A client's heartbeat: answered at once, to that client only.
         case "ping": client?.send(.pong())
@@ -259,6 +260,11 @@ extension VisorServer {
     private func performUnarchive(_ envelope: Envelope) {
         guard let record = session(envelope.session), record.info.archived else { return }
         unarchive(record)
+    }
+
+    private func performRestartAgent(_ envelope: Envelope) {
+        guard let record = session(envelope.session), !record.info.archived, !record.info.agent.isShell else { return }
+        restartAgent(record)
     }
 
     /// Quitting the app kills every agent, so an agent that wants a

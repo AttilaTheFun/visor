@@ -76,6 +76,12 @@ extension Envelope {
         e.platform = value["platform"].string
         e.pushEnvironment = value["pushEnvironment"].string
         e.pushTopic = value["pushTopic"].string
+        e.migration = value["migration"].string
+        e.offer = MigrationOffer(json: value["offer"])
+        e.plan = MigrationPlan(json: value["plan"])
+        e.steps = value["steps"].array?.compactMap(MigrationStep.init(json:))
+        e.file = MigrationFile(json: value["file"])
+        e.offset = value["offset"].int
         e.commands = value["commands"].array?.compactMap { item in
             item["name"].string.map { SlashCommand(name: $0, description: item["description"].string ?? "", argumentHint: item["argumentHint"].string ?? "") }
         }
@@ -131,6 +137,12 @@ extension Envelope {
         if let platform { o["platform"] = .string(platform) }
         if let pushEnvironment { o["pushEnvironment"] = .string(pushEnvironment) }
         if let pushTopic { o["pushTopic"] = .string(pushTopic) }
+        if let migration { o["migration"] = .string(migration) }
+        if let offer { o["offer"] = offer.json }
+        if let plan { o["plan"] = plan.json }
+        if let steps { o["steps"] = .array(steps.map(\.json)) }
+        if let file { o["file"] = file.json }
+        if let offset { o["offset"] = .number(Double(offset)) }
         if let commands {
             o["commands"] = .array(commands.map { .object(["name": .string($0.name), "description": .string($0.description), "argumentHint": .string($0.argumentHint)]) })
         }

@@ -47,6 +47,7 @@ extension VisorAgentServer {
         case .rename(let title): reply = try await call("POST", base + "/rename", .rename(session: session, title: title))
         case .archive: reply = try await call("POST", base + "/archive")
         case .unarchive: reply = try await call("POST", base + "/unarchive")
+        case .restartAgent: reply = try await call("POST", base + "/restartAgent")
         case .end: reply = try await call("DELETE", base)
         }
         return reply.sessions ?? []

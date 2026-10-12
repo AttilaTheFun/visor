@@ -27,6 +27,8 @@ public struct VisorRootView: View {
     @State private var renamingSession: SessionTarget?
     @State private var renamingProject: ProjectTarget?
     @State private var deletingSession: SessionTarget?
+    /// A session being moved to another computer.
+    @State private var migrating: SessionMigration?
     @State private var removingProject: ProjectTarget?
     /// A project whose folder the computer can no longer find.
     @State private var troubled: ProjectTarget?
@@ -86,6 +88,12 @@ public struct VisorRootView: View {
         .sheet(isPresented: $composing) {
             ComposeSessionSheet(store: store) { serverID, id in
                 selection = .session(SessionSelection(serverID: serverID, sessionID: id))
+                if compact { compactColumn = .detail }
+            }
+        }
+        .itemSheet($migrating) { migration in
+            MigrationSheet(migration: migration) { id in
+                selection = .session(SessionSelection(serverID: migration.to.id, sessionID: id))
                 if compact { compactColumn = .detail }
             }
         }
@@ -394,6 +402,23 @@ public struct VisorRootView: View {
             Label("Rename", systemImage: "pencil")
         }
         Button { host.archive(session.id) } label: { Label("Archive", systemImage: "archivebox") }
+        // A new agent on the same conversation: for one that is stuck, or
+        // holds too much.
+        if !session.agent.isShell {
+            Button { host.restartAgent(session.id) } label: { Label("Restart Agent", systemImage: "arrow.clockwise") }
+        }
+        // To another computer connected now; this one keeps the session
+        // until the user removes it.
+        let others = store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }
+        if host.migrates, !session.agent.isShell, !others.isEmpty {
+            Menu {
+                ForEach(others, id: \.id) { other in
+                    Button(other.record.name) { migrating = SessionMigration(session: session, from: host, to: other) }
+                }
+            } label: {
+                Label("Migrate…", systemImage: "arrow.right.circle")
+            }
+        }
         // The command that picks the same conversation up in a terminal
         // on the computer itself.
         if let command = session.resumeCommand {

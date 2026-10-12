@@ -39,6 +39,7 @@ public struct LinuxSystem: CommandLineSystem {
             tools: LinuxTools(),
             host: HostDetails(name: ProcessInfo.processInfo.hostName, dataDirectory: data, addresses: { POSIXAddresses.all() }),
             lifecycle: lifecycle,
+            agentHosts: POSIXAgentHosting.beside(executable),
             log: log
         )
     }

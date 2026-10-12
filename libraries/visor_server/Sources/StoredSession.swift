@@ -27,11 +27,14 @@ struct StoredSession: Codable {
     var queuedImages: [[String]]?
     /// The agent's running total as it last reported it.
     var reportedUsage: SessionUsage?
+    /// The agent's host, when the agent was left running under one for the
+    /// next launch to pick up.
+    var host: StoredHost?
     static let currentShape = 2
 
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
          interrupted: Bool? = nil, agentPID: Int32? = nil, shownPrompts: [String]? = nil, notice: String? = nil,
-         queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil) {
+         queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil) {
         self.info = info
         self.entries = entries
         self.resumeID = resumeID
@@ -42,6 +45,7 @@ struct StoredSession: Codable {
         self.notice = notice
         self.queuedImages = queuedImages
         self.reportedUsage = reportedUsage
+        self.host = host
     }
 
     /// Every field but the session itself is optional, so a file written
@@ -58,5 +62,6 @@ struct StoredSession: Codable {
         notice = try c.decodeIfPresent(String.self, forKey: .notice)
         queuedImages = try c.decodeIfPresent([[String]].self, forKey: .queuedImages)
         reportedUsage = try c.decodeIfPresent(SessionUsage.self, forKey: .reportedUsage)
+        host = try c.decodeIfPresent(StoredHost.self, forKey: .host)
     }
 }

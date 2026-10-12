@@ -8,19 +8,16 @@ import Foundation
 /// An agent on pipes: JSON lines in on its standard input, bytes out on
 /// its output and its errors, and how it ended.
 @MainActor
-final class PipedChild {
-    struct Exit: Sendable {
-        let status: Int32
-        /// Ended by a signal rather than by exiting.
-        let signaled: Bool
-    }
-
+final class PipedChild: AgentChild {
     private let process: Process
     private var input: FileHandle?
     let output: AsyncStream<Data>
     let errors: AsyncStream<Data>
+    /// Nothing is done to an agent on the server's own pipes behind its
+    /// back.
+    let notices = AsyncStream<String> { $0.finish() }
     /// How it ended, once it has.
-    let exit: Task<Exit, Never>
+    let exit: Task<AgentExit, Never>
 
     var pid: Int32 { process.processIdentifier }
     var isRunning: Bool { process.isRunning }
@@ -36,9 +33,9 @@ final class PipedChild {
         process.standardInput = input
         process.standardOutput = output
         process.standardError = errors
-        let (exits, exited) = AsyncStream.makeStream(of: Exit.self)
+        let (exits, exited) = AsyncStream.makeStream(of: AgentExit.self)
         process.terminationHandler = {
-            exited.yield(Exit(status: $0.terminationStatus, signaled: $0.terminationReason == .uncaughtSignal))
+            exited.yield(AgentExit(status: $0.terminationStatus, signaled: $0.terminationReason == .uncaughtSignal))
             exited.finish()
         }
         self.output = output.fileHandleForReading.chunks
@@ -48,11 +45,10 @@ final class PipedChild {
         self.input = input.fileHandleForWriting
         exit = Task {
             for await exit in exits { return exit }
-            return Exit(status: -1, signaled: false)
+            return AgentExit(status: -1, signaled: false)
         }
     }
 
-    /// One JSON object as a line on its standard input.
     func write(_ object: [String: Any]) {
         guard let input, let data = try? JSONSerialization.data(withJSONObject: object) else { return }
         // A child that has gone leaves a pipe that cannot be written to;
@@ -60,16 +56,11 @@ final class PipedChild {
         try? input.write(contentsOf: data + Data([0x0A]))
     }
 
-    /// End of input: an agent reading its standard input finishes what it
-    /// is doing and exits.
     func closeInput() {
         try? input?.close()
         input = nil
     }
 
-    /// Ends it and returns when it is gone: end of input first, then,
-    /// `grace` later, a request to terminate, and a second after that no
-    /// choice.
     func end(grace: Duration) async {
         closeInput()
         let process = self.process
