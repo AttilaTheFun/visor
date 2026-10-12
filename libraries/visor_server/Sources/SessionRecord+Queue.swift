@@ -20,19 +20,27 @@ extension SessionRecord {
         }
     }
 
-    /// Holds a message, and its files, until the turn ends.
-    func enqueue(_ text: String, images: [String] = []) {
-        info.queued.append(text)
-        queuedImages.append(images)
+    /// Holds a message, and its files, until the turn ends: behind what
+    /// waits already, or (`first`) ahead of it.
+    func enqueue(_ text: String, images: [String] = [], first: Bool = false) {
+        info.queued.insert(text, at: first ? 0 : info.queued.count)
+        queuedImages.insert(images, at: first ? 0 : queuedImages.count)
     }
 
-    /// Takes the outbox, leaving it empty: everything said, in order, as
-    /// one message, with every file it carried.
-    func takeQueue() -> (text: String, images: [String]) {
-        let text = info.queued.filter { !$0.isEmpty }.joined(separator: "\n\n")
-        let images = queuedImages.flatMap { $0 }
-        info.queued = []
-        queuedImages = []
+    /// Whether these words end the session's goal (`/goal clear`).
+    static func clearsGoal(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "/goal clear" || trimmed.hasPrefix("/goal clear ")
+    }
+
+    /// Takes the first message from the outbox, with its files: messages go
+    /// over one at a time, each as it was written, so a slash command
+    /// (`/goal clear`) stays a command rather than being run into the words
+    /// around it.
+    func takeNextQueued() -> (text: String, images: [String])? {
+        guard !info.queued.isEmpty else { return nil }
+        let text = info.queued.removeFirst()
+        let images = queuedImages.isEmpty ? [] : queuedImages.removeFirst()
         return (text, images)
     }
 

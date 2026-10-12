@@ -93,8 +93,7 @@ extension VisorServer {
         // What was waiting when the app went away goes now; behind a nudge
         // it waits for that turn to end, as any queued message does.
         for record in sessions where !record.info.archived && !record.info.queued.isEmpty && !record.info.busy {
-            let waiting = record.takeQueue()
-            deliver(waiting.text, to: record, images: waiting.images)
+            deliverQueued(record)
         }
         if !ids.isEmpty { broadcastSessions() }
     }
@@ -129,9 +128,24 @@ extension VisorServer {
     func release(_ record: SessionRecord) {
         record.held = false
         guard !record.info.archived, !record.info.busy, !record.info.queued.isEmpty else { return }
-        let waiting = record.takeQueue()
+        deliverQueued(record)
+    }
+
+    /// The next queued message goes over, on its own. With more behind it,
+    /// its turn is stopped at once — the agent has the message, and answers
+    /// the last one — and the next goes when the agent falls idle; the last
+    /// is answered. A message that starts no turn (Codex's /goal) is
+    /// followed at once by the next.
+    func deliverQueued(_ record: SessionRecord) {
+        guard let next = record.takeNextQueued() else { return }
         broadcastSessions()
-        deliver(waiting.text, to: record, images: waiting.images)
+        deliver(next.text, to: record, images: next.images)
+        guard !record.info.queued.isEmpty else { return }
+        if record.info.busy {
+            record.process.interrupt()
+        } else {
+            deliverQueued(record)
+        }
     }
 
     /// A terminal session's shell is live before anything is typed: bound
@@ -160,9 +174,14 @@ extension VisorServer {
         // is a deliberate act (`stop`), not the cost of typing.
         // Nor is anything said while the agent before this one is going.
         if record.info.busy || record.held {
-            record.enqueue(text, images: images)
+            // Clearing the goal is stopping it: it goes ahead of anything
+            // waiting, and the turn working toward the goal is stopped now
+            // rather than run to its end.
+            let clearsGoal = SessionRecord.clearsGoal(text)
+            record.enqueue(text, images: images, first: clearsGoal)
             saveArchive()
             broadcastSessions()
+            if clearsGoal, record.info.busy, !record.held { record.process.interrupt() }
             return
         }
         record.appendUser(text, images: images)
@@ -274,11 +293,9 @@ extension VisorServer {
                 // made. What waited goes over once the old agent is gone.
                 rebuild(record)
             } else if !record.info.queued.isEmpty {
-                // Everything said during the turn goes over as one turn,
-                // in the order it was said.
-                let waiting = record.takeQueue()
-                broadcastSessions()
-                deliver(waiting.text, to: record, images: waiting.images)
+                // What was said during the turn goes over in the order it
+                // was said, a message at a time (deliverQueued).
+                deliverQueued(record)
             }
         default:
             break

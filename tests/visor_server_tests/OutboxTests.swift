@@ -26,10 +26,14 @@ final class OutboxTests: ServerTestCase {
         r.unqueue("And this")
         XCTAssertEqual(r.queuedImages, [["/files/a.png"], ["/files/clip.mov"]])
 
-        // Taken as one message: the words in order, every file.
-        let waiting = r.takeQueue()
-        XCTAssertEqual(waiting.text, "Look at this")
-        XCTAssertEqual(waiting.images, ["/files/a.png", "/files/clip.mov"])
+        // Taken a message at a time, each with its own files.
+        let first = r.takeNextQueued()
+        XCTAssertEqual(first?.text, "Look at this")
+        XCTAssertEqual(first?.images, ["/files/a.png"])
+        let second = r.takeNextQueued()
+        XCTAssertEqual(second?.text, "")
+        XCTAssertEqual(second?.images, ["/files/clip.mov"])
+        XCTAssertNil(r.takeNextQueued())
         XCTAssertTrue(r.info.queued.isEmpty)
         XCTAssertTrue(r.queuedImages.isEmpty)
     }

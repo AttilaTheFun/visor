@@ -120,7 +120,7 @@ and `subscribe` and stream the rest.
 |---|---|---|
 | `login` | `token` (from `hello`) or `password`; neither on the socket file | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
 | `start` | `id`, `agent` (`claude`/`codex`/`openrouter`, or `shell` for a terminal session), `cwd`, `title`, `skipPermissions` | Create a session (the client picks the id; an empty title means the agent's name, numbered). Nothing is spawned until the first `send` — for a terminal, until a window takes it (`mode`). The client is subscribed to it. |
-| `send` | `session`, `text` | A user turn. To a terminal session: the text typed into its shell and entered; nothing is written down. |
+| `send` | `session`, `text` | A user turn. While the agent works it waits in the session's queue (`queued`); when the turn ends (or `stop` ends it) the queue goes over a message at a time, never joined, each turn but the last stopped as soon as it starts, so the agent answers the last. `/goal clear` sent during a turn goes ahead of the queue and stops the turn. To a terminal session: the text typed into its shell and entered; nothing is written down. |
 | `stop` | `session` | Kill the agent's process; the transcript stays and the next `send` resumes the agent's own session. |
 | `subscribe` | `session` | Replay the transcript, then stream. |
 | `permissions` | `session`, `skipPermissions` | Switch the session between auto (no prompts) and manual. Codex applies it next turn; Claude's process restarts (resumed by id) once the current turn ends. `sessions` follows. |
