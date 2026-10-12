@@ -34,6 +34,10 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     private var child: (any AgentChild)?
     var threadID: String?
     private var turnID: String?
+    /// A turn asked for whose id has not come back: an interrupt asked for
+    /// now is sent once it has (`turn/interrupt` names the turn).
+    private var turnStarting = false
+    private var stopWhenStarted = false
     private var nextRequestID = 1
     /// Answers waited on, by request id.
     private var replies: [Int: CheckedContinuation<Reply, Never>] = [:]
@@ -89,12 +93,15 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         }
         emit.yield(.busy(true))
         emit.yield(.activity("Thinking…"))
+        turnStarting = true
         Task { await self.turn(text, on: child) }
     }
 
     /// Starts the turn: on the thread there is, or on one started for it.
     private func turn(_ text: String, on child: any AgentChild) async {
         guard let threadID = await thread(on: child) else {
+            turnStarting = false
+            stopWhenStarted = false
             emit.yield(.busy(false))
             return
         }
@@ -103,9 +110,12 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         if let effort, !effort.isEmpty { params["effort"] = effort }
         let reply = await request("turn/start", params, of: child)
         guard self.child === child else { return }
+        turnStarting = false
         if let id = reply.turn {
             turnID = id
+            if stopWhenStarted { interrupt() }
         } else if let error = reply.error {
+            stopWhenStarted = false
             emit.yield(.failure("Codex: \(error)"))
             emit.yield(.activity(nil))
             emit.yield(.busy(false))
@@ -131,6 +141,11 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     /// Ends the turn in flight; the thread stays, and the next message
     /// carries on in it.
     public func interrupt() {
+        if turnStarting, turnID == nil {
+            stopWhenStarted = true
+            return
+        }
+        stopWhenStarted = false
         guard let child = running(), let threadID, let turnID else { return }
         Task { _ = await self.request("turn/interrupt", ["threadId": threadID, "turnId": turnID], of: child) }
     }
@@ -151,6 +166,8 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         guard let child else { return nil }
         self.child = nil
         turnID = nil
+        turnStarting = false
+        stopWhenStarted = false
         abandonRequests()
         emit.yield(.activity(nil))
         emit.yield(.memory(nil))
@@ -267,6 +284,8 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
             // is followed as one asked for.
             guard turnID != id else { return }
             turnID = id
+            turnStarting = false
+            if stopWhenStarted { interrupt() }
             emit.yield(.busy(true))
             emit.yield(.activity("Thinking…"))
         case .goal(let goal):
@@ -290,6 +309,8 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         case .turnCompleted(let failure):
             if let failure { emit.yield(.failure(failure)) }
             turnID = nil
+            turnStarting = false
+            stopWhenStarted = false
             emit.yield(.activity(nil))
             emit.yield(.busy(false))
         case .tokens(let used, let limit):

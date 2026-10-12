@@ -39,6 +39,12 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     /// Set by `interrupt()`: the error result that follows is the turn
     /// ending on request, not a failure to show.
     private var interrupting = false
+    /// A message is written and its turn has not begun (claude says so
+    /// with its `system/init`): an interrupt now is taken and ignored —
+    /// the turn then runs to its end (measured) — so it waits for the turn
+    /// to begin (`stopWhenBegun`).
+    private var turnStarting = false
+    private var stopWhenBegun = false
     /// The id of the assistant message whose words are streaming now,
     /// from its message_start; each delta is named with it.
     private var streamingMessageID = ""
@@ -63,6 +69,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             "type": "user",
             "message": ["role": "user", "content": [["type": "text", "text": text]]],
         ])
+        turnStarting = true
         emit.yield(.busy(true))
         emit.yield(.activity("Thinking…"))
     }
@@ -100,6 +107,11 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     public func interrupt() {
         guard let child = running() else { return }
         interrupting = true
+        if turnStarting {
+            stopWhenBegun = true
+            return
+        }
+        stopWhenBegun = false
         child.write([
             "type": "control_request",
             "request_id": "int-\(counter)",
@@ -166,6 +178,8 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     /// Hears the agent: everything it says, in order, and then how it ended.
     private func follow(_ child: any AgentChild) {
         interrupting = false
+        turnStarting = false
+        stopWhenBegun = false
         let tool = self.tool
         // Everything it says, in order, and then how it ended.
         Task { [weak self] in
@@ -203,6 +217,9 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         case .commands(let list):
             emit.yield(.commands(list))
         case .began(let session, let model, let keySource):
+            // The turn has begun: an interrupt asked for before it is sent.
+            turnStarting = false
+            if stopWhenBegun { interrupt() }
             if let session {
                 resumeID = session
                 emit.yield(.session(session))
@@ -241,6 +258,8 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         case .background(let items):
             emit.yield(.background(items))
         case .result(let failure, let spent):
+            turnStarting = false
+            stopWhenBegun = false
             if let spent { emit.yield(.spent(spent)) }
             // An interrupt ends the turn with an error result of its own
             // (error_during_execution); that is the stop the user asked

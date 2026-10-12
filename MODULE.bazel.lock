@@ -631,7 +631,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 2fcd65dacf293a29ac538a3706df03dc04fcfa8745de888b2d0982d63bdccb90"
+          "FILE:@@//third_party/swift_packages/Package.resolved ee90a4bfdd2dca4ed9f6622b66a2a9e680649ed8bee41c5207c01758be290f12"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -645,7 +645,7 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "3c7f2dba60674111bb5475f05ab7b9dc807b1954",
+              "commit": "37babd10c98d6271f7b9830d6f362a7ad20b3d9c",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
               "env": {},
               "env_inherit": [],
