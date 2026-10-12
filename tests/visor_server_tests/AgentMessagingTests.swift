@@ -69,6 +69,12 @@ final class AgentMessagingTests: ServerTestCase {
         XCTAssertEqual(sent.text, "Queued for “Client work” (B) on \(server.hostName): it is working and takes it when its turn ends.")
     }
 
+    /// An agent under its host outlives the server that started it, and
+    /// still holds the token it was given.
+    func testTheAgentsTokenOutlivesALaunch() {
+        XCTAssertEqual(VisorServer(port: 7996).agentToken, server.agentToken)
+    }
+
     func testOnlyThisServersAgentsAndOnlyOthers() {
         server.sessions = [record("A", "One"), record("B", "Two")]
         XCTAssertNotNil(ask("sessions", from: "A", token: "wrong").error)

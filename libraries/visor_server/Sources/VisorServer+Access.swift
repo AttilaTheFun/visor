@@ -23,6 +23,14 @@ extension VisorServer {
         }
     }
 
+    /// The agents' token as kept, made the first time.
+    static func keptAgentToken() -> String {
+        if let kept = secrets.get("agentToken"), !kept.isEmpty { return kept }
+        let made = UUID().uuidString
+        secrets.set("agentToken", made)
+        return made
+    }
+
     /// The password as kept — the keychain — or, the first time, as an
     /// earlier build kept it (in its settings), moved into the keychain.
     static func keptPassword() -> String {

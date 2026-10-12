@@ -114,8 +114,10 @@ public final class VisorServer {
     var http: HTTPServer?
     var connections: [ObjectIdentifier: ClientConnection] = [:]
 
-    /// What the permission shim presents instead of the password; new per launch.
-    let agentToken = UUID().uuidString
+    /// What the agents present instead of the password (their tools, the
+    /// permission shim): kept from launch to launch, since an agent under
+    /// its host outlives the server that started it.
+    let agentToken: String
 
     /// Sessions this launch was asked to bring back into a running state:
     /// they were mid-turn when the app went away, and were named on the
@@ -126,6 +128,7 @@ public final class VisorServer {
         self.port = port
         Self.adoptFormerFolders()
         password = Self.keptPassword()
+        agentToken = Self.keptAgentToken()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()
         takeRollbackNote()
