@@ -92,7 +92,9 @@ extension VisorServer {
         }
         // What was waiting when the app went away goes now; behind a nudge
         // it waits for that turn to end, as any queued message does.
-        for record in sessions where !record.info.archived && !record.info.queued.isEmpty && !record.info.busy {
+        // (A session held while the agent before it goes gets its queue
+        // when that agent has gone: release.)
+        for record in sessions where !record.info.archived && !record.info.queued.isEmpty && !record.info.busy && !record.held {
             deliverQueued(record)
         }
         if !ids.isEmpty { broadcastSessions() }
@@ -136,15 +138,24 @@ extension VisorServer {
     /// the last one — and the next goes when the agent falls idle; the last
     /// is answered. A message that starts no turn (Codex's /goal) is
     /// followed at once by the next.
+    ///
+    /// Only to a session that can take a message now: one that is working,
+    /// or held while the agent before it goes, keeps its queue (deliver
+    /// would only put the message back, and going round again was a loop
+    /// that froze the Mac). A loop, not recursion, and it stops the moment
+    /// a message was not taken.
     func deliverQueued(_ record: SessionRecord) {
-        guard let next = record.takeNextQueued() else { return }
-        broadcastSessions()
-        deliver(next.text, to: record, images: next.images)
-        guard !record.info.queued.isEmpty else { return }
-        if record.info.busy {
-            record.process.interrupt()
-        } else {
-            deliverQueued(record)
+        while !record.held, !record.info.busy, !record.info.archived, let next = record.takeNextQueued() {
+            let waiting = record.info.queued.count
+            broadcastSessions()
+            deliver(next.text, to: record, images: next.images)
+            // Put back rather than taken: nothing more now.
+            if record.info.queued.count > waiting { return }
+            guard !record.info.queued.isEmpty else { return }
+            if record.info.busy {
+                record.process.interrupt()
+                return
+            }
         }
     }
 

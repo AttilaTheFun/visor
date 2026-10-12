@@ -100,6 +100,26 @@ final class QueuedMessagesTests: ServerTestCase {
         XCTAssertFalse(SessionRecord.clearsGoal("/goal clearly better"))
     }
 
+    /// A session held while the agent before it goes keeps its queue, and
+    /// nothing goes round: after a restart this was a loop that put each
+    /// message back and saved the sessions file without end.
+    func testAHeldSessionKeepsItsQueueUntilReleased() {
+        let agent = ScriptedAgent()
+        let record = working(agent)
+        for text in ["One", "Two"] { server.deliver(text, to: record) }
+        server.handle(.busy(false), from: record)
+        XCTAssertEqual(agent.said, ["One", "stop"])
+        record.held = true
+        server.handle(.busy(false), from: record)
+        server.deliverQueued(record)
+        server.resumePending()
+        XCTAssertEqual(agent.said, ["One", "stop"], "nothing goes while held")
+        XCTAssertEqual(record.info.queued, ["Two"], "and nothing is lost or repeated")
+        server.release(record)
+        XCTAssertEqual(agent.said, ["One", "stop", "Two"])
+        XCTAssertTrue(record.info.queued.isEmpty)
+    }
+
     func testOneQueuedMessageIsSimplySent() {
         let agent = ScriptedAgent()
         let record = working(agent)
