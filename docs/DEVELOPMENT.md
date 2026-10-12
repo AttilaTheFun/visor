@@ -171,9 +171,12 @@ it; without a head, the branch holding the newest message (never a line
 that is not a message: Claude Code hangs attachments and snapshots off
 older messages). Prompts off it are abandoned. When the file's newest
 message is on another branch (something else resumed the session), the
-user is told and the agent is resumed at this branch's newest message
-(`--resume-session-at`, Claude Code's own option) until it carries this
-branch on again. A line with no parent that is not the first
+session offers the choice (`SessionInfo.otherBranch`, that branch's latest
+prompt; an alert in the chat): keep this branch — the agent is resumed at
+its newest message (`--resume-session-at`, Claude Code's own option), and
+the next message makes it the newest again — or continue that one, which
+reads the file again from its start on the newest branch and makes the
+agent again. A line with no parent that is not the first
 (compaction boundary) CONTINUES from the line before it; a line whose
 parent was never seen is a missed line, not a fork. The indexer starts the
 tail at a line boundary (never the file size mid-write — that orphaned

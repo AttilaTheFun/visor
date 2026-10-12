@@ -64,6 +64,8 @@ extension VisorServer {
         case "unarchive": performUnarchive(envelope)
         case "restart": performRestart(envelope, from: client)
         case "restartAgent": performRestartAgent(envelope)
+        case "keepBranch": performKeepBranch(envelope)
+        case "continueBranch": performContinueBranch(envelope)
         case "end": performEnd(envelope)
         // A client's heartbeat: answered at once, to that client only.
         case "ping": client?.send(.pong())
@@ -260,6 +262,18 @@ extension VisorServer {
     private func performUnarchive(_ envelope: Envelope) {
         guard let record = session(envelope.session), record.info.archived else { return }
         unarchive(record)
+    }
+
+    private func performKeepBranch(_ envelope: Envelope) {
+        guard let record = session(envelope.session), record.wentOnElsewhere else { return }
+        record.keepBranch()
+        saveArchive()
+        broadcastSessions()
+    }
+
+    private func performContinueBranch(_ envelope: Envelope) {
+        guard let record = session(envelope.session), record.wentOnElsewhere else { return }
+        continueOtherBranch(record)
     }
 
     private func performRestartAgent(_ envelope: Envelope) {

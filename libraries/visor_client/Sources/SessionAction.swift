@@ -13,6 +13,11 @@ public enum SessionAction: Equatable, Sendable {
     /// Ends the session's agent and starts it again on the same
     /// conversation; a turn it was working on is carried on.
     case restartAgent
+    /// The conversation went on elsewhere (`SessionInfo.otherBranch`): keep
+    /// to this branch, which the next message carries on, or continue the
+    /// newest one instead.
+    case keepBranch
+    case continueBranch
     /// Ends the session and its agent.
     case end
 }

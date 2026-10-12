@@ -1115,6 +1115,12 @@ public final class AgentServerConnection: Identifiable {
     /// conversation: what to do with one that is stuck, or holds too much.
     public func restartAgent(_ sessionID: String) { act(.restartAgent, on: sessionID) }
 
+    /// The conversation went on elsewhere: keep to the branch shown (the
+    /// next message carries it on and makes it the newest again), or
+    /// continue the newest branch instead.
+    public func keepBranch(_ sessionID: String) { act(.keepBranch, on: sessionID) }
+    public func continueBranch(_ sessionID: String) { act(.continueBranch, on: sessionID) }
+
     /// Whether sessions move to and from this server (SessionMigration).
     public var migrates: Bool { server.migrates }
 

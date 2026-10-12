@@ -141,6 +141,29 @@ extension VisorServer {
         broadcastSessions()
     }
 
+    /// The conversation carries on from the newest branch, at the user's
+    /// word, rather than the one the session kept to: the chat is read
+    /// again from it, and the agent (which holds the old branch while it
+    /// runs) is made again, so the next message resumes where Claude Code
+    /// would — on that branch. A turn in flight is cut short.
+    func continueOtherBranch(_ record: SessionRecord) {
+        Self.log("continuing the newest branch of \(record.info.title) (\(record.info.id))")
+        record.head = nil
+        record.leaf = nil
+        record.otherBranch = nil
+        record.branchKept = false
+        record.info.otherBranch = nil
+        record.switchingBranch = true
+        // The cache kept no rows for a branch it was not on: the file is
+        // read again from its start.
+        do { try ServerCache.shared.resetSource(record.info.id, state: SourceState(path: "", identity: "", bytes: 0, nextSeq: 0)) } catch {
+            Self.log("index: reset \(record.info.id): \(String(describing: error))")
+        }
+        rebuild(record, rereading: true)
+        saveArchive()
+        broadcastSessions()
+    }
+
     /// The agent before this one is gone: what waited for that goes over.
     func release(_ record: SessionRecord) {
         record.held = false

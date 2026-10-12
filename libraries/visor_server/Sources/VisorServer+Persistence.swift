@@ -86,7 +86,8 @@ extension VisorServer {
             record.reportedUsage = item.reportedUsage
             record.head = item.head
             record.leaf = item.leaf
-            record.wentOnElsewhere = item.wentOnElsewhere ?? false
+            record.otherBranch = item.otherBranch
+            record.branchKept = item.branchKept ?? false
             // The outbox, lined up with its words (a file from before it was
             // kept has words and no files).
             let files = item.queuedImages ?? []

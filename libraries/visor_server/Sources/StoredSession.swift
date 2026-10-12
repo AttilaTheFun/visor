@@ -33,13 +33,14 @@ struct StoredSession: Codable {
     /// Where the conversation stood in the agent's file (SessionRecord).
     var head: String?
     var leaf: String?
-    var wentOnElsewhere: Bool?
+    var otherBranch: String?
+    var branchKept: Bool?
     static let currentShape = 2
 
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
          interrupted: Bool? = nil, agentPID: Int32? = nil, shownPrompts: [String]? = nil, notice: String? = nil,
          queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil,
-         head: String? = nil, leaf: String? = nil, wentOnElsewhere: Bool? = nil) {
+         head: String? = nil, leaf: String? = nil, otherBranch: String? = nil, branchKept: Bool? = nil) {
         self.info = info
         self.entries = entries
         self.resumeID = resumeID
@@ -53,7 +54,8 @@ struct StoredSession: Codable {
         self.host = host
         self.head = head
         self.leaf = leaf
-        self.wentOnElsewhere = wentOnElsewhere
+        self.otherBranch = otherBranch
+        self.branchKept = branchKept
     }
 
     /// Every field but the session itself is optional, so a file written
@@ -73,6 +75,7 @@ struct StoredSession: Codable {
         host = try c.decodeIfPresent(StoredHost.self, forKey: .host)
         head = try c.decodeIfPresent(String.self, forKey: .head)
         leaf = try c.decodeIfPresent(String.self, forKey: .leaf)
-        wentOnElsewhere = try c.decodeIfPresent(Bool.self, forKey: .wentOnElsewhere)
+        otherBranch = try c.decodeIfPresent(String.self, forKey: .otherBranch)
+        branchKept = try c.decodeIfPresent(Bool.self, forKey: .branchKept)
     }
 }

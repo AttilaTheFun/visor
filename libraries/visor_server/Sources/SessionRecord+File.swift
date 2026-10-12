@@ -72,14 +72,20 @@ extension SessionRecord {
     /// forked elsewhere and moved on; the chat follows, and says so.
     func apply(loaded: SessionIndexer.Loaded) {
         var forked = false
-        if let last = shownPrompts.last, loaded.abandoned.contains(last) {
+        if !switchingBranch, let last = shownPrompts.last, loaded.abandoned.contains(last) {
             notice = Self.forkNotice(lost: shownPrompts.filter { loaded.abandoned.contains($0) }.count)
+            forked = true
+        }
+        if switchingBranch {
+            // Moved to the newest branch at the user's word: what this chat
+            // showed is behind it, which is no fork to tell of.
+            switchingBranch = false
             forked = true
         }
         let told = notice != nil
         head = loaded.head ?? head
         leaf = loaded.leaf ?? leaf
-        wentOn(elsewhere: loaded.wentOnElsewhere)
+        wentOn(elsewhere: loaded.elsewhere)
         shownPrompts = Array(loaded.prompts.suffix(Self.rememberedPrompts))
         moreBefore = loaded.more
         let before = entries.map(\.id)
@@ -123,17 +129,24 @@ extension SessionRecord {
         if !changed.isEmpty { onFileRows?(changed) }
     }
 
-    /// Whether the file's newest message is on another branch: told once
-    /// when it comes to be, and the agent resumed at this branch's newest
-    /// message until it carries this branch on again.
-    func wentOn(elsewhere: Bool) {
-        guard elsewhere != wentOnElsewhere else { return }
-        wentOnElsewhere = elsewhere
-        if elsewhere {
-            notice = "Something else carried this conversation on, on a branch of its own beside this one (another Claude Code resumed it). "
-                + "Visor keeps to its own branch, and its agent carries on from there."
-            onFileReplaced?()
-        }
+    /// The file's newest message is on another branch (its latest prompt),
+    /// or back on this one (nil): offered to the user to choose between
+    /// (`info.otherBranch`) unless they kept this branch already over the
+    /// same one; meanwhile the agent resumes on this branch.
+    func wentOn(elsewhere: String?) {
+        guard elsewhere != otherBranch else { return }
+        // The other branch went on further: the choice is offered again.
+        if elsewhere != nil { branchKept = false }
+        otherBranch = elsewhere
+        info.otherBranch = branchKept ? nil : elsewhere
+        onInfoChanged?()
+    }
+
+    /// The user keeps this branch: not offered again until the other goes
+    /// on, and the agent carries this one on with the next message.
+    func keepBranch() {
+        branchKept = true
+        info.otherBranch = nil
     }
 
     /// How many of these rows are the user's, in these words.

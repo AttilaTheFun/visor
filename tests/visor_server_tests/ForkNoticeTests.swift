@@ -77,13 +77,17 @@ final class ForkNoticeTests: ServerTestCase {
         try append([line("user", "p3", "a1", "Also CHERRY"), line("assistant", "a3", "p3", "OK-CHERRY")])
         try await Task.sleep(nanoseconds: 1_200_000_000)
         XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
-        XCTAssertTrue(record.wentOnElsewhere)
-        XCTAssertEqual(record.notice?.hasPrefix("Something else carried this conversation on"), true)
+        XCTAssertEqual(record.info.otherBranch, "Also CHERRY", "offered to the user, by its latest prompt")
+        XCTAssertNil(record.notice)
         XCTAssertEqual(record.shownPrompts, ["p1", "p2"])
         XCTAssertEqual(record.leaf, "a2")
-        XCTAssertGreaterThanOrEqual(replaced, 1)
         XCTAssertEqual(record.stored.head, "p2")
-        XCTAssertEqual(record.stored.wentOnElsewhere, true)
+        XCTAssertEqual(record.stored.otherBranch, "Also CHERRY")
+
+        // Kept: not offered again, and the agent still resumes here.
+        record.keepBranch()
+        XCTAssertNil(record.info.otherBranch)
+        XCTAssertTrue(record.wentOnElsewhere)
 
         // Its agent carries on from there: the conversation is this branch
         // again, and the next resume is Claude Code's own.
@@ -93,6 +97,7 @@ final class ForkNoticeTests: ServerTestCase {
         XCTAssertEqual(texts(record).suffix(2), ["Also DATE", "OK-DATE"])
         XCTAssertFalse(texts(record).contains("OK-CHERRY"))
         XCTAssertFalse(record.wentOnElsewhere)
+        XCTAssertNil(record.info.otherBranch)
         XCTAssertNil(record.notice)
         XCTAssertEqual(record.head, "p4")
         XCTAssertEqual(record.leaf, "a4")
@@ -181,5 +186,29 @@ final class ForkNoticeTests: ServerTestCase {
         await record.waitForFile(past: 0)
         XCTAssertEqual(texts(record).count, 6)
         XCTAssertNil(record.notice)
+    }
+
+    func testContinuingTheOtherBranchReadsItAndStartsTheChatOver() async throws {
+        VisorServer.storeRoot = FileManager.default.temporaryDirectory.appendingPathComponent("visor-branch-server-" + UUID().uuidString)
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7993)
+        let record = record()
+        server.sessions = [record]
+        record.followFile()
+        await record.waitForFile(past: 0)
+        try append([line("user", "p3", "a1", "Also CHERRY"), line("assistant", "a3", "p3", "OK-CHERRY")])
+        try await Task.sleep(nanoseconds: 1_200_000_000)
+        XCTAssertEqual(record.info.otherBranch, "Also CHERRY")
+        let generation = record.generation
+        let loads = record.fileLoads
+
+        server.continueOtherBranch(record)
+        await record.waitForFile(past: loads)
+        XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also CHERRY", "OK-CHERRY"])
+        XCTAssertNil(record.info.otherBranch)
+        XCTAssertFalse(record.wentOnElsewhere)
+        XCTAssertNil(record.notice, "moved at the user's word: no fork to tell of")
+        XCTAssertEqual(record.head, "p3")
+        XCTAssertNotEqual(record.generation, generation, "clients start over from the branch")
     }
 }

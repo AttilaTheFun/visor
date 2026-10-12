@@ -48,6 +48,8 @@ extension VisorAgentServer {
         case .archive: reply = try await call("POST", base + "/archive")
         case .unarchive: reply = try await call("POST", base + "/unarchive")
         case .restartAgent: reply = try await call("POST", base + "/restartAgent")
+        case .keepBranch: reply = try await call("POST", base + "/keepBranch")
+        case .continueBranch: reply = try await call("POST", base + "/continueBranch")
         case .end: reply = try await call("DELETE", base)
         }
         return reply.sessions ?? []

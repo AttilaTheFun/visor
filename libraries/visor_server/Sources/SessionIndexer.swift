@@ -23,8 +23,9 @@ actor SessionIndexer {
         /// with), and its newest message.
         let head: String?
         let leaf: String?
-        /// The file's newest message is on another branch.
-        let wentOnElsewhere: Bool
+        /// The file's newest message is on another branch: that branch's
+        /// latest prompt ("" when it has none), or nil.
+        let elsewhere: String?
     }
 
     /// A line of the conversation as it was written, with the rows it
@@ -39,12 +40,13 @@ actor SessionIndexer {
 
     /// What the indexer says, in order: the session as it stands once the
     /// cache has caught up with the file, then what the file gains — the
-    /// conversation's lines, and whether the file's newest message is now
-    /// on another branch.
+    /// conversation's lines, and when the file's newest message comes to be
+    /// on another branch (that branch's latest prompt) or back on this one
+    /// (nil).
     enum Event: Sendable {
         case loaded(Loaded)
         case lines([Line])
-        case elsewhere(Bool)
+        case elsewhere(String?)
     }
 
     let sessionID: String
@@ -59,8 +61,10 @@ actor SessionIndexer {
     private let parser: any AgentLogParser
     /// Where the conversation stood when last read: its branch is kept to.
     private let head: String?
-    /// Whether the newest message read so far is on another branch.
+    /// Whether the newest message read so far is on another branch, and
+    /// the newest prompt read on any branch, by uuid with its words.
     private var elsewhere = false
+    private var newestPrompt: (uuid: String, text: String)?
 
     /// The cache's word for a file read whole by this build: an earlier one
     /// left the rows of lines it took for another branch unread, and a
@@ -90,10 +94,10 @@ actor SessionIndexer {
         catchUp()
         continuation.yield(.loaded(loaded()))
         for await batch in FileTail.batches(of: url, startingAt: state.bytes, watching: ServerPlatform.current.files) {
-            let was = elsewhere
+            let was = otherBranch
             let taken = take(parser.lines(in: batch.data), endingAt: batch.position)
             if !taken.isEmpty { continuation.yield(.lines(taken)) }
-            if elsewhere != was { continuation.yield(.elsewhere(elsewhere)) }
+            if otherBranch != was { continuation.yield(.elsewhere(otherBranch)) }
         }
         continuation.finish()
     }
@@ -133,6 +137,7 @@ actor SessionIndexer {
             let seq = state.nextSeq
             state.nextSeq += 1
             lineRecords.append(SourceNode(seq: seq, key: line.uuid, parentKey: line.parentUuid, kind: line.type, isPrompt: line.isPrompt))
+            note(prompt: line)
             guard let record = line.record else { continue }
             for row in assembler.rows(for: record) {
                 rowRecords.append(PlacedMessage(message: row, seq: seq, sourceKey: line.uuid))
@@ -153,10 +158,31 @@ actor SessionIndexer {
         members = shape.members
         abandoned = shape.abandoned
         elsewhere = shape.wentOnElsewhere
+        // The other branch's latest prompt, by its row, before the rows of
+        // abandoned branches go: an earlier reading may have read it.
+        if elsewhere, let other = nodes.last(where: { $0.isPrompt && $0.uuid.map(shape.abandoned.contains) == true })?.uuid,
+           newestPrompt?.uuid != other, let seq = store.seq(of: "user-file-" + other, in: sessionID),
+           let row = store.messages(in: sessionID, limit: 1, before: seq + 1).messages.last {
+            newestPrompt = (other, row.text)
+        }
         do { try store.removeMessages(in: sessionID, sourceKeys: shape.abandoned) } catch { VisorServer.log("index: drop \(self.sessionID): \(String(describing: error))") }
         let page = store.messages(in: sessionID, limit: window)
         return Loaded(rows: page.messages, more: page.more, prompts: shape.prompts, abandoned: shape.abandoned, abandonedPrompts: shape.abandonedPrompts,
-                      head: shape.head, leaf: shape.leaf, wentOnElsewhere: shape.wentOnElsewhere)
+                      head: shape.head, leaf: shape.leaf, elsewhere: otherBranch)
+    }
+
+    /// The other branch's latest prompt while the file's newest message is
+    /// on it ("" when it has none read), or nil.
+    private var otherBranch: String? {
+        guard elsewhere else { return nil }
+        guard let newestPrompt, !members.contains(newestPrompt.uuid) else { return "" }
+        return newestPrompt.text
+    }
+
+    /// Keeps the newest prompt read, on whichever branch.
+    private func note(prompt line: ClaudeLine) {
+        guard line.isPrompt, let uuid = line.uuid, case .user(let text, _)? = line.record?.kind else { return }
+        newestPrompt = (uuid, text)
     }
 
     static func isMessage(_ kind: String) -> Bool { kind == "user" || kind == "assistant" }
@@ -173,6 +199,7 @@ actor SessionIndexer {
             let seq = state.nextSeq
             state.nextSeq += 1
             lineRecords.append(SourceNode(seq: seq, key: line.uuid, parentKey: line.parentUuid, kind: line.type, isPrompt: line.isPrompt))
+            note(prompt: line)
             // Under a prompt abandoned by a fork: in the tree, not the
             // conversation. A parent never seen is a line missed, not a
             // fork, and the line is kept.

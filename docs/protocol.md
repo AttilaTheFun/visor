@@ -90,6 +90,7 @@ under `/api`.
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
 | `POST /sessions/{id}/stop` `…/archive` `…/unarchive` | | same |
 | `POST /sessions/{id}/restartAgent` | | same: the session's agent is ended and a new one made on the same conversation; a turn it was working on is carried on by a nudge that goes first |
+| `POST /sessions/{id}/keepBranch` `…/continueBranch` | | same: when the conversation went on elsewhere (`otherBranch` in the session's info: the other branch's latest prompt), keep to the branch shown — the next message carries it on, resumed there with `--resume-session-at` — or continue the newest branch: the chat is read again from it (a new generation) and the agent is made again, resuming there |
 | `POST /sessions/{id}/permissions` | `skipPermissions` | same |
 | `POST /sessions/{id}/settings` | `model`, `effort` | same |
 | `POST /sessions/{id}/approve` | `id`, `allow` | same |
