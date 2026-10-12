@@ -120,8 +120,8 @@ enum ProjectSurvey {
         let branch = await git(["symbolic-ref", "--short", "-q", "HEAD"], in: top).flatMap { $0.isEmpty ? nil : $0 }
         let changes = await git(["status", "--porcelain"], in: top).map { !$0.isEmpty } ?? true
         let unpushed = await git(["rev-list", "-n", "1", "HEAD", "--not", "--remotes"], in: top).map { !$0.isEmpty } ?? true
-        let files = await carried(in: top)
-        let size = files.reduce(0) { $0 + size(of: top + "/" + $1) } + folderSize(top + "/.git")
+        var size = folderSize(top + "/.git")
+        for file in await carried(in: top) { size += Self.size(of: top + "/" + file) }
         return MigrationProject(path: top, remote: remote, branch: branch, commit: commit, unshared: remote == nil || changes || unpushed,
                                 size: size)
     }

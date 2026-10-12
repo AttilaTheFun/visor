@@ -34,7 +34,7 @@ final class Outlet: Sendable {
         open.withLock { isOpen in
             guard isOpen else { return }
             isOpen = false
-            Foundation.close(descriptor)
+            closeDescriptor(descriptor)
         }
     }
 
@@ -47,13 +47,20 @@ final class Outlet: Sendable {
     }
 }
 
+// The system's calls by name, outside the type whose own `write` and
+// `close` would hide them (naming their module differs between systems).
+
+private func closeDescriptor(_ descriptor: Int32) {
+    _ = close(descriptor)
+}
+
 /// All of `data` to a descriptor, as far as it will take it.
 private func writeAll(_ descriptor: Int32, _ data: Data) {
     data.withUnsafeBytes { buffer in
         guard let base = buffer.baseAddress else { return }
         var offset = 0
         while offset < buffer.count {
-            let written = Foundation.write(descriptor, base + offset, buffer.count - offset)
+            let written = write(descriptor, base + offset, buffer.count - offset)
             if written < 0, errno == EINTR { continue }
             if written <= 0 { break }
             offset += written

@@ -75,9 +75,9 @@ final class HostedChild: AgentChild {
         process.environment = environment
         process.standardInput = FileHandle.nullDevice
         let log = folder.appendingPathComponent("hosts.log", isDirectory: false)
-        if !FileManager.default.fileExists(atPath: log.path) { FileManager.default.createFile(atPath: log.path, contents: nil) }
+        if !FileManager.default.fileExists(atPath: log.path) { _ = FileManager.default.createFile(atPath: log.path, contents: nil) }
         if let handle = try? FileHandle(forWritingTo: log) {
-            handle.seekToEndOfFile()
+            _ = handle.seekToEndOfFile()
             process.standardOutput = handle
             process.standardError = handle
         }

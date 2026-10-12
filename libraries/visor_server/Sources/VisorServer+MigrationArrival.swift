@@ -75,13 +75,13 @@ extension VisorServer {
         }
         let url = move.folder.appendingPathComponent(file, isDirectory: false)
         let offset = body.offset ?? 0
-        if offset == 0 { FileManager.default.createFile(atPath: url.path, contents: nil) }
+        if offset == 0 { _ = FileManager.default.createFile(atPath: url.path, contents: nil) }
         guard Self.fileSize(url) == offset, let handle = try? FileHandle(forWritingTo: url) else {
             return .error("That piece does not follow on from what was written (\(Self.fileSize(url)) bytes).")
         }
         defer { try? handle.close() }
         do {
-            try handle.seekToEnd()
+            _ = try handle.seekToEnd()
             try handle.write(contentsOf: data)
         } catch {
             return .error("Could not write: \(error.localizedDescription)")
