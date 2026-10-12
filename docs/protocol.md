@@ -215,14 +215,18 @@ workspace-write sandbox.
 
 Every Claude and Codex session the menu bar app starts gets the same MCP
 server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`), with
-four tools: `list_sessions`, `send_message(session, server?, text)`,
-`read_messages(session, server?, count)` and `message_status(message_id)`.
+four tools: `list_sessions`, `send_message(session, server, text)`,
+`read_messages(session, server, count)` and `message_status(message_id)`:
+a session is always named with its computer's server id (the server also
+takes the session id alone, for scripts from before 0.31).
 Each call is a WebSocket connection from the script to the app carrying
 `{"type":"agent","token":<agent token>,"client":<calling session>,"mode":"sessions"|"send"|"read"|"status","session":<other session>,"server":<its server's id or name>,"messageID":…,"text":…,"rows":<count>,"id":…}`,
 answered with `{"type":"agent_result","id":…,"text":…,"messageID":…}` or `…,"error":…}`.
 A session is never offered itself, nor ended or archived ones. A message is
-delivered as a new turn (queued while the other session works), prefixed
-`[Message from the Visor session "<title>" (<id>), not from the user. …]`.
+delivered as a new turn of its own (queued while the other session works,
+and never joined to other queued messages), headed with who sent it and who
+it is for, each by name, id and computer:
+`[Message from the Visor session "<title>" (<id>) on <computer> (server <server id>), to this session "<title>" (<id>) on <computer> — not from the user. To answer, use send_message with session <id> and server <server id>.]`.
 Node must be on the PATH (as it already is for approvals).
 
 Sessions on other computers are reached through a client connected to
@@ -257,9 +261,7 @@ receipt is kept; the agent that asked is answered with it (a send waits up
 to 8 seconds, a read 20), or told the message waits, with its id for
 `message_status` (`waiting`, `sent`, `queued`, `read`, `failed`, or
 `expired` after a day uncarried). A message carried from another server is
-prefixed `[Message from the Visor session "<title>" (<id>) on <computer>,
-not from the user. To answer, use send_message with session <id> and
-server <server id>.]`.
+headed the same way, its sender's computer being that server.
 
 A client takes part with each server unless its user turned that off for
 that computer (`AgentServerRecord.relay`; on by default, and a fork may

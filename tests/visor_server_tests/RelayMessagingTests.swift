@@ -120,7 +120,7 @@ final class RelayMessagingTests: ServerTestCase {
         XCTAssertEqual(receipts.map(\.outcome), [.queued])
         let answer = await sent.value
         XCTAssertNil(answer.error)
-        XCTAssertEqual(answer.text, "Queued for “Laptop work” on Laptop: it is working and takes it when its turn ends.")
+        XCTAssertEqual(answer.text, "Queued for “Laptop work” (B) on Laptop: it is working and takes it when its turn ends.")
 
         let queued = try XCTUnwrap(there.sessions.first?.info.queued.first)
         XCTAssertTrue(queued.contains("“Mini work” (A) on \(here.hostName)"), queued)
@@ -179,7 +179,7 @@ final class RelayMessagingTests: ServerTestCase {
         // A client comes; the agent asks after it.
         exchange(from: here, to: there)
         let status = await ask("status", messageID: id)
-        XCTAssertEqual(status.text, "Sent to “Laptop work” on Laptop.")
+        XCTAssertEqual(status.text, "Sent to “Laptop work” (B) on Laptop.")
         let unknown = await ask("status", messageID: "nope")
         XCTAssertNotNil(unknown.error)
     }
