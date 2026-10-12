@@ -19,5 +19,6 @@ swift_library(
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
-    deps = ["@swiftpkg_swift_nio_ssh//:NIOSSH"],
+    deps = [
+        "//:foundation","@swiftpkg_swift_nio_ssh//:NIOSSH"],
 )

@@ -14,6 +14,7 @@ swift_library(
     module_name = "VisorServerMac",
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
+        "//:foundation",
         "//libraries/claude_transcript",
         "//libraries/visor_server",
         "//libraries/visor_server_apple",

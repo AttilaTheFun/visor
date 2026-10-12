@@ -9,4 +9,5 @@ swift_library(
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorProtocol",
+    deps = ["//:foundation"],
 )

@@ -16,6 +16,7 @@ swift_library(
     srcs = glob(["Sources/**/*.swift"]) + ["//applications/visor_ios:host_srcs"],
     module_name = "VisorMacOSHost",
     deps = [
+        "//:foundation",
         "//libraries/visor_client",
         "//libraries/visor_services",
         "//libraries/visor_ui",

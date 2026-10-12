@@ -27,6 +27,7 @@ swift_library(
     srcs = [":host_srcs"],
     module_name = "VisorIOSHost",
     deps = [
+        "//:foundation",
         "//libraries/visor_client",
         "//libraries/visor_services",
         "//libraries/visor_ui",
@@ -77,6 +78,7 @@ swift_library(
     copts = STRICT_SWIFT,
     srcs = glob(["Widget/*.swift"]),
     module_name = "VisorWidget",
+    deps = ["//:foundation"],
 )
 
 ios_extension(

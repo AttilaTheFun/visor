@@ -20,6 +20,7 @@ swift_library(
     srcs = ["VisorProbe.swift"],
     module_name = "VisorProbe",
     tags = ["manual"],
+    deps = ["//:foundation"],
 )
 
 ios_ui_test(

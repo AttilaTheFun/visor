@@ -17,6 +17,7 @@ swift_library(
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorServer",
     deps = [
+        "//:foundation",
         "//libraries/claude_transcript",
         "//libraries/message_cache",
         "//libraries/visor_protocol",

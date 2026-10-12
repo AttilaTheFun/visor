@@ -16,6 +16,7 @@ swift_library(
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorMenuBar",
     deps = [
+        "//:foundation",
         "//libraries/visor_protocol",
         "//libraries/visor_server",
         "//libraries/visor_server_apple",

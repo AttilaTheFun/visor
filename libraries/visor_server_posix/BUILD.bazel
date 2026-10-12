@@ -17,6 +17,7 @@ swift_library(
     module_name = "VisorServerPOSIX",
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
+        "//:foundation",
         ":visor_posix_c",
         "//libraries/visor_server",
     ],
