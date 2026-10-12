@@ -186,4 +186,60 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(branch.records.count, 6)
         XCTAssertEqual(branch.lastPrompt, "p1")
     }
+    private func nodes(_ lines: [ClaudeLine]) -> [ClaudeBranch.Node] {
+        lines.map { ClaudeBranch.Node(uuid: $0.uuid, parentUuid: $0.parentUuid, isPrompt: $0.isPrompt, isMessage: $0.isMessage) }
+    }
+
+    func testALineBesideAnOlderMessageDecidesNothing() {
+        // Claude Code writes attachments between messages, and one may
+        // hang off an older message: the newest message decides the
+        // branch, not the last line.
+        let text = """
+        {"type":"user","uuid":"p1","message":{"role":"user","content":"one"}}
+        {"type":"assistant","uuid":"a1","parentUuid":"p1","message":{"role":"assistant","content":[{"type":"text","text":"1"}]}}
+        {"type":"user","uuid":"p2","parentUuid":"a1","message":{"role":"user","content":"two"}}
+        {"type":"assistant","uuid":"a2","parentUuid":"p2","message":{"role":"assistant","content":[{"type":"text","text":"2"}]}}
+        {"type":"attachment","uuid":"x","parentUuid":"a1","attachment":{"type":"deferred_tools_record"}}
+        """
+        let branch = ClaudeBranch.current(of: ClaudeTranscriptParser.lines(in: Data(text.utf8)))
+        XCTAssertTrue(branch.abandoned.isEmpty)
+        XCTAssertEqual(branch.lastPrompt, "p2")
+    }
+
+    func testAHeadKeepsToItsBranchWhenTheFileGoesOnElsewhere() {
+        // Visor's conversation is APPLE then CHERRY (its head, p2); another
+        // agent then wrote BANANA from APPLE, last.
+        let kept = ClaudeBranch.current(nodes: nodes(forkedLines()), head: "p2")
+        XCTAssertEqual(kept.abandoned, ["p3", "m3", "a3"])
+        XCTAssertEqual(kept.head, "p2")
+        XCTAssertEqual(kept.leaf, "a2", "where its agent resumes")
+        XCTAssertTrue(kept.wentOnElsewhere)
+        // With no head, the newest message decides, as Claude Code's
+        // own resume would.
+        let plain = ClaudeBranch.current(nodes: nodes(forkedLines()))
+        XCTAssertEqual(plain.head, "p3")
+        XCTAssertEqual(plain.leaf, "a3")
+        XCTAssertFalse(plain.wentOnElsewhere)
+    }
+
+    func testAHeadFollowsWhatCarriesOnFromIt() {
+        // Two tools at once, then a turn from beside the first result (a
+        // terminal resuming the same conversation): all of it carries on
+        // from the head's turn.
+        let text = """
+        {"type":"user","uuid":"p1","message":{"role":"user","content":"go"}}
+        {"type":"assistant","uuid":"a1","parentUuid":"p1","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}}
+        {"type":"assistant","uuid":"a2","parentUuid":"a1","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Read","input":{}}]}}
+        {"type":"user","uuid":"r1","parentUuid":"a1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"one"}]}}
+        {"type":"user","uuid":"r2","parentUuid":"a2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t2","content":"two"}]}}
+        {"type":"assistant","uuid":"a3","parentUuid":"r2","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}
+        {"type":"user","uuid":"p2","parentUuid":"a3","message":{"role":"user","content":"and then"}}
+        {"type":"assistant","uuid":"a4","parentUuid":"p2","message":{"role":"assistant","content":[{"type":"text","text":"then"}]}}
+        """
+        let shape = ClaudeBranch.current(nodes: nodes(ClaudeTranscriptParser.lines(in: Data(text.utf8))), head: "p1")
+        XCTAssertTrue(shape.abandoned.isEmpty)
+        XCTAssertEqual(shape.head, "p2")
+        XCTAssertEqual(shape.leaf, "a4")
+        XCTAssertFalse(shape.wentOnElsewhere)
+    }
 }

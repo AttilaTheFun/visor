@@ -84,6 +84,8 @@ final class TranscriptStoreTests: ServerTestCase {
                 try handle.close()
             case .lines(let lines):
                 grown += lines
+            case .elsewhere:
+                break
             }
             if grown.count >= 2 { break }
         }

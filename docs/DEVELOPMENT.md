@@ -164,9 +164,16 @@ session list and a suffix of rows; the queue is NOT archived (ephemeral).
 emits deltas, status and busy only; rows come from Claude Code's own
 `~/.claude/projects/<cwd-slug>/<session>.jsonl`, read by a `SessionIndexer`
 (an actor) into the **message cache**; the record reads its events in order.
-The file is a tree (uuid/parentUuid); `ClaudeBranch.current` picks the
-branch holding the last line; prompts off it are abandoned forks (the
-user gets a notice); a line with no parent that is not the first
+The file is a tree (uuid/parentUuid); `ClaudeBranch.current` keeps to
+the branch the session was on — its head, the prompt its latest turn
+began with, kept in sessions.json — and follows whatever carries on from
+it; without a head, the branch holding the newest message (never a line
+that is not a message: Claude Code hangs attachments and snapshots off
+older messages). Prompts off it are abandoned. When the file's newest
+message is on another branch (something else resumed the session), the
+user is told and the agent is resumed at this branch's newest message
+(`--resume-session-at`, Claude Code's own option) until it carries this
+branch on again. A line with no parent that is not the first
 (compaction boundary) CONTINUES from the line before it; a line whose
 parent was never seen is a missed line, not a fork. The indexer starts the
 tail at a line boundary (never the file size mid-write — that orphaned
@@ -177,7 +184,8 @@ trimmed); file rows insert before trailing unsettled user rows.
 **Message cache** (`libraries/message_cache`, module `MessageCache`): one
 API over a `MessageStorage` — `SQLiteStorage` (SQLite.swift; defines
 `MESSAGE_CACHE_SQLITE`, selected on iOS/macOS in the BUILD) or
-`MemoryStorage` (web). Tables: sources (path, identity=inode, bytes,
+`MemoryStorage` (web). Tables: sources (path, identity=inode and the reading's version — a new
+version reads every file again once, bytes,
 nextSeq), syncs (revision, generation), nodes (the source tree), messages
 (seq, id, role, text, source key, JSON of the row), messages_fts (FTS5).
 Server cache: `~/Library/Application Support/com.LoganShire.VisorServer.macOS/

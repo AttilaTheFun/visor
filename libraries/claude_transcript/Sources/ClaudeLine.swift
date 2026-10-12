@@ -27,4 +27,7 @@ public struct ClaudeLine: Sendable, Equatable {
         if case .user = record?.kind { return true }
         return false
     }
+    /// Whether this is a message — the user's or the assistant's — rather
+    /// than something written beside one (an attachment, a snapshot).
+    public var isMessage: Bool { type == "user" || type == "assistant" }
 }

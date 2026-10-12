@@ -33,6 +33,8 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         guard let id = resumeID else { return nil }
         return "cd \(ClaudeProcess.quoted(cwd)) && \(tool) --resume \(id)"
     }
+    /// The message a resume picks the conversation up at (`resume(at:)`).
+    private var resumeAt: String?
     private var counter = 0
     /// Set by `interrupt()`: the error result that follows is the turn
     /// ending on request, not a failure to show.
@@ -75,6 +77,8 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     }
 
     public var processID: Int32? { running()?.pid }
+
+    public func resume(at message: String?) { resumeAt = message }
 
     var hostedChild: HostedChild? { running() as? HostedChild }
     var carried: [String: String] { [:] }
@@ -143,7 +147,12 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         }
         if let model, !model.isEmpty { args += ["--model", model] }
         if let effort, !effort.isEmpty { args += ["--effort", effort] }
-        if let resumeID { args += ["--resume", resumeID] }
+        if let resumeID {
+            args += ["--resume", resumeID]
+            // Claude Code's own option, which the Agent SDK's resumeSessionAt
+            // passes; the OpenRouter CLI does not take it.
+            if let resumeAt, tool == "claude" { args += ["--resume-session-at", resumeAt] }
+        }
         // The agent is told which session it is, so it can name itself
         // when it asks the server to restart (VISOR_SESSION).
         let environment = ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }

@@ -19,6 +19,12 @@ actor SessionIndexer {
         let prompts: [String]
         let abandoned: Set<String>
         let abandonedPrompts: Int
+        /// Where the conversation stands (the prompt its latest turn began
+        /// with), and its newest message.
+        let head: String?
+        let leaf: String?
+        /// The file's newest message is on another branch.
+        let wentOnElsewhere: Bool
     }
 
     /// A line of the conversation as it was written, with the rows it
@@ -26,15 +32,19 @@ actor SessionIndexer {
     struct Line: Sendable {
         let uuid: String?
         let isPrompt: Bool
+        let isMessage: Bool
         let record: ClaudeRecord?
         let rows: [TranscriptEntry]
     }
 
     /// What the indexer says, in order: the session as it stands once the
-    /// cache has caught up with the file, then what the file gains.
+    /// cache has caught up with the file, then what the file gains — the
+    /// conversation's lines, and whether the file's newest message is now
+    /// on another branch.
     enum Event: Sendable {
         case loaded(Loaded)
         case lines([Line])
+        case elsewhere(Bool)
     }
 
     let sessionID: String
@@ -47,8 +57,18 @@ actor SessionIndexer {
     private var state: SourceState
     /// The agent's log format, read into lines of Claude's shape.
     private let parser: any AgentLogParser
+    /// Where the conversation stood when last read: its branch is kept to.
+    private let head: String?
+    /// Whether the newest message read so far is on another branch.
+    private var elsewhere = false
 
-    init(store: MessageCache, sessionID: String, url: URL, window: Int, format: AgentLog.Format = .claude) {
+    /// The cache's word for a file read whole by this build: an earlier one
+    /// left the rows of lines it took for another branch unread, and a
+    /// file it read is read again, once.
+    static let reading = 2
+
+    init(store: MessageCache, sessionID: String, url: URL, window: Int, format: AgentLog.Format = .claude, head: String? = nil) {
+        self.head = head
         parser = format.parser()
         self.store = store
         self.sessionID = sessionID
@@ -70,8 +90,10 @@ actor SessionIndexer {
         catchUp()
         continuation.yield(.loaded(loaded()))
         for await batch in FileTail.batches(of: url, startingAt: state.bytes, watching: ServerPlatform.current.files) {
+            let was = elsewhere
             let taken = take(parser.lines(in: batch.data), endingAt: batch.position)
             if !taken.isEmpty { continuation.yield(.lines(taken)) }
+            if elsewhere != was { continuation.yield(.elsewhere(elsewhere)) }
         }
         continuation.finish()
     }
@@ -89,7 +111,7 @@ actor SessionIndexer {
     /// it was — and writes it down.
     private func catchUp() {
         let facts = fileFacts()
-        let identity = String(facts.inode)
+        let identity = "\(facts.inode)/\(Self.reading)"
         if let kept = store.sourceState(of: sessionID), kept.path == url.path, kept.identity == identity, kept.bytes <= facts.size {
             state = kept
             // Reading on from where the cache stopped: a log that is a list
@@ -124,13 +146,20 @@ actor SessionIndexer {
 
     /// The branch, from the tree the cache holds, and the rows to show.
     private func loaded() -> Loaded {
-        let shape = ClaudeBranch.current(nodes: store.nodes(in: sessionID).map { ClaudeBranch.Node(uuid: $0.key, parentUuid: $0.parentKey, isPrompt: $0.isPrompt) })
+        let nodes = store.nodes(in: sessionID).map { node in
+            ClaudeBranch.Node(uuid: node.key, parentUuid: node.parentKey, isPrompt: node.isPrompt, isMessage: Self.isMessage(node.kind))
+        }
+        let shape = ClaudeBranch.current(nodes: nodes, head: head)
         members = shape.members
         abandoned = shape.abandoned
+        elsewhere = shape.wentOnElsewhere
         do { try store.removeMessages(in: sessionID, sourceKeys: shape.abandoned) } catch { VisorServer.log("index: drop \(self.sessionID): \(String(describing: error))") }
         let page = store.messages(in: sessionID, limit: window)
-        return Loaded(rows: page.messages, more: page.more, prompts: shape.prompts, abandoned: shape.abandoned, abandonedPrompts: shape.abandonedPrompts)
+        return Loaded(rows: page.messages, more: page.more, prompts: shape.prompts, abandoned: shape.abandoned, abandonedPrompts: shape.abandonedPrompts,
+                      head: shape.head, leaf: shape.leaf, wentOnElsewhere: shape.wentOnElsewhere)
     }
+
+    static func isMessage(_ kind: String) -> Bool { kind == "user" || kind == "assistant" }
 
     // MARK: Following
 
@@ -149,15 +178,17 @@ actor SessionIndexer {
             // fork, and the line is kept.
             if let parent = line.parentUuid, !members.contains(parent), abandoned.contains(parent) {
                 if let uuid = line.uuid { abandoned.insert(uuid) }
+                if line.isMessage { elsewhere = true }
                 continue
             }
             if let uuid = line.uuid { members.insert(uuid) }
+            if line.isMessage { elsewhere = false }
             var rows: [TranscriptEntry] = []
             if let record = line.record {
                 rows = assembler.rows(for: record)
                 for row in rows { rowRecords.append(PlacedMessage(message: row, seq: seq, sourceKey: line.uuid)) }
             }
-            taken.append(Line(uuid: line.uuid, isPrompt: line.isPrompt, record: line.record, rows: rows))
+            taken.append(Line(uuid: line.uuid, isPrompt: line.isPrompt, isMessage: line.isMessage, record: line.record, rows: rows))
         }
         state.bytes = position
         do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { VisorServer.log("index: follow \(self.sessionID): \(String(describing: error))") }

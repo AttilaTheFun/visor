@@ -44,13 +44,15 @@ extension SessionRecord {
             // The cache catches up with the file off the main actor and
             // hands over the window to show; then each line as the agent
             // writes it.
-            let indexer = SessionIndexer(store: ServerCache.shared, sessionID: session, url: log.url, window: Self.servedRows, format: log.format)
+            let indexer = SessionIndexer(store: ServerCache.shared, sessionID: session, url: log.url, window: Self.servedRows, format: log.format,
+                                         head: self?.head)
             self?.indexer = indexer
             for await event in indexer.events() {
                 guard let self else { return }
                 switch event {
                 case .loaded(let loaded): self.apply(loaded: loaded)
                 case .lines(let lines): self.apply(lines: lines)
+                case .elsewhere(let elsewhere): self.wentOn(elsewhere: elsewhere)
                 }
             }
         }
@@ -75,6 +77,9 @@ extension SessionRecord {
             forked = true
         }
         let told = notice != nil
+        head = loaded.head ?? head
+        leaf = loaded.leaf ?? leaf
+        wentOn(elsewhere: loaded.wentOnElsewhere)
         shownPrompts = Array(loaded.prompts.suffix(Self.rememberedPrompts))
         moreBefore = loaded.more
         let before = entries.map(\.id)
@@ -107,13 +112,28 @@ extension SessionRecord {
                 // branch is worked out when the agent restarts.
                 if process.processID == nil { followFile(); return }
             }
+            if line.isMessage, let uuid = line.uuid { leaf = uuid }
             if line.isPrompt, let uuid = line.uuid {
+                head = uuid
                 shownPrompts.append(uuid)
                 if shownPrompts.count > Self.rememberedPrompts * 2 { shownPrompts.removeFirst(Self.rememberedPrompts) }
             }
             for row in line.rows where take(fileRow: row) { changed.append(row) }
         }
         if !changed.isEmpty { onFileRows?(changed) }
+    }
+
+    /// Whether the file's newest message is on another branch: told once
+    /// when it comes to be, and the agent resumed at this branch's newest
+    /// message until it carries this branch on again.
+    func wentOn(elsewhere: Bool) {
+        guard elsewhere != wentOnElsewhere else { return }
+        wentOnElsewhere = elsewhere
+        if elsewhere {
+            notice = "Something else carried this conversation on, on a branch of its own beside this one (another Claude Code resumed it). "
+                + "Visor keeps to its own branch, and its agent carries on from there."
+            onFileReplaced?()
+        }
     }
 
     /// How many of these rows are the user's, in these words.

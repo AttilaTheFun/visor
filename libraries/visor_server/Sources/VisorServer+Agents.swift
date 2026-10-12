@@ -233,6 +233,8 @@ extension VisorServer {
                                    : (images.count == 1 ? "Attached file:" : "Attached files:")
             forAgent = (text.isEmpty ? "" : text + "\n\n") + heading + "\n" + list
         }
+        // A conversation carried on elsewhere is picked up on this branch.
+        record.process.resume(at: record.wentOnElsewhere ? record.leaf : nil)
         do {
             try record.process.send(forAgent)
             // The spawn happened inside `send`, so the pid is knowable

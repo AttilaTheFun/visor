@@ -81,6 +81,15 @@ public final class SessionRecord {
     var listening: Task<Void, Never>?
     var isBound: Bool { listening != nil }
 
+    /// Where the conversation stands in the agent's file: the prompt its
+    /// latest turn began with (the branch a reading keeps to), its newest
+    /// message, and whether the file's newest message is on another branch
+    /// — something else carried the session on from beside it, and the
+    /// agent is then resumed at `leaf` rather than where Claude would.
+    var head: String?
+    var leaf: String?
+    var wentOnElsewhere = false
+
     /// The host an earlier launch left the agent under, until this one
     /// has picked it up or found it gone (VisorServer+Hosts.swift).
     var leftHost: StoredHost?
@@ -177,7 +186,8 @@ public final class SessionRecord {
     var stored: StoredSession {
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
-        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host)
+        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
+                      wentOnElsewhere: wentOnElsewhere ? true : nil)
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or
