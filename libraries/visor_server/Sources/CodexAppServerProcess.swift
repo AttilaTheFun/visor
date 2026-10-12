@@ -13,14 +13,16 @@ import VisorProtocol
 public final class CodexAppServerProcess: AgentProcess {
     /// The answer to a request: what it names, or what went wrong. A
     /// request whose app server went away is answered with that.
-    private struct Reply {
+    struct Reply {
         var thread: String?
         var turn: String?
         var error: String?
+        /// For a goal's requests: the goal (nil inside when there is none).
+        var goal: CodexGoal??
     }
 
     public let events: AsyncStream<AgentEvent>
-    private let emit: AsyncStream<AgentEvent>.Continuation
+    let emit: AsyncStream<AgentEvent>.Continuation
     public var skipPermissions: Bool
     public var model: String?
     public var effort: String?
@@ -30,7 +32,7 @@ public final class CodexAppServerProcess: AgentProcess {
     /// The running app server. One that was stopped is no longer this, and
     /// what it still says is not passed on.
     private var child: PipedChild?
-    private var threadID: String?
+    var threadID: String?
     private var turnID: String?
     private var nextRequestID = 1
     /// Answers waited on, by request id.
@@ -53,15 +55,23 @@ public final class CodexAppServerProcess: AgentProcess {
     }
     public var processID: Int32? { running()?.pid }
 
-    private func running() -> PipedChild? {
+    func running() -> PipedChild? {
         guard let child, child.isRunning else { return nil }
         return child
     }
 
     // MARK: Turns
 
+    public func startsTurn(_ text: String) -> Bool { CodexCommand(text) == nil }
+
     public func send(_ text: String) throws {
         let child = try running() ?? spawn()
+        // Codex's own commands are requests of its app server, not words
+        // for the model (CodexAppServerProcess+Commands.swift).
+        if let command = CodexCommand(text) {
+            Task { await self.perform(command, on: child) }
+            return
+        }
         emit.yield(.busy(true))
         emit.yield(.activity("Thinking…"))
         Task { await self.turn(text, on: child) }
@@ -69,19 +79,10 @@ public final class CodexAppServerProcess: AgentProcess {
 
     /// Starts the turn: on the thread there is, or on one started for it.
     private func turn(_ text: String, on child: PipedChild) async {
-        if threadID == nil {
-            // The first turn starts the thread; later ones ride on it.
-            let reply = await request("thread/start", threadParams(), of: child)
-            guard self.child === child else { return }
-            guard let id = reply.thread else {
-                emit.yield(.failure("Codex: \(reply.error ?? "could not start a thread")"))
-                emit.yield(.busy(false))
-                return
-            }
-            threadID = id
-            emit.yield(.session(id))
+        guard let threadID = await thread(on: child) else {
+            emit.yield(.busy(false))
+            return
         }
-        guard let threadID else { return }
         var params: [String: Any] = ["threadId": threadID, "input": [["type": "text", "text": text]]]
         if let model, !model.isEmpty { params["model"] = model }
         if let effort, !effort.isEmpty { params["effort"] = effort }
@@ -94,6 +95,22 @@ public final class CodexAppServerProcess: AgentProcess {
             emit.yield(.activity(nil))
             emit.yield(.busy(false))
         }
+    }
+
+    /// The thread there is, or one started now: the first turn (or a goal
+    /// set before any) starts it, and later ones ride on it. Nil, said as
+    /// a failure, when it cannot be started.
+    func thread(on child: PipedChild) async -> String? {
+        if let threadID { return threadID }
+        let reply = await request("thread/start", threadParams(), of: child)
+        guard self.child === child else { return nil }
+        guard let id = reply.thread else {
+            emit.yield(.failure("Codex: \(reply.error ?? "could not start a thread")"))
+            return nil
+        }
+        threadID = id
+        emit.yield(.session(id))
+        return id
     }
 
     /// Ends the turn in flight; the thread stays, and the next message
@@ -145,7 +162,7 @@ public final class CodexAppServerProcess: AgentProcess {
         return params
     }
 
-    private func spawn() throws -> PipedChild {
+    func spawn() throws -> PipedChild {
         guard let executable = ToolPath.resolve("codex") else { throw AgentProcessError.toolMissing("codex") }
         // Visor's MCP server: the other sessions.
         let child = try PipedChild(executable: executable, arguments: ["app-server"] + VisorMCP.codexArguments(approvalEnvironment),
@@ -192,13 +209,16 @@ public final class CodexAppServerProcess: AgentProcess {
                 if let error = reply.error, self.child === child {
                     self.emit.yield(.failure("Codex could not resume the thread: \(error)"))
                 }
+                // The goal as it stands now: it may have been met, or
+                // cleared, while no one was following.
+                _ = await self.request("thread/goal/get", ["threadId": threadID], of: child)
             }
         }
         return child
     }
 
     /// Asks the app server something and waits for its answer.
-    private func request(_ method: String, _ params: sending [String: Any], of child: PipedChild) async -> Reply {
+    func request(_ method: String, _ params: sending [String: Any], of child: PipedChild) async -> Reply {
         guard self.child === child else { return Reply(error: "Codex's app server is gone") }
         let id = nextRequestID
         nextRequestID += 1
@@ -208,8 +228,17 @@ public final class CodexAppServerProcess: AgentProcess {
 
     private func take(_ output: CodexOutput, from child: PipedChild) {
         switch output {
-        case .reply(let id, let thread, let turn, let error):
-            replies.removeValue(forKey: id)?.resume(returning: Reply(thread: thread, turn: turn, error: error))
+        case .reply(let id, let thread, let turn, let error, let goal):
+            replies.removeValue(forKey: id)?.resume(returning: Reply(thread: thread, turn: turn, error: error, goal: goal))
+        case .turnStarted(let id):
+            // One Codex started itself (its goal's next turn, a review)
+            // is followed as one asked for.
+            guard turnID != id else { return }
+            turnID = id
+            emit.yield(.busy(true))
+            emit.yield(.activity("Thinking…"))
+        case .goal(let goal):
+            emit.yield(.goal(goal.flatMap { $0.met ? nil : $0.objective }, met: goal?.met ?? false))
         case .asked(let id, let method):
             // Not expected with prompts off; answered no rather than left
             // hanging.

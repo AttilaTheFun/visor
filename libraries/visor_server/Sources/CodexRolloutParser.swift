@@ -21,6 +21,9 @@ final class CodexRolloutParser: LinearLogParser, AgentLogParser {
                     let text = Self.text(payload["content"])
                     switch payload["role"] as? String {
                     case "user":
+                        // A goal the user set, paused, resumed or cleared:
+                        // the command as they typed it.
+                        if let command = Self.goalCommand(text) { return .user(text: command, images: []) }
                         // Codex's own context (instructions, environment)
                         // comes as user messages in angle brackets.
                         if text.isEmpty || text.hasPrefix("<") { return nil }
@@ -47,6 +50,26 @@ final class CodexRolloutParser: LinearLogParser, AgentLogParser {
                 }
             }, timestamp: timestamp)
         }
+    }
+
+    /// What Codex writes when the user changes the goal, back as the
+    /// command they typed: "User set the goal: \"…\"" is `/goal …`, a
+    /// status alone is `/goal pause` or `/goal resume`, "User cleared the
+    /// goal." is `/goal clear`. Nil for anything else.
+    static func goalCommand(_ text: String) -> String? {
+        guard text.hasPrefix("<codex_internal_context source=\"user_goal\">") else { return nil }
+        if text.contains("User cleared the goal.") { return "/goal clear" }
+        let set = "User set the goal: \""
+        if let start = text.range(of: set) {
+            let rest = text[start.upperBound...]
+            let end = rest.range(of: "\"\nUser set goal status:") ?? rest.range(of: "\"", options: .backwards)
+            guard let end else { return nil }
+            return "/goal " + rest[..<end.lowerBound]
+        }
+        if let status = text.range(of: "User set goal status: \"") {
+            return text[status.upperBound...].hasPrefix("paused") ? "/goal pause" : "/goal resume"
+        }
+        return nil
     }
 
     /// The words of a content array (input_text / output_text parts).

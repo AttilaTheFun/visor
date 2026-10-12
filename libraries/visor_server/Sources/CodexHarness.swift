@@ -12,6 +12,10 @@ public final class CodexHarness: AgentHarness {
 
     public init() {}
 
+    /// Codex's own commands, which its app-server takes as requests
+    /// (CodexCommand).
+    public var commands: [SlashCommand] { CodexCommand.offered }
+
     @MainActor public func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess {
         CodexAppServerProcess(cwd: cwd, skipPermissions: skipPermissions, resume: resume)
     }

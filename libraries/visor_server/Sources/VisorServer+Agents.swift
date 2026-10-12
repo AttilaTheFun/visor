@@ -166,11 +166,14 @@ extension VisorServer {
             return
         }
         record.appendUser(text, images: images)
+        // A command the agent's process takes itself is no turn of its own:
+        // the session works only once the agent says a turn began.
+        let turn = record.process.startsTurn(text)
         // Written down before the turn runs: if the app is killed while the
         // agent is working, the message the user sent is still here when it
         // comes back (the store is otherwise written at the end of a turn),
         // and `interrupted` says a reply is still owed.
-        record.interrupted = true
+        if turn { record.interrupted = true }
         saveArchive()
         // The adapter's events reach subscribers through the record; bound
         // once, the first time the session takes a turn.
@@ -194,7 +197,7 @@ extension VisorServer {
             // Working from now, not from when the agent says so: what the
             // user sends next (a command after its words, split by the
             // client) waits for this turn rather than landing inside it.
-            if !record.info.busy { broadcast(record.apply(.busy(true)), session: record) }
+            if turn, !record.info.busy { broadcast(record.apply(.busy(true)), session: record) }
         } catch {
             broadcast(record.apply(.failure(error.localizedDescription)), session: record)
             broadcast(record.apply(.busy(false)), session: record)
@@ -235,7 +238,7 @@ extension VisorServer {
         // window they are drawn for inside apply.
         broadcast(record.apply(event), session: record)
         switch event {
-        case .context, .session, .background:
+        case .context, .session, .background, .goal:
             // These land in the session list, not an envelope.
             broadcastSessions()
         case .spent:

@@ -8,11 +8,13 @@ import Foundation
 import VisorProtocol
 
 extension VisorServer {
-    /// What a session's agent takes: its own list, or the agent's last.
+    /// What a session's agent takes: its own list, the agent's last, or
+    /// what its harness says it takes.
     func commands(for record: SessionRecord) -> [SlashCommand] {
         if !record.commands.isEmpty { return record.commands }
         if knownCommands.isEmpty { knownCommands = Self.keptCommands() }
-        return knownCommands[record.info.agent] ?? []
+        if let known = knownCommands[record.info.agent], !known.isEmpty { return known }
+        return harnesses.harness(for: record.info.agent)?.commands ?? []
     }
 
     /// An agent listed its commands: the latest for that agent, kept.

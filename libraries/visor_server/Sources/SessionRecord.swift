@@ -120,6 +120,9 @@ public final class SessionRecord {
 
     /// What the user is told about the session until they acknowledge it.
     var notice: String?
+    /// The agent said its last goal was met (Codex, which says so rather
+    /// than writing a row for it).
+    var goalMet = false
     /// The agent's running total as it last reported it: what the next
     /// report is measured from (`info.usage` is what was added up).
     var reportedUsage: SessionUsage?

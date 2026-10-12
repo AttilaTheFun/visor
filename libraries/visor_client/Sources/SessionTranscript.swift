@@ -299,6 +299,14 @@ public final class SessionTranscript {
         return older.count
     }
 
+    /// What the server tells the user about the session. A new one answers
+    /// a command that has no row of its own (Codex's /goal alone,
+    /// /compact): that command is taken, no longer sending.
+    func take(notice new: String?) {
+        if let new, new != notice { sending.removeAll { $0.entry.text.hasPrefix("/") } }
+        notice = new
+    }
+
     /// Drops an outgoing message once the transcript has moved past when
     /// it was sent and carries an identical message: it is on the record.
     func settleSending() {
@@ -369,7 +377,7 @@ public final class SessionTranscript {
             activity = envelope.activity
             busy = envelope.busy ?? false
             error = envelope.error
-            notice = envelope.notice
+            take(notice: envelope.notice)
         case "ephemeral":
             // Everything that is not the record, on subscribing.
             turnStatus = envelope.status ?? []
@@ -377,7 +385,7 @@ public final class SessionTranscript {
             latestActivity = envelope.activity
             busy = envelope.busy ?? false
             pendingApproval = envelope.approval
-            notice = envelope.notice
+            take(notice: envelope.notice)
         case "status":
             turnStatus = envelope.status ?? []
         case "delta", "streamEnd":
@@ -397,7 +405,7 @@ public final class SessionTranscript {
             // What was on its way did not arrive.
             sending.removeAll()
         case "notice":
-            notice = envelope.notice
+            take(notice: envelope.notice)
         case "approval":
             pendingApproval = envelope.approval
         case "tty":

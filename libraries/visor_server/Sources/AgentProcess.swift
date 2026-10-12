@@ -35,6 +35,10 @@ public protocol AgentProcess: AnyObject {
     var resumeCommand: String? { get }
     /// Sends a user turn; spawns (or resumes) the process as needed.
     func send(_ text: String) throws
+    /// Whether these words are a turn of the agent's, or a command its
+    /// process takes itself (Codex's /goal, /compact), which starts a turn
+    /// only if the agent then says one began.
+    func startsTurn(_ text: String) -> Bool
     /// Ends the turn in flight but keeps the process, so the next message
     /// carries straight on in it. Where an agent has no way to end a turn
     /// without ending the process, this is `stop`.
@@ -54,6 +58,8 @@ public protocol AgentProcess: AnyObject {
 }
 
 public extension AgentProcess {
+    func startsTurn(_ text: String) -> Bool { true }
+
     /// Without its own way to end a turn, an interrupt is a stop: the
     /// process goes, and the next message spawns another that resumes.
     func interrupt() { stop() }

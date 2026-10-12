@@ -35,6 +35,8 @@ extension SessionRecord {
     /// Whether the goal just gone was met, not cleared: the latest goal row
     /// is a met one.
     func goalWasMet(_ goal: String) -> Bool {
+        // The agent said so itself (Codex).
+        if goalMet { return true }
         guard let row = entries.reversed().first(where: { Self.goal(of: $0) != nil }) else { return false }
         return row.toolName == "goal-met"
     }

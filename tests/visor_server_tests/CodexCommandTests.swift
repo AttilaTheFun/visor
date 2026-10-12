@@ -1,0 +1,107 @@
+// Codex's own slash commands: its app-server takes /goal, /compact and
+// /review as requests, not as words of a turn. Typed in a Codex session,
+// they are read as such; the goal Codex reports is the session's; a goal
+// the user changed reads back from the rollout as the command they typed;
+// and the composer offers them before Codex has run.
+
+import ClaudeTranscript
+import Foundation
+import VisorProtocol
+@testable import VisorServer
+import XCTest
+
+@MainActor
+final class CodexCommandTests: ServerTestCase {
+    func testTheCommandsAreRead() {
+        XCTAssertEqual(CodexCommand("/goal"), .showGoal)
+        XCTAssertEqual(CodexCommand(" /goal  ship the release \n"), .setGoal("ship the release"))
+        XCTAssertEqual(CodexCommand("/goal clear"), .clearGoal)
+        XCTAssertEqual(CodexCommand("/goal pause"), .pauseGoal)
+        XCTAssertEqual(CodexCommand("/goal resume"), .resumeGoal)
+        XCTAssertEqual(CodexCommand("/goal fix the\nflaky test"), .setGoal("fix the\nflaky test"))
+        XCTAssertEqual(CodexCommand("/compact"), .compact)
+        XCTAssertEqual(CodexCommand("/review"), .review(nil))
+        XCTAssertEqual(CodexCommand("/review the sync code"), .review("the sync code"))
+        // Anything else goes to the agent as typed.
+        XCTAssertNil(CodexCommand("/goals are good"))
+        XCTAssertNil(CodexCommand("/prompts:deploy"))
+        XCTAssertNil(CodexCommand("set a goal"))
+    }
+
+    func testWhatTheAppServerSaysOfTurnsAndGoals() {
+        let goal = #"{"threadId":"t","objective":"Ship it","status":"active","tokenBudget":null,"tokensUsed":10,"timeUsedSeconds":125,"createdAt":1,"updatedAt":2}"#
+        XCTAssertEqual(lastGoal(#"{"method":"thread/goal/updated","params":{"threadId":"t","turnId":null,"goal":\#(goal)}}"#),
+                       .some(CodexGoal(objective: "Ship it", status: "active", tokensUsed: 10, timeUsedSeconds: 125)))
+        XCTAssertEqual(lastGoal(#"{"method":"thread/goal/cleared","params":{"threadId":"t"}}"#), .some(nil))
+        // The answer to a goal's request carries it; null is none.
+        XCTAssertEqual(lastGoal(#"{"id":4,"result":{"goal":null}}"#), .some(nil))
+        XCTAssertEqual(lastGoal(#"{"id":4,"result":{"goal":\#(goal)}}"#)??.objective, "Ship it")
+        XCTAssertEqual(lastGoal(#"{"id":5,"result":{"turn":{"id":"u1"}}}"#), .none, "other answers say nothing of it")
+        // A turn Codex started itself.
+        guard case .turnStarted(let id)? = CodexOutput.parse(#"{"method":"turn/started","params":{"threadId":"t","turn":{"id":"u2"}}}"#).first else {
+            return XCTFail("no turn")
+        }
+        XCTAssertEqual(id, "u2")
+        XCTAssertEqual(CodexGoal(objective: "Ship it", status: "paused", timeUsedSeconds: 125).summary,
+                       "Goal: Ship it — paused (/goal resume), 2 min so far.")
+    }
+
+    private func lastGoal(_ line: String) -> CodexGoal?? {
+        for output in CodexOutput.parse(line).reversed() {
+            if case .goal(let goal) = output { return .some(goal) }
+        }
+        return .none
+    }
+
+    func testTheSessionTakesTheGoalCodexReports() {
+        let record = SessionRecord(info: SessionInfo(id: "C", agent: .codex, cwd: "/tmp", title: "Codex", created: 0),
+                                   process: CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
+        _ = record.apply(.goal("Ship it", met: false))
+        XCTAssertEqual(record.info.goal, "Ship it")
+        XCTAssertFalse(record.goalWasMet("Ship it"))
+        _ = record.apply(.goal(nil, met: true))
+        XCTAssertNil(record.info.goal)
+        XCTAssertTrue(record.goalWasMet("Ship it"), "met, as Codex said: the push says achieved")
+        _ = record.apply(.goal("Next", met: false))
+        _ = record.apply(.goal(nil, met: false))
+        XCTAssertFalse(record.goalWasMet("Next"), "cleared, not met")
+        // A command answered in words is a notice.
+        let envelope = record.apply(.notice("No goal is set."))
+        XCTAssertEqual(record.notice, "No goal is set.")
+        XCTAssertEqual(envelope?.notice, "No goal is set.")
+    }
+
+    func testAGoalTheUserChangedReadsBackAsTheirCommand() {
+        func said(_ text: String) -> String? {
+            CodexRolloutParser.goalCommand("<codex_internal_context source=\"user_goal\">\n" + text + "\n</codex_internal_context>")
+        }
+        XCTAssertEqual(said("User set the goal: \"Ship it\"\nUser set goal status: \"active\"."), "/goal Ship it")
+        XCTAssertEqual(said("User set the goal: \"Fix the \"flaky\"\ntest\"\nUser set goal status: \"active\"."), "/goal Fix the \"flaky\"\ntest")
+        XCTAssertEqual(said("User set goal status: \"paused\"."), "/goal pause")
+        XCTAssertEqual(said("User set goal status: \"active\"."), "/goal resume")
+        XCTAssertEqual(said("User cleared the goal."), "/goal clear")
+        XCTAssertNil(CodexRolloutParser.goalCommand("<codex_internal_context source=\"goal\">\nContinue working toward the active thread goal."))
+
+        // In the rollout: the user's row, where the context is not one.
+        let line: [String: Any] = ["type": "response_item", "ordinal": 1,
+                                   "payload": ["type": "message", "id": "g1", "role": "user", "content": [[
+                                       "type": "input_text",
+                                       "text": "<codex_internal_context source=\"user_goal\">\nUser set the goal: \"Ship it\"\nUser set goal status: \"active\".\n</codex_internal_context>"]]]]
+        let data = Data(String(decoding: try! JSONSerialization.data(withJSONObject: line), as: UTF8.self).utf8)
+        let rows = TranscriptAssembler.rows(in: CodexRolloutParser().lines(in: data).compactMap(\.record))
+        XCTAssertEqual(rows.map(\.text), ["/goal Ship it"])
+        XCTAssertEqual(rows.first?.role, .user)
+    }
+
+    func testTheComposerOffersThemBeforeCodexHasRun() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-codex-commands-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7984)
+        defer { server.stop() }
+        let record = SessionRecord(info: SessionInfo(id: "C", agent: .codex, cwd: "/tmp", title: "Codex", created: 0),
+                                   process: CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
+        XCTAssertEqual(server.commands(for: record).map(\.name), ["goal", "compact", "review"])
+    }
+}

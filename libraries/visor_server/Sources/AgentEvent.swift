@@ -40,4 +40,10 @@ public enum AgentEvent: Sendable {
     /// What the agent has running in the background, whole, whenever it
     /// changes; empty when it waits on nothing.
     case background([StatusItem])
+    /// The goal the agent itself says it works toward (Codex's), or none:
+    /// met (`met`), or cleared.
+    case goal(String?, met: Bool)
+    /// Something to tell the user about the session, in words: the answer
+    /// to a command that has no row of its own.
+    case notice(String)
 }
