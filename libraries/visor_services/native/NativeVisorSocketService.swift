@@ -1,11 +1,8 @@
-// The Apple implementations: URLSessionWebSocketTask behind the socket
-// service (events queued per socket, handed out one at a time to `next`),
-// UserDefaults behind settings. Compiled in on Apple only (the BUILD's
-// select); the web page brings its own in JavaScript.
+// URLSessionWebSocketTask behind the socket service (events queued per
+// socket, handed out one at a time to `next`): Apple's, or another
+// Foundation's (Isomer's, on the web and Android), the same code.
 
-#if canImport(Darwin)
 import Foundation
-import Security
 import Synchronization
 
 @MainActor
@@ -23,7 +20,12 @@ public final class NativeVisorSocketService: VisorSocketService {
     private var nextID: Int32 = 1
     private let session: URLSession
 
-    public init() {
+    /// Whether the system suspends the app in the background, its sockets
+    /// with it: iOS does (and Android), a Mac and a web page do not.
+    public let dropsInBackground: Bool
+
+    public init(dropsInBackground: Bool = NativeVisorSocketService.suspendedInBackground) {
+        self.dropsInBackground = dropsInBackground
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 15
@@ -109,8 +111,8 @@ public final class NativeVisorSocketService: VisorSocketService {
     }
 
     /// iOS suspends the app in the background and its sockets do not
-    /// survive; a Mac's carry on.
-    public var dropsInBackground: Bool {
+    /// survive; a Mac's carry on. A host elsewhere says its own.
+    public nonisolated static var suspendedInBackground: Bool {
         #if os(iOS)
         true
         #else
@@ -156,4 +158,3 @@ public final class NativeVisorSocketService: VisorSocketService {
         waiter?.resume(throwing: VisorSocketGone())
     }
 }
-#endif
