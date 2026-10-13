@@ -16,6 +16,7 @@ swift_library(
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorMenuBar",
     deps = [
+        "//:foundation",
         "//libraries/visor_protocol",
         "//libraries/visor_server",
         "//libraries/visor_server_apple",
@@ -24,6 +25,9 @@ swift_library(
 
 macos_application(
     name = "visor_menubar",
+    # The agents' host, beside the app's own program: each session's agent
+    # runs under one, so a restart of the server leaves it working.
+    additional_contents = {"//applications/visor_agent_host:visor-agent-host": "Helpers"},
     app_icons = ["//artwork/app-icon:app_icon"],
     bundle_id = BUNDLE_ID,
     bundle_name = "Visor Server",

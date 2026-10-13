@@ -1,12 +1,30 @@
-#if canImport(Darwin)
+// Settings in UserDefaults, and secrets in the keychain where there is one
+// (Apple's systems); elsewhere (Isomer's Foundation, on the web and
+// Android) secrets are kept with the settings, as the system keeps an
+// app's own preferences.
+
 import Foundation
+#if canImport(os)
 import os
+#endif
+#if canImport(Security)
 import Security
+#endif
 
 @MainActor
 public final class NativeVisorSettingsService: VisorSettingsService {
     public init() {}
 
+    public func get(key: String) -> String {
+        UserDefaults.standard.string(forKey: "visor." + key) ?? ""
+    }
+
+    public func set(key: String, value: String) {
+        if value.isEmpty { UserDefaults.standard.removeObject(forKey: "visor." + key) }
+        else { UserDefaults.standard.set(value, forKey: "visor." + key) }
+    }
+
+    #if canImport(Security)
     /// Secrets in the keychain, a generic password per key under the app's
     /// bundle id. The app that wrote one reads it without asking, as long
     /// as it is signed the same way (a stable signature, not ad hoc).
@@ -55,14 +73,10 @@ public final class NativeVisorSettingsService: VisorSettingsService {
          kSecAttrService as String: Bundle.main.bundleIdentifier ?? "Visor",
          kSecAttrAccount as String: key]
     }
+    #else
+    /// Secrets with the settings, under a name of their own.
+    public func secret(key: String) -> String { get(key: "secret." + key) }
 
-    public func get(key: String) -> String {
-        UserDefaults.standard.string(forKey: "visor." + key) ?? ""
-    }
-
-    public func set(key: String, value: String) {
-        if value.isEmpty { UserDefaults.standard.removeObject(forKey: "visor." + key) }
-        else { UserDefaults.standard.set(value, forKey: "visor." + key) }
-    }
+    public func setSecret(key: String, value: String) { set(key: "secret." + key, value: value) }
+    #endif
 }
-#endif

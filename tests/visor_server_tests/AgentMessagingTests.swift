@@ -60,6 +60,19 @@ final class AgentMessagingTests: ServerTestCase {
         XCTAssertEqual(b.info.queued.count, 1)
         XCTAssertTrue(b.info.queued[0].contains("Visor session “Server work” (A)"))
         XCTAssertTrue(b.info.queued[0].hasSuffix("Is the API done?"))
+        // Sender and recipient by name, id and computer, and how to answer:
+        // never taken for the user's words or another session's.
+        let header = String(b.info.queued[0].prefix { $0 != "\n" })
+        XCTAssertEqual(header, "[Message from the Visor session “Server work” (A) on \(server.hostName) (server \(server.id)), "
+                       + "to this session “Client work” (B) on \(server.hostName) — not from the user. "
+                       + "To answer, use send_message with session A and server \(server.id).]")
+        XCTAssertEqual(sent.text, "Queued for “Client work” (B) on \(server.hostName): it is working and takes it when its turn ends.")
+    }
+
+    /// An agent under its host outlives the server that started it, and
+    /// still holds the token it was given.
+    func testTheAgentsTokenOutlivesALaunch() {
+        XCTAssertEqual(VisorServer(port: 7996).agentToken, server.agentToken)
     }
 
     func testOnlyThisServersAgentsAndOnlyOthers() {

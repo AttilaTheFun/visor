@@ -9,6 +9,7 @@ swift_library(
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorUI",
     deps = [
+        "//:foundation",
         "//:swift_ui",
         "//libraries/visor_client",
         "//libraries/visor_protocol",

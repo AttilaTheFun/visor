@@ -40,6 +40,7 @@ public struct MacSystem: CommandLineSystem {
                               addresses: { NetworkAddresses.all().map(\.address) },
                               networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } }),
             lifecycle: lifecycle,
+            agentHosts: POSIXAgentHosting.beside(executable),
             log: log
         )
     }

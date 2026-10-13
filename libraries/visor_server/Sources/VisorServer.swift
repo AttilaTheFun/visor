@@ -23,6 +23,10 @@ public final class VisorServer {
     public internal(set) var listening = false
 
     public internal(set) var lastError: String?
+    /// An update that did not stay up and was rolled back, as the
+    /// relauncher said (VisorServer+Rollback.swift): shown until the next
+    /// update.
+    public internal(set) var updateNotice: String?
     /// Required: the server does not listen without one. Every client and
     /// every tool on this computer signs in with it; the connection code
     /// carries it.
@@ -51,6 +55,7 @@ public final class VisorServer {
                 listenAgain()
             }
             if settings.lan != oldValue.lan || settings.vpn != oldValue.vpn { refusedPaths.removeAll() }
+            if settings.detachAgents != oldValue.detachAgents { applyAgentDetaching() }
             // Asking nothing: a server with no password yet starts now.
             if settings.asksNothing, !oldValue.asksNothing, listener == nil { start() }
         }
@@ -69,6 +74,10 @@ public final class VisorServer {
     /// Agents waiting to hear what became of a message they sent
     /// elsewhere: by message id, then by waiter.
     var relayWaiters: [String: [String: (RelayRecord) -> Void]] = [:]
+    /// Sessions moving to other servers, by their offers' tokens, and
+    /// moving here, by their plans' ids (VisorServer+Migration.swift).
+    var migrationsOut: [String: OutgoingMigration] = [:]
+    var migrationsIn: [String: IncomingMigration] = [:]
     /// Addresses connections were refused on (a path that is off), each
     /// logged once.
     var refusedPaths: Set<String> = []
@@ -106,8 +115,10 @@ public final class VisorServer {
     var http: HTTPServer?
     var connections: [ObjectIdentifier: ClientConnection] = [:]
 
-    /// What the permission shim presents instead of the password; new per launch.
-    let agentToken = UUID().uuidString
+    /// What the agents present instead of the password (their tools, the
+    /// permission shim): kept from launch to launch, since an agent under
+    /// its host outlives the server that started it.
+    let agentToken: String
 
     /// Sessions this launch was asked to bring back into a running state:
     /// they were mid-turn when the app went away, and were named on the
@@ -118,8 +129,11 @@ public final class VisorServer {
         self.port = port
         Self.adoptFormerFolders()
         password = Self.keptPassword()
+        agentToken = Self.keptAgentToken()
+        applyAgentDetaching()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()
+        takeRollbackNote()
     }
 
     /// A server apart from the user's own: its own port, a folder of its
@@ -163,13 +177,13 @@ public final class VisorServer {
     static var storeURL: URL {
         let base = storeRoot ?? ServerPlatform.current.host.dataDirectory
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base.appendingPathComponent("sessions.json")
+        return base.appendingPathComponent("sessions.json", isDirectory: false)
     }
 
     /// Beside the sessions: the slash commands each agent last listed.
-    static var commandsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("commands.json") }
+    static var commandsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("commands.json", isDirectory: false) }
     /// And each agent's account, as its sessions last said.
-    static var accountsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("accounts.json") }
+    static var accountsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("accounts.json", isDirectory: false) }
 
     /// What a session is told when its turn was cut off by a restart. It
     /// arrives as a user turn, which is what it is: the agent's own process
@@ -177,6 +191,13 @@ public final class VisorServer {
     static let resumeNudge = """
         [Visor] The Visor server restarted while you were working, so that turn was cut short \
         and whatever you were part-way through did not finish. Pick it up from where you left \
+        off, checking the state of anything you had started before you carry on.
+        """
+
+    /// What an agent restarted from a client is told, when it was working.
+    static let restartNudge = """
+        [Visor] Your process was restarted from Visor while you were working, so that turn was cut \
+        short and whatever you were part-way through did not finish. Pick it up from where you left \
         off, checking the state of anything you had started before you carry on.
         """
 

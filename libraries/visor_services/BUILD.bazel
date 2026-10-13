@@ -4,9 +4,11 @@ load("@rules_swift//swift:swift.bzl", "swift_library")
 package(default_visibility = ["//visibility:public"])
 
 # What a host gives the client: a socket, HTTP, settings, notifications and
-# a widget feed. The protocols are portable; the Apple implementations
-# (URLSession, UserDefaults, the keychain, UserNotifications) sit beside
-# them and are what the iOS and Mac apps install.
+# a widget feed. The protocols are portable; the implementations beside
+# them are what the iOS and Mac apps install. The socket, HTTP and settings
+# ones are Foundation's alone (URLSession, UserDefaults, the keychain where
+# there is one), so a host with another Foundation (Isomer's) compiles them
+# too; notifications, dictation, the network's state and SSH are Apple's.
 swift_library(
     name = "visor_services",
     copts = STRICT_SWIFT,
@@ -16,15 +18,16 @@ swift_library(
         "//conditions:default": [],
     }),
     module_name = "VisorServices",
-    deps = select({
+    deps = ["//:foundation"] + select({
         "@platforms//os:ios": ["//libraries/visor_ssh"],
         "@platforms//os:macos": ["//libraries/visor_ssh"],
         "//conditions:default": [],
     }),
 )
 
-# The Apple implementations as sources, for a host that compiles them for
-# another Foundation (Linux, Windows) into a module of its own.
+# The implementations as sources, for a host that compiles the portable
+# ones for another Foundation (Isomer's on the web and Android, Linux,
+# Windows) into a module of its own.
 filegroup(
     name = "native_srcs",
     srcs = glob(["native/*.swift"]),

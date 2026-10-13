@@ -32,13 +32,16 @@ public struct ServerPlatform: Sendable {
     public var host: HostDetails
     /// Relaunching into another build, and quitting.
     public var lifecycle: any ServerLifecycle
+    /// Hosts the agents run under, apart from the server; nil where they
+    /// are the server's own children.
+    public var agentHosts: (any AgentHosting)?
     /// What the server says it is doing, a line at a time.
     public var log: @Sendable (String) -> Void
 
     public init(listening: any Listening, terminals: any TerminalLaunching, processes: any ProcessSignals,
                 secrets: any SecretStore, fetching: any HTTPFetching, pushSigning: (any PushSigning)?,
                 images: any ImageMeasuring, files: any FileWatching, tools: any ToolLocating, host: HostDetails,
-                lifecycle: any ServerLifecycle,
+                lifecycle: any ServerLifecycle, agentHosts: (any AgentHosting)? = nil,
                 log: @escaping @Sendable (String) -> Void) {
         self.listening = listening
         self.terminals = terminals
@@ -51,6 +54,7 @@ public struct ServerPlatform: Sendable {
         self.tools = tools
         self.host = host
         self.lifecycle = lifecycle
+        self.agentHosts = agentHosts
         self.log = log
     }
 

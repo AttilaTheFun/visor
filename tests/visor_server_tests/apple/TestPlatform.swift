@@ -8,6 +8,9 @@ enum TestPlatform {
     static func install() {
         var platform = ServerPlatform.apple(secrets: MemorySecrets())
         platform.host = HostDetails(name: "Test Mac", dataDirectory: scratch)
+        // No host program beside the tests: their agents are the tests' own
+        // children (AgentHostTests starts hosts itself).
+        platform.agentHosts = nil
         ServerPlatform.current = platform
     }
 

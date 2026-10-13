@@ -81,6 +81,28 @@ public final class SessionRecord {
     var listening: Task<Void, Never>?
     var isBound: Bool { listening != nil }
 
+    /// Where the conversation stands in the agent's file: the prompt its
+    /// latest turn began with (the branch a reading keeps to), and its
+    /// newest message.
+    var head: String?
+    var leaf: String?
+    /// The file's newest message is on another branch — something else
+    /// carried the session on from beside it: that branch's latest prompt
+    /// ("" when it has none). The agent is then resumed at `leaf`, rather
+    /// than where Claude would, unless the user continues that branch.
+    var otherBranch: String?
+    /// The user chose to keep this branch over `otherBranch`: it is not
+    /// offered again until the other branch goes on further.
+    var branchKept = false
+    /// Being read again on the newest branch, at the user's word: the next
+    /// reading starts the clients over, and is no fork to tell of.
+    var switchingBranch = false
+    var wentOnElsewhere: Bool { otherBranch != nil }
+
+    /// The host an earlier launch left the agent under, until this one
+    /// has picked it up or found it gone (VisorServer+Hosts.swift).
+    var leftHost: StoredHost?
+
     /// The agent that ran before this one has been told to go and is not
     /// yet gone: what is said waits, so that two agents never hold the
     /// session at once.
@@ -101,8 +123,10 @@ public final class SessionRecord {
     /// only the ones the file does not carry.
     /// The file into the cache and to here, off the main thread.
     var indexer: SessionIndexer?
-    /// Finding the file, then hearing what the indexer says of it.
+    /// Finding the file, then hearing what the indexer says of it; the
+    /// conversation it is the file of.
     var following: Task<Void, Never>?
+    var followed: String?
     /// Whether the cache holds rows before the first one here.
     var moreBefore = false
 
@@ -123,6 +147,9 @@ public final class SessionRecord {
     /// The agent said its last goal was met (Codex, which says so rather
     /// than writing a row for it).
     var goalMet = false
+    /// The agent says its goal itself (Codex): what it says, not the
+    /// transcript's marks, is the session's goal.
+    var goalReported = false
     /// The agent's running total as it last reported it: what the next
     /// report is measured from (`info.usage` is what was added up).
     var reportedUsage: SessionUsage?
@@ -173,7 +200,15 @@ public final class SessionRecord {
     var stored: StoredSession {
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
-        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage)
+        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
+                      otherBranch: otherBranch, branchKept: branchKept ? true : nil)
+    }
+
+    /// The agent's host as it stands, for the next launch to pick up (or
+    /// the one an earlier launch left, until it is picked up).
+    var host: StoredHost? {
+        guard let hostable = process as? HostableProcess, let child = hostable.hostedChild else { return leftHost }
+        return StoredHost(socket: child.socket, line: child.nextLine, carried: hostable.carried)
     }
 
     /// The session's resume command, refreshed from the process (the id is

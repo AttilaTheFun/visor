@@ -1,6 +1,7 @@
-#if canImport(Darwin)
+// URLSession behind the HTTP service: Apple's, or another Foundation's
+// (Isomer's, on the web and Android), the same code.
+
 import Foundation
-import Security
 import Synchronization
 
 public final class NativeVisorHTTPService: VisorHTTPService {
@@ -61,4 +62,3 @@ public final class NativeVisorHTTPService: VisorHTTPService {
         return text
     }
 }
-#endif

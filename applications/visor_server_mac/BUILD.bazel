@@ -14,6 +14,7 @@ swift_library(
     srcs = ["main.swift"],
     module_name = "VisorServerMacMain",
     deps = [
+        "//:foundation",
         "//libraries/visor_server_cli",
         "//libraries/visor_server_mac",
     ],

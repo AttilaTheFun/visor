@@ -27,6 +27,7 @@ extension SessionRecord {
     func followFile() {
         guard let id = process.resumeID else { return }
         stopFollowing()
+        followed = id
         let agent = info.agent, cwd = info.cwd, session = info.id
         following = Task { [weak self] in
             // Not written yet (the agent announces its id before its first
@@ -44,13 +45,15 @@ extension SessionRecord {
             // The cache catches up with the file off the main actor and
             // hands over the window to show; then each line as the agent
             // writes it.
-            let indexer = SessionIndexer(store: ServerCache.shared, sessionID: session, url: log.url, window: Self.servedRows, format: log.format)
+            let indexer = SessionIndexer(store: ServerCache.shared, sessionID: session, url: log.url, window: Self.servedRows, format: log.format,
+                                         head: self?.head)
             self?.indexer = indexer
             for await event in indexer.events() {
                 guard let self else { return }
                 switch event {
                 case .loaded(let loaded): self.apply(loaded: loaded)
                 case .lines(let lines): self.apply(lines: lines)
+                case .elsewhere(let elsewhere): self.wentOn(elsewhere: elsewhere)
                 }
             }
         }
@@ -62,6 +65,7 @@ extension SessionRecord {
         following?.cancel()
         following = nil
         indexer = nil
+        followed = nil
     }
 
     /// The file as read: the conversation is the branch that holds its
@@ -70,11 +74,20 @@ extension SessionRecord {
     /// forked elsewhere and moved on; the chat follows, and says so.
     func apply(loaded: SessionIndexer.Loaded) {
         var forked = false
-        if let last = shownPrompts.last, loaded.abandoned.contains(last) {
+        if !switchingBranch, let last = shownPrompts.last, loaded.abandoned.contains(last) {
             notice = Self.forkNotice(lost: shownPrompts.filter { loaded.abandoned.contains($0) }.count)
             forked = true
         }
+        if switchingBranch {
+            // Moved to the newest branch at the user's word: what this chat
+            // showed is behind it, which is no fork to tell of.
+            switchingBranch = false
+            forked = true
+        }
         let told = notice != nil
+        head = loaded.head ?? head
+        leaf = loaded.leaf ?? leaf
+        wentOn(elsewhere: loaded.elsewhere)
         shownPrompts = Array(loaded.prompts.suffix(Self.rememberedPrompts))
         moreBefore = loaded.more
         let before = entries.map(\.id)
@@ -107,13 +120,35 @@ extension SessionRecord {
                 // branch is worked out when the agent restarts.
                 if process.processID == nil { followFile(); return }
             }
+            if line.isMessage, let uuid = line.uuid { leaf = uuid }
             if line.isPrompt, let uuid = line.uuid {
+                head = uuid
                 shownPrompts.append(uuid)
                 if shownPrompts.count > Self.rememberedPrompts * 2 { shownPrompts.removeFirst(Self.rememberedPrompts) }
             }
             for row in line.rows where take(fileRow: row) { changed.append(row) }
         }
         if !changed.isEmpty { onFileRows?(changed) }
+    }
+
+    /// The file's newest message is on another branch (its latest prompt),
+    /// or back on this one (nil): offered to the user to choose between
+    /// (`info.otherBranch`) unless they kept this branch already over the
+    /// same one; meanwhile the agent resumes on this branch.
+    func wentOn(elsewhere: String?) {
+        guard elsewhere != otherBranch else { return }
+        // The other branch went on further: the choice is offered again.
+        if elsewhere != nil { branchKept = false }
+        otherBranch = elsewhere
+        info.otherBranch = branchKept ? nil : elsewhere
+        onInfoChanged?()
+    }
+
+    /// The user keeps this branch: not offered again until the other goes
+    /// on, and the agent carries this one on with the next message.
+    func keepBranch() {
+        branchKept = true
+        info.otherBranch = nil
     }
 
     /// How many of these rows are the user's, in these words.
@@ -151,7 +186,7 @@ extension SessionRecord {
         let file = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
         let row = rowText.trimmingCharacters(in: .whitespacesAndNewlines)
         return file == row || (!row.isEmpty && file.hasPrefix(row + "\n\nAttached "))
-            || (row.isEmpty && file.hasPrefix("Attached "))
+            || (row.isEmpty && file.hasPrefix("Attached ")) || CommandWords.same(file, row)
     }
 
     /// Puts one row from the file into the transcript: a new row goes on the

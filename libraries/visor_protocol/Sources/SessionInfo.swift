@@ -68,6 +68,15 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// between turns — a monitor, a command, a subagent — as the agent
     /// reports the list; empty when nothing is.
     public var background: [StatusItem] = []
+    /// How much memory the agent and what it runs are using, in bytes, as
+    /// its host last said; nil where the agent has no host, or is not
+    /// running.
+    public var memory: Int64?
+    /// The conversation was carried on elsewhere, on a branch beside the
+    /// one shown (another Claude Code resumed it): that branch's latest
+    /// prompt, while the user has not chosen between them. The session
+    /// keeps to its own branch unless told to continue that one.
+    public var otherBranch: String?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -120,5 +129,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         loopWake = try c.decodeIfPresent(Double.self, forKey: .loopWake)
         loopCron = try c.decodeIfPresent(String.self, forKey: .loopCron)
         background = try c.decodeIfPresent([StatusItem].self, forKey: .background) ?? []
+        memory = try c.decodeIfPresent(Int64.self, forKey: .memory)
+        otherBranch = try c.decodeIfPresent(String.self, forKey: .otherBranch)
     }
 }

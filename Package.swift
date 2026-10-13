@@ -32,7 +32,8 @@ let shared: [Target] = [
         // Where there is no SQLite (Windows), the cache is kept in memory.
         swiftSettings: strict + [.define("MESSAGE_CACHE_SQLITE", .when(platforms: [.macOS, .linux]))]
     ),
-    .target(name: "VisorServer", dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache"],
+    .target(name: "AgentHostWire", path: "libraries/agent_host_wire/Sources", swiftSettings: strict),
+    .target(name: "VisorServer", dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire"],
             path: "libraries/visor_server/Sources", swiftSettings: strict),
     .target(name: "VisorServerCLI", dependencies: ["VisorServer", "VisorProtocol"],
             path: "libraries/visor_server_cli/Sources", swiftSettings: strict),
@@ -47,10 +48,16 @@ let system: [Target] = [
                       path: "applications/visor_server_windows", swiftSettings: strict),
 ]
 let tests: [Target] = []
+let agentHost: [Product] = []
 #else
-/// Linux: POSIX terminals, signals and sockets (shared with the Mac).
+/// Linux: POSIX terminals, signals and sockets (shared with the Mac), and
+/// the agents' host, built beside the server.
 let system: [Target] = [
     .target(name: "CVisorPOSIX", path: "libraries/visor_server_posix/c"),
+    .target(name: "VisorAgentHost", dependencies: ["AgentHostWire", "CVisorPOSIX"],
+            path: "libraries/visor_agent_host/Sources", swiftSettings: strict),
+    .executableTarget(name: "VisorAgentHostMain", dependencies: ["VisorAgentHost"],
+                      path: "applications/visor_agent_host", exclude: ["BUILD.bazel"], swiftSettings: strict),
     .target(name: "VisorServerPOSIX", dependencies: ["CVisorPOSIX", "VisorServer"],
             path: "libraries/visor_server_posix/Sources", swiftSettings: strict),
     .target(name: "VisorServerLinux", dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI", "VisorServerPOSIX"],
@@ -64,12 +71,15 @@ let tests: [Target] = [
                 dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux"],
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
 ]
+/// The agents' host, built with the server: `swift build -c release` puts
+/// both in the same folder, where the server looks for it.
+let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"])]
 #endif
 
 let package = Package(
     name: "visor",
     platforms: [.macOS(.v15)],
-    products: [.executable(name: "visor-server", targets: ["VisorServerMain"])],
+    products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
     dependencies: [
         // The message cache, where there is SQLite to keep it in.
         .package(url: "https://github.com/stephencelis/SQLite.swift.git", exact: "0.15.3"),

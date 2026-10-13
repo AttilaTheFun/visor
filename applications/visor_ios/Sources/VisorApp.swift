@@ -14,11 +14,19 @@ struct VisorApp: App {
     /// the user opened (PushDelegate).
     @UIApplicationDelegateAdaptor(PushDelegate.self) private var pushDelegate
 
+    /// This app's version and build ("0.31 (8)").
+    static var bundleVersion: String {
+        guard let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return "" }
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        return build.map { "\(short) (\($0))" } ?? short
+    }
+
     init() {
         // The host's services first: the store connects through them.
         installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService(),
                              notifications: NativeVisorNotificationService(), widget: WidgetFeed(), ssh: NativeVisorSSHService(), network: NativeVisorNetworkService(),
-                             dictation: NativeVisorDictationService(), deviceName: UIDevice.current.name)
+                             dictation: NativeVisorDictationService(), deviceName: UIDevice.current.name,
+                             appVersion: Self.bundleVersion, platformName: UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS")
         // Asked once, at first launch: turns finished, goals done, agents
         // waiting for approval.
         // (Not for screenshot tests, which a prompt would cover.)

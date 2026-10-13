@@ -150,13 +150,30 @@ struct AgentScreen: View {
                 }
             }
         }
-        // The session was forked elsewhere and the chat moved to the newer
-        // branch: not a choice, but not a surprise either.
-        .alert("This session was forked", isPresented: Binding(get: { transcript.notice != nil }, set: { if !$0 { host.acknowledge(sessionID) } })) {
+        // What the user is told about the session (a fork found, a command
+        // the agent's memory limit stopped, where it moved from).
+        .alert(info?.title ?? "Session", isPresented: Binding(get: { transcript.notice != nil && info?.otherBranch == nil },
+                                                               set: { if !$0 { host.acknowledge(sessionID) } })) {
             Button("OK") { host.acknowledge(sessionID) }
         } message: {
             Text(transcript.notice ?? "")
         }
+        // The conversation went on elsewhere, beside the branch shown: the
+        // user chooses which to carry on.
+        .alert("This Conversation Went On Elsewhere", isPresented: Binding(get: { info?.otherBranch != nil }, set: { _ in })) {
+            Button("Keep This Branch", role: .cancel) { host.keepBranch(sessionID) }
+            Button("Continue That Branch") { host.continueBranch(sessionID) }
+        } message: {
+            Text(Self.otherBranchWords(info?.otherBranch))
+        }
+    }
+
+    /// What the choice between branches says of the other one.
+    static func otherBranchWords(_ prompt: String?) -> String {
+        let latest = (prompt ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let named = latest.isEmpty ? "" : " Its latest message: “\(latest.count > 140 ? String(latest.prefix(140)) + "…" : latest)”."
+        return "Another Claude Code carried this conversation on, on a branch beside the one shown here.\(named) "
+            + "Keep this branch, and your next message carries it on, or continue that one: Visor reads it and its agent resumes there."
     }
 
     private var chat: some View {

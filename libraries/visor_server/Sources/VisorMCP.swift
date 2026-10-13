@@ -17,7 +17,7 @@ enum VisorMCP {
         written.withLock { path in
             if let path { return path }
             let directory = ServerPlatform.current.host.dataDirectory
-            let file = directory.appendingPathComponent("visor_mcp.js")
+            let file = directory.appendingPathComponent("visor_mcp.js", isDirectory: false)
             let source = Data(VisorMCPScript.source.utf8)
             if (try? Data(contentsOf: file)) != source {
                 try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

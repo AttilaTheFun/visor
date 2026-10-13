@@ -93,6 +93,25 @@ final class RelayMessagingTests: ServerTestCase {
         return await withCheckedContinuation { done in here.answerAgent(e) { done.resume(returning: $0) } }
     }
 
+    func testEachServerKnowsItsClientsBuildsAndTheOtherServers() async {
+        here.sessions = [record("A", "Mini work")]
+        var said = report()
+        said.clientVersion = "0.31 (8)"
+        said.clientPlatform = "iOS"
+        said.servers[1].version = "0.31 (6)"
+        here.takeReport(said)
+        let list = await ask("sessions")
+        XCTAssertTrue(list.text?.contains("On Laptop (server \(there.id), Visor Server 0.31 (6))") == true, list.text ?? "")
+        XCTAssertTrue(list.text?.contains("Logan's iPhone: Visor 0.31 (8) on iOS") == true, list.text ?? "")
+        let answer = here.route(HTTPRequest(method: "GET", path: "/api/versions", headers: ["authorization": "Bearer here-password"], body: ""))
+        XCTAssertEqual(answer.status, 200)
+        let versions = parseJSON(answer.body)
+        XCTAssertEqual(versions?["clients"][0]["version"].string, "0.31 (8)")
+        XCTAssertEqual(versions?["clients"][0]["platform"].string, "iOS")
+        XCTAssertEqual(versions?["servers"][0]["version"].string, "0.31 (6)")
+        XCTAssertEqual(versions?["server"]["id"].string, here.id)
+    }
+
     func testAnAgentListsTheSessionsAClientReports() async {
         here.sessions = [record("A", "Mini work")]
         there.sessions = [record("B", "Laptop work", busy: true)]
@@ -120,7 +139,7 @@ final class RelayMessagingTests: ServerTestCase {
         XCTAssertEqual(receipts.map(\.outcome), [.queued])
         let answer = await sent.value
         XCTAssertNil(answer.error)
-        XCTAssertEqual(answer.text, "Queued for “Laptop work” on Laptop: it is working and takes it when its turn ends.")
+        XCTAssertEqual(answer.text, "Queued for “Laptop work” (B) on Laptop: it is working and takes it when its turn ends.")
 
         let queued = try XCTUnwrap(there.sessions.first?.info.queued.first)
         XCTAssertTrue(queued.contains("“Mini work” (A) on \(here.hostName)"), queued)
@@ -179,7 +198,7 @@ final class RelayMessagingTests: ServerTestCase {
         // A client comes; the agent asks after it.
         exchange(from: here, to: there)
         let status = await ask("status", messageID: id)
-        XCTAssertEqual(status.text, "Sent to “Laptop work” on Laptop.")
+        XCTAssertEqual(status.text, "Sent to “Laptop work” (B) on Laptop.")
         let unknown = await ask("status", messageID: "nope")
         XCTAssertNotNil(unknown.error)
     }

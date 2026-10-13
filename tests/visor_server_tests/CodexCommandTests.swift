@@ -12,6 +12,29 @@ import XCTest
 
 @MainActor
 final class CodexCommandTests: ServerTestCase {
+    func testAGoalWrittenBackItsOwnWayIsTheOneSent() {
+        let sent = "/goal Ok yes please migrate the existing stuff to Bazel first, and get it working\n\nI understand it will be limited"
+        // Codex's rollout keeps the breaks and quotes escaped, and may cut it short.
+        XCTAssertTrue(CommandWords.same("/goal Ok yes please migrate the existing stuff to Bazel first, and get it working\\n\\nI under", sent))
+        XCTAssertTrue(SessionRecord.sameWords("/goal Ok yes please migrate the existing stuff to Bazel first, and get it", sent))
+        XCTAssertFalse(CommandWords.same("/goal something else entirely", sent))
+        XCTAssertFalse(CommandWords.same("/compact", "/goal compact"))
+        XCTAssertFalse(CommandWords.same("plain words", "plain words "), "only commands are matched loosely")
+    }
+
+    func testTheGoalTheAgentSaysIsNotUndoneByTheRows() {
+        let info = SessionInfo(id: "C", agent: .codex, cwd: "/tmp", title: "Codex", created: 0)
+        let record = SessionRecord(info: info, process: CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil),
+                                   entries: [TranscriptEntry(id: "u1", role: .user, text: "/goal clear"),
+                                             TranscriptEntry(id: "u2", role: .user, text: "/goal ship 0.31")])
+        record.noteMarks(lookingBack: false)
+        XCTAssertEqual(record.info.goal, "ship 0.31", "the latest /goal row sets the goal")
+        _ = record.apply(.goal("ship 0.31 and test it", met: false))
+        record.entries.append(TranscriptEntry(id: "a1", role: .assistant, text: "Working on it."))
+        record.noteMarks(lookingBack: false)
+        XCTAssertEqual(record.info.goal, "ship 0.31 and test it", "Codex's own word stands")
+    }
+
     func testTheCommandsAreRead() {
         XCTAssertEqual(CodexCommand("/goal"), .showGoal)
         XCTAssertEqual(CodexCommand(" /goal  ship the release \n"), .setGoal("ship the release"))

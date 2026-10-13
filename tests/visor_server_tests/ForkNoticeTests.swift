@@ -1,5 +1,7 @@
-// A session forked elsewhere: the chat follows the branch Claude Code
-// would resume, and the user is told once.
+// A session forked elsewhere: the chat keeps to the branch it was on (its
+// head) and its agent resumes there, and the user is told once. A session
+// that has no head yet (from before one was kept) follows the branch
+// Claude Code would resume.
 
 import ClaudeTranscript
 import MessageCache
@@ -58,7 +60,7 @@ final class ForkNoticeTests: ServerTestCase {
 
     private func texts(_ record: SessionRecord) -> [String] { record.entries.map(\.text) }
 
-    func testForkWhileIdleMovesTheChatAndSaysSo() async throws {
+    func testForkElsewhereKeepsTheChatOnItsBranchAndResumesThere() async throws {
         let record = record()
         var replaced = 0
         record.onFileReplaced = { replaced += 1 }
@@ -66,24 +68,39 @@ final class ForkNoticeTests: ServerTestCase {
         await record.waitForFile(past: 0)
         XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
         XCTAssertNil(record.notice)
-        XCTAssertEqual(record.shownPrompts, ["p1", "p2"])
+        XCTAssertEqual(record.head, "p2")
+        XCTAssertEqual(record.leaf, "a2")
 
-        // Another agent resumes from APPLE and writes last: BANANA is left behind.
+        // Another agent resumes from APPLE and writes last. The chat keeps
+        // to its branch, says the file went on elsewhere, and its agent is
+        // resumed at its own newest message.
         try append([line("user", "p3", "a1", "Also CHERRY"), line("assistant", "a3", "p3", "OK-CHERRY")])
         try await Task.sleep(nanoseconds: 1_200_000_000)
-        XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also CHERRY", "OK-CHERRY"])
-        XCTAssertEqual(record.notice?.hasPrefix("Another Claude Code resumed this session"), true)
-        XCTAssertEqual(record.notice?.contains("One message shown here"), true)
-        XCTAssertEqual(record.shownPrompts, ["p1", "p3"])
-        XCTAssertGreaterThanOrEqual(replaced, 1)
-
-        // Someone continuing the conversation is not a fork: no new notice.
-        record.notice = nil
-        try append([line("user", "p4", "a3", "Also DATE"), line("assistant", "a4", "p4", "OK-DATE")])
-        try await Task.sleep(nanoseconds: 1_200_000_000)
-        XCTAssertEqual(texts(record).last, "OK-DATE")
+        XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
+        XCTAssertEqual(record.info.otherBranch, "Also CHERRY", "offered to the user, by its latest prompt")
         XCTAssertNil(record.notice)
-        XCTAssertEqual(record.shownPrompts, ["p1", "p3", "p4"])
+        XCTAssertEqual(record.shownPrompts, ["p1", "p2"])
+        XCTAssertEqual(record.leaf, "a2")
+        XCTAssertEqual(record.stored.head, "p2")
+        XCTAssertEqual(record.stored.otherBranch, "Also CHERRY")
+
+        // Kept: not offered again, and the agent still resumes here.
+        record.keepBranch()
+        XCTAssertNil(record.info.otherBranch)
+        XCTAssertTrue(record.wentOnElsewhere)
+
+        // Its agent carries on from there: the conversation is this branch
+        // again, and the next resume is Claude Code's own.
+        record.notice = nil
+        try append([line("user", "p4", "a2", "Also DATE"), line("assistant", "a4", "p4", "OK-DATE")])
+        try await Task.sleep(nanoseconds: 1_200_000_000)
+        XCTAssertEqual(texts(record).suffix(2), ["Also DATE", "OK-DATE"])
+        XCTAssertFalse(texts(record).contains("OK-CHERRY"))
+        XCTAssertFalse(record.wentOnElsewhere)
+        XCTAssertNil(record.info.otherBranch)
+        XCTAssertNil(record.notice)
+        XCTAssertEqual(record.head, "p4")
+        XCTAssertEqual(record.leaf, "a4")
     }
 
     func testForkFoundOnResumeFromWhatWasShownBefore() async throws {
@@ -169,5 +186,29 @@ final class ForkNoticeTests: ServerTestCase {
         await record.waitForFile(past: 0)
         XCTAssertEqual(texts(record).count, 6)
         XCTAssertNil(record.notice)
+    }
+
+    func testContinuingTheOtherBranchReadsItAndStartsTheChatOver() async throws {
+        VisorServer.storeRoot = FileManager.default.temporaryDirectory.appendingPathComponent("visor-branch-server-" + UUID().uuidString)
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7993)
+        let record = record()
+        server.sessions = [record]
+        record.followFile()
+        await record.waitForFile(past: 0)
+        try append([line("user", "p3", "a1", "Also CHERRY"), line("assistant", "a3", "p3", "OK-CHERRY")])
+        try await Task.sleep(nanoseconds: 1_200_000_000)
+        XCTAssertEqual(record.info.otherBranch, "Also CHERRY")
+        let generation = record.generation
+        let loads = record.fileLoads
+
+        server.continueOtherBranch(record)
+        await record.waitForFile(past: loads)
+        XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also CHERRY", "OK-CHERRY"])
+        XCTAssertNil(record.info.otherBranch)
+        XCTAssertFalse(record.wentOnElsewhere)
+        XCTAssertNil(record.notice, "moved at the user's word: no fork to tell of")
+        XCTAssertEqual(record.head, "p3")
+        XCTAssertNotEqual(record.generation, generation, "clients start over from the branch")
     }
 }

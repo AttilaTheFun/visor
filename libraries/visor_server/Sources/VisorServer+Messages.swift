@@ -63,6 +63,9 @@ extension VisorServer {
         case "archive": performArchive(envelope)
         case "unarchive": performUnarchive(envelope)
         case "restart": performRestart(envelope, from: client)
+        case "restartAgent": performRestartAgent(envelope)
+        case "keepBranch": performKeepBranch(envelope)
+        case "continueBranch": performContinueBranch(envelope)
         case "end": performEnd(envelope)
         // A client's heartbeat: answered at once, to that client only.
         case "ping": client?.send(.pong())
@@ -261,6 +264,23 @@ extension VisorServer {
         unarchive(record)
     }
 
+    private func performKeepBranch(_ envelope: Envelope) {
+        guard let record = session(envelope.session), record.wentOnElsewhere else { return }
+        record.keepBranch()
+        saveArchive()
+        broadcastSessions()
+    }
+
+    private func performContinueBranch(_ envelope: Envelope) {
+        guard let record = session(envelope.session), record.wentOnElsewhere else { return }
+        continueOtherBranch(record)
+    }
+
+    private func performRestartAgent(_ envelope: Envelope) {
+        guard let record = session(envelope.session), !record.info.archived, !record.info.agent.isShell else { return }
+        restartAgent(record)
+    }
+
     /// Quitting the app kills every agent, so an agent that wants a
     /// new build of the server cannot install it itself: it dies
     /// half-way. Here the server does it — a relauncher that outlives
@@ -298,6 +318,16 @@ extension VisorServer {
         return answer(envelope, from: caller.info.id, named: caller.displayName, on: nil)
     }
 
+    /// What heads a message from one agent to another: the session and the
+    /// computer it came from and the one it is for, each by name and id, so
+    /// an agent never takes it for the user's or for another session's,
+    /// and answers exactly where it came from.
+    static func agentMessageHeader(from: RelayEndpoint, to: RelayEndpoint) -> String {
+        "[Message from the Visor session “\(from.sessionName)” (\(from.session)) on \(from.serverName) (server \(from.server)), "
+            + "to this session “\(to.sessionName)” (\(to.session)) on \(to.serverName) — not from the user. "
+            + "To answer, use send_message with session \(from.session) and server \(from.server).]"
+    }
+
     /// The ask answered for this server's sessions: from one of its own
     /// agents, or (`computer` set) from an agent on another server whose
     /// message a client carried here.
@@ -326,17 +356,16 @@ extension VisorServer {
                 reply.error = "Nothing to send."
                 return reply
             }
-            // Marked as another agent's, so it is not taken for the user's.
-            let marked = if let computer {
-                "[Message from the Visor session “\(name)” (\(caller)) on \(computer.serverName), not from the user. "
-                    + "To answer, use send_message with session \(caller) and server \(computer.server).]\n\n" + text
-            } else {
-                "[Message from the Visor session “\(name)” (\(caller)), not from the user. "
-                    + "To answer, use send_message to that session.]\n\n" + text
-            }
+            // Marked as another agent's, so it is not taken for the user's:
+            // who sent it (session and computer, by name and id), who it is
+            // for, and exactly how to answer.
+            let from = computer ?? RelayEndpoint(server: id, serverName: hostName, session: caller, sessionName: name)
+            let marked = Self.agentMessageHeader(from: from, to: RelayEndpoint(server: id, serverName: hostName, session: target.info.id,
+                                                                               sessionName: target.displayName)) + "\n\n" + text
             let busy = target.info.busy
             deliver(marked, to: target)
-            reply.text = busy ? "Queued for \(target.displayName): it is working and takes it when its turn ends." : "Sent to \(target.displayName)."
+            let to = "“\(target.displayName)” (\(target.info.id)) on \(hostName)"
+            reply.text = busy ? "Queued for \(to): it is working and takes it when its turn ends." : "Sent to \(to)."
             reply.busy = busy
         case "read":
             guard let target = others.first(where: { $0.info.id == envelope.session }) else {

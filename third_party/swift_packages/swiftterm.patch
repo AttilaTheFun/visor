@@ -360,3 +360,31 @@ diff -ruN a/Sources/SwiftTerm/Generated/SwiftTermTerminfo.swift b/Sources/SwiftT
 +}
 +
 +#endif
+diff -ruN a/Sources/SwiftTerm/Profiling.swift b/Sources/SwiftTerm/Profiling.swift
+--- a/Sources/SwiftTerm/Profiling.swift
++++ b/Sources/SwiftTerm/Profiling.swift
+@@ -127,17 +127,24 @@
+ 
+     /// Marks a worker whose owner cannot be derived portably from its name.
+     static func markCurrentThread(as owner: ProfilingOwner) {
++        // A thread's dictionary is Apple's (and Linux's); Isomer's
++        // Foundation (the web, Android) has none, and the parse thread is
++        // known by its name there.
++        #if canImport(Darwin)
+         Thread.current.threadDictionary[threadOwnerKey] = NSNumber(value: owner.rawValue)
++        #endif
+     }
+ 
+     static var current: ProfilingOwner {
+         if Thread.isMainThread {
+             return .main
+         }
++        #if canImport(Darwin)
+         if let number = Thread.current.threadDictionary[threadOwnerKey] as? NSNumber,
+            let owner = ProfilingOwner(rawValue: number.uint8Value) {
+             return owner
+         }
++        #endif
+         guard let name = Thread.current.name, !name.isEmpty else {
+             return .other
+         }

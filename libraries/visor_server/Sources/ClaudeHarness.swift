@@ -128,7 +128,7 @@ public final class ClaudeHarness: AgentHarness {
     /// account's default, which a session reports once it runs.
     static func configuredModel() -> String? {
         let file = ClaudeSessionFiles.configDirectory(home: FileManager.default.homeDirectoryForCurrentUser)
-            .appendingPathComponent("settings.json")
+            .appendingPathComponent("settings.json", isDirectory: false)
         if let data = try? Data(contentsOf: file),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let model = object["model"] as? String, !model.isEmpty { return model }

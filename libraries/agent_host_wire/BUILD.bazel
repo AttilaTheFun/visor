@@ -1,0 +1,14 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# What the server and an agent's host (visor-agent-host) say to each other
+# over the host's socket: frames, and the host's hello.
+swift_library(
+    name = "agent_host_wire",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "AgentHostWire",
+    deps = ["//:foundation"],
+)

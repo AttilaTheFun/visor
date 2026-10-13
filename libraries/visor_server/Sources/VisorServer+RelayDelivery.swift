@@ -13,7 +13,7 @@ extension VisorServer {
     /// sender's outbox keeping it, so no copy of it can still come.
     static let relayLedgerKept: TimeInterval = 2 * relayLifetime
 
-    static var relayLedgerURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("relay-ledger.json") }
+    static var relayLedgerURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("relay-ledger.json", isDirectory: false) }
 
     static func keptRelayLedger() -> [String: RelayLedgerEntry] {
         guard let data = try? Data(contentsOf: relayLedgerURL) else { return [:] }

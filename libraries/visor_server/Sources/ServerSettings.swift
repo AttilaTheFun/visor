@@ -46,11 +46,18 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// own addresses, its SSH key and the computers it knows told to no
     /// one, introductions refused. Also on with VISOR_STANDALONE=1.
     public var standalone = false
+    /// Each session's agent runs under a host of its own (visor-agent-host),
+    /// apart from the server: a restart or an update leaves it working, and
+    /// one that runs away cannot take the server down. Off, agents are the
+    /// server's own children. On unless turned off; VISOR_DETACH_AGENT_HOST
+    /// (0 or 1) overrides it (VisorServer.detachesAgents).
+    public var detachAgents = true
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
-        case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone
+        case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
+             detachAgents
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -64,6 +71,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         try c.encode(serverID, forKey: .serverID)
         try c.encode(authentication, forKey: .authentication)
         try c.encode(standalone, forKey: .standalone)
+        try c.encode(detachAgents, forKey: .detachAgents)
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -87,6 +95,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         standalone = try c.decodeIfPresent(Bool.self, forKey: .standalone) ?? false
         serverID = try c.decodeIfPresent(String.self, forKey: .serverID) ?? ""
         authentication = try c.decodeIfPresent(String.self, forKey: .authentication) ?? "password"
+        detachAgents = try c.decodeIfPresent(Bool.self, forKey: .detachAgents) ?? true
     }
 
     public func keep(at url: URL) {

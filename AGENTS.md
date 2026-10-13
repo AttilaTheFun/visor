@@ -53,4 +53,6 @@ to one focused change, and say in it how the change was verified.
 - Never send test turns into a real session: start a throwaway session
   over the protocol and end it.
 - Verify a server restart by counting agent processes per session id:
-  exactly one `claude --resume <id>` (or codex) parented to the menu bar app.
+  exactly one `claude --resume <id>` (or codex) per session id, parented to
+  its `visor-agent-host` (which is parented to the menu bar app, or to
+  launchd once the server that started it has restarted).

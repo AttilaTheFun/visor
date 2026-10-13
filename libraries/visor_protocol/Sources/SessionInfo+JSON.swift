@@ -18,6 +18,8 @@ extension SessionInfo {
         if let loopWake { o["loopWake"] = .number(loopWake) }
         if let loopCron { o["loopCron"] = .string(loopCron) }
         if !background.isEmpty { o["background"] = .array(background.map(\.json)) }
+        if let memory { o["memory"] = .number(Double(memory)) }
+        if let otherBranch { o["otherBranch"] = .string(otherBranch) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         if case .tui(let controller, let cols, let rows) = mode {
@@ -44,6 +46,8 @@ extension SessionInfo {
         loopWake = json["loopWake"].double
         loopCron = json["loopCron"].string
         background = json["background"].array?.compactMap(StatusItem.init(json:)) ?? []
+        memory = json["memory"].int64
+        otherBranch = json["otherBranch"].string
         preview = json["preview"].string
         updated = json["updated"].double
         if json["mode"]["kind"].string == "tui", let controller = json["mode"]["controller"].string,

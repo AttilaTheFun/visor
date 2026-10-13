@@ -91,7 +91,8 @@ Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
    (rules_xcodeproj); it is not committed.
 7. Keeping the server up: a LaunchAgent with RunAtLoad that runs
    `open -a "/Applications/Visor Server.app"` starts it at login (no
-   KeepAlive — the server's relauncher owns restarts).
+   KeepAlive — the server's relauncher owns restarts; the agents are under
+   their own hosts and outlive it).
 
 ## 3. Architecture, as built
 
@@ -163,9 +164,19 @@ session list and a suffix of rows; the queue is NOT archived (ephemeral).
 emits deltas, status and busy only; rows come from Claude Code's own
 `~/.claude/projects/<cwd-slug>/<session>.jsonl`, read by a `SessionIndexer`
 (an actor) into the **message cache**; the record reads its events in order.
-The file is a tree (uuid/parentUuid); `ClaudeBranch.current` picks the
-branch holding the last line; prompts off it are abandoned forks (the
-user gets a notice); a line with no parent that is not the first
+The file is a tree (uuid/parentUuid); `ClaudeBranch.current` keeps to
+the branch the session was on — its head, the prompt its latest turn
+began with, kept in sessions.json — and follows whatever carries on from
+it; without a head, the branch holding the newest message (never a line
+that is not a message: Claude Code hangs attachments and snapshots off
+older messages). Prompts off it are abandoned. When the file's newest
+message is on another branch (something else resumed the session), the
+session offers the choice (`SessionInfo.otherBranch`, that branch's latest
+prompt; an alert in the chat): keep this branch — the agent is resumed at
+its newest message (`--resume-session-at`, Claude Code's own option), and
+the next message makes it the newest again — or continue that one, which
+reads the file again from its start on the newest branch and makes the
+agent again. A line with no parent that is not the first
 (compaction boundary) CONTINUES from the line before it; a line whose
 parent was never seen is a missed line, not a fork. The indexer starts the
 tail at a line boundary (never the file size mid-write — that orphaned
@@ -176,7 +187,8 @@ trimmed); file rows insert before trailing unsettled user rows.
 **Message cache** (`libraries/message_cache`, module `MessageCache`): one
 API over a `MessageStorage` — `SQLiteStorage` (SQLite.swift; defines
 `MESSAGE_CACHE_SQLITE`, selected on iOS/macOS in the BUILD) or
-`MemoryStorage` (web). Tables: sources (path, identity=inode, bytes,
+`MemoryStorage` (web). Tables: sources (path, identity=inode and the reading's version — a new
+version reads every file again once, bytes,
 nextSeq), syncs (revision, generation), nodes (the source tree), messages
 (seq, id, role, text, source key, JSON of the row), messages_fts (FTS5).
 Server cache: `~/Library/Application Support/com.LoganShire.VisorServer.macOS/
@@ -522,7 +534,54 @@ Settings" last (edit or remove). Compose offers only
 (required), the network (whose the Mac is, the front's state).
 `POST /api/restart {path, session}` installs a bundle over itself via
 a detached relauncher and resumes named sessions with a nudge
-("[Visor] The Visor server restarted while you were working…").
+("[Visor] The Visor server restarted while you were working…"). The
+relauncher (`AppRelauncher`) keeps the running bundle aside (`Previous/` in
+the data directory) and watches the new one for two minutes: if it quits,
+crashes or never answers on its port, the previous build is put back and
+opened, carrying the same sessions, and `relaunch-rollback.txt` says why,
+which the server shows in its menu (`updateNotice`) once.
+
+**Agents apart from the server.** Unless turned off — Visor Server's
+"Run agents apart from the server" (`ServerSettings.detachAgents`, on by
+default), or `VISOR_DETACH_AGENT_HOST=0` in a server's environment, which
+overrides the setting — every chat agent runs under a host of its own,
+`visor-agent-host`. An agent that is to be detached and cannot be (no host
+program, one that does not run) is not started some other way: it fails,
+saying how to turn detaching off, and the menu says so too. Windows has no
+host, so its agents are the server's own children unless the variable
+says 1. The host is libraries/visor_agent_host (in the bundle at
+`Contents/Helpers`, signed with the app by tools/sign_mac_app.sh). The
+server starts the host as its child — so the agent keeps the app's
+privacy grants (a launchd job would not: a job reading ~/Downloads is
+refused) — and the host calls `setsid`, so it outlives the server. The
+agent's adapter drives a `HostedChild` as it would a `PipedChild`: lines
+in, lines out, an exit. `relaunch` lets the hosts go (`leaveAgents`) and
+writes each socket and the next line not yet heard into sessions.json
+(`StoredSession.host`); the next launch picks each up (`pickUp`, while the
+session is held) and is sent what it missed, Codex's turn in flight
+carried by the adapter (`HostableProcess.carried`). A host that is gone
+leaves the session as a restart used to: resumed with the nudge. A quit
+ends the agents. A host with no server for a day ends its agent; one
+whose agent has gone waits ten minutes for a server to tell. The host's
+memory guard holds the agent's tree to `AgentChildren.memoryLimit` (half
+the computer's memory) by stopping its largest process, with a notice;
+the session's `memory` is shown in the inspector. "Restart Agent" in a
+session's menu (`restartAgent`) ends just that session's agent; the
+next message starts a new one, and a turn it was working on is carried
+on by a nudge. Hosts log to `hosts/hosts.log` in the data folder.
+
+**Moving a session.** "Migrate…" in a session's menu lists the other
+computers connected now. The client (`SessionMigration`) asks the
+session's server for an offer (VisorServer+Migration.swift: the agent's
+own files for the conversation, found by `SessionCatalog+Migration`, and
+the projects — its folder's repository, and the repositories its
+conversation names most, by `ProjectSurvey`), the other for a plan
+(VisorServer+MigrationArrival.swift: each project here already, cloned
+from its remote when it has nothing the remote does not, copied when it
+does or has no remote, or made), and carries the files across a piece at
+a time. Paths under one home folder land under the other's. The new
+session resumes the same conversation; the old one is left for the user
+to remove.
 
 **The server on every system.** `libraries/visor_server` has no
 conditional compilation and imports nothing of a system: what differs —

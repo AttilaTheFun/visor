@@ -83,6 +83,8 @@ public final class AgentServerConnection: Identifiable {
     @ObservationIgnored public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
     public private(set) var catalogs: [AgentCatalog] = []
+    /// The Visor Server it runs, as it said at sign-in ("0.31 (8)").
+    public private(set) var serverVersion: String?
     /// The store saves when the address or credentials change.
     @ObservationIgnored var onRecordChange: (() -> Void)?
 
@@ -464,6 +466,7 @@ public final class AgentServerConnection: Identifiable {
     /// What the server said of itself: its id, and its own addresses as
     /// more paths to it.
     private func take(_ identity: ServerIdentity) {
+        serverVersion = identity.version
         var changed = false
         if record.serverID != identity.id { record.serverID = identity.id; changed = true }
         if record.standalone != identity.standalone {
@@ -1043,17 +1046,18 @@ public final class AgentServerConnection: Identifiable {
     private func sendParts(_ sessionID: String, text: String, images: [String]) {
         let parts = text.contains("\n/") ? Self.split(text, commands: Set((sessionCommands[sessionID] ?? []).map(\.name))) : [text]
         let session = transcript(for: sessionID)
-        var posts: [(text: String, images: [String])] = []
+        var posts: [(id: String, text: String, images: [String])] = []
         for (index, part) in parts.enumerated() {
             let attached = index == 0 ? images : []
-            session.sending.append(outgoing(part, images: attached, in: sessionID, session))
-            posts.append((part, attached))
+            let out = outgoing(part, images: attached, in: sessionID, session)
+            session.sending.append(out)
+            posts.append((out.id, part, attached))
         }
         session.flush()
         Task { [weak self] in
             // One after the other: a command must reach the server after
             // its words, to wait for their turn to end.
-            for post in posts { await self?.post(sessionID, text: post.text, images: post.images) }
+            for post in posts { await self?.post(sessionID, outgoing: post.id, text: post.text, images: post.images) }
         }
     }
 
@@ -1071,13 +1075,22 @@ public final class AgentServerConnection: Identifiable {
         return outgoing
     }
 
-    private func post(_ sessionID: String, text: String, images: [String]) async {
+    /// Posts one message. Taken, one that waits for the turn to end is no
+    /// longer on its way: the server's queue holds it from here (one sent to
+    /// an idle agent stays in the thread until the record carries it). Not
+    /// taken, it is not on its way at all, and the user is told.
+    private func post(_ sessionID: String, outgoing id: String, text: String, images: [String]) async {
+        let session = transcript(for: sessionID)
         do {
             take(try await server.sendMessage(sessionID, text: text, images: images), replacing: false)
+            session.sending.removeAll { $0.id == id && !$0.shown }
             commandError = nil
         } catch {
-            commandError = "\(error)"
+            session.sending.removeAll { $0.id == id }
+            let words = text.count > 60 ? String(text.prefix(60)) + "…" : text
+            commandError = "Not sent (“\(words)”): \(error)"
         }
+        session.flush()
     }
 
     /// The slash commands each open session's agent takes, asked once,
@@ -1110,6 +1123,19 @@ public final class AgentServerConnection: Identifiable {
     }
 
     public func stop(_ sessionID: String) { act(.stop, on: sessionID) }
+
+    /// Ends the session's agent and starts it again on the same
+    /// conversation: what to do with one that is stuck, or holds too much.
+    public func restartAgent(_ sessionID: String) { act(.restartAgent, on: sessionID) }
+
+    /// The conversation went on elsewhere: keep to the branch shown (the
+    /// next message carries it on and makes it the newest again), or
+    /// continue the newest branch instead.
+    public func keepBranch(_ sessionID: String) { act(.keepBranch, on: sessionID) }
+    public func continueBranch(_ sessionID: String) { act(.continueBranch, on: sessionID) }
+
+    /// Whether sessions move to and from this server (SessionMigration).
+    public var migrates: Bool { server.migrates }
 
     /// Drops a message that is waiting for the turn to end — one of them,
     /// or all of them when `text` is nil.

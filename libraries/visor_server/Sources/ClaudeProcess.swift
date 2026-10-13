@@ -14,7 +14,7 @@ import Foundation
 import VisorProtocol
 
 @MainActor
-public final class ClaudeProcess: AgentProcess {
+public final class ClaudeProcess: AgentProcess, HostableProcess {
     public let events: AsyncStream<AgentEvent>
     private let emit: AsyncStream<AgentEvent>.Continuation
 
@@ -27,16 +27,28 @@ public final class ClaudeProcess: AgentProcess {
     public var approvalEnvironment: [String: String] = [:]
     /// The running agent. One that was stopped is no longer this, and what
     /// it still says is not passed on.
-    private var child: PipedChild?
+    private var child: (any AgentChild)?
     public private(set) var resumeID: String?
     public var resumeCommand: String? {
         guard let id = resumeID else { return nil }
         return "cd \(ClaudeProcess.quoted(cwd)) && \(tool) --resume \(id)"
     }
+    /// The message a resume picks the conversation up at (`resume(at:)`).
+    private var resumeAt: String?
     private var counter = 0
     /// Set by `interrupt()`: the error result that follows is the turn
     /// ending on request, not a failure to show.
     private var interrupting = false
+    /// A message is written and its turn has not begun (claude says so
+    /// with its `system/init`): an interrupt now is taken and ignored —
+    /// the turn then runs to its end (measured) — so it waits for the turn
+    /// to begin (`stopWhenBegun`).
+    private var turnStarting = false
+    private var stopWhenBegun = false
+    /// A turn is running: one sent, or one claude began itself (when a
+    /// background task it started finishes, it carries on without a
+    /// message — measured), which `system/init` says as it does any turn.
+    private var working = false
     /// The id of the assistant message whose words are streaming now,
     /// from its message_start; each delta is named with it.
     private var streamingMessageID = ""
@@ -61,6 +73,8 @@ public final class ClaudeProcess: AgentProcess {
             "type": "user",
             "message": ["role": "user", "content": [["type": "text", "text": text]]],
         ])
+        turnStarting = true
+        working = true
         emit.yield(.busy(true))
         emit.yield(.activity("Thinking…"))
     }
@@ -76,7 +90,18 @@ public final class ClaudeProcess: AgentProcess {
 
     public var processID: Int32? { running()?.pid }
 
-    private func running() -> PipedChild? {
+    public func resume(at message: String?) { resumeAt = message }
+
+    var hostedChild: HostedChild? { running() as? HostedChild }
+    var carried: [String: String] { [:] }
+
+    /// An agent left running by an earlier launch: heard from here on.
+    func adopt(_ child: HostedChild, carried: [String: String]) {
+        self.child = child
+        follow(child)
+    }
+
+    private func running() -> (any AgentChild)? {
         guard let child, child.isRunning else { return nil }
         return child
     }
@@ -87,6 +112,11 @@ public final class ClaudeProcess: AgentProcess {
     public func interrupt() {
         guard let child = running() else { return }
         interrupting = true
+        if turnStarting {
+            stopWhenBegun = true
+            return
+        }
+        stopWhenBegun = false
         child.write([
             "type": "control_request",
             "request_id": "int-\(counter)",
@@ -109,15 +139,17 @@ public final class ClaudeProcess: AgentProcess {
 
     /// Lets go of the running agent, for whoever is ending it: from here
     /// the session is idle, and the agent's exit is expected.
-    private func release() -> PipedChild? {
+    private func release() -> (any AgentChild)? {
         guard let child else { return nil }
         self.child = nil
+        working = false
         emit.yield(.activity(nil))
+        emit.yield(.memory(nil))
         emit.yield(.busy(false))
         return child
     }
 
-    private func spawn() throws -> PipedChild {
+    private func spawn() throws -> any AgentChild {
         guard let executable = ToolPath.resolve(tool) else { throw AgentProcessError.toolMissing(tool) }
         var args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
         // Visor's MCP server: the other sessions, and in manual mode the
@@ -133,14 +165,28 @@ public final class ClaudeProcess: AgentProcess {
         }
         if let model, !model.isEmpty { args += ["--model", model] }
         if let effort, !effort.isEmpty { args += ["--effort", effort] }
-        if let resumeID { args += ["--resume", resumeID] }
+        if let resumeID {
+            args += ["--resume", resumeID]
+            // Claude Code's own option, which the Agent SDK's resumeSessionAt
+            // passes; the OpenRouter CLI does not take it.
+            if let resumeAt, tool == "claude" { args += ["--resume-session-at", resumeAt] }
+        }
         // The agent is told which session it is, so it can name itself
         // when it asks the server to restart (VISOR_SESSION).
         let environment = ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
-        let child = try PipedChild(executable: executable, arguments: args,
-                                   directory: (cwd as NSString).expandingTildeInPath, environment: environment)
+        let child = try AgentChildren.start(executable: executable, arguments: args, directory: (cwd as NSString).expandingTildeInPath,
+                                            environment: environment, session: approvalEnvironment["VISOR_SESSION"])
         self.child = child
+        follow(child)
+        return child
+    }
+
+    /// Hears the agent: everything it says, in order, and then how it ended.
+    private func follow(_ child: any AgentChild) {
         interrupting = false
+        turnStarting = false
+        stopWhenBegun = false
+        working = false
         let tool = self.tool
         // Everything it says, in order, and then how it ended.
         Task { [weak self] in
@@ -151,7 +197,9 @@ public final class ClaudeProcess: AgentProcess {
             let exit = await child.exit.value
             guard let self, self.child === child else { return }
             self.child = nil
+            self.working = false
             self.emit.yield(.activity(nil))
+            self.emit.yield(.memory(nil))
             self.emit.yield(.busy(false))
             if exit.status != 0, !exit.signaled { self.emit.yield(.failure("\(tool) exited with status \(exit.status)")) }
         }
@@ -161,7 +209,15 @@ public final class ClaudeProcess: AgentProcess {
                 if self.child === child { self.emit.yield(.failure(line)) }
             }
         }
-        return child
+        Task { [weak self] in
+            for await notice in child.notices {
+                guard let self else { return }
+                if self.child === child { self.emit.yield(.notice(notice)) }
+            }
+        }
+        (child as? HostedChild)?.onMemory = { [weak self] bytes in
+            if let self, self.child === child { self.emit.yield(.memory(Int64(clamping: bytes))) }
+        }
     }
 
     private func take(_ output: ClaudeOutput) {
@@ -169,6 +225,16 @@ public final class ClaudeProcess: AgentProcess {
         case .commands(let list):
             emit.yield(.commands(list))
         case .began(let session, let model, let keySource):
+            // The turn has begun: an interrupt asked for before it is sent.
+            turnStarting = false
+            if stopWhenBegun { interrupt() }
+            // One claude began itself: the session is working, as for one
+            // sent.
+            if !working {
+                working = true
+                emit.yield(.busy(true))
+                emit.yield(.activity("Thinking…"))
+            }
             if let session {
                 resumeID = session
                 emit.yield(.session(session))
@@ -207,6 +273,9 @@ public final class ClaudeProcess: AgentProcess {
         case .background(let items):
             emit.yield(.background(items))
         case .result(let failure, let spent):
+            turnStarting = false
+            stopWhenBegun = false
+            working = false
             if let spent { emit.yield(.spent(spent)) }
             // An interrupt ends the turn with an error result of its own
             // (error_during_execution); that is the stop the user asked

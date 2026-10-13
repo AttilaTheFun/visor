@@ -46,4 +46,7 @@ public enum AgentEvent: Sendable {
     /// Something to tell the user about the session, in words: the answer
     /// to a command that has no row of its own.
     case notice(String)
+    /// How much memory the agent and what it runs are using, as its host
+    /// says (nil once it has gone).
+    case memory(Int64?)
 }

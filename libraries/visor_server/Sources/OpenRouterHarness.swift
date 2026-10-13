@@ -95,7 +95,7 @@ public final class OpenRouterHarness: AgentHarness {
 
     /// The CLI's model list, the ones that can call tools.
     static func cachedModels() -> [Cached]? {
-        let file = SessionCatalog.openrouterRoot.appendingPathComponent("models.json")
+        let file = SessionCatalog.openrouterRoot.appendingPathComponent("models.json", isDirectory: false)
         guard let data = try? Data(contentsOf: file),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let list = object["models"] as? [[String: Any]] else { return nil }
@@ -136,7 +136,7 @@ public final class OpenRouterHarness: AgentHarness {
     /// Fetches the list through the CLI when it is missing or a day old:
     /// whether it did. Visor never calls OpenRouter itself.
     public static func refreshIfStale() async -> Bool {
-        let file = SessionCatalog.openrouterRoot.appendingPathComponent("models.json")
+        let file = SessionCatalog.openrouterRoot.appendingPathComponent("models.json", isDirectory: false)
         let age = (try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate).map { Date().timeIntervalSince($0) }
         guard age == nil || age! > 24 * 60 * 60, let tool = ToolPath.resolve("openrouter") else { return false }
         return await Command.output(tool, ["models", "--refresh"], environment: ToolPath.environment())?.status == 0

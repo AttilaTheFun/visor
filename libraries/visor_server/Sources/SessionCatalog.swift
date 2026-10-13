@@ -21,7 +21,9 @@ enum SessionCatalog {
         }
     }
 
-    private static let home = FileManager.default.homeDirectoryForCurrentUser
+    /// The user's home, where the agents keep their stores: Claude's
+    /// files' own, which a test can move.
+    static var home: URL { ClaudeSessionFiles.home }
 
     /// Puts a session's history where its folder looks for it.
     ///
@@ -42,11 +44,11 @@ enum SessionCatalog {
         guard agent != .codex, !id.isEmpty, !cwd.isEmpty else { return false }
         let files = FileManager.default
         let root = ClaudeSessionFiles.projectsRoot(home: home)
-        let target = root.appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd))
-        let wanted = target.appendingPathComponent(id + ".jsonl")
+        let target = root.appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd), isDirectory: true)
+        let wanted = target.appendingPathComponent(id + ".jsonl", isDirectory: false)
         guard !files.fileExists(atPath: wanted.path) else { return false }
         let elsewhere = (try? files.contentsOfDirectory(at: root, includingPropertiesForKeys: nil))?
-            .map { $0.appendingPathComponent(id + ".jsonl") }
+            .map { $0.appendingPathComponent(id + ".jsonl", isDirectory: false) }
             .first { files.fileExists(atPath: $0.path) }
         guard let elsewhere else { return false }
         try? files.createDirectory(at: target, withIntermediateDirectories: true)
@@ -65,7 +67,7 @@ enum SessionCatalog {
         // Claude keeps writing to the directory it opened with.
         let byDirectory = cwd != nil
         if let cwd {
-            directories = [root.appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd))]
+            directories = [root.appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd), isDirectory: true)]
         } else {
             directories = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
         }
@@ -135,27 +137,27 @@ enum SessionCatalog {
     static func openrouterHasKey() -> Bool {
         let environment = ToolPath.environment()
         for name in ["OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY"] where !(environment[name] ?? "").isEmpty { return true }
-        guard let data = try? Data(contentsOf: openrouterRoot.appendingPathComponent("config.json")),
+        guard let data = try? Data(contentsOf: openrouterRoot.appendingPathComponent("config.json", isDirectory: false)),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let key = object["apiKey"] as? String else { return false }
         return !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     static func openrouterDefaultModel() -> String? {
-        guard let data = try? Data(contentsOf: openrouterRoot.appendingPathComponent("config.json")),
+        guard let data = try? Data(contentsOf: openrouterRoot.appendingPathComponent("config.json", isDirectory: false)),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let model = object["model"] as? String, !model.isEmpty else { return nil }
         return model
     }
 
     private static func openrouterSession(id: String) -> [String: Any]? {
-        let file = openrouterRoot.appendingPathComponent("sessions").appendingPathComponent(id + ".json")
+        let file = openrouterRoot.appendingPathComponent("sessions", isDirectory: true).appendingPathComponent(id + ".json", isDirectory: false)
         guard let data = try? Data(contentsOf: file) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
     private static func openrouter(cwd: String?) -> [ResumableSession] {
-        let directory = openrouterRoot.appendingPathComponent("sessions")
+        let directory = openrouterRoot.appendingPathComponent("sessions", isDirectory: true)
         let names = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []).filter { $0.hasSuffix(".json") }
         var result: [ResumableSession] = []
         for name in names {
@@ -177,7 +179,7 @@ enum SessionCatalog {
     private static func openrouterTranscript(id: String) -> [TranscriptEntry] {
         // The CLI's log, read as the live session reads it, where there is
         // one; a session from before the log, from its saved messages.
-        let log = openrouterRoot.appendingPathComponent("sessions/\(id).jsonl")
+        let log = openrouterRoot.appendingPathComponent("sessions/\(id).jsonl", isDirectory: false)
         if let data = try? Data(contentsOf: log) {
             return TranscriptAssembler.rows(in: OpenRouterLogParser().lines(in: data).compactMap(\.record))
         }
@@ -207,7 +209,7 @@ enum SessionCatalog {
     }
 
     private static func codex(cwd: String?) -> [ResumableSession] {
-        let root = home.appendingPathComponent(".codex/sessions")
+        let root = home.appendingPathComponent(".codex/sessions", isDirectory: true)
         guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.contentModificationDateKey]) else { return [] }
         var files: [(URL, Date)] = []
         for case let file as URL in enumerator where file.pathExtension == "jsonl" {
@@ -272,7 +274,7 @@ enum SessionCatalog {
 
     /// The rollout file of a Codex thread.
     static func codexRollout(id: String) -> URL? {
-        let root = home.appendingPathComponent(".codex/sessions")
+        let root = home.appendingPathComponent(".codex/sessions", isDirectory: true)
         guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return nil }
         for case let candidate as URL in enumerator where candidate.pathExtension == "jsonl" && candidate.lastPathComponent.contains(id) {
             return candidate

@@ -17,6 +17,7 @@ struct MenuContent: View {
                 Text(server.listening ? "Visor is serving on port \(String(server.port))" : "Visor is not listening")
             }
             if let error = server.lastError { Text(error) }
+            if let notice = server.updateNotice { Text(notice) }
             // What a client types: the address set by hand, else the
             // server's own guess when the network reaches it.
             if let address = server.reachableAddress {

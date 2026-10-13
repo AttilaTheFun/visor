@@ -11,7 +11,7 @@ extension VisorServer {
     /// How long a message waits for a client to carry it.
     static let relayLifetime: TimeInterval = 24 * 60 * 60
 
-    static var relayOutboxURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("relay-outbox.json") }
+    static var relayOutboxURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("relay-outbox.json", isDirectory: false) }
 
     static func keptRelayOutbox() -> [String: RelayRecord] {
         guard let data = try? Data(contentsOf: relayOutboxURL),

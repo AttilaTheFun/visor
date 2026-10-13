@@ -101,9 +101,11 @@ extension SessionRecord {
             if let limit { info.contextLimit = limit }
             // The sessions list carries it; the caller broadcasts that.
             return nil
-        case .session:
+        case .session(let id):
             refreshResume()
-            followFile()
+            // Said at each turn's start: the file is followed again only
+            // for a conversation it is not following already.
+            if indexer == nil || followed != id { followFile() }
             return nil
         case .commands(let list):
             commands = list
@@ -114,6 +116,7 @@ extension SessionRecord {
             // The sessions list carries it; the caller broadcasts that.
             return nil
         case .goal(let goal, let met):
+            goalReported = true
             goalMet = met
             info.goal = goal
             // The sessions list carries it; the caller broadcasts that.
@@ -121,6 +124,9 @@ extension SessionRecord {
         case .notice(let words):
             notice = words
             return ephemeralEnvelope
+        case .memory(let bytes):
+            info.memory = bytes
+            return nil
         case .spent(let total):
             let added = reportedUsage.map { total.continues(from: $0) ? total.since($0) : total } ?? total
             reportedUsage = total

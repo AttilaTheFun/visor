@@ -75,20 +75,23 @@ under `/api`.
 
 | method and path | body | answer |
 |---|---|---|
-| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `id` and own `addresses` — or, from a server that stands alone, `standalone: true` and no addresses — or 401 |
+| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `version` (its build, "0.31 (9)"), its `id` and own `addresses` — or, from a server that stands alone, `standalone: true` and no addresses — or 401 |
 | `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
 | `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
 | `GET /sessions/<id>/earlier` | `before=<row id>` | the `earlier` envelope: the rows before that row, `more` |
 | `POST /sessions/<id>/acknowledge` | | the user has read the session's notice |
 | `POST /ssh/keys` | `text`: an SSH public key line (this device's, or one scanned from another device's `visor://authorize?key=` QR code) | `ssh`; the key is in the user's `authorized_keys`, so that device comes in over SSH next |
 | `GET /codes` | | `codes`: the server's connection codes — `qr` (the QR code's), and `http`, `https`, `ssh` (each leading with that kind of path; absent when it has none) |
-| `POST /relay` | `report`: the client's `DirectoryReport` | `relay` with `relayed`: the messages waiting for the servers the report names |
+| `POST /relay` | `report`: the client's `DirectoryReport` — its `client` id and `clientName`, its `clientVersion` and `clientPlatform`, and each server it is connected to with that server's `version` and sessions | `relay` with `relayed`: the messages waiting for the servers the report names |
+| `GET /versions` | | the builds as this server knows them: its own (`server`: `id`, `name`, `version`), its `clients` (`name`, `platform`, `version`, when they `reported`), and the other `servers` (`id`, `name`, `version`, `reportedBy`, `reported`) as its clients reported them; agents get the same in `list_sessions` |
 | `POST /relay/deliver` | `relayed`: one `RelayMessage` | `relay` with `receipt`: what became of it — the same however often it is carried; 409 for a message to another server |
 | `POST /relay/receipt` | `receipt`: what became of a message from this server | `relay` |
 | `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript) | `sessions` with the new one |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
 | `POST /sessions/{id}/stop` `…/archive` `…/unarchive` | | same |
+| `POST /sessions/{id}/restartAgent` | | same: the session's agent is ended and a new one made on the same conversation; a turn it was working on is carried on by a nudge that goes first |
+| `POST /sessions/{id}/keepBranch` `…/continueBranch` | | same: when the conversation went on elsewhere (`otherBranch` in the session's info: the other branch's latest prompt), keep to the branch shown — the next message carries it on, resumed there with `--resume-session-at` — or continue the newest branch: the chat is read again from it (a new generation) and the agent is made again, resuming there |
 | `POST /sessions/{id}/permissions` | `skipPermissions` | same |
 | `POST /sessions/{id}/settings` | `model`, `effort` | same |
 | `POST /sessions/{id}/approve` | `id`, `allow` | same |
@@ -99,6 +102,22 @@ under `/api`.
 | `GET /resumable?agent=&cwd=` | | `resumable`: the agent's own sessions started in `cwd` (Claude's `~/.claude/projects`, Codex's `~/.codex/sessions`), newest first, `id`/`title` (first prompt)/`timestamp` |
 | `POST /restart` | `path` (a new build to install over this one, optional), `session` (one to carry on besides the busy ones) | `restart`: the sessions carried on; the server then relaunches |
 | `POST /quit` | | `quit`; the server then ends its agents (what was running is written down as running, for the next start) and exits — how `visor-server stop` stops it |
+| `POST /migration/offer` | `session` | `migration` with `offer`: the session (`cwd` absolute), the agent's own id for its conversation (`resumeID`), the computer's name (`from`) and home folder, the conversation's `files` (`id`, `place` under the agent's folder — `{project}` for Claude's project folder — `size`, `packed`), and its `projects` (the session's own folder first, then the git repositories under the home folder its conversation names most: `remote`, `branch`, `commit`, `unshared`, `size`, `mentions`) |
+| `POST /migration/read` | `migration` (the offer's `token`), `file` (`id`, and in `size` how much is wanted), `offset` | `migration` with `data` (base64, at most 4 MB) and `offset` (where the next piece starts) |
+| `POST /migration/pack` | `migration`, `path` (a project of the offer's) | `migration` with `file`: the project packed (what git tracks and does not ignore, and its `.git`), to read like the others |
+| `POST /migration/plan` | `offer` | `migration` with `plan`: its `id`, where the session runs here (`cwd`: the same place under this home folder), `agentInstalled`, and a `step` per project — `present`, `clone`, `copy` or `create`, with a `note` and whether it is `chosen` |
+| `POST /migration/write` | `migration` (the plan's `id`), `file`, `offset`, `data` | `migration` with the next `offset`; a piece must follow on from the last |
+| `POST /migration/clone` | `migration`, `steps` (the one) | `migration`, or the git error (the client then copies the project instead) |
+| `POST /migration/unpack` | `migration`, `file`, `steps` (the one) | `migration`, once the project is unpacked where its step says |
+| `POST /migration/finish` | `migration`, `steps` (those chosen), `cwd` (the folder the session runs in there, when the user chose one rather than the plan's: one of its projects, or another) | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here looks for them, the chosen folders made, and the session started resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from |
+
+Moving a session (`SessionMigration` in the client): the client asks the
+session's server for an offer and the other for a plan, the user chooses
+which projects to bring, and the client carries each file across a piece
+at a time (read from the one, written to the other), has projects cloned
+(or packed, carried and unpacked when they cannot be), then finishes. The
+session where it was is left as it was, for the user to remove. A refusal
+at any step is a 400 with an `error` envelope saying why.
 
 A client asks `GET /sessions` once a minute as the backup for the socket:
 the list is taken as a `sessions` broadcast would be, and an answer while
@@ -120,7 +139,7 @@ and `subscribe` and stream the rest.
 |---|---|---|
 | `login` | `token` (from `hello`) or `password`; neither on the socket file | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
 | `start` | `id`, `agent` (`claude`/`codex`/`openrouter`, or `shell` for a terminal session), `cwd`, `title`, `skipPermissions` | Create a session (the client picks the id; an empty title means the agent's name, numbered). Nothing is spawned until the first `send` — for a terminal, until a window takes it (`mode`). The client is subscribed to it. |
-| `send` | `session`, `text` | A user turn. To a terminal session: the text typed into its shell and entered; nothing is written down. |
+| `send` | `session`, `text` | A user turn. While the agent works it waits in the session's queue (`queued`); when the turn ends (or `stop` ends it) the queue goes over a message at a time, never joined, each turn but the last stopped as soon as it starts (once the agent says it began: Claude's `system/init`, Codex's turn id — a stop sent before that is taken and ignored), so the agent answers the last. `/goal clear` sent during a turn goes ahead of the queue and stops the turn. To a terminal session: the text typed into its shell and entered; nothing is written down. |
 | `stop` | `session` | Kill the agent's process; the transcript stays and the next `send` resumes the agent's own session. |
 | `subscribe` | `session` | Replay the transcript, then stream. |
 | `permissions` | `session`, `skipPermissions` | Switch the session between auto (no prompts) and manual. Codex applies it next turn; Claude's process restarts (resumed by id) once the current turn ends. `sessions` follows. |
@@ -197,6 +216,23 @@ tool's output; the transcript view hides them, the assistant's
   `account/rateLimits/read`, asked at launch, and
   `account/rateLimits/updated` give the plan, its windows and credits.
 
+Each agent runs under a host of its own, `visor-agent-host` (on a Mac in
+Visor Server's bundle under `Contents/Helpers`; beside the command-line
+server elsewhere), so the server can restart, update or crash while it
+works. The host starts the agent on pipes, keeps its latest 32 MB of
+output numbered by line, and listens on a socket in the data folder's
+`hosts/`; the server talks to it in frames (libraries/agent_host_wire:
+the host's `hello`, the agent's lines, errors and exit, notices; the
+server's `attach` from a line, input, end of input, signals, a memory
+limit, `release`). Going for a restart, the server lets its hosts go and
+writes down each socket and the next line it had not heard; the next
+launch connects again and is sent what it missed, so a turn in flight
+carries on. A plain quit still ends the agents. Each host also guards its
+agent's memory: past the limit (half the computer's memory), the process
+holding the most in the agent's tree — usually a command it ran — is
+stopped, and the session is told; `memory` in a session's info is what
+the agent and what it runs use now.
+
 ## Approvals (manual mode)
 
 In manual mode Claude runs with `--permission-mode acceptEdits` and
@@ -215,14 +251,18 @@ workspace-write sandbox.
 
 Every Claude and Codex session the menu bar app starts gets the same MCP
 server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`), with
-four tools: `list_sessions`, `send_message(session, server?, text)`,
-`read_messages(session, server?, count)` and `message_status(message_id)`.
+four tools: `list_sessions`, `send_message(session, server, text)`,
+`read_messages(session, server, count)` and `message_status(message_id)`:
+a session is always named with its computer's server id (the server also
+takes the session id alone, for scripts from before 0.31).
 Each call is a WebSocket connection from the script to the app carrying
 `{"type":"agent","token":<agent token>,"client":<calling session>,"mode":"sessions"|"send"|"read"|"status","session":<other session>,"server":<its server's id or name>,"messageID":…,"text":…,"rows":<count>,"id":…}`,
 answered with `{"type":"agent_result","id":…,"text":…,"messageID":…}` or `…,"error":…}`.
 A session is never offered itself, nor ended or archived ones. A message is
-delivered as a new turn (queued while the other session works), prefixed
-`[Message from the Visor session "<title>" (<id>), not from the user. …]`.
+delivered as a new turn of its own (queued while the other session works,
+and never joined to other queued messages), headed with who sent it and who
+it is for, each by name, id and computer:
+`[Message from the Visor session "<title>" (<id>) on <computer> (server <server id>), to this session "<title>" (<id>) on <computer> — not from the user. To answer, use send_message with session <id> and server <server id>.]`.
 Node must be on the PATH (as it already is for approvals).
 
 Sessions on other computers are reached through a client connected to
@@ -257,9 +297,7 @@ receipt is kept; the agent that asked is answered with it (a send waits up
 to 8 seconds, a read 20), or told the message waits, with its id for
 `message_status` (`waiting`, `sent`, `queued`, `read`, `failed`, or
 `expired` after a day uncarried). A message carried from another server is
-prefixed `[Message from the Visor session "<title>" (<id>) on <computer>,
-not from the user. To answer, use send_message with session <id> and
-server <server id>.]`.
+headed the same way, its sender's computer being that server.
 
 A client takes part with each server unless its user turned that off for
 that computer (`AgentServerRecord.relay`; on by default, and a fork may

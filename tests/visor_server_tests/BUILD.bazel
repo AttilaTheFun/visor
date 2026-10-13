@@ -5,6 +5,8 @@ swift_test(
     name = "visor_server_tests",
     copts = STRICT_SWIFT,
     srcs = glob(["*.swift", "apple/*.swift"]),
+    # The agents' host, which AgentHostTests runs.
+    data = ["//applications/visor_agent_host:visor-agent-host"],
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//libraries/claude_transcript",
@@ -12,5 +14,6 @@ swift_test(
         "//libraries/visor_protocol",
         "//libraries/visor_server",
         "//libraries/visor_server_apple",
+        "//libraries/visor_server_posix",
     ],
 )

@@ -25,7 +25,7 @@ extension VisorServer {
 
     func loadSessions() {
         var stored: [StoredSession] = []
-        let legacy = Self.storeURL.deletingLastPathComponent().appendingPathComponent("archive.json")
+        let legacy = Self.storeURL.deletingLastPathComponent().appendingPathComponent("archive.json", isDirectory: false)
         for url in [Self.storeURL, legacy] {
             guard let data = try? Data(contentsOf: url), data.count > 2 else { continue }
             do {
@@ -44,7 +44,7 @@ extension VisorServer {
                 // the whole record of every session, and a decoding change
                 // once turned it into "[]".
                 let kept = url.deletingLastPathComponent()
-                    .appendingPathComponent(url.lastPathComponent + ".unreadable")
+                    .appendingPathComponent(url.lastPathComponent + ".unreadable", isDirectory: false)
                 try? FileManager.default.removeItem(at: kept)
                 try? FileManager.default.copyItem(at: url, to: kept)
                 storeIsReadable = false
@@ -54,6 +54,7 @@ extension VisorServer {
         }
         let asked = Self.requestedResumes()
         var orphans: [(session: String, pid: Int32, resume: String?)] = []
+        var hosted: [(record: SessionRecord, host: StoredHost, pid: Int32?, resume: String?)] = []
         for item in stored {
             var info = item.info
             info.busy = false
@@ -67,9 +68,10 @@ extension VisorServer {
             // An agent of ours that outlived the app (we were killed
             // outright, or quit before it went): it still holds the
             // session, so it goes before anything resumes into it.
-            if let pid = item.agentPID { orphans.append((info.id, pid, item.resumeID)) }
+            // One left under its host is picked up instead (pickUp).
+            if item.host == nil, let pid = item.agentPID { orphans.append((info.id, pid, item.resumeID)) }
             // Running when we went away, so running again now.
-            if item.interrupted == true, !asked.contains("none"), asked.contains(info.id) || asked.contains("all") {
+            if item.host == nil, item.interrupted == true, !asked.contains("none"), asked.contains(info.id) || asked.contains("all") {
                 pendingResumes.append(info.id)
             }
             var entries = item.entries
@@ -82,16 +84,27 @@ extension VisorServer {
             record.refreshResume()
             record.interrupted = item.interrupted ?? false
             record.reportedUsage = item.reportedUsage
+            record.head = item.head
+            record.leaf = item.leaf
+            record.otherBranch = item.otherBranch
+            record.branchKept = item.branchKept ?? false
             // The outbox, lined up with its words (a file from before it was
             // kept has words and no files).
             let files = item.queuedImages ?? []
             record.queuedImages = info.queued.indices.map { $0 < files.count ? files[$0] : [] }
             record.primePreview()
-            record.held = item.agentPID != nil
+            record.held = item.agentPID != nil || item.host != nil
+            if let host = item.host {
+                record.leftHost = host
+                hosted.append((record, host, item.agentPID, item.resumeID))
+            }
             sessions.append(record)
         }
         try? FileManager.default.removeItem(at: legacy)
         if !stored.isEmpty { saveArchive() }
+        for left in hosted {
+            Task { await pickUp(left.record, host: left.host, agentPID: left.pid, resume: left.resume) }
+        }
         guard !orphans.isEmpty else { return }
         // Until its orphan is gone, what is said to a session waits.
         Task {
@@ -125,7 +138,7 @@ extension VisorServer {
             let data = try JSONEncoder().encode(stored)
             // Yesterday's file is kept beside today's. It costs nothing and
             // it is the difference between a bad write and a lost afternoon.
-            let backup = Self.storeURL.deletingLastPathComponent().appendingPathComponent("sessions.previous.json")
+            let backup = Self.storeURL.deletingLastPathComponent().appendingPathComponent("sessions.previous.json", isDirectory: false)
             if let existing = try? Data(contentsOf: Self.storeURL), existing.count > 2, existing != data {
                 try? existing.write(to: backup, options: .atomic)
             }

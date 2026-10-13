@@ -138,6 +138,31 @@ public protocol AgentServer: AnyObject {
     /// What became of a message from this server, where it went.
     func confirm(_ receipt: RelayReceipt) async throws
 
+    // MARK: Moving a session to another server (SessionMigration)
+
+    /// Whether sessions move to and from this server.
+    var migrates: Bool { get }
+    /// A session offered for moving elsewhere: its conversation's files and
+    /// its projects.
+    func migrationOffer(for session: String) async throws -> MigrationOffer
+    /// Up to `length` bytes of one of an offer's files from `offset`,
+    /// base64, and where the next piece starts.
+    func migrationRead(_ offer: String, file: String, offset: Int, length: Int) async throws -> (data: String, next: Int)
+    /// A project of an offer's, packed for copying.
+    func migrationPack(_ offer: String, project: String) async throws -> MigrationFile
+    /// What this server will do with a session offered by another.
+    func migrationPlan(for offer: MigrationOffer) async throws -> MigrationPlan
+    /// A piece of a file carried here for a move, at `offset`.
+    func migrationWrite(_ plan: String, file: String, offset: Int, data: String) async throws
+    /// Clones a project the plan said to clone.
+    func migrationClone(_ plan: String, step: MigrationStep) async throws
+    /// Unpacks a project carried here where its step says.
+    func migrationUnpack(_ plan: String, file: String, step: MigrationStep) async throws
+    /// Ends a move here, making the chosen steps' folders, the session run
+    /// in `cwd` (the plan's when nil): the new session's id, and the
+    /// server's sessions.
+    func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo])
+
     // MARK: Identity and SSH
 
     /// What the server said of itself at the last sign-in: its id and
@@ -167,6 +192,19 @@ public extension AgentServer {
     func relay(_ report: DirectoryReport) async throws -> [RelayMessage] { throw AgentServerError.unsupported }
     func deliver(_ message: RelayMessage) async throws -> RelayReceipt { throw AgentServerError.unsupported }
     func confirm(_ receipt: RelayReceipt) async throws { throw AgentServerError.unsupported }
+    var migrates: Bool { false }
+    func migrationOffer(for session: String) async throws -> MigrationOffer { throw AgentServerError.unsupported }
+    func migrationRead(_ offer: String, file: String, offset: Int, length: Int) async throws -> (data: String, next: Int) {
+        throw AgentServerError.unsupported
+    }
+    func migrationPack(_ offer: String, project: String) async throws -> MigrationFile { throw AgentServerError.unsupported }
+    func migrationPlan(for offer: MigrationOffer) async throws -> MigrationPlan { throw AgentServerError.unsupported }
+    func migrationWrite(_ plan: String, file: String, offset: Int, data: String) async throws { throw AgentServerError.unsupported }
+    func migrationClone(_ plan: String, step: MigrationStep) async throws { throw AgentServerError.unsupported }
+    func migrationUnpack(_ plan: String, file: String, step: MigrationStep) async throws { throw AgentServerError.unsupported }
+    func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo]) {
+        throw AgentServerError.unsupported
+    }
     var identity: ServerIdentity? { nil }
     func authorizeSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
 }

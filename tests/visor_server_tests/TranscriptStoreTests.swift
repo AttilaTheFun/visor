@@ -41,6 +41,21 @@ final class TranscriptStoreTests: ServerTestCase {
         throw XCTSkip("the indexer said nothing")
     }
 
+    func testASecondNameForTheFileReadsOnFromWhereTheFirstStopped() async throws {
+        try write([line("user", "u1", nil, "Hello"), line("assistant", "a1", "u1", "Hi", id: "msg_1")])
+        _ = try await load(SessionIndexer(store: store, sessionID: "S", url: file, window: 10))
+        let read = try XCTUnwrap(store.sourceState(of: "S"))
+        // The folder was renamed: the file has a second name, a hard link.
+        let other = dir.appendingPathComponent("renamed.jsonl")
+        try FileManager.default.linkItem(at: file, to: other)
+        let loaded = try await load(SessionIndexer(store: store, sessionID: "S", url: other, window: 10))
+        XCTAssertEqual(loaded.rows.map(\.text), ["Hello", "Hi"])
+        let now = try XCTUnwrap(store.sourceState(of: "S"))
+        XCTAssertEqual(now.bytes, read.bytes, "read on, not read again")
+        XCTAssertEqual(now.nextSeq, read.nextSeq)
+        XCTAssertEqual(store.nodes(in: "S").count, 2)
+    }
+
     func testBuildsPagesRebuildsAndSearches() async throws {
         var lines: [String] = []
         var parent: String? = nil
@@ -84,6 +99,8 @@ final class TranscriptStoreTests: ServerTestCase {
                 try handle.close()
             case .lines(let lines):
                 grown += lines
+            case .elsewhere:
+                break
             }
             if grown.count >= 2 { break }
         }

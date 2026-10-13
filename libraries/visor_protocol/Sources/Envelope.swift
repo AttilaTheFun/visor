@@ -148,6 +148,20 @@ public struct Envelope: Codable, Sendable {
     public var pushEnvironment: String?
     /// The app a push token is for: its bundle id.
     public var pushTopic: String?
+    /// Moving a session to another server (VisorServer+Migration.swift):
+    /// the move it is part of (an offer's token where the session was, a
+    /// plan's id where it goes), what the session's server offers, what
+    /// the other will do, the steps chosen or the one taken, the file read
+    /// or written, and where in it (`data` holds the bytes, base64).
+    /// `hello`: the server's version and build, as installed and running
+    /// ("0.31 (8)").
+    public var version: String?
+    public var migration: String?
+    public var offer: MigrationOffer?
+    public var plan: MigrationPlan?
+    public var steps: [MigrationStep]?
+    public var file: MigrationFile?
+    public var offset: Int?
 
     public init(type: String) { self.type = type }
 

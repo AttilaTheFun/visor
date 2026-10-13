@@ -96,6 +96,12 @@ if [ -d "$APP/Contents/Frameworks" ]; then
     find "$APP/Contents/Frameworks" \( -name "*.dylib" -o -name "*.framework" \) -maxdepth 1 -print0 \
         | xargs -0 -n 1 codesign --force --options runtime --timestamp --sign "$IDENTITY"
 fi
+# A program of its own in the bundle (Visor Server's agent host) is signed
+# the same way, before the app that seals it.
+if [ -d "$APP/Contents/Helpers" ]; then
+    find "$APP/Contents/Helpers" -type f -perm +111 -print0 \
+        | xargs -0 -n 1 codesign --force --options runtime --timestamp --sign "$IDENTITY"
+fi
 codesign --force --options runtime --timestamp --sign "$IDENTITY" ${ENTITLEMENTS[@]+"${ENTITLEMENTS[@]}"} -r="$REQUIREMENT" "$APP"
 codesign --verify --strict "$APP"
 echo "Signed $(basename "$APP") with $(security find-identity -v -p codesigning | grep "$IDENTITY" | sed 's/.*"\(.*\)".*/\1/' | head -1)"

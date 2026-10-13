@@ -42,19 +42,25 @@ extension VisorServer {
     private func listSessions(for envelope: Envelope, caller: SessionRecord) -> Envelope {
         var reply = agentReply(envelope)
         let here = reply.text ?? ""
-        var sections = ["On this computer, \(hostName) (server \(id)):\n" + (here == "No other sessions." ? "No other sessions." : here)]
+        let running = Self.version.isEmpty ? "" : ", Visor Server \(Self.version)"
+        var sections = ["On this computer, \(hostName) (server \(id)\(running)):\n" + (here == "No other sessions." ? "No other sessions." : here)]
         let now = Date()
         for reported in reportedServers(now: now) {
             let ago = Int(now.timeIntervalSince(reported.at))
-            let heading = "On \(reported.server.name) (server \(reported.server.id)), as \(reported.by) reported \(ago) s ago:"
+            let version = reported.server.version.map { ", Visor Server \($0)" } ?? ""
+            let heading = "On \(reported.server.name) (server \(reported.server.id)\(version)), as \(reported.by) reported \(ago) s ago:"
             let lines = reported.server.sessions.map { session in
                 "\(session.id) — \(session.name)" + (session.agent.isEmpty ? "" : " (\(session.agent), \(session.busy ? "working" : "idle"))")
             }
             sections.append(heading + "\n" + (lines.isEmpty ? "No sessions." : lines.joined(separator: "\n")))
         }
-        if sections.count > 1 {
-            sections.append("A session on another computer is reached through a Visor client connected to both: give send_message or read_messages its id, and its server's id when two computers have a session of that id.")
+        let clients = reportedClients(now: now).map { client in
+            "\(client.name): " + Self.describe(app: "Visor", version: client.version, platform: client.platform)
+                + ", reported \(Int(now.timeIntervalSince(client.at))) s ago"
         }
+        if !clients.isEmpty { sections.append("Visor clients connected here:\n" + clients.joined(separator: "\n")) }
+        sections.append("To message or read a session, give send_message or read_messages its session id and its server's id, as listed here. "
+                        + "A session on another computer is reached through a Visor client connected to both.")
         reply.text = sections.joined(separator: "\n\n")
         return reply
     }
@@ -134,7 +140,7 @@ extension VisorServer {
     /// or where the message is.
     private func agentResult(_ record: RelayRecord, to ask: Envelope, asStatus: Bool) -> Envelope {
         let message = record.message
-        let target = "“\(message.to.sessionName.isEmpty ? message.to.session : message.to.sessionName)” on \(message.to.serverName)"
+        let target = "“\(message.to.sessionName.isEmpty ? message.to.session : message.to.sessionName)” (\(message.to.session)) on \(message.to.serverName)"
         var reply = Envelope(type: "agent_result")
         reply.id = ask.id
         reply.messageID = message.id

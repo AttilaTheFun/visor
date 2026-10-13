@@ -92,9 +92,10 @@ extension VisorServer {
         }
         // What was waiting when the app went away goes now; behind a nudge
         // it waits for that turn to end, as any queued message does.
-        for record in sessions where !record.info.archived && !record.info.queued.isEmpty && !record.info.busy {
-            let waiting = record.takeQueue()
-            deliver(waiting.text, to: record, images: waiting.images)
+        // (A session held while the agent before it goes gets its queue
+        // when that agent has gone: release.)
+        for record in sessions where !record.info.archived && !record.info.queued.isEmpty && !record.info.busy && !record.held {
+            deliverQueued(record)
         }
         if !ids.isEmpty { broadcastSessions() }
     }
@@ -125,13 +126,75 @@ extension VisorServer {
         }
     }
 
+    /// Ends the session's agent and makes a new one on the same
+    /// conversation, as the user asked: the new one starts with the next
+    /// message, and a turn the old one was working on is carried on by a
+    /// nudge that goes first.
+    func restartAgent(_ record: SessionRecord) {
+        Self.log("restarting the agent of \(record.info.title) (\(record.info.id))")
+        let working = record.info.busy
+        rebuild(record)
+        if working {
+            record.enqueue(Self.restartNudge, images: [], first: true)
+            saveArchive()
+        }
+        broadcastSessions()
+    }
+
+    /// The conversation carries on from the newest branch, at the user's
+    /// word, rather than the one the session kept to: the chat is read
+    /// again from it, and the agent (which holds the old branch while it
+    /// runs) is made again, so the next message resumes where Claude Code
+    /// would — on that branch. A turn in flight is cut short.
+    func continueOtherBranch(_ record: SessionRecord) {
+        Self.log("continuing the newest branch of \(record.info.title) (\(record.info.id))")
+        record.head = nil
+        record.leaf = nil
+        record.otherBranch = nil
+        record.branchKept = false
+        record.info.otherBranch = nil
+        record.switchingBranch = true
+        // The cache kept no rows for a branch it was not on: the file is
+        // read again from its start.
+        do { try ServerCache.shared.resetSource(record.info.id, state: SourceState(path: "", identity: "", bytes: 0, nextSeq: 0)) } catch {
+            Self.log("index: reset \(record.info.id): \(String(describing: error))")
+        }
+        rebuild(record, rereading: true)
+        saveArchive()
+        broadcastSessions()
+    }
+
     /// The agent before this one is gone: what waited for that goes over.
     func release(_ record: SessionRecord) {
         record.held = false
         guard !record.info.archived, !record.info.busy, !record.info.queued.isEmpty else { return }
-        let waiting = record.takeQueue()
-        broadcastSessions()
-        deliver(waiting.text, to: record, images: waiting.images)
+        deliverQueued(record)
+    }
+
+    /// The next queued message goes over, on its own. With more behind it,
+    /// its turn is stopped at once — the agent has the message, and answers
+    /// the last one — and the next goes when the agent falls idle; the last
+    /// is answered. A message that starts no turn (Codex's /goal) is
+    /// followed at once by the next.
+    ///
+    /// Only to a session that can take a message now: one that is working,
+    /// or held while the agent before it goes, keeps its queue (deliver
+    /// would only put the message back, and going round again was a loop
+    /// that froze the Mac). A loop, not recursion, and it stops the moment
+    /// a message was not taken.
+    func deliverQueued(_ record: SessionRecord) {
+        while !record.held, !record.info.busy, !record.info.archived, let next = record.takeNextQueued() {
+            let waiting = record.info.queued.count
+            broadcastSessions()
+            deliver(next.text, to: record, images: next.images)
+            // Put back rather than taken: nothing more now.
+            if record.info.queued.count > waiting { return }
+            guard !record.info.queued.isEmpty else { return }
+            if record.info.busy {
+                record.process.interrupt()
+                return
+            }
+        }
     }
 
     /// A terminal session's shell is live before anything is typed: bound
@@ -160,9 +223,14 @@ extension VisorServer {
         // is a deliberate act (`stop`), not the cost of typing.
         // Nor is anything said while the agent before this one is going.
         if record.info.busy || record.held {
-            record.enqueue(text, images: images)
+            // Clearing the goal is stopping it: it goes ahead of anything
+            // waiting, and the turn working toward the goal is stopped now
+            // rather than run to its end.
+            let clearsGoal = SessionRecord.clearsGoal(text)
+            record.enqueue(text, images: images, first: clearsGoal)
             saveArchive()
             broadcastSessions()
+            if clearsGoal, record.info.busy, !record.held { record.process.interrupt() }
             return
         }
         record.appendUser(text, images: images)
@@ -188,6 +256,8 @@ extension VisorServer {
                                    : (images.count == 1 ? "Attached file:" : "Attached files:")
             forAgent = (text.isEmpty ? "" : text + "\n\n") + heading + "\n" + list
         }
+        // A conversation carried on elsewhere is picked up on this branch.
+        record.process.resume(at: record.wentOnElsewhere ? record.leaf : nil)
         do {
             try record.process.send(forAgent)
             // The spawn happened inside `send`, so the pid is knowable
@@ -241,7 +311,7 @@ extension VisorServer {
         case .context, .session, .background, .goal:
             // These land in the session list, not an envelope.
             broadcastSessions()
-        case .spent:
+        case .spent, .memory:
             broadcastSessionsSoon()
         case .plan(let plan, let subscription):
             keepPlan(plan, subscription: subscription, for: record.info.agent)
@@ -261,6 +331,8 @@ extension VisorServer {
             // The agent's own id appears with the first turn; the
             // transcript is written down whenever a turn ends.
             record.refreshResume()
+            // A turn the agent began itself is owed as one sent is.
+            if busy { record.interrupted = true }
             if !busy { record.interrupted = false; saveArchive() }
             broadcastSessions()
             // An archived session takes no turns, and one whose last
@@ -274,11 +346,9 @@ extension VisorServer {
                 // made. What waited goes over once the old agent is gone.
                 rebuild(record)
             } else if !record.info.queued.isEmpty {
-                // Everything said during the turn goes over as one turn,
-                // in the order it was said.
-                let waiting = record.takeQueue()
-                broadcastSessions()
-                deliver(waiting.text, to: record, images: waiting.images)
+                // What was said during the turn goes over in the order it
+                // was said, a message at a time (deliverQueued).
+                deliverQueued(record)
             }
         default:
             break

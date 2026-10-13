@@ -29,15 +29,15 @@ const tools = [
   },
   {
     name: "send_message",
-    description: "Sends a message to another Visor session, as a new turn for that agent. It is marked as coming from this session, not the user. If the session is working, the message waits for its turn to end. A session on another computer is reached through a Visor client connected to both: the answer says whether it was taken, or that it waits for such a client (kept for a day), with a message id for message_status.",
+    description: "Sends a message to another Visor session, named by its session id and its computer's server id (both from list_sessions), as a new turn for that agent. It is headed with this session's name, id and computer, so the other agent knows exactly who sent it and how to answer, and that it is not from the user. If the session is working, the message waits for its turn to end. A session on another computer is reached through a Visor client connected to both: the answer says whether it was taken, or that it waits for such a client (kept for a day), with a message id for message_status.",
     inputSchema: {
       type: "object",
       properties: {
         session: { type: "string", description: "The session's id, from list_sessions." },
-        server: { type: "string", description: "The id (or name) of the computer the session is on, from list_sessions. Needed only when two computers have a session of that id; omit it for this computer." },
+        server: { type: "string", description: "The server id of the computer the session is on, from list_sessions (this computer's too). When answering a message, the server its header names." },
         text: { type: "string", description: "What to say." },
       },
-      required: ["session", "text"],
+      required: ["session", "server", "text"],
     },
   },
   {
@@ -47,10 +47,10 @@ const tools = [
       type: "object",
       properties: {
         session: { type: "string", description: "The session's id, from list_sessions." },
-        server: { type: "string", description: "The id (or name) of the computer the session is on, from list_sessions. Needed only when two computers have a session of that id." },
+        server: { type: "string", description: "The server id of the computer the session is on, from list_sessions (this computer's too)." },
         count: { type: "number", description: "How many messages, 1 to 50. Defaults to 10." },
       },
-      required: ["session"],
+      required: ["session", "server"],
     },
   },
   {

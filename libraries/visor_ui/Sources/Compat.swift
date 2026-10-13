@@ -4,6 +4,9 @@
 
 import AgentUI
 import SwiftUI
+#if canImport(Isomer)
+import Isomer
+#endif
 #if canImport(QuickLook)
 import QuickLook
 #endif
@@ -97,19 +100,23 @@ extension View {
 }
 
 /// What the system pasteboard holds as text: AppKit's on the Mac, UIKit's
-/// everywhere else (which the portable SwiftUI has too).
+/// on an iPhone or iPad, and Isomer's clipboard elsewhere (the browser's,
+/// Android's), which has no UIKit.
 @MainActor func pasteboardString() -> String? {
-    #if os(macOS)
+    #if canImport(Isomer)
+    return Clipboard.string
+    #elseif os(macOS)
     return NSPasteboard.general.string(forType: .string)
     #else
     return UIPasteboard.general.string
     #endif
 }
 
-/// The system pasteboard: AppKit's on the Mac, UIKit's everywhere else
-/// (which the portable SwiftUI has too: the browser's clipboard, Android's).
-func copyToPasteboard(_ text: String) {
-    #if os(macOS)
+/// Puts text on the system pasteboard: as `pasteboardString` reads it.
+@MainActor func copyToPasteboard(_ text: String) {
+    #if canImport(Isomer)
+    Clipboard.string = text
+    #elseif os(macOS)
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
     #else
