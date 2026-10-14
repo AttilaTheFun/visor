@@ -5,16 +5,14 @@ import VisorClient
 import VisorProtocol
 
 /// A computer's section: observes the computer, so its rows and its
-/// header follow the connection and the sessions as they change. The
-/// header is a row on a phone (`inline`: SidebarSection).
+/// header follow the connection and the sessions as they change.
 @MainActor
 struct HostSection<Rows: View>: View {
     var host: AgentServerConnection
-    var inline = false
     @ViewBuilder let rows: (AgentServerConnection) -> Rows
 
     var body: some View {
-        SidebarSection(inline: inline) {
+        Section {
             rows(host)
         } header: {
             HStack(spacing: 6) {

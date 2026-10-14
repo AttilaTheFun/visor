@@ -7,10 +7,9 @@ import VisorClient
 struct AccountSection: View {
     @Environment(VisorStore.self) private var store
     let account: any VisorAccount
-    var inline = false
 
     var body: some View {
-        SidebarSection(inline: inline) {
+        Section {
             Button(role: .destructive) { store.signOutAccount() } label: {
                 Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right").rowLabel()
             }
