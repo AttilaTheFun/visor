@@ -109,13 +109,10 @@ final class ScriptedServer: AgentServer {
     func sessions() async throws -> [SessionInfo] { asked += 1; return try listed.get() }
 
     func subscribe(_ session: String) { subscribed.append(session) }
-    func assumeControl(_ session: String, cols: Int, rows: Int) {}
     func acknowledge(_ session: String) {}
     /// The rows asked for over the channel: the session, and the row they go before.
     var earlierAsked: [(session: String, before: String)] = []
     func loadEarlier(_ session: String, before: String) { earlierAsked.append((session, before)) }
-    func sendInput(_ session: String, data: String) {}
-    func resize(_ session: String, cols: Int, rows: Int) {}
 
     /// The sessions started, and the messages sent (session, text).
     var started: [(id: String, cwd: String)] = []

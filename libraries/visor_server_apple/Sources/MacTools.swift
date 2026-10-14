@@ -24,10 +24,6 @@ public struct MacTools: ToolLocating {
         await POSIXUser.locate(tool, with: "/bin/zsh")
     }
 
-    public var loginShell: ShellCommand {
-        ShellCommand(POSIXUser.loginShell(fallback: "/bin/zsh"), ["-l"])
-    }
-
     public func environment(_ base: [String: String]) -> [String: String] {
         var environment = base
         let extra = ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.claude/local"]

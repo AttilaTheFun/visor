@@ -626,7 +626,7 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "rGypP5nrTI9oaJIH2p4vvfzarcXFntsjmKbWV4stK2I=",
-        "usagesDigest": "1WmCPxJgZCHpaBKcADTF/tZiEqVoJohkR8Lw6cLOJrk=",
+        "usagesDigest": "A6DC8dr8R+csaQN9mtHB7VQKYf4oVWviykcn2SbbbHw=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
@@ -865,19 +865,7 @@
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
-              "init_submodules": false,
               "make_files_read_only": false,
-              "recursive_init_submodules": true,
-              "patch_args": [
-                "-p1"
-              ],
-              "patch_cmds": [],
-              "patch_cmds_win": [],
-              "patch_tool": "",
-              "patches": [
-                "@@//third_party/swift_packages:swiftterm.patch"
-              ],
-              "publicly_expose_all_targets": false,
               "replace_scm_with_registry": false,
               "target_deps": {},
               "module_aliases": {},

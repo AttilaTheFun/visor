@@ -49,7 +49,7 @@ struct ComputerSettingsForm: View {
                 Text("Connection")
             } footer: {
                 if host.state == .connected, !host.live {
-                    Text("Polling: this path carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn.")
+                    Text("Polling: this path carries no live channel, so updates arrive a little later.")
                 }
             }
             Section {

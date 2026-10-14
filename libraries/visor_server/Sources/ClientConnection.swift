@@ -11,9 +11,6 @@ final class ClientConnection {
     /// Whether it came on a connection only this user could open (the
     /// socket file an SSH client reaches): its login needs no password.
     var trusted = false
-    /// Which client this is, as it named itself at login: whose window a
-    /// terminal may be drawn for.
-    var clientID = ""
     var onMessage: ((Envelope) -> Void)?
     var onClose: (() -> Void)?
 

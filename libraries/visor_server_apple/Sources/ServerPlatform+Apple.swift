@@ -5,7 +5,7 @@ import VisorServerPOSIX
 
 extension ServerPlatform {
     /// A Mac's, for the menu bar app (and the staging server): the Network
-    /// framework's sockets, POSIX terminals and signals, the keychain,
+    /// framework's sockets, POSIX signals, the keychain,
     /// CryptoKit and URLSession for pushes, ImageIO, the kernel's word on
     /// files, the system log, and the agents' host from the bundle.
     /// The app's version and build, from its bundle ("0.31 (8)").
@@ -20,7 +20,6 @@ extension ServerPlatform {
         let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
         return ServerPlatform(
             listening: NetworkListening(),
-            terminals: POSIXTerminals(),
             processes: POSIXProcessSignals(),
             secrets: secrets,
             fetching: URLSessionFetching(),

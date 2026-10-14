@@ -29,7 +29,6 @@ public struct LinuxSystem: CommandLineSystem {
         let data = dataDirectory
         return ServerPlatform(
             listening: POSIXListening(),
-            terminals: POSIXTerminals(),
             processes: POSIXProcessSignals(),
             secrets: FileSecrets(url: data.appendingPathComponent("secrets.json")),
             fetching: FoundationNetworkingFetching(),

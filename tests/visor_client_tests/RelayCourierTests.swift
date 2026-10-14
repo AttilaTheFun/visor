@@ -50,13 +50,11 @@ final class RelayCourierTests: XCTestCase {
         VisorHost.settings?.set(key: "hosts", value: JSONValue.array([a.json, b.json]).encoded())
         store = VisorStore()
         for _ in 0..<10 { await settle() }
-        var terminal = SessionInfo(id: "T", agent: .shell, cwd: "/", title: "Shell", created: 0)
-        terminal.busy = false
         var archived = SessionInfo(id: "Z", agent: .claude, cwd: "/", title: "Old", created: 0)
         archived.archived = true
         var working = SessionInfo(id: "B", agent: .claude, cwd: "/", title: "Laptop work", created: 0)
         working.busy = true
-        mini.deliver(.sessions([SessionInfo(id: "A", agent: .claude, cwd: "/", title: "", created: 0), terminal]))
+        mini.deliver(.sessions([SessionInfo(id: "A", agent: .claude, cwd: "/", title: "", created: 0)]))
         laptop.deliver(.sessions([working, archived]))
         await settle()
         mini.reports = []
@@ -77,8 +75,8 @@ final class RelayCourierTests: XCTestCase {
         XCTAssertEqual(report.clientName, "Logan's iPhone")
         XCTAssertEqual(report.servers.map(\.id), ["mini-id", "laptop-id"])
         XCTAssertEqual(report.servers.map(\.name), ["Mini", "Laptop"])
-        // What an agent can message: not a terminal, not the archived;
-        // untitled, by its agent's name.
+        // What an agent can message: not the archived; untitled, by its
+        // agent's name.
         let claude = AgentKind.claude.title
         XCTAssertEqual(report.servers[0].sessions, [DirectorySession(id: "A", name: claude, agent: claude, busy: false)])
         XCTAssertEqual(report.servers[1].sessions, [DirectorySession(id: "B", name: "Laptop work", agent: claude, busy: true)])

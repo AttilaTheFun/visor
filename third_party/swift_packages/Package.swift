@@ -1,11 +1,9 @@
 // swift-tools-version: 5.9
 
 // The SwiftPM dependencies Visor consumes through rules_swift_package_manager:
-// AgentUI (the agent chat page, the navigation containers and the terminal,
-// which brings SwiftTerm's emulator from github.com/migueldeicaza/SwiftTerm;
-// swiftterm.patch adds what its build plugin generates, since rspm runs no
-// SwiftPM plugins). rspm reads Package.resolved for the pinned graph and
-// generates one `@swiftpkg_<name>` repo per package.
+// AgentUI (the agent chat page and the navigation containers). rspm reads
+// Package.resolved for the pinned graph and generates one `@swiftpkg_<name>`
+// repo per package.
 import PackageDescription
 
 let package = Package(

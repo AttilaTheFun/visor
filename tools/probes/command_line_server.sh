@@ -1,6 +1,6 @@
 #!/bin/bash
 # The command-line server (Linux), tried as its user would: a password made, the server run in the
-# terminal and checked with the terminal probe, stopped through its REST side; then started in the
+# terminal and checked with the server probe, stopped through its REST side; then started in the
 # background, restarted through /api/restart (the new process waits for the old to go), checked
 # again, and stopped with `visor-server stop`. Needs no agent CLI.
 #   tools/probes/command_line_server.sh [path to visor-server]   (default .build/debug/visor-server)
@@ -21,9 +21,9 @@ check test ${#PW} -ge 12
 $BIN run --port $PORT > /tmp/visor-server-run.log 2>&1 &
 sleep 2
 export VISOR_PORT=$PORT VISOR_TOKEN="$PW"
-check env QUIT=1 node tools/probes/terminal.mjs
+check env QUIT=1 node tools/probes/server.mjs
 sleep 1
-check grep -q "session started: probe-terminal" /tmp/visor-server-run.log
+check grep -q "session started: probe-server" /tmp/visor-server-run.log
 
 # In the background: started, restarted, stopped.
 check $BIN start --port $PORT
@@ -36,7 +36,7 @@ sleep 4
 SECOND=$(cut -d' ' -f1 "$DATA/visor-server.pid")
 check test "$FIRST" != "$SECOND"
 check gone "$FIRST"
-check node tools/probes/terminal.mjs
+check node tools/probes/server.mjs
 check $BIN stop
 check gone "$SECOND"
 echo "--- the background server's log"

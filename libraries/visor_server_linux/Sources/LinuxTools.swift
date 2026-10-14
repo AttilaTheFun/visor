@@ -23,10 +23,6 @@ public struct LinuxTools: ToolLocating {
         await POSIXUser.locate(tool, with: POSIXUser.loginShell(fallback: "/bin/sh"))
     }
 
-    public var loginShell: ShellCommand {
-        ShellCommand(POSIXUser.loginShell(fallback: "/bin/sh"), ["-l"])
-    }
-
     public func environment(_ base: [String: String]) -> [String: String] {
         var environment = base
         let extra = ["\(home)/.local/bin", "\(home)/.claude/local", "\(home)/.npm-global/bin", "/usr/local/bin"]

@@ -13,7 +13,7 @@ extension VisorServer {
     /// project whether it is here already, is cloned, copied, or made.
     func migrationPlan(_ body: Envelope) async -> Envelope {
         ageMigrations()
-        guard let offer = body.offer, let harness = harnesses.harness(for: offer.session.agent), !offer.session.agent.isShell else {
+        guard let offer = body.offer, let harness = harnesses.harness(for: offer.session.agent) else {
             return .error("This server does not run that kind of session.")
         }
         let home = SessionCatalog.home.path

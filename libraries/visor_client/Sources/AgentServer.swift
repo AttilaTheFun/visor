@@ -38,18 +38,10 @@ public protocol AgentServer: AnyObject {
 
     /// Follows a session: its state and new rows arrive as `.session` events.
     func subscribe(_ session: String)
-    /// Takes a terminal session for this client's window: its shell is
-    /// drawn at this size, for this client, and what it has shown comes
-    /// back as a replay (`.session` with a `tty` envelope whose size is
-    /// set). Whoever had it before is sent nothing more.
-    func assumeControl(_ session: String, cols: Int, rows: Int)
     /// The user has read what the session had to tell them.
     func acknowledge(_ session: String)
     /// Asks for the rows before `before`.
     func loadEarlier(_ session: String, before: String)
-    /// What the user typed into a terminal session, base64.
-    func sendInput(_ session: String, data: String)
-    func resize(_ session: String, cols: Int, rows: Int)
 
     // MARK: Sessions
 

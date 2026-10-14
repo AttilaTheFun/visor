@@ -4,7 +4,7 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 package(default_visibility = ["//visibility:public"])
 
 # The command-line server's system on a Mac: no menu bar app, no keychain
-# prompts — POSIX sockets, terminals and signals, secrets in a file, the
+# prompts — POSIX sockets and signals, secrets in a file, the
 # Mac's own fetching, push signing, images, file watching and tools. For a
 # server a script or a sandbox starts (applications/visor_server_mac).
 swift_library(

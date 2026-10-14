@@ -6,13 +6,11 @@ import VisorServices
 extension VisorAgentServer {
     // MARK: Over the live channel
 
-    // Over the channel; by polling, what has a one-shot form is asked
-    // for that way, and the terminal's bytes, which only the channel
-    // carries, are not.
+    // Over the channel; by polling, each is asked for in its one-shot
+    // form.
     public func subscribe(_ session: String) {
         if polling != nil { pollState(of: session) } else { send(.subscribe(session: session)) }
     }
-    public func assumeControl(_ session: String, cols: Int, rows: Int) { send(.assumeControl(session: session, cols: cols, rows: rows)) }
     public func acknowledge(_ session: String) {
         if polling != nil { Task { _ = try? await call("POST", "/sessions/\(Self.escape(session))/acknowledge") } }
         else { send(.acknowledge(session: session)) }
@@ -20,8 +18,6 @@ extension VisorAgentServer {
     public func loadEarlier(_ session: String, before: String) {
         if polling != nil { pollEarlier(of: session, before: before) } else { send(.earlier(session: session, before: before)) }
     }
-    public func sendInput(_ session: String, data: String) { send(.input(session: session, data: data)) }
-    public func resize(_ session: String, cols: Int, rows: Int) { send(.resize(session: session, cols: cols, rows: rows)) }
 
     // MARK: Sessions
 

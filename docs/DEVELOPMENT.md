@@ -8,12 +8,11 @@ and the gotchas. Read it whole once; keep it current as things change.
 
 Visor is a Mac menu bar app that runs coding agents (Claude Code, Codex,
 OpenRouter models) as sessions on the Mac and serves them to clients on
-iPhone, iPad, Mac and the web, over whatever reaches the Mac. Clients chat with a session
-and watch it work, and open terminal sessions on the Mac — its shell,
-as ssh would give it — to run anything there themselves. The agent doing this
-work can drive its own development through Visor: you talk to an agent
-in the Visor client; the agent edits, builds, tests, and redeploys the
-very server it is running under.
+iPhone, iPad, Mac and the web, over whatever reaches the Mac. Clients chat
+with a session and watch it work. The agent doing this work can drive its
+own development through Visor: you talk to an agent in the Visor client;
+the agent edits, builds, tests, and redeploys the very server it is
+running under.
 
 The repos (github.com/AttilaTheFun):
 
@@ -23,17 +22,13 @@ The repos (github.com/AttilaTheFun):
 | `agent_ui` | SwiftPM package: AgentUI (the chat: transcript, composer, footer), NavigationUI, InboxUI, MessagesUI. Pinned by revision in third_party/swift_packages/Package.swift. |
 | `open_router_cli` | SwiftPM: OpenRouterKit (client, streaming, ORAgent loop, coding tools, sessions, config, Claude's stream-json) and the `openrouter` CLI, which Visor drives. |
 
-Third-party: SwiftTerm's portable emulator (through agent_ui's TerminalUI,
-from upstream github.com/migueldeicaza/SwiftTerm, which builds for Android
-since #733; rspm runs no SwiftPM plugins, so MODULE.bazel patches in what
-its build plugin generates, third_party/swift_packages/swiftterm.patch,
-made from the pinned revision), swift-nio-ssh 0.9 (SSH for the client
-and the server, through libraries/visor_ssh; it parses OpenSSH key lines
-but writes none, so `NIOSSHPublicKey+OpenSSH.swift` writes the kept host
-key from the key's bytes, read through reflection — a line to offer
-upstream instead), SQLite.swift 0.15.3 (the
-caches), rules_swift_package_manager (rspm) brings SwiftPM packages into
-Bazel as `@swiftpkg_<identity>` — the identity keeps its dot:
+Third-party: swift-nio-ssh 0.9 (SSH for the client and the server,
+through libraries/visor_ssh; it parses OpenSSH key lines but writes none,
+so `NIOSSHPublicKey+OpenSSH.swift` writes the kept host key from the
+key's bytes, read through reflection — a line to offer upstream instead),
+SQLite.swift 0.15.3 (the caches), rules_swift_package_manager (rspm)
+brings SwiftPM packages into Bazel as `@swiftpkg_<identity>` — the
+identity keeps its dot:
 `@swiftpkg_sqlite.swift//:SQLite`, `@swiftpkg_agent_ui//:AgentUI`.
 
 ## 2. Setting up a Mac
@@ -240,38 +235,6 @@ every stream present when sent has landed — `shadowed` hides the matched
 record row meanwhile; `turnStatus: [StatusItem]`). Sent text is trimmed.
 `catalogs` envelope refreshes the agent list (e.g. after a key is saved).
 
-**Terminal sessions** (0.18). A session whose agent is `shell` is the
-login shell of the user the server runs as (`ToolPath.loginShell`, run
-with `-l`) on a PTY in the session's folder: `ShellHarness` makes a
-`ShellProcess`, whose `TerminalChild` holds the PTY, read on a dispatch
-source built outside the main actor. The shell is started by
-`visor_spawn_on_terminal` (libraries/visor_server/pty, C): fork, then in
-the child only async-signal-safe calls — default signals, `setsid`,
-`ioctl(TIOCSCTTY)`, the slave on 0–2, every other descriptor closed,
-`chdir`, `execve`. macOS gives a session a controlling terminal only
-through `TIOCSCTTY` in the child, which `posix_spawn` cannot do; without
-it a shell started from the launchd-run server has no job control or
-line editing and Ctrl-C signals nothing (`ps` shows its tty as `??`). Nothing runs until a
-window takes the session (`mode` `tui` with its client and size:
-`performMode`), which starts the shell — or keeps it, if another window
-had it — and sends the taker a replay of what it has shown
-(`replayTerminal`: a `tty` with its size set, which tells the client's
-`TerminalPane` to start its `TerminalScreen` over and draw from there).
-The client draws it with AgentUI's TerminalUI — SwiftTerm's emulator under
-a SwiftUI view, the same on Apple's SwiftUI and Isomer's — with a key bar
-(esc, ctrl, tab, arrows, paste) on a phone and drag to scroll back. Bytes go
-only to the window that has it (`onTerminalBytes`); keystrokes and
-resizes only from it. A line sent (`send`, REST or socket) is typed in;
-nothing is written down, there are no turns, and agents cannot message a
-terminal (`answer`). When the shell exits the window is told, and a key
-starts another. The shell's environment is the server's with the
-developer paths, `TERM=xterm-256color`, and no `VISOR_*` variables. A
-restart of the server ends the shells; the sessions come back, and a
-window opening one starts a new shell. These replaced the agent's own
-TUI as a session mode (0.17 and before): to carry a conversation on in
-the agent's interface, copy its resume command, end the chat session,
-and run the command in a terminal session.
-
 **Keeping the connection** (0.18). The retry: after a drop
 `AgentServerConnection` signs in and opens the channel again after 2, 4,
 8, 16 s, then every 30 (`retryDelay(afterAttempt:)`). Each step has a
@@ -365,7 +328,7 @@ own addresses, `ownAddresses`: the public address, each address with the
 port while the network reaches it, `ssh://user@address` while SSH is let
 in). The client's `RelayCourier`, owned by `VisorStore`, reports to each
 server that takes part what the device is connected to (`report()`: the
-servers taking part and their sessions, archived and terminals left out)
+servers taking part and their sessions, archived ones left out)
 every 20 s, when a server connects (`joined`), when a record changes, and
 at once for a server's `relay` push (`AgentServerEvent.relay`, the
 connection's `onRelay`); the server keeps it by client id
@@ -468,10 +431,7 @@ scans the SSH connection code and comes in over SSH at once.
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
 rows: title / status dot-or-spinner • computer • project / two-line
 preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:
-status:…)`; a terminal session: `TerminalPane` (AgentUI's TerminalUI) when this
-window has it — taken on opening when no window has it — else "Open in
-another window" with Use Here), `SessionInspector`, `ComposeSessionSheet`
-(Terminal is one of the harnesses). In agent_ui,
+status:…)`), `SessionInspector`, `ComposeSessionSheet`. In agent_ui,
 `TranscriptView` renders the record, then ONE always-present
 `EphemeralFooter` cell (id "bottom": streams, queued, sending,
 `ActivityList` of `ActivityItem`s with task checklists, error, the 18 pt
@@ -585,15 +545,14 @@ to remove.
 
 **The server on every system.** `libraries/visor_server` has no
 conditional compilation and imports nothing of a system: what differs —
-listening on loopback, a shell on a pseudo-terminal, signals to process
-ids, where secrets are kept, outgoing HTTPS, signing pushes, reading a
-picture's header, word of a file being written, where the agents' tools
-are, the host's name and data directory, relaunching, the path in — is a
-protocol (`LoopbackListening`, `TerminalLaunching`, `ProcessSignals`,
-`SecretStore`, `HTTPFetching`, `PushSigning`, `ImageMeasuring`,
-`FileWatching`, `ToolLocating`, `HostDetails`, `ServerLifecycle`,
-`ServerExposure`), gathered in a `ServerPlatform` the binary sets as
-`ServerPlatform.current` before anything else. HTTP and the WebSocket
+listening on loopback, signals to process ids, where secrets are kept,
+outgoing HTTPS, signing pushes, reading a picture's header, word of a file
+being written, where the agents' tools are, the host's name and data
+directory, relaunching, the path in — is a protocol (`LoopbackListening`,
+`ProcessSignals`, `SecretStore`, `HTTPFetching`, `PushSigning`,
+`ImageMeasuring`, `FileWatching`, `ToolLocating`, `HostDetails`,
+`ServerLifecycle`, `ServerExposure`), gathered in a `ServerPlatform` the
+binary sets as `ServerPlatform.current` before anything else. HTTP and the WebSocket
 (RFC 6455, with its own SHA-1) are read and written by the server over
 the plain bytes a `ByteStream` carries, so every system speaks them the
 same way. The platforms:
@@ -602,14 +561,14 @@ same way. The platforms:
   Network framework's TCP, the keychain, CryptoKit and URLSession for
   APNs, ImageIO, a vnode dispatch source, the app's relauncher, os_log;
 - POSIX (libraries/visor_server_posix, shared by the Mac and Linux):
-  terminals, signals, loopback sockets and daemons, with the calls whose
-  shape differs between macOS and Linux in C (`c/visor_posix.c`), so the
-  Swift is the same on both;
+  signals, loopback sockets and daemons, with the calls whose shape
+  differs between macOS and Linux in C (`c/visor_posix.c`), so the Swift
+  is the same on both;
 - Linux's, Windows's and a headless Mac's (libraries/visor_server_linux,
   …_windows, …_mac), each a `CommandLineSystem` for `visor-server`
   (libraries/visor_server_cli: run, start, stop, status, password, code):
   POSIX and FoundationNetworking;
-  Winsock, ConPTY, the Win32 process calls. Neither sends pushes yet
+  Winsock and the Win32 process calls. Neither sends pushes yet
   (`pushSigning` is nil), pictures are measured from their headers
   (`HeaderImageMeasuring`), files are polled (`PollingFileWatching`), the
   password is in a file only its user reads (`FileSecrets`), and Windows
@@ -632,8 +591,8 @@ computers); `run` and `start` take the same as options (`--password`,
 `--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server
-is built and tried in CI (a terminal session on ConPTY with PowerShell);
-it has not been run against real agents.
+is built and tried in CI (a throwaway session over its WebSocket); it has
+not been run against real agents.
 
 ## 4. The working loop
 
@@ -699,12 +658,10 @@ it has not been run against real agents.
   the final record and the ephemeral snapshot, and ends the session. The
   expected tail: `user | assistant ONE | user | assistant TWO`, streams
   empty. Try a trailing space on a message: that used to freeze the record.
-- `node tools/probes/lifecycle.mjs` (`AGENT=codex|openrouter`, `TERMINAL=1`
-  to also open a terminal session, type a line into its shell, see it run
-  and have another window take it, `MCP=1` to also have the agent
-  call Visor's MCP `list_sessions` and, in a second session with manual
-  permissions, ask for a tool call's approval and be given it) — a throwaway session interrupted
-  mid-turn, carried on, then
+- `node tools/probes/lifecycle.mjs` (`AGENT=codex|openrouter`, `MCP=1` to
+  also have the agent call Visor's MCP `list_sessions` and, in a second
+  session with manual permissions, ask for a tool call's approval and be
+  given it) — a throwaway session interrupted mid-turn, carried on, then
   ended; the expected tail is `failures 0`, and a few seconds later the
   server has no agent left as a child (`pgrep -lP <server pid>`).
 - The probes talk to the installed server unless `VISOR_PORT` names
@@ -715,10 +672,10 @@ it has not been run against real agents.
   subscribing client gets (busy, activity, status count, held streams).
   Stale streams here = a bug.
 - `node tools/probes/earlier.mjs <visor session id>` — pages earlier rows.
-- `node tools/probes/terminal.mjs` — any server, no agent needed: the REST
-  side and the socket answer, a terminal session runs the shell (a line, a
-  large output, Ctrl-C), and is ended; `QUIT=1` then stops the server
-  through `/api/quit`; `VISOR_SHELL=powershell` for a Windows server.
+- `node tools/probes/server.mjs` — any server, no agent needed: the REST
+  side and the socket answer, the heartbeat is answered, and a throwaway
+  session is started, followed and ended; `QUIT=1` then stops the server
+  through `/api/quit`.
 - `node tools/probes/noweb_proxy.mjs` — a reverse proxy on 8099 that
   carries HTTP only (`/visor/api` → 7534, the rest → 7533, every WebSocket
   upgrade refused): a path with no WebSockets in front of a staging
@@ -747,7 +704,7 @@ it has not been run against real agents.
   sees the sessions; then the same through a jump host (the sshd jumped
   through to itself). Kill the sshd by its pid file afterwards.
 - `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
-  as its user would run it: a password, `run` checked with the terminal
+  as its user would run it: a password, `run` checked with the server
   probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
   it; on the Mac, in a container: a podman machine of your own, an image
   with `swift:6.4-noble`, `libsqlite3-dev` and Node 22, the checkout
@@ -944,8 +901,6 @@ From the code-quality pass of October 2026, found and left:
 - `VisorServer` and `SessionRecord` are `ObservableObject`s. The server is
   Apple-only and could use Observation; the client cannot until Isomer has
   it.
-- The terminal pane's keyboard inset and input order were changed without
-  a device to try them on (#79).
 - The openrouter CLI, signalled, leaves the command it was running; a
   reply interrupted mid-stream is not kept in its session.
 - SSH addresses work on Apple hosts only: the web has no SSH, and

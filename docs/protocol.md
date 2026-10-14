@@ -54,9 +54,8 @@ polling instead, with the same effect a little later: the list of
 sessions (`GET /sessions?since=`) and each open session's state
 (`GET /sessions/<id>/state?since=`), each held by the server until it
 changes, as the transcript's sync always is; the rows before one from
-`GET /sessions/<id>/earlier`. Only a terminal session's bytes need the
-socket. Pushes are optional the same way: a device whose server sends
-none notifies itself.
+`GET /sessions/<id>/earlier`. Pushes are optional the same way: a device
+whose server sends none notifies itself.
 
 ## Connection codes
 
@@ -138,8 +137,8 @@ and `subscribe` and stream the rest.
 | type | fields | meaning |
 |---|---|---|
 | `login` | `token` (from `hello`) or `password`; neither on the socket file | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
-| `start` | `id`, `agent` (`claude`/`codex`/`openrouter`, or `shell` for a terminal session), `cwd`, `title`, `skipPermissions` | Create a session (the client picks the id; an empty title means the agent's name, numbered). Nothing is spawned until the first `send` — for a terminal, until a window takes it (`mode`). The client is subscribed to it. |
-| `send` | `session`, `text` | A user turn. While the agent works it waits in the session's queue (`queued`); when the turn ends (or `stop` ends it) the queue goes over a message at a time, never joined, each turn but the last stopped as soon as it starts (once the agent says it began: Claude's `system/init`, Codex's turn id — a stop sent before that is taken and ignored), so the agent answers the last. `/goal clear` sent during a turn goes ahead of the queue and stops the turn. To a terminal session: the text typed into its shell and entered; nothing is written down. |
+| `start` | `id`, `agent` (`claude`/`codex`/`openrouter`), `cwd`, `title`, `skipPermissions` | Create a session (the client picks the id; an empty title means the agent's name, numbered). Nothing is spawned until the first `send`. The client is subscribed to it. |
+| `send` | `session`, `text` | A user turn. While the agent works it waits in the session's queue (`queued`); when the turn ends (or `stop` ends it) the queue goes over a message at a time, never joined, each turn but the last stopped as soon as it starts (once the agent says it began: Claude's `system/init`, Codex's turn id — a stop sent before that is taken and ignored), so the agent answers the last. `/goal clear` sent during a turn goes ahead of the queue and stops the turn. |
 | `stop` | `session` | Kill the agent's process; the transcript stays and the next `send` resumes the agent's own session. |
 | `subscribe` | `session` | Replay the transcript, then stream. |
 | `permissions` | `session`, `skipPermissions` | Switch the session between auto (no prompts) and manual. Codex applies it next turn; Claude's process restarts (resumed by id) once the current turn ends. `sessions` follows. |
@@ -147,11 +146,14 @@ and `subscribe` and stream the rest.
 | `approve` | `session`, `id`, `allow` | Answer a pending permission request (manual mode). |
 | `archive` | `session` | End the agent gracefully (stdin closed, then terminated), keep the transcript and the agent's own session id on disk; the session lists as archived with its `resumeCommand`. |
 | `unarchive` | `session` | Bring it back; the next `send` resumes the agent's own session with the same agent, directory and permission mode. A `send` to an archived session unarchives it too. |
-| `end` | `session` | Stop and forget the session (archived or not). A terminal session's shell ends with it. |
-| `mode` | `session`, `mode: "tui"`, `cols`, `rows` | Take a terminal session for this client's window: its shell is drawn at this size, for this client only, from now on — started if it is not running, kept if another window had it (that window is sent nothing more). The taker is sent a replay (`tty` with `cols` and `rows` set). Ignored for a chat session. `sessions` follows, with `mode` naming the client and size. |
-| `input` | `session`, `data` (base64) | Keystrokes, from the client the terminal is drawn for (from any other, ignored). With the shell exited, a key starts a new one. |
-| `resize` | `session`, `cols`, `rows` | The window that has the terminal changed size. |
+| `end` | `session` | Stop and forget the session (archived or not). |
 | `ping` | | The client's heartbeat, every 16 s once logged in. Answered at once with `pong`. A client that hears nothing — the `pong` or anything else — within 8 s takes the socket as dropped and reconnects (after 2, 4, 8, 16 s, then every 30). A server from before 0.18 answers `error` "Unknown message ping", which a client takes as an answer too. An envelope, not a WebSocket ping frame: a browser cannot send those. |
+
+Servers from 0.18 to 0.31 also had terminal sessions (agent `shell`,
+driven by `mode`, `input` and `resize`, drawn from `tty`). A client
+leaves such a session out of the list it reads; a server now ignores
+those three from an older client, and drops a terminal session it finds
+in its store.
 
 ## Server → client
 
@@ -169,9 +171,8 @@ and `subscribe` and stream the rest.
 | `busy` | `session`, `busy` | The turn started / ended. |
 | `approval` | `session`, `approval` | A tool call is waiting for Allow/Deny (`id`, `tool`, `summary`), or null once answered. `SessionInfo.pendingApproval` mirrors it. |
 | `failure` | `session`, `message` | Something went wrong; shown under the transcript until the next user turn. |
-| `tty` | `session`, `data` (base64); `cols`, `rows` on a replay | What a terminal session's shell drew, to the window it is drawn for only. With `cols` set it is the whole screen so far (on taking the terminal, or subscribing again while holding it): the client starts its screen over. |
 
-`SessionInfo`: `id`, `agent` (`claude`, `codex`, `openrouter`, `shell`), `mode` (absent, or — for a terminal session a window has — `{"kind":"tui","controller":<client>,"cols":…,"rows":…}`), `cwd`, `title` (given, or the agent's name numbered within the folder),
+`SessionInfo`: `id`, `agent` (`claude`, `codex`, `openrouter`), `cwd`, `title` (given, or the agent's name numbered within the folder),
 `busy`, `ended`, `skipPermissions`, `model`, `effort` (nil: the provider's / model's default; Claude fills `model` with what it actually runs), `archived`, `resumeCommand` (once the agent's own id is known: `cd <cwd> && claude --resume <id>` / `codex resume <id>`), `created`, `contextUsed`/`contextLimit` (the last request's tokens and the model's window), `usage` (what the session has used in all: `input` tokens, cache reads included, `cached`, `output`, and `cost` in dollars where the agent prices its turns — Claude Code at API prices even on a subscription, the openrouter CLI at OpenRouter's). Every session (live or archived) persists in `~/Library/Application Support/Visor/sessions.json` on the host, so a relaunch of the menu bar app brings them back idle, resumable by the agent's own id. `TranscriptEntry`: `id`, `role`
 (`user`/`assistant`/`tool`), `text`, `activities`, `toolName` — the shape of
 AgentUI's `TranscriptMessage`, which the client maps one to one. Tool
@@ -273,7 +274,7 @@ client tells each server it is connected to what it is connected to, every
 (`POST /api/relay` with a `DirectoryReport`: `client`, `clientName`, and
 `servers`, each `DirectoryServer` an `id`, `name` and `sessions`, each
 `DirectorySession` an `id`, `name`, `agent` and `busy`; archived sessions
-and terminals left out). A server keeps the last report of each client by
+left out). A server keeps the last report of each client by
 the client's id, for ten minutes; `list_sessions` gives this server's
 sessions and then each other server's as last reported, with who reported
 it and how long ago.

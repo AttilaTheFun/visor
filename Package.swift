@@ -40,7 +40,7 @@ let shared: [Target] = [
 ]
 
 #if os(Windows)
-/// Windows: Winsock, ConPTY, the Win32 process calls.
+/// Windows: Winsock, the Win32 process calls.
 let system: [Target] = [
     .target(name: "VisorServerWindows", dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI"],
             path: "libraries/visor_server_windows/Sources", swiftSettings: strict),
@@ -50,8 +50,8 @@ let system: [Target] = [
 let tests: [Target] = []
 let agentHost: [Product] = []
 #else
-/// Linux: POSIX terminals, signals and sockets (shared with the Mac), and
-/// the agents' host, built beside the server.
+/// Linux: POSIX signals and sockets (shared with the Mac), and the agents'
+/// host, built beside the server.
 let system: [Target] = [
     .target(name: "CVisorPOSIX", path: "libraries/visor_server_posix/c"),
     .target(name: "VisorAgentHost", dependencies: ["AgentHostWire", "CVisorPOSIX"],

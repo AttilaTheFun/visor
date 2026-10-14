@@ -2,8 +2,8 @@ import XCTest
 
 /// Drives the phone client in the simulator, for looking at it and for
 /// recording it: a send (for the send-motion check), the composer, the
-/// archive list, the terminal, and the snapshot fixture's screens. On the
-/// main actor, where XCUIApplication is.
+/// archive list, and the snapshot fixture's screens. On the main actor,
+/// where XCUIApplication is.
 @MainActor
 final class VisorProbe: XCTestCase {
     private let outDir = "/private/tmp/visor_probe"
@@ -589,72 +589,6 @@ final class VisorProbe: XCTestCase {
                 shot(app, "look-4-typed")
             }
         }
-    }
-
-    /// A terminal session from a phone, as the phone draws it: opened, the
-    /// shell is drawn for this window at once; a line typed runs; the
-    /// inspector says which window has it; and the sidebar afterwards. The
-    /// session is a throwaway terminal session made over the API before
-    /// the run (VISOR_LOOK_SESSION names it).
-    func testTerminalLook() throws {
-        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
-        XCUIDevice.shared.orientation = .portrait
-        let app = XCUIApplication()
-        app.launch()
-        let add = app.buttons["add-computer"].firstMatch
-        if add.waitForExistence(timeout: 10) {
-            add.tap()
-        } else {
-            let row = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Add Computer")).firstMatch
-            if row.waitForExistence(timeout: 10) { row.tap() }
-        }
-        Thread.sleep(forTimeInterval: 2)
-        let host = app.textFields["host"].firstMatch
-        if host.waitForExistence(timeout: 20) {
-            let env = ProcessInfo.processInfo.environment
-            host.tap()
-            host.typeText(env["VISOR_PROBE_HOST"] ?? "my-mac.example.ts.net")
-            let secure = app.secureTextFields["password"].firstMatch
-            if secure.waitForExistence(timeout: 5) {
-                secure.tap()
-                secure.typeText(env["VISOR_PROBE_PASSWORD"] ?? "")
-            }
-            app.buttons["connect"].firstMatch.tap()
-            Thread.sleep(forTimeInterval: 8)
-            let done = app.buttons["Done"].firstMatch
-            if done.exists { done.tap() }
-            Thread.sleep(forTimeInterval: 4)
-        }
-        let wanted = ProcessInfo.processInfo.environment["VISOR_LOOK_SESSION"] ?? "probe-terminal-look"
-        let row = app.cells.containing(NSPredicate(format: "label CONTAINS %@", wanted)).firstMatch
-        if row.waitForExistence(timeout: 20) {
-            row.tap()
-        } else {
-            let any = app.staticTexts[wanted].firstMatch
-            XCTAssertTrue(any.waitForExistence(timeout: 20), "no session row to open")
-            any.tap()
-        }
-        Thread.sleep(forTimeInterval: 6)
-        shot(app, "term-0-terminal")
-        // Typed into the shell: SwiftTerm takes the keyboard when tapped.
-        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        Thread.sleep(forTimeInterval: 1)
-        app.typeText("echo visor-look-$((40 + 2)) cols=$COLUMNS -- 'q'\n")
-        Thread.sleep(forTimeInterval: 3)
-        shot(app, "term-1-typed")
-        let title = app.buttons["session-title"].firstMatch
-        XCTAssertTrue(title.waitForExistence(timeout: 10), "no title button")
-        title.tap()
-        Thread.sleep(forTimeInterval: 3)
-        shot(app, "term-2-inspector")
-        let done = app.buttons["Done"].firstMatch
-        if done.exists { done.tap() }
-        Thread.sleep(forTimeInterval: 2)
-        // And back to the sidebar: are the sessions still there?
-        let back = app.navigationBars.buttons.element(boundBy: 0)
-        if back.exists { back.tap() } else { app.swipeRight() }
-        Thread.sleep(forTimeInterval: 4)
-        shot(app, "term-3-sidebar-after")
     }
 
     private func shot(_ app: XCUIApplication, _ name: String) {

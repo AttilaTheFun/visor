@@ -1,6 +1,5 @@
-// The sessions' agents (and terminal sessions' shells): made, bound to
-// their records, given what the user says, rebuilt when a session's
-// folder or settings change.
+// The sessions' agents: made, bound to their records, given what the
+// user says, rebuilt when a session's folder or settings change.
 
 import ClaudeTranscript
 import MessageCache
@@ -17,9 +16,6 @@ extension VisorServer {
         // and a terminal can resume it from there.
         if let resume { harness.adoptHistory(id: resume, cwd: info.cwd) }
         let process = harness.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
-        // A shell is born at the window it is drawn for, so its first
-        // prompt is already the right shape.
-        if let size = info.mode.terminalSize { (process as? TerminalCapable)?.resize(cols: size.cols, rows: size.rows) }
         process.model = info.model
         process.effort = info.effort
         process.approvalEnvironment = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]
@@ -103,10 +99,9 @@ extension VisorServer {
     /// Ends the agent and makes a new one on the same session, which
     /// picks the conversation up as the file stands: one built for the
     /// session as it is now (its folder, its settings). A turn in flight
-    /// is cut short. A terminal session's shell starts again at once if a
-    /// window has it; the chat's agent starts with the next message,
-    /// which is when resuming matters. With `rereading`, the transcript is read again, since the
-    /// file may have moved on under another writer.
+    /// is cut short. The new agent starts with the next message, which is
+    /// when resuming matters. With `rereading`, the transcript is read
+    /// again, since the file may have moved on under another writer.
     func rebuild(_ record: SessionRecord, rereading: Bool = false) {
         record.restartWhenIdle = false
         let old = record.process
@@ -120,7 +115,6 @@ extension VisorServer {
         }
         Task {
             await old.end(within: .seconds(3))
-            if record.info.mode.isTUI { launchTerminal(record) }
             if rereading { record.followFile() }
             release(record)
         }
@@ -197,27 +191,7 @@ extension VisorServer {
         }
     }
 
-    /// A terminal session's shell is live before anything is typed: bound
-    /// and started now (or kept, if it is running), at its window's size.
-    func launchTerminal(_ record: SessionRecord) {
-        if !record.isBound { bind(record) }
-        if let size = record.info.mode.terminalSize { record.terminal?.resize(cols: size.cols, rows: size.rows) }
-        do { try record.terminal?.start() } catch {
-            broadcast(record.apply(.failure(error.localizedDescription)), session: record)
-        }
-        saveArchive()
-    }
-
     func deliver(_ text: String, to record: SessionRecord, images: [String] = []) {
-        // A terminal session has no turns: what is sent is a line typed
-        // into its shell, and nothing is written down.
-        if record.info.agent.isShell {
-            if !record.isBound { bind(record) }
-            do { try record.process.send(text) } catch {
-                broadcast(record.apply(.failure(error.localizedDescription)), session: record)
-            }
-            return
-        }
         // A turn in flight is left alone. What the user says now waits its
         // turn and goes over as soon as the agent falls idle — interrupting
         // is a deliberate act (`stop`), not the cost of typing.
@@ -278,12 +252,6 @@ extension VisorServer {
     }
 
     func bind(_ record: SessionRecord) {
-        record.onTerminalBytes = { [weak self, weak record] envelope in
-            guard let self, let record, let controller = record.info.mode.controller else { return }
-            for key in record.subscribers where self.connections[key]?.clientID == controller {
-                self.connections[key]?.send(envelope)
-            }
-        }
         record.onFileRows = { [weak self, weak record] rows in
             guard let self, let record else { return }
             for row in rows { self.broadcast(.entry(session: record.info.id, row), session: record) }
@@ -304,8 +272,7 @@ extension VisorServer {
     /// to whoever watches it.
     func handle(_ event: AgentEvent, from record: SessionRecord) {
         let reported = record.info.reportedModel
-        // Nothing to say is nothing sent: terminal bytes went to the one
-        // window they are drawn for inside apply.
+        // Nothing to say is nothing sent.
         broadcast(record.apply(event), session: record)
         switch event {
         case .context, .session, .background, .goal:

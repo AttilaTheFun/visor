@@ -72,20 +72,19 @@ public struct Envelope: Codable, Sendable {
     /// folders: whether `path` is still a folder on the computer. A project
     /// whose folder was renamed or moved out from under us answers false.
     public var exists: Bool?
-    /// A session's mode ("chat" / "tui"), asked for or reported.
+    /// What an agent asks of the other sessions (`agent`): "sessions",
+    /// "send", "read" or "status".
     public var mode: String?
-    /// Which client a terminal is drawn for.
-    public var controller: String?
-    /// Which client is speaking, given at login.
+    /// Which client is speaking, given at login; for an agent's ask, the
+    /// session asking.
     public var client: String?
     /// Something the user is told about the session and acknowledges —
     /// that it was forked elsewhere and the chat now follows the newer
     /// branch. On a transcript until acknowledged, and pushed as it happens.
     public var notice: String?
-    /// Terminal bytes, base64: what the PTY produced, or what the user typed.
+    /// Bytes, base64: a piece of a file a migration carries.
     public var data: String?
-    /// The terminal's size, in cells.
-    public var cols: Int?
+    /// How many of a session's latest rows an agent's read asks for.
     public var rows: Int?
     /// Earlier rows: the id the asked-for rows come before, and whether a
     /// transcript goes back further than what was sent.
@@ -205,23 +204,6 @@ extension Envelope {
     /// The user has read the session's notice.
     public static func acknowledge(session: String) -> Envelope {
         var e = Envelope(type: "acknowledge"); e.session = session; return e
-    }
-    /// Takes a terminal session for this client's window: its shell is
-    /// drawn at this size, for this client, from now on.
-    public static func assumeControl(session: String, cols: Int, rows: Int) -> Envelope {
-        var e = Envelope(type: "mode"); e.session = session; e.mode = "tui"; e.cols = cols; e.rows = rows; return e
-    }
-
-    /// Bytes typed into the terminal, base64.
-    public static func input(session: String, data: String) -> Envelope {
-        var e = Envelope(type: "input"); e.session = session; e.data = data; return e
-    }
-    public static func resize(session: String, cols: Int, rows: Int) -> Envelope {
-        var e = Envelope(type: "resize"); e.session = session; e.cols = cols; e.rows = rows; return e
-    }
-    /// Bytes the terminal produced, base64.
-    public static func tty(session: String, data: String) -> Envelope {
-        var e = Envelope(type: "tty"); e.session = session; e.data = data; return e
     }
     /// Asks for the rows before `before` of a thread served from its end.
     public static func earlier(session: String, before: String) -> Envelope {
