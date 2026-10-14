@@ -10,6 +10,7 @@ import AgentUI
 import NavigationUI
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 
 @MainActor
@@ -420,7 +421,7 @@ public struct VisorRootView: View {
         // The command that picks the same conversation up in a terminal
         // on the computer itself.
         if let command = session.resumeCommand {
-            Button { copyToPasteboard(command) } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
+            Button { Pasteboard.string = command } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
         }
         Divider()
         Button { selection = .project(serverID: host.id, cwd: card.project.cwd) } label: {

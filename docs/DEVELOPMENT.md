@@ -899,12 +899,12 @@ From the code-quality pass of October 2026, found and left:
   mid-slide shows as a stutter in its steps (−11, −4, −13) rather than a
   step down.
 - `VisorServer` and `SessionRecord` are `ObservableObject`s. The server is
-  Apple-only and could use Observation; the client cannot until Isomer has
-  it.
+  Apple-only and could use Observation; the client cannot until every
+  SwiftUI it is built with has it.
 - The openrouter CLI, signalled, leaves the command it was running; a
   reply interrupted mid-stream is not kept in its session.
 - SSH addresses work on Apple hosts only: the web has no SSH, and
-  Android's host (Isomer) does not provide a `VisorSSHService` yet; the
+  Android's host does not provide a `VisorSSHService` yet; the
   Linux and Windows clients, when there are some, can give one over
   swift-nio-ssh. The address still needs Visor Server running on the
   computer; a computer with only SSH could be served by starting the

@@ -1,12 +1,9 @@
-// What Apple's SwiftUI has and Isomer's does not yet: item-driven
+// What Apple's SwiftUI has and a portable SwiftUI may not yet: item-driven
 // sheets (built on the isPresented form), a secure field, and the
 // inset-grouped form style on the Mac.
 
 import AgentUI
 import SwiftUI
-#if canImport(Isomer)
-import Isomer
-#endif
 #if canImport(QuickLook)
 import QuickLook
 #endif
@@ -51,7 +48,7 @@ extension View {
     }
 
     /// A list in the detail (an archive): inset grouped, as every SwiftUI
-    /// draws it (the web's and Isomer's on a phone too), and the sidebar
+    /// draws it (a portable SwiftUI's on a phone too), and the sidebar
     /// style on the Mac, which has no inset-grouped list.
     @ViewBuilder func insetGroupedList() -> some View {
         // The Mac's SwiftUI has no inset-grouped list: its sidebar is the
@@ -99,31 +96,6 @@ extension View {
     }
 }
 
-/// What the system pasteboard holds as text: AppKit's on the Mac, UIKit's
-/// on an iPhone or iPad, and Isomer's clipboard elsewhere (the browser's,
-/// Android's), which has no UIKit.
-@MainActor func pasteboardString() -> String? {
-    #if canImport(Isomer)
-    return Clipboard.string
-    #elseif os(macOS)
-    return NSPasteboard.general.string(forType: .string)
-    #else
-    return UIPasteboard.general.string
-    #endif
-}
-
-/// Puts text on the system pasteboard: as `pasteboardString` reads it.
-@MainActor func copyToPasteboard(_ text: String) {
-    #if canImport(Isomer)
-    Clipboard.string = text
-    #elseif os(macOS)
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(text, forType: .string)
-    #else
-    UIPasteboard.general.string = text
-    #endif
-}
-
 extension View {
     /// A sheet's heights on a phone (and on the portable SwiftUI, whose
     /// sheets are a phone's); a window's size on the Mac.
@@ -143,23 +115,3 @@ extension View {
         #endif
     }
 }
-
-#if os(iOS)
-import UIKit
-
-extension View {
-    /// The camera, as Isomer spells it on the portable SwiftUI (which
-    /// has its own): a photo taken, as a file, or nil when cancelled.
-    func cameraCapture(isPresented: Binding<Bool>, onCapture: @escaping (URL?) -> Void) -> some View {
-        fullScreenCover(isPresented: isPresented) {
-            CameraCapture { data in
-                isPresented.wrappedValue = false
-                guard let data else { return onCapture(nil) }
-                let file = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("photo-\(UUID().uuidString.prefix(8)).jpg")
-                onCapture((try? data.write(to: file)) != nil ? file : nil)
-            }
-            .ignoresSafeArea()
-        }
-    }
-}
-#endif

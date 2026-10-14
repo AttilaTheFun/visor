@@ -4,6 +4,7 @@
 
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 import VisorServices
 
@@ -119,7 +120,7 @@ struct ComputerSettingsForm: View {
             Section {
                 connectionLogShareLink(log)
                     .accessibilityIdentifier("share-log")
-                Button("Copy Connection Log") { copyToPasteboard(log) }
+                Button("Copy Connection Log") { Pasteboard.string = log }
                 Button("Clear Connection Log", role: .destructive) {
                     ConnectionLog.shared.clear()
                     log = ConnectionLog.shared.text

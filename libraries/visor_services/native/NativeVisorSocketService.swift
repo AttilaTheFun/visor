@@ -1,6 +1,6 @@
 // URLSessionWebSocketTask behind the socket service (events queued per
 // socket, handed out one at a time to `next`): Apple's, or another
-// Foundation's (Isomer's, on the web and Android), the same code.
+// Foundation's (a host's own, on the web and Android), the same code.
 
 import Foundation
 import Synchronization

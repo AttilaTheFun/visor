@@ -175,7 +175,7 @@ struct SettingsPane: View {
                     if pushMessage == "Saved." { keyPEM = "" }
                 }
                 .disabled(keyPEM.isEmpty || keyID.isEmpty || teamID.isEmpty)
-                Text("An APNs key from your Apple developer account (Keys → Apple Push Notifications service). It stays in this Mac's keychain. A push says only the session's name and what happened: \"Isomer: Goal achieved in 1h45m\".")
+                Text("An APNs key from your Apple developer account (Keys → Apple Push Notifications service). It stays in this Mac's keychain. A push says only the session's name and what happened: \"Halo: Goal achieved in 1h45m\".")
                     .font(.caption).foregroundColor(.secondary)
                 if let pushMessage { Text(pushMessage).font(.caption) }
             } header: {

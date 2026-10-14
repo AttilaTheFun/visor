@@ -2,6 +2,7 @@ import AgentUI
 import NavigationUI
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 
 /// An archive in the detail column: a computer's ended sessions, newest
@@ -44,7 +45,7 @@ struct ArchivedList: View {
                     .contextMenu {
                         Button { host.unarchive(session.id) } label: { Label("Unarchive", systemImage: "tray.and.arrow.up") }
                         if let command = session.resumeCommand {
-                            Button { copyToPasteboard(command) } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
+                            Button { Pasteboard.string = command } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
                         }
                         Button { openProject(session.cwd) } label: { Label("Project Settings", systemImage: "folder") }
                         Button(role: .destructive) { deleting = session } label: { Label("Remove", systemImage: "trash") }

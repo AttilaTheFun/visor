@@ -4,6 +4,7 @@
 
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 
 @MainActor
@@ -54,7 +55,7 @@ struct SessionInspector: View {
                     // interface: end this session, and run this in a
                     // terminal on the computer.
                     if let command = session.resumeCommand {
-                        Button { copyToPasteboard(command) } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
+                        Button { Pasteboard.string = command } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
                     }
                 }
                 SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)

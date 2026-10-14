@@ -10,6 +10,7 @@
 
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 
 @MainActor
@@ -46,7 +47,7 @@ struct ConnectionCodeSection: View {
                 }
                 ForEach(ConnectionPath.allCases, id: \.self) { kind in
                     if let code = codes.code(for: kind) {
-                        Button("Copy \(kind.title) Connection Code") { copyToPasteboard(code) }
+                        Button("Copy \(kind.title) Connection Code") { Pasteboard.string = code }
                             .accessibilityIdentifier("copy-\(kind.rawValue)-code")
                     }
                 }

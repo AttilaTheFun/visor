@@ -1,8 +1,8 @@
 // Picking something to send: files anywhere, and on a phone the photo
 // library and the camera; or files dropped on the chat. All standard
-// SwiftUI, which the portable SwiftUI implements too; only the camera,
-// which SwiftUI has none of, is a helper (Compat.swift on iOS,
-// Isomer's own elsewhere). What comes back is the bytes and a
+// SwiftUI, which a portable SwiftUI implements too; only the camera,
+// which SwiftUI has none of, comes from elsewhere (VisorCamera, which a
+// host may give its own of). What comes back is the bytes and a
 // name — the upload and the path are the caller's business.
 
 import Foundation
@@ -13,10 +13,7 @@ import PhotosUI
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif
-// Isomer's camera (`cameraCapture`) is the Isomer module's: Isomer's SwiftUI has only Apple's API.
-#if canImport(Isomer)
-import Isomer
-#endif
+import VisorCamera
 #if os(iOS) || os(macOS)
 import AVFoundation
 import ImageIO
@@ -24,7 +21,7 @@ import ImageIO
 
 extension View {
     /// Whether this host offers a choice of camera, photo library and
-    /// files (a phone, the Isomer builds as well), rather than going
+    /// files (a phone, or a host that is not a Mac), rather than going
     /// straight to files (a Mac).
     static var offersAttachMenu: Bool {
         #if os(macOS)
@@ -35,15 +32,7 @@ extension View {
     }
 
     /// Whether there is a camera to take a photo with.
-    static var canTakePhotos: Bool {
-        #if os(iOS)
-        CameraCapture.available
-        #elseif os(macOS)
-        false
-        #else
-        true
-        #endif
-    }
+    @MainActor static var canTakePhotos: Bool { Camera.available }
 
     /// The pickers behind the attach button, one per source; `source` is
     /// the one open, and goes back to nil when it closes.

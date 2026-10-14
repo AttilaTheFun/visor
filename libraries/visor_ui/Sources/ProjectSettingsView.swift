@@ -4,6 +4,7 @@
 
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 
 @MainActor
@@ -30,7 +31,7 @@ struct ProjectSettingsView: View {
             }
             Section {
                 Button("Rename in Visor…", action: rename)
-                Button("Copy folder path") { copyToPasteboard(project.cwd) }
+                Button("Copy folder path") { Pasteboard.string = project.cwd }
                 if project.missing {
                     Button("Locate the folder…", action: locate)
                 }
