@@ -299,11 +299,11 @@ public struct VisorRootView: View {
             if compact, compactColumn != (value == nil ? .sidebar : .detail) { compactColumn = value == nil ? .sidebar : .detail }
         })) {
             ForEach(store.servers) { host in
-                HostSection(host: host) { host in hostRows(host) }
+                HostSection(host: host, inline: compact) { host in hostRows(host) }
             }
             // What was said, as well as what the sessions are called.
             if searching, !messageHits.isEmpty {
-                Section {
+                SidebarSection(inline: compact) {
                     ForEach(messageHits, id: \.hit.id) { item in
                         MessageHitRow(hit: item.hit, computer: store.servers.count > 1 ? item.host.record.name : nil)
                             .tag(ContentSelection.session(SessionSelection(serverID: item.host.id, sessionID: item.hit.session)))
@@ -312,7 +312,7 @@ public struct VisorRootView: View {
                     Text("Messages").noHeaderCase()
                 }
             }
-            if let account = VisorAccounts.current { AccountSection(account: account) }
+            if let account = VisorAccounts.current { AccountSection(account: account, inline: compact) }
             // Always last: where another computer comes from.
             Section {
                 Button { store.addingServer = true } label: {
