@@ -4,7 +4,7 @@
 // the transcript's sync is. The socket is the quick way to hear these;
 // over a path that carries no WebSocket (a proxy that does not pass them,
 // a network that drops them) the same arrives by asking again, and the
-// client works. Terminal bytes are the one thing only the channel carries.
+// client works.
 
 import Foundation
 import VisorProtocol

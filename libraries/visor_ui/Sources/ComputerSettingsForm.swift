@@ -4,6 +4,7 @@
 
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 import VisorServices
 
@@ -49,7 +50,7 @@ struct ComputerSettingsForm: View {
                 Text("Connection")
             } footer: {
                 if host.state == .connected, !host.live {
-                    Text("Polling: this path carries no live channel, so updates arrive a little later, and terminal sessions cannot be drawn.")
+                    Text("Polling: this path carries no live channel, so updates arrive a little later.")
                 }
             }
             Section {
@@ -119,7 +120,7 @@ struct ComputerSettingsForm: View {
             Section {
                 connectionLogShareLink(log)
                     .accessibilityIdentifier("share-log")
-                Button("Copy Connection Log") { copyToPasteboard(log) }
+                Button("Copy Connection Log") { Pasteboard.string = log }
                 Button("Clear Connection Log", role: .destructive) {
                     ConnectionLog.shared.clear()
                     log = ConnectionLog.shared.text

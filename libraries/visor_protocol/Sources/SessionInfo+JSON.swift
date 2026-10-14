@@ -22,10 +22,6 @@ extension SessionInfo {
         if let otherBranch { o["otherBranch"] = .string(otherBranch) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
-        if case .tui(let controller, let cols, let rows) = mode {
-            o["mode"] = .object(["kind": .string("tui"), "controller": .string(controller),
-                                 "cols": .number(Double(cols)), "rows": .number(Double(rows))])
-        }
         return .object(o)
     }
 
@@ -50,11 +46,5 @@ extension SessionInfo {
         otherBranch = json["otherBranch"].string
         preview = json["preview"].string
         updated = json["updated"].double
-        if json["mode"]["kind"].string == "tui", let controller = json["mode"]["controller"].string,
-           let cols = json["mode"]["cols"].double, let rows = json["mode"]["rows"].double {
-            mode = .tui(controller: controller, cols: Int(whole: cols), rows: Int(whole: rows))
-        } else {
-            mode = .chat
-        }
     }
 }

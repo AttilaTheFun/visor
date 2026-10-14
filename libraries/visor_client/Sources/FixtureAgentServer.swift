@@ -44,7 +44,6 @@ final class FixtureAgentServer: AgentServer {
         Task { onEvent(.session(reply)) }
     }
 
-    func assumeControl(_ session: String, cols: Int, rows: Int) {}
     func acknowledge(_ session: String) {}
     /// On the `earlier` screen, the goal session's thread goes back further:
     /// a page of 200 rows comes half a second after it is asked for, as
@@ -62,8 +61,6 @@ final class FixtureAgentServer: AgentServer {
             onEvent(.session(Self.wire(page)))
         }
     }
-    func sendInput(_ session: String, data: String) {}
-    func resize(_ session: String, cols: Int, rows: Int) {}
 
     func sessions() async throws -> [SessionInfo] { Self.welcome.sessions ?? [] }
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }

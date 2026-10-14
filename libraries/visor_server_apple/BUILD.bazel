@@ -6,7 +6,7 @@ package(default_visibility = ["//visibility:public"])
 # The server's platform on a Mac (ServerPlatform.apple): the Network
 # framework's sockets, the keychain, CryptoKit and URLSession for pushes,
 # ImageIO, the kernel's word on files, the app's relauncher — with the
-# POSIX terminals and signals.
+# POSIX signals.
 swift_library(
     name = "visor_server_apple",
     copts = STRICT_SWIFT,

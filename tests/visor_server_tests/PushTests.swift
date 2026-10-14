@@ -20,7 +20,7 @@ final class PushTests: ServerTestCase {
     }
 
     private func record(_ id: String, busy: Bool = false) -> SessionRecord {
-        SessionRecord(info: SessionInfo(id: id, agent: .claude, cwd: "/tmp", title: "Isomer", busy: busy, created: 0),
+        SessionRecord(info: SessionInfo(id: id, agent: .claude, cwd: "/tmp", title: "Halo", busy: busy, created: 0),
                       process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
     }
 
@@ -33,7 +33,7 @@ final class PushTests: ServerTestCase {
         XCTAssertTrue(said.isEmpty, "the first look says nothing")
         _ = working.apply(.busy(false))
         server.notifyPushes()
-        XCTAssertEqual(said, ["turn: Isomer: Turn finished"])
+        XCTAssertEqual(said, ["turn: Halo: Turn finished"])
 
         // A goal met, after a while: said with how long it took.
         working.replaceEntriesForTesting([TranscriptEntry(id: "goal-file-1", role: .tool, text: "Secret words", toolName: "goal")])
@@ -41,7 +41,7 @@ final class PushTests: ServerTestCase {
         server.pushStates["s"]?.goalSince = Date().timeIntervalSince1970 - 6300
         working.replaceEntriesForTesting(working.entries + [TranscriptEntry(id: "goal-file-2", role: .tool, text: "Why", toolName: "goal-met")])
         server.notifyPushes()
-        XCTAssertEqual(said.last, "goal: Isomer: Goal achieved in 1h45m")
+        XCTAssertEqual(said.last, "goal: Halo: Goal achieved in 1h45m")
         XCTAssertFalse(said.contains { $0.contains("Secret words") }, "the goal's words are not said")
 
         // A goal cleared by the user: nothing.
@@ -77,12 +77,12 @@ final class PushTests: ServerTestCase {
     }
 
     func testAPushCarriesTheSessionsState() throws {
-        let data = server.pushData(session: "s", title: "Isomer", status: "working")
+        let data = server.pushData(session: "s", title: "Halo", status: "working")
         XCTAssertEqual(data["state"], "working")
-        XCTAssertEqual(data["title"], "Isomer")
+        XCTAssertEqual(data["title"], "Halo")
         XCTAssertEqual(data["session"], "s")
         XCTAssertNotNil(data["updated"].flatMap(Int.init))
-        XCTAssertEqual(Set(server.pushData(session: "s", title: "Isomer", status: nil).keys), ["computer", "session"])
+        XCTAssertEqual(Set(server.pushData(session: "s", title: "Halo", status: nil).keys), ["computer", "session"])
 
         let device = PushDevice(token: "ab12", platform: "ios", environment: "production", topic: "com.example.app", registered: 0)
         let silent = try XCTUnwrap(APNsSender.statusRequest(to: device, jwt: "J", collapse: "s/status", data: data))
@@ -96,7 +96,7 @@ final class PushTests: ServerTestCase {
 
     func testTheRequestCarriesNothingOfTheConversation() throws {
         let device = PushDevice(token: "ab12", platform: "ios", environment: "sandbox", topic: "com.example.app", registered: 0)
-        let request = try XCTUnwrap(APNsSender.request(to: device, jwt: "J", title: "Isomer", body: "Turn finished",
+        let request = try XCTUnwrap(APNsSender.request(to: device, jwt: "J", title: "Halo", body: "Turn finished",
                                                        collapse: "s/turn", data: ["computer": "mini.ts.net", "session": "s"]))
         XCTAssertEqual(request.url, "https://api.sandbox.push.apple.com/3/device/ab12")
         XCTAssertEqual(request.headers["apns-topic"], "com.example.app")
@@ -104,7 +104,7 @@ final class PushTests: ServerTestCase {
         let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: request.body) as? [String: Any])
         XCTAssertEqual(Set(payload.keys), ["aps", "computer", "session"])
         let alert = (payload["aps"] as? [String: Any])?["alert"] as? [String: String]
-        XCTAssertEqual(alert, ["title": "Isomer", "body": "Turn finished"])
+        XCTAssertEqual(alert, ["title": "Halo", "body": "Turn finished"])
     }
 
     /// A device is forgotten when APNs says its token is no good — not

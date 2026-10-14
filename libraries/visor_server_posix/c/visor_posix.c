@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <sys/ioctl.h>
 #include <sys/wait.h>
 #ifdef __APPLE__
 #include <libproc.h>
@@ -23,28 +22,7 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <termios.h>
 #include <unistd.h>
-
-int visor_open_terminal(char *slave, size_t capacity) {
-    int master = posix_openpt(O_RDWR | O_NOCTTY);
-    if (master < 0) return -1;
-    if (grantpt(master) != 0 || unlockpt(master) != 0) {
-        int error = errno;
-        close(master);
-        errno = error;
-        return -1;
-    }
-    const char *name = ptsname(master);
-    if (!name || strlen(name) + 1 > capacity) {
-        close(master);
-        errno = ENAMETOOLONG;
-        return -1;
-    }
-    strcpy(slave, name);
-    (void)fcntl(master, F_SETFD, FD_CLOEXEC);
-    return master;
-}
 
 /// Signal handlers and mask back to their defaults, and every descriptor
 /// above the standard three closed: what a child should start from. Only
@@ -67,23 +45,6 @@ static void visor_start_clean(int highest) {
 static int visor_highest_descriptor(void) {
     long limit = sysconf(_SC_OPEN_MAX);
     return (limit > 0 && limit < 65536) ? (int)limit : 65536;
-}
-
-pid_t visor_spawn_on_terminal(const char *path, char *const argv[], char *const envp[], const char *directory,
-                              int terminal) {
-    // Everything the child needs is made before the fork.
-    int highest = visor_highest_descriptor();
-    pid_t pid = fork();
-    if (pid != 0) return pid;
-
-    // The child.
-    if (setsid() < 0) _exit(126);
-    if (ioctl(terminal, TIOCSCTTY, 0) < 0) _exit(126);
-    if (dup2(terminal, 0) < 0 || dup2(terminal, 1) < 0 || dup2(terminal, 2) < 0) _exit(126);
-    visor_start_clean(highest);
-    if (directory) (void)chdir(directory);
-    execve(path, argv, envp);
-    _exit(127);
 }
 
 pid_t visor_spawn_piped(const char *path, char *const argv[], char *const envp[], const char *directory, int pipes[3]) {
@@ -216,14 +177,6 @@ unsigned long long visor_physical_memory(void) {
     return pages > 0 && size > 0 ? (unsigned long long)pages * (unsigned long long)size : 0;
 }
 #endif
-
-int visor_set_terminal_size(int terminal, unsigned short cols, unsigned short rows) {
-    struct winsize size;
-    memset(&size, 0, sizeof size);
-    size.ws_col = cols;
-    size.ws_row = rows;
-    return ioctl(terminal, TIOCSWINSZ, &size);
-}
 
 pid_t visor_spawn_detached(const char *path, char *const argv[], char *const envp[], int log) {
     int highest = visor_highest_descriptor();

@@ -27,7 +27,6 @@ public struct WindowsSystem: CommandLineSystem {
         let data = dataDirectory
         return ServerPlatform(
             listening: WinsockListening(),
-            terminals: ConPTYTerminals(),
             processes: WindowsProcessSignals(),
             secrets: FileSecrets(url: data.appendingPathComponent("secrets.json")),
             fetching: FoundationNetworkingFetching(),

@@ -11,7 +11,7 @@ package(default_visibility = ["//visibility:public"])
 # Where `import SwiftUI` comes from. On Apple it is the system framework and
 # this points at nothing; a host that carries the client elsewhere (a
 # browser, Android, Linux, Windows) sets the flag to its own SwiftUI:
-#   --@visor//:swift_ui=@isomer//:swift_ui
+#   --@visor//:swift_ui=@<host>//:swift_ui
 label_flag(
     name = "swift_ui",
     build_setting_default = ":system_swift_ui",
@@ -27,7 +27,7 @@ swift_library(
 # Where `import Foundation` comes from, the same way: on Apple the system's,
 # and this points at nothing; a host whose platform has no Foundation of its
 # own (a browser, Android) sets it to the one it builds:
-#   --@visor//:foundation=@isomer//:foundation
+#   --@visor//:foundation=@<host>//:foundation
 label_flag(
     name = "foundation",
     build_setting_default = ":system_foundation",
@@ -35,6 +35,25 @@ label_flag(
 
 # The system Foundation: nothing to link, the import is implicit.
 cc_library(name = "system_foundation")
+
+# The system pasteboard (module VisorPasteboard: `Pasteboard.string`): by
+# default AppKit's or UIKit's, none elsewhere. A host with a clipboard of
+# its own sets the flag to its library of that module:
+#   --@visor//:pasteboard=@<host>//:pasteboard
+label_flag(
+    name = "pasteboard",
+    build_setting_default = "//libraries/visor_pasteboard",
+)
+
+# The camera (module VisorCamera: `Camera.available` and the `cameraCapture`
+# modifier): by default UIKit's picker on an iPhone or iPad, none elsewhere.
+# A host with a camera of its own sets the flag to its library of that
+# module:
+#   --@visor//:camera=@<host>//:camera
+label_flag(
+    name = "camera",
+    build_setting_default = "//libraries/visor_camera",
+)
 
 xcodeproj(
     name = "xcodeproj",

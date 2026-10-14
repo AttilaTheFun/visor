@@ -1,4 +1,3 @@
-import AgentUI
 import SwiftUI
 
 #if os(iOS)
@@ -7,7 +6,7 @@ import UIKit
 /// The camera, for a photo to attach. SwiftUI has no camera of its own,
 /// so this is the one place the app reaches for UIKit's picker. Hands
 /// back the photo as JPEG, or nil when cancelled.
-struct CameraCapture: UIViewControllerRepresentable {
+struct CameraPicker: UIViewControllerRepresentable {
     let done: (Data?) -> Void
 
     static var available: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }

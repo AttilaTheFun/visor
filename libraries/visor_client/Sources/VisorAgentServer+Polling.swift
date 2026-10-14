@@ -1,6 +1,6 @@
 // Following a server without its live channel. The one-shot side has
-// everything the channel carries but a terminal's bytes: the list of
-// sessions (`GET /sessions?since=`), a session's ephemeral state
+// everything the channel carries: the list of sessions
+// (`GET /sessions?since=`), a session's ephemeral state
 // (`GET /sessions/<id>/state?since=`) and the rows before one
 // (`GET /sessions/<id>/earlier?before=`), each held by the server until
 // there is something new. Asked for in a loop, they arrive as the same

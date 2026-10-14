@@ -2,10 +2,6 @@
 // synced from the computer's record. The composer's pills attach files,
 // open the model sheet (model, effort, approval mode) and show a goal, a
 // loop or queued messages; Stop interrupts the turn on the computer.
-//
-// A terminal session's page is its shell, drawn by SwiftTerm for this
-// window: opened, the window takes the terminal, unless another window
-// has it — then it asks first.
 
 import AgentUI
 import NavigationUI
@@ -29,11 +25,7 @@ struct AgentScreen: View {
     @State private var previewFile: URL?
     /// The attach source open (files, the photo library, the camera).
     @State private var attachSource: AttachSource?
-    @State private var taking = false
     @State private var showInspector = false
-    /// Use Here was confirmed: the terminal is drawn here, and taken from
-    /// the other window once it has its size.
-    @State private var usingHere = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The session was ended from here: the screen has nothing left to show.
@@ -80,27 +72,8 @@ struct AgentScreen: View {
         return String(draft.dropFirst()).lowercased()
     }
 
-    private var isTerminal: Bool { info?.agent.isShell ?? false }
-    /// A terminal is drawn only for the window that took it.
-    private var controlsTerminal: Bool { isTerminal && (info.map(host.controlsTerminal) ?? false) }
-    /// Another window has this terminal.
-    private var controlledElsewhere: Bool { isTerminal && (info?.mode.isTUI ?? false) && !controlsTerminal }
-
     var body: some View {
-        Group {
-            if !isTerminal {
-                chat
-            } else if !host.live {
-                terminalNeedsChannel
-            } else if controlledElsewhere && !usingHere {
-                terminalElsewhere
-            } else {
-                // Drawn here; it takes the terminal (if this window does not
-                // have it) at the size it measures itself to be.
-                TerminalPane(host: host, sessionID: sessionID, useHere: usingHere)
-            }
-        }
-        .onChange(of: controlsTerminal) { _, now in if now { usingHere = false } }
+        chat
         // The title is the session's; the inspector opens from an explicit
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
@@ -122,9 +95,6 @@ struct AgentScreen: View {
             }
         }
         .navigationTitle(sessionTitle)
-        // The terminal is black; a bar drawn over it keeps its title
-        // legible only in the dark palette.
-        .terminalBarScheme(controlsTerminal)
         .toolbarTitleDisplayMode(.inline)
         // The draft is kept as it is typed, and taken up again when the
         // session is opened again (SavedDrafts).
@@ -371,44 +341,6 @@ struct AgentScreen: View {
         case .failed(let reason): "Connection failed: \(reason)"
         case .needsAuthentication: "The computer wants its password — see Computer Settings"
         case .disconnected: "Not connected"
-        }
-    }
-
-    /// A terminal another window has: the way to have it here.
-    /// A terminal's bytes travel only over the live channel, which this
-    /// path does not carry.
-    private var terminalNeedsChannel: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "terminal").font(.largeTitle).foregroundColor(.secondary)
-            Text("Needs a live connection").font(.headline)
-            Text("This computer is followed by polling, and a terminal is drawn only over a live channel. The shell keeps running; chats work as usual.")
-                .font(.footnote)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(TranscriptMetrics.edgeInset)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var terminalElsewhere: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "terminal").font(.largeTitle).foregroundColor(.secondary)
-            Text("Open in another window").font(.headline)
-            Text("A terminal is drawn for one window at a time. The shell keeps running whichever window has it.")
-                .font(.footnote)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Use Here") { taking = true }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("use-terminal-here")
-        }
-        .padding(TranscriptMetrics.edgeInset)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .alert("Use this terminal here?", isPresented: $taking) {
-            Button("Cancel", role: .cancel) {}
-            Button("Use Here") { usingHere = true }
-        } message: {
-            Text("The other window stops showing it. The shell and what runs in it carry on.")
         }
     }
 

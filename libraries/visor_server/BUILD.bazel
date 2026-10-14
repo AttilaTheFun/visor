@@ -6,11 +6,10 @@ package(default_visibility = ["//visibility:public"])
 # The server: a WebSocket and a REST listener on loopback that authenticate
 # clients and run agent sessions — Claude Code, Codex and the rest as
 # subprocesses whose JSON streams are normalised into the protocol's
-# transcript entries, and terminal sessions. Nothing in it is particular to
-# a system: what is (sockets, terminals, secrets, pushes, …) is given by the
-# binary that runs it, as a ServerPlatform (visor_server_apple for the menu
-# bar app; the Linux and Windows command-line servers build with SwiftPM,
-# Package.swift).
+# transcript entries. Nothing in it is particular to a system: what is
+# (sockets, signals, secrets, pushes, …) is given by the binary that runs
+# it, as a ServerPlatform (visor_server_apple for the menu bar app; the
+# Linux and Windows command-line servers build with SwiftPM, Package.swift).
 swift_library(
     name = "visor_server",
     copts = STRICT_SWIFT,

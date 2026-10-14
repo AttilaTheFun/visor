@@ -33,8 +33,6 @@ enum AgentLog {
         case .openrouter:
             let url = SessionCatalog.openrouterRoot.appendingPathComponent("sessions/\(id).jsonl", isDirectory: false)
             return FileManager.default.fileExists(atPath: url.path) ? (url, .openrouter) : nil
-        case .shell:
-            return nil
         }
     }
 }

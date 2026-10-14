@@ -626,12 +626,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "rGypP5nrTI9oaJIH2p4vvfzarcXFntsjmKbWV4stK2I=",
-        "usagesDigest": "1WmCPxJgZCHpaBKcADTF/tZiEqVoJohkR8Lw6cLOJrk=",
+        "usagesDigest": "A6DC8dr8R+csaQN9mtHB7VQKYf4oVWviykcn2SbbbHw=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved ffbf9f6a111b9b6509a427c20e396dd23c10acd471f2466bdcc987800bba6e88"
+          "FILE:@@//third_party/swift_packages/Package.resolved e559fefd3f53f5f114bc725cb4db06e736e1c98a04d126f69643036bd7fbd00b"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -645,7 +645,7 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "7d6854f3b1320547e98e4e86f422448bd94ea30f",
+              "commit": "d20cb2cd27d7e33ad25a5552570de4f6127c3708",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
               "env": {},
               "env_inherit": [],
@@ -865,19 +865,7 @@
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
-              "init_submodules": false,
               "make_files_read_only": false,
-              "recursive_init_submodules": true,
-              "patch_args": [
-                "-p1"
-              ],
-              "patch_cmds": [],
-              "patch_cmds_win": [],
-              "patch_tool": "",
-              "patches": [
-                "@@//third_party/swift_packages:swiftterm.patch"
-              ],
-              "publicly_expose_all_targets": false,
               "replace_scm_with_registry": false,
               "target_deps": {},
               "module_aliases": {},

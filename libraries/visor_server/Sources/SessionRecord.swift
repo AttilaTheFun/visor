@@ -163,20 +163,6 @@ public final class SessionRecord {
 
     /// sessions is sent again.
     var onInfoChanged: (() -> Void)?
-    /// What a terminal session's shell drew, for the one client it is
-    /// drawn for.
-    var onTerminalBytes: ((Envelope) -> Void)?
-    /// Whether the shell's program is drawing full-screen.
-    var altScreen = false
-
-    /// What the shell has shown, kept for a window that attaches next.
-    var scrollback = Data()
-
-    static let scrollbackLimit = 200_000
-
-    var terminal: TerminalCapable? { process as? TerminalCapable }
-
-    func setMode(_ mode: SessionMode) { info.mode = mode }
 
     init(info: SessionInfo, process: AgentProcess, entries: [TranscriptEntry] = [], shownPrompts: [String] = [], notice: String? = nil) {
         self.info = info

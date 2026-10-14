@@ -102,8 +102,8 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     }
 
     /// This device, as the servers know it: kept (with the secrets, so a
-    /// reinstall keeps it too), so a server can tell whose window a
-    /// terminal is drawn for across launches.
+    /// reinstall keeps it too), so a server knows this device's reports
+    /// across launches.
     @MainActor public static let clientID: String = {
         if let saved = VisorHost.settings?.kept(key: "clientID"), !saved.isEmpty { return saved }
         let fresh = newID()

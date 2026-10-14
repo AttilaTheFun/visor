@@ -1,7 +1,6 @@
 // The one compose, beside the search: everything a session needs before it
-// exists — which server, which folder, which harness (an agent, or a
-// terminal on the computer), and what to call
-// it. The folder is picked from the computer's projects or browsed for; a
+// exists — which server, which folder, which agent, and what to call it.
+// The folder is picked from the computer's projects or browsed for; a
 // server that sets sessions up its own way offers its named choices in
 // place of folders, and asks for the first message the session starts with.
 // Sessions start in auto mode (no permission prompts — nobody is at the
@@ -46,16 +45,13 @@ struct ComposeSessionSheet: View {
     private var place: String { starting.fromChoices ? choiceID : cwd.trimmed }
     /// Picking up an agent's own session needs a folder to look in and a
     /// session that starts without a message.
-    private var canResume: Bool { !agent.isShell && starting == .inFolders }
+    private var canResume: Bool { starting == .inFolders }
     private var available: Set<AgentKind> {
         Set((host?.catalogs ?? []).filter(\.available).map(\.agent))
     }
     private var ready: Bool {
-        // A terminal needs a server that has them (one from before 0.18
-        // would start an agent instead).
         host != nil && !waiting && !place.isEmpty && !(resuming && canResume && resumeID.trimmed.isEmpty)
             && (!starting.withFirstMessage || !message.trimmed.isEmpty)
-            && (!agent.isShell || available.contains(.shell))
     }
 
     var body: some View {
@@ -119,7 +115,6 @@ struct ComposeSessionSheet: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    // A terminal has no conversation to pick up.
                     if canResume {
                         Picker("Conversation", selection: $resuming) {
                             Text("New").tag(false)
@@ -229,19 +224,15 @@ struct ComposeSessionSheet: View {
         }
         .onChange(of: host?.startChoices ?? []) { useChoices() }
         .onChange(of: resuming) { if resuming { loadResumable() } }
-        .onChange(of: agent) {
-            if agent.isShell { resuming = false }
-            if resuming { loadResumable() }
-        }
+        .onChange(of: agent) { if resuming { loadResumable() } }
         .onChange(of: cwd) { if resuming { loadResumable() } }
     }
 
     /// A kind as the picker names it: marked when this computer cannot
-    /// run it — its tool is not installed, or (a terminal) its Visor
-    /// Server is from before terminal sessions.
+    /// run it, its tool not installed.
     private func pickerTitle(for kind: AgentKind) -> String {
         guard !available.contains(kind), !(host?.catalogs.isEmpty ?? true) else { return kind.title }
-        return kind.isShell ? "\(kind.title) (needs a newer Visor Server)" : "\(kind.title) (not installed)"
+        return "\(kind.title) (not installed)"
     }
 
     private var defaultTitle: String {

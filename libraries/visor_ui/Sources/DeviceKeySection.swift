@@ -1,4 +1,5 @@
 import SwiftUI
+import VisorPasteboard
 import VisorProtocol
 import VisorServices
 
@@ -17,7 +18,7 @@ struct DeviceKeySection: View {
                 .textSelection(.enabled)
                 .lineLimit(3)
                 .truncationMode(.middle)
-            Button("Copy Key") { copyToPasteboard(key) }
+            Button("Copy Key") { Pasteboard.string = key }
                 .accessibilityIdentifier("copy-ssh-key")
             Button(shown ? "Hide QR Code" : "Show Key as QR Code") { shown.toggle() }
                 .accessibilityIdentifier("show-key-qr")

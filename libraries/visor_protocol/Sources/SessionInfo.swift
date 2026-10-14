@@ -48,9 +48,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     public var queued: [String] = []
     /// Seconds since 1970.
     public var created: Double
-    /// Chat unless switched: the terminal holds the session while the
-    /// user drives it interactively, the chat process otherwise.
-    public var mode: SessionMode = .chat
     /// The start of the latest message, for a list of sessions to show
     /// under each; nil before anything is said.
     public var preview: String?
@@ -122,7 +119,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         usage = try c.decodeIfPresent(SessionUsage.self, forKey: .usage)
         queued = try c.decodeIfPresent([String].self, forKey: .queued) ?? []
         created = try c.decodeIfPresent(Double.self, forKey: .created) ?? 0
-        mode = try c.decodeIfPresent(SessionMode.self, forKey: .mode) ?? .chat
         preview = try c.decodeIfPresent(String.self, forKey: .preview)
         updated = try c.decodeIfPresent(Double.self, forKey: .updated)
         goal = try c.decodeIfPresent(String.self, forKey: .goal)

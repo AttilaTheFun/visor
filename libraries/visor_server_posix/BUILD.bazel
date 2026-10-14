@@ -5,11 +5,10 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 package(default_visibility = ["//visibility:public"])
 
-# What macOS and Linux share for the server: terminals (a pseudo-terminal,
-# the shell the leader of a session on it), signals to processes, loopback
-# sockets. The calls whose shape differs between the two are in C
-# (c/visor_posix.c), so the Swift is the same on both. Built here for the
-# Mac; Linux builds it with SwiftPM (Package.swift).
+# What macOS and Linux share for the server: signals to processes, loopback
+# sockets, the agents' hosts. The calls whose shape differs between the two
+# are in C (c/visor_posix.c), so the Swift is the same on both. Built here
+# for the Mac; Linux builds it with SwiftPM (Package.swift).
 swift_library(
     name = "visor_server_posix",
     copts = STRICT_SWIFT,

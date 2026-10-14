@@ -15,7 +15,6 @@ extension SessionCatalog {
         case .claude: ClaudeSessionFiles.configDirectory()
         case .codex: home.appendingPathComponent(".codex", isDirectory: true)
         case .openrouter: openrouterRoot
-        case .shell: nil
         }
     }
 
@@ -48,8 +47,6 @@ extension SessionCatalog {
                 let file = sessions.appendingPathComponent("\(id).\(suffix)", isDirectory: false)
                 return files.fileExists(atPath: file.path) ? ConversationFile(url: file, place: "sessions/\(id).\(suffix)", folder: false) : nil
             }
-        case .shell:
-            return []
         }
     }
 

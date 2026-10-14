@@ -47,11 +47,6 @@ public struct WindowsTools: ToolLocating {
         }
     }
 
-    /// Windows PowerShell, which every Windows has.
-    public var loginShell: ShellCommand {
-        ShellCommand("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", ["-NoLogo"])
-    }
-
     public func environment(_ base: [String: String]) -> [String: String] {
         var environment = base
         let key = base.keys.first { $0.caseInsensitiveCompare("PATH") == .orderedSame } ?? "Path"

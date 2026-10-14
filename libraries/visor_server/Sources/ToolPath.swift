@@ -37,11 +37,6 @@ public enum ToolPath {
         }
     }
 
-    /// The shell a terminal session runs: the user's own.
-    public static func loginShell() -> ShellCommand {
-        ServerPlatform.current.tools.loginShell
-    }
-
     /// The environment for a spawned agent: ours, with the tool
     /// directories on its search path and any trace of a surrounding
     /// Claude Code session removed (a nested session refuses to start).

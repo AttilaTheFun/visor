@@ -298,7 +298,6 @@ extension VisorServer {
         guard let agent = call.body.agent else { return HTTPResponse(400, "{\"error\":\"agent required\"}") }
         var e = Envelope(type: "start")
         e.id = call.body.id; e.agent = agent; e.cwd = call.body.cwd; e.title = call.body.title; e.skipPermissions = call.body.skipPermissions; e.resume = call.body.resume
-        e.mode = call.body.mode
         perform(e, from: nil)
         let created = session(e.id) ?? sessions.last
         return .json(created.map { Envelope.sessions([$0.info]).encoded() } ?? "{}")
@@ -314,7 +313,7 @@ extension VisorServer {
     private func restSessionAction(_ call: RESTCall) -> HTTPResponse {
         let action = call.parts[2]
         guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "keepBranch", "continueBranch", "permissions", "settings",
-               "approve", "rename", "mode", "acknowledge"].contains(action) else {
+               "approve", "rename", "acknowledge"].contains(action) else {
             return HTTPResponse(404, "{\"error\":\"unknown action\"}")
         }
         guard let record = session(call.parts[1]) else { return HTTPResponse(404, "{\"error\":\"no such session\"}") }

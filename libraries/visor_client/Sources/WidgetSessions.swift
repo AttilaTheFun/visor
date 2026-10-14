@@ -22,8 +22,7 @@ public enum WidgetSessions {
     static let limit = 8
 
     public static func json(_ sessions: [Source]) -> String {
-        // Terminals have no state to show: only conversations.
-        let live = sessions.filter { !$0.info.archived && !$0.info.ended && !$0.info.agent.isShell }
+        let live = sessions.filter { !$0.info.archived && !$0.info.ended }
             .sorted { ($0.info.updated ?? $0.info.created) > ($1.info.updated ?? $1.info.created) }
             .prefix(limit)
         let rows: [JSONValue] = live.map { source in

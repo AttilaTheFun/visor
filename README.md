@@ -6,8 +6,7 @@ and the openrouter CLI as subprocesses on the host and serves them to your
 devices over whatever reaches the host — a LAN, a VPN, a reverse proxy, a
 tunnel; a SwiftUI client for iPhone, iPad and Mac adds a computer from its
 connection code, starts sessions, chats with them and watches their
-progress, and opens terminal sessions — the Mac's own shell, drawn in
-SwiftUI over SwiftTerm's emulator — to run anything there directly.
+progress.
 
 ## Parts
 
@@ -68,15 +67,15 @@ SwiftUI over SwiftTerm's emulator — to run anything there directly.
   archive, the HTTP and WebSocket listeners. Agents are configured
   outside Visor (`claude`, `codex login`, `openrouter auth login`). It is
   the same on every system and asks the system for nothing except
-  through the `ServerPlatform` it is given: sockets, terminals, process
-  signals, secrets, pushes, picture headers, file watching, tool paths.
+  through the `ServerPlatform` it is given: sockets, process signals,
+  secrets, pushes, picture headers, file watching, tool paths.
 - **libraries/visor_server_apple**, **…_posix** — the Mac's platform (the
   Network framework, the keychain, CryptoKit, ImageIO) and what macOS and
-  Linux share (terminals, signals and sockets, through a small C shim).
+  Linux share (signals and sockets, through a small C shim).
 - **libraries/visor_server_cli**, **…_linux**, **…_windows**,
   **applications/visor_server_linux**, **…_windows** — `visor-server`,
   the command-line server, and each system's platform for it (Linux:
-  POSIX; Windows: Winsock and ConPTY).
+  POSIX; Windows: Winsock and the Win32 process calls).
 
 ## Building
 

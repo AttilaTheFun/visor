@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 # a widget feed. The protocols are portable; the implementations beside
 # them are what the iOS and Mac apps install. The socket, HTTP and settings
 # ones are Foundation's alone (URLSession, UserDefaults, the keychain where
-# there is one), so a host with another Foundation (Isomer's) compiles them
+# there is one), so a host with another Foundation (its own) compiles them
 # too; notifications, dictation, the network's state and SSH are Apple's.
 swift_library(
     name = "visor_services",
@@ -26,7 +26,7 @@ swift_library(
 )
 
 # The implementations as sources, for a host that compiles the portable
-# ones for another Foundation (Isomer's on the web and Android, Linux,
+# ones for another Foundation (a host's own, on the web and Android, Linux,
 # Windows) into a module of its own.
 filegroup(
     name = "native_srcs",

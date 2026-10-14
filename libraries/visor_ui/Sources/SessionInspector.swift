@@ -1,10 +1,10 @@
 // The session's inspector, from the title: what it is, where, and the
-// ways out. For a chat, its agent and model, and what it has used of
-// its context and its account's limits; for a terminal, which window
-// has it.
+// ways out: its agent and model, and what it has used of its context and
+// its account's limits.
 
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 
 @MainActor
@@ -25,14 +25,6 @@ struct SessionInspector: View {
     /// The pause after typing before the title is saved.
     @State private var titleSave: Task<Void, Never>?
 
-    /// Which window a terminal session is drawn for, in words.
-    private var terminalWindow: String {
-        if host.controlsTerminal(session) {
-            return session.mode.terminalSize.map { "This one, \($0.cols) × \($0.rows)" } ?? "This one"
-        }
-        return session.mode.isTUI ? "Another window" : "None yet"
-    }
-
     var body: some View {
         NavigationStack {
             Form {
@@ -52,39 +44,24 @@ struct SessionInspector: View {
                                 }
                             }
                     }
-                    if session.agent.isShell {
-                        LabeledContent("Kind", value: "Terminal")
-                        LabeledContent("Folder", value: session.cwd)
-                        LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
-                        LabeledContent("Window", value: terminalWindow)
-                    } else {
-                        LabeledContent("Agent", value: session.agent.title)
-                        LabeledContent("Model", value: host.modelTitle(for: session) + (session.effort.map { " " + AgentCatalog.effortTitle($0) } ?? ""))
-                        LabeledContent("Folder", value: session.cwd)
-                        LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
-                        LabeledContent("State", value: session.busy ? "Working" : (session.archived ? "Archived" : "Idle"))
-                        // The agent and what it runs, as its host says.
-                        if let memory = session.memory { LabeledContent("Memory", value: MigrationSheet.size(Int(clamping: memory))) }
-                        // To carry the conversation on in the agent's own
-                        // interface: end this session, open a terminal
-                        // session, and run this there.
-                        if let command = session.resumeCommand {
-                            Button { copyToPasteboard(command) } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
-                        }
+                    LabeledContent("Agent", value: session.agent.title)
+                    LabeledContent("Model", value: host.modelTitle(for: session) + (session.effort.map { " " + AgentCatalog.effortTitle($0) } ?? ""))
+                    LabeledContent("Folder", value: session.cwd)
+                    LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
+                    LabeledContent("State", value: session.busy ? "Working" : (session.archived ? "Archived" : "Idle"))
+                    // The agent and what it runs, as its host says.
+                    if let memory = session.memory { LabeledContent("Memory", value: MigrationSheet.size(Int(clamping: memory))) }
+                    // To carry the conversation on in the agent's own
+                    // interface: end this session, and run this in a
+                    // terminal on the computer.
+                    if let command = session.resumeCommand {
+                        Button { Pasteboard.string = command } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
                     }
                 }
-                if !session.agent.isShell {
-                    SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)
-                }
+                SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)
                 Section {
-                    // A terminal keeps nothing to come back to: it is ended,
-                    // not archived.
-                    if !session.agent.isShell { Button("Archive", action: archive) }
+                    Button("Archive", action: archive)
                     Button("End session", role: .destructive, action: end)
-                } footer: {
-                    if session.agent.isShell {
-                        Text("Ending the session ends its shell and whatever runs in it.")
-                    }
                 }
             }
             .insetGroupedForm()

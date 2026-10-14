@@ -1,9 +1,8 @@
 // A harness is one kind of session, and everything the server needs of
-// it: how to make its process (an agent's chat process, or a terminal
-// session's shell), what it can resume, a session's transcript, and its
-// models. The server holds a set of harnesses and never branches on the
-// kind itself — a different set is a different set of kinds. A host swaps
-// the registry to bring its own.
+// it: how to make its agent's process, what it can resume, a session's
+// transcript, and its models. The server holds a set of harnesses and
+// never branches on the kind itself — a different set is a different set
+// of kinds. A host swaps the registry to bring its own.
 
 import Foundation
 import Synchronization

@@ -24,8 +24,6 @@ public enum AgentEvent: Sendable {
     /// The agent's own session id, once it has one: where its transcript
     /// file is.
     case session(String)
-    /// Bytes a terminal produced.
-    case tty(Data)
     /// The slash commands the agent takes, as it lists them.
     case commands([SlashCommand])
     /// The model the agent says it is actually running.

@@ -10,6 +10,7 @@ import AgentUI
 import NavigationUI
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 
 @MainActor
@@ -404,13 +405,11 @@ public struct VisorRootView: View {
         Button { host.archive(session.id) } label: { Label("Archive", systemImage: "archivebox") }
         // A new agent on the same conversation: for one that is stuck, or
         // holds too much.
-        if !session.agent.isShell {
-            Button { host.restartAgent(session.id) } label: { Label("Restart Agent", systemImage: "arrow.clockwise") }
-        }
+        Button { host.restartAgent(session.id) } label: { Label("Restart Agent", systemImage: "arrow.clockwise") }
         // To another computer connected now; this one keeps the session
         // until the user removes it.
         let others = store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }
-        if host.migrates, !session.agent.isShell, !others.isEmpty {
+        if host.migrates, !others.isEmpty {
             Menu {
                 ForEach(others, id: \.id) { other in
                     Button(other.record.name) { migrating = SessionMigration(session: session, from: host, to: other) }
@@ -422,7 +421,7 @@ public struct VisorRootView: View {
         // The command that picks the same conversation up in a terminal
         // on the computer itself.
         if let command = session.resumeCommand {
-            Button { copyToPasteboard(command) } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
+            Button { Pasteboard.string = command } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
         }
         Divider()
         Button { selection = .project(serverID: host.id, cwd: card.project.cwd) } label: {

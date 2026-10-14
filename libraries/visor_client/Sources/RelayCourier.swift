@@ -81,12 +81,11 @@ public final class RelayCourier {
     }
 
     /// What this device tells each server: the servers that take part and
-    /// their sessions that an agent can message (not the archived, not
-    /// the terminals).
+    /// their sessions that an agent can message (not the archived).
     func report() -> DirectoryReport {
         let servers = participants.map { connection in
             DirectoryServer(id: connection.record.serverID, name: connection.record.name, version: connection.serverVersion, sessions: connection.sessions
-                .filter { !$0.archived && !$0.agent.isShell }
+                .filter { !$0.archived }
                 .map { DirectorySession(id: $0.id, name: $0.title.isEmpty ? $0.agent.title : $0.title, agent: $0.agent.title, busy: $0.busy) })
         }
         return DirectoryReport(client: AgentServerRecord.clientID, clientName: VisorHost.deviceName, clientVersion: Self.said(VisorHost.appVersion),

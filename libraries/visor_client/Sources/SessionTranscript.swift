@@ -324,14 +324,6 @@ public final class SessionTranscript {
             return true
         }
     }
-    /// What a terminal session's shell has shown, base64 a chunk, for a
-    /// terminal view that attaches later; and the view attached now, told
-    /// each chunk and whether it replaces everything before it (a replay
-    /// of the whole screen, sent when this window takes the terminal or
-    /// subscribes again).
-    @ObservationIgnored public private(set) var terminalBacklog: [String] = []
-    @ObservationIgnored public var onTerminalBytes: ((_ chunk: String, _ startsOver: Bool) -> Void)?
-
     public init() {}
 
     /// The newest status label, and the wait before it is shown.
@@ -409,15 +401,6 @@ public final class SessionTranscript {
             take(notice: envelope.notice)
         case "approval":
             pendingApproval = envelope.approval
-        case "tty":
-            // A replay of the whole screen (its size set) stands in for
-            // what was kept, even an empty one; a live chunk is appended.
-            let replay = envelope.cols != nil
-            guard let data = envelope.data, !data.isEmpty || replay else { return }
-            if replay { terminalBacklog = [] }
-            terminalBacklog.append(data)
-            if terminalBacklog.count > 400 { terminalBacklog.removeFirst(terminalBacklog.count - 400) }
-            onTerminalBytes?(data, replay)
         default:
             break
         }

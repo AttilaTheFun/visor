@@ -8,6 +8,7 @@
 
 import SwiftUI
 import VisorClient
+import VisorPasteboard
 import VisorProtocol
 import VisorServices
 
@@ -35,7 +36,7 @@ struct ConnectForm: View {
                     // Read only when tapped: a phone asks before an app
                     // reads the pasteboard.
                     Button("Paste Connection Code") {
-                        if let pasted = pasteboardString() { entry = pasted.trimmed }
+                        if let pasted = Pasteboard.string { entry = pasted.trimmed }
                     }
                     .accessibilityIdentifier("paste-code")
                 }

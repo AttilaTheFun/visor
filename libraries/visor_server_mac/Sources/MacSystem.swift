@@ -8,9 +8,9 @@ import VisorServerPOSIX
 /// The command-line server on a Mac, without the menu bar app: its data
 /// in ~/Library/Application Support/visor-server (or VISOR_DATA_DIR, for a
 /// sandbox that gives it a folder), secrets in a file there rather than
-/// the keychain (nothing to ask a user who is not there), POSIX sockets,
-/// terminals and signals, and the Mac's own fetching, push signing,
-/// images, file watching and tools.
+/// the keychain (nothing to ask a user who is not there), POSIX sockets
+/// and signals, and the Mac's own fetching, push signing, images, file
+/// watching and tools.
 public struct MacSystem: CommandLineSystem {
     public init() {}
 
@@ -28,7 +28,6 @@ public struct MacSystem: CommandLineSystem {
         let data = dataDirectory
         return ServerPlatform(
             listening: POSIXListening(),
-            terminals: POSIXTerminals(),
             processes: POSIXProcessSignals(),
             secrets: FileSecrets(url: data.appendingPathComponent("secrets.json")),
             fetching: URLSessionFetching(),

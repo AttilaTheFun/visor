@@ -34,7 +34,7 @@ final class WireNumbersTests: XCTestCase {
         XCTAssertEqual(list.first?.usage, info.usage)
         // And numbers no count should be: taken, not trapped on.
         let odd = #"{"type":"sessions","sessions":[{"id":"s","agent":"claude","cwd":"/","title":"t","contextUsed":1e40,"contextLimit":-1e40,"# +
-            #""usage":{"input":1e40,"cached":-5,"output":2.9},"mode":{"kind":"tui","controller":"c","cols":1e12,"rows":1e12}}],"revision":1e30,"cols":1e30}"#
+            #""usage":{"input":1e40,"cached":-5,"output":2.9}}],"revision":1e30,"rows":1e30}"#
         let taken = try XCTUnwrap(Envelope.decode(odd))
         XCTAssertEqual(taken.sessions?.first?.usage?.input, .max)
         XCTAssertEqual(taken.sessions?.first?.usage?.output, 2)

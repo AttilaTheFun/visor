@@ -10,7 +10,7 @@ struct RelayRecord: Codable, Equatable {
         /// Taken there: sent to the session at once, queued while it
         /// works, or read.
         case sent, queued, read
-        /// Not taken there (no such session, a terminal).
+        /// Not taken there (no such session).
         case failed
         /// Not carried before it expired.
         case expired

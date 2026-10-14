@@ -11,8 +11,8 @@ extension VisorServer {
             connections[key]?.send(envelope)
         }
         // The same for those polling: anything ephemeral (the record's
-        // rows have their own sync, and terminal bytes only the channel).
-        if envelope.type != "entry", envelope.type != "transcript", envelope.type != "tty", envelope.type != "earlier" {
+        // rows have their own sync).
+        if envelope.type != "entry", envelope.type != "transcript", envelope.type != "earlier" {
             stateChanged(session)
         }
     }

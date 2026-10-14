@@ -9,15 +9,14 @@ swift_library(
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorUI",
     deps = [
+        "//:camera",
         "//:foundation",
+        "//:pasteboard",
         "//:swift_ui",
         "//libraries/visor_client",
         "//libraries/visor_protocol",
         "//libraries/visor_services",
         "@swiftpkg_agent_ui//:AgentUI",
         "@swiftpkg_agent_ui//:NavigationUI",
-        # Terminal sessions: drawn in SwiftUI over SwiftTerm's emulator, on
-        # every platform.
-        "@swiftpkg_agent_ui//:TerminalUI",
     ],
 )

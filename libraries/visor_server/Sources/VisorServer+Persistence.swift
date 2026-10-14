@@ -25,11 +25,20 @@ extension VisorServer {
 
     func loadSessions() {
         var stored: [StoredSession] = []
+        var dropped = false
         let legacy = Self.storeURL.deletingLastPathComponent().appendingPathComponent("archive.json", isDirectory: false)
         for url in [Self.storeURL, legacy] {
             guard let data = try? Data(contentsOf: url), data.count > 2 else { continue }
             do {
-                var items = try JSONDecoder().decode([StoredSession].self, from: data)
+                let read = try JSONDecoder().decode([StoredItem].self, from: data)
+                // Terminal sessions are gone: one kept by an older build is
+                // dropped here, where it would otherwise read as a Claude
+                // session (what an agent's name not known here reads as).
+                for item in read where item.isTerminal {
+                    Self.log("dropped the terminal session \(item.session.info.title) (\(item.session.info.id)): Visor no longer has terminal sessions")
+                    dropped = true
+                }
+                var items = read.filter { !$0.isTerminal }.map(\.session)
                 // Rows written before sizes were kept: read the sizes once
                 // now, so an old thread lays out as steadily as a new one.
                 for i in items.indices {
@@ -59,8 +68,6 @@ extension VisorServer {
             var info = item.info
             info.busy = false
             info.ended = false
-            // A terminal is drawn for a client that is no longer here.
-            info.mode = .chat
             // What ran in the background ran in an agent that has gone
             // (an agent says its list when one changes, not when it
             // starts with none, so a kept list would stay up for good).
@@ -101,7 +108,7 @@ extension VisorServer {
             sessions.append(record)
         }
         try? FileManager.default.removeItem(at: legacy)
-        if !stored.isEmpty { saveArchive() }
+        if !stored.isEmpty || dropped { saveArchive() }
         for left in hosted {
             Task { await pickUp(left.record, host: left.host, agentPID: left.pid, resume: left.resume) }
         }
@@ -153,5 +160,24 @@ extension VisorServer {
             savingFailed = true
             lastError = "Sessions are not being saved: \(error.localizedDescription)"
         }
+    }
+}
+
+/// A stored session as the file has it, with its agent's name as written:
+/// a name this build does not know reads as Claude in `SessionInfo`, and a
+/// terminal session ("shell", kept by 0.18 to 0.31) must be told apart to
+/// be dropped instead.
+private struct StoredItem: Decodable {
+    var session: StoredSession
+    var agent: String?
+
+    var isTerminal: Bool { agent == "shell" }
+
+    private enum Keys: String, CodingKey { case info, agent }
+
+    init(from decoder: Decoder) throws {
+        session = try StoredSession(from: decoder)
+        agent = try decoder.container(keyedBy: Keys.self).nestedContainer(keyedBy: Keys.self, forKey: .info)
+            .decodeIfPresent(String.self, forKey: .agent)
     }
 }

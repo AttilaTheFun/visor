@@ -1,5 +1,5 @@
 // URLSession behind the HTTP service: Apple's, or another Foundation's
-// (Isomer's, on the web and Android), the same code.
+// (a host's own, on the web and Android), the same code.
 
 import Foundation
 import Synchronization

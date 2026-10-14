@@ -1,4 +1,4 @@
-// The wire encoding, by hand over Isomer's JSONValue: Foundation's
+// The wire encoding, by hand over the protocol's JSONValue: Foundation's
 // JSONEncoder is not on the portable stack (wasm, Android), and the same
 // bytes must come out of every host. Optional fields are omitted when nil.
 
@@ -43,11 +43,9 @@ extension Envelope {
         e.path = value["path"].string
         e.exists = value["exists"].bool
         e.mode = value["mode"].string
-        e.controller = value["controller"].string
         e.client = value["client"].string
         e.notice = value["notice"].string
         e.data = value["data"].string
-        e.cols = value["cols"].int
         e.rows = value["rows"].int
         e.before = value["before"].string
         e.more = value["more"].bool
@@ -111,9 +109,8 @@ extension Envelope {
         put("token", token); put("prompt", prompt); put("resume", resume); put("path", path)
         putBool("exists", exists)
         put("mode", mode); put("data", data)
-        put("controller", controller); put("client", client)
+        put("client", client)
         put("notice", notice)
-        if let cols { o["cols"] = .number(Double(cols)) }
         if let rows { o["rows"] = .number(Double(rows)) }
         put("before", before)
         putBool("more", more)

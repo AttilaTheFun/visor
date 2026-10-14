@@ -818,31 +818,10 @@ public final class AgentServerConnection: Identifiable {
         if state == .connected { server.subscribe(sessionID) } else { pendingSubscriptions.insert(sessionID) }
     }
 
-    /// Takes a terminal session for this window, at this size. Whichever
-    /// window had it stops being drawn for: a terminal is one size, for
-    /// one window. The shell keeps running throughout.
-    public func assumeControl(_ sessionID: String, cols: Int, rows: Int) {
-        server.assumeControl(sessionID, cols: cols, rows: rows)
-    }
-
     /// The user has read what the session had to tell them.
     public func acknowledge(_ sessionID: String) {
         transcript(for: sessionID).notice = nil
         server.acknowledge(sessionID)
-    }
-
-    /// Whether the terminal of this session is drawn for this client.
-    public func controlsTerminal(_ session: SessionInfo) -> Bool {
-        session.mode.controlled(by: AgentServerRecord.clientID)
-    }
-
-    /// What the user typed into the terminal, base64.
-    public func sendInput(_ sessionID: String, data: String) {
-        server.sendInput(sessionID, data: data)
-    }
-
-    public func resize(_ sessionID: String, cols: Int, rows: Int) {
-        server.resize(sessionID, cols: cols, rows: rows)
     }
 
     // MARK: Projects

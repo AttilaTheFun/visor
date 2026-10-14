@@ -1,5 +1,5 @@
 // Settings in UserDefaults, and secrets in the keychain where there is one
-// (Apple's systems); elsewhere (Isomer's Foundation, on the web and
+// (Apple's systems); elsewhere (a host's own Foundation, on the web and
 // Android) secrets are kept with the settings, as the system keeps an
 // app's own preferences.
 
