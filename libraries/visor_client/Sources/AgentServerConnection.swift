@@ -720,8 +720,12 @@ public final class AgentServerConnection: Identifiable {
             if state == .connected { notifyChanges(from: before, to: sessions) }
             onSessionsChange?()
             saveCachedSessions()
-            // Words sent while the agent was busy come back in its queue.
-            for session in sessions { transcripts[session.id]?.settleSending() }
+            // Words sent while the agent was busy come back in its queue; a
+            // goal command, in the session's goal.
+            for session in sessions {
+                transcripts[session.id]?.settleSending()
+                transcripts[session.id]?.settleGoal(session.goal)
+            }
         case .closed:
             break
         case .session(let envelope):

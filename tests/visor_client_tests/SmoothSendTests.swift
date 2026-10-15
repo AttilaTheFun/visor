@@ -209,6 +209,36 @@ final class OptimisticSendTests: XCTestCase {
         XCTAssertEqual(t.displayID(of: t.entries.last!), "sending-1", "shown under the sent row's id")
     }
 
+    /// A goal Codex takes with no row in its log: the sent command goes
+    /// once the session's goal is the one it set (or, for a clear, none).
+    func testAGoalCommandIsTakenWhenTheGoalSaysSo() {
+        let t = SessionTranscript()
+        var first = Envelope(type: "transcript")
+        first.entries = [TranscriptEntry(id: "u-old", role: .user, text: "earlier")]; first.revision = 1; first.generation = 1
+        t.sync(first)
+        let objective = "Ok please implement this in coordination with the isomer agent, calculate baselines for the metrics"
+        let sent = TranscriptEntry(id: "sending-goal", role: .user, text: "/goal " + objective)
+        t.sending.append(.init(id: sent.id, entry: sent, sinceRevision: t.revision))
+        t.settleGoal(nil)
+        XCTAssertEqual(t.sending.count, 1, "no goal yet: still on its way")
+        t.settleGoal("Something else entirely")
+        XCTAssertEqual(t.sending.count, 1, "another goal is not this one")
+        t.settleGoal(objective)
+        XCTAssertTrue(t.sending.isEmpty)
+
+        let clear = TranscriptEntry(id: "sending-clear", role: .user, text: "/goal clear")
+        t.sending.append(.init(id: clear.id, entry: clear, sinceRevision: t.revision))
+        t.settleGoal(objective)
+        XCTAssertEqual(t.sending.count, 1)
+        t.settleGoal(nil)
+        XCTAssertTrue(t.sending.isEmpty)
+
+        let words = TranscriptEntry(id: "sending-words", role: .user, text: "Carry on")
+        t.sending.append(.init(id: words.id, entry: words, sinceRevision: t.revision))
+        t.settleGoal(nil)
+        XCTAssertEqual(t.sending.count, 1, "words are settled by their row, not the goal")
+    }
+
     func testACommandAfterWordsIsItsOwnMessage() {
         let names: Set<String> = ["goal", "compact"]
         XCTAssertEqual(AgentServerConnection.split("Here's the context.\n/goal Ship it\nwith tests", commands: names),

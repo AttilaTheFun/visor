@@ -6,15 +6,28 @@ import VisorProtocol
 /// the assistant's messages, tool calls and their outputs; everything else
 /// (events, context, token counts) is bookkeeping, kept as nodes only.
 final class CodexRolloutParser: LinearLogParser, AgentLogParser {
+    /// The goal as the log has said it so far: its objective (nil, none)
+    /// and status. A goal event that says only this again is no command.
+    private var goal: (objective: String?, status: String) = (nil, "active")
+
     func lines(in data: Data) -> [ClaudeLine] {
         Self.objects(in: data).map { object in
             let payload = object["payload"] as? [String: Any] ?? [:]
             let timestamp = object["timestamp"] as? String
             let key = payload["id"] as? String ?? (object["ordinal"] as? Int).map { "codex-\($0)" }
             guard object["type"] as? String == "response_item" else {
+                // A goal the user changed, where the log says so only as an
+                // event (codex 0.156 writes no "User set the goal" context):
+                // the command as they typed it.
+                if let command = goalCommand(event: payload) {
+                    return line(key: "codex-goal-" + (timestamp ?? UUID().uuidString), type: "message",
+                                record: { _ in .user(text: command, images: []) }, timestamp: timestamp)
+                }
                 return line(key: key, type: object["type"] as? String ?? "event", record: { _ in nil }, timestamp: timestamp)
             }
             let kind = payload["type"] as? String ?? ""
+            let goalText = kind == "message" && payload["role"] as? String == "user" ? Self.goalCommand(Self.text(payload["content"])) : nil
+            if let goalText { note(goalText) }
             return line(key: key, type: kind, record: { key in
                 switch kind {
                 case "message":
@@ -23,7 +36,7 @@ final class CodexRolloutParser: LinearLogParser, AgentLogParser {
                     case "user":
                         // A goal the user set, paused, resumed or cleared:
                         // the command as they typed it.
-                        if let command = Self.goalCommand(text) { return .user(text: command, images: []) }
+                        if let goalText { return .user(text: goalText, images: []) }
                         // Codex's own context (instructions, environment)
                         // comes as user messages in angle brackets.
                         if text.isEmpty || text.hasPrefix("<") { return nil }
@@ -49,6 +62,47 @@ final class CodexRolloutParser: LinearLogParser, AgentLogParser {
                     return nil
                 }
             }, timestamp: timestamp)
+        }
+    }
+
+    /// A goal command the log has written: the goal it leaves.
+    private func note(_ command: String) {
+        let words = command.dropFirst("/goal".count).trimmingCharacters(in: .whitespaces)
+        switch words {
+        case "clear": goal = (nil, "active")
+        case "pause": goal.status = "paused"
+        case "resume": goal.status = "active"
+        default: goal = (words, "active")
+        }
+    }
+
+    /// The command a goal event stands for, when it changes the goal the
+    /// log has said: a new objective is `/goal …`, paused is `/goal pause`,
+    /// active after paused `/goal resume`, cleared `/goal clear`. Where Codex also
+    /// wrote the "User set the goal" context (0.162 does, just before), the
+    /// event says nothing new. Codex's own changes — met, blocked, out of
+    /// budget — are no command.
+    func goalCommand(event payload: [String: Any]) -> String? {
+        switch payload["type"] as? String {
+        case "thread_goal_updated":
+            guard let now = CodexGoal(payload["goal"]) else { return nil }
+            let command: String?
+            if goal.objective == nil || !CommandWords.same("/goal " + now.objective, "/goal " + (goal.objective ?? "")) {
+                command = now.status == "active" || now.status == "paused" ? "/goal " + now.objective : nil
+            } else if now.status == "paused", goal.status != "paused" {
+                command = "/goal pause"
+            } else if now.status == "active", goal.status == "paused" {
+                command = "/goal resume"
+            } else {
+                command = nil
+            }
+            goal = (now.objective, now.status)
+            return command
+        case "thread_goal_cleared":
+            defer { goal = (nil, "active") }
+            return goal.objective == nil ? nil : "/goal clear"
+        default:
+            return nil
         }
     }
 

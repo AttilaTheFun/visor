@@ -307,6 +307,24 @@ public final class SessionTranscript {
         notice = new
     }
 
+    /// Drops an outgoing goal command once the session's goal says it was
+    /// taken: `/goal <objective>` when the goal is that objective, `/goal
+    /// clear` when there is none. Codex takes a goal as a request of its
+    /// own, and its log may never write the command back (codex 0.16x set
+    /// one with no row at all), so the record's copy cannot be waited for.
+    func settleGoal(_ goal: String?) {
+        guard !sending.isEmpty else { return }
+        sending.removeAll { out in
+            let text = out.entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard text.hasPrefix("/goal ") else { return false }
+            let objective = text.dropFirst("/goal ".count).trimmingCharacters(in: .whitespaces)
+            if objective == "clear" { return goal == nil }
+            if objective == "pause" || objective == "resume" { return false }
+            guard let goal else { return false }
+            return CommandWords.same("/goal " + goal, text)
+        }
+    }
+
     /// Drops an outgoing message once the transcript has moved past when
     /// it was sent and carries an identical message: it is on the record.
     func settleSending() {

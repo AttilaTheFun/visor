@@ -116,6 +116,42 @@ final class CodexCommandTests: ServerTestCase {
         XCTAssertEqual(rows.first?.role, .user)
     }
 
+    /// Codex 0.156 writes a goal the user set only as an event (no "User
+    /// set the goal" context); 0.162 writes both. Either way, one row: the
+    /// user's command.
+    func testAGoalLoggedOnlyAsAnEventReadsBackOnce() {
+        func rows(_ lines: [[String: Any]]) -> [TranscriptEntry] {
+            let data = Data(lines.map { String(decoding: try! JSONSerialization.data(withJSONObject: $0), as: UTF8.self) }
+                .joined(separator: "\n").utf8)
+            return TranscriptAssembler.rows(in: CodexRolloutParser().lines(in: data).compactMap(\.record))
+        }
+        func event(_ objective: String, _ status: String, at time: String) -> [String: Any] {
+            ["timestamp": time, "type": "event_msg",
+             "payload": ["type": "thread_goal_updated", "threadId": "T",
+                         "goal": ["threadId": "T", "objective": objective, "status": status, "tokensUsed": "0"]]]
+        }
+        func context(_ text: String, id: String) -> [String: Any] {
+            ["type": "response_item",
+             "payload": ["type": "message", "id": id, "role": "user", "content": [["type": "input_text", "text": text]]]]
+        }
+        let continuation = context("<codex_internal_context source=\"goal\">\nContinue working toward the active thread goal.\n<objective>\nShip it\n</objective>", id: "c1")
+
+        // 0.156: the event alone, then Codex's own continuation context.
+        let old = rows([event("Ship it", "active", at: "2026-10-15T00:02:48.370Z"), continuation,
+                        event("Ship it", "paused", at: "2026-10-15T00:10:00.000Z"),
+                        event("Ship it", "active", at: "2026-10-15T00:11:00.000Z"),
+                        event("Ship it", "complete", at: "2026-10-15T00:20:00.000Z"),
+                        event("Then this", "active", at: "2026-10-15T00:30:00.000Z"),
+                        ["timestamp": "2026-10-15T00:40:00.000Z", "type": "event_msg", "payload": ["type": "thread_goal_cleared", "threadId": "T"]]])
+        XCTAssertEqual(old.map(\.text), ["/goal Ship it", "/goal pause", "/goal resume", "/goal Then this", "/goal clear"])
+        XCTAssertTrue(old.allSatisfy { $0.role == .user })
+
+        // 0.162: the context, then the same goal as an event: one row.
+        let new = rows([context("<codex_internal_context source=\"user_goal\">\nUser set the goal: \"Ship it\"\nUser set goal status: \"active\".\n</codex_internal_context>", id: "g1"),
+                        event("Ship it", "active", at: "2026-10-15T00:02:48.370Z"), continuation])
+        XCTAssertEqual(new.map(\.text), ["/goal Ship it"])
+    }
+
     func testTheComposerOffersThemBeforeCodexHasRun() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-codex-commands-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
