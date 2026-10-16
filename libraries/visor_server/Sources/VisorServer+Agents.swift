@@ -192,6 +192,13 @@ extension VisorServer {
     }
 
     func deliver(_ text: String, to record: SessionRecord, images: [String] = []) {
+        // `/login` signs Claude Code in again, beside the agent: no turn,
+        // and nothing for the agent, working or not.
+        if record.info.agent == .claude, images.isEmpty, let arguments = Self.signInArguments(text) {
+            startSignIn(record, arguments: arguments)
+            broadcast(record.ephemeralEnvelope, session: record)
+            return
+        }
         // A turn in flight is left alone. What the user says now waits its
         // turn and goes over as soon as the agent falls idle — interrupting
         // is a deliberate act (`stop`), not the cost of typing.

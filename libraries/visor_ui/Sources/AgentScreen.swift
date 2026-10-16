@@ -14,6 +14,9 @@ struct AgentScreen: View {
     var host: AgentServerConnection
     let sessionID: String
     private let transcript: SessionTranscript
+    @Environment(\.openURL) private var openURL
+    /// The sign-in page last offered (`/login`): offered once.
+    @State private var signInOffered: String?
     @State private var draft = ""
     @State private var showModels = false
     /// The goal whose words are being shown, with a way to clear it.
@@ -131,6 +134,18 @@ struct AgentScreen: View {
         } message: {
             Text(transcript.notice ?? "")
         }
+        // Signing Claude Code in again (`/login`): its page, to open here;
+        // the code it shows is what the user sends next.
+        .alert("Sign In to Claude", isPresented: Binding(get: { transcript.signIn != nil && transcript.signIn != signInOffered },
+                                                         set: { if !$0 { signInOffered = transcript.signIn } })) {
+            Button("Open Sign-In Page") {
+                signInOffered = transcript.signIn
+                if let page = transcript.signIn, let url = URL(string: page) { openURL(url) }
+            }
+            Button("Later", role: .cancel) { signInOffered = transcript.signIn }
+        } message: {
+            Text("Sign in on the page that opens, then paste the code it shows here and send it.")
+        }
         // The conversation went on elsewhere, beside the branch shown: the
         // user chooses which to carry on.
         .alert("This Conversation Went On Elsewhere", isPresented: Binding(get: { info?.otherBranch != nil }, set: { _ in })) {
@@ -162,7 +177,7 @@ struct AgentScreen: View {
                 ? "Write the first message below; \(info?.agent.title ?? "the agent") starts in \(info?.cwd ?? "its directory")."
                 : "Fetching the transcript from \(host.record.name).",
             draft: $draft,
-            placeholder: "Message \(info?.agent.title ?? "the agent")…",
+            placeholder: transcript.signIn != nil ? "Paste the sign-in code…" : "Message \(info?.agent.title ?? "the agent")…",
             busy: transcript.busy,
             // The send button spins only for what is not in the thread yet.
             sending: transcript.sending.contains { !$0.shown },

@@ -116,6 +116,9 @@ public struct Envelope: Codable, Sendable {
     /// ("" when it is the thread's first; nil when not known): a client
     /// that keeps that row keeps the rows before it too.
     public var follows: String?
+    /// In a session's state, a sign-in waiting for its code (`/login`):
+    /// the page to sign in at. What the user sends next goes to it.
+    public var signIn: String?
     /// The turn's status lines so far — tool calls, subagents, shells,
     /// thinking — as the computer keeps them.
     public var status: [StatusItem]?
@@ -182,9 +185,9 @@ extension Envelope {
     /// the streams, the status lines, the activity, busy, the approval
     /// waiting, the queue, the notice.
     public static func ephemeral(session: String, streams: [StreamChunk], status: [StatusItem], activity: String?, busy: Bool,
-                                 approval: ApprovalRequest?, queued: [String], notice: String?) -> Envelope {
+                                 approval: ApprovalRequest?, queued: [String], notice: String?, signIn: String? = nil) -> Envelope {
         var e = Envelope(type: "ephemeral"); e.session = session; e.streams = streams; e.status = status
-        e.activity = activity; e.busy = busy; e.approval = approval; e.notice = notice
+        e.activity = activity; e.busy = busy; e.approval = approval; e.notice = notice; e.signIn = signIn
         if !queued.isEmpty { e.folders = queued }
         return e
     }
@@ -227,6 +230,10 @@ extension Envelope {
     /// Stops following a session the client has left: its state and
     /// streamed words are sent no more (a server before 0.33 says it does
     /// not know the message, which the client lets pass).
+    /// The code a sign-in page showed, for the session's sign-in.
+    public static func signIn(session: String, code: String) -> Envelope {
+        var e = Envelope(type: "signIn"); e.session = session; e.text = code; return e
+    }
     public static func unsubscribe(session: String) -> Envelope {
         var e = Envelope(type: "unsubscribe"); e.session = session; return e
     }

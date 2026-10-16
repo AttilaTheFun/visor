@@ -18,6 +18,7 @@ final class ScriptedServer: AgentServer {
     var channels = 0
     var subscribed: [String] = []
     var unsubscribed: [String] = []
+    var codes: [String] = []
     var actions: [(SessionAction, String)] = []
     private var onEvent: (@MainActor (AgentServerEvent) -> Void)?
 
@@ -111,6 +112,7 @@ final class ScriptedServer: AgentServer {
 
     func subscribe(_ session: String) { subscribed.append(session) }
     func unsubscribe(_ session: String) { unsubscribed.append(session) }
+    func signIn(_ session: String, code: String) { codes.append(code) }
     func acknowledge(_ session: String) {}
     /// The rows asked for over the channel: the session, and the row they go before.
     var earlierAsked: [(session: String, before: String)] = []

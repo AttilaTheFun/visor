@@ -138,6 +138,19 @@ public final class SessionTranscript {
         get { _ = tick; return _error }
         set { _error = newValue; changed() }
     }
+    /// A sign-in waiting for its code (`/login`): the page to sign in at.
+    /// What the user sends next is the code.
+    @ObservationIgnored private var _signIn: String? = nil
+    public var signIn: String? {
+        get { _ = tick; return _signIn }
+        set {
+            guard newValue != _signIn else { return }
+            _signIn = newValue
+            // The `/login` that started it is taken.
+            if newValue != nil { _sending.removeAll { $0.entry.text.hasPrefix("/login") } }
+            changed()
+        }
+    }
     /// A tool call waiting for Allow or Deny.
     @ObservationIgnored private var _pendingApproval: ApprovalRequest? = nil
     public var pendingApproval: ApprovalRequest? {
@@ -474,6 +487,7 @@ public final class SessionTranscript {
             latestActivity = envelope.activity
             busy = envelope.busy ?? false
             pendingApproval = envelope.approval
+            signIn = envelope.signIn
             take(notice: envelope.notice)
         case "status":
             turnStatus = envelope.status ?? []

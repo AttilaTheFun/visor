@@ -131,6 +131,8 @@ public final class SessionRecord {
     /// the first one here follows ("" for none; nil when not known).
     var moreBefore = false
     var firstFollows: String?
+    /// A sign-in of Claude Code's under way (`/login`), until it ends.
+    var signIn: ClaudeSignIn?
 
     /// How many times the file has been read in: what a test waits on.
     var fileLoads = 0
@@ -277,6 +279,6 @@ public final class SessionRecord {
     /// Everything that is not the record, in one piece.
     var ephemeralEnvelope: Envelope {
         .ephemeral(session: info.id, streams: streams.filter { !carries(messageID: $0.id) }.map { StreamChunk(id: $0.id, text: $0.text) }, status: turnStatus,
-                   activity: activity, busy: info.busy, approval: info.pendingApproval, queued: info.queued, notice: notice)
+                   activity: activity, busy: info.busy, approval: info.pendingApproval, queued: info.queued, notice: notice, signIn: signIn?.url)
     }
 }

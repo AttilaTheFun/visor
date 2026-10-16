@@ -1076,6 +1076,13 @@ public final class AgentServerConnection: Identifiable {
         // Without the whitespace around it, which is how the record keeps
         // it (and a phone's keyboard leaves a space after the last word).
         let text = Self.trimmed(text)
+        // A sign-in waiting for its code (`/login`): these words are the
+        // code, for the sign-in, and nothing for the agent or the thread.
+        if transcripts[sessionID]?.signIn != nil, !text.hasPrefix("/"), images.isEmpty {
+            server.signIn(sessionID, code: text)
+            note("thread \(sessionID.prefix(8)): a sign-in code sent")
+            return
+        }
         // A slash command on a line of its own after some words: Claude
         // Code takes it as the command only at the start of a message, so
         // the words go first and the command after them, as the terminal

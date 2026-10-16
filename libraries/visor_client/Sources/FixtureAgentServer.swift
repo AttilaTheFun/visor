@@ -36,6 +36,7 @@ final class FixtureAgentServer: AgentServer {
     }
 
     func unsubscribe(_ session: String) {}
+    func signIn(_ session: String, code: String) {}
 
     func subscribe(_ session: String) {
         guard let onEvent else { return }

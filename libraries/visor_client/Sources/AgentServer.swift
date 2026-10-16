@@ -40,6 +40,8 @@ public protocol AgentServer: AnyObject {
     func subscribe(_ session: String)
     /// Stops following a session that was left.
     func unsubscribe(_ session: String)
+    /// The code a sign-in page showed, for the session's sign-in (`/login`).
+    func signIn(_ session: String, code: String)
     /// The user has read what the session had to tell them.
     func acknowledge(_ session: String)
     /// Asks for the rows before `before`.

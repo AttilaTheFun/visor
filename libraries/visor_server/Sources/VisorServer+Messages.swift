@@ -53,6 +53,7 @@ extension VisorServer {
         case "earlier": performEarlier(envelope, from: client)
         case "subscribe": performSubscribe(envelope, from: client)
         case "unsubscribe": performUnsubscribe(envelope, from: client)
+        case "signIn": performSignIn(envelope)
         case "permissions": performPermissions(envelope)
         case "approve": performApprove(envelope)
         case "settings": performSettings(envelope)

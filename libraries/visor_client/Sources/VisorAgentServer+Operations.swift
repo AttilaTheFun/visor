@@ -11,6 +11,13 @@ extension VisorAgentServer {
     public func subscribe(_ session: String) {
         if polling != nil { pollState(of: session) } else { send(.subscribe(session: session)) }
     }
+    public func signIn(_ session: String, code: String) {
+        if polling != nil {
+            Task { _ = try? await call("POST", "/sessions/\(Self.escape(session))/signIn", .signIn(session: session, code: code)) }
+        } else {
+            send(.signIn(session: session, code: code))
+        }
+    }
     public func unsubscribe(_ session: String) {
         if let polling { polling.states.removeValue(forKey: session)?.cancel() } else { send(.unsubscribe(session: session)) }
     }
