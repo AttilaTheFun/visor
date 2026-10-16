@@ -825,9 +825,17 @@ public final class AgentServerConnection: Identifiable {
                 // revision held, after the last row given.
                 let catchUp = transcript.catchUp
                 do {
+                    let asked = ContinuousClock.now
                     let envelope = try await server.transcript(of: sessionID, since: catchUp?.since ?? revision,
                                                                 generation: transcript.generation, after: catchUp?.after)
-                    guard !Task.isCancelled, transcript.takes(envelope) else { continue }
+                    guard !Task.isCancelled else { return }
+                    guard transcript.takes(envelope) else {
+                        // Nothing new, and not held as a server holds it
+                        // (a front, a stand-in): a breath before asking
+                        // again, rather than asking as fast as it answers.
+                        if ContinuousClock.now - asked < .seconds(1) { try? await Task.sleep(for: .seconds(1)) }
+                        continue
+                    }
                     let shown = transcript.shownIDs, generation = transcript.generation
                     let whole = envelope.reset == true || envelope.generation.map { $0 != generation } ?? false
                     transcript.sync(envelope)
