@@ -1,176 +1,196 @@
-// The cache in SQLite, through SQLite.swift: rows by place, an index of
-// their words, the tree of their source lines. Where the build has it —
-// every Apple host; the browser keeps its cache in memory.
+// The cache in SQLite, through its C API: rows by place, an index of their
+// words, the tree of their source lines. On every host (`//:sqlite`): the
+// file a cache opened with `MessageCache.open(named:)` keeps. The tables
+// are the ones SQLite.swift made before (schema 7), so a cache kept by an
+// earlier build reads on.
 
 #if MESSAGE_CACHE_SQLITE
-import Foundation
-import SQLite
 import VisorProtocol
 
 public final class SQLiteStorage: MessageStorage {
-    private typealias E<T> = SQLite.Expression<T>
-    private let db: Connection
-    private let sources = Table("sources")
-    private let syncs = Table("syncs")
-    private let nodes = Table("nodes")
-    private let messages = Table("messages")
-    private let session = E<String>("session")
-    private let path = E<String>("path")
-    private let identity = E<String>("identity")
-    private let bytes = E<Int64>("bytes")
-    private let nextSeq = E<Int>("next_seq")
-    private let revision = E<Int>("revision")
-    private let generation = E<Int>("generation")
-    private let seq = E<Int>("seq")
-    private let key = E<String?>("key")
-    private let parentKey = E<String?>("parent")
-    private let kind = E<String>("kind")
-    private let prompt = E<Bool>("prompt")
-    private let id = E<String>("id")
-    private let role = E<String>("role")
-    private let text = E<String>("text")
-    private let sourceKey = E<String?>("source_key")
-    private let json = E<String>("json")
+    private let db: SQLiteDatabase
 
     /// The file at a path, created if need be; ":memory:" for none.
-    public convenience init(path: String) throws {
-        try self.init(connection: path == ":memory:" ? Connection(.inMemory) : Connection(path))
-    }
-
-    private init(connection: Connection) throws {
-        db = connection
-        db.busyTimeout = 5
-        try? db.execute("PRAGMA journal_mode=WAL")
+    public init(path: String) throws {
+        db = try SQLiteDatabase(path: path)
+        if path != ":memory:" { try? db.execute("PRAGMA journal_mode=WAL") }
         if db.userVersion != Int32(MessageCache.schemaVersion) {
-            try db.execute("DROP TABLE IF EXISTS sources; DROP TABLE IF EXISTS syncs; DROP TABLE IF EXISTS nodes; DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS messages_fts;")
+            try db.execute("""
+                DROP TABLE IF EXISTS sources; DROP TABLE IF EXISTS syncs; DROP TABLE IF EXISTS nodes;
+                DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS messages_fts;
+                """)
             db.userVersion = Int32(MessageCache.schemaVersion)
         }
-        try db.run(sources.create(ifNotExists: true) { t in
-            t.column(session, primaryKey: true); t.column(path); t.column(identity); t.column(bytes); t.column(nextSeq)
-        })
-        try db.run(syncs.create(ifNotExists: true) { t in
-            t.column(session, primaryKey: true); t.column(revision); t.column(generation)
-        })
-        try db.run(nodes.create(ifNotExists: true) { t in
-            t.column(session); t.column(seq); t.column(key); t.column(parentKey); t.column(kind); t.column(prompt)
-            t.primaryKey(session, seq)
-        })
-        try db.run(messages.create(ifNotExists: true) { t in
-            t.column(session); t.column(seq); t.column(id); t.column(role); t.column(text); t.column(sourceKey); t.column(json)
-            t.primaryKey(session, id)
-        })
-        try db.run(messages.createIndex(session, seq, ifNotExists: true))
-        try db.run(messages.createIndex(session, sourceKey, ifNotExists: true))
-        try db.execute("CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(session UNINDEXED, id UNINDEXED, role UNINDEXED, text, tokenize='unicode61')")
+        try db.execute("""
+            CREATE TABLE IF NOT EXISTS "sources" ("session" TEXT PRIMARY KEY NOT NULL, "path" TEXT NOT NULL,
+                "identity" TEXT NOT NULL, "bytes" INTEGER NOT NULL, "next_seq" INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS "syncs" ("session" TEXT PRIMARY KEY NOT NULL, "revision" INTEGER NOT NULL,
+                "generation" INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS "nodes" ("session" TEXT NOT NULL, "seq" INTEGER NOT NULL, "key" TEXT, "parent" TEXT,
+                "kind" TEXT NOT NULL, "prompt" INTEGER NOT NULL, PRIMARY KEY ("session", "seq"));
+            CREATE TABLE IF NOT EXISTS "messages" ("session" TEXT NOT NULL, "seq" INTEGER NOT NULL, "id" TEXT NOT NULL,
+                "role" TEXT NOT NULL, "text" TEXT NOT NULL, "source_key" TEXT, "json" TEXT NOT NULL, PRIMARY KEY ("session", "id"));
+            CREATE INDEX IF NOT EXISTS "index_messages_on_session_seq" ON "messages" ("session", "seq");
+            CREATE INDEX IF NOT EXISTS "index_messages_on_session_source_key" ON "messages" ("session", "source_key");
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(session UNINDEXED, id UNINDEXED, role UNINDEXED, text,
+                tokenize='unicode61');
+            """)
     }
 
-    public func transaction(_ body: () throws -> Void) throws { try db.transaction { try body() } }
+    public func transaction(_ body: () throws -> Void) throws { try db.transaction(body) }
 
     public func sourceState(_ s: String) -> SourceState? {
-        guard let row = try? db.pluck(sources.filter(session == s)) else { return nil }
-        return SourceState(path: row[path], identity: row[identity], bytes: UInt64(row[bytes]), nextSeq: row[nextSeq])
+        first("SELECT path, identity, bytes, next_seq FROM sources WHERE session = ?", [.text(s)]) { row in
+            SourceState(path: row.text(0) ?? "", identity: row.text(1) ?? "", bytes: UInt64(row.int(2)), nextSeq: row.int(3))
+        }
     }
 
     public func setSourceState(_ state: SourceState, _ s: String) throws {
-        try db.run(sources.insert(or: .replace, session <- s, path <- state.path, identity <- state.identity, bytes <- Int64(state.bytes), nextSeq <- state.nextSeq))
+        try db.run("INSERT OR REPLACE INTO sources (session, path, identity, bytes, next_seq) VALUES (?, ?, ?, ?, ?)",
+                   .text(s), .text(state.path), .text(state.identity), .int(Int(state.bytes)), .int(state.nextSeq))
     }
 
     public func syncState(_ s: String) -> SyncState? {
-        guard let row = try? db.pluck(syncs.filter(session == s)) else { return nil }
-        return SyncState(revision: row[revision], generation: row[generation])
+        first("SELECT revision, generation FROM syncs WHERE session = ?", [.text(s)]) { SyncState(revision: $0.int(0), generation: $0.int(1)) }
     }
 
     public func setSyncState(_ state: SyncState, _ s: String) throws {
-        try db.run(syncs.insert(or: .replace, session <- s, revision <- state.revision, generation <- state.generation))
+        try db.run("INSERT OR REPLACE INTO syncs (session, revision, generation) VALUES (?, ?, ?)",
+                   .text(s), .int(state.revision), .int(state.generation))
     }
 
     public func deleteSession(_ s: String) throws {
-        try db.run(sources.filter(session == s).delete())
-        try db.run(syncs.filter(session == s).delete())
-        try db.run(nodes.filter(session == s).delete())
+        try db.run("DELETE FROM sources WHERE session = ?", .text(s))
+        try db.run("DELETE FROM syncs WHERE session = ?", .text(s))
+        try db.run("DELETE FROM nodes WHERE session = ?", .text(s))
         try deleteMessages(s)
     }
 
     public func insertNodes(_ s: String, _ new: [SourceNode]) throws {
+        let statement = try db.prepare("INSERT OR REPLACE INTO nodes (session, seq, key, parent, kind, prompt) VALUES (?, ?, ?, ?, ?, ?)")
         for node in new {
-            try db.run(nodes.insert(or: .replace, session <- s, seq <- node.seq, key <- node.key, parentKey <- node.parentKey, kind <- node.kind, prompt <- node.isPrompt))
+            try statement.bind([.text(s), .int(node.seq), .optional(node.key), .optional(node.parentKey), .text(node.kind), .int(node.isPrompt ? 1 : 0)])
+            _ = try statement.step()
         }
     }
 
     public func nodes(_ s: String) -> [SourceNode] {
-        (try? db.prepare(nodes.filter(session == s).order(seq)).map {
-            SourceNode(seq: $0[seq], key: $0[key], parentKey: $0[parentKey], kind: $0[kind], isPrompt: $0[prompt])
-        }) ?? []
+        all("SELECT seq, key, parent, kind, prompt FROM nodes WHERE session = ? ORDER BY seq", [.text(s)]) { row in
+            SourceNode(seq: row.int(0), key: row.text(1), parentKey: row.text(2), kind: row.text(3) ?? "", isPrompt: row.int(4) != 0)
+        }
     }
 
     public func upsertMessage(_ s: String, _ message: TranscriptEntry, seq position: Int, sourceKey source: String?) throws {
-        let kept = try? db.pluck(messages.select(seq).filter(session == s && id == message.id))
-        try db.run(messages.insert(or: .replace, session <- s, seq <- (kept?[seq] ?? position), id <- message.id, role <- message.role.rawValue,
-                                   text <- message.text, sourceKey <- source, json <- message.json.encoded()))
-        try db.run("DELETE FROM messages_fts WHERE session = ? AND id = ?", s, message.id)
-        if !message.text.isEmpty {
-            try db.run("INSERT INTO messages_fts (session, id, role, text) VALUES (?, ?, ?, ?)", s, message.id, message.role.rawValue, message.text)
-        }
+        let kept = seq(s, of: message.id)
+        try write(s, message, seq: kept ?? position, sourceKey: source)
+        try db.run("DELETE FROM messages_fts WHERE session = ? AND id = ?", .text(s), .text(message.id))
+        try index(s, message)
     }
 
     public func insertMessage(_ s: String, _ message: TranscriptEntry, seq position: Int) throws {
-        try db.run(messages.insert(or: .replace, session <- s, seq <- position, id <- message.id, role <- message.role.rawValue,
-                                   text <- message.text, sourceKey <- nil, json <- message.json.encoded()))
-        if !message.text.isEmpty {
-            try db.run("INSERT INTO messages_fts (session, id, role, text) VALUES (?, ?, ?, ?)", s, message.id, message.role.rawValue, message.text)
-        }
+        try write(s, message, seq: position, sourceKey: nil)
+        try index(s, message)
+    }
+
+    private func write(_ s: String, _ message: TranscriptEntry, seq position: Int, sourceKey source: String?) throws {
+        try db.run("INSERT OR REPLACE INTO messages (session, seq, id, role, text, source_key, json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                   .text(s), .int(position), .text(message.id), .text(message.role.rawValue), .text(message.text),
+                   .optional(source), .text(message.json.encoded()))
+    }
+
+    private func index(_ s: String, _ message: TranscriptEntry) throws {
+        guard !message.text.isEmpty else { return }
+        try db.run("INSERT INTO messages_fts (session, id, role, text) VALUES (?, ?, ?, ?)",
+                   .text(s), .text(message.id), .text(message.role.rawValue), .text(message.text))
     }
 
     public func deleteMessages(_ s: String, sourceKeys: Set<String>) throws {
-        for chunk in stride(from: 0, to: sourceKeys.count, by: 500).map({ Array(Array(sourceKeys)[$0..<Swift.min($0 + 500, sourceKeys.count)]) }) {
-            let ids = try db.prepare(messages.select(id).filter(session == s && chunk.contains(sourceKey))).map { $0[id] }
-            for rowID in ids { try db.run("DELETE FROM messages_fts WHERE session = ? AND id = ?", s, rowID) }
-            try db.run(messages.filter(session == s && chunk.contains(sourceKey)).delete())
+        let keys = Array(sourceKeys)
+        for start in stride(from: 0, to: keys.count, by: 500) {
+            let chunk = Array(keys[start..<min(start + 500, keys.count)])
+            let marks = chunk.map { _ in "?" }.joined(separator: ", ")
+            let values = [SQLiteValue.text(s)] + chunk.map(SQLiteValue.text)
+            let ids = all("SELECT id FROM messages WHERE session = ? AND source_key IN (\(marks))", values) { $0.text(0) ?? "" }
+            for rowID in ids { try db.run("DELETE FROM messages_fts WHERE session = ? AND id = ?", .text(s), .text(rowID)) }
+            let statement = try db.prepare("DELETE FROM messages WHERE session = ? AND source_key IN (\(marks))")
+            try statement.bind(values)
+            _ = try statement.step()
         }
     }
 
     public func deleteMessages(_ s: String) throws {
-        try db.run(messages.filter(session == s).delete())
-        try db.run("DELETE FROM messages_fts WHERE session = ?", s)
+        try db.run("DELETE FROM messages WHERE session = ?", .text(s))
+        try db.run("DELETE FROM messages_fts WHERE session = ?", .text(s))
+    }
+
+    /// Removes rows by id, and their words from the index.
+    public func deleteMessages(_ s: String, ids: [String]) throws {
+        for id in ids {
+            try db.run("DELETE FROM messages WHERE session = ? AND id = ?", .text(s), .text(id))
+            try db.run("DELETE FROM messages_fts WHERE session = ? AND id = ?", .text(s), .text(id))
+        }
     }
 
     public func messages(_ s: String, limit: Int, before: Int?) -> (messages: [TranscriptEntry], more: Bool) {
-        var query = messages.select(seq, json).filter(session == s)
-        if let before { query = query.filter(seq < before) }
-        let page = (try? db.prepare(query.order(seq.desc).limit(limit + 1)).map { $0[json] }) ?? []
+        let page: [String] = if let before {
+            all("SELECT json FROM messages WHERE session = ? AND seq < ? ORDER BY seq DESC LIMIT ?",
+                [.text(s), .int(before), .int(limit + 1)]) { $0.text(0) ?? "" }
+        } else {
+            all("SELECT json FROM messages WHERE session = ? ORDER BY seq DESC LIMIT ?", [.text(s), .int(limit + 1)]) { $0.text(0) ?? "" }
+        }
         let entries = page.prefix(limit).reversed().compactMap { parseJSON($0).flatMap(TranscriptEntry.init(json:)) }
         return (entries, page.count > limit)
     }
 
     public func seq(_ s: String, of messageID: String) -> Int? {
-        (try? db.pluck(messages.select(seq).filter(session == s && id == messageID)))?[seq]
+        first("SELECT seq FROM messages WHERE session = ? AND id = ?", [.text(s), .text(messageID)]) { $0.int(0) }
     }
 
     public func seqRange(_ s: String) -> ClosedRange<Int>? {
-        guard let low = try? db.scalar(messages.select(seq.min).filter(session == s)),
-              let high = try? db.scalar(messages.select(seq.max).filter(session == s)) else { return nil }
-        return low...high
+        first("SELECT MIN(seq), MAX(seq) FROM messages WHERE session = ?", [.text(s)]) { row -> ClosedRange<Int>? in
+            row.isNull(0) || row.isNull(1) ? nil : row.int(0)...row.int(1)
+        } ?? nil
     }
 
-    public func count(_ s: String) -> Int { (try? db.scalar(messages.filter(session == s).count)) ?? 0 }
+    public func count(_ s: String) -> Int {
+        first("SELECT COUNT(*) FROM messages WHERE session = ?", [.text(s)]) { $0.int(0) } ?? 0
+    }
 
     public func lastMessage(_ s: String, idPrefixes: [String], userTexts: [String]) -> TranscriptEntry? {
-        var matches: SQLite.Expression<Bool>?
-        func or(_ e: SQLite.Expression<Bool>) { matches = matches.map { $0 || e } ?? e }
-        for prefix in idPrefixes { or(id.like(prefix + "%")) }
-        for words in userTexts { or(role == "user" && text.like(words + "%")) }
-        guard let matches else { return nil }
-        let row = try? db.pluck(messages.select(json).filter(session == s && matches).order(seq.desc))
-        return row.flatMap { parseJSON($0[json]).flatMap(TranscriptEntry.init(json:)) }
+        var clauses: [String] = []
+        var values: [SQLiteValue] = [.text(s)]
+        for prefix in idPrefixes {
+            clauses.append("id LIKE ?")
+            values.append(.text(prefix + "%"))
+        }
+        for words in userTexts {
+            clauses.append("(role = 'user' AND text LIKE ?)")
+            values.append(.text(words + "%"))
+        }
+        guard !clauses.isEmpty else { return nil }
+        let sql = "SELECT json FROM messages WHERE session = ? AND (" + clauses.joined(separator: " OR ") + ") ORDER BY seq DESC LIMIT 1"
+        return first(sql, values) { $0.text(0) }.flatMap { $0 }.flatMap { parseJSON($0).flatMap(TranscriptEntry.init(json:)) }
     }
 
     public func search(_ terms: [String], limit: Int) -> [MessageHit] {
-        let match = terms.map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }.joined(separator: " ")
-        let statement = try? db.prepare("SELECT session, id, role, snippet(messages_fts, 3, '', '', '…', 16) FROM messages_fts WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?", match, limit)
-        return (statement?.map { row in
-            MessageHit(session: row[0] as? String ?? "", messageID: row[1] as? String ?? "",
-                       role: TranscriptEntry.Role(rawValue: row[2] as? String ?? "") ?? .assistant, snippet: row[3] as? String ?? "")
-        }) ?? []
+        let match = terms.map { "\"" + $0.replacing("\"", with: "\"\"") + "\"" }.joined(separator: " ")
+        return all("SELECT session, id, role, snippet(messages_fts, 3, '', '', '…', 16) FROM messages_fts WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?",
+                   [.text(match), .int(limit)]) { row in
+            MessageHit(session: row.text(0) ?? "", messageID: row.text(1) ?? "",
+                       role: TranscriptEntry.Role(rawValue: row.text(2) ?? "") ?? .assistant, snippet: row.text(3) ?? "")
+        }
+    }
+
+    // MARK: Reading
+
+    private func all<T>(_ sql: String, _ values: [SQLiteValue], _ read: (SQLiteStatement) -> T) -> [T] {
+        guard let statement = try? db.prepare(sql), (try? statement.bind(values)) != nil else { return [] }
+        return statement.rows(read)
+    }
+
+    private func first<T>(_ sql: String, _ values: [SQLiteValue], _ read: (SQLiteStatement) -> T) -> T? {
+        guard let statement = try? db.prepare(sql), (try? statement.bind(values)) != nil, (try? statement.step()) == true else { return nil }
+        return read(statement)
     }
 }
 #endif

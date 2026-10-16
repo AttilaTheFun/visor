@@ -23,6 +23,15 @@ public final class MessageCache: Sendable {
     }
     private static let provider = Mutex<(@Sendable (_ name: String) -> (any MessageStorage)?)?>(nil)
 
+    /// Where `open(named:)` keeps its files, when the host says (a path to
+    /// a folder); nil for the app's Application Support folder. Set before
+    /// the first cache is opened.
+    public static var directory: String? {
+        get { folder.withLock { $0 } }
+        set { folder.withLock { $0 = newValue } }
+    }
+    private static let folder = Mutex<String?>(nil)
+
     private let storage: Mutex<any MessageStorage>
 
     /// A cache over a storage, which is the cache's alone from here on.
