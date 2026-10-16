@@ -107,6 +107,15 @@ public struct Envelope: Codable, Sendable {
     /// The rows are the whole, not a delta: the client replaces what it
     /// holds (its cache too) and draws the thread again.
     public var reset: Bool?
+    /// In a delta, more changed rows follow these: the client takes these,
+    /// and asks again for the rows changed since the same revision after
+    /// the last of them (`?after=<id>`). A client far behind catches up a
+    /// page at a time, in order.
+    public var later: Bool?
+    /// In a whole answer, the row its first row follows on the computer
+    /// ("" when it is the thread's first; nil when not known): a client
+    /// that keeps that row keeps the rows before it too.
+    public var follows: String?
     /// The turn's status lines so far — tool calls, subagents, shells,
     /// thinking — as the computer keeps them.
     public var status: [StatusItem]?
@@ -214,6 +223,12 @@ extension Envelope {
     }
     public static func subscribe(session: String) -> Envelope {
         var e = Envelope(type: "subscribe"); e.session = session; return e
+    }
+    /// Stops following a session the client has left: its state and
+    /// streamed words are sent no more (a server before 0.33 says it does
+    /// not know the message, which the client lets pass).
+    public static func unsubscribe(session: String) -> Envelope {
+        var e = Envelope(type: "unsubscribe"); e.session = session; return e
     }
     public static func permissions(session: String, skipPermissions: Bool) -> Envelope {
         var e = Envelope(type: "permissions"); e.session = session; e.skipPermissions = skipPermissions; return e

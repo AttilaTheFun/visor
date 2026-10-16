@@ -691,7 +691,10 @@ public final class AgentServerConnection: Identifiable {
             onConnected?()
             enrollSSHIfWanted()
             // Re-subscribe to whatever was open before the drop.
-            for id in pendingSubscriptions.union(transcripts.keys) { server.subscribe(id) }
+            // The sessions open here (not those left and let go of).
+            for id in pendingSubscriptions.union(transcripts.keys.filter { releasing[$0] == nil && transcripts[$0]?.released != true }) {
+                server.subscribe(id)
+            }
             pendingSubscriptions.removeAll()
             askEarlierAgain()
             // A folder may have been renamed or moved while we were away.
@@ -751,23 +754,20 @@ public final class AgentServerConnection: Identifiable {
     static let cacheQueue = CacheQueue()
     func cacheKey(_ sessionID: String) -> String { id + "/" + sessionID }
 
+    /// How many rows a thread opens with (from this device's cache, at once;
+    /// from the server, the first time), and how many go in each page after.
+    static let initialRows = 100
+    static let pageRows = 50
+
     public func transcript(for sessionID: String) -> SessionTranscript {
         if let existing = transcripts[sessionID] { return existing }
         let transcript = SessionTranscript()
         let key = cacheKey(sessionID)
-        // As last seen, at once; the sync then asks only for what moved.
-        let kept = Self.cache.messages(in: key, limit: 600)
-        if !kept.messages.isEmpty, let state = Self.cache.syncState(of: key) {
-            transcript.entries = kept.messages
-            transcript.hasEarlier = kept.more
-            transcript.revision = state.revision
-            transcript.generation = state.generation
-            transcript.loaded = true
-        }
-        transcript.keep = { whole, rows, state in
+        fill(transcript, from: key)
+        transcript.keep = { write, state in
             let cache = Self.cache
             Self.cacheQueue.write {
-                if whole { try? cache.replace(key, with: rows) } else { try? cache.append(key, rows) }
+                Self.write(write, to: cache, key: key)
                 try? cache.setSyncState(state, for: key)
             }
         }
@@ -777,12 +777,41 @@ public final class AgentServerConnection: Identifiable {
         return transcript
     }
 
+    /// As last seen, at once, from this device's cache; the sync then asks
+    /// only for what moved.
+    private func fill(_ transcript: SessionTranscript, from key: String) {
+        let kept = Self.cache.messages(in: key, limit: Self.initialRows)
+        guard !kept.messages.isEmpty, let state = Self.cache.syncState(of: key) else { return }
+        transcript.entries = kept.messages
+        transcript.hasEarlier = kept.more
+        transcript.revision = state.revision
+        transcript.generation = state.generation
+        transcript.loaded = true
+    }
+
+    /// A sync's change, written to the cache as a change: every row synced
+    /// or paged to stays kept, and a thread reads back offline as far as it
+    /// was ever seen.
+    nonisolated static func write(_ write: SessionTranscript.CacheWrite, to cache: MessageCache, key: String) {
+        switch write {
+        case .upsert(let rows, let removed):
+            try? cache.remove(removed, in: key)
+            try? cache.append(key, rows)
+        case .rewrite(let from, let rows, let all):
+            if (try? cache.replace(key, from: from, with: rows)) != true { try? cache.replace(key, with: all) }
+        case .follow(let after, let rows):
+            if (try? cache.replace(key, after: after, with: rows)) != true { try? cache.replace(key, with: rows) }
+        case .replace(let rows):
+            try? cache.replace(key, with: rows)
+        }
+    }
+
     /// The transcript syncs apart from the live channel: each request
     /// names the revision held and is answered when the rows have moved
-    /// past it (or after a while, with the same), and the answer replaces
-    /// the rows held — so a dropped channel message, a sleep, a restart of
-    /// the server all heal on the next answer. Runs for as long as the
-    /// transcript is kept.
+    /// past it (or after a while, with the same), and the answer brings the
+    /// rows held up to date — so a dropped channel message, a sleep, a
+    /// restart of the server all heal on the next answer. Runs while the
+    /// session is open, and a little after it is left (`leave`).
     private var syncing: [String: Task<Void, Never>] = [:]
 
     private func startSyncing(_ sessionID: String, _ transcript: SessionTranscript) {
@@ -792,9 +821,13 @@ public final class AgentServerConnection: Identifiable {
             while !Task.isCancelled {
                 guard let transcript else { return }
                 let revision = transcript.revision
+                // Catching up: the next page of what changed since the
+                // revision held, after the last row given.
+                let catchUp = transcript.catchUp
                 do {
-                    let envelope = try await server.transcript(of: sessionID, since: revision, generation: transcript.generation)
-                    guard transcript.takes(envelope) else { continue }
+                    let envelope = try await server.transcript(of: sessionID, since: catchUp?.since ?? revision,
+                                                                generation: transcript.generation, after: catchUp?.after)
+                    guard !Task.isCancelled, transcript.takes(envelope) else { continue }
                     let shown = transcript.shownIDs, generation = transcript.generation
                     let whole = envelope.reset == true || envelope.generation.map { $0 != generation } ?? false
                     transcript.sync(envelope)
@@ -813,13 +846,50 @@ public final class AgentServerConnection: Identifiable {
     }
 
     /// Opens a session's transcript: its rows sync, and its state (working,
-    /// status lines, an approval asked for) follows over the socket.
+    /// status lines, an approval asked for) follows over the socket. A
+    /// session left and let go of reads its latest rows from the cache
+    /// again, and syncs on from there.
     public func subscribe(_ sessionID: String) {
-        _ = transcript(for: sessionID)
+        releasing.removeValue(forKey: sessionID)?.cancel()
+        let transcript = transcript(for: sessionID)
+        if transcript.released {
+            transcript.released = false
+            fill(transcript, from: cacheKey(sessionID))
+            startSyncing(sessionID, transcript)
+        }
         // The agent's commands, known before a message is sent: a message
         // with a command after some words is split where it is typed.
         if sessionCommands[sessionID] == nil { Task { [weak self] in _ = await self?.loadCommands(for: sessionID) } }
         if state == .connected { server.subscribe(sessionID) } else { pendingSubscriptions.insert(sessionID) }
+    }
+
+    /// How long a session left is kept as it is, so going back to it at
+    /// once (a sheet, a quick look at another) costs nothing.
+    static let releaseDelay: Duration = .seconds(20)
+    private var releasing: [String: Task<Void, Never>] = [:]
+
+    /// The session is no longer on screen: a little later, unless it is
+    /// opened again, its rows go from memory (the cache keeps them), its
+    /// sync stops, and the server stops sending its state.
+    public func leave(_ sessionID: String) {
+        guard transcripts[sessionID] != nil else { return }
+        releasing.removeValue(forKey: sessionID)?.cancel()
+        releasing[sessionID] = Task { [weak self] in
+            try? await Task.sleep(for: Self.releaseDelay)
+            guard !Task.isCancelled else { return }
+            self?.release(sessionID)
+        }
+    }
+
+    func release(_ sessionID: String) {
+        releasing[sessionID] = nil
+        syncing.removeValue(forKey: sessionID)?.cancel()
+        pendingSubscriptions.remove(sessionID)
+        if state == .connected { server.unsubscribe(sessionID) }
+        guard let transcript = transcripts[sessionID] else { return }
+        transcript.release()
+        transcript.released = true
+        note("thread \(sessionID.prefix(8)): left, its rows let go of")
     }
 
     /// The user has read what the session had to tell them.

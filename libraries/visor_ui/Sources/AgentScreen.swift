@@ -102,6 +102,9 @@ struct AgentScreen: View {
         // Kept by a view of its own that reads the draft: read here (an
         // onChange of it), each keystroke evaluated the whole screen again.
         .background(DraftKeeper(draft: $draft, server: host.record.id, session: sessionID))
+        // Left: a little later its rows go from memory (the cache keeps them)
+        // and its sync stops, unless it is opened again first.
+        .onDisappear { host.leave(sessionID) }
         .onAppear {
             host.subscribe(sessionID)
             // Screenshot tests: the inspector or the model picker, open —

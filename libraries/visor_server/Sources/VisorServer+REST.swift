@@ -7,8 +7,8 @@ import Foundation
 import VisorProtocol
 
 extension VisorServer {
-    func transcriptJSON(_ record: SessionRecord, since: Int?) -> HTTPResponse {
-        .json(record.transcriptEnvelope(since: since).encoded())
+    func transcriptJSON(_ record: SessionRecord, since: Int?, after: String? = nil) -> HTTPResponse {
+        .json(record.transcriptEnvelope(since: since, after: after).encoded())
     }
 
     /// Answers everyone waiting on this session's transcript with the
@@ -61,9 +61,13 @@ extension VisorServer {
             // current, as before, rather than answered at once with the
             // whole over and over.)
             let current = query["generation"].flatMap(Int.init).map { $0 == record.generation } ?? true
+            // A client catching up: the next page of what changed since
+            // its revision, after the last row it was given.
+            let after = query["after"].flatMap { $0.isEmpty ? nil : $0 }
             // Held only while the client has exactly what there is.
-            guard current, had == record.revision else {
-                return respond(transcriptJSON(record, since: current ? had.map { $0 > record.revision ? -1 : $0 } : nil))
+            guard current, had == record.revision, after == nil else {
+                return respond(transcriptJSON(record, since: current ? had.map { $0 > record.revision ? -1 : $0 } : nil,
+                                              after: current ? after : nil))
             }
             transcriptWaiters[record.info.id, default: []].append((revision: record.revision, generation: record.generation, respond: respond))
             Task { [weak self, weak record] in

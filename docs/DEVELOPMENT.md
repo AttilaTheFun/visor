@@ -26,10 +26,11 @@ Third-party: swift-nio-ssh 0.9 (SSH for the client and the server,
 through libraries/visor_ssh; it parses OpenSSH key lines but writes none,
 so `NIOSSHPublicKey+OpenSSH.swift` writes the kept host key from the
 key's bytes, read through reflection — a line to offer upstream instead),
-SQLite.swift 0.15.3 (the caches), rules_swift_package_manager (rspm)
+SQLite (the caches, through its C API: the system's on Apple's systems,
+SQLite's amalgamation 3.53.4 built in third_party/sqlite elsewhere,
+`--@visor//:sqlite` for a host's own), rules_swift_package_manager (rspm)
 brings SwiftPM packages into Bazel as `@swiftpkg_<identity>` — the
-identity keeps its dot:
-`@swiftpkg_sqlite.swift//:SQLite`, `@swiftpkg_agent_ui//:AgentUI`.
+identity keeps its dot: `@swiftpkg_agent_ui//:AgentUI`.
 
 ## 2. Setting up a Mac
 
@@ -127,8 +128,9 @@ grouped by maker with search. The server runs `openrouter models
 OpenRouter itself). Harnesses are injectable
 (`VisorServer.harnesses`) so a different adapter layer can be swapped in.
 
-The **record** is the transcript in memory (`entries`, a window of 600
-rows served) plus the ephemeral state. Every change bumps `revision`;
+The **record** is the transcript in memory (`entries`: a window of the
+latest 100 rows when read in, and every row since; the latest 100 served
+whole, changes 50 at a time) plus the ephemeral state. Every change bumps `revision`;
 each row is stamped with the revision it last changed or moved at, and a
 removed row is remembered (a tombstone) with the revision it went at.
 Every agent's transcript is its own log, followed as it is written:
@@ -180,9 +182,14 @@ in place when the file's copy arrives (`user-file-<uuid>`, words compared
 trimmed); file rows insert before trailing unsettled user rows.
 
 **Message cache** (`libraries/message_cache`, module `MessageCache`): one
-API over a `MessageStorage` — `SQLiteStorage` (SQLite.swift; defines
-`MESSAGE_CACHE_SQLITE`, selected on iOS/macOS in the BUILD) or
-`MemoryStorage` (web). Tables: sources (path, identity=inode and the reading's version — a new
+API over a `MessageStorage` — `SQLiteStorage` on every host (SQLite's C
+API, module `CSQLite`, from the `//:sqlite` label flag: the system's on
+Apple's systems, the amalgamation built in third_party/sqlite elsewhere —
+FTS5 required; a host with its own build, for wasm, sets the flag), or
+`MemoryStorage` for tests and the fixture. `MessageCache.directory` is
+where a host keeps the file (else Application Support). The SwiftPM build
+(Linux server) takes the system's libsqlite3; Windows keeps it in memory.
+Tables: sources (path, identity=inode and the reading's version — a new
 version reads every file again once, bytes,
 nextSeq), syncs (revision, generation), nodes (the source tree), messages
 (seq, id, role, text, source key, JSON of the row), messages_fts (FTS5).
@@ -191,8 +198,19 @@ messages.sqlite`, keyed by Visor session id; every agent's rows are
 written by the indexer from its log. Client cache: `…/com.LoganShire.
 VisorClient.macOS/messages.sqlite` (iOS in its container), keyed
 `<host id>/<session id>`; a session opens from it synchronously
-(`AgentServerConnection.transcript(for:)`, called from `AgentScreen.init`) and
-syncs only what moved. Both are disposable: client rebuilds from server,
+(`AgentServerConnection.transcript(for:)`, called from `AgentScreen.init`)
+with its latest 100 rows, and syncs only what moved; earlier pages are 50
+rows, from the cache until it has none, then from the server (all of the
+server's page kept). Every change a sync brings is written as a change
+(`SessionTranscript.CacheWrite`): rows at the end or changed in place
+upserted, a structural change rewriting from the first row whose place
+changed, a whole answer in a new generation carrying on from the row it
+`follows` — never the rows in memory in place of the history kept, so a
+thread reads back offline as far as it was seen. A session left
+(`AgentScreen` disappearing) is let go of 20 s later unless opened again:
+its rows go from memory, its sync stops and the server is told
+`unsubscribe`; opened again, it fills from the cache. A client behind
+catches up 50 rows at a time (`later`, `after=`). Both are disposable: client rebuilds from server,
 server from the files. `GET /api/search?q=words` searches the server cache.
 
 **Ephemeral vs persisted.** Persisted = what
@@ -846,7 +864,6 @@ moment, so this is a look, not a gate.
   version, so a Claude session driven by Visor cannot show the task
   checklist yet; the rendering is there for when it does.
 - rspm `use_repo` names keep the package identity's dot.
-- `SQLite.Expression` must be qualified (Foundation has `Expression` too).
 - A file is followed for as long as its stream is read (`FileTail.batches`,
   `SessionIndexer.events()`): stop reading (cancel the task) and the
   following stops with it.
@@ -872,7 +889,12 @@ Bugs seen and not yet fixed are in docs/KNOWN_ISSUES.md.
 - The openrouter CLI runs its tools without asking (no manual mode); its
   `--permission-mode` is accepted, said to do nothing, and ignored.
 - The first "earlier" page after a resume can be short (in-memory rows
-  before the window), then 600 a page.
+  before the window), then 50 a page.
+- After an Xcode update, Bazel fails in rules_swift's `system_sdk`
+  extension ("xcode-locator failed. version: <the old one>"): its result is
+  cached in the output base's own MODULE.bazel.lock. Remove the
+  `system_sdk` and `xcode_configure_extension` entries from
+  `$(bazel info output_base)/MODULE.bazel.lock` (after `bazel shutdown`).
 - A 212 MB session file indexes in ~9 s on first build (off the main
   thread); resumes after that are lookups.
 

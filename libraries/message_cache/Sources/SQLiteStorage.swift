@@ -123,12 +123,17 @@ public final class SQLiteStorage: MessageStorage {
         try db.run("DELETE FROM messages_fts WHERE session = ?", .text(s))
     }
 
-    /// Removes rows by id, and their words from the index.
     public func deleteMessages(_ s: String, ids: [String]) throws {
         for id in ids {
             try db.run("DELETE FROM messages WHERE session = ? AND id = ?", .text(s), .text(id))
             try db.run("DELETE FROM messages_fts WHERE session = ? AND id = ?", .text(s), .text(id))
         }
+    }
+
+    public func deleteMessages(_ s: String, fromSeq position: Int) throws {
+        try db.run("DELETE FROM messages_fts WHERE session = ? AND id IN (SELECT id FROM messages WHERE session = ? AND seq >= ?)",
+                   .text(s), .text(s), .int(position))
+        try db.run("DELETE FROM messages WHERE session = ? AND seq >= ?", .text(s), .int(position))
     }
 
     public func messages(_ s: String, limit: Int, before: Int?) -> (messages: [TranscriptEntry], more: Bool) {

@@ -127,8 +127,10 @@ public final class SessionRecord {
     /// conversation it is the file of.
     var following: Task<Void, Never>?
     var followed: String?
-    /// Whether the cache holds rows before the first one here.
+    /// Whether the cache holds rows before the first one here, and the row
+    /// the first one here follows ("" for none; nil when not known).
     var moreBefore = false
+    var firstFollows: String?
 
     /// How many times the file has been read in: what a test waits on.
     var fileLoads = 0
@@ -262,9 +264,13 @@ public final class SessionRecord {
         process.effort = effort
     }
 
-    /// How much of a transcript is sent and kept. The session file holds
-    /// the rest; a long thread is read from the end.
-    static let servedRows = 600
+    /// How much of a transcript a client is sent first (its latest rows),
+    /// and is kept here and in the store; the session file holds the rest,
+    /// and a long thread is read from the end.
+    static let servedRows = 100
+    /// How many rows go in each page after that: earlier ones, and the
+    /// changes a client that is behind catches up on.
+    static let pageRows = 50
 
     var transcriptEnvelope: Envelope { transcriptEnvelope(since: nil) }
 

@@ -35,6 +35,8 @@ final class FixtureAgentServer: AgentServer {
         try? await Task.sleep(nanoseconds: UInt64(milliseconds) * 1_000_000)
     }
 
+    func unsubscribe(_ session: String) {}
+
     func subscribe(_ session: String) {
         guard let onEvent else { return }
         let approval = session == VisorFixture.chatSession
@@ -67,7 +69,7 @@ final class FixtureAgentServer: AgentServer {
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] { [] }
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { [] }
 
-    func transcript(of session: String, since revision: Int, generation: Int) async throws -> Envelope {
+    func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope {
         if revision == 1, VisorFixture.screen == "learns-earlier", session == VisorFixture.chatSession {
             // The held sync answered ten seconds on with no row changed but
             // word of earlier rows, as a server's first answer after a

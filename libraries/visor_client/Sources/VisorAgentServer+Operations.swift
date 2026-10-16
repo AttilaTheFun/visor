@@ -11,6 +11,9 @@ extension VisorAgentServer {
     public func subscribe(_ session: String) {
         if polling != nil { pollState(of: session) } else { send(.subscribe(session: session)) }
     }
+    public func unsubscribe(_ session: String) {
+        if let polling { polling.states.removeValue(forKey: session)?.cancel() } else { send(.unsubscribe(session: session)) }
+    }
     public func acknowledge(_ session: String) {
         if polling != nil { Task { _ = try? await call("POST", "/sessions/\(Self.escape(session))/acknowledge") } }
         else { send(.acknowledge(session: session)) }
@@ -55,8 +58,9 @@ extension VisorAgentServer {
         try await call("POST", "/sessions/\(session)/send", .send(session: session, text: text, images: images)).sessions ?? []
     }
 
-    public func transcript(of session: String, since revision: Int, generation: Int) async throws -> Envelope {
-        let text = try await callText("GET", "/sessions/\(session)/transcript?since=\(revision)&generation=\(generation)", body: "")
+    public func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope {
+        let page = after.map { "&after=" + Self.escape($0) } ?? ""
+        let text = try await callText("GET", "/sessions/\(session)/transcript?since=\(revision)&generation=\(generation)" + page, body: "")
         // Read off the main actor: the whole of a thread is hundreds of rows.
         let envelope = await Task.detached(priority: .userInitiated) {
             Envelope.decode(text, defaultType: "transcript")
