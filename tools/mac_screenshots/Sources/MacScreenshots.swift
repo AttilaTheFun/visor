@@ -39,21 +39,22 @@ enum MacScreenshots {
         window.setFrameOrigin(NSPoint(x: 0, y: 0))
         window.makeKeyAndOrderFront(nil)
         app.activate()
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(6))
-            FileHandle.standardError.write(Data("window \(window.windowNumber) visible=\(window.isVisible) \(window.frame)\n".utf8))
-            capture(["-l\(window.windowNumber)", "-o", "-x", out])
+        // Off the main thread, so a screen that keeps it busy (a menu's
+        // tracking) is captured all the same, and the tool always ends.
+        let number = window.windowNumber
+        DispatchQueue.global().asyncAfter(deadline: .now() + 6) {
+            capture(["-l\(number)", "-o", "-x", out])
             // No picture of the window: the whole screen, to see why.
             if !FileManager.default.fileExists(atPath: out) {
                 capture(["-x", out.replacingOccurrences(of: ".png", with: "-screen.png")])
             }
-            app.terminate(nil)
+            exit(0)
         }
         app.run()
     }
 
     /// `screencapture` with these arguments, saying how it went.
-    static func capture(_ arguments: [String]) {
+    nonisolated static func capture(_ arguments: [String]) {
         let capture = Process()
         capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         capture.arguments = arguments

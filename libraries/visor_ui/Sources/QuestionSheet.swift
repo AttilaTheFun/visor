@@ -42,6 +42,7 @@ struct QuestionSheet: View {
                     }
                 }
             }
+            .insetGroupedForm()
             .navigationTitle(questions.count == 1 ? "Question" : "\(questions.count) Questions")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
