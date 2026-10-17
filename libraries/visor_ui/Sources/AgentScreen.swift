@@ -80,6 +80,9 @@ struct AgentScreen: View {
 
     var body: some View {
         chat
+        // Screenshot and UI tests: the new-rows pill stays until tapped, so a
+        // test on a slow machine still finds it (4 s otherwise).
+        .environment(\.newRowsPillSeconds, VisorFixture.active ? 600 : 4)
         // The title is the session's; the inspector opens from an explicit
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
