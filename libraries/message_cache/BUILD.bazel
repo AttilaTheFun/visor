@@ -15,6 +15,6 @@ swift_library(
     deps = [
         "//:foundation",
         "//libraries/visor_protocol",
-        "@swift_sqlite//:SwiftSQLite",
+        "@swiftpkg_swift_sqlite//:SwiftSQLite",
     ],
 )

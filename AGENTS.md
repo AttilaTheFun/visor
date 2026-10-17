@@ -20,9 +20,9 @@ to one focused change, and say in it how the change was verified.
   (tools/signing), which is not checked in.
 - Dependencies: BCR versions in MODULE.bazel; agent_ui by revision in
   third_party/swift_packages/Package.swift + Package.resolved (re-resolve
-  with `swift package resolve`, delete `.build`); swift_sqlite by commit
-  (`git_override` in MODULE.bazel, `revision:` in Package.swift), its
-  WebAssembly build being Bazel's own — its tag's commit at a release.
+  with `swift package resolve`, delete `.build`), as is swift_sqlite (and
+  in the root Package.swift for the SwiftPM server) — its tag's commit at
+  a release.
 - Every Swift target is built in the Swift 6 language mode with warnings
   as errors: `copts = STRICT_SWIFT` (tools/swift/defs.bzl), which a new
   target takes too. (It holds while `//:swift_ui` is the system SwiftUI;

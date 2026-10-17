@@ -6,7 +6,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/swift_sqlite.git",
       "state" : {
-        "revision" : "6a0c812495ea1151a3edb1dd9c7fba43f27b6d13"
+        "revision" : "1dd8c7263f0059b6e74090e05b299854f3dabd02"
       }
     }
   ],

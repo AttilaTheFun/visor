@@ -99,6 +99,14 @@
       }
     },
     {
+      "identity" : "swift_sqlite",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AttilaTheFun/swift_sqlite.git",
+      "state" : {
+        "revision" : "1dd8c7263f0059b6e74090e05b299854f3dabd02"
+      }
+    },
+    {
       "identity" : "swiftterm",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/migueldeicaza/SwiftTerm.git",

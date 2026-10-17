@@ -19,16 +19,6 @@ bazel_dep(name = "rules_apple", version = "5.1.0")
 bazel_dep(name = "rules_xcodeproj", version = "4.1.0")
 bazel_dep(name = "rules_swift_package_manager", version = "1.24.1")
 
-# SQLite for the message cache, on every host: swift_sqlite (the system's
-# SQLite on Apple's platforms, its vendored amalgamation elsewhere, WASI
-# included), pinned by commit; at a release, its tag's.
-bazel_dep(name = "swift_sqlite", version = "0.34")
-git_override(
-    module_name = "swift_sqlite",
-    commit = "6a0c812495ea1151a3edb1dd9c7fba43f27b6d13",
-    remote = "https://github.com/AttilaTheFun/swift_sqlite.git",
-)
-
 # The chat, composer and navigation views: the agent_ui package, pinned by
 # revision in third_party/swift_packages.
 swift_deps = use_extension(
@@ -44,6 +34,7 @@ use_repo(
     "swift_package",
     "swiftpkg_agent_ui",
     "swiftpkg_swift_nio_ssh",
+    "swiftpkg_swift_sqlite",
 )
 
 # The builder's own signing values (the Apple team), from .bazelrc.user.
