@@ -23,6 +23,9 @@ public enum VisorFixture {
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }
     @MainActor public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
+    /// "dark" or "light" for pictures in one look whatever the device's
+    /// (`-visor.fixture.appearance dark`); "" for the device's.
+    @MainActor public static var appearance: String { active ? (VisorHost.settings?.get(key: "fixture.appearance") ?? "") : "" }
 
     public static let serverID = "fixture"
     /// The session a screen that shows one opens.

@@ -60,6 +60,8 @@ public struct VisorRootView: View {
         // there: held across passes, so the screen compares equal.
         endSession.run = { selection = nil }
         return root
+            // Screenshots: one look, whatever the device's.
+            .preferredColorScheme(VisorFixture.appearance == "dark" ? .dark : VisorFixture.appearance == "light" ? .light : nil)
             .sheet(isPresented: Binding(get: { store.addingServer }, set: { store.addingServer = $0 })) {
                 AddAgentServerSheet { record in
                     store.add(record)

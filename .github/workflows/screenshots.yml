@@ -1,0 +1,42 @@
+name: Screenshots
+# The site's pictures (site/): the Mac client and the phone app on the
+# screenshot fixture, in the dark look, kept as this run's artifact to be
+# copied into site/images. Run by hand, or when what makes them changes.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/mac_screenshots/**'
+      - '.github/workflows/screenshots.yml'
+jobs:
+  mac:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: bazel build //tools/mac_screenshots
+      # A window shown on CI's own Mac and captured.
+      - name: Pictures
+        run: |
+          mkdir -p shots
+          tool="$(bazel cquery --output=files //tools/mac_screenshots 2>/dev/null | head -1)"
+          for screen in chat question models; do
+            "$tool" "$screen" "$PWD/shots/mac-$screen.png" dark
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-screenshots
+          path: shots/*.png
+
+  iphone:
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pictures (iOS simulator)
+        run: VISOR_UI_CASES=VisorProbe/testSiteShots tools/ios_ui_tests.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iphone-screenshots
+          path: /private/tmp/visor_probe/site-*.png

@@ -520,6 +520,23 @@ final class VisorProbe: XCTestCase {
         app.terminate()
     }
 
+    /// The site's pictures of the phone (.github/workflows/screenshots.yml):
+    /// the screenshot fixture's screens in the dark look, saved beside the
+    /// probe's other pictures as `site-<screen>.png`.
+    func testSiteShots() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        for screen in ["sessions", "chat", "question", "models", "inspector"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", screen == "sessions" ? "" : screen,
+                                   "-visor.fixture.appearance", "dark"]
+            app.launch()
+            Thread.sleep(forTimeInterval: 5)
+            shot(app, "site-\(screen)")
+            app.terminate()
+        }
+    }
+
     /// Looks, and sends nothing: opens a session the phone already lists
     /// and photographs the chat, the composer with the keyboard up, and
     /// (by its environment) a search, the attach menu, a picture or what
