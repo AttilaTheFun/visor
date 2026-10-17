@@ -18,7 +18,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 UDID="${DEVICE_LAB_UDID:?run in a device-lab lease of the phone, or set DEVICE_LAB_UDID}"
-CASES="${VISOR_UI_CASES:-VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning,VisorProbe/testFixtureSlashCommands,VisorProbe/testFixtureQuestion}"
+CASES="${VISOR_UI_CASES:-VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning,VisorProbe/testFixtureSlashCommands,VisorProbe/testFixtureQuestion,VisorProbe/testABurstOfRowsAtTheEndIsFollowedToItsEnd}"
 LOG="$(mktemp)"
 bazel test //tests/ios_probe:visor_probe_device --ios_multi_cpus=arm64 \
   --test_arg=--destination=platform=iOS,id="$UDID" --test_env=HOME="$HOME" \
