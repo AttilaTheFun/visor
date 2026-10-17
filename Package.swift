@@ -84,6 +84,6 @@ let package = Package(
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
     // swift_sqlite pinned by commit, as MODULE.bazel pins it; at a release,
     // its tag's.
-    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sqlite.git", revision: "4e6ff38833917d660875890effb9496cffd06b22")],
+    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sqlite.git", revision: "6a0c812495ea1151a3edb1dd9c7fba43f27b6d13")],
     targets: shared + system + tests
 )
