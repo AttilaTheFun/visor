@@ -417,7 +417,7 @@ account's `headers(for:)`), follows `VisorAccounts.changed()`, and takes
 them away at Sign Out (the sidebar's `AccountSection`). None by default;
 `-visor.account fixture` (or `fixture-signed-in`) uses `FixtureAccount`,
 three canned computers behind one front. The client's models are
-`@Observable` (the iPhone app targets iOS 26); `SessionTranscript` keeps
+`@Observable` (the iPhone app targets iOS 18 from 0.35, 26 before); `SessionTranscript` keeps
 its state untracked behind one counter, so views hear of a frame's changes
 once.
 The server's side is `ServerSettings.authentication`: `password` (the
