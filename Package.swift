@@ -22,17 +22,16 @@ let strict: [SwiftSetting] = [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-
 let shared: [Target] = [
     .target(name: "VisorProtocol", path: "libraries/visor_protocol/Sources", swiftSettings: strict),
     .target(name: "ClaudeTranscript", path: "libraries/claude_transcript/Sources", swiftSettings: strict),
-    // SQLite's C API from the system's SQLite (libsqlite3), as Bazel's
-    // `//:sqlite` gives it elsewhere.
-    .systemLibrary(name: "CSQLite", path: "third_party/sqlite/swiftpm", pkgConfig: "sqlite3", providers: [.apt(["libsqlite3-dev"])]),
     .target(
         name: "MessageCache",
         dependencies: [
             "VisorProtocol",
-            .target(name: "CSQLite", condition: .when(platforms: [.macOS, .linux])),
+            .product(name: "SwiftSQLite", package: "swift_sqlite", condition: .when(platforms: [.macOS, .linux])),
         ],
         path: "libraries/message_cache/Sources",
-        // Where there is no system SQLite (Windows), the cache is kept in memory.
+        // SQLite (swift_sqlite, as in the Bazel build) on the Mac and Linux;
+        // on Windows the cache is kept in memory until swift_sqlite is
+        // tried there.
         swiftSettings: strict + [.define("MESSAGE_CACHE_SQLITE", .when(platforms: [.macOS, .linux]))]
     ),
     .target(name: "AgentHostWire", path: "libraries/agent_host_wire/Sources", swiftSettings: strict),
@@ -83,5 +82,8 @@ let package = Package(
     name: "visor",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
+    // swift_sqlite pinned by commit, as MODULE.bazel pins it; at a release,
+    // its tag's.
+    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sqlite.git", revision: "4e6ff38833917d660875890effb9496cffd06b22")],
     targets: shared + system + tests
 )

@@ -19,17 +19,14 @@ bazel_dep(name = "rules_apple", version = "5.1.0")
 bazel_dep(name = "rules_xcodeproj", version = "4.1.0")
 bazel_dep(name = "rules_swift_package_manager", version = "1.24.1")
 
-# SQLite's amalgamation, for the message cache wherever the system has no
-# SQLite of its own (third_party/sqlite). The same file the registry's
-# sqlite3 module takes, built here with the full-text index.
-http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-
-http_archive(
-    name = "sqlite_amalgamation",
-    build_file = "//third_party/sqlite:amalgamation.BUILD",
-    integrity = "sha256-HnHd+ThJxqbs9YuCfAaSBz0t1+5AGWFYBo97KfQi6H0=",
-    strip_prefix = "sqlite-amalgamation-3530400",
-    urls = ["https://sqlite.org/2026/sqlite-amalgamation-3530400.zip"],
+# SQLite for the message cache, on every host: swift_sqlite (the system's
+# SQLite on Apple's platforms, its vendored amalgamation elsewhere, WASI
+# included), pinned by commit; at a release, its tag's.
+bazel_dep(name = "swift_sqlite", version = "0.34")
+git_override(
+    module_name = "swift_sqlite",
+    commit = "4e6ff38833917d660875890effb9496cffd06b22",
+    remote = "https://github.com/AttilaTheFun/swift_sqlite.git",
 )
 
 # The chat, composer and navigation views: the agent_ui package, pinned by

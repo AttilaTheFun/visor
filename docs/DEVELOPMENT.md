@@ -26,9 +26,10 @@ Third-party: swift-nio-ssh 0.9 (SSH for the client and the server,
 through libraries/visor_ssh; it parses OpenSSH key lines but writes none,
 so `NIOSSHPublicKey+OpenSSH.swift` writes the kept host key from the
 key's bytes, read through reflection — a line to offer upstream instead),
-SQLite (the caches, through its C API: the system's on Apple's systems,
-SQLite's amalgamation 3.53.4 built in third_party/sqlite elsewhere,
-`--@visor//:sqlite` for a host's own), rules_swift_package_manager (rspm)
+SQLite (the caches, through swift_sqlite: the system's on Apple's
+systems, its vendored amalgamation 3.53.4 elsewhere, WASI included; a Bazel
+module pinned by commit with `git_override`, as its WebAssembly build is
+Bazel's own), rules_swift_package_manager (rspm)
 brings SwiftPM packages into Bazel as `@swiftpkg_<identity>` — the
 identity keeps its dot: `@swiftpkg_agent_ui//:AgentUI`.
 
@@ -182,13 +183,13 @@ in place when the file's copy arrives (`user-file-<uuid>`, words compared
 trimmed); file rows insert before trailing unsettled user rows.
 
 **Message cache** (`libraries/message_cache`, module `MessageCache`): one
-API over a `MessageStorage` — `SQLiteStorage` on every host (SQLite's C
-API, module `CSQLite`, from the `//:sqlite` label flag: the system's on
-Apple's systems, the amalgamation built in third_party/sqlite elsewhere —
-FTS5 required; a host with its own build, for wasm, sets the flag), or
+API over a `MessageStorage` — `SQLiteStorage` on every host (swift_sqlite's
+`SwiftSQLite`, `@swift_sqlite//:SwiftSQLite`: the system's SQLite on Apple's
+systems, its amalgamation with FTS5 elsewhere, WebAssembly included), or
 `MemoryStorage` for tests and the fixture. `MessageCache.directory` is
 where a host keeps the file (else Application Support). The SwiftPM build
-(Linux server) takes the system's libsqlite3; Windows keeps it in memory.
+(Linux server) takes the same package; Windows keeps it in memory until
+swift_sqlite is tried there.
 Tables: sources (path, identity=inode and the reading's version — a new
 version reads every file again once, bytes,
 nextSeq), syncs (revision, generation), nodes (the source tree), messages
@@ -749,7 +750,7 @@ not been run against real agents.
   as its user would run it: a password, `run` checked with the server
   probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
   it; on the Mac, in a container: a podman machine of your own, an image
-  with `swift:6.4-noble`, `libsqlite3-dev` and Node 22, the checkout
+  with `swift:6.4-noble` and Node 22, the checkout
   mounted, `swift build --product visor-server` then this.
 - REST locally is plain HTTP: `http://127.0.0.1:7433/api/...` with
   `Authorization: Bearer <password>` (`security find-generic-password -s

@@ -94,7 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Packages
-        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev procps curl netcat-openbsd
+        run: apt-get update && apt-get install -y --no-install-recommends procps curl netcat-openbsd
       - uses: actions/setup-node@v4
         with:
           node-version: 22
