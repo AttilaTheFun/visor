@@ -173,7 +173,10 @@ struct ComposeSessionSheet: View {
                     }
                 }
                 Section {
-                    TextField(defaultTitle, text: $title)
+                    // The default as the field's prompt, its name hidden: a
+                    // Mac's form shows a field's title as a label beside it.
+                    TextField("Name", text: $title, prompt: Text(defaultTitle))
+                        .labelsHidden()
                         .accessibilityIdentifier("title")
                 } header: {
                     Text("Name")
