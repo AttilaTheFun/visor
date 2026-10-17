@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Drives the phone client in the simulator, for looking at it and for
@@ -264,12 +265,27 @@ final class VisorProbe: XCTestCase {
     /// Every fixture screen (VisorFixture), each from a fresh launch with
     /// the canned computer: the same pixels every run is the point.
     func testFixtureScreens() throws {
+        fixtureShots(.portrait)
+    }
+
+    /// The same screens in landscape, turned so on purpose.
+    func testFixtureScreensLandscape() throws {
+        fixtureShots(.landscapeLeft)
+    }
+
+    private func fixtureShots(_ orientation: UIDeviceOrientation) {
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
-        XCUIDevice.shared.orientation = .portrait
-        for screen in ["sessions", "chat", "goal", "inspector", "models", "search", "connect"] {
+        XCUIDevice.shared.orientation = orientation
+        for screen in ["sessions", "chat", "question", "goal", "inspector", "models", "search", "connect"] {
             let app = XCUIApplication()
             app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", screen]
             app.launch()
+            // Turned again once the app is up: one launched while the
+            // phone already lies on its side can come up in portrait.
+            if orientation != .portrait {
+                XCUIDevice.shared.orientation = .portrait
+                XCUIDevice.shared.orientation = orientation
+            }
             Thread.sleep(forTimeInterval: 4)
             shot(app, "fixture-" + screen)
             app.terminate()
@@ -653,7 +669,14 @@ final class VisorProbe: XCTestCase {
     }
 
     private func shot(_ app: XCUIApplication, _ name: String) {
-        let data = app.screenshot().pngRepresentation
-        try? data.write(to: URL(fileURLWithPath: "\(outDir)/\(name).png"))
+        // In landscape, the screen's picture: the app's comes out as its
+        // portrait layout in half a landscape frame on iOS 27's simulator.
+        let picture = (XCUIDevice.shared.orientation.isLandscape ? XCUIScreen.main.screenshot() : app.screenshot()).image
+        // Drawn upright: the picture's orientation is a tag that not every
+        // reader of the PNG applies.
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = picture.scale
+        let upright = UIGraphicsImageRenderer(size: picture.size, format: format).image { _ in picture.draw(at: .zero) }
+        try? upright.pngData()?.write(to: URL(fileURLWithPath: "\(outDir)/\(name).png"))
     }
 }
