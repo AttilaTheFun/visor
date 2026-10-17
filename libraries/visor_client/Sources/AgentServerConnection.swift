@@ -937,11 +937,31 @@ public final class AgentServerConnection: Identifiable {
         }
     }
 
-    /// Opens a session's transcript: its rows sync, and its state (working,
-    /// status lines, an approval asked for) follows over the socket. A
-    /// session left and let go of reads its latest rows from the cache
-    /// again, and syncs on from there.
+    /// Opens a session's transcript for a screen that shows it: its rows
+    /// sync, and its state (working, status lines, an approval asked for)
+    /// follows over the socket. A session left and let go of reads its
+    /// latest rows from the cache again, and syncs on from there. Each
+    /// screen is counted, and the session is let go of only when none
+    /// shows it (`leave`).
     public func subscribe(_ sessionID: String) {
+        onScreen[sessionID, default: 0] += 1
+        follow(sessionID)
+    }
+
+    /// A screen found its session let go of while it shows it: taken up
+    /// again at once (the screen is counted already).
+    public func takeUp(_ sessionID: String) {
+        guard transcripts[sessionID]?.released == true else { return }
+        note("thread \(sessionID.prefix(8)): let go of while on screen; taken up again")
+        follow(sessionID)
+    }
+
+    /// How many screens show each session. A screen built again can appear
+    /// before the one it replaces goes, so a session is let go of only once
+    /// the count is back to none.
+    private var onScreen: [String: Int] = [:]
+
+    private func follow(_ sessionID: String) {
         releasing.removeValue(forKey: sessionID)?.cancel()
         let transcript = transcript(for: sessionID)
         if transcript.released {
@@ -965,6 +985,9 @@ public final class AgentServerConnection: Identifiable {
     /// sync stops, and the server stops sending its state.
     public func leave(_ sessionID: String) {
         guard transcripts[sessionID] != nil else { return }
+        let left = max(0, (onScreen[sessionID] ?? 0) - 1)
+        onScreen[sessionID] = left == 0 ? nil : left
+        guard left == 0 else { return note("thread \(sessionID.prefix(8)): one screen of it gone, \(left) still showing it") }
         releasing.removeValue(forKey: sessionID)?.cancel()
         releasing[sessionID] = Task { [weak self] in
             try? await Task.sleep(for: Self.releaseDelay)
@@ -975,12 +998,17 @@ public final class AgentServerConnection: Identifiable {
 
     func release(_ sessionID: String) {
         releasing[sessionID] = nil
+        // Shown again since, or the session the app is showing: kept.
+        guard onScreen[sessionID] == nil else { return }
+        if let viewing = VisorNotificationHandler.shared.viewing, viewing.session == sessionID, viewing.computer == record.address {
+            return note("thread \(sessionID.prefix(8)): on screen, kept")
+        }
         syncing.removeValue(forKey: sessionID)?.cancel()
         pendingSubscriptions.remove(sessionID)
         if state == .connected { server.unsubscribe(sessionID) }
         guard let transcript = transcripts[sessionID] else { return }
-        transcript.release()
         transcript.released = true
+        transcript.release()
         note("thread \(sessionID.prefix(8)): left, its rows let go of")
     }
 

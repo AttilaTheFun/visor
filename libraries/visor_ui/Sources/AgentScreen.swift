@@ -108,6 +108,9 @@ struct AgentScreen: View {
         // Left: a little later its rows go from memory (the cache keeps them)
         // and its sync stops, unless it is opened again first.
         .onDisappear { host.leave(sessionID) }
+        // Let go of while shown all the same: taken up again, rather than
+        // left saying it is loading.
+        .onChange(of: transcript.loaded) { _, loaded in if !loaded { host.takeUp(sessionID) } }
         .onAppear {
             host.subscribe(sessionID)
             // Screenshot tests: the inspector or the model picker, open —
