@@ -317,10 +317,12 @@ final class VisorProbe: XCTestCase {
         let watched = try XCTUnwrap(read, "no row in view after scrolling up")
         let before = watched.frame
         let pill = app.buttons["new-rows-pill"]
-        XCTAssertTrue(pill.waitForExistence(timeout: 20), "no pill when rows came in below")
+        // Waited for with its count: on a slow machine the pill can show
+        // the first of the two rows for a moment before the second.
+        let two = app.buttons.matching(NSPredicate(format: "identifier == 'new-rows-pill' AND label CONTAINS '2 new messages'")).firstMatch
+        XCTAssertTrue(two.waitForExistence(timeout: 20), "no pill for the two rows that came in below")
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         shot(app, "arrivals-pill")
-        XCTAssertTrue(pill.label.contains("2 new messages"), pill.label)
         XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when rows came in below")
         XCTAssertTrue(pill.waitForNonExistence(timeout: 9), "the pill stayed")
         // The third row: the pill again, and its tap goes down to it. Tapped
