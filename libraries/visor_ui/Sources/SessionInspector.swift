@@ -79,6 +79,9 @@ struct SessionInspector: View {
             title = session.title
             shown = session.title
         }
+        // The account's limits as they stand now, not as a turn last left
+        // them: each time the inspector shows a session.
+        .task(id: session.id) { host.refreshAccount(session.agent) }
         // Renamed elsewhere (the sidebar, another device): the field
         // follows, unless a name of the user's own is being typed in it.
         .onChange(of: session.title) {

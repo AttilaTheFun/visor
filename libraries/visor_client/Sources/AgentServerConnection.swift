@@ -82,7 +82,7 @@ public final class AgentServerConnection: Identifiable {
     /// which invalidated the screen's parent for one more pass.
     @ObservationIgnored public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
-    public private(set) var catalogs: [AgentCatalog] = []
+    public internal(set) var catalogs: [AgentCatalog] = []
     /// The Visor Server it runs, as it said at sign-in ("0.31 (8)").
     public private(set) var serverVersion: String?
     /// The store saves when the address or credentials change.

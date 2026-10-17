@@ -100,6 +100,7 @@ under `/api`.
 | `GET /folders?path=` | | `path` (resolved, `~` expanded) and `folders` (subfolders, hidden ones skipped) — the project picker |
 | `POST /folders` | `path` | creates the folder with its parents; answers like GET |
 | `GET /resumable?agent=&cwd=` | | `resumable`: the agent's own sessions started in `cwd` (Claude's `~/.claude/projects`, Codex's `~/.codex/sessions`), newest first, `id`/`title` (first prompt)/`timestamp` |
+| `GET /account?agent=` | | `account` (`agent`, `account`): the agent's account as it stands now — Codex asked afresh by a `codex app-server` of its own (a read begun in the last 30 s is shared), the others as their sessions last said. A change also goes out to every channel as `account`. Clients ask whenever the inspector shows a session |
 | `POST /restart` | `path` (a new build to install over this one, optional), `session` (one to carry on besides the busy ones) | `restart`: the sessions carried on; the server then relaunches |
 | `POST /quit` | | `quit`; the server then ends its agents (what was running is written down as running, for the next start) and exits — how `visor-server stop` stops it |
 | `POST /migration/offer` | `session` | `migration` with `offer`: the session (`cwd` absolute), the agent's own id for its conversation (`resumeID`), the computer's name (`from`) and home folder, the conversation's `files` (`id`, `place` under the agent's folder — `{project}` for Claude's project folder — `size`, `packed`), and its `projects` (the session's own folder first, then the git repositories under the home folder its conversation names most: `remote`, `branch`, `commit`, `unshared`, `size`, `mentions`) |
@@ -217,7 +218,7 @@ tool's output; the transcript view hides them, the assistant's
   (`~/.codex/sessions/<y>/<m>/<d>/rollout-*-<thread>.jsonl`), followed as
   Codex writes it. `thread/tokenUsage/updated` gives the context (`last`)
   and the thread's tokens (`total`); `account/read` and
-  `account/rateLimits/read`, asked at launch, and
+  `account/rateLimits/read`, asked at launch (and by `GET /account`), and
   `account/rateLimits/updated` give the plan, its windows and credits.
 
 Each agent runs under a host of its own, `visor-agent-host` (on a Mac in

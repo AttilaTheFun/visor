@@ -85,6 +85,10 @@ extension VisorAgentServer {
         try await call("GET", "/resumable?agent=\(agent.rawValue)&cwd=" + Self.escape(cwd)).resumable ?? []
     }
 
+    public func account(of agent: AgentKind) async throws -> AgentAccount? {
+        try await call("GET", "/account?agent=\(agent.rawValue)").account
+    }
+
     public func relocateSessions(from cwd: String, to destination: String) async throws -> [SessionInfo] {
         var e = Envelope(type: "relocate")
         e.path = cwd

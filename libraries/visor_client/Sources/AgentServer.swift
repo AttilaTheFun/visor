@@ -82,6 +82,10 @@ public protocol AgentServer: AnyObject {
     func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope
     /// The slash commands the session's agent takes.
     func commands(for session: String) async throws -> [SlashCommand]
+    /// How an agent's account stands now: read afresh where the server
+    /// can ask the agent, what it last heard where it cannot. Nil from a
+    /// server that does not say.
+    func account(of agent: AgentKind) async throws -> AgentAccount?
     /// The agent's own sessions started in `cwd`, newest first.
     func resumable(agent: AgentKind, cwd: String) async throws -> [ResumableSession]
     /// The sessions that ran in a folder follow it to where it moved.
@@ -202,6 +206,7 @@ public extension AgentServer {
             ?? SessionInfo(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions, created: 0)
     }
     var managesSessions: Bool { true }
+    func account(of agent: AgentKind) async throws -> AgentAccount? { nil }
     func verifyChannel() async -> Bool { true }
     func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool { false }
     func connectionCodes() async throws -> ConnectionCodes { throw AgentServerError.unsupported }
