@@ -238,7 +238,7 @@ final class HelloFlowTests: XCTestCase {
         server.signIn = .failure(AgentServerError.message("away"))
         server.drop("No answer to a heartbeat")
         await settle()
-        XCTAssertEqual(host.state, .offline("No answer to a heartbeat"))
+        XCTAssertEqual(host.state, .offline("message(\"away\")"), "opened again at once, which failed")
         XCTAssertTrue(server.pauses.contains(2000))
         server.elapse(2000)
         await settle()
@@ -295,27 +295,53 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertEqual(other.channels, 0)
     }
 
-    /// After time in the background on a phone the channel is opened
-    /// afresh without being asked first; a try that fails then waits out
-    /// the schedule from its start.
-    func testBackFromTheBackgroundOpensAfresh() async {
+    /// A channel that was up and goes (a heartbeat unanswered, the app
+    /// back from the background with its socket dead) is opened again at
+    /// once, and the server is shown as connected all the while; only if
+    /// that fails is it offline, and the schedule starts.
+    func testAChannelThatGoesIsOpenedAgainStillShownConnected() async {
         let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
         host.connect()
         await settle()
-        host.resume(fresh: true)
-        await settle()
-        XCTAssertEqual(server.verified, 0, "not asked")
-        XCTAssertEqual(server.channels, 2, "opened afresh")
+        server.drop("connection lost")
         XCTAssertEqual(host.state, .connected)
-
-        server.signIn = .failure(AgentServerError.message("no route yet"))
-        host.resume(fresh: true)
         await settle()
-        XCTAssertTrue(server.pauses.contains(2000), "the schedule, from its start")
-        server.signIn = .success("Scripted Mac")
+        XCTAssertEqual(server.channels, 2, "opened again at once")
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertFalse(server.pauses.contains(2000), "no wait")
+
+        // Back in front with a channel that does not answer: the same.
+        server.alive = false
+        server.hangs = true
+        host.resume()
+        await settle()
+        XCTAssertEqual(host.state, .connected, "still shown connected while it is opened again")
+        host.resume()
+        await settle()
+        XCTAssertEqual(server.verified, 1, "coming back again meanwhile leaves the reopen to finish")
+        // The earlier sign-ins' timeouts end with it, answered long since.
+        while server.pauses.contains(5000) { server.elapse(5000) }
+        await settle()
+        XCTAssertEqual(host.state, .offline("No answer to the sign-in"), "it failed: offline")
+        server.hangs = false
         server.elapse(2000)
         await settle()
         XCTAssertEqual(host.state, .connected)
+    }
+
+    /// A channel opened again underneath that takes a while shows the
+    /// server as connecting.
+    func testAQuietReopenThatTakesAWhileShowsConnecting() async {
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        server.hangs = true
+        server.drop("connection lost")
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+        server.elapse(AgentServerConnection.quietHold)
+        await settle()
+        XCTAssertEqual(host.state, .connecting)
     }
 
     /// Going to the background starts the schedule over: a server that had
@@ -336,7 +362,7 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertTrue(server.pauses.contains(16_000), "four failures in")
 
         host.suspend()
-        host.resume(fresh: true)
+        host.resume()
         await settle()
         XCTAssertTrue(server.pauses.contains(2000), "tried at once, failed, and back to two seconds")
         server.signIn = .success("Scripted Mac")
@@ -376,7 +402,8 @@ final class HelloFlowTests: XCTestCase {
         host.suspend()
         let text = ConnectionLog.shared.text
         for expected in ["Book: connect asked for", "Book: signing in", "signed in after", "Scripted Mac: connected: welcome",
-                         "dropped: No answer to a heartbeat; retry 1 in 2 s", "signing in (retry 1)", "sign-in failed after",
+                         "dropped: No answer to a heartbeat; opening it again at once, still shown connected",
+                         "signing in by book.example, still shown connected", "retry 1 in 2 s", "signing in (retry 1)", "sign-in failed after",
                          "retry 2 in 4 s", "retry schedule reset"] {
             XCTAssertTrue(text.contains(expected), "no \"\(expected)\" in:\n\(text)")
         }

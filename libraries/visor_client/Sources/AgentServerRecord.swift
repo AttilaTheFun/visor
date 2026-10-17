@@ -33,6 +33,10 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     /// Other addresses it is reached at, as the server says: tried in
     /// turn when `address` does not answer.
     public var paths: [String]
+    /// The path the last sign-in answered on ("" for none yet): tried
+    /// first among those that fit as well, so a launch starts where the
+    /// last one got in.
+    public var lastPath: String
     /// The server said it stands alone: reached only at `address`, its
     /// other paths not learned or tried, and kept out of the relay.
     public var standalone: Bool
@@ -48,7 +52,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
                 provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", paths: [String] = [],
                 authentication: String = PasswordAuthenticator.name, standalone: Bool = false, relay: Bool? = nil,
-                fromAccount: Bool = false) {
+                fromAccount: Bool = false, lastPath: String = "") {
         self.standalone = standalone
         self.relay = relay
         self.fromAccount = fromAccount
@@ -62,6 +66,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         self.renamed = renamed
         self.serverID = serverID
         self.paths = paths
+        self.lastPath = lastPath
     }
 
     /// Every address to try, the preferred first, without repeats.
@@ -81,6 +86,35 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
             learned = true
         }
         return learned
+    }
+
+    /// The addresses the server gave at a sign-in, as its paths now, in
+    /// its order. One it no longer gives goes if it is at an interface's
+    /// address — an IP, which a lease that moved, a link-local address or
+    /// a bridge to a virtual machine leaves behind, and which would only
+    /// be tried and waited out — and stays after the server's own if it
+    /// is a name (a proxy, a tunnel it does not know of), as does the one
+    /// the last sign-in answered on (a port forwarded to it). Whether
+    /// they changed.
+    @MainActor @discardableResult
+    public mutating func takePaths(_ addresses: [String]) -> Bool {
+        guard !addresses.isEmpty else { return false }
+        var next: [String] = []
+        for path in addresses where !path.isEmpty && path != address && !next.contains(path) { next.append(path) }
+        for path in paths where path != address && !next.contains(path) {
+            if path != lastPath, let host = AgentServerConnection.host(ofPath: path), Self.isIP(host) { continue }
+            next.append(path)
+        }
+        guard next != paths else { return false }
+        paths = next
+        return true
+    }
+
+    /// An IPv4 or IPv6 address rather than a name.
+    static func isIP(_ host: String) -> Bool {
+        if host.contains(":") { return true }
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 4 && parts.allSatisfy { Int($0).map { (0...255).contains($0) } ?? false }
     }
 
     /// The server's own name, as a sign-in gives it: taken unless the
@@ -121,7 +155,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
             "id": .string(id), "name": .string(name), "address": .string(address), "secret": .string(secret),
             "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed),
             "serverID": .string(serverID), "paths": .array(paths.map(JSONValue.string)), "authentication": .string(authentication),
-            "standalone": .bool(standalone), "fromAccount": .bool(fromAccount)]
+            "standalone": .bool(standalone), "fromAccount": .bool(fromAccount), "lastPath": .string(lastPath)]
         if let relay { fields["relay"] = .bool(relay) }
         return .object(fields)
     }
@@ -137,6 +171,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
                   renamed: json["renamed"].bool ?? false, serverID: json["serverID"].string ?? "",
                   paths: (json["paths"].array ?? json["roads"].array)?.compactMap(\.string) ?? [],
                   authentication: json["authentication"].string ?? PasswordAuthenticator.name,
-                  standalone: json["standalone"].bool ?? false, relay: json["relay"].bool, fromAccount: json["fromAccount"].bool ?? false)
+                  standalone: json["standalone"].bool ?? false, relay: json["relay"].bool, fromAccount: json["fromAccount"].bool ?? false,
+                  lastPath: json["lastPath"].string ?? "")
     }
 }

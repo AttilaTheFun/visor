@@ -272,16 +272,17 @@ public final class VisorStore {
     /// The app came back to the front: every server is tried or checked
     /// at once (`AgentServerConnection.resume`). After time in the
     /// background on a host whose sockets do not outlive it (a phone),
-    /// each channel is opened afresh without being asked first.
+    /// requests start over on new connections; each channel is asked
+    /// whether it is there, and opened again underneath if not.
     public func resume(afterBackground: Bool = false) {
         guard !VisorFixture.active else { return }
         let fresh = afterBackground && (VisorHost.socket?.dropsInBackground ?? false)
         ConnectionLog.shared.note("app", "in front" + (afterBackground ? ", back from the background" : "")
-                                  + (fresh ? ": every channel is opened afresh" : ""))
+                                  + (fresh ? ": requests start over on new connections" : ""))
         // Requests must not ride connections that died while the app was
         // away: the host starts over with new ones.
         if fresh { VisorHost.http?.reset() }
-        servers.forEach { $0.resume(fresh: fresh) }
+        servers.forEach { $0.resume() }
     }
 
     /// The app left the front for the background: each server's retry
