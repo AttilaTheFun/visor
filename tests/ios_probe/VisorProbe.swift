@@ -323,11 +323,15 @@ final class VisorProbe: XCTestCase {
         XCTAssertTrue(pill.label.contains("2 new messages"), pill.label)
         XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when rows came in below")
         XCTAssertTrue(pill.waitForNonExistence(timeout: 9), "the pill stayed")
-        // The third row: the pill again, and its tap goes down to it.
-        XCTAssertTrue(pill.waitForExistence(timeout: 18), "no pill for the third row")
-        XCTAssertTrue(pill.label.contains("1 new message"), pill.label)
-        XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when the third row came in")
-        pill.tap()
+        // The third row: the pill again, and its tap goes down to it. Tapped
+        // where it is as soon as it is seen: it stays four seconds, and on a
+        // slow machine a query can take most of that.
+        let third = app.buttons.matching(NSPredicate(format: "identifier == 'new-rows-pill' AND label CONTAINS '1 new message'")).firstMatch
+        XCTAssertTrue(third.waitForExistence(timeout: 18), "no pill for the third row")
+        let spot = third.frame
+        let watchedTop = watched.frame.minY
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: spot.midX, dy: spot.midY)).tap()
+        XCTAssertEqual(watchedTop, before.minY, accuracy: 0.5, "what was read moved when the third row came in")
         let newest = app.staticTexts["All 42 sync tests pass, offline rows included."]
         XCTAssertTrue(newest.waitForExistence(timeout: 3), "the newest row is not in the thread")
         Thread.sleep(forTimeInterval: 1)
