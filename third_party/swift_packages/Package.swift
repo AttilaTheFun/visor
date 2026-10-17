@@ -23,7 +23,7 @@ let package = Package(
         // revision until its tag.
         .package(
             url: "https://github.com/AttilaTheFun/swift_sqlite.git",
-            revision: "1dd8c7263f0059b6e74090e05b299854f3dabd02"
+            revision: "70f0c45d6d1fc46b5a07e3fac59094aacd062585"
         ),
     ]
 )
