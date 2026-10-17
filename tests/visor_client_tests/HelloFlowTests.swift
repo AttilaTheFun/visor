@@ -464,6 +464,22 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertEqual(server.actions.map(\.1), ["s1", "s1"])
     }
 
+    /// The agent's questions answered from a client: the answers go with
+    /// the approval, allowed; no answers is a refusal. A permission is
+    /// allowed or denied with none.
+    func testAQuestionsAnswersGoWithTheApproval() async {
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        host.answer("s1", id: "q1", answers: ["Which color?": "Blue"])
+        host.answer("s1", id: "q2", answers: nil)
+        host.approve("s1", id: "p1", allow: true)
+        await settle()
+        XCTAssertEqual(server.actions.map(\.0), [.approve(id: "q1", allow: true, answers: ["Which color?": "Blue"]),
+                                                .approve(id: "q2", allow: false, answers: nil),
+                                                .approve(id: "p1", allow: true, answers: nil)])
+    }
+
     func testPasswordsAreKeptAsSecrets() {
         let settings = MemorySettings()
         VisorHost.settings = settings

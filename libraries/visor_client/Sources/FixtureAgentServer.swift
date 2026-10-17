@@ -40,8 +40,10 @@ final class FixtureAgentServer: AgentServer {
 
     func subscribe(_ session: String) {
         guard let onEvent else { return }
-        let approval = session == VisorFixture.chatSession
-            ? ApprovalRequest(id: "fixture-approval", tool: "Bash", summary: "swift test --filter SyncTests") : nil
+        // The chat waits on a tool call; on the question screen, on a question.
+        let approval: ApprovalRequest? = session != VisorFixture.chatSession ? nil
+            : VisorFixture.screen == "question" ? VisorFixture.question
+            : ApprovalRequest(id: "fixture-approval", tool: "Bash", summary: "swift test --filter SyncTests")
         let reply = Self.wire(.ephemeral(session: session, streams: [], status: [], activity: nil, busy: false,
                                          approval: approval, queued: [], notice: nil))
         Task { onEvent(.session(reply)) }

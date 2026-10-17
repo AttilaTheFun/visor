@@ -202,8 +202,12 @@ public final class AgentServerConnection: Identifiable {
             // and says where to go when the notification is opened.
             let key = record.address + "/" + new.id
             if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval {
-                notifications.notify(id: key + "/approval", title: "\(title) is waiting",
-                                     body: "Allow \(approval.tool)? " + approval.summary)
+                if let question = approval.questions?.first {
+                    notifications.notify(id: key + "/approval", title: "\(title) asks", body: question.question)
+                } else {
+                    notifications.notify(id: key + "/approval", title: "\(title) is waiting",
+                                         body: "Allow \(approval.tool)? " + approval.summary)
+                }
             }
             if let goal = old.goal, new.goal == nil {
                 notifications.notify(id: key + "/goal", title: "\(title): goal done", body: goal)
@@ -1359,7 +1363,13 @@ public final class AgentServerConnection: Identifiable {
     }
 
     public func approve(_ sessionID: String, id: String, allow: Bool) {
-        act(.approve(id: id, allow: allow), on: sessionID)
+        act(.approve(id: id, allow: allow, answers: nil), on: sessionID)
+    }
+
+    /// Answers the agent's questions (AskUserQuestion), by question; nil
+    /// leaves them unanswered, which the agent hears as a refusal.
+    public func answer(_ sessionID: String, id: String, answers: [String: String]?) {
+        act(.approve(id: id, allow: answers != nil, answers: answers), on: sessionID)
     }
 
     public func rename(_ sessionID: String, title: String) {

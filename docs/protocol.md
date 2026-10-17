@@ -94,7 +94,7 @@ under `/api`.
 | `POST /sessions/{id}/keepBranch` `…/continueBranch` | | same: when the conversation went on elsewhere (`otherBranch` in the session's info: the other branch's latest prompt), keep to the branch shown — the next message carries it on, resumed there with `--resume-session-at` — or continue the newest branch: the chat is read again from it (a new generation) and the agent is made again, resuming there |
 | `POST /sessions/{id}/permissions` | `skipPermissions` | same |
 | `POST /sessions/{id}/settings` | `model`, `effort` | same |
-| `POST /sessions/{id}/approve` | `id`, `allow` | same |
+| `POST /sessions/{id}/approve` | `id`, `allow`, `answers` | same |
 | `POST /sessions/{id}/rename` | `title` | same |
 | `DELETE /sessions/{id}` | | the remaining `sessions` |
 | `GET /folders?path=` | | `path` (resolved, `~` expanded) and `folders` (subfolders, hidden ones skipped) — the project picker |
@@ -146,7 +146,7 @@ and `subscribe` and stream the rest.
 | `unsubscribe` | `session` | The client left the session: nothing more of it is sent until it subscribes again. A server before 0.33 answers `error` "Unknown message unsubscribe", which a client lets pass. |
 | `permissions` | `session`, `skipPermissions` | Switch the session between auto (no prompts) and manual. Codex applies it next turn; Claude's process restarts (resumed by id) once the current turn ends. `sessions` follows. |
 | `settings` | `session`, `model`, `effort` | Change the model and/or effort (nil keeps the current one). Codex applies it next turn; Claude restarts (resumed by id) once idle. `sessions` follows. |
-| `approve` | `session`, `id`, `allow` | Answer a pending permission request (manual mode). |
+| `approve` | `session`, `id`, `allow`, `answers` | Answer a pending permission request (manual mode), or the agent's questions (`answers`: answer by question; several to one joined with ", "; no answers is a refusal). |
 | `archive` | `session` | End the agent gracefully (stdin closed, then terminated), keep the transcript and the agent's own session id on disk; the session lists as archived with its `resumeCommand`. |
 | `unarchive` | `session` | Bring it back; the next `send` resumes the agent's own session with the same agent, directory and permission mode. A `send` to an archived session unarchives it too. |
 | `end` | `session` | Stop and forget the session (archived or not). |
@@ -172,7 +172,7 @@ in its store.
 | `entry` | `session`, `entry` | A finished entry, or a replacement for the entry with the same id (an assistant message grows as its tool calls arrive). An assistant entry clears `streaming`. |
 | `activity` | `session`, `activity` | What the agent is doing ("Bash: ls"), or null. |
 | `busy` | `session`, `busy` | The turn started / ended. |
-| `approval` | `session`, `approval` | A tool call is waiting for Allow/Deny (`id`, `tool`, `summary`), or null once answered. `SessionInfo.pendingApproval` mirrors it. |
+| `approval` | `session`, `approval` | A tool call is waiting for Allow/Deny (`id`, `tool`, `summary`), or the agent asks the user something (`tool` "AskUserQuestion", `questions`: `[{question, header, options: [{label, description}], multiSelect}]`), or null once answered. `SessionInfo.pendingApproval` mirrors it. |
 | `failure` | `session`, `message` | Something went wrong; shown under the transcript until the next user turn. |
 
 `SessionInfo`: `id`, `agent` (`claude`, `codex`, `openrouter`), `cwd`, `title` (given, or the agent's name numbered within the folder),
@@ -237,17 +237,23 @@ holding the most in the agent's tree — usually a command it ran — is
 stopped, and the session is told; `memory` in a session's info is what
 the agent and what it runs use now.
 
-## Approvals (manual mode)
+## Approvals and questions
 
-In manual mode Claude runs with `--permission-mode acceptEdits` and
-`--permission-prompt-tool mcp__visor__approve`, a tool of the MCP server the
-menu bar app bundles (`visor_mcp.js`, run with node). Each permission request
-becomes a WebSocket connection from the shim to the app carrying
-`{"type":"approval_request","token":<agent token>,"session":…,"id":…,"text":<tool>,"prompt":<summary>}`;
+Claude runs with `--permission-prompt-tool mcp__visor__approve`, a tool of the
+MCP server the menu bar app bundles (`visor_mcp.js`, run with node), in either
+mode: in manual mode (`--permission-mode acceptEdits`) every tool call that
+is not an edit comes to it; auto-approving (`bypassPermissions`) only the
+agent's questions do (AskUserQuestion, which Claude Code offers only where a
+prompt can answer it; from 0.35). Each request becomes a WebSocket connection
+from the shim to the app carrying
+`{"type":"approval_request","token":<agent token>,"session":…,"id":…,"text":<tool>,"prompt":<summary>}`,
+with `questions` (the tool's own, as Claude Code gives them) for a question;
 the app shows it to subscribers as `approval` and lists the session as
 waiting; the client's `approve` is answered back to the shim as
-`{"type":"approval_result","id":…,"busy":<allow>}`, which the shim turns into
-Claude's allow/deny. The token is generated per app launch and is not the
+`{"type":"approval_result","id":…,"busy":<allow>,"answers":{…}}`, which the
+shim turns into Claude's allow/deny — for a question, allow with the tool's
+input and `answers` (`{<question>: <answer>}`), which Claude takes as the
+user's. The token is generated per app launch and is not the
 password. Codex's headless runs never ask; its manual mode is the
 workspace-write sandbox.
 

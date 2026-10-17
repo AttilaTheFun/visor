@@ -152,17 +152,18 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     private func spawn() throws -> any AgentChild {
         guard let executable = ToolPath.resolve(tool) else { throw AgentProcessError.toolMissing(tool) }
         var args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
-        // Visor's MCP server: the other sessions, and in manual mode the
-        // permission prompt answered from the client.
-        let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: !skipPermissions)
+        // Visor's MCP server: the other sessions, and the permission prompt
+        // answered from the client. Claude Code offers its questions to the
+        // user (AskUserQuestion) only where a prompt can answer them, so
+        // Claude has the prompt in either mode: auto-approving, only its
+        // questions come to it; manual, every tool call too. (The
+        // OpenRouter CLI has it only in manual mode, as before.)
+        let prompt = !skipPermissions || tool == "claude"
+        let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: prompt)
         if let mcp { args += ["--mcp-config", mcp] }
-        if skipPermissions {
-            args += ["--permission-mode", "bypassPermissions"]
-        } else {
-            // Manual: edits are accepted, everything else asks the user.
-            args += ["--permission-mode", "acceptEdits"]
-            if mcp != nil { args += ["--permission-prompt-tool", "mcp__visor__approve"] }
-        }
+        // Manual: edits are accepted, everything else asks the user.
+        args += ["--permission-mode", skipPermissions ? "bypassPermissions" : "acceptEdits"]
+        if mcp != nil, prompt { args += ["--permission-prompt-tool", "mcp__visor__approve"] }
         if let model, !model.isEmpty { args += ["--model", model] }
         if let effort, !effort.isEmpty { args += ["--effort", effort] }
         if let resumeID {

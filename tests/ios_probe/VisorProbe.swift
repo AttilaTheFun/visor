@@ -503,6 +503,27 @@ final class VisorProbe: XCTestCase {
         app.terminate()
     }
 
+    /// The agent's question (AskUserQuestion) opens as a sheet on its own:
+    /// Send waits for an answer, an option picked is one, and sending
+    /// closes the sheet; the composer keeps the question with Answer.
+    func testFixtureQuestion() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "question"]
+        app.launch()
+        let send = app.buttons["question-send"]
+        XCTAssertTrue(send.waitForExistence(timeout: 10), "the question did not open")
+        XCTAssertTrue(app.staticTexts["Which way should rows written offline go to the server?"].exists)
+        XCTAssertFalse(send.isEnabled, "Send before an answer")
+        app.buttons["approval-On reconnect"].tap()
+        XCTAssertTrue(send.isEnabled, "an option picked is an answer")
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        shot(app, "question")
+        send.tap()
+        XCTAssertTrue(send.waitForNonExistence(timeout: 5), "the sheet stayed")
+        XCTAssertTrue(app.buttons["answer"].waitForExistence(timeout: 5), "the composer does not keep the question")
+        app.terminate()
+    }
+
     /// Looks, and sends nothing: opens a session the phone already lists
     /// and photographs the chat, the composer with the keyboard up, and
     /// (by its environment) a search, the attach menu, a picture or what

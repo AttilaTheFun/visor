@@ -127,4 +127,11 @@ public enum VisorFixture {
         TranscriptEntry(id: "f8", role: .assistant, text: "", activities: ["Edit: Sources/Sync/RowStore.swift", "Edit: Sources/Sync/SyncQueue.swift", "Bash: swift build"]),
         TranscriptEntry(id: "f9", role: .assistant, text: "Rows now sync in the background, and the banner matches your layout. I'd like to run the tests next."),
     ]
+
+    /// The question the question screen's chat waits on (AskUserQuestion).
+    static let question = ApprovalRequest(
+        id: "fixture-question", tool: "AskUserQuestion", summary: "Which way should rows written offline go to the server?",
+        questions: [AgentQuestion(question: "Which way should rows written offline go to the server?", header: "Sync",
+                                  options: [AgentQuestion.Option(label: "On reconnect", description: "Everything kept goes as soon as the network is back."),
+                                            AgentQuestion.Option(label: "In the background", description: "A few at a time while the app is in use.")])])
 }
