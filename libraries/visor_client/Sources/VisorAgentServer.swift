@@ -64,6 +64,8 @@ public final class VisorAgentServer: AgentServer {
     /// How many messages this channel has brought: one more after a ping
     /// is the answer to it, whatever the message was.
     private var heard = 0
+    /// Who waits on the channel's next message (`verifyChannel`).
+    private var listening: [Answer] = []
     /// Whether this channel's socket opened and the login went out.
     private var loggedIn = false
 
@@ -72,33 +74,82 @@ public final class VisorAgentServer: AgentServer {
     }
 
     public func authenticate(_ record: AgentServerRecord) async throws -> String? {
-        self.record = record
-        if let sshAddress {
-            try await openTunnel(sshAddress)
-            // The socket file first, signed in by SSH alone; a server that
-            // does not serve it is reached at its port, with the password.
-            if let name = try? await hello() { return name }
-            try await fallBackToPort()
+        let opening = beginSignIn()
+        let signIn = try await signIn(record, opening: opening)
+        guard opening == tunnelOpenings else {
+            signIn.session?.close()
+            throw AgentServerError.message("Signing in again")
         }
+        return take(signIn)
+    }
+
+    /// One sign-in by the record's address, kept apart from this server's
+    /// own state until it is taken (`take`): what `hello` gave, and the
+    /// SSH connection it came through.
+    struct SignIn {
+        var record: AgentServerRecord
+        var session: (any VisorSSHSession)?
+        var tunnel: ServerAddress?
+        var headers: [String: String]
+        var token: String?
+        var identity: ServerIdentity?
+        var name: String?
+    }
+
+    /// A sign-in begins: whatever an earlier one left open goes, and one
+    /// still under way is overtaken (its connection closed when it ends).
+    func beginSignIn() -> Int {
+        closeTunnel()
+        tunnelOpenings += 1
+        return tunnelOpenings
+    }
+
+    /// A sign-in that got in becomes this server's: its address, its
+    /// tunnel, the token for the channel's login. The server's name.
+    func take(_ signIn: SignIn) -> String? {
+        closeTunnel()
+        record = signIn.record
+        tunnelSession = signIn.session
+        tunnel = signIn.tunnel
+        socketHeaders = signIn.headers
+        token = signIn.token
+        if let identity = signIn.identity { self.identity = identity }
+        return signIn.name
+    }
+
+    /// Signs in by the record's address. Over SSH: the socket file first,
+    /// signed in by SSH alone; a server that does not serve it is reached
+    /// at its port, with the password.
+    func signIn(_ record: AgentServerRecord, opening: Int) async throws -> SignIn {
+        guard let ssh = SSHAddress(record.address) else {
+            guard let address = ServerAddress(record.address) else { throw AgentServerError.message("Bad address") }
+            return try await hello(record, at: address, through: nil)
+        }
+        let (session, socketFile) = try await connectTunnel(ssh, opening: opening)
         do {
-            return try await hello()
+            if let signIn = try? await hello(record, at: socketFile, through: session) { return signIn }
+            let port = try await forwardPort(session)
+            return try await hello(record, at: port, through: session)
         } catch {
-            closeTunnel()
+            session.close()
             throw error
         }
     }
 
     /// `hello`: the server's name, and the token for the channel's login.
     /// A 401 is the server asking for a password.
-    private func hello() async throws -> String? {
+    private func hello(_ record: AgentServerRecord, at address: ServerAddress, through session: (any VisorSSHSession)?) async throws -> SignIn {
+        guard let http = VisorHost.http else { throw AgentServerError.message("No HTTP service on this host") }
         do {
-            socketHeaders = try await AgentServerAuthenticators.authenticator(for: record).headers(for: record)
-            let hello = try await call("GET", "/hello")
-            token = hello.token
+            let headers = try await AgentServerAuthenticators.authenticator(for: record).headers(for: record)
+            let text = try await http.request(method: "GET", url: address.api + "/hello", body: "", headers: headers)
+            let hello = Envelope.decode(text, defaultType: "reply") ?? Envelope(type: "reply")
+            var identity: ServerIdentity?
             if let id = hello.id, !id.isEmpty {
                 identity = ServerIdentity(id: id, addresses: hello.addresses ?? [], standalone: hello.standalone ?? false, version: hello.version)
             }
-            return hello.host.flatMap { $0.isEmpty ? nil : $0 }
+            return SignIn(record: record, session: session, tunnel: session == nil ? nil : address, headers: headers, token: hello.token,
+                          identity: identity, name: hello.host.flatMap { $0.isEmpty ? nil : $0 })
         } catch {
             if VisorHost.http?.status(of: error) == 401 { throw AgentServerError.needsAuthentication }
             throw error
@@ -137,6 +188,8 @@ public final class VisorAgentServer: AgentServer {
                         self.send(.login(password: self.record.secret, token: self.token, client: AgentServerRecord.clientID))
                     } else if event.hasPrefix("message ") {
                         self.heard += 1
+                        for answer in self.listening { answer.end() }
+                        self.listening = []
                         // Read off the main actor: a page of earlier rows
                         // is hundreds of them. The loop waits for each, so
                         // messages still arrive in order.
@@ -206,10 +259,37 @@ public final class VisorAgentServer: AgentServer {
     public func verifyChannel() async -> Bool {
         guard let id = socketID, let socket = VisorHost.socket else { return false }
         let before = heard
+        // Answered by the next message, or not within the time.
+        let answer = Answer()
+        listening.append(answer)
         send(.ping())
-        await socket.delay(milliseconds: Self.verifyTimeout)
+        Task {
+            await socket.delay(milliseconds: Self.verifyTimeout)
+            answer.end()
+        }
+        await answer.wait()
         // Another channel since: that one is not this question's to answer.
         return socketID != id || heard != before
+    }
+
+    /// A wait for the channel's next message, ended by it or by the time
+    /// running out, whichever comes first.
+    @MainActor
+    final class Answer {
+        private var ended = false
+        private var waiting: CheckedContinuation<Void, Never>?
+
+        func wait() async {
+            guard !ended else { return }
+            await withCheckedContinuation { waiting = $0 }
+        }
+
+        func end() {
+            guard !ended else { return }
+            ended = true
+            waiting?.resume()
+            waiting = nil
+        }
     }
 
     private func drop(_ id: Int32, _ reason: String, _ onEvent: @MainActor (AgentServerEvent) -> Void) {

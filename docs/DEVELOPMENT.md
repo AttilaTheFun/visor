@@ -26,10 +26,10 @@ Third-party: swift-nio-ssh 0.9 (SSH for the client and the server,
 through libraries/visor_ssh; it parses OpenSSH key lines but writes none,
 so `NIOSSHPublicKey+OpenSSH.swift` writes the kept host key from the
 key's bytes, read through reflection — a line to offer upstream instead),
-SQLite (the caches, through its C API: the system's on Apple's systems,
-SQLite's amalgamation 3.53.4 built in third_party/sqlite elsewhere,
-`--@visor//:sqlite` for a host's own), rules_swift_package_manager (rspm)
-brings SwiftPM packages into Bazel as `@swiftpkg_<identity>` — the
+SQLite (the caches, through swift_sqlite: the system's on Apple's
+systems, its vendored amalgamation 3.53.4 elsewhere, WebAssembly included; a
+Swift package, by revision in third_party/swift_packages like agent_ui),
+rules_swift_package_manager (rspm) brings SwiftPM packages into Bazel as `@swiftpkg_<identity>` — the
 identity keeps its dot: `@swiftpkg_agent_ui//:AgentUI`.
 
 ## 2. Setting up a Mac
@@ -182,13 +182,12 @@ in place when the file's copy arrives (`user-file-<uuid>`, words compared
 trimmed); file rows insert before trailing unsettled user rows.
 
 **Message cache** (`libraries/message_cache`, module `MessageCache`): one
-API over a `MessageStorage` — `SQLiteStorage` on every host (SQLite's C
-API, module `CSQLite`, from the `//:sqlite` label flag: the system's on
-Apple's systems, the amalgamation built in third_party/sqlite elsewhere —
-FTS5 required; a host with its own build, for wasm, sets the flag), or
+API over a `MessageStorage` — `SQLiteStorage` on every host (swift_sqlite's
+`SwiftSQLite`, `@swiftpkg_swift_sqlite//:SwiftSQLite`: the system's SQLite on Apple's
+systems, its amalgamation with FTS5 elsewhere, WebAssembly included), or
 `MemoryStorage` for tests and the fixture. `MessageCache.directory` is
 where a host keeps the file (else Application Support). The SwiftPM build
-(Linux server) takes the system's libsqlite3; Windows keeps it in memory.
+(Linux and Windows servers) takes the same package.
 Tables: sources (path, identity=inode and the reading's version — a new
 version reads every file again once, bytes,
 nextSeq), syncs (revision, generation), nodes (the source tree), messages
@@ -258,8 +257,16 @@ record row meanwhile; `turnStatus: [StatusItem]`). Sent text is trimmed.
 8, 16 s, then every 30 (`retryDelay(afterAttempt:)`). Each step has a
 limit, so a try that hangs (a request riding a connection that died while
 the app was away) becomes a drop and a retry: the sign-in has 5 s
-(`signInTimeout`), the socket 4 s to open and have its login answered
-(`VisorAgentServer.loginTimeout`). The heartbeat
+(`signInTimeout`; 2 s on the first round for a path on the device's own
+network, `localSignInTimeout`, which answers in milliseconds or not at
+all), the socket 4 s to open and have its login answered
+(`VisorAgentServer.loginTimeout`). A channel that was up and goes (a
+socket error, a heartbeat unanswered) is opened again at once, by the
+paths from the best, and the server is still shown as connected
+(0.34, Logan: "We shouldn't consider a connection disconnected unless we
+were unable to have a heartbeat returned in time"): only when every path
+has failed is it offline and on the schedule, and a reopen that takes
+longer than `quietHold` (6 s) shows it as connecting. The heartbeat
 (`VisorAgentServer.watch`): a `ping` envelope every 16 s, and a
 channel that says nothing for 8 s after one is closed and reported as
 dropped, so a socket that died quietly (a sleep, a change of network) is
@@ -273,12 +280,13 @@ The app's place on screen drives the rest (`VisorRootView` on
 every server's schedule over and keeps the log. Coming back
 (`VisorStore.resume`) tries every server at the same moment, each on its
 own: one not connected is opened at once, and a try that fails follows
-the schedule from 2 s. One that looks connected is asked outright
-(`AgentServer.verifyChannel`: a ping, 1 s) and opened afresh if it does
-not answer — except after time in the background on a host whose sockets
-do not outlive it (`VisorSocketService.dropsInBackground`: an iPhone),
-where every channel is opened afresh without asking and the host's HTTP
-connections are let go first (`VisorHTTPService.reset`).
+the schedule from 2 s. One that was connected stays shown so and is asked
+outright (`AgentServer.verifyChannel`: a ping, 1 s); one that does not
+answer is opened again underneath, as a drop is. After time in the
+background on a host whose sockets do not outlive it
+(`VisorSocketService.dropsInBackground`: an iPhone) the host's HTTP
+connections are let go first (`VisorHTTPService.reset`). Until 0.34 such a
+host opened every channel afresh without asking, and showed it connecting.
 
 The timed parts wait on the host's timer (`delay`), so the tests drive
 them by hand (`ScriptedSocket.elapse`, `ScriptedServer.elapse`).
@@ -422,11 +430,26 @@ one's own, or a front that has signed the user in.
 is on now (each interface's address and mask) and whether it has a
 tailnet address, and calls back when the networks change (NWPathMonitor).
 Paths are ranked local, overlay, other, unlikely (a LAN's address when
-away, a tailnet's with no tailnet) — the one that answered last first
-among its equals — and `VisorStore` has every connection re-rank on a
-change: a server connected by a path that is no longer the best is
-connected again by the one that is. A host without the service (the
-web, Android) tries paths in the order kept.
+away, a tailnet's with no tailnet; a link's own 169.254 address counts as
+a LAN's) — the one that answered last first among its equals, kept in the
+record (`lastPath`) so a launch starts with it — and `VisorStore` has
+every connection re-rank on a change: a server connected by a path that
+is no longer the best is connected again by the one that is, and one
+already signing in by the best is left to finish (the monitor's first
+word at launch). A host without the service (the web, Android) tries
+paths in the order kept, the last one that answered first. The paths are
+the server's own word at each sign-in (`AgentServerRecord.takePaths`): an
+IP it no longer gives goes (a lease that moved, a link-local address, a
+bridge to a virtual machine, each of which was tried and waited out on
+every launch before 0.34); a name stays after them, as does the path last
+answered on. A Visor server is signed in to by the round's paths at once
+(`AgentServer.racesPaths`, `VisorAgentServer+PathRace`): the first at
+once, the next when it has had its head start alone (400 ms; an SSH path,
+the way in, 1 s), or at once when every one before has failed, each with
+its own timeout, and the first to get in taken — so a path that says
+nothing costs its head start, not its timeout. A 401 is the answer only
+when no path gets in. Another provider's server is signed in to one path
+at a time.
 
 **Bootstrapping SSH** (`VisorServer+SSHKeys`, `AgentServerConnection.
 useSSH`, `enrollSSHIfWanted`): a client that is in by any path hands its
@@ -725,7 +748,7 @@ not been run against real agents.
   as its user would run it: a password, `run` checked with the server
   probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
   it; on the Mac, in a container: a podman machine of your own, an image
-  with `swift:6.4-noble`, `libsqlite3-dev` and Node 22, the checkout
+  with `swift:6.4-noble` and Node 22, the checkout
   mounted, `swift build --product visor-server` then this.
 - REST locally is plain HTTP: `http://127.0.0.1:7433/api/...` with
   `Authorization: Bearer <password>` (`security find-generic-password -s

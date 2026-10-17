@@ -102,7 +102,16 @@ public final class AgentServerConnection: Identifiable {
     /// answered last time first; `pathIndex` is the one being tried.
     private var paths: [String] = []
     private var pathIndex = 0
-    private var lastGoodPath: String?
+    /// The path the last sign-in answered on, kept in the record so a
+    /// launch starts with it.
+    private var lastGoodPath: String? {
+        get { record.lastPath.isEmpty ? nil : record.lastPath }
+        set { if record.lastPath != (newValue ?? "") { record.lastPath = newValue ?? "" } }
+    }
+    /// A channel that was up is being opened again, and the server is
+    /// still shown as connected: it is taken to be until a try fails, or
+    /// the new channel takes longer than `quietHold`.
+    private var quiet = false
     /// Told when the server is connected and has said who it is (the
     /// store folds other records of it into this one, and the relay
     /// reports to it).
@@ -290,6 +299,7 @@ public final class AgentServerConnection: Identifiable {
 
     public func disconnect() {
         wantsConnection = false
+        quiet = false
         polling?.cancel()
         polling = nil
         closeSocket()
@@ -309,7 +319,7 @@ public final class AgentServerConnection: Identifiable {
     private func open() {
         guard wantsConnection else { return }
         closeSocket()
-        state = .connecting
+        if !quiet { state = .connecting }
         let mine = generation
         let server = server
         if pathIndex == 0 || paths.isEmpty { paths = pathsToTry() }
@@ -323,11 +333,26 @@ public final class AgentServerConnection: Identifiable {
         var record = record
         record.address = path
         let started = log.now()
-        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : "") + (path == self.record.address ? "" : " by \(path)"))
+        // A path on the network the device is on answers in milliseconds
+        // or not at all: on the first round it is given less time, and the
+        // next path is tried sooner.
+        let timeouts = paths.map { attempt == 0 && Self.fit(of: $0) == .local ? Self.localSignInTimeout : Self.signInTimeout }
+        let timeout = timeouts[min(pathIndex, paths.count - 1)]
+        // Every path in the round at once, each a moment after the one
+        // before, where the server signs in so: the round is one try.
+        let racing = server.racesPaths && pathIndex == 0 && paths.count > 1
+        let candidates = paths
+        // SSH, the way in, has longer alone: its handshake takes longer.
+        let headStarts = paths.map { SSHAddress($0) != nil ? Self.sshHeadStart : Self.headStart }
+        let limit = racing ? headStarts.dropLast().reduce(0, +) + (timeouts.max() ?? Self.signInTimeout) + 1_000 : timeout
+        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : "")
+             + (racing ? " by the first to answer of \(paths.joined(separator: ", "))" : " by \(path)") + (quiet ? ", still shown connected" : ""))
         signingIn = mine
         Task { [weak self] in
             do {
-                let name = try await server.authenticate(record)
+                let (name, path) = racing
+                    ? try await server.authenticate(record, byFirstOf: candidates, headStarts: headStarts, timeouts: timeouts)
+                    : (try await server.authenticate(record), path)
                 guard let self, self.generation == mine, self.wantsConnection else { return }
                 self.signingIn = nil
                 self.note("signed in after \(self.log.since(started)) ms; opening the channel")
@@ -354,9 +379,12 @@ public final class AgentServerConnection: Identifiable {
                 if error as? AgentServerError == .needsAuthentication {
                     self.note("sign-in refused after \(self.log.since(started)) ms: needs signing in")
                     self.wantsConnection = false
+                    self.quiet = false
                     self.state = .needsAuthentication
                 } else {
                     self.note("sign-in failed after \(self.log.since(started)) ms")
+                    // Raced, the round is over: no path is left to step to.
+                    if racing { self.pathIndex = self.paths.count - 1 }
                     self.dropped("\(error)")
                 }
             }
@@ -364,15 +392,24 @@ public final class AgentServerConnection: Identifiable {
         // A sign-in that never answers (a request riding a connection that
         // died while the app was away) is given up on, not waited out.
         Task { [weak self] in
-            await server.delay(milliseconds: Self.signInTimeout)
+            await server.delay(milliseconds: limit)
             guard let self, self.signingIn == mine, self.generation == mine else { return }
             self.signingIn = nil
+            self.note("no answer to the sign-in by \(racing ? "any path" : path) in \(limit) ms")
+            if racing { self.pathIndex = self.paths.count - 1 }
             self.dropped("No answer to the sign-in")
         }
     }
 
-    /// How long a sign-in has to answer before the try is given up.
+    /// How long one path has to answer before the next starts beside it,
+    /// where the server signs in by several at once; an SSH path longer.
+    static let headStart: Int32 = 400
+    static let sshHeadStart: Int32 = 1_000
+
+    /// How long a sign-in has to answer before the try is given up; on
+    /// the first round, a path on the device's own network has less.
     static let signInTimeout: Int32 = 5_000
+    static let localSignInTimeout: Int32 = 2_000
 
     /// The paths for a round: the record's own paths ranked by fit — a
     /// path on a network the device is on now first (the LAN at home),
@@ -441,11 +478,13 @@ public final class AgentServerConnection: Identifiable {
         return parts.count == 4 && parts[0] == 100 && (64...127).contains(parts[1])
     }
 
-    /// 10/8, 172.16/12, 192.168/16: a LAN's addresses, reachable only from it.
+    /// 10/8, 172.16/12, 192.168/16: a LAN's addresses, reachable only
+    /// from it; and 169.254/16, a link's own (a cable between two Macs).
     static func isPrivate(_ host: String) -> Bool {
         let parts = host.split(separator: ".").compactMap { Int($0) }
         guard parts.count == 4 else { return false }
         return parts[0] == 10 || (parts[0] == 172 && (16...31).contains(parts[1])) || (parts[0] == 192 && parts[1] == 168)
+            || (parts[0] == 169 && parts[1] == 254)
     }
 
     /// The device's networks changed: a server not connected is tried
@@ -456,9 +495,21 @@ public final class AgentServerConnection: Identifiable {
         guard wantsConnection else { return }
         let best = pathsToTry().first
         if state == .connected, let path, path == best { return }
-        note("the networks changed: connecting by \(best ?? record.address)" + (state == .connected ? " instead of \(path ?? "")" : ""))
+        // Already on its way in by the path that fits best (the system's
+        // first word at launch, as the first sign-in runs): left to finish.
+        let trying = path ?? (signingIn != nil && paths.indices.contains(pathIndex) ? paths[pathIndex] : nil)
+        if state == .connecting || quiet, let trying, trying == best {
+            note("the networks changed: already connecting by \(trying)")
+            return
+        }
+        note("the networks changed: connecting by \(best ?? record.address)" + (state == .connected ? " instead of \(path ?? ""), still shown connected" : ""))
+        // Connected by a path that no longer fits best: moved underneath,
+        // still shown as connected.
+        if state == .connected, !quiet {
+            quiet = true
+            holdQuietly()
+        }
         attempt = 0
-        lastGoodPath = nil
         pathIndex = 0
         open()
     }
@@ -479,7 +530,7 @@ public final class AgentServerConnection: Identifiable {
             if changed { onRecordChange?() }
             return
         }
-        if record.learnPaths(identity.addresses) { changed = true }
+        if record.takePaths(identity.addresses) { changed = true }
         if changed { onRecordChange?() }
     }
 
@@ -530,8 +581,12 @@ public final class AgentServerConnection: Identifiable {
             do {
                 try await server.authorizeSSHKey(key)
                 guard let self, self.generation == mine else { return }
-                self.note("this device's SSH key was authorized; connecting over SSH")
+                self.note("this device's SSH key was authorized; connecting over SSH, still shown connected")
                 self.lastGoodPath = nil
+                if self.state == .connected {
+                    self.quiet = true
+                    self.holdQuietly()
+                }
                 self.connect()
             } catch {
                 self?.note("the SSH key was not authorized: \(error)")
@@ -562,24 +617,27 @@ public final class AgentServerConnection: Identifiable {
         }
     }
 
-    /// The app came back to the front. A phone drops the channel whenever
-    /// the app leaves it, and whatever was waiting to retry was not
-    /// running either: so a server that is not connected is tried again
-    /// now, from the start of the schedule, and one that looks connected
-    /// is asked whether it still is, and opened afresh if it does not
-    /// answer — or, when `fresh` (the host says its sockets do not outlive
-    /// the app's time in the background), opened afresh without asking. A
-    /// server waiting for the user to sign in is left alone.
-    ///
+    /// The app came back to the front. Whatever was waiting to retry was
+    /// not running while it was away: so a server that is not connected is
+    /// tried again now, from the start of the schedule. One that was
+    /// connected still shows so, and its channel is asked whether it is
+    /// there (a phone's may have died while the app was away); one that
+    /// does not answer is opened again underneath, and shown otherwise only
+    /// if that fails. A server waiting for the user to sign in is left
+    /// alone.
     ///
     /// Every server is tried at the same moment, each on its own; a try
     /// that fails is followed by the schedule from its start (2, 4, 8…).
-    public func resume(fresh: Bool = false) {
+    public func resume() {
         guard wantsConnection else {
             note("back in front: left alone (\(state.label))")
             return
         }
-        guard state == .connected, !fresh else {
+        if quiet { return note("back in front: already opening the channel again") }
+        // On its way in already (the launch's own first try, as the app
+        // first comes to the front): left to finish, not started over.
+        if state == .connecting { return note("back in front: already connecting") }
+        guard state == .connected else {
             note("back in front: connecting now (was \(state.label))")
             attempt = 0
             open()
@@ -588,13 +646,12 @@ public final class AgentServerConnection: Identifiable {
         note("back in front: asking the open channel whether it is there")
         let mine = generation
         let server = server
+        let asked = log.now()
         Task { [weak self] in
             let alive = await server.verifyChannel()
-            guard let self, self.generation == mine, self.wantsConnection else { return }
-            self.note(alive ? "the channel answered" : "the channel did not answer: opening afresh")
-            guard !alive else { return }
-            self.attempt = 0
-            self.open()
+            guard let self, self.generation == mine, self.wantsConnection, self.state == .connected else { return }
+            guard !alive else { return self.note("the channel answered in \(self.log.since(asked)) ms") }
+            self.dropped("No answer to a heartbeat on coming back")
         }
     }
 
@@ -645,21 +702,54 @@ public final class AgentServerConnection: Identifiable {
         attempt >= 5 ? 30 : 1 << max(1, attempt)
     }
 
+    /// How long a channel opened again underneath may take before the
+    /// server is shown as connecting: a little more than a sign-in has.
+    static let quietHold: Int32 = 6_000
+    private var quietTries = 0
+
+    /// Shows the server as connecting once the channel opened again
+    /// underneath has taken `quietHold`, if it is still being opened.
+    private func holdQuietly() {
+        quietTries += 1
+        let mine = quietTries
+        Task { [weak self] in
+            await self?.server.delay(milliseconds: Self.quietHold)
+            guard let self, self.quiet, self.quietTries == mine else { return }
+            self.note("the channel is taking a while: shown as connecting")
+            self.quiet = false
+            self.state = .connecting
+        }
+    }
+
     private func dropped(_ reason: String) {
         generation += 1
         server.closeChannel()
-        if case .failed = state {} else { state = wantsConnection ? .offline(reason) : .disconnected }
-        for transcript in transcripts.values { transcript.busy = false; transcript.activity = nil }
-        guard wantsConnection else {
-            note("dropped: \(reason); not retrying")
+        // A channel that was up, gone: opened again at once, by the paths
+        // from the best, and still shown as connected — which it is taken
+        // to be until every path has failed, or it takes too long.
+        if wantsConnection, state == .connected, !quiet {
+            note("dropped: \(reason); opening it again at once, still shown connected")
+            quiet = true
+            attempt = 0
+            pathIndex = 0
+            path = nil
+            holdQuietly()
+            open()
             return
         }
         // Another path to the same server is tried at once; the wait
         // comes once every path has been.
-        if path == nil, pathIndex + 1 < paths.count {
+        if wantsConnection, path == nil, pathIndex + 1 < paths.count {
             pathIndex += 1
-            note("dropped: \(reason); trying \(paths[pathIndex])")
+            note("dropped: \(reason); trying \(paths[pathIndex])" + (quiet ? ", still shown connected" : ""))
             open()
+            return
+        }
+        quiet = false
+        if case .failed = state {} else { state = wantsConnection ? .offline(reason) : .disconnected }
+        for transcript in transcripts.values { transcript.busy = false; transcript.activity = nil }
+        guard wantsConnection else {
+            note("dropped: \(reason); not retrying")
             return
         }
         pathIndex = 0
@@ -679,6 +769,7 @@ public final class AgentServerConnection: Identifiable {
         switch event {
         case .welcome(let name, let list, let catalogs):
             note("connected: welcome \(log.since(channelAsked)) ms after the channel was asked for, \(list.count) sessions")
+            quiet = false
             state = .connected
             live = true
             attempt = 0
@@ -713,9 +804,11 @@ public final class AgentServerConnection: Identifiable {
         case .refused(let message):
             note("login refused: \(message)")
             wantsConnection = false
+            quiet = false
             state = .needsAuthentication
         case .failed(let message):
             note("the server answered with an error: \(message)")
+            quiet = false
             state = .failed(message)
         case .sessions(let list):
             let before = sessions
@@ -853,11 +946,31 @@ public final class AgentServerConnection: Identifiable {
         }
     }
 
-    /// Opens a session's transcript: its rows sync, and its state (working,
-    /// status lines, an approval asked for) follows over the socket. A
-    /// session left and let go of reads its latest rows from the cache
-    /// again, and syncs on from there.
+    /// Opens a session's transcript for a screen that shows it: its rows
+    /// sync, and its state (working, status lines, an approval asked for)
+    /// follows over the socket. A session left and let go of reads its
+    /// latest rows from the cache again, and syncs on from there. Each
+    /// screen is counted, and the session is let go of only when none
+    /// shows it (`leave`).
     public func subscribe(_ sessionID: String) {
+        onScreen[sessionID, default: 0] += 1
+        follow(sessionID)
+    }
+
+    /// A screen found its session let go of while it shows it: taken up
+    /// again at once (the screen is counted already).
+    public func takeUp(_ sessionID: String) {
+        guard transcripts[sessionID]?.released == true else { return }
+        note("thread \(sessionID.prefix(8)): let go of while on screen; taken up again")
+        follow(sessionID)
+    }
+
+    /// How many screens show each session. A screen built again can appear
+    /// before the one it replaces goes, so a session is let go of only once
+    /// the count is back to none.
+    private var onScreen: [String: Int] = [:]
+
+    private func follow(_ sessionID: String) {
         releasing.removeValue(forKey: sessionID)?.cancel()
         let transcript = transcript(for: sessionID)
         if transcript.released {
@@ -881,6 +994,9 @@ public final class AgentServerConnection: Identifiable {
     /// sync stops, and the server stops sending its state.
     public func leave(_ sessionID: String) {
         guard transcripts[sessionID] != nil else { return }
+        let left = max(0, (onScreen[sessionID] ?? 0) - 1)
+        onScreen[sessionID] = left == 0 ? nil : left
+        guard left == 0 else { return note("thread \(sessionID.prefix(8)): one screen of it gone, \(left) still showing it") }
         releasing.removeValue(forKey: sessionID)?.cancel()
         releasing[sessionID] = Task { [weak self] in
             try? await Task.sleep(for: Self.releaseDelay)
@@ -891,12 +1007,17 @@ public final class AgentServerConnection: Identifiable {
 
     func release(_ sessionID: String) {
         releasing[sessionID] = nil
+        // Shown again since, or the session the app is showing: kept.
+        guard onScreen[sessionID] == nil else { return }
+        if let viewing = VisorNotificationHandler.shared.viewing, viewing.session == sessionID, viewing.computer == record.address {
+            return note("thread \(sessionID.prefix(8)): on screen, kept")
+        }
         syncing.removeValue(forKey: sessionID)?.cancel()
         pendingSubscriptions.remove(sessionID)
         if state == .connected { server.unsubscribe(sessionID) }
         guard let transcript = transcripts[sessionID] else { return }
-        transcript.release()
         transcript.released = true
+        transcript.release()
         note("thread \(sessionID.prefix(8)): left, its rows let go of")
     }
 

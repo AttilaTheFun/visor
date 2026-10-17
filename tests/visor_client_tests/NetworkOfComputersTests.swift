@@ -65,6 +65,83 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(server.signedInBy.count, 3)
     }
 
+    /// The path that answered is kept in the record: the next launch (a
+    /// new connection from the saved record) tries it first among those
+    /// that fit as well.
+    func testTheLastPathIsTriedFirstAtTheNextLaunch() async {
+        let record = AgentServerRecord(name: "Mini", address: "http://10.0.0.9:7433", secret: "pw", provider: "scripted",
+                                       paths: ["http://10.0.0.2:7433"])
+        let server = scripted(record)
+        server.refused = ["http://10.0.0.9:7433"]
+        let host = AgentServerConnection(record: record)
+        host.connect()
+        await settle()
+        XCTAssertEqual(host.record.lastPath, "http://10.0.0.2:7433")
+        let saved = AgentServerRecord(json: host.record.json)
+        XCTAssertEqual(saved?.lastPath, "http://10.0.0.2:7433")
+        let launched = AgentServerConnection(record: saved!)
+        launched.connect()
+        await settle()
+        XCTAssertEqual(server.signedInBy.suffix(1), ["http://10.0.0.2:7433"], "the stale address was not tried again first")
+    }
+
+    /// The paths are the server's own word at each sign-in: an IP it no
+    /// longer gives (a lease that moved, a link-local address, a bridge
+    /// to a virtual machine) goes; a name stays after them, as does the
+    /// path the last sign-in answered on.
+    func testPathsTheServerNoLongerGivesGo() {
+        var record = AgentServerRecord(name: "Mini", address: "ssh://logan@192.168.4.49", provider: "scripted",
+                                       paths: ["ssh://logan@169.254.179.38", "http://192.168.64.1:7433", "https://proxy.example.com/visor",
+                                               "http://203.0.113.5:7433", "http://[fe80::1]:7433"],
+                                       lastPath: "http://203.0.113.5:7433")
+        XCTAssertTrue(record.takePaths(["http://192.168.4.49:7433", "ssh://logan@192.168.4.49", "ssh://logan@100.90.45.11"]))
+        XCTAssertEqual(record.paths, ["http://192.168.4.49:7433", "ssh://logan@100.90.45.11", "https://proxy.example.com/visor",
+                                      "http://203.0.113.5:7433"])
+        XCTAssertFalse(record.takePaths(["http://192.168.4.49:7433", "ssh://logan@100.90.45.11"]), "nothing new")
+        XCTAssertFalse(record.takePaths([]), "a server that gives none leaves them")
+        XCTAssertTrue(AgentServerRecord.isIP("fe80::1"))
+        XCTAssertFalse(AgentServerRecord.isIP("logans-mac-mini.tail83099f.ts.net"))
+        XCTAssertEqual(AgentServerConnection.fit(of: "ssh://logan@169.254.179.38"), .other, "no network service: nothing known")
+    }
+
+    /// A link's own address (169.254) is a LAN's: out of reach unless
+    /// the device is on that link.
+    func testALinkLocalAddressIsUnlikelyOffItsLink() {
+        let network = ScriptedNetwork()
+        VisorHost.network = network
+        defer { VisorHost.network = nil }
+        XCTAssertEqual(AgentServerConnection.fit(of: "ssh://logan@169.254.179.38"), .unlikely)
+        network.local = ["169.254.179.38"]
+        XCTAssertEqual(AgentServerConnection.fit(of: "ssh://logan@169.254.179.38"), .local)
+    }
+
+    /// The networks speaking while a sign-in is on its way by the path
+    /// that fits best (the system's first word at launch): it is left to
+    /// finish, not started over.
+    func testANetworkChangeLeavesASignInOnTheBestPath() async {
+        let network = ScriptedNetwork()
+        VisorHost.network = network
+        defer { VisorHost.network = nil }
+        network.local = ["192.168.4.49"]
+        let record = AgentServerRecord(name: "Mini", address: "http://192.168.4.49:7433", secret: "pw", provider: "scripted",
+                                       paths: ["http://100.90.45.11:7433"])
+        let server = scripted(record)
+        server.hangs = true
+        let host = AgentServerConnection(record: record)
+        host.connect()
+        await settle()
+        host.networkChanged()
+        await settle()
+        XCTAssertEqual(server.pauses.filter { $0 == AgentServerConnection.localSignInTimeout }.count, 1, "one sign-in, not two")
+        XCTAssertEqual(host.state, .connecting)
+        // A LAN path that does not answer is left after 2 s, not 5.
+        server.hangs = false
+        server.elapse(AgentServerConnection.localSignInTimeout)
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertEqual(host.path, "http://100.90.45.11:7433")
+    }
+
     /// Every path refused: the wait, then the paths again from the start.
     func testEveryRoadRefusedMeansTheWait() async {
         let record = AgentServerRecord(name: "Mini", address: "http://a", secret: "pw", provider: "scripted", paths: ["http://b"])

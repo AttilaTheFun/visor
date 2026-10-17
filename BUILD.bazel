@@ -45,17 +45,6 @@ label_flag(
     build_setting_default = "//libraries/visor_pasteboard",
 )
 
-# SQLite, for the message cache (a C module, CSQLite, with SQLite's API
-# and its full-text index, FTS5): by default the system's on Apple's
-# systems and SQLite's amalgamation built here elsewhere. A host that builds
-# SQLite its own way (for wasm, with its own file system) sets the flag to
-# its library of that module:
-#   --@visor//:sqlite=@<host>//:sqlite
-label_flag(
-    name = "sqlite",
-    build_setting_default = "//third_party/sqlite:default",
-)
-
 # The camera (module VisorCamera: `Camera.available` and the `cameraCapture`
 # modifier): by default UIKit's picker on an iPhone or iPad, none elsewhere.
 # A host with a camera of its own sets the flag to its library of that

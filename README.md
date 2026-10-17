@@ -88,7 +88,7 @@ through rules_swift_package_manager from third_party/swift_packages.
     bazel run //:xcodeproj     # generates Visor.xcodeproj for Xcode (not committed)
 
 The command-line server for Linux and Windows is SwiftPM's (Package.swift
-at the root; Swift 6.2 or later, and on Linux `libsqlite3-dev`):
+at the root; Swift 6.2 or later):
 
     swift build -c release --product visor-server
     .build/release/visor-server            # run here, saying what it does

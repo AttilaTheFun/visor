@@ -5,17 +5,16 @@ package(default_visibility = ["//visibility:public"])
 
 # The message cache: a session's rows, where they came from, and how far
 # they were synced — the same on the server (from the agents' own files)
-# and on a client (from the server). SQLite on every host (`//:sqlite`);
+# and on a client (from the server). SQLite on every host (swift_sqlite);
 # in memory only for tests and the screenshot fixture.
 swift_library(
     name = "message_cache",
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "MessageCache",
-    defines = ["MESSAGE_CACHE_SQLITE"],
     deps = [
         "//:foundation",
-        "//:sqlite",
         "//libraries/visor_protocol",
+        "@swiftpkg_swift_sqlite//:SwiftSQLite",
     ],
 )

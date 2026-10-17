@@ -109,6 +109,7 @@ final class CacheWriteTests: XCTestCase {
         let transcript = try open()
         host.subscribe("S")
         await settle()
+        host.leave("S")
         host.release("S")
         XCTAssertTrue(transcript.entries.isEmpty)
         XCTAssertTrue(transcript.released)
@@ -119,5 +120,32 @@ final class CacheWriteTests: XCTestCase {
         XCTAssertEqual(transcript.entries.count, AgentServerConnection.initialRows)
         XCTAssertEqual(transcript.entries.last?.id, "r299")
         XCTAssertEqual(transcript.revision, 3)
+    }
+
+    /// A screen built again appears before the one it replaces goes: the
+    /// session is still shown, and is not let go of. Nor is the one the app
+    /// says is on screen; and one let go of all the same is taken up again
+    /// by the screen that finds it so.
+    func testASessionStillShownIsNotLetGoOf() async throws {
+        let transcript = try open()
+        host.subscribe("S")
+        host.subscribe("S")
+        host.leave("S")
+        host.release("S")
+        XCTAssertFalse(transcript.released, "the new screen shows it")
+        XCTAssertEqual(transcript.entries.count, AgentServerConnection.initialRows)
+
+        host.leave("S")
+        VisorNotificationHandler.shared.viewing = NotificationTarget(computer: host.record.address, session: "S")
+        host.release("S")
+        XCTAssertFalse(transcript.released, "the session the app is showing")
+        VisorNotificationHandler.shared.viewing = nil
+
+        host.release("S")
+        XCTAssertTrue(transcript.released)
+        host.takeUp("S")
+        await settle()
+        XCTAssertFalse(transcript.released)
+        XCTAssertEqual(transcript.entries.count, AgentServerConnection.initialRows)
     }
 }

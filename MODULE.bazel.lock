@@ -631,7 +631,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 66b57d6cd69fd75a5291eb5d18b8791856076fafb130985e46e7e66d5687f8c9"
+          "FILE:@@//third_party/swift_packages/Package.resolved cb821318ae2730158fe9e9b0950d73df8f1437b4c41d6ef0c9b2a409d560f62c"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -665,6 +665,24 @@
               "commit": "3ec281496f28a3b6581afd946b759e2642f5cd8d",
               "remote": "https://github.com/apple/swift-nio-ssh.git",
               "version": "0.15.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": ""
+            }
+          },
+          "swiftpkg_swift_sqlite": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_sqlite",
+              "commit": "70f0c45d6d1fc46b5a07e3fac59094aacd062585",
+              "remote": "https://github.com/AttilaTheFun/swift_sqlite.git",
+              "version": "0.34.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -860,6 +878,7 @@
           "explicitRootModuleDirectDeps": [
             "swiftpkg_agent_ui",
             "swiftpkg_swift_nio_ssh",
+            "swiftpkg_swift_sqlite",
             "swift_package"
           ],
           "explicitRootModuleDirectDevDeps": [],

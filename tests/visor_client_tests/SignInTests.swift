@@ -172,8 +172,8 @@ final class SignInTests: XCTestCase {
         XCTAssertEqual(host.state, .connected)
     }
 
-    /// No answer within 8 s of a ping: the channel is dropped, and the
-    /// connection starts its retries.
+    /// No answer within 8 s of a ping: the channel is dropped, and opened
+    /// again at once while the server is still shown as connected.
     func testAHeartbeatThatIsNotAnsweredDropsTheChannel() async {
         let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example"))
         host.connect()
@@ -185,8 +185,9 @@ final class SignInTests: XCTestCase {
         await settle()
         socket.elapse(8000)
         await settle()
-        XCTAssertEqual(host.state, .offline("No answer to a heartbeat"))
-        XCTAssertTrue(socket.pauses.contains(2000), "the first retry is two seconds off")
+        XCTAssertEqual(socket.opened.count, 2, "a new socket, at once")
+        XCTAssertFalse(socket.pauses.contains(2000), "no retry waited out")
+        XCTAssertEqual(host.state, .connected)
     }
 
     /// Asked outright (the app back in front), a channel that answers the
@@ -195,8 +196,10 @@ final class SignInTests: XCTestCase {
         let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example"))
         host.connect()
         await settle()
+        ConnectionLog.shared.clear()
         host.resume()
         await settle()
+        XCTAssertTrue(ConnectionLog.shared.text.contains("the channel answered"), "on the pong, not after the second")
         socket.elapse(1000)
         await settle()
         XCTAssertEqual(socket.opened.count, 1, "it answered")

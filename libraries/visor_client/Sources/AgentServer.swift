@@ -20,6 +20,18 @@ public protocol AgentServer: AnyObject {
     /// `AgentServerError.needsAuthentication` when the credentials are
     /// missing or refused, which the connection shows and does not retry.
     func authenticate(_ record: AgentServerRecord) async throws -> String?
+    /// Whether the server signs in by several paths at once
+    /// (`authenticate(_:byFirstOf:headStarts:timeouts:)`). One that does not
+    /// is signed in by one path at a time, the next tried when one fails.
+    var racesPaths: Bool { get }
+    /// Signs in by whichever of `paths` answers first (the record's
+    /// address aside): the first tried at once, each next one when the
+    /// one before has had its `headStarts` entry alone, or at once when
+    /// every one before it has failed, each given its `timeouts` entry. The server's name and the
+    /// path that answered. `needsAuthentication` only when no path got in
+    /// and one was refused for want of credentials.
+    func authenticate(_ record: AgentServerRecord, byFirstOf paths: [String], headStarts: [Int32],
+                      timeouts: [Int32]) async throws -> (name: String?, path: String)
     /// Opens the live channel after a sign-in. What the server says comes
     /// back through `onEvent`, starting with `.welcome`; `.closed` ends it
     /// (the connection reopens it after a while).
@@ -173,6 +185,13 @@ public protocol AgentServer: AnyObject {
 }
 
 public extension AgentServer {
+    var racesPaths: Bool { false }
+    func authenticate(_ record: AgentServerRecord, byFirstOf paths: [String], headStarts: [Int32],
+                      timeouts: [Int32]) async throws -> (name: String?, path: String) {
+        var record = record
+        record.address = paths.first ?? record.address
+        return (try await authenticate(record), record.address)
+    }
     var starting: SessionStarting { .inFolders }
     func startChoices() async throws -> [StartChoice] { [] }
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool,

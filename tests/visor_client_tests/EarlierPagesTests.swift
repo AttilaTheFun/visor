@@ -36,6 +36,15 @@ final class EarlierPagesTests: XCTestCase {
         }
     }
 
+    /// Settles until `done`, for as long as a slow machine takes (two
+    /// seconds at most): the queue is another thread.
+    private func settle(until done: () -> Bool) async {
+        for _ in 0..<200 where !done() {
+            await settle()
+            if !done() { try? await Task.sleep(nanoseconds: 10_000_000) }
+        }
+    }
+
     private func rows(_ prefix: String, _ count: Int) -> [TranscriptEntry] {
         (0..<count).map { TranscriptEntry(id: "\(prefix)\($0)", role: .assistant, text: "row \($0)") }
     }
@@ -62,23 +71,23 @@ final class EarlierPagesTests: XCTestCase {
 
         host.loadEarlier("S")
         host.loadEarlier("S")
-        await settle()
+        await settle { !transcript.loadingEarlier }
         XCTAssertEqual(transcript.entries.first?.id, "r60", "one page of 50, asked for twice")
         XCTAssertEqual(transcript.entries.count, 150)
         XCTAssertTrue(server.earlierAsked.isEmpty, "the server is not asked while the cache has rows")
 
         host.loadEarlier("S")
-        await settle()
+        await settle { !transcript.loadingEarlier }
         host.loadEarlier("S")
-        await settle()
+        await settle { !transcript.loadingEarlier }
         XCTAssertEqual(transcript.entries.first?.id, "r0")
         XCTAssertTrue(transcript.hasEarlier, "the server may have rows before the cache's first")
 
         host.loadEarlier("S")
-        await settle()
+        await settle { !server.earlierAsked.isEmpty }
         XCTAssertEqual(server.earlierAsked.map(\.before), ["r0"])
         server.deliver(earlier([], more: false))
-        await settle()
+        await settle { !transcript.hasEarlier }
         XCTAssertFalse(transcript.hasEarlier)
         XCTAssertEqual(transcript.entries.count, 210)
     }

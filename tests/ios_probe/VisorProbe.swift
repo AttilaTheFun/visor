@@ -308,24 +308,32 @@ final class VisorProbe: XCTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
             .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)))
         Thread.sleep(forTimeInterval: 1.5)
-        // A row in view to watch: the first of these that can be seen.
-        let read = ["layout I want for the offline banner", "Rows written offline are all on the server", "the sync notes", "Found it."]
+        // A row in view to watch: the first of these that can be seen —
+        // plain text rows, whose frame is read at once (a /goal card's took
+        // up to 10 s on CI, and the pill, which stays 4 s, was gone).
+        let read = ["layout I want for the offline banner", "the sync notes", "Found it."]
             .lazy.map { app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", $0)).firstMatch }
             .first { $0.exists && $0.isHittable }
         let watched = try XCTUnwrap(read, "no row in view after scrolling up")
         let before = watched.frame
         let pill = app.buttons["new-rows-pill"]
-        XCTAssertTrue(pill.waitForExistence(timeout: 20), "no pill when rows came in below")
+        // Waited for with its count: on a slow machine the pill can show
+        // the first of the two rows for a moment before the second.
+        let two = app.buttons.matching(NSPredicate(format: "identifier == 'new-rows-pill' AND label CONTAINS '2 new messages'")).firstMatch
+        XCTAssertTrue(two.waitForExistence(timeout: 20), "no pill for the two rows that came in below")
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         shot(app, "arrivals-pill")
-        XCTAssertTrue(pill.label.contains("2 new messages"), pill.label)
         XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when rows came in below")
         XCTAssertTrue(pill.waitForNonExistence(timeout: 9), "the pill stayed")
-        // The third row: the pill again, and its tap goes down to it.
-        XCTAssertTrue(pill.waitForExistence(timeout: 18), "no pill for the third row")
-        XCTAssertTrue(pill.label.contains("1 new message"), pill.label)
-        XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when the third row came in")
-        pill.tap()
+        // The third row: the pill again, and its tap goes down to it. Tapped
+        // where it is as soon as it is seen, with nothing asked in between:
+        // it stays four seconds, and on CI's simulator one query can take
+        // most of that. (That what is read does not move is the first
+        // arrival's to show.)
+        let third = app.buttons.matching(NSPredicate(format: "identifier == 'new-rows-pill' AND label CONTAINS '1 new message'")).firstMatch
+        XCTAssertTrue(third.waitForExistence(timeout: 18), "no pill for the third row")
+        let spot = third.frame
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: spot.midX, dy: spot.midY)).tap()
         let newest = app.staticTexts["All 42 sync tests pass, offline rows included."]
         XCTAssertTrue(newest.waitForExistence(timeout: 3), "the newest row is not in the thread")
         Thread.sleep(forTimeInterval: 1)
