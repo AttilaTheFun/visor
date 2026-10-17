@@ -12,11 +12,8 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            revision: "d20cb2cd27d7e33ad25a5552570de4f6127c3708"
+            revision: "d8f92f52c1bf8d1011b5ec006a91fa7889520489"
         ),
-        // The transcript cache: indexed, searchable rows of every session's
-        // file, kept by the server off the main thread.
-        .package(url: "https://github.com/stephencelis/SQLite.swift.git", exact: "0.15.3"),
         // SSH as a road to a server: the client's own SSH connection, a
         // port forwarded to the server on its loopback (SSHAgentServer).
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.9.0"),

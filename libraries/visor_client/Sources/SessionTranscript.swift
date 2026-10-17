@@ -138,6 +138,19 @@ public final class SessionTranscript {
         get { _ = tick; return _error }
         set { _error = newValue; changed() }
     }
+    /// A sign-in waiting for its code (`/login`): the page to sign in at.
+    /// What the user sends next is the code.
+    @ObservationIgnored private var _signIn: String? = nil
+    public var signIn: String? {
+        get { _ = tick; return _signIn }
+        set {
+            guard newValue != _signIn else { return }
+            _signIn = newValue
+            // The `/login` that started it is taken.
+            if newValue != nil { _sending.removeAll { $0.entry.text.hasPrefix("/login") } }
+            changed()
+        }
+    }
     /// A tool call waiting for Allow or Deny.
     @ObservationIgnored private var _pendingApproval: ApprovalRequest? = nil
     public var pendingApproval: ApprovalRequest? {
@@ -200,9 +213,41 @@ public final class SessionTranscript {
     /// The generation of the rows held; a different one in an answer means
     /// the rows were rebuilt and the answer is the whole, not a delta.
     @ObservationIgnored public var generation = -1
-    /// Told what a sync brought — the whole, or rows new or changed — so
-    /// the cache keeps it. Set by the connection that owns this.
-    @ObservationIgnored var keep: ((_ whole: Bool, _ rows: [TranscriptEntry], _ state: SyncState) -> Void)?
+    /// Told what a sync brought, as the cache is to write it, with where
+    /// the sync then stands. Set by the connection that owns this.
+    @ObservationIgnored var keep: ((_ write: CacheWrite, _ state: SyncState) -> Void)?
+
+    /// What a sync changes in the cache: the cache keeps every row synced
+    /// or paged to, so a change is written as a change — never the rows in
+    /// memory in place of the history kept.
+    enum CacheWrite: Equatable {
+        /// Rows new at the end or changed in place, and rows gone.
+        case upsert([TranscriptEntry], removed: [String])
+        /// Everything from the row `from` on is these rows (a row moved,
+        /// inserted or removed there); `all`, the rows held, if the cache
+        /// does not have that row.
+        case rewrite(from: String, [TranscriptEntry], all: [TranscriptEntry])
+        /// Everything after the row `after` is these rows (the whole, in a
+        /// new generation, carrying on the history kept); the rows alone,
+        /// if the cache does not have that row.
+        case follow(after: String, [TranscriptEntry])
+        /// The history is these rows, and nothing before them.
+        case replace([TranscriptEntry])
+    }
+
+    /// A client behind the server catches up a page at a time (`later`):
+    /// the revision it asks past and the last row it was given, and the
+    /// revision the server had when it began, which it holds once the
+    /// last page is in.
+    struct CatchUp: Equatable {
+        var since: Int
+        var after: String
+        var revision: Int
+    }
+    @ObservationIgnored var catchUp: CatchUp?
+    /// Let go of when the session was left: refilled from the cache, and
+    /// synced again, when it is opened.
+    @ObservationIgnored var released = false
 
     /// Whether a sync's answer brings anything: the first answer, rows
     /// past the revision held, or the rows as a whole in another
@@ -211,7 +256,7 @@ public final class SessionTranscript {
     /// resumed conversation's, imported by the computer) may come at
     /// revision 0 too: they come whole, in the computer's generation.
     func takes(_ envelope: Envelope) -> Bool {
-        !loaded || (envelope.revision ?? -1) != revision || envelope.reset == true
+        !loaded || (envelope.revision ?? -1) != revision || envelope.reset == true || envelope.later == true || catchUp != nil
             || (envelope.generation.map { $0 != generation } ?? false)
     }
 
@@ -221,22 +266,23 @@ public final class SessionTranscript {
         // running.
         let first = !_loaded
         let rows = envelope.entries ?? []
-        let whole: Bool
-        var kept = rows
+        let write: CacheWrite
         // The rows replaced by the answer's, not merged with them.
         var replaced = false
         if envelope.reset != true, let generation = envelope.generation, generation == self.generation, loaded {
             // A delta: the rows removed since the revision held go; each
             // row new, changed or moved since goes after the row it follows
-            // on the computer. Only rows appended at the end, or changed in
-            // place, leave the cache's copy right as it is; otherwise it
-            // takes the rows as a whole.
+            // on the computer. Rows appended at the end, or changed in
+            // place, are written to the cache as they are; anything else
+            // rewrites the cache from the first row whose place changed.
+            let old = entries
             var next = entries
             var structural = false
-            if let removed = envelope.removed, !removed.isEmpty {
+            let removed = envelope.removed ?? []
+            if !removed.isEmpty {
                 let gone = Set(removed)
                 next.removeAll { gone.contains($0.id) }
-                structural = true
+                structural = next.count != old.count
             }
             let after = envelope.after ?? []
             for (offset, row) in rows.enumerated() {
@@ -245,6 +291,7 @@ public final class SessionTranscript {
                     let before = index > 0 ? next[index - 1].id : ""
                     if anchor == nil || anchor == before { next[index] = row; continue }
                     next.remove(at: index)
+                    structural = true
                 }
                 if let anchor, anchor.isEmpty {
                     next.insert(row, at: 0)
@@ -256,21 +303,48 @@ public final class SessionTranscript {
                     next.append(row)
                 }
             }
-            whole = structural
-            if structural { kept = next }
+            // The first place where the rows held differ from before.
+            let diverge = (0..<min(old.count, next.count)).first { old[$0].id != next[$0].id } ?? (next.count < old.count ? next.count : nil)
+            if structural, let first = diverge, first < old.count {
+                write = .rewrite(from: old[first].id, Array(next[min(first, next.count)...]), all: next)
+            } else {
+                // Rows that went from what the cache keeps beyond the
+                // rows held go too.
+                write = .upsert(rows, removed: removed)
+            }
             entries = next
         } else {
-            whole = true
             replaced = true
             carryDisplayIDs(from: entries, to: rows)
-            entries = rows
+            // The whole carries on the history held when its first row
+            // follows a row held (`follows`): the rows before it stay, here
+            // and in the cache. Otherwise it is the history.
+            if let follows = envelope.follows, !follows.isEmpty, !rows.isEmpty {
+                if let index = entries.firstIndex(where: { $0.id == follows }) {
+                    entries = Array(entries[...index]) + rows
+                    replaced = false
+                } else {
+                    entries = rows
+                }
+                write = .follow(after: follows, rows)
+            } else {
+                entries = rows
+                write = .replace(rows)
+            }
             generation = envelope.generation ?? generation
             // Earlier pages start over from these rows.
             loadingEarlier = false
             earlierAsked = nil
             reachedStart = false
         }
-        revision = envelope.revision ?? revision
+        // Catching up: the revision held stays where it was until the last
+        // page, so a sync cut short asks again from there.
+        if envelope.later == true, let last = rows.last?.id {
+            catchUp = CatchUp(since: catchUp?.since ?? revision, after: last, revision: catchUp?.revision ?? (envelope.revision ?? revision))
+        } else {
+            revision = catchUp?.revision ?? envelope.revision ?? revision
+            catchUp = nil
+        }
         // The server's word on rows before its own last ones: the whole
         // answer's says what is before it; a delta's only that there are
         // rows before the server's last page, which the rows held may
@@ -282,9 +356,26 @@ public final class SessionTranscript {
         }
         if envelope.entries?.contains(where: { $0.role == .user }) == true { error = nil }
         loaded = true
-        keep?(whole, kept, SyncState(revision: revision, generation: generation))
+        keep?(write, SyncState(revision: revision, generation: generation))
         settleSending()
         if first { flush() }
+    }
+
+    /// Lets go of the rows held, when the session is left: the cache keeps
+    /// them, and the session reads its latest rows from there when it is
+    /// opened again. What is on its way, or still to be told, stays.
+    func release() {
+        entries = []
+        displayIDs = [:]
+        loaded = false
+        // Asked for whole again, unless the cache says where it stood.
+        revision = 0
+        generation = -1
+        catchUp = nil
+        loadingEarlier = false
+        earlierAsked = nil
+        reachedStart = false
+        hasEarlier = false
     }
 
     /// Rows from before the first shown, put in front of it; `more`, whether
@@ -305,6 +396,24 @@ public final class SessionTranscript {
     func take(notice new: String?) {
         if let new, new != notice { sending.removeAll { $0.entry.text.hasPrefix("/") } }
         notice = new
+    }
+
+    /// Drops an outgoing goal command once the session's goal says it was
+    /// taken: `/goal <objective>` when the goal is that objective, `/goal
+    /// clear` when there is none. Codex takes a goal as a request of its
+    /// own, and its log may never write the command back (codex 0.16x set
+    /// one with no row at all), so the record's copy cannot be waited for.
+    func settleGoal(_ goal: String?) {
+        guard !sending.isEmpty else { return }
+        sending.removeAll { out in
+            let text = out.entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard text.hasPrefix("/goal ") else { return false }
+            let objective = text.dropFirst("/goal ".count).trimmingCharacters(in: .whitespaces)
+            if objective == "clear" { return goal == nil }
+            if objective == "pause" || objective == "resume" { return false }
+            guard let goal else { return false }
+            return CommandWords.same("/goal " + goal, text)
+        }
     }
 
     /// Drops an outgoing message once the transcript has moved past when
@@ -378,6 +487,7 @@ public final class SessionTranscript {
             latestActivity = envelope.activity
             busy = envelope.busy ?? false
             pendingApproval = envelope.approval
+            signIn = envelope.signIn
             take(notice: envelope.notice)
         case "status":
             turnStatus = envelope.status ?? []

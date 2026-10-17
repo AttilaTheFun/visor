@@ -1,15 +1,21 @@
 #if MESSAGE_CACHE_SQLITE
 import Foundation
-import SQLite
 import VisorProtocol
 
 extension MessageCache {
-    /// A cache on disk under Application Support, by name; in memory if
-    /// that cannot be opened.
+    /// A cache in a SQLite file of this name, in `directory` (set by a
+    /// host that keeps its files elsewhere: the browser's, a phone's), or
+    /// else in the app's Application Support folder; in memory only if no
+    /// file can be opened there.
     public static func open(named name: String) -> MessageCache {
         if let storage = storageProvider?(name) { return MessageCache(storage: storage) }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "Visor")
+        let base: URL
+        if let directory {
+            base = URL(fileURLWithPath: directory, isDirectory: true)
+        } else {
+            base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent(Bundle.main.bundleIdentifier ?? "Visor")
+        }
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         let path = base.appendingPathComponent(name + ".sqlite").path
         if let storage = try? SQLiteStorage(path: path) { return MessageCache(storage: storage) }
@@ -21,7 +27,8 @@ extension MessageCache {
 }
 #else
 extension MessageCache {
-    /// No SQLite on this host: the cache lives in memory.
+    /// No SQLite in this build (the Windows server): the cache lives in
+    /// memory.
     public static func open(named name: String) -> MessageCache {
         if let storage = storageProvider?(name) { return MessageCache(storage: storage) }
         return inMemory()

@@ -348,7 +348,7 @@
     },
     "@@pybind11_bazel+//:internal_configure.bzl%internal_configure_extension": {
       "general": {
-        "bzlTransitiveDigest": "NRXra7941UfmNUyIxnLt82V5hULluVGL2nBsijTl4j4=",
+        "bzlTransitiveDigest": "BsgERqYptkJeeC8wFaLj251IoTZTSy/58WA6kVp0q8I=",
         "usagesDigest": "D1r3lfzMuUBFxgG8V6o0bQTLMk3GkaGOaPzw53wrwyw=",
         "recordedInputs": [
           "REPO_MAPPING:pybind11_bazel+,bazel_tools bazel_tools",
@@ -631,7 +631,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved e559fefd3f53f5f114bc725cb4db06e736e1c98a04d126f69643036bd7fbd00b"
+          "FILE:@@//third_party/swift_packages/Package.resolved 66b57d6cd69fd75a5291eb5d18b8791856076fafb130985e46e7e66d5687f8c9"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -645,26 +645,8 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "d20cb2cd27d7e33ad25a5552570de4f6127c3708",
+              "commit": "d8f92f52c1bf8d1011b5ec006a91fa7889520489",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": ""
-            }
-          },
-          "swiftpkg_sqlite.swift": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_sqlite.swift",
-              "commit": "a95fc6df17d108bd99210db5e8a9bac90fe984b8",
-              "remote": "https://github.com/stephencelis/SQLite.swift.git",
-              "version": "0.15.3",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -877,7 +859,6 @@
         "moduleExtensionMetadata": {
           "explicitRootModuleDirectDeps": [
             "swiftpkg_agent_ui",
-            "swiftpkg_sqlite.swift",
             "swiftpkg_swift_nio_ssh",
             "swift_package"
           ],

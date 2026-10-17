@@ -480,6 +480,18 @@ final class VisorProbe: XCTestCase {
         field.tap()
         field.typeText("/comp")
         XCTAssertTrue(app.staticTexts["/compact"].waitForExistence(timeout: 5), "the commands were not offered")
+        // Picked, the command is the draft, and the caret is after it:
+        // what is typed next follows the command ("/compact x", not
+        // "/comx pact").
+        app.staticTexts["/compact"].tap()
+        Thread.sleep(forTimeInterval: 0.5)
+        field.typeText("x")
+        XCTAssertEqual(field.value as? String, "/compact x")
+        // The draft is kept for the session: cleared, so the cases after
+        // this one open the chat as they expect it (the microphone shows
+        // only with nothing written).
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "/compact x".count))
+        Thread.sleep(forTimeInterval: 1)
         app.terminate()
     }
 

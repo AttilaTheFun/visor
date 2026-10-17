@@ -22,14 +22,17 @@ let strict: [SwiftSetting] = [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-
 let shared: [Target] = [
     .target(name: "VisorProtocol", path: "libraries/visor_protocol/Sources", swiftSettings: strict),
     .target(name: "ClaudeTranscript", path: "libraries/claude_transcript/Sources", swiftSettings: strict),
+    // SQLite's C API from the system's SQLite (libsqlite3), as Bazel's
+    // `//:sqlite` gives it elsewhere.
+    .systemLibrary(name: "CSQLite", path: "third_party/sqlite/swiftpm", pkgConfig: "sqlite3", providers: [.apt(["libsqlite3-dev"])]),
     .target(
         name: "MessageCache",
         dependencies: [
             "VisorProtocol",
-            .product(name: "SQLite", package: "SQLite.swift", condition: .when(platforms: [.macOS, .linux])),
+            .target(name: "CSQLite", condition: .when(platforms: [.macOS, .linux])),
         ],
         path: "libraries/message_cache/Sources",
-        // Where there is no SQLite (Windows), the cache is kept in memory.
+        // Where there is no system SQLite (Windows), the cache is kept in memory.
         swiftSettings: strict + [.define("MESSAGE_CACHE_SQLITE", .when(platforms: [.macOS, .linux]))]
     ),
     .target(name: "AgentHostWire", path: "libraries/agent_host_wire/Sources", swiftSettings: strict),
@@ -80,9 +83,5 @@ let package = Package(
     name: "visor",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
-    dependencies: [
-        // The message cache, where there is SQLite to keep it in.
-        .package(url: "https://github.com/stephencelis/SQLite.swift.git", exact: "0.15.3"),
-    ],
     targets: shared + system + tests
 )

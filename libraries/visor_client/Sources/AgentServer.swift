@@ -38,6 +38,10 @@ public protocol AgentServer: AnyObject {
 
     /// Follows a session: its state and new rows arrive as `.session` events.
     func subscribe(_ session: String)
+    /// Stops following a session that was left.
+    func unsubscribe(_ session: String)
+    /// The code a sign-in page showed, for the session's sign-in (`/login`).
+    func signIn(_ session: String, code: String)
     /// The user has read what the session had to tell them.
     func acknowledge(_ session: String)
     /// Asks for the rows before `before`.
@@ -60,8 +64,10 @@ public protocol AgentServer: AnyObject {
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo]
     /// The session's rows past `revision` in `generation`, as a transcript
     /// envelope; the server holds the answer until the rows have moved
-    /// (or for a while, then answers with the same).
-    func transcript(of session: String, since revision: Int, generation: Int) async throws -> Envelope
+    /// (or for a while, then answers with the same). With `after`, a
+    /// client catching up asks for the next page of those rows, the ones
+    /// after that row (answered at once; `later` says more follow).
+    func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope
     /// The slash commands the session's agent takes.
     func commands(for session: String) async throws -> [SlashCommand]
     /// The agent's own sessions started in `cwd`, newest first.

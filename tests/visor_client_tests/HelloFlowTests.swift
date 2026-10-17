@@ -17,6 +17,8 @@ final class ScriptedServer: AgentServer {
     var signIn: Result<String?, Error> = .success("Scripted Mac")
     var channels = 0
     var subscribed: [String] = []
+    var unsubscribed: [String] = []
+    var codes: [String] = []
     var actions: [(SessionAction, String)] = []
     private var onEvent: (@MainActor (AgentServerEvent) -> Void)?
 
@@ -109,6 +111,8 @@ final class ScriptedServer: AgentServer {
     func sessions() async throws -> [SessionInfo] { asked += 1; return try listed.get() }
 
     func subscribe(_ session: String) { subscribed.append(session) }
+    func unsubscribe(_ session: String) { unsubscribed.append(session) }
+    func signIn(_ session: String, code: String) { codes.append(code) }
     func acknowledge(_ session: String) {}
     /// The rows asked for over the channel: the session, and the row they go before.
     var earlierAsked: [(session: String, before: String)] = []
@@ -130,7 +134,7 @@ final class ScriptedServer: AgentServer {
     var choices: [StartChoice] = []
     func startChoices() async throws -> [StartChoice] { choices }
     var managesSessions = true
-    func transcript(of session: String, since revision: Int, generation: Int) async throws -> Envelope {
+    func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope {
         // Nothing moves: held, as a server holds it.
         while !Task.isCancelled { try await Task.sleep(nanoseconds: 60_000_000_000) }
         throw CancellationError()

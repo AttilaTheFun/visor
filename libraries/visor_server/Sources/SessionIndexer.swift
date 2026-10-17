@@ -16,6 +16,9 @@ actor SessionIndexer {
     struct Loaded: Sendable {
         let rows: [TranscriptEntry]
         let more: Bool
+        /// The row the first of `rows` follows ("" when it is the first of
+        /// all; nil when not known).
+        var follows: String? = nil
         let prompts: [String]
         let abandoned: Set<String>
         let abandonedPrompts: Int
@@ -188,8 +191,13 @@ actor SessionIndexer {
             newestPrompt = (other, row.text)
         }
         do { try store.removeMessages(in: sessionID, sourceKeys: shape.abandoned) } catch { VisorServer.log("index: drop \(self.sessionID): \(String(describing: error))") }
-        let page = store.messages(in: sessionID, limit: window)
-        return Loaded(rows: page.messages, more: page.more, prompts: shape.prompts, abandoned: shape.abandoned, abandonedPrompts: shape.abandonedPrompts,
+        // One more than the window: the row before it, which a client
+        // that keeps it carries its history on from.
+        let page = store.messages(in: sessionID, limit: window + 1)
+        let over = page.messages.count > window
+        return Loaded(rows: Array(page.messages.suffix(window)), more: over || page.more,
+                      follows: over ? page.messages.first?.id : (page.more ? nil : ""),
+                      prompts: shape.prompts, abandoned: shape.abandoned, abandonedPrompts: shape.abandonedPrompts,
                       head: shape.head, leaf: shape.leaf, elsewhere: otherBranch)
     }
 

@@ -39,34 +39,50 @@ extension SessionRecord {
     func replaceEntriesForTesting(_ rows: [TranscriptEntry]) { entries = rows }
 
     /// The rows changed since a revision, each with the row it follows
-    /// ("" for the first), and the rows removed since — or every row, for
-    /// a revision from before the generation began.
-    func rows(since: Int) -> (rows: [TranscriptEntry], after: [String], removed: [String]) {
-        let start = max(0, entries.count - Self.servedRows)
+    /// ("" for the first), and the rows removed since — at most `limit`,
+    /// in order, from after the row `after` (nil: from the first); `later`
+    /// says whether more changed rows follow. Every row held is looked at,
+    /// not only the latest: a client far behind is brought up a page at a
+    /// time, with nothing skipped.
+    func rows(since: Int, after: String? = nil, limit: Int = Int.max)
+        -> (rows: [TranscriptEntry], after: [String], removed: [String], later: Bool) {
+        var start = 0
+        if let after, let index = entries.firstIndex(where: { $0.id == after }) { start = index + 1 }
         var rows: [TranscriptEntry] = []
-        var after: [String] = []
+        var anchors: [String] = []
+        var later = false
         // A row never stamped came with the record, before any revision.
         for index in start..<entries.count where (rowSeq[entries[index].id] ?? 0) > since {
+            guard rows.count < limit else {
+                later = true
+                break
+            }
             rows.append(entries[index])
-            after.append(index > 0 ? entries[index - 1].id : "")
+            anchors.append(index > 0 ? entries[index - 1].id : "")
         }
-        let removed = removedAt.filter { $0.value > since }.map(\.key)
-        return (rows, after, removed)
+        // What went is said once, with the first page.
+        let removed = after == nil ? removedAt.filter { $0.value > since }.map(\.key) : []
+        return (rows, anchors, removed, later)
     }
 
     /// The record, or the rows of it changed since a revision the client
-    /// holds — with the generation, so the client knows whether it may
-    /// merge these as a delta or must take them as the whole.
-    func transcriptEnvelope(since: Int?) -> Envelope {
-        let delta = since.map { rows(since: $0) }
+    /// holds — a page of them, from after the row `after` — with the
+    /// generation, so the client knows whether it may merge these as a
+    /// delta or must take them as the whole.
+    func transcriptEnvelope(since: Int?, after: String? = nil) -> Envelope {
+        let delta = since.map { rows(since: $0, after: after, limit: Self.pageRows) }
         var e = Envelope.transcript(session: info.id, entries: delta?.rows ?? Array(entries.suffix(Self.servedRows)), streaming: streaming,
                                     activity: activity, busy: info.busy, error: error)
         if let delta {
             e.after = delta.after
             e.removed = delta.removed
+            if delta.later { e.later = true }
         } else {
-            // The rows as a whole: the client replaces what it holds.
+            // The rows as a whole: the client replaces what it holds from
+            // the row the first of them follows, which it may keep.
             e.reset = true
+            let start = entries.count - min(entries.count, Self.servedRows)
+            e.follows = start > 0 ? entries[start - 1].id : (moreBefore ? firstFollows : "")
         }
         e.more = moreBefore || entries.count > Self.servedRows
         e.notice = notice
@@ -82,7 +98,7 @@ extension SessionRecord {
         e.session = info.id
         // From what is here first; the cache holds what is before that.
         if let index = entries.firstIndex(where: { $0.id == id }), index > 0 {
-            let start = max(0, index - Self.servedRows)
+            let start = max(0, index - Self.pageRows)
             e.entries = Array(entries[start..<index])
             e.more = start > 0 || moreBefore
             return e
@@ -96,7 +112,7 @@ extension SessionRecord {
         // one the client has paged to past the record's own rows. (Before
         // the record's first, always, sent a client that had paged that far
         // the rows it had, and it asked again for ever.)
-        let page = await indexer.earlier(before: id, limit: Self.servedRows)
+        let page = await indexer.earlier(before: id, limit: Self.pageRows)
         e.entries = page.rows
         e.more = page.more
         return e

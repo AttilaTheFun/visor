@@ -7,14 +7,14 @@ import VisorProtocol
 // page in front of the rows, and the thread's bottom anchor keeps what is
 // on screen where it is.
 extension AgentServerConnection {
-    /// How many earlier rows go in at once.
-    static let earlierPage = 200
+    /// How many earlier rows go in at once: a page.
+    static var earlierPage: Int { pageRows }
 
     /// Asks for the rows before the first one the transcript has. Asked
     /// again while a page is on its way, it does nothing.
     public func loadEarlier(_ sessionID: String) {
         let transcript = transcript(for: sessionID)
-        guard !transcript.loadingEarlier, let before = transcript.entries.first?.id else { return }
+        guard !transcript.loadingEarlier, !transcript.released, let before = transcript.entries.first?.id else { return }
         transcript.loadingEarlier = true
         let cache = Self.cache, key = cacheKey(sessionID), limit = Self.earlierPage
         Task { [weak self] in

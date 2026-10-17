@@ -7,7 +7,7 @@
 #   tools/ios_ui_tests.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
-CASES="VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning"
+CASES="VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning,VisorProbe/testFixtureSlashCommands"
 LOG="$(mktemp)"
 # On the simulator the tests run on, when it exists already (CI's is new):
 # the app taken off, since installing over a copy can leave its old binary,

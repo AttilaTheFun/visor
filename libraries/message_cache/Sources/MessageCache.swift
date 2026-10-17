@@ -23,6 +23,15 @@ public final class MessageCache: Sendable {
     }
     private static let provider = Mutex<(@Sendable (_ name: String) -> (any MessageStorage)?)?>(nil)
 
+    /// Where `open(named:)` keeps its files, when the host says (a path to
+    /// a folder); nil for the app's Application Support folder. Set before
+    /// the first cache is opened.
+    public static var directory: String? {
+        get { folder.withLock { $0 } }
+        set { folder.withLock { $0 = newValue } }
+    }
+    private static let folder = Mutex<String?>(nil)
+
     private let storage: Mutex<any MessageStorage>
 
     /// A cache over a storage, which is the cache's alone from here on.
@@ -121,6 +130,42 @@ public final class MessageCache: Sendable {
     }
 
     public func remove(_ session: String) throws { try storage.withLock { try $0.deleteSession(session) } }
+
+    /// Removes these rows, by id.
+    public func remove(_ ids: [String], in session: String) throws {
+        guard !ids.isEmpty else { return }
+        try storage.withLock { storage in try storage.transaction { try storage.deleteMessages(session, ids: ids) } }
+    }
+
+    /// Puts these rows in place of the row `id` and every row after it;
+    /// false (nothing written) when `id` is not kept.
+    @discardableResult
+    public func replace(_ session: String, from id: String, with messages: [TranscriptEntry]) throws -> Bool {
+        try replaceTail(session, at: id, inclusive: true, with: messages)
+    }
+
+    /// Puts these rows in place of every row after the row `id`, which
+    /// stays; false (nothing written) when `id` is not kept.
+    @discardableResult
+    public func replace(_ session: String, after id: String, with messages: [TranscriptEntry]) throws -> Bool {
+        try replaceTail(session, at: id, inclusive: false, with: messages)
+    }
+
+    private func replaceTail(_ session: String, at id: String, inclusive: Bool, with messages: [TranscriptEntry]) throws -> Bool {
+        try storage.withLock { storage in
+            guard let seq = storage.seq(session, of: id) else { return false }
+            try storage.transaction {
+                let start = inclusive ? seq : seq + 1
+                try storage.deleteMessages(session, fromSeq: start)
+                // A row of these kept further back moves here.
+                try storage.deleteMessages(session, ids: messages.map(\.id))
+                for (offset, message) in messages.enumerated() {
+                    try storage.insertMessage(session, message, seq: start + offset)
+                }
+            }
+            return true
+        }
+    }
 
     // MARK: Sync
 

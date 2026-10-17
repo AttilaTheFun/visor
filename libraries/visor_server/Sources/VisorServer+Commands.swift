@@ -11,6 +11,13 @@ extension VisorServer {
     /// What a session's agent takes: its own list, the agent's last, or
     /// what its harness says it takes.
     func commands(for record: SessionRecord) -> [SlashCommand] {
+        let agents = agentCommands(for: record)
+        // Signing Claude Code in again is Visor's (`/login`), beside them.
+        guard record.info.agent == .claude, !agents.contains(where: { $0.name == Self.signInCommand.name }) else { return agents }
+        return agents + [Self.signInCommand]
+    }
+
+    private func agentCommands(for record: SessionRecord) -> [SlashCommand] {
         if !record.commands.isEmpty { return record.commands }
         if knownCommands.isEmpty { knownCommands = Self.keptCommands() }
         if let known = knownCommands[record.info.agent], !known.isEmpty { return known }

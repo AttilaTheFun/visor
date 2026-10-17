@@ -43,6 +43,14 @@ public final class MemoryStorage: MessageStorage {
 
     public func deleteMessages(_ session: String) throws { rows[session] = nil }
 
+    public func deleteMessages(_ session: String, ids: [String]) throws {
+        for id in ids { rows[session]?[id] = nil }
+    }
+
+    public func deleteMessages(_ session: String, fromSeq seq: Int) throws {
+        rows[session] = rows[session]?.filter { $0.value.seq < seq }
+    }
+
     private func ordered(_ session: String) -> [Row] { (rows[session]?.values.map { $0 } ?? []).sorted { $0.seq < $1.seq } }
 
     public func messages(_ session: String, limit: Int, before: Int?) -> (messages: [TranscriptEntry], more: Bool) {

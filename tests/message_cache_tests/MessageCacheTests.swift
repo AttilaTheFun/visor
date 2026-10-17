@@ -1,3 +1,4 @@
+import Foundation
 // The cache behaves the same whatever holds it: rows by place, appended,
 // prepended, replaced, dropped by source; states kept; words found.
 
@@ -64,6 +65,23 @@ final class MessageCacheTests: XCTestCase {
 
 /// A host that supplies its own storage gets it from `open(named:)`.
 final class StorageProviderTests: XCTestCase {
+    /// A cache in a file, in the folder a host names, is there for the
+    /// next open: what a client reads its threads from offline.
+    func testAFileInTheHostsFolderKeepsItsRows() throws {
+        let folder = NSTemporaryDirectory() + "visor-cache-" + String(UInt64.random(in: 0...UInt64.max))
+        MessageCache.directory = folder
+        defer {
+            MessageCache.directory = nil
+            try? FileManager.default.removeItem(atPath: folder)
+        }
+        let rows = (0..<5).map { TranscriptEntry(id: "r\($0)", role: .assistant, text: "row \($0) of the pelican thread") }
+        try MessageCache.open(named: "kept").append("S", rows)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder + "/kept.sqlite"))
+        let again = MessageCache.open(named: "kept")
+        XCTAssertEqual(again.messages(in: "S", limit: 3).messages.map(\.id), ["r2", "r3", "r4"])
+        XCTAssertEqual(again.search("pelican").count, 5)
+    }
+
     func testOpenUsesTheSuppliedStorage() {
         let asked = Mutex<[String]>([])
         MessageCache.storageProvider = { name in

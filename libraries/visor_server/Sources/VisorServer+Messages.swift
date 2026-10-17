@@ -52,6 +52,8 @@ extension VisorServer {
         case "acknowledge": performAcknowledge(envelope)
         case "earlier": performEarlier(envelope, from: client)
         case "subscribe": performSubscribe(envelope, from: client)
+        case "unsubscribe": performUnsubscribe(envelope, from: client)
+        case "signIn": performSignIn(envelope)
         case "permissions": performPermissions(envelope)
         case "approve": performApprove(envelope)
         case "settings": performSettings(envelope)
@@ -88,7 +90,7 @@ extension VisorServer {
         let resume = (envelope.resume ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let info = SessionInfo(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skip, created: Date().timeIntervalSince1970)
         // A resumed session shows what was said before it moved here.
-        let past = resume.isEmpty ? [] : (harnesses.harness(for: agent)?.transcript(id: resume, cwd: cwd, limit: 300) ?? [])
+        let past = resume.isEmpty ? [] : (harnesses.harness(for: agent)?.transcript(id: resume, cwd: cwd, limit: SessionRecord.servedRows) ?? [])
         let record = SessionRecord(info: info, process: makeProcess(info, resume: resume.isEmpty ? nil : resume), entries: past)
         if !resume.isEmpty { record.refreshResume() }
         sessions.append(record)
@@ -134,6 +136,13 @@ extension VisorServer {
     private func performEarlier(_ envelope: Envelope, from client: ClientConnection?) {
         guard let client, let record = session(envelope.session), let before = envelope.before else { return }
         Task { client.send(await record.earlier(before: before)) }
+    }
+
+    /// The client left the session: nothing more of it goes there until it
+    /// follows the session again.
+    private func performUnsubscribe(_ envelope: Envelope, from client: ClientConnection?) {
+        guard let client, let record = session(envelope.session) else { return }
+        record.subscribers.remove(ObjectIdentifier(client))
     }
 
     private func performSubscribe(_ envelope: Envelope, from client: ClientConnection?) {

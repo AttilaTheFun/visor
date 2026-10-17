@@ -228,6 +228,8 @@ public final class VisorAgentServer: AgentServer {
         switch envelope.type {
         case "pong": return nil
         case "error" where envelope.message == "Unknown message ping": return nil
+        // A server before 0.33 keeps following a session that was left.
+        case "error" where envelope.message == "Unknown message unsubscribe": return nil
         case "welcome": return .welcome(name: envelope.host ?? "", sessions: envelope.sessions ?? [], catalogs: envelope.catalogs ?? [])
         case "sessions": return .sessions(envelope.sessions ?? [])
         case "catalogs": return .catalogs(envelope.catalogs ?? [])

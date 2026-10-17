@@ -55,18 +55,20 @@ final class EarlierPagesTests: XCTestCase {
     }
 
     func testPagesComeFromTheCacheBeforeTheServer() async throws {
-        try keep(rows("r", 900))
+        try keep(rows("r", 210))
         let transcript = host.transcript(for: "S")
-        XCTAssertEqual(transcript.entries.first?.id, "r300", "the last 600 shown")
+        XCTAssertEqual(transcript.entries.first?.id, "r110", "the last 100 shown")
         XCTAssertTrue(transcript.hasEarlier)
 
         host.loadEarlier("S")
         host.loadEarlier("S")
         await settle()
-        XCTAssertEqual(transcript.entries.first?.id, "r100", "one page of 200, asked for twice")
-        XCTAssertEqual(transcript.entries.count, 800)
+        XCTAssertEqual(transcript.entries.first?.id, "r60", "one page of 50, asked for twice")
+        XCTAssertEqual(transcript.entries.count, 150)
         XCTAssertTrue(server.earlierAsked.isEmpty, "the server is not asked while the cache has rows")
 
+        host.loadEarlier("S")
+        await settle()
         host.loadEarlier("S")
         await settle()
         XCTAssertEqual(transcript.entries.first?.id, "r0")
@@ -78,7 +80,7 @@ final class EarlierPagesTests: XCTestCase {
         server.deliver(earlier([], more: false))
         await settle()
         XCTAssertFalse(transcript.hasEarlier)
-        XCTAssertEqual(transcript.entries.count, 900)
+        XCTAssertEqual(transcript.entries.count, 210)
     }
 
     func testTheServersPageIsKeptAndShownAPageAtATime() async throws {
@@ -101,16 +103,16 @@ final class EarlierPagesTests: XCTestCase {
         await settle()
         XCTAssertEqual(server.earlierAsked.count, 1, "asked once while the page is on its way")
 
-        server.deliver(earlier(rows("e", 500), more: true))
+        server.deliver(earlier(rows("e", 120), more: true))
         await settle()
-        XCTAssertEqual(transcript.entries.first?.id, "e300", "the last 200 of the server's page")
-        XCTAssertEqual(transcript.entries.count, 210)
+        XCTAssertEqual(transcript.entries.first?.id, "e70", "the last 50 of the server's page")
+        XCTAssertEqual(transcript.entries.count, 60)
         XCTAssertTrue(transcript.hasEarlier)
-        XCTAssertEqual(AgentServerConnection.cache.count(in: key), 510, "all of it kept")
+        XCTAssertEqual(AgentServerConnection.cache.count(in: key), 130, "all of it kept")
 
         host.loadEarlier("S")
         await settle()
-        XCTAssertEqual(transcript.entries.first?.id, "e100", "the next page from the cache")
+        XCTAssertEqual(transcript.entries.first?.id, "e20", "the next page from the cache")
         XCTAssertEqual(server.earlierAsked.count, 1)
 
         // A delta after the start was reached does not bring the row back.
@@ -140,10 +142,10 @@ final class EarlierPagesTests: XCTestCase {
         transcript.sync(delta)
         host.loadEarlier("S")
         await settle()
-        server.deliver(earlier(rows("e", 300), more: false))
+        server.deliver(earlier(rows("e", 75), more: false))
         await settle()
-        XCTAssertEqual(transcript.entries.first?.id, "e100")
-        XCTAssertTrue(transcript.hasEarlier, "100 rows still before these")
+        XCTAssertEqual(transcript.entries.first?.id, "e25")
+        XCTAssertTrue(transcript.hasEarlier, "25 rows still before these")
         host.loadEarlier("S")
         await settle()
         XCTAssertEqual(transcript.entries.first?.id, "e0")

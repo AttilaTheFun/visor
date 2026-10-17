@@ -92,6 +92,7 @@ extension SessionRecord {
         moreBefore = loaded.more
         let before = entries.map(\.id)
         if !loaded.rows.isEmpty {
+            firstFollows = loaded.follows
             entries = loaded.rows
             settle(in: entries)
         }
