@@ -777,7 +777,8 @@ not been run against real agents.
 For screenshot tests, the client can show a canned computer instead of
 real ones (`libraries/visor_client/Sources/VisorFixture.swift`). The setting
 `fixture` = `snapshot` turns it on; `fixture.screen` opens a screen:
-`sessions`, `chat`, `goal`, `inspector`, `models`, `search` or `connect`
+`sessions`, `chat`, `question`, `goal`, `inspector`, `models`, `search`,
+`connect` or `new-session` (the New Session sheet over the sessions)
 (`earlier` is `goal` with a page of earlier rows that loads as its spinner
 row shows). On Apple
 these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so
@@ -792,7 +793,8 @@ the thread has settled; take screenshots at least 4 s after launch (8 s
 lets every sheet's glass finish easing in). The busy session shows a static glyph instead of
 a spinner. Pin the simulator's status bar (`xcrun simctl status_bar booted
 override --time 9:41 …`) and the same screen gives the same pixels every
-run. The iOS probe's `testFixtureScreens` takes all six.
+run. The iOS probe's `testFixtureScreens` takes all of them in portrait,
+`testFixtureScreensLandscape` in landscape.
 
 ### Fixture look check
 

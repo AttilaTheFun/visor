@@ -27,7 +27,7 @@ jobs:
         run: |
           mkdir -p shots
           tool="$(bazel cquery --output=files //tools/mac_screenshots 2>/dev/null | head -1)"
-          for screen in chat question models; do
+          for screen in chat question models inspector new-session; do
             "$tool" "$screen" "$PWD/shots/mac-$screen.png" dark
           done
           ls -la shots

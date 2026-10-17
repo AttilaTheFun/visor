@@ -10,6 +10,11 @@
 #
 # HOME is passed on: the runner signs its app with the login keychain's
 # identity, which a test's own HOME does not reach.
+#
+# VISOR_PROBE_ORIENTATION=landscape holds the cases on their side. Each case
+# is recorded (XCTest's screen recording) and its pictures kept, in the
+# result bundle bazel-testlogs/tests/ios_probe/visor_probe_device/
+# test.outputs/tests.xcresult (release_review's harness reads it back).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 UDID="${DEVICE_LAB_UDID:?run in a device-lab lease of the phone, or set DEVICE_LAB_UDID}"
@@ -17,6 +22,9 @@ CASES="${VISOR_UI_CASES:-VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorP
 LOG="$(mktemp)"
 bazel test //tests/ios_probe:visor_probe_device --ios_multi_cpus=arm64 \
   --test_arg=--destination=platform=iOS,id="$UDID" --test_env=HOME="$HOME" \
+  --test_env=VISOR_PROBE_ORIENTATION="${VISOR_PROBE_ORIENTATION:-portrait}" \
+  --test_arg=--xctestrun_attachment_lifetime=keepAlways --test_arg=--xctestrun_screen_capture_format=screenRecording \
+  --nozip_undeclared_test_outputs \
   --spawn_strategy=local --nocache_test_results --test_output=streamed \
   --test_filter="$CASES" > "$LOG" 2>&1 &
 BAZEL=$!
@@ -24,8 +32,9 @@ while kill -0 "$BAZEL" 2>/dev/null; do
   grep -q "Test Suite 'Selected tests' \(passed\|failed\)" "$LOG" && break
   sleep 5
 done
-# The lines after the verdict, then the hang, if there is one, cut short.
-sleep 3
+# The result bundle written after the verdict (its recordings take a
+# while), then the hang, if there is one, cut short.
+for _ in $(seq 1 60); do kill -0 "$BAZEL" 2>/dev/null || break; sleep 3; done
 pkill -f "xcodebuild.*visor_probe_device" 2>/dev/null
 kill "$BAZEL" 2>/dev/null
 wait "$BAZEL" 2>/dev/null

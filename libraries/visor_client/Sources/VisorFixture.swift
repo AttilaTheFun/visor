@@ -14,8 +14,9 @@ import VisorServices
 public enum VisorFixture {
     /// Whether the app is showing the canned computer.
     @MainActor public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
-    /// The screen to open on: sessions, chat, goal, inspector, models,
-    /// search or connect ("" for the app's own first screen); also earlier
+    /// The screen to open on: sessions, chat, question, goal, inspector,
+    /// models, search, connect or new-session ("" for the app's own first
+    /// screen); also earlier
     /// (a page of earlier rows goes in), learns-earlier (the chat, told
     /// ten seconds on that there are rows before it) and arrivals (the
     /// chat, with rows coming in twelve and twenty-six seconds on).

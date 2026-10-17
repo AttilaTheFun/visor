@@ -62,6 +62,8 @@ ios_application(
 
 ios_ui_test(
     name = "visor_probe_device",
+    # A run on its side: --test_env=VISOR_PROBE_ORIENTATION=landscape.
+    env_inherit = ["VISOR_PROBE_ORIENTATION"],
     minimum_os_version = "18.0",
     tags = ["manual"],
     test_host = ":probe_host",

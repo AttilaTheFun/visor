@@ -254,6 +254,8 @@ public struct VisorRootView: View {
                 if compact { compactColumn = .detail }
             case "search":
                 search = VisorFixture.searchQuery
+            case "new-session":
+                composing = true
             default:
                 break
             }

@@ -9,11 +9,18 @@ import XCTest
 final class VisorProbe: XCTestCase {
     private let outDir = "/private/tmp/visor_probe"
 
-    /// Every case starts in portrait, whichever way the phone lies (the
-    /// lab's iPhone stands on its side); a case that wants landscape turns
-    /// it so itself.
+    /// The orientation a run's behaviour cases are held in:
+    /// VISOR_PROBE_ORIENTATION=landscape turns them all on their side
+    /// (`--test_env`), portrait otherwise. The screens' pictures say their
+    /// own (testFixtureScreens, testFixtureScreensLandscape, testSiteShots).
+    nonisolated static var runOrientation: UIDeviceOrientation {
+        ProcessInfo.processInfo.environment["VISOR_PROBE_ORIENTATION"] == "landscape" ? .landscapeLeft : .portrait
+    }
+
+    /// Every case starts in the run's orientation, whichever way the phone
+    /// lies (the lab's iPhone stands on its side).
     override nonisolated func setUp() async throws {
-        await MainActor.run { XCUIDevice.shared.orientation = .portrait }
+        await MainActor.run { XCUIDevice.shared.orientation = Self.runOrientation }
     }
 
     /// The send, as a person does it, for a screen recording to be taken
@@ -276,7 +283,7 @@ final class VisorProbe: XCTestCase {
     private func fixtureShots(_ orientation: UIDeviceOrientation) {
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         XCUIDevice.shared.orientation = orientation
-        for screen in ["sessions", "chat", "question", "goal", "inspector", "models", "search", "connect"] {
+        for screen in ["sessions", "chat", "question", "goal", "inspector", "models", "search", "connect", "new-session"] {
             let app = XCUIApplication()
             app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", screen]
             app.launch()
@@ -299,7 +306,7 @@ final class VisorProbe: XCTestCase {
     /// happens if it is not there already, and every row under it moved
     /// down: the thread jumped on the first send after a launch (Visor 0.26).
     func testLearningOfEarlierRowsMovesNothing() throws {
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "learns-earlier"]
         app.launch()
@@ -311,6 +318,7 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 10)
         XCTAssertTrue(last.exists, "the thread moved its last row out of view when it learned of earlier rows")
         XCTAssertEqual(last.frame.minY, before.minY, accuracy: 0.5, "the thread moved when it learned of earlier rows")
+        shot(app, "earlier-rows-learned")
         app.terminate()
     }
 
@@ -320,7 +328,7 @@ final class VisorProbe: XCTestCase {
     /// a pill says how many came in below and goes a few seconds later, and
     /// its tap takes the thread down to the newest.
     func testRowsArrivingWhileReadingAboveMoveNothing() throws {
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "arrivals"]
         app.launch()
@@ -364,7 +372,7 @@ final class VisorProbe: XCTestCase {
     /// Rows coming in while the thread is at its end are scrolled to, and
     /// there is no pill.
     func testRowsArrivingAtTheEndAreScrolledTo() throws {
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "arrivals"]
         app.launch()
@@ -375,6 +383,7 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 1)
         XCTAssertTrue(arrived.isHittable, "the thread did not go down to the rows that came in")
         XCTAssertFalse(app.buttons["new-rows-pill"].exists, "a pill while at the end")
+        shot(app, "arrivals-at-the-end")
         app.terminate()
     }
 
@@ -384,7 +393,7 @@ final class VisorProbe: XCTestCase {
     /// the prompt undecided (tools/ios_ui_tests.sh resets the simulator's
     /// permissions first; CI's simulator is new each run).
     func testRefusingDictationLeavesTheAppRunning() throws {
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
         app.launch()
@@ -398,6 +407,7 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 2)
         XCTAssertEqual(app.state, .runningForeground, "the app ended when dictation was refused")
         XCTAssertTrue(mic.exists, "the composer is gone after dictation was refused")
+        shot(app, "dictation-refused")
         app.terminate()
     }
 
@@ -514,6 +524,7 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
         field.typeText("x")
         XCTAssertEqual(field.value as? String, "/compact x")
+        shot(app, "slash-command-picked")
         // Cleared, as a person would. (The fixture keeps no drafts between
         // launches, so the cases after this one open an empty composer,
         // with its microphone, whatever happens here.)
@@ -668,6 +679,9 @@ final class VisorProbe: XCTestCase {
         }
     }
 
+    /// The screen now, as a picture: written to outDir (from the
+    /// simulator, which shares this Mac's disk) and kept in the test's
+    /// results too (how a phone's run brings its pictures back).
     private func shot(_ app: XCUIApplication, _ name: String) {
         // In landscape, the screen's picture: the app's comes out as its
         // portrait layout in half a landscape frame on iOS 27's simulator.
@@ -678,5 +692,9 @@ final class VisorProbe: XCTestCase {
         format.scale = picture.scale
         let upright = UIGraphicsImageRenderer(size: picture.size, format: format).image { _ in picture.draw(at: .zero) }
         try? upright.pngData()?.write(to: URL(fileURLWithPath: "\(outDir)/\(name).png"))
+        let kept = XCTAttachment(image: upright)
+        kept.name = name
+        kept.lifetime = .keepAlways
+        add(kept)
     }
 }
