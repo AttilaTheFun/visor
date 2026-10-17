@@ -79,6 +79,14 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         emit.yield(.activity("Thinking…"))
     }
 
+    /// The model a message says it ran on, if it ran on one: Claude Code
+    /// marks the messages it writes itself (a goal set, an interruption)
+    /// "<synthetic>", which is no model.
+    static func ranModel(_ model: String?) -> String? {
+        guard let model, !model.isEmpty, !model.hasPrefix("<") else { return nil }
+        return model
+    }
+
     /// A Claude model's context window, as Claude Code's own `/context`
     /// reports it: the Claude 5 family runs at a million tokens, the 3 and
     /// 4 families (Haiku 4.5 among them) at two hundred thousand.
@@ -240,7 +248,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
                 resumeID = session
                 emit.yield(.session(session))
             }
-            if let model, !model.isEmpty { emit.yield(.model(model)) }
+            if let model = Self.ranModel(model) { emit.yield(.model(model)) }
             // A login is a subscription; a key is paid for by the token.
             if let keySource {
                 let subscription = keySource == "none"
@@ -258,7 +266,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             if thinking { emit.yield(.activity("Thinking…")) }
             emit.yield(.thinking(thinking))
         case .assistant(let model, let tokens, let tools):
-            if let model, !model.isEmpty { emit.yield(.model(model)) }
+            if let model = Self.ranModel(model) { emit.yield(.model(model)) }
             if tokens > 0 { emit.yield(.context(used: tokens, limit: Self.contextWindow(for: model))) }
             for tool in tools {
                 emit.yield(.activity(tool.label))

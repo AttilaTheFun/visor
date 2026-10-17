@@ -71,6 +71,16 @@ final class AgentLogTests: ServerTestCase {
 
 /// A goal's records are shown as the goal's rows: set, then met.
 final class GoalRowTests: ServerTestCase {
+    /// Claude Code marks the messages it writes itself (a goal set, an
+    /// interruption) "<synthetic>": no model, so the session keeps showing
+    /// the one that ran.
+    func testASyntheticMessageNamesNoModel() {
+        XCTAssertNil(ClaudeProcess.ranModel("<synthetic>"))
+        XCTAssertNil(ClaudeProcess.ranModel(""))
+        XCTAssertNil(ClaudeProcess.ranModel(nil))
+        XCTAssertEqual(ClaudeProcess.ranModel("claude-opus-5-5"), "claude-opus-5-5")
+    }
+
     func testGoalsBecomeTheirOwnRows() {
         let rows = TranscriptAssembler.rows(in: [
             // As Claude Code writes it: the goal's state, then the command.
