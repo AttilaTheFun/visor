@@ -188,8 +188,7 @@ API over a `MessageStorage` — `SQLiteStorage` on every host (swift_sqlite's
 systems, its amalgamation with FTS5 elsewhere, WebAssembly included), or
 `MemoryStorage` for tests and the fixture. `MessageCache.directory` is
 where a host keeps the file (else Application Support). The SwiftPM build
-(Linux server) takes the same package; Windows keeps it in memory until
-swift_sqlite is tried there.
+(Linux and Windows servers) takes the same package.
 Tables: sources (path, identity=inode and the reading's version — a new
 version reads every file again once, bytes,
 nextSeq), syncs (revision, generation), nodes (the source tree), messages

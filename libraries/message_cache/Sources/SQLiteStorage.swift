@@ -4,7 +4,6 @@
 // SQLite.swift made before (schema 7), so a cache kept by an earlier build
 // reads on.
 
-#if MESSAGE_CACHE_SQLITE
 import SwiftSQLite
 import VisorProtocol
 
@@ -193,4 +192,3 @@ public final class SQLiteStorage: MessageStorage {
         all(sql, values, read).first
     }
 }
-#endif

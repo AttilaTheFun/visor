@@ -1,4 +1,3 @@
-#if MESSAGE_CACHE_SQLITE
 import Foundation
 import VisorProtocol
 
@@ -25,13 +24,3 @@ extension MessageCache {
     /// SQLite in memory: the real storage, without a file (tests).
     public static func sqliteInMemory() throws -> MessageCache { MessageCache(storage: try SQLiteStorage(path: ":memory:")) }
 }
-#else
-extension MessageCache {
-    /// No SQLite in this build (the Windows server): the cache lives in
-    /// memory.
-    public static func open(named name: String) -> MessageCache {
-        if let storage = storageProvider?(name) { return MessageCache(storage: storage) }
-        return inMemory()
-    }
-}
-#endif

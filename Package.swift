@@ -26,13 +26,11 @@ let shared: [Target] = [
         name: "MessageCache",
         dependencies: [
             "VisorProtocol",
-            .product(name: "SwiftSQLite", package: "swift_sqlite", condition: .when(platforms: [.macOS, .linux])),
+            // SQLite (swift_sqlite, as in the Bazel build) on every system.
+            .product(name: "SwiftSQLite", package: "swift_sqlite"),
         ],
         path: "libraries/message_cache/Sources",
-        // SQLite (swift_sqlite, as in the Bazel build) on the Mac and Linux;
-        // on Windows the cache is kept in memory until swift_sqlite is
-        // tried there.
-        swiftSettings: strict + [.define("MESSAGE_CACHE_SQLITE", .when(platforms: [.macOS, .linux]))]
+        swiftSettings: strict
     ),
     .target(name: "AgentHostWire", path: "libraries/agent_host_wire/Sources", swiftSettings: strict),
     .target(name: "VisorServer", dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire"],

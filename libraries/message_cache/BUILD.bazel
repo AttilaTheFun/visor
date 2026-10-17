@@ -12,7 +12,6 @@ swift_library(
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "MessageCache",
-    defines = ["MESSAGE_CACHE_SQLITE"],
     deps = [
         "//:foundation",
         "//libraries/visor_protocol",
