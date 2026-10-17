@@ -29,14 +29,30 @@ struct MacScreenshots: App {
         Task { @MainActor in
             NSApplication.shared.activate()
             try? await Task.sleep(for: .seconds(6))
-            if let window = NSApplication.shared.windows.first(where: { $0.isVisible }) {
-                let capture = Process()
-                capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-                capture.arguments = ["-l\(window.windowNumber)", "-o", "-x", out]
-                try? capture.run()
-                capture.waitUntilExit()
+            let windows = NSApplication.shared.windows
+            FileHandle.standardError.write(Data("windows: \(windows.map { "\($0.windowNumber) visible=\($0.isVisible) \($0.frame)" })\n".utf8))
+            if let window = windows.first(where: { $0.isVisible }) {
+                Self.capture(["-l\(window.windowNumber)", "-o", "-x", out])
+            }
+            // No picture of the window: the whole screen, to see why.
+            if !FileManager.default.fileExists(atPath: out) {
+                Self.capture(["-x", out.replacingOccurrences(of: ".png", with: "-screen.png")])
             }
             NSApplication.shared.terminate(nil)
+        }
+    }
+
+    /// `screencapture` with these arguments, saying how it went.
+    static func capture(_ arguments: [String]) {
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = arguments
+        do {
+            try capture.run()
+            capture.waitUntilExit()
+            FileHandle.standardError.write(Data("screencapture \(arguments.joined(separator: " ")): \(capture.terminationStatus)\n".utf8))
+        } catch {
+            FileHandle.standardError.write(Data("screencapture failed: \(error)\n".utf8))
         }
     }
 

@@ -25,6 +25,7 @@ jobs:
           done
           ls -la shots
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: mac-screenshots
           path: shots/*.png
@@ -34,6 +35,15 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      # The simulator the probe runs on, made ahead, with the status bar
+      # pictures usually show.
+      - name: Simulator
+        run: |
+          runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' | head -1)"
+          id="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.0" "iPhone 17" "$runtime")"
+          xcrun simctl boot "$id"
+          xcrun simctl bootstatus "$id"
+          xcrun simctl status_bar "$id" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
       - name: Pictures (iOS simulator)
         run: VISOR_UI_CASES=VisorProbe/testSiteShots tools/ios_ui_tests.sh
       - uses: actions/upload-artifact@v4
