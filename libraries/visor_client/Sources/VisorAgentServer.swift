@@ -64,6 +64,8 @@ public final class VisorAgentServer: AgentServer {
     /// How many messages this channel has brought: one more after a ping
     /// is the answer to it, whatever the message was.
     private var heard = 0
+    /// Who waits on the channel's next message (`verifyChannel`).
+    private var listening: [Answer] = []
     /// Whether this channel's socket opened and the login went out.
     private var loggedIn = false
 
@@ -186,6 +188,8 @@ public final class VisorAgentServer: AgentServer {
                         self.send(.login(password: self.record.secret, token: self.token, client: AgentServerRecord.clientID))
                     } else if event.hasPrefix("message ") {
                         self.heard += 1
+                        for answer in self.listening { answer.end() }
+                        self.listening = []
                         // Read off the main actor: a page of earlier rows
                         // is hundreds of them. The loop waits for each, so
                         // messages still arrive in order.
@@ -255,10 +259,37 @@ public final class VisorAgentServer: AgentServer {
     public func verifyChannel() async -> Bool {
         guard let id = socketID, let socket = VisorHost.socket else { return false }
         let before = heard
+        // Answered by the next message, or not within the time.
+        let answer = Answer()
+        listening.append(answer)
         send(.ping())
-        await socket.delay(milliseconds: Self.verifyTimeout)
+        Task {
+            await socket.delay(milliseconds: Self.verifyTimeout)
+            answer.end()
+        }
+        await answer.wait()
         // Another channel since: that one is not this question's to answer.
         return socketID != id || heard != before
+    }
+
+    /// A wait for the channel's next message, ended by it or by the time
+    /// running out, whichever comes first.
+    @MainActor
+    final class Answer {
+        private var ended = false
+        private var waiting: CheckedContinuation<Void, Never>?
+
+        func wait() async {
+            guard !ended else { return }
+            await withCheckedContinuation { waiting = $0 }
+        }
+
+        func end() {
+            guard !ended else { return }
+            ended = true
+            waiting?.resume()
+            waiting = nil
+        }
     }
 
     private func drop(_ id: Int32, _ reason: String, _ onEvent: @MainActor (AgentServerEvent) -> Void) {
