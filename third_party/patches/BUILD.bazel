@@ -1,0 +1,2 @@
+# Patches to modules from the registry, applied in MODULE.bazel.
+exports_files(glob(["*.patch"]))

@@ -853,6 +853,20 @@ nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
 rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and CI).
 
+The same cases run on a phone: the device lab's iPhone XS (iOS 18, on the
+Mac mini; `~/Developer/device_lab`), in a lease:
+`device-lab run --device iphone-xs -- tools/ios_device_tests.sh`. The
+phone runs `//tests/ios_probe:visor_probe_device`, whose host is the app
+signed with the team's wildcard profile (no push, no widget): the test's
+runner app is signed with its host's profile, and only the wildcard covers
+the runner. rules_apple's runner is patched
+(third_party/patches/rules_apple_device_xctrunner.patch) to name that
+runner `<app>.xctrunner` on a device, as Xcode does; a device finds no data
+container for the simulator's `com.apple.test.` name. The phone must be in
+the team's profiles (`tools/mint_profile/mint_profile.sh` with its UDID, for
+the app's and the wildcard). Every case starts in portrait (the probe's
+`setUp`), whichever way the phone lies; a landscape case turns it itself.
+
 `tools/probes/resync.mjs` (REST only) reports rows from before a send
 that the send replaces on the server.
 

@@ -8,6 +8,13 @@ import XCTest
 final class VisorProbe: XCTestCase {
     private let outDir = "/private/tmp/visor_probe"
 
+    /// Every case starts in portrait, whichever way the phone lies (the
+    /// lab's iPhone stands on its side); a case that wants landscape turns
+    /// it so itself.
+    override nonisolated func setUp() async throws {
+        await MainActor.run { XCUIDevice.shared.orientation = .portrait }
+    }
+
     /// The send, as a person does it, for a screen recording to be taken
     /// of: the session named by VISOR_FRAMES_SESSION is opened, the
     /// composer tapped (the on-screen keyboard comes up), a message typed
@@ -491,9 +498,9 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
         field.typeText("x")
         XCTAssertEqual(field.value as? String, "/compact x")
-        // The draft is kept for the session: cleared, so the cases after
-        // this one open the chat as they expect it (the microphone shows
-        // only with nothing written).
+        // Cleared, as a person would. (The fixture keeps no drafts between
+        // launches, so the cases after this one open an empty composer,
+        // with its microphone, whatever happens here.)
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "/compact x".count))
         Thread.sleep(forTimeInterval: 1)
         app.terminate()

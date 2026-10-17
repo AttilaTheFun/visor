@@ -1,5 +1,5 @@
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
-load("@rules_apple//apple:ios.bzl", "ios_ui_test")
+load("@rules_apple//apple:ios.bzl", "ios_application", "ios_ui_test")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 
 # Simulator probe for the client against Visor Server on this Mac
@@ -30,6 +30,41 @@ ios_ui_test(
     test_host = "//applications/visor_ios",
     # The test runs in about a minute; xcodebuild's teardown sometimes hangs
     # well past that, and Bazel's default 300s would report a pass as a timeout.
+    timeout = "long",
+    deps = [":probe_lib"],
+)
+
+# On a phone (the lab's iPhone): the same app, signed with the team's
+# wildcard profile rather than its own. The test's runner app is signed with
+# the profile of the app it tests, and only the wildcard covers the runner's
+# bundle id; the wildcard cannot carry push, so this app has none, and no
+# widget. Through the lab, with the lease's phone:
+#   bazel test //tests/ios_probe:visor_probe_device --ios_multi_cpus=arm64 \
+#     --test_arg=--destination=platform=iOS,id=$DEVICE_LAB_UDID \
+#     --test_env=HOME="$HOME" --spawn_strategy=local --test_filter=…
+# (HOME: the runner signs with the login keychain's identity, which a test's
+# own HOME does not reach.)
+ios_application(
+    name = "probe_host",
+    testonly = True,
+    bundle_id = "com.LoganShire.VisorClient.iOS",
+    entitlements = "probe_host.entitlements",
+    families = [
+        "iphone",
+        "ipad",
+    ],
+    infoplists = ["//applications/visor_ios:Info.plist"],
+    minimum_os_version = "18.0",
+    provisioning_profile = "//applications/visor_ios:xcode_managed_profile",
+    tags = ["manual"],
+    deps = ["//applications/visor_ios:ios_lib"],
+)
+
+ios_ui_test(
+    name = "visor_probe_device",
+    minimum_os_version = "18.0",
+    tags = ["manual"],
+    test_host = ":probe_host",
     timeout = "long",
     deps = [":probe_lib"],
 )
