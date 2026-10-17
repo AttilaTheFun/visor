@@ -329,6 +329,19 @@ final class HelloFlowTests: XCTestCase {
         XCTAssertEqual(host.state, .connected)
     }
 
+    /// Coming to the front while a sign-in is on its way (the launch's own
+    /// first try, as the app first comes to the front) leaves it to finish.
+    func testComingToTheFrontWhileConnectingLeavesIt() async {
+        server.hangs = true
+        let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example", provider: "scripted"))
+        host.connect()
+        await settle()
+        host.resume()
+        await settle()
+        XCTAssertEqual(server.pauses.filter { $0 == AgentServerConnection.signInTimeout }.count, 1, "one sign-in, not two")
+        XCTAssertEqual(host.state, .connecting)
+    }
+
     /// A channel opened again underneath that takes a while shows the
     /// server as connecting.
     func testAQuietReopenThatTakesAWhileShowsConnecting() async {

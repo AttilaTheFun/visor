@@ -502,7 +502,13 @@ public final class AgentServerConnection: Identifiable {
             note("the networks changed: already connecting by \(trying)")
             return
         }
-        note("the networks changed: connecting by \(best ?? record.address)" + (state == .connected ? " instead of \(path ?? "")" : ""))
+        note("the networks changed: connecting by \(best ?? record.address)" + (state == .connected ? " instead of \(path ?? ""), still shown connected" : ""))
+        // Connected by a path that no longer fits best: moved underneath,
+        // still shown as connected.
+        if state == .connected, !quiet {
+            quiet = true
+            holdQuietly()
+        }
         attempt = 0
         pathIndex = 0
         open()
@@ -628,6 +634,9 @@ public final class AgentServerConnection: Identifiable {
             return
         }
         if quiet { return note("back in front: already opening the channel again") }
+        // On its way in already (the launch's own first try, as the app
+        // first comes to the front): left to finish, not started over.
+        if state == .connecting { return note("back in front: already connecting") }
         guard state == .connected else {
             note("back in front: connecting now (was \(state.label))")
             attempt = 0

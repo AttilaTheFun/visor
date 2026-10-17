@@ -308,8 +308,10 @@ final class VisorProbe: XCTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
             .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)))
         Thread.sleep(forTimeInterval: 1.5)
-        // A row in view to watch: the first of these that can be seen.
-        let read = ["layout I want for the offline banner", "Rows written offline are all on the server", "the sync notes", "Found it."]
+        // A row in view to watch: the first of these that can be seen —
+        // plain text rows, whose frame is read at once (a /goal card's took
+        // up to 10 s on CI, and the pill, which stays 4 s, was gone).
+        let read = ["layout I want for the offline banner", "the sync notes", "Found it."]
             .lazy.map { app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", $0)).firstMatch }
             .first { $0.exists && $0.isHittable }
         let watched = try XCTUnwrap(read, "no row in view after scrolling up")

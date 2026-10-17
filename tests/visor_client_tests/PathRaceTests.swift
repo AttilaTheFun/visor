@@ -87,6 +87,27 @@ final class PathRaceTests: XCTestCase {
         XCTAssertEqual(locked.state, .needsAuthentication)
     }
 
+    /// A round overtaken by a sign-in begun since starts nothing more: only
+    /// the new round goes on to the next path.
+    func testAnOvertakenRoundStartsNothingMore() async {
+        VisorHost.http = RacingHTTP(answers: ["http://b:7433": welcome])
+        ConnectionLog.shared.clear()
+        let host = AgentServerConnection(record: record)
+        host.connect()
+        await settle()
+        host.disconnect()
+        host.connect()
+        await settle()
+        socket.elapse(AgentServerConnection.headStart)
+        await settle()
+        let also = "also signing in by http://b:7433"
+        XCTAssertFalse(ConnectionLog.shared.text.contains(also), "the overtaken round went on")
+        socket.elapse(AgentServerConnection.headStart)
+        await settle()
+        XCTAssertEqual(ConnectionLog.shared.text.components(separatedBy: also).count - 1, 1)
+        XCTAssertEqual(host.state, .connected)
+    }
+
     /// No path answers: each is given up after its time, and the round
     /// ends as one failed try, followed by the schedule.
     func testNoPathAnsweringEndsTheRound() async {

@@ -54,9 +54,11 @@ extension VisorAgentServer {
         return (take(won), won.record.address)
     }
 
-    /// Starts the round's next try, if it is still that one's turn.
+    /// Starts the round's next try, if it is still that one's turn, and
+    /// the round is still the server's (a sign-in begun since ends it).
     private func start(_ index: Int, of race: PathRace, _ record: AgentServerRecord, opening: Int, headStarts: [Int32], timeouts: [Int32]) {
         guard !race.over, index < race.paths.count, race.started == index else { return }
+        guard opening == tunnelOpenings else { return overtake(race) }
         race.started = index + 1
         var attempt = record
         attempt.address = race.paths[index]
@@ -99,11 +101,20 @@ extension VisorAgentServer {
         }
     }
 
+    /// A sign-in begun since owns the server: this round ends, starting
+    /// nothing more.
+    private func overtake(_ race: PathRace) {
+        race.over = true
+        race.waiting?.resume(throwing: AgentServerError.message("Signing in again"))
+        race.waiting = nil
+    }
+
     /// A try failed (or ran out of time): once every path has, the round
     /// does; once every path started so far has, the next starts at once.
     private func lost(_ index: Int, of race: PathRace, _ error: Error, _ record: AgentServerRecord, opening: Int, headStarts: [Int32],
                       timeouts: [Int32]) {
         guard !race.over, race.failed[index] == nil else { return }
+        guard opening == tunnelOpenings else { return overtake(race) }
         race.failed[index] = error
         ConnectionLog.shared.note(record.name.isEmpty ? record.address : record.name, "\(race.paths[index]) failed: \(error)")
         if race.failed.count == race.paths.count {
