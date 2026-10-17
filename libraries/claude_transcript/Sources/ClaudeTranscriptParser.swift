@@ -97,6 +97,11 @@ public enum ClaudeTranscriptParser {
                 return ClaudeRecord(uuid: uuid, kind: .user(text: command(text) ?? text, images: []), timestamp: timestamp)
             }
             guard let parts = message["content"] as? [[String: Any]] else { return nil }
+            // The answers to the agent's questions (AskUserQuestion): the
+            // user's, which Claude Code keeps beside the tool's result.
+            if let answers = answers(object["toolUseResult"]) {
+                return ClaudeRecord(uuid: uuid, kind: .answers(answers), timestamp: timestamp)
+            }
             // Tool results ride along as user messages; they are not the
             // user's words.
             if let result = parts.first(where: { $0["type"] as? String == "tool_result" }) {
@@ -159,6 +164,17 @@ public enum ClaudeTranscriptParser {
             condition = String(condition[condition.index(after: condition.startIndex)..<end])
         }
         return condition
+    }
+
+    /// AskUserQuestion's result, as Claude Code records it
+    /// (`{questions: [{question, …}], answers: {<question>: <answer>}}`):
+    /// the answers in the order the questions were asked. Nil for any other
+    /// tool's result, and for questions left unanswered.
+    public static func answers(_ value: Any?) -> [ClaudeAnswer]? {
+        guard let result = value as? [String: Any], let answers = result["answers"] as? [String: String], !answers.isEmpty else { return nil }
+        let asked = (result["questions"] as? [[String: Any]] ?? []).compactMap { $0["question"] as? String }
+        let ordered = asked.filter { answers[$0] != nil } + answers.keys.filter { !asked.contains($0) }.sorted()
+        return ordered.map { ClaudeAnswer(question: $0, answer: answers[$0] ?? "") }
     }
 
     /// The text and pictures of a content value: a string, or blocks.

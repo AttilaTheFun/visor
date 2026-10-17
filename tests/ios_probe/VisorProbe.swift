@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Drives the phone client in the simulator, for looking at it and for
@@ -7,6 +8,20 @@ import XCTest
 @MainActor
 final class VisorProbe: XCTestCase {
     private let outDir = "/private/tmp/visor_probe"
+
+    /// The orientation a run's behaviour cases are held in:
+    /// VISOR_PROBE_ORIENTATION=landscape turns them all on their side
+    /// (`--test_env`), portrait otherwise. The screens' pictures say their
+    /// own (testFixtureScreens, testFixtureScreensLandscape, testSiteShots).
+    nonisolated static var runOrientation: UIDeviceOrientation {
+        ProcessInfo.processInfo.environment["VISOR_PROBE_ORIENTATION"] == "landscape" ? .landscapeLeft : .portrait
+    }
+
+    /// Every case starts in the run's orientation, whichever way the phone
+    /// lies (the lab's iPhone stands on its side).
+    override nonisolated func setUp() async throws {
+        await MainActor.run { XCUIDevice.shared.orientation = Self.runOrientation }
+    }
 
     /// The send, as a person does it, for a screen recording to be taken
     /// of: the session named by VISOR_FRAMES_SESSION is opened, the
@@ -257,12 +272,27 @@ final class VisorProbe: XCTestCase {
     /// Every fixture screen (VisorFixture), each from a fresh launch with
     /// the canned computer: the same pixels every run is the point.
     func testFixtureScreens() throws {
+        fixtureShots(.portrait)
+    }
+
+    /// The same screens in landscape, turned so on purpose.
+    func testFixtureScreensLandscape() throws {
+        fixtureShots(.landscapeLeft)
+    }
+
+    private func fixtureShots(_ orientation: UIDeviceOrientation) {
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
-        XCUIDevice.shared.orientation = .portrait
-        for screen in ["sessions", "chat", "goal", "inspector", "models", "search", "connect"] {
+        XCUIDevice.shared.orientation = orientation
+        for screen in ["sessions", "chat", "question", "goal", "inspector", "models", "search", "connect", "new-session"] {
             let app = XCUIApplication()
             app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", screen]
             app.launch()
+            // Turned again once the app is up: one launched while the
+            // phone already lies on its side can come up in portrait.
+            if orientation != .portrait {
+                XCUIDevice.shared.orientation = .portrait
+                XCUIDevice.shared.orientation = orientation
+            }
             Thread.sleep(forTimeInterval: 4)
             shot(app, "fixture-" + screen)
             app.terminate()
@@ -276,7 +306,7 @@ final class VisorProbe: XCTestCase {
     /// happens if it is not there already, and every row under it moved
     /// down: the thread jumped on the first send after a launch (Visor 0.26).
     func testLearningOfEarlierRowsMovesNothing() throws {
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "learns-earlier"]
         app.launch()
@@ -288,6 +318,7 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 10)
         XCTAssertTrue(last.exists, "the thread moved its last row out of view when it learned of earlier rows")
         XCTAssertEqual(last.frame.minY, before.minY, accuracy: 0.5, "the thread moved when it learned of earlier rows")
+        shot(app, "earlier-rows-learned")
         app.terminate()
     }
 
@@ -297,7 +328,7 @@ final class VisorProbe: XCTestCase {
     /// a pill says how many came in below and goes a few seconds later, and
     /// its tap takes the thread down to the newest.
     func testRowsArrivingWhileReadingAboveMoveNothing() throws {
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "arrivals"]
         app.launch()
@@ -318,22 +349,18 @@ final class VisorProbe: XCTestCase {
         let before = watched.frame
         let pill = app.buttons["new-rows-pill"]
         // Waited for with its count: on a slow machine the pill can show
-        // the first of the two rows for a moment before the second.
+        // the first of the two rows for a moment before the second. In the
+        // fixture the pill stays until tapped (`newRowsPillSeconds`).
         let two = app.buttons.matching(NSPredicate(format: "identifier == 'new-rows-pill' AND label CONTAINS '2 new messages'")).firstMatch
         XCTAssertTrue(two.waitForExistence(timeout: 20), "no pill for the two rows that came in below")
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         shot(app, "arrivals-pill")
         XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when rows came in below")
-        XCTAssertTrue(pill.waitForNonExistence(timeout: 9), "the pill stayed")
-        // The third row: the pill again, and its tap goes down to it. Tapped
-        // where it is as soon as it is seen, with nothing asked in between:
-        // it stays four seconds, and on CI's simulator one query can take
-        // most of that. (That what is read does not move is the first
-        // arrival's to show.)
-        let third = app.buttons.matching(NSPredicate(format: "identifier == 'new-rows-pill' AND label CONTAINS '1 new message'")).firstMatch
-        XCTAssertTrue(third.waitForExistence(timeout: 18), "no pill for the third row")
-        let spot = third.frame
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: spot.midX, dy: spot.midY)).tap()
+        // The third row: counted on the same pill, and its tap goes down to it.
+        let three = app.buttons.matching(NSPredicate(format: "identifier == 'new-rows-pill' AND label CONTAINS '3 new messages'")).firstMatch
+        XCTAssertTrue(three.waitForExistence(timeout: 24), "the third row is not counted")
+        XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when the third row came in")
+        pill.tap()
         let newest = app.staticTexts["All 42 sync tests pass, offline rows included."]
         XCTAssertTrue(newest.waitForExistence(timeout: 3), "the newest row is not in the thread")
         Thread.sleep(forTimeInterval: 1)
@@ -345,7 +372,7 @@ final class VisorProbe: XCTestCase {
     /// Rows coming in while the thread is at its end are scrolled to, and
     /// there is no pill.
     func testRowsArrivingAtTheEndAreScrolledTo() throws {
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "arrivals"]
         app.launch()
@@ -356,6 +383,26 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 1)
         XCTAssertTrue(arrived.isHittable, "the thread did not go down to the rows that came in")
         XCTAssertFalse(app.buttons["new-rows-pill"].exists, "a pill while at the end")
+        shot(app, "arrivals-at-the-end")
+        app.terminate()
+    }
+
+    /// A burst of long rows at the end, more than a screen of them in one
+    /// change (a reply that ran on while the app was away), is followed
+    /// to its end: the list scrolls before it has measured them, and the
+    /// rows it measures afterwards must not leave the thread short of its
+    /// end (the "half a page back" Logan saw on coming back to a session).
+    func testABurstOfRowsAtTheEndIsFollowedToItsEnd() throws {
+        XCUIDevice.shared.orientation = Self.runOrientation
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "burst"]
+        app.launch()
+        let done = app.staticTexts["Burst done: every row is on the server."]
+        XCTAssertTrue(done.waitForExistence(timeout: 20), "the burst did not come")
+        Thread.sleep(forTimeInterval: 3)
+        shot(app, "burst-followed")
+        XCTAssertTrue(done.isHittable, "the thread stopped short of the burst's end")
+        XCTAssertFalse(app.buttons["new-rows-pill"].exists, "a pill while following the end")
         app.terminate()
     }
 
@@ -365,7 +412,7 @@ final class VisorProbe: XCTestCase {
     /// the prompt undecided (tools/ios_ui_tests.sh resets the simulator's
     /// permissions first; CI's simulator is new each run).
     func testRefusingDictationLeavesTheAppRunning() throws {
-        XCUIDevice.shared.orientation = .portrait
+        XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
         app.launch()
@@ -379,6 +426,7 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 2)
         XCTAssertEqual(app.state, .runningForeground, "the app ended when dictation was refused")
         XCTAssertTrue(mic.exists, "the composer is gone after dictation was refused")
+        shot(app, "dictation-refused")
         app.terminate()
     }
 
@@ -495,12 +543,51 @@ final class VisorProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
         field.typeText("x")
         XCTAssertEqual(field.value as? String, "/compact x")
-        // The draft is kept for the session: cleared, so the cases after
-        // this one open the chat as they expect it (the microphone shows
-        // only with nothing written).
+        shot(app, "slash-command-picked")
+        // Cleared, as a person would. (The fixture keeps no drafts between
+        // launches, so the cases after this one open an empty composer,
+        // with its microphone, whatever happens here.)
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "/compact x".count))
         Thread.sleep(forTimeInterval: 1)
         app.terminate()
+    }
+
+    /// The agent's question (AskUserQuestion) opens as a sheet on its own:
+    /// Send waits for an answer, an option picked is one, and sending
+    /// closes the sheet; the composer keeps the question with Answer.
+    func testFixtureQuestion() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "question"]
+        app.launch()
+        let send = app.buttons["question-send"]
+        XCTAssertTrue(send.waitForExistence(timeout: 10), "the question did not open")
+        XCTAssertTrue(app.staticTexts["Which way should rows written offline go to the server?"].exists)
+        XCTAssertFalse(send.isEnabled, "Send before an answer")
+        app.buttons["approval-On reconnect"].tap()
+        XCTAssertTrue(send.isEnabled, "an option picked is an answer")
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        shot(app, "question")
+        send.tap()
+        XCTAssertTrue(send.waitForNonExistence(timeout: 5), "the sheet stayed")
+        XCTAssertTrue(app.buttons["answer"].waitForExistence(timeout: 5), "the composer does not keep the question")
+        app.terminate()
+    }
+
+    /// The site's pictures of the phone (.github/workflows/screenshots.yml):
+    /// the screenshot fixture's screens in the dark look, saved beside the
+    /// probe's other pictures as `site-<screen>.png`.
+    func testSiteShots() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        for screen in ["sessions", "chat", "question", "models", "inspector"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", screen == "sessions" ? "" : screen,
+                                   "-visor.fixture.appearance", "dark"]
+            app.launch()
+            Thread.sleep(forTimeInterval: 5)
+            shot(app, "site-\(screen)")
+            app.terminate()
+        }
     }
 
     /// Looks, and sends nothing: opens a session the phone already lists
@@ -611,8 +698,33 @@ final class VisorProbe: XCTestCase {
         }
     }
 
+    /// The screen now, as a picture: written to outDir (from the
+    /// simulator, which shares this Mac's disk) and kept in the test's
+    /// results too (how a phone's run brings its pictures back).
     private func shot(_ app: XCUIApplication, _ name: String) {
-        let data = app.screenshot().pngRepresentation
-        try? data.write(to: URL(fileURLWithPath: "\(outDir)/\(name).png"))
+        // In landscape, the screen's picture: the app's comes out as its
+        // portrait layout in half a landscape frame on iOS 27's simulator.
+        let picture = (XCUIDevice.shared.orientation.isLandscape ? XCUIScreen.main.screenshot() : app.screenshot()).image
+        // Drawn upright: the picture's orientation is a tag that not every
+        // reader of the PNG applies.
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = picture.scale
+        // A phone's screen picture in landscape is its portrait frame with
+        // the screen on its side: turned a quarter anticlockwise (the
+        // runs turn it to landscapeLeft). The simulator's is landscape.
+        let sideways = XCUIDevice.shared.orientation == .landscapeLeft && picture.size.width < picture.size.height
+        let size = sideways ? CGSize(width: picture.size.height, height: picture.size.width) : picture.size
+        let upright = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            if sideways {
+                context.cgContext.translateBy(x: 0, y: size.height)
+                context.cgContext.rotate(by: -.pi / 2)
+            }
+            picture.draw(at: .zero)
+        }
+        try? upright.pngData()?.write(to: URL(fileURLWithPath: "\(outDir)/\(name).png"))
+        let kept = XCTAttachment(image: upright)
+        kept.name = name
+        kept.lifetime = .keepAlways
+        add(kept)
     }
 }

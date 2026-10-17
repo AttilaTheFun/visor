@@ -17,6 +17,9 @@ struct AgentScreen: View {
     @Environment(\.openURL) private var openURL
     /// The sign-in page last offered (`/login`): offered once.
     @State private var signInOffered: String?
+    /// The agent's questions open, and the last request opened on its own.
+    @State private var answering = false
+    @State private var questionsOffered: String?
     @State private var draft = ""
     @State private var showModels = false
     /// The goal whose words are being shown, with a way to clear it.
@@ -77,6 +80,9 @@ struct AgentScreen: View {
 
     var body: some View {
         chat
+        // Screenshot and UI tests: the new-rows pill stays until tapped, so a
+        // test on a slow machine still finds it (4 s otherwise).
+        .environment(\.newRowsPillSeconds, VisorFixture.active ? 600 : 4)
         // The title is the session's; the inspector opens from an explicit
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
@@ -202,7 +208,7 @@ struct AgentScreen: View {
             dictation: DictationBridge.installed
         ) {
             if let approval = transcript.pendingApproval {
-                ApprovalControls(request: approval, host: host, sessionID: sessionID)
+                ApprovalControls(request: approval, host: host, sessionID: sessionID, answering: $answering)
             } else if let info {
                 // Pictures, before anything else in the row: what you are
                 // about to say, then how it is being said.
@@ -341,6 +347,15 @@ struct AgentScreen: View {
         .sheet(isPresented: $showModels) {
             if let info { ModelSheet(host: host, session: info) }
         }
+        // The agent's questions: open on their own when they come, once
+        // each, and closed when they are answered elsewhere.
+        .sheet(isPresented: $answering) {
+            if let approval = transcript.pendingApproval, approval.questions?.isEmpty == false {
+                QuestionSheet(request: approval, host: host, sessionID: sessionID)
+            }
+        }
+        .onAppear { offerQuestions() }
+        .onChange(of: transcript.pendingApproval?.id) { _, _ in offerQuestions() }
         .overlay(alignment: .top) {
             if info?.archived == true {
                 Text("Archived — a message resumes it")
@@ -350,6 +365,18 @@ struct AgentScreen: View {
                     .padding(.top, 6)
             }
         }
+    }
+
+    /// Opens the agent's questions when a new request asks some (once
+    /// each), and closes them when none waits any more.
+    private func offerQuestions() {
+        guard let approval = transcript.pendingApproval, approval.questions?.isEmpty == false else {
+            answering = false
+            return
+        }
+        guard approval.id != questionsOffered else { return }
+        questionsOffered = approval.id
+        answering = true
     }
 
     /// The path to the computer, when it is not open: shown where the

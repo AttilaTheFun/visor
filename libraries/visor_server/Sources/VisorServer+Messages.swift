@@ -14,7 +14,8 @@ extension VisorServer {
                 client.sendLast(.error("Not an agent of this host"))
                 return
             }
-            let request = ApprovalRequest(id: id, tool: envelope.text ?? "tool", summary: envelope.prompt ?? "")
+            let questions = envelope.questions?.isEmpty == false ? envelope.questions : nil
+            let request = ApprovalRequest(id: id, tool: envelope.text ?? "tool", summary: envelope.prompt ?? "", questions: questions)
             record.approvalWaiters[id] = client
             record.setPendingApproval(request)
             broadcast(.approval(session: record.info.id, request), session: record)
@@ -171,11 +172,21 @@ extension VisorServer {
     }
 
     private func performApprove(_ envelope: Envelope) {
-        guard let record = session(envelope.session), let id = envelope.id, let allow = envelope.allow,
-              let waiter = record.approvalWaiters.removeValue(forKey: id) else { return }
+        guard let record = session(envelope.session), let id = envelope.id, let allow = envelope.allow else { return }
+        // A question the agent itself asked (Codex's): answered to it.
+        guard let waiter = record.approvalWaiters.removeValue(forKey: id) else {
+            guard let pending = record.info.pendingApproval, pending.id == id, pending.questions != nil else { return }
+            record.process.answer(id, with: allow ? envelope.answers : nil)
+            record.setPendingApproval(nil)
+            broadcast(.approval(session: record.info.id, nil), session: record)
+            broadcastSessions()
+            return
+        }
         var answer = Envelope(type: "approval_result")
         answer.id = id
         answer.busy = allow
+        // A question's answers, for the agent's own tool input.
+        answer.answers = envelope.answers
         waiter.sendLast(answer)
         if record.info.pendingApproval?.id == id { record.setPendingApproval(nil) }
         broadcast(.approval(session: record.info.id, record.info.pendingApproval), session: record)

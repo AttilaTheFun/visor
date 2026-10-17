@@ -282,8 +282,9 @@ extension VisorServer {
         // Nothing to say is nothing sent.
         broadcast(record.apply(event), session: record)
         switch event {
-        case .context, .session, .background, .goal:
-            // These land in the session list, not an envelope.
+        case .context, .session, .background, .goal, .question:
+            // These land in the session list, not an envelope (a question
+            // as the session's waiting, besides its own envelope).
             broadcastSessions()
         case .spent, .memory:
             broadcastSessionsSoon()

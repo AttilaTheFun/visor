@@ -5,9 +5,10 @@
 # the tests have said how they went, xcodebuild is stopped. CI runs this.
 #
 #   tools/ios_ui_tests.sh
+#   VISOR_UI_CASES=VisorProbe/testSiteShots tools/ios_ui_tests.sh   # other cases
 set -uo pipefail
 cd "$(dirname "$0")/.."
-CASES="VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning,VisorProbe/testFixtureSlashCommands"
+CASES="${VISOR_UI_CASES:-VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning,VisorProbe/testFixtureSlashCommands,VisorProbe/testFixtureQuestion,VisorProbe/testABurstOfRowsAtTheEndIsFollowedToItsEnd}"
 LOG="$(mktemp)"
 # On the simulator the tests run on, when it exists already (CI's is new):
 # the app taken off, since installing over a copy can leave its old binary,

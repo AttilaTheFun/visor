@@ -51,6 +51,37 @@ final class CodexCommandTests: ServerTestCase {
         XCTAssertNil(CodexCommand("set a goal"))
     }
 
+    /// Codex's question to the user (request_user_input), as the app server
+    /// sends it: each question with the id its answer goes back under.
+    func testCodexsQuestionIsRead() {
+        let line = #"{"id":7,"method":"item/tool/requestUserInput","params":{"threadId":"t","turnId":"u","itemId":"call_1","questions":[{"id":"preferred_color","header":"Color","question":"Which color do you prefer?","isOther":true,"isSecret":false,"options":[{"label":"Red","description":"Choose Red."},{"label":"Blue","description":"Choose Blue."}]}],"isBlocking":false,"autoResolutionMs":null}}"#
+        guard case .questions(let id, let asked)? = CodexOutput.parse(line).first else { return XCTFail("not a question") }
+        XCTAssertEqual(id, 7)
+        XCTAssertEqual(asked.map(\.id), ["preferred_color"])
+        XCTAssertEqual(asked.first?.question, AgentQuestion(question: "Which color do you prefer?", header: "Color",
+                                                            options: [.init(label: "Red", description: "Choose Red."),
+                                                                      .init(label: "Blue", description: "Choose Blue.")]))
+        XCTAssertTrue(CodexAppServerProcess.questionArguments.contains("features.default_mode_request_user_input=true"))
+    }
+
+    /// The user's answers to Codex's questions read back as theirs: the
+    /// call's questions by id, the output's answers by the questions' words.
+    /// Claude's are the same row, from the assembler.
+    func testAnswersToCodexsQuestionsAreTheUsers() throws {
+        let call: [String: Any] = ["type": "response_item", "ordinal": 1, "payload": [
+            "type": "function_call", "id": "fc1", "name": "request_user_input", "call_id": "call_1",
+            "arguments": #"{"questions":[{"header":"Color","id":"color","question":"Which color do you prefer?","options":[]}]}"#]]
+        let output: [String: Any] = ["type": "response_item", "ordinal": 2, "payload": [
+            "type": "function_call_output", "id": "fco1", "call_id": "call_1", "output": #"{"answers":{"color":{"answers":["Blue"]}}}"#]]
+        let data = Data(try [call, output].map { String(decoding: try JSONSerialization.data(withJSONObject: $0), as: UTF8.self) }
+            .joined(separator: "\n").utf8)
+        let rows = TranscriptAssembler.rows(in: CodexRolloutParser().lines(in: data).compactMap(\.record))
+        let answers = try XCTUnwrap(rows.last)
+        XCTAssertEqual(answers.toolName, "answers")
+        XCTAssertEqual(answers.text, "Which color do you prefer?\n**Blue**")
+        XCTAssertNil(CodexRolloutParser.answers("aborted by user after 60.1s", to: [("color", "Which color do you prefer?")]), "stopped first")
+    }
+
     func testWhatTheAppServerSaysOfTurnsAndGoals() {
         let goal = #"{"threadId":"t","objective":"Ship it","status":"active","tokenBudget":null,"tokensUsed":10,"timeUsedSeconds":125,"createdAt":1,"updatedAt":2}"#
         XCTAssertEqual(lastGoal(#"{"method":"thread/goal/updated","params":{"threadId":"t","turnId":null,"goal":\#(goal)}}"#),

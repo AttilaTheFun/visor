@@ -82,7 +82,7 @@ public final class AgentServerConnection: Identifiable {
     /// which invalidated the screen's parent for one more pass.
     @ObservationIgnored public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
-    public private(set) var catalogs: [AgentCatalog] = []
+    public internal(set) var catalogs: [AgentCatalog] = []
     /// The Visor Server it runs, as it said at sign-in ("0.31 (8)").
     public private(set) var serverVersion: String?
     /// The store saves when the address or credentials change.
@@ -202,8 +202,12 @@ public final class AgentServerConnection: Identifiable {
             // and says where to go when the notification is opened.
             let key = record.address + "/" + new.id
             if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval {
-                notifications.notify(id: key + "/approval", title: "\(title) is waiting",
-                                     body: "Allow \(approval.tool)? " + approval.summary)
+                if let question = approval.questions?.first {
+                    notifications.notify(id: key + "/approval", title: "\(title) asks", body: question.question)
+                } else {
+                    notifications.notify(id: key + "/approval", title: "\(title) is waiting",
+                                         body: "Allow \(approval.tool)? " + approval.summary)
+                }
             }
             if let goal = old.goal, new.goal == nil {
                 notifications.notify(id: key + "/goal", title: "\(title): goal done", body: goal)
@@ -1346,7 +1350,10 @@ public final class AgentServerConnection: Identifiable {
     public func modelTitle(for session: SessionInfo) -> String {
         // The chosen model names the session; with no choice, the one a
         // turn actually ran on; else the agent's default.
-        let named = session.model ?? session.reportedModel
+        // (A server before 0.35 took Claude Code's "<synthetic>", the mark on
+        // messages it writes itself, for a model.)
+        let reported = session.reportedModel.flatMap { $0.hasPrefix("<") ? nil : $0 }
+        let named = session.model ?? reported
         return catalog(for: session.agent)?.title(for: named)
             ?? named.map(AgentCatalog.prettyModelName)
             ?? session.agent.title
@@ -1355,11 +1362,17 @@ public final class AgentServerConnection: Identifiable {
     /// The model a session's last turn fell back to, when it is not the
     /// one chosen: shown in place of it, marked.
     public func fallbackModel(for session: SessionInfo) -> AgentModel? {
-        catalog(for: session.agent)?.fallback(from: session.model, to: session.reportedModel)
+        catalog(for: session.agent)?.fallback(from: session.model, to: session.reportedModel.flatMap { $0.hasPrefix("<") ? nil : $0 })
     }
 
     public func approve(_ sessionID: String, id: String, allow: Bool) {
-        act(.approve(id: id, allow: allow), on: sessionID)
+        act(.approve(id: id, allow: allow, answers: nil), on: sessionID)
+    }
+
+    /// Answers the agent's questions (AskUserQuestion), by question; nil
+    /// leaves them unanswered, which the agent hears as a refusal.
+    public func answer(_ sessionID: String, id: String, answers: [String: String]?) {
+        act(.approve(id: id, allow: answers != nil, answers: answers), on: sessionID)
     }
 
     public func rename(_ sessionID: String, title: String) {

@@ -40,8 +40,10 @@ final class FixtureAgentServer: AgentServer {
 
     func subscribe(_ session: String) {
         guard let onEvent else { return }
-        let approval = session == VisorFixture.chatSession
-            ? ApprovalRequest(id: "fixture-approval", tool: "Bash", summary: "swift test --filter SyncTests") : nil
+        // The chat waits on a tool call; on the question screen, on a question.
+        let approval: ApprovalRequest? = session != VisorFixture.chatSession ? nil
+            : VisorFixture.screen == "question" ? VisorFixture.question
+            : ApprovalRequest(id: "fixture-approval", tool: "Bash", summary: "swift test --filter SyncTests")
         let reply = Self.wire(.ephemeral(session: session, streams: [], status: [], activity: nil, busy: false,
                                          approval: approval, queued: [], notice: nil))
         Task { onEvent(.session(reply)) }
@@ -85,9 +87,8 @@ final class FixtureAgentServer: AgentServer {
         }
         if VisorFixture.screen == "arrivals", session == VisorFixture.chatSession, revision == 1 || revision == 2 {
             // Rows come in as a reply would: two twelve seconds on, one
-            // more fourteen seconds after (room for the pill, which stays
-            // four, to go between them on a slow machine), each after the
-            // last there was.
+            // more fourteen seconds after, each after the last there was.
+            // (The pill stays until tapped here: `newRowsPillSeconds`.)
             try await Task.sleep(nanoseconds: revision == 1 ? 12_000_000_000 : 14_000_000_000)
             let rows = revision == 1
                 ? [TranscriptEntry(id: "arrival-1", role: .user, text: "Run them now, please."),
@@ -96,6 +97,24 @@ final class FixtureAgentServer: AgentServer {
             var e = Envelope.transcript(session: session, entries: rows, streaming: "", activity: nil, busy: false, error: nil)
             e.after = revision == 1 ? [VisorFixture.transcript.last?.id ?? "", "arrival-1"] : ["arrival-2"]
             e.revision = revision + 1
+            e.generation = 1
+            return Self.wire(e)
+        }
+        if VisorFixture.screen == "burst", session == VisorFixture.chatSession, revision == 1 {
+            // A burst of long rows at once, as a reply that ran on while
+            // the app was away comes in when it is back: more than a
+            // screen of them, taller than the list guesses before it has
+            // measured them.
+            try await Task.sleep(nanoseconds: 8_000_000_000)
+            let paragraph = "The retry queue now keeps each row's last edit, so a row changed twice while offline reaches the server once, as it was last written, and the banner says how many are still waiting."
+            let rows = (1...8).map { n in
+                TranscriptEntry(id: "burst-\(n)", role: .assistant,
+                                text: n == 8 ? "Burst done: every row is on the server."
+                                    : "Step \(n).\n\n\(paragraph)\n\n```swift\nfunc retry(_ row: Row) async throws {\n    try await server.save(row)\n    store.markSent(row.id)\n}\n```\n\n\(paragraph)")
+            }
+            var e = Envelope.transcript(session: session, entries: rows, streaming: "", activity: nil, busy: false, error: nil)
+            e.after = [VisorFixture.transcript.last?.id ?? ""] + (1..<8).map { "burst-\($0)" }
+            e.revision = 2
             e.generation = 1
             return Self.wire(e)
         }

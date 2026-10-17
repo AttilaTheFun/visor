@@ -119,6 +119,13 @@ public struct Envelope: Codable, Sendable {
     /// In a session's state, a sign-in waiting for its code (`/login`):
     /// the page to sign in at. What the user sends next goes to it.
     public var signIn: String?
+    /// approval_request (agent shim → server): what the agent asks the
+    /// user (AskUserQuestion), as it gave it.
+    public var questions: [AgentQuestion]?
+    /// approve (client → server) and approval_result (server → shim): the
+    /// user's answers to those questions, by question; several answers to
+    /// one joined with ", ".
+    public var answers: [String: String]?
     /// The turn's status lines so far — tool calls, subagents, shells,
     /// thinking — as the computer keeps them.
     public var status: [StatusItem]?
@@ -243,8 +250,8 @@ extension Envelope {
     public static func settings(session: String, model: String?, effort: String?) -> Envelope {
         var e = Envelope(type: "settings"); e.session = session; e.model = model; e.effort = effort; return e
     }
-    public static func approve(session: String, id: String, allow: Bool) -> Envelope {
-        var e = Envelope(type: "approve"); e.session = session; e.id = id; e.allow = allow; return e
+    public static func approve(session: String, id: String, allow: Bool, answers: [String: String]? = nil) -> Envelope {
+        var e = Envelope(type: "approve"); e.session = session; e.id = id; e.allow = allow; e.answers = answers; return e
     }
     public static func approval(session: String, _ request: ApprovalRequest?) -> Envelope {
         var e = Envelope(type: "approval"); e.session = session; e.approval = request; return e

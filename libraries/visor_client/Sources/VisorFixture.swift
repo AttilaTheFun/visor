@@ -14,15 +14,20 @@ import VisorServices
 public enum VisorFixture {
     /// Whether the app is showing the canned computer.
     @MainActor public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
-    /// The screen to open on: sessions, chat, goal, inspector, models,
-    /// search or connect ("" for the app's own first screen); also earlier
+    /// The screen to open on: sessions, chat, question, goal, inspector,
+    /// models, search, connect or new-session ("" for the app's own first
+    /// screen); also earlier
     /// (a page of earlier rows goes in), learns-earlier (the chat, told
-    /// ten seconds on that there are rows before it) and arrivals (the
-    /// chat, with rows coming in twelve and twenty-six seconds on).
+    /// ten seconds on that there are rows before it), arrivals (the
+    /// chat, with rows coming in twelve and twenty-six seconds on) and
+    /// burst (eight long rows at once, eight seconds on).
     /// A session to open a few seconds after launch, for a recording of
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }
     @MainActor public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
+    /// "dark" or "light" for pictures in one look whatever the device's
+    /// (`-visor.fixture.appearance dark`); "" for the device's.
+    @MainActor public static var appearance: String { active ? (VisorHost.settings?.get(key: "fixture.appearance") ?? "") : "" }
 
     public static let serverID = "fixture"
     /// The session a screen that shows one opens.
@@ -127,4 +132,11 @@ public enum VisorFixture {
         TranscriptEntry(id: "f8", role: .assistant, text: "", activities: ["Edit: Sources/Sync/RowStore.swift", "Edit: Sources/Sync/SyncQueue.swift", "Bash: swift build"]),
         TranscriptEntry(id: "f9", role: .assistant, text: "Rows now sync in the background, and the banner matches your layout. I'd like to run the tests next."),
     ]
+
+    /// The question the question screen's chat waits on (AskUserQuestion).
+    static let question = ApprovalRequest(
+        id: "fixture-question", tool: "AskUserQuestion", summary: "Which way should rows written offline go to the server?",
+        questions: [AgentQuestion(question: "Which way should rows written offline go to the server?", header: "Sync",
+                                  options: [AgentQuestion.Option(label: "On reconnect", description: "Everything kept goes as soon as the network is back."),
+                                            AgentQuestion.Option(label: "In the background", description: "A few at a time while the app is in use.")])])
 }

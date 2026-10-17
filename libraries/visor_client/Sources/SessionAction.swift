@@ -6,7 +6,9 @@ public enum SessionAction: Equatable, Sendable {
     case unqueue(text: String?)
     case permissions(skip: Bool)
     case settings(model: String?, effort: String?)
-    case approve(id: String, allow: Bool)
+    /// Answers a tool call waiting on the user: allowed or denied, and a
+    /// question's answers (by question) when the call was a question.
+    case approve(id: String, allow: Bool, answers: [String: String]?)
     case rename(title: String)
     case archive
     case unarchive

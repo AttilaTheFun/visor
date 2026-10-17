@@ -63,6 +63,9 @@ public protocol AgentProcess: AnyObject {
     /// this message rather than where its own reading of its file would,
     /// when the file went on elsewhere; nil, where it would.
     func resume(at message: String?)
+    /// The user's answers to a question the agent asked (`.question`), by
+    /// question; nil when the user would not answer.
+    func answer(_ request: String, with answers: [String: String]?)
 }
 
 public extension AgentProcess {
@@ -71,6 +74,8 @@ public extension AgentProcess {
     func carryGoal(_ objective: String) -> Bool { false }
 
     func resume(at message: String?) {}
+
+    func answer(_ request: String, with answers: [String: String]?) {}
 
     /// Without its own way to end a turn, an interrupt is a stop: the
     /// process goes, and the next message spawns another that resumes.

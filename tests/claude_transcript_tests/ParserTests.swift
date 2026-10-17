@@ -37,6 +37,17 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(records[5].kind, .title("probe title"))
     }
 
+    /// The answers to the agent's questions (AskUserQuestion) are the
+    /// user's, in the order asked, read from what Claude Code keeps beside
+    /// the tool's result.
+    func testAnswersToTheAgentsQuestionsAreTheUsers() {
+        let line = #"{"type":"user","uuid":"u9","toolUseResult":{"questions":[{"question":"Which color?","header":"Color","options":[]},{"question":"How big?","header":"Size","options":[]}],"answers":{"How big?":"Large","Which color?":"Blue"}},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_9","content":"Your questions have been answered"}]}}"#
+        let records = ClaudeTranscriptParser.records(in: Data(line.utf8))
+        XCTAssertEqual(records.first?.kind, .answers([ClaudeAnswer(question: "Which color?", answer: "Blue"),
+                                                      ClaudeAnswer(question: "How big?", answer: "Large")]))
+        XCTAssertNil(ClaudeTranscriptParser.answers(["stdout": "x"]), "another tool's result")
+    }
+
     func testAMessageSentMidTurnIsTheUsers() {
         let line = #"{"type":"attachment","uuid":"m1","parentUuid":"a3","attachment":{"type":"queued_command","prompt":[{"text":"It was a dialog I approved","type":"text"}],"commandMode":"prompt"}}"#
         let parsed = ClaudeTranscriptParser.lines(in: Data(line.utf8))
