@@ -21,12 +21,10 @@ extension VisorAgentServer {
 
     /// Opens the SSH connection along the address's route — each hop's
     /// host key kept the first time and compared after — and a port here
-    /// that reaches the server's socket file; `address` is then the
-    /// tunnel's. `fallBackToPort` reaches the port instead.
-    func openTunnel(_ address: SSHAddress) async throws {
-        closeTunnel()
-        tunnelOpenings += 1
-        let opening = tunnelOpenings
+    /// that reaches the server's socket file: the connection, and the
+    /// address the server is then at. `forwardPort` reaches the port
+    /// instead. A sign-in begun since (`opening` behind) closes it.
+    func connectTunnel(_ address: SSHAddress, opening: Int) async throws -> (any VisorSSHSession, ServerAddress) {
         guard let ssh = VisorHost.ssh else { throw AgentServerError.message("This app cannot reach a computer over SSH") }
         let route = address.route
         let known: [String?] = route.map { hop in
@@ -58,8 +56,7 @@ extension VisorAgentServer {
         }
         do {
             let port = try await session.attach(command: Self.attachCommand)
-            tunnelSession = session
-            tunnel = ServerAddress("http://127.0.0.1:\(port)")
+            return (session, try Self.loopback(port))
         } catch {
             session.close()
             throw AgentServerError.message("\(address.target.host) could not open a channel: \(error)")
@@ -70,10 +67,15 @@ extension VisorAgentServer {
     /// for a server that does not serve its socket file (SSH clients not
     /// let in without a password, an older server, a system without
     /// socket files, no `nc` there).
-    func fallBackToPort() async throws {
-        guard let session = tunnelSession else { throw AgentServerError.message("Not connected over SSH") }
+    func forwardPort(_ session: any VisorSSHSession) async throws -> ServerAddress {
         let port = try await session.forward(toPort: Self.serverPort)
-        tunnel = ServerAddress("http://127.0.0.1:\(port)")
+        return try Self.loopback(port)
+    }
+
+    /// The tunnel's end here, a port on this device's loopback.
+    static func loopback(_ port: Int) throws -> ServerAddress {
+        guard let address = ServerAddress("http://127.0.0.1:\(port)") else { throw AgentServerError.message("No port for the tunnel") }
+        return address
     }
 
     func closeTunnel() {

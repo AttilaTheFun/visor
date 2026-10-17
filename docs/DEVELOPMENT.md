@@ -443,7 +443,14 @@ the server's own word at each sign-in (`AgentServerRecord.takePaths`): an
 IP it no longer gives goes (a lease that moved, a link-local address, a
 bridge to a virtual machine, each of which was tried and waited out on
 every launch before 0.34); a name stays after them, as does the path last
-answered on.
+answered on. A Visor server is signed in to by the round's paths at once
+(`AgentServer.racesPaths`, `VisorAgentServer+PathRace`): the first at
+once, the next when it has had its head start alone (400 ms; an SSH path,
+the way in, 1 s), or at once when every one before has failed, each with
+its own timeout, and the first to get in taken — so a path that says
+nothing costs its head start, not its timeout. A 401 is the answer only
+when no path gets in. Another provider's server is signed in to one path
+at a time.
 
 **Bootstrapping SSH** (`VisorServer+SSHKeys`, `AgentServerConnection.
 useSSH`, `enrollSSHIfWanted`): a client that is in by any path hands its

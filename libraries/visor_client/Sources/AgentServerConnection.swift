@@ -336,12 +336,23 @@ public final class AgentServerConnection: Identifiable {
         // A path on the network the device is on answers in milliseconds
         // or not at all: on the first round it is given less time, and the
         // next path is tried sooner.
-        let timeout = attempt == 0 && Self.fit(of: path) == .local ? Self.localSignInTimeout : Self.signInTimeout
-        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : "") + " by \(path)" + (quiet ? ", still shown connected" : ""))
+        let timeouts = paths.map { attempt == 0 && Self.fit(of: $0) == .local ? Self.localSignInTimeout : Self.signInTimeout }
+        let timeout = timeouts[min(pathIndex, paths.count - 1)]
+        // Every path in the round at once, each a moment after the one
+        // before, where the server signs in so: the round is one try.
+        let racing = server.racesPaths && pathIndex == 0 && paths.count > 1
+        let candidates = paths
+        // SSH, the way in, has longer alone: its handshake takes longer.
+        let headStarts = paths.map { SSHAddress($0) != nil ? Self.sshHeadStart : Self.headStart }
+        let limit = racing ? headStarts.dropLast().reduce(0, +) + (timeouts.max() ?? Self.signInTimeout) + 1_000 : timeout
+        note("signing in" + (attempt > 0 ? " (retry \(attempt))" : "")
+             + (racing ? " by the first to answer of \(paths.joined(separator: ", "))" : " by \(path)") + (quiet ? ", still shown connected" : ""))
         signingIn = mine
         Task { [weak self] in
             do {
-                let name = try await server.authenticate(record)
+                let (name, path) = racing
+                    ? try await server.authenticate(record, byFirstOf: candidates, headStarts: headStarts, timeouts: timeouts)
+                    : (try await server.authenticate(record), path)
                 guard let self, self.generation == mine, self.wantsConnection else { return }
                 self.signingIn = nil
                 self.note("signed in after \(self.log.since(started)) ms; opening the channel")
@@ -372,6 +383,8 @@ public final class AgentServerConnection: Identifiable {
                     self.state = .needsAuthentication
                 } else {
                     self.note("sign-in failed after \(self.log.since(started)) ms")
+                    // Raced, the round is over: no path is left to step to.
+                    if racing { self.pathIndex = self.paths.count - 1 }
                     self.dropped("\(error)")
                 }
             }
@@ -379,13 +392,19 @@ public final class AgentServerConnection: Identifiable {
         // A sign-in that never answers (a request riding a connection that
         // died while the app was away) is given up on, not waited out.
         Task { [weak self] in
-            await server.delay(milliseconds: timeout)
+            await server.delay(milliseconds: limit)
             guard let self, self.signingIn == mine, self.generation == mine else { return }
             self.signingIn = nil
-            self.note("no answer to the sign-in by \(path) in \(timeout) ms")
+            self.note("no answer to the sign-in by \(racing ? "any path" : path) in \(limit) ms")
+            if racing { self.pathIndex = self.paths.count - 1 }
             self.dropped("No answer to the sign-in")
         }
     }
+
+    /// How long one path has to answer before the next starts beside it,
+    /// where the server signs in by several at once; an SSH path longer.
+    static let headStart: Int32 = 400
+    static let sshHeadStart: Int32 = 1_000
 
     /// How long a sign-in has to answer before the try is given up; on
     /// the first round, a path on the device's own network has less.
