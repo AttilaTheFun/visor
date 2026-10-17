@@ -22,7 +22,11 @@ private final class QuietAgent: AgentProcess {
 
     init() { (events, _) = AsyncStream.makeStream() }
 
+    /// The answers it was given, by the request they answer.
+    var answered: [(String, [String: String]?)] = []
+
     func send(_ text: String) throws {}
+    func answer(_ request: String, with answers: [String: String]?) { answered.append((request, answers)) }
     func startsTurn(_ text: String) -> Bool { true }
     func interrupt() {}
     func stop() {}
@@ -95,6 +99,23 @@ final class QuestionTests: ServerTestCase {
         XCTAssertEqual(result.id, "r1")
         XCTAssertEqual(result.busy, true)
         XCTAssertEqual(result.answers, ["Which color?": "Blue"])
+    }
+
+    /// A question the agent itself asked (Codex's request_user_input) is
+    /// shown the same way, and its answers go to the agent.
+    func testAnAgentsOwnQuestionIsAnsweredToIt() throws {
+        let agent = QuietAgent()
+        let record = SessionRecord(info: SessionInfo(id: "c", agent: .codex, cwd: "/tmp", title: "c", created: 0), process: agent)
+        server.sessions = [record]
+        let request = ApprovalRequest(id: "codex-7", tool: "request_user_input", summary: "Which color?",
+                                      questions: [AgentQuestion(question: "Which color?", options: [.init(label: "Red"), .init(label: "Blue")])])
+        server.handle(.question(request), from: record)
+        XCTAssertEqual(record.info.pendingApproval, request)
+        let body = Envelope.approve(session: "c", id: "codex-7", allow: true, answers: ["Which color?": "Red"]).encoded()
+        XCTAssertEqual(server.route(HTTPRequest(method: "POST", path: "/api/sessions/c/approve", headers: ["authorization": "Bearer pw"], body: body)).status, 200)
+        XCTAssertEqual(agent.answered.first?.0, "codex-7")
+        XCTAssertEqual(agent.answered.first?.1, ["Which color?": "Red"])
+        XCTAssertNil(record.info.pendingApproval)
     }
 
     /// A tool call that is not a question carries none, as before.

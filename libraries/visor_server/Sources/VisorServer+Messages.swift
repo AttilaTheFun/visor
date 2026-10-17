@@ -172,8 +172,16 @@ extension VisorServer {
     }
 
     private func performApprove(_ envelope: Envelope) {
-        guard let record = session(envelope.session), let id = envelope.id, let allow = envelope.allow,
-              let waiter = record.approvalWaiters.removeValue(forKey: id) else { return }
+        guard let record = session(envelope.session), let id = envelope.id, let allow = envelope.allow else { return }
+        // A question the agent itself asked (Codex's): answered to it.
+        guard let waiter = record.approvalWaiters.removeValue(forKey: id) else {
+            guard let pending = record.info.pendingApproval, pending.id == id, pending.questions != nil else { return }
+            record.process.answer(id, with: allow ? envelope.answers : nil)
+            record.setPendingApproval(nil)
+            broadcast(.approval(session: record.info.id, nil), session: record)
+            broadcastSessions()
+            return
+        }
         var answer = Envelope(type: "approval_result")
         answer.id = id
         answer.busy = allow

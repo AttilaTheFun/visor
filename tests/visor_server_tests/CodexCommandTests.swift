@@ -51,6 +51,19 @@ final class CodexCommandTests: ServerTestCase {
         XCTAssertNil(CodexCommand("set a goal"))
     }
 
+    /// Codex's question to the user (request_user_input), as the app server
+    /// sends it: each question with the id its answer goes back under.
+    func testCodexsQuestionIsRead() {
+        let line = #"{"id":7,"method":"item/tool/requestUserInput","params":{"threadId":"t","turnId":"u","itemId":"call_1","questions":[{"id":"preferred_color","header":"Color","question":"Which color do you prefer?","isOther":true,"isSecret":false,"options":[{"label":"Red","description":"Choose Red."},{"label":"Blue","description":"Choose Blue."}]}],"isBlocking":false,"autoResolutionMs":null}}"#
+        guard case .questions(let id, let asked)? = CodexOutput.parse(line).first else { return XCTFail("not a question") }
+        XCTAssertEqual(id, 7)
+        XCTAssertEqual(asked.map(\.id), ["preferred_color"])
+        XCTAssertEqual(asked.first?.question, AgentQuestion(question: "Which color do you prefer?", header: "Color",
+                                                            options: [.init(label: "Red", description: "Choose Red."),
+                                                                      .init(label: "Blue", description: "Choose Blue.")]))
+        XCTAssertTrue(CodexAppServerProcess.questionArguments.contains("features.default_mode_request_user_input=true"))
+    }
+
     func testWhatTheAppServerSaysOfTurnsAndGoals() {
         let goal = #"{"threadId":"t","objective":"Ship it","status":"active","tokenBudget":null,"tokensUsed":10,"timeUsedSeconds":125,"createdAt":1,"updatedAt":2}"#
         XCTAssertEqual(lastGoal(#"{"method":"thread/goal/updated","params":{"threadId":"t","turnId":null,"goal":\#(goal)}}"#),

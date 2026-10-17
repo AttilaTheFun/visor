@@ -253,7 +253,11 @@ waiting; the client's `approve` is answered back to the shim as
 `{"type":"approval_result","id":…,"busy":<allow>,"answers":{…}}`, which the
 shim turns into Claude's allow/deny — for a question, allow with the tool's
 input and `answers` (`{<question>: <answer>}`), which Claude takes as the
-user's. The token is generated per app launch and is not the
+user's. Codex asks through its app server instead (`item/tool/requestUserInput`,
+an experimental request: the server runs Codex with
+`features.default_mode_request_user_input` and initializes with
+`experimentalApi`); the server shows it as the same `approval` (id `codex-<n>`,
+tool `request_user_input`) and answers Codex by its question ids. The token is generated per app launch and is not the
 password. Codex's headless runs never ask; its manual mode is the
 workspace-write sandbox.
 

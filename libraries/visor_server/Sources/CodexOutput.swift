@@ -9,6 +9,9 @@ enum CodexOutput: Sendable {
     case reply(id: Int, thread: String?, turn: String?, error: String?, goal: CodexGoal??)
     /// The app server asking us something (an approval).
     case asked(id: Int, method: String)
+    /// Codex asking the user (request_user_input): each question with the
+    /// id the answer goes back under.
+    case questions(id: Int, [(id: String, question: AgentQuestion)])
     case text(item: String, String)
     case toolStarted(id: String, name: String, label: String)
     case reasoningStarted
@@ -28,6 +31,18 @@ enum CodexOutput: Sendable {
     /// The account's windows and credits, whole or in part.
     case rateLimits(RateLimits)
     case failure(String)
+
+    /// One of request_user_input's questions, as the user is shown it.
+    /// Codex takes words of the user's own where `isOther` (the sheet
+    /// always offers them).
+    static func question(_ item: [String: Any]) -> (id: String, question: AgentQuestion)? {
+        guard let id = item["id"] as? String, let text = item["question"] as? String else { return nil }
+        let options = (item["options"] as? [[String: Any]] ?? []).compactMap { option -> AgentQuestion.Option? in
+            guard let label = option["label"] as? String else { return nil }
+            return AgentQuestion.Option(label: label, description: option["description"] as? String ?? "")
+        }
+        return (id, AgentQuestion(question: text, header: item["header"] as? String ?? "", options: options))
+    }
 
     static func parse(_ line: String) -> [CodexOutput] {
         guard let object = JSON.object(line) else { return [] }
@@ -51,6 +66,10 @@ enum CodexOutput: Sendable {
             return outputs
         }
         guard let method = object["method"] as? String else { return [] }
+        if let id = object["id"] as? Int, method == "item/tool/requestUserInput" {
+            let asked = (object["params"] as? [String: Any])?["questions"] as? [[String: Any]] ?? []
+            return [.questions(id: id, asked.compactMap(question))]
+        }
         if let id = object["id"] as? Int { return [.asked(id: id, method: method)] }
         let params = object["params"] as? [String: Any] ?? [:]
         switch method {
