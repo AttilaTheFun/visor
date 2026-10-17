@@ -19,11 +19,10 @@ let package = Package(
         // port forwarded to the server on its loopback (SSHAgentServer).
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.9.0"),
         // SQLite for the message cache: the system's on Apple's platforms,
-        // its vendored amalgamation elsewhere (WebAssembly included). By
-        // revision until its tag.
+        // its vendored amalgamation elsewhere (WebAssembly included).
         .package(
             url: "https://github.com/AttilaTheFun/swift_sqlite.git",
-            revision: "70f0c45d6d1fc46b5a07e3fac59094aacd062585"
+            exact: "0.34.0"
         ),
     ]
 )

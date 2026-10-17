@@ -103,7 +103,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/swift_sqlite.git",
       "state" : {
-        "revision" : "70f0c45d6d1fc46b5a07e3fac59094aacd062585"
+        "revision" : "70f0c45d6d1fc46b5a07e3fac59094aacd062585",
+        "version" : "0.34.0"
       }
     },
     {

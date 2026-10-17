@@ -80,8 +80,7 @@ let package = Package(
     name: "visor",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
-    // swift_sqlite pinned by commit, as third_party/swift_packages pins it;
-    // at a release, its tag's.
-    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sqlite.git", revision: "70f0c45d6d1fc46b5a07e3fac59094aacd062585")],
+    // swift_sqlite at its release, as third_party/swift_packages pins it.
+    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sqlite.git", exact: "0.34.0")],
     targets: shared + system + tests
 )

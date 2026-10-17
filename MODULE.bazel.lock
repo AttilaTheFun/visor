@@ -631,7 +631,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 363f5674b0292e25fc3043b71110c4944d6b13f9e03009867ddb2d77237c6eea"
+          "FILE:@@//third_party/swift_packages/Package.resolved cb821318ae2730158fe9e9b0950d73df8f1437b4c41d6ef0c9b2a409d560f62c"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -682,6 +682,7 @@
               "bazel_package_name": "swiftpkg_swift_sqlite",
               "commit": "70f0c45d6d1fc46b5a07e3fac59094aacd062585",
               "remote": "https://github.com/AttilaTheFun/swift_sqlite.git",
+              "version": "0.34.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
