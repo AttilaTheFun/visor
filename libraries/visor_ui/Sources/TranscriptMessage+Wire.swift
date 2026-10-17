@@ -14,6 +14,8 @@ extension TranscriptMessage {
         switch entry.role {
         case .user: role = .user
         case .assistant: role = .assistant
+        // The user's answers to the agent's questions: shown as theirs.
+        case .tool where entry.toolName == "answers": role = .user
         case .tool: role = .tool
         }
         // Every attachment is a tile: a picture drawn, a video or a file
