@@ -100,6 +100,24 @@ final class FixtureAgentServer: AgentServer {
             e.generation = 1
             return Self.wire(e)
         }
+        if VisorFixture.screen == "burst", session == VisorFixture.chatSession, revision == 1 {
+            // A burst of long rows at once, as a reply that ran on while
+            // the app was away comes in when it is back: more than a
+            // screen of them, taller than the list guesses before it has
+            // measured them.
+            try await Task.sleep(nanoseconds: 8_000_000_000)
+            let paragraph = "The retry queue now keeps each row's last edit, so a row changed twice while offline reaches the server once, as it was last written, and the banner says how many are still waiting."
+            let rows = (1...8).map { n in
+                TranscriptEntry(id: "burst-\(n)", role: .assistant,
+                                text: n == 8 ? "Burst done: every row is on the server."
+                                    : "Step \(n).\n\n\(paragraph)\n\n```swift\nfunc retry(_ row: Row) async throws {\n    try await server.save(row)\n    store.markSent(row.id)\n}\n```\n\n\(paragraph)")
+            }
+            var e = Envelope.transcript(session: session, entries: rows, streaming: "", activity: nil, busy: false, error: nil)
+            e.after = [VisorFixture.transcript.last?.id ?? ""] + (1..<8).map { "burst-\($0)" }
+            e.revision = 2
+            e.generation = 1
+            return Self.wire(e)
+        }
         if revision >= 1 {
             // Up to date: held, as a server holds it, until asked to stop.
             while !Task.isCancelled { try await Task.sleep(nanoseconds: 60_000_000_000) }

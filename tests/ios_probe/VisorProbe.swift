@@ -387,6 +387,25 @@ final class VisorProbe: XCTestCase {
         app.terminate()
     }
 
+    /// A burst of long rows at the end, more than a screen of them in one
+    /// change (a reply that ran on while the app was away), is followed
+    /// to its end: the list scrolls before it has measured them, and the
+    /// rows it measures afterwards must not leave the thread short of its
+    /// end (the "half a page back" Logan saw on coming back to a session).
+    func testABurstOfRowsAtTheEndIsFollowedToItsEnd() throws {
+        XCUIDevice.shared.orientation = Self.runOrientation
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "burst"]
+        app.launch()
+        let done = app.staticTexts["Burst done: every row is on the server."]
+        XCTAssertTrue(done.waitForExistence(timeout: 20), "the burst did not come")
+        Thread.sleep(forTimeInterval: 3)
+        shot(app, "burst-followed")
+        XCTAssertTrue(done.isHittable, "the thread stopped short of the burst's end")
+        XCTAssertFalse(app.buttons["new-rows-pill"].exists, "a pill while following the end")
+        app.terminate()
+    }
+
     /// Refusing dictation leaves the app running: the system's answer to
     /// the speech recognition prompt comes on a queue of its own, and a
     /// handler for it built on the main actor trapped there (0.29). Needs
@@ -690,7 +709,18 @@ final class VisorProbe: XCTestCase {
         // reader of the PNG applies.
         let format = UIGraphicsImageRendererFormat()
         format.scale = picture.scale
-        let upright = UIGraphicsImageRenderer(size: picture.size, format: format).image { _ in picture.draw(at: .zero) }
+        // A phone's screen picture in landscape is its portrait frame with
+        // the screen on its side: turned a quarter anticlockwise (the
+        // runs turn it to landscapeLeft). The simulator's is landscape.
+        let sideways = XCUIDevice.shared.orientation == .landscapeLeft && picture.size.width < picture.size.height
+        let size = sideways ? CGSize(width: picture.size.height, height: picture.size.width) : picture.size
+        let upright = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            if sideways {
+                context.cgContext.translateBy(x: 0, y: size.height)
+                context.cgContext.rotate(by: -.pi / 2)
+            }
+            picture.draw(at: .zero)
+        }
         try? upright.pngData()?.write(to: URL(fileURLWithPath: "\(outDir)/\(name).png"))
         let kept = XCTAttachment(image: upright)
         kept.name = name
