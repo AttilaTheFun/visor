@@ -15,6 +15,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build
         run: bazel build //tools/mac_screenshots
+      # What the runner's display can do, for a sharper picture next time.
+      - name: Display
+        continue-on-error: true
+        run: |
+          system_profiler SPDisplaysDataType | sed -n '1,40p'
+          brew install jakehilborn/jakehilborn/displayplacer >/dev/null 2>&1 && displayplacer list | head -60
       # A window shown on CI's own Mac and captured.
       - name: Pictures
         run: |
