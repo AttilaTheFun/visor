@@ -1,13 +1,13 @@
 name: Screenshots
 # The site's pictures (site/): the Mac client and the phone app on the
 # screenshot fixture, in the dark look, kept as this run's artifact to be
-# copied into site/images. Run by hand, or when what makes them changes.
+# copied into site/images. Run by hand (the release Mac's runner starts it
+# for a version's dossier), or when the Mac's screenshot tool changes.
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - 'tools/mac_screenshots/**'
-      - '.github/workflows/screenshots.yml'
 jobs:
   mac:
     runs-on: xcode-27
