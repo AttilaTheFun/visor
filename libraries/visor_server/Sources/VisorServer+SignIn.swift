@@ -39,7 +39,8 @@ extension VisorServer {
                 record.signIn = nil
                 if signedIn {
                     self.tell(record, "Signed in to Claude again. The agent starts afresh on the new sign-in.")
-                    if !record.info.archived { self.restartAgent(record) }
+                    // A stopped agent is left stopped: the next start is on the new sign-in.
+                    if !record.info.archived, record.info.agentState == .running { self.restartAgent(record) }
                 } else {
                     self.tell(record, "The sign-in did not finish" + (said.isEmpty ? "." : ": " + said))
                 }

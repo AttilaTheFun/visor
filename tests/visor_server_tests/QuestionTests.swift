@@ -26,6 +26,7 @@ private final class QuietAgent: AgentProcess {
     var answered: [(String, [String: String]?)] = []
 
     func send(_ text: String) throws {}
+    func start() throws {}
     func answer(_ request: String, with answers: [String: String]?) { answered.append((request, answers)) }
     func startsTurn(_ text: String) -> Bool { true }
     func interrupt() {}

@@ -74,6 +74,9 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// prompt, while the user has not chosen between them. The session
     /// keeps to its own branch unless told to continue that one.
     public var otherBranch: String?
+    /// Where its agent is: nil from a server of 0.34 or before, whose
+    /// agents are only ever restarted.
+    public var agentState: AgentState?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -127,5 +130,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         background = try c.decodeIfPresent([StatusItem].self, forKey: .background) ?? []
         memory = try c.decodeIfPresent(Int64.self, forKey: .memory)
         otherBranch = try c.decodeIfPresent(String.self, forKey: .otherBranch)
+        // A state a later build wrote, which this one has not heard of, is none.
+        agentState = (try? c.decodeIfPresent(AgentState.self, forKey: .agentState)) ?? nil
     }
 }

@@ -108,6 +108,11 @@ public final class SessionRecord {
     /// session at once.
     var held = false
 
+    /// What is said waits rather than goes to the agent: the agent before
+    /// this one is still going, or this one is not running (stopped, or
+    /// on its way to or from it).
+    var waits: Bool { held || info.agentState != .running }
+
     var subscribers: Set<ObjectIdentifier> = []
 
     /// The permission mode changed mid-turn: restart the process when the turn ends.
@@ -170,6 +175,9 @@ public final class SessionRecord {
 
     init(info: SessionInfo, process: AgentProcess, entries: [TranscriptEntry] = [], shownPrompts: [String] = [], notice: String? = nil) {
         self.info = info
+        // A session made here, or from a server that keeps no state:
+        // running unless put away.
+        if info.agentState == nil { self.info.agentState = info.archived ? .stopped : .running }
         self.process = process
         self.entries = entries
         self.shownPrompts = shownPrompts
@@ -207,6 +215,9 @@ public final class SessionRecord {
 
     func setArchived(_ archived: Bool) {
         info.archived = archived
+        // Put away, its agent is ended; taken out, it runs with the next
+        // message.
+        info.agentState = archived ? .stopped : .running
         info.busy = false
         activity = nil
         streams = []

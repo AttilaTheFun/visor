@@ -55,6 +55,14 @@ struct AgentScreen: View {
     /// with the thread's own changes, not each time the list changes.
     private var info: SessionInfo? { transcript.info }
 
+    /// The composer's words before anything is typed: what the agent is
+    /// waiting for, when it is not simply the next message.
+    private var placeholder: String {
+        if transcript.signIn != nil { return "Paste the sign-in code…" }
+        if info?.agentState == .stopped { return "The agent is stopped: messages wait until it starts…" }
+        return "Message \(info?.agent.title ?? "the agent")…"
+    }
+
     /// While a draft is a slash and the start of a command's name, the
     /// commands it could be, best first: names that begin with what is
     /// typed, then names that hold it. Asked by the composer as the draft
@@ -186,7 +194,7 @@ struct AgentScreen: View {
                 ? "Write the first message below; \(info?.agent.title ?? "the agent") starts in \(info?.cwd ?? "its directory")."
                 : "Fetching the transcript from \(host.record.name).",
             draft: $draft,
-            placeholder: transcript.signIn != nil ? "Paste the sign-in code…" : "Message \(info?.agent.title ?? "the agent")…",
+            placeholder: placeholder,
             busy: transcript.busy,
             // The send button spins only for what is not in the thread yet.
             sending: transcript.sending.contains { !$0.shown },

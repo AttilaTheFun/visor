@@ -566,10 +566,16 @@ ends the agents. A host with no server for a day ends its agent; one
 whose agent has gone waits ten minutes for a server to tell. The host's
 memory guard holds the agent's tree to `AgentChildren.memoryLimit` (half
 the computer's memory) by stopping its largest process, with a notice;
-the session's `memory` is shown in the inspector. "Restart Agent" in a
-session's menu (`restartAgent`) ends just that session's agent; the
-next message starts a new one, and a turn it was working on is carried
-on by a nudge. Hosts log to `hosts/hosts.log` in the data folder.
+the session's `memory` is shown in the inspector. A session's agent
+has a state (`SessionInfo.agentState`, kept with the session), and its
+menu and inspector offer what that state allows (AgentStateButtons):
+running, "Stop Agent" and "Restart Agent"; stopped, "Start Agent";
+starting or stopping, nothing. Restart (`restartAgent`) ends just that
+session's agent and starts a new one at once (`AgentProcess.start`), a
+turn it was working on carried on by a nudge. Stop (`stopAgent`) ends
+it and keeps it ended, through a launch too, what is sent meanwhile
+waiting in the queue (`SessionRecord.waits`) until Start (`startAgent`).
+Hosts log to `hosts/hosts.log` in the data folder.
 
 **Moving a session.** "Migrate…" in a session's menu lists the other
 computers connected now. The client (`SessionMigration`) asks the

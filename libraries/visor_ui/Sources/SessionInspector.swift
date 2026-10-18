@@ -54,7 +54,7 @@ struct SessionInspector: View {
                     LabeledContent("Model", value: host.modelTitle(for: session) + (session.effort.map { " " + AgentCatalog.effortTitle($0) } ?? ""))
                     LabeledContent("Folder", value: session.cwd)
                     LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
-                    LabeledContent("State", value: session.busy ? "Working" : (session.archived ? "Archived" : "Idle"))
+                    LabeledContent("State", value: AgentStateButtons.stateTitle(session))
                     // The agent and what it runs, as its host says.
                     if let memory = session.memory { LabeledContent("Memory", value: MigrationSheet.size(Int(clamping: memory))) }
                     // To carry the conversation on in the agent's own
@@ -65,6 +65,9 @@ struct SessionInspector: View {
                     }
                 }
                 SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)
+                if !session.archived {
+                    Section { AgentStateButtons(host: host, session: session) }
+                }
                 Section {
                     Button("Archive", action: archive)
                     Button("End session", role: .destructive, action: end)

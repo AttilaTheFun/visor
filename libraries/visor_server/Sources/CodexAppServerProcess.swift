@@ -100,6 +100,8 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         Task { await self.turn(text, on: child) }
     }
 
+    public func start() throws { _ = try running() ?? spawn() }
+
     /// Starts the turn: on the thread there is, or on one started for it.
     private func turn(_ text: String, on child: any AgentChild) async {
         guard let threadID = await thread(on: child) else {
