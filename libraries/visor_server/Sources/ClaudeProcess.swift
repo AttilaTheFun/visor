@@ -79,6 +79,8 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         emit.yield(.activity("Thinking…"))
     }
 
+    public func start() throws { _ = try running() ?? spawn() }
+
     /// The model a message says it ran on, if it ran on one: Claude Code
     /// marks the messages it writes itself (a goal set, an interruption)
     /// "<synthetic>", which is no model.

@@ -35,6 +35,9 @@ public protocol AgentProcess: AnyObject {
     var resumeCommand: String? { get }
     /// Sends a user turn; spawns (or resumes) the process as needed.
     func send(_ text: String) throws
+    /// Spawns (or resumes) the process now, ahead of any turn, as Start
+    /// Agent and Restart Agent ask; nothing when it is running already.
+    func start() throws
     /// Whether these words are a turn of the agent's, or a command its
     /// process takes itself (Codex's /goal, /compact), which starts a turn
     /// only if the agent then says one began.

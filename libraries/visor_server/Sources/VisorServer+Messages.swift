@@ -63,6 +63,8 @@ extension VisorServer {
         case "unarchive": performUnarchive(envelope)
         case "restart": performRestart(envelope, from: client)
         case "restartAgent": performRestartAgent(envelope)
+        case "stopAgent": performStopAgent(envelope)
+        case "startAgent": performStartAgent(envelope)
         case "keepBranch": performKeepBranch(envelope)
         case "continueBranch": performContinueBranch(envelope)
         case "end": performEnd(envelope)
@@ -238,9 +240,26 @@ extension VisorServer {
         continueOtherBranch(record)
     }
 
+    /// A running agent restarted. A stopped one is started (what a client
+    /// of 0.34 or before, which offers only Restart, means by it); one
+    /// starting or stopping is left to get there.
     private func performRestartAgent(_ envelope: Envelope) {
         guard let record = session(envelope.session), !record.info.archived else { return }
-        restartAgent(record)
+        switch record.info.agentState {
+        case .running?: restartAgent(record)
+        case .stopped?: startAgent(record)
+        default: break
+        }
+    }
+
+    private func performStopAgent(_ envelope: Envelope) {
+        guard let record = session(envelope.session), !record.info.archived, record.info.agentState == .running else { return }
+        stopAgent(record)
+    }
+
+    private func performStartAgent(_ envelope: Envelope) {
+        guard let record = session(envelope.session), !record.info.archived, record.info.agentState == .stopped else { return }
+        startAgent(record)
     }
 
     /// Quitting the app kills every agent, so an agent that wants a

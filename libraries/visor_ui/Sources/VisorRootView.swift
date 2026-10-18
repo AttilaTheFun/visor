@@ -407,9 +407,7 @@ public struct VisorRootView: View {
             Label("Rename", systemImage: "pencil")
         }
         Button { host.archive(session.id) } label: { Label("Archive", systemImage: "archivebox") }
-        // A new agent on the same conversation: for one that is stuck, or
-        // holds too much.
-        Button { host.restartAgent(session.id) } label: { Label("Restart Agent", systemImage: "arrow.clockwise") }
+        AgentStateButtons(host: host, session: session)
         // To another computer connected now; this one keeps the session
         // until the user removes it.
         let others = store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }

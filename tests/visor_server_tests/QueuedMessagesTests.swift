@@ -29,6 +29,7 @@ private final class ScriptedAgent: AgentProcess {
     init() { (events, emit) = AsyncStream.makeStream() }
 
     func send(_ text: String) throws { said.append(text) }
+    func start() throws {}
     func startsTurn(_ text: String) -> Bool { !commands.contains(text) }
     func interrupt() { said.append("stop") }
     func stop() {}
