@@ -1,0 +1,28 @@
+name: Build
+# A branch's commit built to try before it merges, on the release Mac's
+# runner (self-hosted, release-mac): a push whose head commit says
+# :build:, or by hand. Never a fork's: only pushes to this repository's
+# branches, and dispatches, run here. What is done with the packages is
+# the runner's ($PIPELINE_CI).
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, ':build:')
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - run: $PIPELINE_CI prepare
+      - run: tools/build_packages.sh
+      - run: $PIPELINE_CI publish Visor dist/packages/*
+        env:
+          GH_TOKEN: ${{ github.token }}
