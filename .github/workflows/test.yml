@@ -10,6 +10,8 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  # The Mac's pictures: the Screenshots workflow started for the commit.
+  actions: write
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
@@ -17,7 +19,7 @@ jobs:
   test:
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, ':test:')
     runs-on: [self-hosted, release-mac]
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - run: $PIPELINE_CI prepare

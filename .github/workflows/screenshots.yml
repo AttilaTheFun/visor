@@ -1,0 +1,59 @@
+name: Screenshots
+# The site's pictures (site/): the Mac client and the phone app on the
+# screenshot fixture, in the dark look, kept as this run's artifact to be
+# copied into site/images. Run by hand, or when what makes them changes.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/mac_screenshots/**'
+      - '.github/workflows/screenshots.yml'
+jobs:
+  mac:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: bazel build //tools/mac_screenshots
+      # What the runner's display can do, for a sharper picture next time.
+      - name: Display
+        continue-on-error: true
+        run: |
+          system_profiler SPDisplaysDataType | sed -n '1,40p'
+          brew install jakehilborn/jakehilborn/displayplacer >/dev/null 2>&1 && displayplacer list | head -60
+      # A window shown on CI's own Mac and captured.
+      - name: Pictures
+        timeout-minutes: 10
+        run: |
+          mkdir -p shots
+          tool="$(bazel cquery --output=files //tools/mac_screenshots 2>/dev/null | head -1)"
+          for screen in chat question models inspector new-session; do
+            "$tool" "$screen" "$PWD/shots/mac-$screen.png" dark
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-screenshots
+          path: shots/*.png
+
+  iphone:
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      # The simulator the probe runs on, made ahead, with the status bar
+      # pictures usually show.
+      - name: Simulator
+        run: |
+          runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' | head -1)"
+          id="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.0" "iPhone 17" "$runtime")"
+          xcrun simctl boot "$id"
+          xcrun simctl bootstatus "$id"
+          xcrun simctl status_bar "$id" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+      - name: Pictures (iOS simulator)
+        run: VISOR_UI_CASES=VisorProbe/testSiteShots tools/ios_ui_tests.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iphone-screenshots
+          path: /private/tmp/visor_probe/site-*.png
