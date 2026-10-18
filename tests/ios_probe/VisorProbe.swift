@@ -406,6 +406,44 @@ final class VisorProbe: XCTestCase {
         app.terminate()
     }
 
+    /// Typing through an autocorrection: what is typed after a word the
+    /// keyboard lengthened ("dont" to "don't") goes after it. The field says
+    /// where its caret is a moment after the words change, and the caret
+    /// from the words before, handed back to it in that moment, moved it a
+    /// letter back: "I don't kno whatw" (Logan: "weird jumps in the text
+    /// insertion point when typing").
+    func testTypingThroughAnAutocorrectionKeepsTheCaret() throws {
+        XCUIDevice.shared.orientation = Self.runOrientation
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        let field = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "no composer")
+        field.tap()
+        // Key by key, as a person types: `typeText` goes round the keyboard's
+        // autocorrection.
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5), "no on-screen keyboard (a hardware keyboard is connected?)")
+        func type(_ text: String) {
+            for character in text {
+                let key = character == " " ? keyboard.keys["space"] : keyboard.keys[String(character)]
+                if key.exists { key.tap() } else { field.typeText(String(character)) }
+            }
+        }
+        // Corrections that lengthen the word ("dont" to "don't"): a caret
+        // kept from the words before it is a letter short of the end.
+        type("im sure i dont know ")
+        type("what")
+        Thread.sleep(forTimeInterval: 1)
+        let typed = (field.value as? String ?? "").replacingOccurrences(of: "\u{2019}", with: "'")
+        shot(app, "autocorrection-typed")
+        XCTAssertTrue(typed.contains("don't"), "the keyboard did not correct dont, so this ran no correction: \(typed)")
+        // What came after the corrected words, after them, in order.
+        XCTAssertTrue(typed.lowercased().hasSuffix("sure i don't know what"), "what was typed after a correction went elsewhere: \(typed)")
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed.count + 2))
+        app.terminate()
+    }
+
     /// Refusing dictation leaves the app running: the system's answer to
     /// the speech recognition prompt comes on a queue of its own, and a
     /// handler for it built on the main actor trapped there (0.29). Needs
