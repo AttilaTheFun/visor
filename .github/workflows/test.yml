@@ -1,11 +1,14 @@
 name: Test
 # A branch's commit's screens and UI tests, run on the release Mac's runner
 # (self-hosted, release-mac) for review before it merges: a push whose head
-# commit says :test:, or by hand. Never a fork's. Where the runs go is the
-# runner's ($PIPELINE_CI).
+# commit says :test:, a pull request's conversation saying :test: (by its
+# owner or a collaborator), or by hand. Never a fork's. Where the runs go is
+# the runner's ($PIPELINE_CI).
 on:
   push:
     branches-ignore: [main]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,16 +16,39 @@ permissions:
   # The Mac's pictures: the Screenshots workflow started for the commit.
   actions: write
 concurrency:
-  group: test-${{ github.ref }}
+  group: test-${{ github.event.issue.number || github.ref }}
   cancel-in-progress: true
 jobs:
   test:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, ':test:')
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && contains(github.event.head_commit.message, ':test:'))
+      || (github.event_name == 'issue_comment' && github.event.issue.pull_request
+          && contains(github.event.comment.body, ':test:')
+          && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 180
     steps:
+      # Said in a pull request's conversation: its own branch and commit,
+      # unless it comes from a fork.
+      - name: The pull request
+        id: pr
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          repo="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" --jq .head.repo.full_name)"
+          [ "$repo" = "$GITHUB_REPOSITORY" ] || { echo "#$NUMBER is from $repo: a fork's is not tested here"; exit 1; }
+          echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" --jq .head.sha)" >> "$GITHUB_OUTPUT"
+          echo "ref=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" --jq .head.ref)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.sha || github.sha }}
       - run: $PIPELINE_CI prepare
       - run: $PIPELINE_CI test Visor
         env:
           GH_TOKEN: ${{ github.token }}
+          PIPELINE_SHA: ${{ steps.pr.outputs.sha }}
+          PIPELINE_BRANCH: ${{ steps.pr.outputs.ref }}
+          PIPELINE_PULL_REQUEST: ${{ github.event.issue.number }}

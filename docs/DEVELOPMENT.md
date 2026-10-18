@@ -685,16 +685,18 @@ not been run against real agents.
   folder (updates Package.resolved), then build here.
 - Builds and runs of a branch, before it merges: a push to a branch of
   this repository (never a fork's) whose head commit's message says
-  `:build:` runs build.yml on the release Mac's self-hosted runner
-  (tools/build_packages.sh: the iPhone app and the Mac's disk images,
-  signed), and `:test:` runs test.yml (the screens and UI tests); the
-  words count anywhere in the message. What the runner does with them is
-  its own (`$PIPELINE_CI`: the builds to the release server, the runs to
-  the review server, each under its commit, branch and pull request).
-  Either can also be run by hand (workflow_dispatch). A tag `v<version>`
-  on main runs release.yml: the version built and published as its
-  release candidate, notes drafted from every pull request merged since
-  the tag before, then the whole suite run as the version's dossier.
+  `:build:`, or `:build:` said in a pull request's conversation by its
+  owner or a collaborator (Reviews' Conversation), runs build.yml on the
+  release Mac's self-hosted runner (tools/build_packages.sh: the iPhone
+  app and the Mac's disk images, signed), and `:test:`, said either way,
+  runs test.yml (the screens and UI tests); the words count anywhere in
+  the message. What the runner does with them is its own (`$PIPELINE_CI`:
+  the builds to the release server, the runs to the review server, each
+  under its commit, branch and pull request). Either can also be run by
+  hand (workflow_dispatch). A tag `v<version>` on main runs release.yml:
+  the version built and published as its release candidate, notes drafted
+  from every pull request merged since the tag before, then the whole
+  suite run as the version's dossier.
 - Rules (AGENTS.md): every change through a pull request, no attribution lines; no
   Combine; visor_client/visor_ui stay Foundation-free of networking,
   JSON, UserDefaults (they build for the web — `String.trimmingCharacters`
