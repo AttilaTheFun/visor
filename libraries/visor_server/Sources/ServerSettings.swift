@@ -5,6 +5,7 @@
 // in the data directory with the sessions.
 
 import Foundation
+import VisorProtocol
 
 public struct ServerSettings: Codable, Equatable, Sendable {
     /// Let the LAN reach the port: the home or office network this
@@ -52,12 +53,31 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// server's own children. On unless turned off; VISOR_DETACH_AGENT_HOST
     /// (0 or 1) overrides it (VisorServer.detachesAgents).
     public var detachAgents = true
+    /// The most virtual machines of each platform (`MachinePlatform`'s raw
+    /// value) the server may run agents' sessions in at once; none by
+    /// default, a platform not named being 0.
+    public var machines: [String: Int] = [:]
+    /// The script that provisions a virtual machine and wraps it and the
+    /// agent inside it (its contract: docs/DEVELOPMENT.md, Virtual
+    /// machines), for a host to bring its own images, network and tools;
+    /// empty for Visor's own.
+    public var provisioningScript = ""
 
     public init() {}
 
+    /// The most machines of the platform the server may run at once.
+    public func maxMachines(_ platform: MachinePlatform) -> Int { max(0, machines[platform.rawValue] ?? 0) }
+
+    /// Sets it, within what the system allows (Apple's two macOS machines
+    /// per Mac); 0 takes the platform off.
+    public mutating func setMaxMachines(_ platform: MachinePlatform, _ count: Int) {
+        let allowed = min(max(0, count), platform.hostLimit ?? Int.max)
+        machines[platform.rawValue] = allowed == 0 ? nil : allowed
+    }
+
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             detachAgents
+             detachAgents, machines, provisioningScript
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -72,6 +92,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         try c.encode(authentication, forKey: .authentication)
         try c.encode(standalone, forKey: .standalone)
         try c.encode(detachAgents, forKey: .detachAgents)
+        if !machines.isEmpty { try c.encode(machines, forKey: .machines) }
+        if !provisioningScript.isEmpty { try c.encode(provisioningScript, forKey: .provisioningScript) }
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -96,6 +118,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         serverID = try c.decodeIfPresent(String.self, forKey: .serverID) ?? ""
         authentication = try c.decodeIfPresent(String.self, forKey: .authentication) ?? "password"
         detachAgents = try c.decodeIfPresent(Bool.self, forKey: .detachAgents) ?? true
+        machines = try c.decodeIfPresent([String: Int].self, forKey: .machines) ?? [:]
+        provisioningScript = try c.decodeIfPresent(String.self, forKey: .provisioningScript) ?? ""
     }
 
     public func keep(at url: URL) {

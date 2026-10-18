@@ -23,7 +23,8 @@ struct SettingsPane: View {
     /// The field being edited, so leaving it applies what was typed: an
     /// address that only Return applied was easy to leave unapplied.
     @FocusState private var editing: EditedField?
-    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword }
+    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword, provisioningScript }
+    @State private var provisioningScript = ""
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
@@ -156,6 +157,22 @@ struct SettingsPane: View {
                 Text("Agents")
             }
             Section {
+                ForEach(MachinePlatform.allCases, id: \.self) { platform in
+                    let count = server.settings.maxMachines(platform)
+                    Stepper(value: Binding(get: { count }, set: { server.settings.setMaxMachines(platform, $0) }),
+                            in: 0...(platform.hostLimit ?? 16)) {
+                        LabeledContent(platform.title, value: count == 0 ? "None" : "\(count) at a time")
+                    }
+                }
+                TextField("Provisioning script (empty: Visor's own)", text: $provisioningScript)
+                    .focused($editing, equals: .provisioningScript)
+                    .onSubmit { apply(.provisioningScript) }
+                Text("Agents' sessions in virtual machines on this Mac, each wiped before it is used again: none unless allowed here (macOS allows two per Mac). A provisioning script of your own makes the machines from your own images, network and tools.")
+                    .font(.caption).foregroundColor(.secondary)
+            } header: {
+                Text("Virtual machines")
+            }
+            Section {
                 let current = server.apnsKey
                 Text(current.configured
                      ? "Key \(current.keyID) is set; \(server.pushDeviceCount) device\(server.pushDeviceCount == 1 ? "" : "s") asked for notifications."
@@ -197,6 +214,7 @@ struct SettingsPane: View {
         .onAppear {
             publicAddress = server.settings.publicAddress
             tlsPath = server.settings.tlsIdentityPath
+            provisioningScript = server.settings.provisioningScript
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
@@ -207,6 +225,7 @@ struct SettingsPane: View {
         .onDisappear {
             apply(.publicAddress)
             apply(.tlsPath)
+            apply(.provisioningScript)
         }
     }
 
@@ -219,6 +238,9 @@ struct SettingsPane: View {
             if server.settings.publicAddress != publicAddress { server.settings.publicAddress = publicAddress }
         case .tlsPath:
             if server.settings.tlsIdentityPath != tlsPath { server.settings.tlsIdentityPath = tlsPath }
+        case .provisioningScript:
+            let path = provisioningScript.trimmingCharacters(in: .whitespaces)
+            if server.settings.provisioningScript != path { server.settings.provisioningScript = path }
         case .tlsPassword:
             // The identity with its password, as Return always applied them.
             guard !tlsPassword.isEmpty else { return }
