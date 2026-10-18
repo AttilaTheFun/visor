@@ -54,6 +54,13 @@ public struct WindowsTools: ToolLocating {
         return environment
     }
 
+    public func searchPath(_ directory: String, before environment: [String: String]) -> [String: String] {
+        var environment = environment
+        let key = environment.keys.first { $0.caseInsensitiveCompare("PATH") == .orderedSame } ?? "Path"
+        environment[key] = [directory, environment[key]].compactMap { $0 }.joined(separator: ";")
+        return environment
+    }
+
     public func command(_ executable: String, _ arguments: [String]) -> ShellCommand {
         let kind = (executable as NSString).pathExtension.lowercased()
         guard kind == "cmd" || kind == "bat" else { return ShellCommand(executable, arguments) }

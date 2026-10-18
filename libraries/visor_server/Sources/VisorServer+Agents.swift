@@ -18,7 +18,8 @@ extension VisorServer {
         let process = harness.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
         process.model = info.model
         process.effort = info.effort
-        process.approvalEnvironment = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]
+        process.approvalEnvironment = AgentEnvironmentFile.read(info.agent)
+            .merging(["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]) { _, ours in ours }
         return process
     }
 
