@@ -665,7 +665,10 @@ reaches this server) makes a machine ready, the repository cloned to
 it and connects out to the server) and shut it down, answering
 `{"state": …}`; `reclaim` wipes it back to its image and returns it to
 the pool; `delete` removes it and its disk; `status` answers the state
-of each machine it knows, for a server that restarts. A session in a
+of each machine it knows, for a server that restarts. What it makes is
+kept out of Time Machine (`tmutil addexclusion` on the machines' folder
+and each machine as it is made): machines are wiped and made again,
+never backed up, and must not fill local snapshots. A session in a
 machine has the machine's states (provisioning, starting, running,
 stopping, stopped, reclaimed) and is moved in and out of machines by
 Migrate…, as between computers. Built so far: the settings.
