@@ -1,0 +1,45 @@
+name: Release
+# A version tagged on main (v0.36), on the release Mac's runner
+# (self-hosted, release-mac): built with the release signing (the Mac's
+# Developer ID, notarized) and published to the release server as the
+# version's release candidate, its notes every pull request merged since
+# the tag before; then the whole suite (the simulator, the device lab, the
+# Mac's pictures) run into the review server as the version's dossier, to
+# be signed off before the version is promoted. What is done with the
+# packages and the runs is the runner's ($PIPELINE_CI).
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: release-${{ github.ref }}
+jobs:
+  release:
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The tag names the version
+        run: |
+          version="$(plutil -extract CFBundleShortVersionString raw applications/visor_macos/Info.plist)"
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "$GITHUB_REF_NAME is not version $version's tag"; exit 1; }
+      - run: $PIPELINE_CI prepare
+      - run: tools/build_packages.sh
+      - run: $PIPELINE_CI release Visor dist/packages/*
+        env:
+          GH_TOKEN: ${{ github.token }}
+  dossier:
+    needs: release
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - run: $PIPELINE_CI prepare
+      - run: $PIPELINE_CI test Visor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIPELINE_TEST_TARGETS: ios iphone-xs macos
