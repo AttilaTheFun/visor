@@ -1,0 +1,26 @@
+name: Test
+# A branch's commit's screens and UI tests, run on the release Mac's runner
+# (self-hosted, release-mac) for review before it merges: a push whose head
+# commit says :test:, or by hand. Never a fork's. Where the runs go is the
+# runner's ($PIPELINE_CI).
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, ':test:')
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - run: $PIPELINE_CI prepare
+      - run: $PIPELINE_CI test Visor
+        env:
+          GH_TOKEN: ${{ github.token }}
