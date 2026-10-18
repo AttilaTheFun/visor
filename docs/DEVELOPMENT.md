@@ -635,11 +635,40 @@ on|off` serves the socket file for SSH clients (Linux; not Windows),
 `visor-server address <url>` names a front of your own, `visor-server
 standalone on` keeps it to itself (see the protocol's network of
 computers); `run` and `start` take the same as options (`--password`,
-`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`), for a
+`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`,
+`--machines`, `--provisioning`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server
 is built and tried in CI (a throwaway session over its WebSocket); it has
 not been run against real agents.
+
+**Virtual machines** (being built). A server may run agents' sessions
+in virtual machines on its own computer, each started with a GitHub
+repository, an agent and a platform (`MachinePlatform`: macOS, with
+Xcode, Bazel and Homebrew; Ubuntu with a desktop, apt, Bazel and git),
+wiped before it is used again. How many of each it may run at once is
+the owner's to set (`ServerSettings.machines`: none unless set; macOS
+two per Mac), in the menu bar app's settings or `visor-server machines
+<platform> <n>`. The machines are made by a provisioning script
+(`ServerSettings.provisioningScript`, `visor-server provisioning
+<path>`; empty for Visor's own), so a company can bring its own images,
+network and tools. Its contract: the server runs `<script> <action>
+--platform <macos|linux> --machine <id>`, one action at a time; its
+answer is one JSON object on stdout, its progress on stderr (the
+session's activity), a non-zero exit a failure said in the session.
+`provision` (also `--repository <owner/name>` and `--agent <kind>`; in
+its environment the repository's token, the agent's sign-in, and
+`VISOR_HOST_URL` and `VISOR_MACHINE_TOKEN`, how the wrapper inside
+reaches this server) makes a machine ready, the repository cloned to
+`~/Developer/<repo>` and Visor's wrapper installed, and answers
+`{"machine": id}`; `start` and `stop` boot it (the wrapper starts with
+it and connects out to the server) and shut it down, answering
+`{"state": …}`; `reclaim` wipes it back to its image and returns it to
+the pool; `delete` removes it and its disk; `status` answers the state
+of each machine it knows, for a server that restarts. A session in a
+machine has the machine's states (provisioning, starting, running,
+stopping, stopped, reclaimed) and is moved in and out of machines by
+Migrate…, as between computers. Built so far: the settings.
 
 ## 4. The working loop
 
