@@ -22,7 +22,7 @@ final class RelayCourierTests: XCTestCase {
         ScriptedProvider.servers = [:]
         AgentServerProviders.register(ScriptedProvider())
         VisorHost.settings = MemorySettings()
-        VisorHost.deviceName = "Logan's iPhone"
+        VisorHost.deviceName = "My iPhone"
         RelayCourier.onByDefault = true
     }
 
@@ -72,7 +72,7 @@ final class RelayCourierTests: XCTestCase {
         let report = try XCTUnwrap(mini.reports.last)
         XCTAssertEqual(laptop.reports.last, report, "the same to each")
         XCTAssertEqual(report.client, AgentServerRecord.clientID)
-        XCTAssertEqual(report.clientName, "Logan's iPhone")
+        XCTAssertEqual(report.clientName, "My iPhone")
         XCTAssertEqual(report.servers.map(\.id), ["mini-id", "laptop-id"])
         XCTAssertEqual(report.servers.map(\.name), ["Mini", "Laptop"])
         // What an agent can message: not the archived; untitled, by its

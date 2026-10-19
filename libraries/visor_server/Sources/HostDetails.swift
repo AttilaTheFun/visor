@@ -2,7 +2,7 @@ import Foundation
 
 /// This computer, as the server tells it.
 public struct HostDetails: Sendable {
-    /// Its name, as a client shows it ("Logan's Mac mini").
+    /// Its name, as a client shows it ("Studio Mac").
     public var name: String
     /// The server's own version and build, as installed and running
     /// ("0.31 (8)"); empty where the binary does not say.

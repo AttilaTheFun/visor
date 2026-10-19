@@ -41,7 +41,7 @@ extension VisorServer {
 
     /// The reported servers an agent's word for one names: the one with
     /// that id, or else every one with that name (as written, or as a
-    /// session id from before ids wrote it, `logans-mac-mini`).
+    /// session id from before ids wrote it, `studio-mac`).
     func reportedServers(matching key: String) -> [DirectoryServer] {
         let servers = reportedServers().map(\.server)
         if let byID = servers.first(where: { $0.id == key }) { return [byID] }

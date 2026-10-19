@@ -49,7 +49,7 @@ final class RelayMessagingTests: ServerTestCase {
     /// What a client connected to both says: both servers, with their sessions.
     private func report(client: String = "phone", servers: [VisorServer]? = nil) -> DirectoryReport {
         let servers = servers ?? [here!, there!]
-        return DirectoryReport(client: client, clientName: "Logan's iPhone", servers: servers.map { server in
+        return DirectoryReport(client: client, clientName: "My iPhone", servers: servers.map { server in
             DirectoryServer(id: server.id, name: server === here ? "Mini" : "Laptop",
                             sessions: server.sessions.map { DirectorySession(id: $0.info.id, name: $0.displayName, agent: "Claude", busy: $0.info.busy) })
         })
@@ -102,7 +102,7 @@ final class RelayMessagingTests: ServerTestCase {
         here.takeReport(said)
         let list = await ask("sessions")
         XCTAssertTrue(list.text?.contains("On Laptop (server \(there.id), Visor Server 0.31 (6))") == true, list.text ?? "")
-        XCTAssertTrue(list.text?.contains("Logan's iPhone: Visor 0.31 (8) on iOS") == true, list.text ?? "")
+        XCTAssertTrue(list.text?.contains("My iPhone: Visor 0.31 (8) on iOS") == true, list.text ?? "")
         let answer = here.route(HTTPRequest(method: "GET", path: "/api/versions", headers: ["authorization": "Bearer here-password"], body: ""))
         XCTAssertEqual(answer.status, 200)
         let versions = parseJSON(answer.body)
@@ -122,7 +122,7 @@ final class RelayMessagingTests: ServerTestCase {
         let list = await ask("sessions")
         let text = list.text ?? ""
         XCTAssertTrue(text.contains("On this computer, \(here.hostName) (server \(here.id)):\nNo other sessions."), text)
-        XCTAssertTrue(text.contains("On Laptop (server \(there.id)), as Logan's iPhone reported"), text)
+        XCTAssertTrue(text.contains("On Laptop (server \(there.id)), as My iPhone reported"), text)
         XCTAssertTrue(text.contains("B — Laptop work (Claude, working)"), text)
         XCTAssertFalse(text.contains("On Mini"), "this server is not listed as another")
     }
