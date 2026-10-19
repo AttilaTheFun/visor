@@ -731,7 +731,11 @@ Migrate…, as between computers. Built so far: the settings.
   review store; neither runs for a fork's pull request. What the runner does
   with them is its own (`$PIPELINE_CI`: the builds to the release server,
   the runs to the review store, each under its commit, branch and pull
-  request). main requires every job green on the head commit to merge, so
+  request). Each run's build number is one past the version's highest on
+  the release server (its `number` job: `$PIPELINE_CI number`), stamped
+  into the four Info.plists before building and used for the runs, so
+  every build published is one more without a commit to bump it; a tag's
+  release takes the next the same way. main requires every job green on the head commit to merge, so
   a pull request that can merge has its builds in Releases and its runs in
   Reviews. A tag `v<version>` on main runs release.yml:
   the version built and published as its release candidate, notes drafted

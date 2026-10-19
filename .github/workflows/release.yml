@@ -21,6 +21,8 @@ concurrency:
 jobs:
   release:
     runs-on: [self-hosted, release-mac]
+    outputs:
+      build: ${{ steps.number.outputs.build }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +33,11 @@ jobs:
           version="$(plutil -extract CFBundleShortVersionString raw applications/visor_macos/Info.plist)"
           [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "$GITHUB_REF_NAME is not version $version's tag"; exit 1; }
       - run: $PIPELINE_CI prepare
+      # The release candidate's build number: one past the version's
+      # highest (its pull requests' pushes built before it).
+      - id: number
+        run: echo "build=$($PIPELINE_CI number Visor applications/visor_ios/Info.plist)" >> "$GITHUB_OUTPUT"
+      - run: $PIPELINE_CI stamp ${{ steps.number.outputs.build }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist
       - run: tools/build_packages.sh
       - run: $PIPELINE_CI release Visor dist/packages/*
         env:
@@ -42,6 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: $PIPELINE_CI prepare
+      - run: $PIPELINE_CI stamp ${{ needs.release.outputs.build }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist
       - run: $PIPELINE_CI test Visor
         env:
           GH_TOKEN: ${{ github.token }}

@@ -301,9 +301,10 @@ final class VisorProbe: XCTestCase {
                 XCUIDevice.shared.orientation = orientation
             }
             // The search's matches in messages come a moment after its
-            // sessions: waited for, or the picture had them only some runs.
+            // sessions (more than fifteen seconds on CI's simulator):
+            // waited for, or the picture had them only some runs.
             if screen == "search" {
-                XCTAssertTrue(app.staticTexts["Messages"].waitForExistence(timeout: 15), "the search found no messages")
+                XCTAssertTrue(app.staticTexts["Messages"].waitForExistence(timeout: 60), "the search found no messages")
             }
             Thread.sleep(forTimeInterval: 4)
             shot(app, "fixture-" + screen)

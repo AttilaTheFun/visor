@@ -214,12 +214,28 @@ jobs:
           Get-Content server.log, server-errors.log
           exit $status
 
-  # The pull request's packages (the iPhone's .ipa, the Mac's apps signed
-  # and notarized), published to Releases as its builds, or the version's
-  # on a pre-release branch (release-*). What is done with them is the
-  # runner's ($PIPELINE_CI).
-  build:
+  # The build number this run's build and runs take: one past the
+  # version's highest on the release server, so every build published is
+  # one more.
+  number:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.next.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - id: next
+        run: echo "build=$($PIPELINE_CI number Visor applications/visor_ios/Info.plist)" >> "$GITHUB_OUTPUT"
+
+  # The pull request's packages (the iPhone's .ipa, the Mac's apps signed
+  # and notarized) at that number, published to Releases as its builds, or
+  # the version's on a pre-release branch (release-*). What is done with
+  # them is the runner's ($PIPELINE_CI).
+  build:
+    needs: number
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 90
     steps:
@@ -227,6 +243,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: $PIPELINE_CI prepare
+      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.build }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist
       - run: tools/build_packages.sh
       - run: $PIPELINE_CI publish Visor dist/packages/*
         env:
@@ -240,16 +257,16 @@ jobs:
   # version's dossier on a pre-release branch; failed ones too, so they
   # can be seen there.
   review:
-    needs: [ios-ui, mac-screens]
+    needs: [number, ios-ui, mac-screens]
     if: >-
-      !cancelled() && github.event_name == 'pull_request'
-      && github.event.pull_request.head.repo.full_name == github.repository
+      !cancelled() && needs.number.result == 'success'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.build }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist
       - uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/review
