@@ -263,8 +263,8 @@ all), the socket 4 s to open and have its login answered
 (`VisorAgentServer.loginTimeout`). A channel that was up and goes (a
 socket error, a heartbeat unanswered) is opened again at once, by the
 paths from the best, and the server is still shown as connected
-(0.34, Logan: "We shouldn't consider a connection disconnected unless we
-were unable to have a heartbeat returned in time"): only when every path
+(0.34: a connection is not disconnected unless no heartbeat came back in
+time): only when every path
 has failed is it offline and on the schedule, and a reopen that takes
 longer than `quietHold` (6 s) shows it as connecting. The heartbeat
 (`VisorAgentServer.watch`): a `ping` envelope every 16 s, and a
@@ -721,7 +721,7 @@ Migrate…, as between computers. Built so far: the settings.
 - agent_ui changes: commit+push there, put the revision in
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
-- Builds and runs of a pull request, before it merges (Logan, 19 Oct): every
+- Builds and runs of a pull request, before it merges: every
   commit pushed to it runs ci.yml whole, and a newer push cancels the run
   before it if it hasn't finished. Beside the tests and every platform's
   build (GitHub's runners), its `build` job builds the iPhone app and the
@@ -729,7 +729,7 @@ Migrate…, as between computers. Built so far: the settings.
   (tools/build_packages.sh); not for a fork's pull request. What the runner
   does with them is its own (`$PIPELINE_CI`: the builds to the release
   server, under their commit, branch and pull request). The proof (the
-  screens and UI tests) is not CI's (Logan, 19 Oct): see below. Each run's build number is one past the version's highest on
+  screens and UI tests) is not CI's: see below. Each run's build number is one past the version's highest on
   the release server (its `number` job: `$PIPELINE_CI number`), stamped
   into the four Info.plists before building and used for the runs, so
   every build published is one more without a commit to bump it. main
@@ -739,7 +739,7 @@ Migrate…, as between computers. Built so far: the settings.
   its builds and runs are the version's. A release is of one of those
   commits: an agent proposes it as a draft GitHub release
   (`agent-token gh claude release create v<version> --draft --target <sha>`),
-  Logan reviews it in Reviews (its CI, builds, screens, and the pull
+  the owner reviews it in Reviews (its CI, builds, screens, and the pull
   requests since the last release) and approves it there, which makes the
   tag and promotes that commit's builds in Releases; nothing is built from
   the tag (releases: docs/RELEASE_PROCESS.md).
@@ -917,11 +917,10 @@ nothing moves, the pill's count, its going, and its tap;
 rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 
 CI runs the unit tests and builds; the snapshot and UI tests, the proof,
-run on an agent's Mac or a test VM, never on the lab's phones (Logan, 18
-Oct: the lab is for what needs real hardware, a sensor or a benchmark on a
-device; 19 Oct: "run the fast tests and builds on ci but the snapshot and
-other verification proof locally … the agents can publish their proof
-tagged with a commit it ran on to the review server"). For each commit
+run on an agent's Mac or a test VM, never on the lab's phones (the lab is
+for what needs real hardware, a sensor or a benchmark on a device), and
+the agent publishes them to the review server tagged with the commit they
+ran on (GitHub's hosted Mac minutes are billed). For each commit
 pushed to a pull request, and each merged to main:
 
     tools/proof.sh            # .proof/: ios-portrait, ios-landscape (+ mac-screenshots with PROOF_MAC=1, on a test VM)
@@ -937,9 +936,9 @@ files it with the review server under the commit and its build (the
 number CI's `number` job gave the commit), where Reviews shows it as the
 pull request's or the release's runs.
 
-The same cases can run on a phone, for what needs one: the device lab's iPhone XS (iOS 18, on the
-Mac mini; `~/Developer/device_lab`), in a lease:
-`device-lab run --device iphone-xs -- tools/ios_device_tests.sh`. The
+The same cases can run on a phone, for what needs one: a test phone
+leased from a device lab (one agent at a time), for example
+`device-lab run --device <name> -- tools/ios_device_tests.sh`. The
 phone runs `//tests/ios_probe:visor_probe_device`, whose host is the app
 signed with the team's wildcard profile (no push, no widget): the test's
 runner app is signed with its host's profile, and only the wildcard covers
@@ -962,7 +961,7 @@ erased first: nothing cached, the rows come from the first sync) and
 lays the frames around the tap out as contact sheets. The thread must
 appear once, at its end. Rows laid out from the top and scrolled to
 their end a frame later showed the thread's top for that frame — the
-flicker Logan saw on first opens (7 October); AgentUI's TranscriptView
+flicker seen on first opens (7 October); AgentUI's TranscriptView
 now keeps such rows invisible until the scroll has landed. A pixel
 measure would be fooled by the push animation under way at the same
 moment, so this is a look, not a gate.

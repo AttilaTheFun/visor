@@ -1,7 +1,7 @@
 #!/bin/bash
 # The proof of a commit, made on this Mac or a test VM instead of in CI
-# (Logan, 19 Oct: "run the fast tests and builds on ci but the snapshot
-# and other verification proof locally"): what CI's ios-ui and mac-screens
+# (CI runs the fast tests and builds; the snapshots and UI tests, slow,
+# run here): what CI's ios-ui and mac-screens
 # jobs made, in the same folders, for an agent to publish to the review
 # server tagged with the commit (releases: //reviews/harnesses:publish_proof).
 #
