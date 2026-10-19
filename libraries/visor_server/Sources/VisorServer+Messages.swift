@@ -14,7 +14,8 @@ extension VisorServer {
                 client.sendLast(.error("Not an agent of this host"))
                 return
             }
-            let request = ApprovalRequest(id: id, tool: envelope.text ?? "tool", summary: envelope.prompt ?? "")
+            let questions = envelope.questions?.isEmpty == false ? envelope.questions : nil
+            let request = ApprovalRequest(id: id, tool: envelope.text ?? "tool", summary: envelope.prompt ?? "", questions: questions)
             record.approvalWaiters[id] = client
             record.setPendingApproval(request)
             broadcast(.approval(session: record.info.id, request), session: record)
@@ -62,6 +63,8 @@ extension VisorServer {
         case "unarchive": performUnarchive(envelope)
         case "restart": performRestart(envelope, from: client)
         case "restartAgent": performRestartAgent(envelope)
+        case "stopAgent": performStopAgent(envelope)
+        case "startAgent": performStartAgent(envelope)
         case "keepBranch": performKeepBranch(envelope)
         case "continueBranch": performContinueBranch(envelope)
         case "end": performEnd(envelope)
@@ -171,11 +174,21 @@ extension VisorServer {
     }
 
     private func performApprove(_ envelope: Envelope) {
-        guard let record = session(envelope.session), let id = envelope.id, let allow = envelope.allow,
-              let waiter = record.approvalWaiters.removeValue(forKey: id) else { return }
+        guard let record = session(envelope.session), let id = envelope.id, let allow = envelope.allow else { return }
+        // A question the agent itself asked (Codex's): answered to it.
+        guard let waiter = record.approvalWaiters.removeValue(forKey: id) else {
+            guard let pending = record.info.pendingApproval, pending.id == id, pending.questions != nil else { return }
+            record.process.answer(id, with: allow ? envelope.answers : nil)
+            record.setPendingApproval(nil)
+            broadcast(.approval(session: record.info.id, nil), session: record)
+            broadcastSessions()
+            return
+        }
         var answer = Envelope(type: "approval_result")
         answer.id = id
         answer.busy = allow
+        // A question's answers, for the agent's own tool input.
+        answer.answers = envelope.answers
         waiter.sendLast(answer)
         if record.info.pendingApproval?.id == id { record.setPendingApproval(nil) }
         broadcast(.approval(session: record.info.id, record.info.pendingApproval), session: record)
@@ -227,9 +240,26 @@ extension VisorServer {
         continueOtherBranch(record)
     }
 
+    /// A running agent restarted. A stopped one is started (what a client
+    /// of 0.34 or before, which offers only Restart, means by it); one
+    /// starting or stopping is left to get there.
     private func performRestartAgent(_ envelope: Envelope) {
         guard let record = session(envelope.session), !record.info.archived else { return }
-        restartAgent(record)
+        switch record.info.agentState {
+        case .running?: restartAgent(record)
+        case .stopped?: startAgent(record)
+        default: break
+        }
+    }
+
+    private func performStopAgent(_ envelope: Envelope) {
+        guard let record = session(envelope.session), !record.info.archived, record.info.agentState == .running else { return }
+        stopAgent(record)
+    }
+
+    private func performStartAgent(_ envelope: Envelope) {
+        guard let record = session(envelope.session), !record.info.archived, record.info.agentState == .stopped else { return }
+        startAgent(record)
     }
 
     /// Quitting the app kills every agent, so an agent that wants a

@@ -20,6 +20,7 @@ extension SessionInfo {
         if !background.isEmpty { o["background"] = .array(background.map(\.json)) }
         if let memory { o["memory"] = .number(Double(memory)) }
         if let otherBranch { o["otherBranch"] = .string(otherBranch) }
+        if let agentState { o["agentState"] = .string(agentState.rawValue) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -44,6 +45,7 @@ extension SessionInfo {
         background = json["background"].array?.compactMap(StatusItem.init(json:)) ?? []
         memory = json["memory"].int64
         otherBranch = json["otherBranch"].string
+        agentState = json["agentState"].string.flatMap(AgentState.init(rawValue:))
         preview = json["preview"].string
         updated = json["updated"].double
     }

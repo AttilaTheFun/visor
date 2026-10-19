@@ -27,12 +27,16 @@ public protocol AgentHarness: AnyObject, Sendable {
     /// The slash commands its sessions take before the agent has listed
     /// its own (or where it lists none): the harness's.
     var commands: [SlashCommand] { get }
+    /// The account as the agent says it now, asked outright rather than
+    /// heard from a session's turns; nil where it cannot be asked.
+    func readAccount() async -> AgentAccount?
 }
 
 public extension AgentHarness {
     /// Installed on the login shell's PATH.
     var available: Bool { ToolPath.resolve(tool) != nil }
     var commands: [SlashCommand] { [] }
+    func readAccount() async -> AgentAccount? { nil }
     func adoptHistory(id: String, cwd: String) { _ = SessionCatalog.adoptHistory(agent: kind, id: id, cwd: cwd) }
     func resumable(cwd: String) -> [ResumableSession] { SessionCatalog.resumable(agent: kind, cwd: cwd) }
     func transcript(id: String, cwd: String, limit: Int) -> [TranscriptEntry] {

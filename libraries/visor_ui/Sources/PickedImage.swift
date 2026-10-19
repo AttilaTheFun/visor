@@ -24,8 +24,12 @@ struct PickedImage: Identifiable, Equatable {
 
     var isVideo: Bool { AttachmentKind.isVideo(name) }
 
+    /// Its own id each time it is picked: the id is also its thumbnail's
+    /// key in the image cache, and one made of its name and first bytes
+    /// was the same for every "image-0.png" (a PNG's first bytes are its
+    /// signature), so a new picture showed an earlier one's thumbnail.
     init(name: String, base64: String) {
-        self.id = name + "-" + String(base64.prefix(16))
+        self.id = UUID().uuidString
         self.name = name
         self.base64 = base64
     }

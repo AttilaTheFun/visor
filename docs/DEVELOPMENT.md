@@ -417,7 +417,7 @@ account's `headers(for:)`), follows `VisorAccounts.changed()`, and takes
 them away at Sign Out (the sidebar's `AccountSection`). None by default;
 `-visor.account fixture` (or `fixture-signed-in`) uses `FixtureAccount`,
 three canned computers behind one front. The client's models are
-`@Observable` (the iPhone app targets iOS 26); `SessionTranscript` keeps
+`@Observable` (the iPhone app targets iOS 18 from 0.35, 26 before); `SessionTranscript` keeps
 its state untracked behind one counter, so views hear of a frame's changes
 once.
 The server's side is `ServerSettings.authentication`: `password` (the
@@ -566,10 +566,16 @@ ends the agents. A host with no server for a day ends its agent; one
 whose agent has gone waits ten minutes for a server to tell. The host's
 memory guard holds the agent's tree to `AgentChildren.memoryLimit` (half
 the computer's memory) by stopping its largest process, with a notice;
-the session's `memory` is shown in the inspector. "Restart Agent" in a
-session's menu (`restartAgent`) ends just that session's agent; the
-next message starts a new one, and a turn it was working on is carried
-on by a nudge. Hosts log to `hosts/hosts.log` in the data folder.
+the session's `memory` is shown in the inspector. A session's agent
+has a state (`SessionInfo.agentState`, kept with the session), and its
+menu and inspector offer what that state allows (AgentStateButtons):
+running, "Stop Agent" and "Restart Agent"; stopped, "Start Agent";
+starting or stopping, nothing. Restart (`restartAgent`) ends just that
+session's agent and starts a new one at once (`AgentProcess.start`), a
+turn it was working on carried on by a nudge. Stop (`stopAgent`) ends
+it and keeps it ended, through a launch too, what is sent meanwhile
+waiting in the queue (`SessionRecord.waits`) until Start (`startAgent`).
+Hosts log to `hosts/hosts.log` in the data folder.
 
 **Moving a session.** "Migrate…" in a session's menu lists the other
 computers connected now. The client (`SessionMigration`) asks the
@@ -629,11 +635,43 @@ on|off` serves the socket file for SSH clients (Linux; not Windows),
 `visor-server address <url>` names a front of your own, `visor-server
 standalone on` keeps it to itself (see the protocol's network of
 computers); `run` and `start` take the same as options (`--password`,
-`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`), for a
+`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`,
+`--machines`, `--provisioning`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server
 is built and tried in CI (a throwaway session over its WebSocket); it has
 not been run against real agents.
+
+**Virtual machines** (being built). A server may run agents' sessions
+in virtual machines on its own computer, each started with a GitHub
+repository, an agent and a platform (`MachinePlatform`: macOS, with
+Xcode, Bazel and Homebrew; Ubuntu with a desktop, apt, Bazel and git),
+wiped before it is used again. How many of each it may run at once is
+the owner's to set (`ServerSettings.machines`: none unless set; macOS
+two per Mac), in the menu bar app's settings or `visor-server machines
+<platform> <n>`. The machines are made by a provisioning script
+(`ServerSettings.provisioningScript`, `visor-server provisioning
+<path>`; empty for Visor's own), so a company can bring its own images,
+network and tools. Its contract: the server runs `<script> <action>
+--platform <macos|linux> --machine <id>`, one action at a time; its
+answer is one JSON object on stdout, its progress on stderr (the
+session's activity), a non-zero exit a failure said in the session.
+`provision` (also `--repository <owner/name>` and `--agent <kind>`; in
+its environment the repository's token, the agent's sign-in, and
+`VISOR_HOST_URL` and `VISOR_MACHINE_TOKEN`, how the wrapper inside
+reaches this server) makes a machine ready, the repository cloned to
+`~/Developer/<repo>` and Visor's wrapper installed, and answers
+`{"machine": id}`; `start` and `stop` boot it (the wrapper starts with
+it and connects out to the server) and shut it down, answering
+`{"state": …}`; `reclaim` wipes it back to its image and returns it to
+the pool; `delete` removes it and its disk; `status` answers the state
+of each machine it knows, for a server that restarts. What it makes is
+kept out of Time Machine (`tmutil addexclusion` on the machines' folder
+and each machine as it is made): machines are wiped and made again,
+never backed up, and must not fill local snapshots. A session in a
+machine has the machine's states (provisioning, starting, running,
+stopping, stopped, reclaimed) and is moved in and out of machines by
+Migrate…, as between computers. Built so far: the settings.
 
 ## 4. The working loop
 
@@ -683,18 +721,28 @@ not been run against real agents.
 - agent_ui changes: commit+push there, put the revision in
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
-- Builds and runs of a branch, before it merges: a push to a branch of
-  this repository (never a fork's) whose head commit's message says
-  `:build:` runs build.yml on the release Mac's self-hosted runner
-  (tools/build_packages.sh: the iPhone app and the Mac's disk images,
-  signed), and `:test:` runs test.yml (the screens and UI tests); the
-  words count anywhere in the message. What the runner does with them is
-  its own (`$PIPELINE_CI`: the builds to the release server, the runs to
-  the review server, each under its commit, branch and pull request).
-  Either can also be run by hand (workflow_dispatch). A tag `v<version>`
-  on main runs release.yml: the version built and published as its
-  release candidate, notes drafted from every pull request merged since
-  the tag before, then the whole suite run as the version's dossier.
+- Builds and runs of a pull request, before it merges (Logan, 19 Oct): every
+  commit pushed to it runs ci.yml whole, and a newer push cancels the run
+  before it if it hasn't finished. Beside the tests and every platform's
+  build (GitHub's runners), its `build` job builds the iPhone app and the
+  Mac's disk images, signed, on the release Mac's self-hosted runner
+  (tools/build_packages.sh); not for a fork's pull request. What the runner
+  does with them is its own (`$PIPELINE_CI`: the builds to the release
+  server, under their commit, branch and pull request). The proof (the
+  screens and UI tests) is not CI's (Logan, 19 Oct): see below. Each run's build number is one past the version's highest on
+  the release server (its `number` job: `$PIPELINE_CI number`), stamped
+  into the four Info.plists before building and used for the runs, so
+  every build published is one more without a commit to bump it. main
+  requires every job green on the head commit to merge, so a pull request
+  that can merge has its builds in Releases and its runs in Reviews. CI runs
+  again on each commit merged to main (a squash is a commit of its own), and
+  its builds and runs are the version's. A release is of one of those
+  commits: an agent proposes it as a draft GitHub release
+  (`agent-token gh claude release create v<version> --draft --target <sha>`),
+  Logan reviews it in Reviews (its CI, builds, screens, and the pull
+  requests since the last release) and approves it there, which makes the
+  tag and promotes that commit's builds in Releases; nothing is built from
+  the tag (releases: docs/RELEASE_PROCESS.md).
 - Rules (AGENTS.md): every change through a pull request, no attribution lines; no
   Combine; visor_client/visor_ui stay Foundation-free of networking,
   JSON, UserDefaults (they build for the web — `String.trimmingCharacters`
@@ -789,7 +837,8 @@ not been run against real agents.
 For screenshot tests, the client can show a canned computer instead of
 real ones (`libraries/visor_client/Sources/VisorFixture.swift`). The setting
 `fixture` = `snapshot` turns it on; `fixture.screen` opens a screen:
-`sessions`, `chat`, `goal`, `inspector`, `models`, `search` or `connect`
+`sessions`, `chat`, `question`, `goal`, `inspector`, `models`, `search`,
+`connect` or `new-session` (the New Session sheet over the sessions)
 (`earlier` is `goal` with a page of earlier rows that loads as its spinner
 row shows). On Apple
 these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so
@@ -804,7 +853,8 @@ the thread has settled; take screenshots at least 4 s after launch (8 s
 lets every sheet's glass finish easing in). The busy session shows a static glyph instead of
 a spinner. Pin the simulator's status bar (`xcrun simctl status_bar booted
 override --time 9:41 …`) and the same screen gives the same pixels every
-run. The iOS probe's `testFixtureScreens` takes all six.
+run. The iOS probe's `testFixtureScreens` takes all of them in portrait,
+`testFixtureScreensLandscape` in landscape.
 
 ### Fixture look check
 
@@ -847,9 +897,10 @@ The iOS probe's `testLearningOfEarlierRowsMovesNothing` guards that jump
 with no computer: the fixture's `learns-earlier` screen opens the chat
 with no earlier rows known and, ten seconds on, answers its sync with
 word of some, as a server's first answer after a launch can; the test
-fails if the last row moves. CI runs it (the `ios-ui` job, in the
+fails if the last row moves. The proof runs it (`tools/proof.sh`, in the
 simulator, through `tools/ios_ui_tests.sh`, which goes by what the tests
-say because xcodebuild's teardown can hang past a pass). To run it here,
+say; xcodebuild gathers no simulator diagnostics after them, which took
+minutes and read as a timeout). To run it here (or in a VM),
 after touching the thread's rows or its scrolling, `tools/ios_ui_tests.sh`
 or:
 `bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64
@@ -863,7 +914,42 @@ screen brings rows in twelve and twenty-six seconds after it opens;
 `testRowsArrivingWhileReadingAboveMoveNothing` scrolls up and checks that
 nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
-rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and CI).
+rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
+
+CI runs the unit tests and builds; the snapshot and UI tests, the proof,
+run on an agent's Mac or a test VM, never on the lab's phones (Logan, 18
+Oct: the lab is for what needs real hardware, a sensor or a benchmark on a
+device; 19 Oct: "run the fast tests and builds on ci but the snapshot and
+other verification proof locally … the agents can publish their proof
+tagged with a commit it ran on to the review server"). For each commit
+pushed to a pull request, and each merged to main:
+
+    tools/proof.sh            # .proof/: ios-portrait, ios-landscape (+ mac-screenshots with PROOF_MAC=1, on a test VM)
+    cd ~/Developer/releases && bazel run //reviews/harnesses:publish_proof -- \
+      visor ~/Developer/visor ~/Developer/visor/.proof --pull-request <n>   # main's: no --pull-request
+
+`tools/proof.sh` runs, in each orientation, the fixture's screens and
+then the UI cases, each recorded, on the iPhone 17 simulator (iOS 27,
+keyboard suggestions off: their words are noise in a picture), and the
+Mac's screens only with `PROOF_MAC=1`: the tool draws a window and makes
+it key, so only in a test VM, never on a Mac someone uses. publish_proof
+files it with the review server under the commit and its build (the
+number CI's `number` job gave the commit), where Reviews shows it as the
+pull request's or the release's runs.
+
+The same cases can run on a phone, for what needs one: the device lab's iPhone XS (iOS 18, on the
+Mac mini; `~/Developer/device_lab`), in a lease:
+`device-lab run --device iphone-xs -- tools/ios_device_tests.sh`. The
+phone runs `//tests/ios_probe:visor_probe_device`, whose host is the app
+signed with the team's wildcard profile (no push, no widget): the test's
+runner app is signed with its host's profile, and only the wildcard covers
+the runner. rules_apple's runner is patched
+(third_party/patches/rules_apple_device_xctrunner.patch) to name that
+runner `<app>.xctrunner` on a device, as Xcode does; a device finds no data
+container for the simulator's `com.apple.test.` name. The phone must be in
+the team's profiles (`tools/mint_profile/mint_profile.sh` with its UDID, for
+the app's and the wildcard). Every case starts in portrait (the probe's
+`setUp`), whichever way the phone lies; a landscape case turns it itself.
 
 `tools/probes/resync.mjs` (REST only) reports rows from before a send
 that the send replaces on the server.

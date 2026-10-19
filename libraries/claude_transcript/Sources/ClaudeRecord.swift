@@ -17,6 +17,9 @@ public struct ClaudeRecord: Sendable, Equatable {
         case assistant(messageID: String, blocks: [ClaudeBlock], stopReason: String?, model: String?, usage: ClaudeUsage?)
         /// What a tool returned.
         case toolResult(toolUseID: String?, text: String, images: [ClaudeImage], isError: Bool)
+        /// The user's answers to the questions the agent asked them, in the
+        /// order asked: the result of that tool, but the user's words.
+        case answers([ClaudeAnswer])
         /// A title the user gave the session, or Claude Code did.
         case title(String)
         /// A goal the user set (`/goal`): Claude keeps working until it is

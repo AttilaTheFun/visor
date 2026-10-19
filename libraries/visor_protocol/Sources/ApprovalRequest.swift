@@ -9,10 +9,14 @@ public struct ApprovalRequest: Codable, Hashable, Sendable {
     public var tool: String
     /// One line of what it wants to do.
     public var summary: String
+    /// What the agent asks the user (AskUserQuestion): answered, not
+    /// allowed or denied. Nil for any other tool.
+    public var questions: [AgentQuestion]?
 
-    public init(id: String, tool: String, summary: String) {
+    public init(id: String, tool: String, summary: String, questions: [AgentQuestion]? = nil) {
         self.id = id
         self.tool = tool
         self.summary = summary
+        self.questions = questions
     }
 }

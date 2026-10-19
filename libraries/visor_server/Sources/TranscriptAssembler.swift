@@ -90,6 +90,11 @@ struct TranscriptAssembler {
             let paths = images.compactMap { AgentImages.save(base64: $0.base64, mediaType: $0.mediaType) }
             return [TranscriptEntry(id: "tool-file-" + record.uuid, role: .tool, text: String(text.prefix(400)),
                                     toolName: "tool_result", images: paths, imageSizes: AgentImages.pixelSizes(paths: paths))]
+        case .answers(let answers):
+            // The user's answers to the agent's questions: a row the
+            // transcript shows as theirs, each question over its answer.
+            let text = answers.map { "\($0.question)\n**\($0.answer)**" }.joined(separator: "\n\n")
+            return [TranscriptEntry(id: "answers-file-" + record.uuid, role: .tool, text: text, toolName: "answers")]
         case .title:
             return []
         case .goal(let condition, let met, let reason):

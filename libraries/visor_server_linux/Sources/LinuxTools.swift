@@ -30,6 +30,12 @@ public struct LinuxTools: ToolLocating {
         return environment
     }
 
+    public func searchPath(_ directory: String, before environment: [String: String]) -> [String: String] {
+        var environment = environment
+        environment["PATH"] = [directory, environment["PATH"]].compactMap { $0 }.joined(separator: ":")
+        return environment
+    }
+
     public func command(_ executable: String, _ arguments: [String]) -> ShellCommand {
         ShellCommand(executable, arguments)
     }

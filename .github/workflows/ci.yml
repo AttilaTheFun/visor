@@ -1,8 +1,28 @@
 name: CI
+# Every commit pushed to a pull request, and each one merged to main (a
+# squash is a commit of its own): the fast checks, the tests and every
+# platform's build; then, on the release Mac's runner (self-hosted,
+# release-mac), the commit's packages built, signed and published to
+# Releases. The proof (the simulator's screens and UI tests, recorded, and
+# the Mac's screens) is not made here (Logan, 19 Oct: GitHub's Mac minutes
+# go fast): an agent makes it on its own Mac or a test VM (tools/proof.sh)
+# and publishes it to the review server tagged with the commit (releases:
+# publish_proof). A newer push to the pull request cancels this run if it
+# hasn't finished. main requires every job green on a pull request's head
+# commit before it merges. A fork's pull request never runs on the release
+# Mac.
 on:
   pull_request:
   push:
     branches: [main]
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # main's runs are never cut short: their builds are a release's.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
 jobs:
   test:
     # Xcode 27, the toolchain the code is written against.
@@ -41,18 +61,6 @@ jobs:
   # computer, on the snapshot fixture. The thread must not move when it
   # learns there are rows before it (the jump on the first send after a
   # launch, 0.26). A simulator build needs no signing team.
-  ios-ui:
-    runs-on: xcode-27
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      # Judged by what the tests say, not Bazel's exit: xcodebuild's
-      # teardown can hang well past a pass (tools/ios_ui_tests.sh).
-      - name: UI tests (iOS simulator)
-        run: tools/ios_ui_tests.sh
-
-  # The same on Xcode 26 (GitHub's macOS 26 image): the toolchain a year
-  # behind, which forks and contributors may still be on.
   xcode26:
     runs-on: macos-26
     steps:
@@ -133,3 +141,45 @@ jobs:
           $status = $LASTEXITCODE
           Get-Content server.log, server-errors.log
           exit $status
+
+  # The build number this commit's build takes, and its proof is filed
+  # under: one past the version's highest on the release server, so every
+  # build published is one more, and kept there as the commit's.
+  number:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.next.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - id: next
+        run: echo "build=$($PIPELINE_CI number Visor applications/visor_ios/Info.plist)" >> "$GITHUB_OUTPUT"
+        env:
+          # The commit itself (a pull request's head, not its merge ref).
+          PIPELINE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+  # The commit's packages (the iPhone's .ipa, the Mac's apps signed and
+  # notarized) at that number, published to Releases as the pull request's
+  # builds, or the version's on a pre-release branch (release-*) or main.
+  # What is done with them is the runner's ($PIPELINE_CI). (On main the pull
+  # request's values are empty, and it takes the push's own.)
+  build:
+    needs: number
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: $PIPELINE_CI prepare
+      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.build }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist
+      - run: tools/build_packages.sh
+      - run: $PIPELINE_CI publish Visor dist/packages/*
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIPELINE_SHA: ${{ github.event.pull_request.head.sha }}
+          PIPELINE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PIPELINE_PULL_REQUEST: ${{ github.event.pull_request.number }}

@@ -60,6 +60,8 @@ public struct VisorRootView: View {
         // there: held across passes, so the screen compares equal.
         endSession.run = { selection = nil }
         return root
+            // Screenshots: one look, whatever the device's.
+            .preferredColorScheme(VisorFixture.appearance == "dark" ? .dark : VisorFixture.appearance == "light" ? .light : nil)
             .sheet(isPresented: Binding(get: { store.addingServer }, set: { store.addingServer = $0 })) {
                 AddAgentServerSheet { record in
                     store.add(record)
@@ -244,7 +246,7 @@ public struct VisorRootView: View {
         still.disablesAnimations = true
         withTransaction(still) {
             switch screen {
-            case "chat", "inspector", "models", "learns-earlier", "arrivals":
+            case "chat", "inspector", "models", "learns-earlier", "arrivals", "burst", "question", "commands":
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
                 if compact { compactColumn = .detail }
             case "goal", "earlier":
@@ -252,6 +254,8 @@ public struct VisorRootView: View {
                 if compact { compactColumn = .detail }
             case "search":
                 search = VisorFixture.searchQuery
+            case "new-session":
+                composing = true
             default:
                 break
             }
@@ -331,7 +335,9 @@ public struct VisorRootView: View {
             try? await Task.sleep(nanoseconds: 300_000_000)
             sidebarFocused = true
         }
-        .task(id: search.trimmed) { await searchMessages(search.trimmed) }
+        // Asked again as a computer connects: a search typed (or opened on)
+        // before it was found none of its messages, and kept none.
+        .task(id: "\(search.trimmed)|\(store.servers.filter { $0.state == .connected }.count)") { await searchMessages(search.trimmed) }
         .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 440)
     }
 
@@ -403,9 +409,7 @@ public struct VisorRootView: View {
             Label("Rename", systemImage: "pencil")
         }
         Button { host.archive(session.id) } label: { Label("Archive", systemImage: "archivebox") }
-        // A new agent on the same conversation: for one that is stuck, or
-        // holds too much.
-        Button { host.restartAgent(session.id) } label: { Label("Restart Agent", systemImage: "arrow.clockwise") }
+        AgentStateButtons(host: host, session: session)
         // To another computer connected now; this one keeps the session
         // until the user removes it.
         let others = store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }

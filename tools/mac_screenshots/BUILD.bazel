@@ -1,0 +1,23 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load("@rules_swift//swift:swift.bzl", "swift_binary")
+
+# Pictures of the Mac client on the screenshot fixture, for the site:
+#
+#   bazel run //tools/mac_screenshots -- <screen> <out.png> [dark|light]
+#
+# It shows a window and captures it, so it is run where a window may be
+# shown (CI's Mac: .github/workflows/screenshots.yml), never on a Mac
+# someone is using.
+swift_binary(
+    name = "mac_screenshots",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        "//:foundation",
+        "//:swift_ui",
+        "//libraries/visor_client",
+        "//libraries/visor_services",
+        "//libraries/visor_ui",
+    ],
+)

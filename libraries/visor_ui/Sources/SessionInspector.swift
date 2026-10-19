@@ -11,9 +11,15 @@ import VisorProtocol
 struct SessionInspector: View {
     var host: AgentServerConnection
     let session: SessionInfo
-    /// A sheet, not a pane: a phone. Only then is there a Done button —
-    /// a pane is closed from the toolbar's inspector button.
+    /// Presented as a sheet by the screen (a phone). Only a sheet has a
+    /// title and a Done button: a pane is closed from the toolbar's
+    /// inspector button.
     let compact: Bool
+    /// The size class inside the presentation: compact also where the
+    /// screen asked for a pane and the host made a sheet of it anyway (a
+    /// portable SwiftUI, in a window too short for a third column).
+    @Environment(\.horizontalSizeClass) private var presentedSizeClass
+    private var asSheet: Bool { compact || presentedSizeClass == .compact }
     let close: () -> Void
     let archive: () -> Void
     let end: () -> Void
@@ -48,7 +54,7 @@ struct SessionInspector: View {
                     LabeledContent("Model", value: host.modelTitle(for: session) + (session.effort.map { " " + AgentCatalog.effortTitle($0) } ?? ""))
                     LabeledContent("Folder", value: session.cwd)
                     LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
-                    LabeledContent("State", value: session.busy ? "Working" : (session.archived ? "Archived" : "Idle"))
+                    LabeledContent("State", value: AgentStateButtons.stateTitle(session))
                     // The agent and what it runs, as its host says.
                     if let memory = session.memory { LabeledContent("Memory", value: MigrationSheet.size(Int(clamping: memory))) }
                     // To carry the conversation on in the agent's own
@@ -59,6 +65,9 @@ struct SessionInspector: View {
                     }
                 }
                 SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)
+                if !session.archived {
+                    Section { AgentStateButtons(host: host, session: session) }
+                }
                 Section {
                     Button("Archive", action: archive)
                     Button("End session", role: .destructive, action: end)
@@ -67,10 +76,10 @@ struct SessionInspector: View {
             .insetGroupedForm()
             // Titled only as a sheet: as a pane beside the chat, its title
             // would stand in for the window's, which is the session's.
-            .titled("Details", when: compact)
+            .titled("Details", when: asSheet)
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
-                if compact {
+                if asSheet {
                     ToolbarItem(placement: .confirmationAction) { Button("Done", action: close) }
                 }
             }
@@ -79,6 +88,9 @@ struct SessionInspector: View {
             title = session.title
             shown = session.title
         }
+        // The account's limits as they stand now, not as a turn last left
+        // them: each time the inspector shows a session.
+        .task(id: session.id) { host.refreshAccount(session.agent) }
         // Renamed elsewhere (the sidebar, another device): the field
         // follows, unless a name of the user's own is being typed in it.
         .onChange(of: session.title) {

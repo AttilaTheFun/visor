@@ -44,6 +44,9 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     /// The account's limits as last said, for a sparse update to lay
     /// itself over.
     private var rateLimits: CodexOutput.RateLimits?
+    /// Questions Codex asked the user and waits on, by the request shown:
+    /// the app server's request id, and each question's id by its words.
+    private var questionsAsked: [String: (rpc: Int, ids: [String: String])] = [:]
 
     public init(cwd: String, skipPermissions: Bool, resume: String?) {
         self.cwd = cwd
@@ -96,6 +99,8 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         turnStarting = true
         Task { await self.turn(text, on: child) }
     }
+
+    public func start() throws { _ = try running() ?? spawn() }
 
     /// Starts the turn: on the thread there is, or on one started for it.
     private func turn(_ text: String, on child: any AgentChild) async {
@@ -181,6 +186,22 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         for continuation in waiting.values { continuation.resume(returning: Reply(error: "Codex's app server is gone")) }
     }
 
+    /// Codex's questions to the user (request_user_input), which it offers
+    /// outside plan mode only with this feature, under development in Codex
+    /// 0.162; its warning about that is not the user's to read.
+    static let questionArguments = ["-c", "features.default_mode_request_user_input=true", "-c", "suppress_unstable_features_warning=true"]
+
+    public func answer(_ request: String, with answers: [String: String]?) {
+        guard let asked = questionsAsked.removeValue(forKey: request), let child else { return }
+        // By each question's id; none at all when the user would not answer.
+        var byID: [String: Any] = [:]
+        for (words, answer) in answers ?? [:] {
+            guard let id = asked.ids[words] else { continue }
+            byID[id] = ["answers": [answer]]
+        }
+        child.write(["jsonrpc": "2.0", "id": asked.rpc, "result": ["answers": byID]])
+    }
+
     // MARK: The daemon
 
     /// Auto: no prompts, no sandbox. Manual: Codex's own workspace
@@ -198,14 +219,17 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     func spawn() throws -> any AgentChild {
         guard let executable = ToolPath.resolve("codex") else { throw AgentProcessError.toolMissing("codex") }
         // Visor's MCP server: the other sessions.
-        let child = try AgentChildren.start(executable: executable, arguments: ["app-server"] + VisorMCP.codexArguments(approvalEnvironment),
+        let child = try AgentChildren.start(executable: executable, arguments: ["app-server"] + Self.questionArguments + VisorMCP.codexArguments(approvalEnvironment),
                                             directory: (cwd as NSString).expandingTildeInPath,
                                             environment: ToolPath.environment().merging(approvalEnvironment) { _, ours in ours },
                                             session: approvalEnvironment["VISOR_SESSION"])
         self.child = child
         follow(child)
         Task {
-            _ = await self.request("initialize", ["clientInfo": ["name": "visor", "version": "1"]], of: child)
+            // Codex's questions to the user are among its experimental
+            // requests: asked for (with the feature, in `arguments`).
+            _ = await self.request("initialize", ["clientInfo": ["name": "visor", "version": "1"], "capabilities": ["experimentalApi": true]],
+                                   of: child)
             // How the account is paid for and how near its limits it is;
             // turns update the limits as they go.
             _ = await self.request("account/read", [:], of: child)
@@ -290,6 +314,13 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
             emit.yield(.activity("Thinking…"))
         case .goal(let goal):
             emit.yield(.goal(goal.flatMap { $0.met ? nil : $0.objective }, met: goal?.met ?? false))
+        case .questions(let id, let asked):
+            // Shown to the user as the session's waiting question; the
+            // answers go back under each question's id (`answer`).
+            let request = "codex-\(id)"
+            questionsAsked[request] = (id, Dictionary(asked.map { ($0.question.question, $0.id) }, uniquingKeysWith: { first, _ in first }))
+            emit.yield(.question(ApprovalRequest(id: request, tool: "request_user_input", summary: asked.first?.question.question ?? "",
+                                                 questions: asked.map(\.question))))
         case .asked(let id, let method):
             // Not expected with prompts off; answered no rather than left
             // hanging.
@@ -308,6 +339,8 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
             if reasoning { emit.yield(.thinking(false)) }
         case .turnCompleted(let failure):
             if let failure { emit.yield(.failure(failure)) }
+            // A question the turn asked waits no longer.
+            questionsAsked = [:]
             turnID = nil
             turnStarting = false
             stopWhenStarted = false

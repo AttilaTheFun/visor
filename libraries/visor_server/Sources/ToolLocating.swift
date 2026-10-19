@@ -18,6 +18,8 @@ public protocol ToolLocating: Sendable {
     /// The environment a tool is started with: `base` with the tool
     /// directories on its search path.
     func environment(_ base: [String: String]) -> [String: String]
+    /// `environment` with `directory` first on its search path.
+    func searchPath(_ directory: String, before environment: [String: String]) -> [String: String]
     /// How to start `executable` with `arguments` (a script goes through
     /// its interpreter where the system does not start one itself).
     func command(_ executable: String, _ arguments: [String]) -> ShellCommand

@@ -68,6 +68,12 @@ extension VisorServer {
             var info = item.info
             info.busy = false
             info.ended = false
+            // A stopped agent stays stopped; one the app went away under
+            // while it started or stopped is where it was going.
+            switch info.agentState {
+            case .stopped?, .stopping?: info.agentState = .stopped
+            default: info.agentState = info.archived ? .stopped : .running
+            }
             // What ran in the background ran in an agent that has gone
             // (an agent says its list when one changes, not when it
             // starts with none, so a kept list would stay up for good).

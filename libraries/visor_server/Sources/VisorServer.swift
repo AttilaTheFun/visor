@@ -87,6 +87,9 @@ public final class VisorServer {
     /// How each agent is paid for and how near its limits it is, as its
     /// sessions last said; read from disk when first wanted.
     var knownAccounts: [AgentKind: AgentAccount]?
+    /// Each agent's last read of its account outright, and when it began
+    /// (VisorServer+Accounts.swift).
+    var accountReads: [AgentKind: (started: Double, task: Task<Void, Never>)] = [:]
 
     /// The devices that asked for pushes, what each session last looked like,
     /// and what sends them (VisorServer+Push.swift).

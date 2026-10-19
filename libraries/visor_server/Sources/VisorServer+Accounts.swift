@@ -37,6 +37,36 @@ extension VisorServer {
         keep(account, for: agent)
     }
 
+    /// Asks the agent how its account stands now (Codex; the others are
+    /// only heard from their turns), keeps what it says and tells every
+    /// client. A read that began in the last half minute is waited for
+    /// rather than begun again: an inspector opened again and again does
+    /// not start Codex each time.
+    func refreshAccount(of agent: AgentKind) async {
+        let now = Date().timeIntervalSince1970
+        if let read = accountReads[agent], now - read.started < 30 { return await read.task.value }
+        guard let harness = harnesses.harness(for: agent) else { return }
+        let task = Task { @MainActor [weak self] in
+            guard let read = await harness.readAccount(), let self else { return }
+            var account = self.account(for: agent) ?? AgentAccount(updated: 0)
+            if let plan = read.plan { (account.plan, account.subscription) = (plan, read.subscription) }
+            // Kept even when the same: it is how they stand now.
+            account.limits = read.limits
+            self.keep(account, for: agent)
+        }
+        accountReads[agent] = (now, task)
+        await task.value
+    }
+
+    /// `GET /account?agent=`: the agent's account, read afresh where it
+    /// can be.
+    func answerAccount(of agent: AgentKind, respond: @escaping (HTTPResponse) -> Void) {
+        Task {
+            await refreshAccount(of: agent)
+            respond(.json(Envelope.account(account(for: agent) ?? AgentAccount(updated: 0), of: agent).encoded()))
+        }
+    }
+
     private func keep(_ account: AgentAccount, for agent: AgentKind) {
         var account = account
         account.updated = Date().timeIntervalSince1970

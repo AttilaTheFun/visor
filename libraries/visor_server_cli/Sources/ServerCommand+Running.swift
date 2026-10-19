@@ -62,6 +62,8 @@ extension ServerCommand {
         case "ssh": try ssh(value)
         case "address": address(value)
         case "standalone": try standalone(value)
+        case "machines": try machinesOption(value)
+        case "provisioning": try provisioning(value)
         default: throw CommandLineError.usage("unknown option --\(name)")
         }
     }

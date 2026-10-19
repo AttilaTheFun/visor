@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visor: your coding agents, from anywhere</title>
+  <meta name="description" content="Visor runs Claude Code, Codex and the openrouter CLI on your computer and brings their sessions to your iPhone, iPad and Mac.">
+  <meta property="og:title" content="Visor">
+  <meta property="og:description" content="Your coding agents, from anywhere: Claude Code, Codex and the openrouter CLI on your computer, their sessions on your iPhone, iPad and Mac.">
+  <meta property="og:image" content="images/mac-chat.png">
+  <link rel="icon" href="images/icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="#"><img src="images/icon.png" alt="" width="28" height="28"> Visor</a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/AttilaTheFun/visor">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Your coding agents, from anywhere.</h1>
+      <p class="lede">
+        Visor runs Claude Code, Codex and the openrouter CLI on your computer, and brings their sessions
+        to your iPhone, iPad and Mac. Start a session, follow it as it works, answer its questions and
+        approve what it does, from wherever your devices can reach the computer.
+      </p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/AttilaTheFun/visor/releases/latest">Download for Mac</a>
+        <a class="button" href="https://github.com/AttilaTheFun/visor">View on GitHub</a>
+      </div>
+      <p class="fine">Free and open source. Visor Server needs macOS 15, or Linux or Windows for the command-line server.</p>
+    </section>
+
+    <section class="showcase" aria-label="Visor on the Mac and the iPhone">
+      <img class="mac" src="images/mac-chat.png" alt="Visor on the Mac: a session's chat beside the list of computers and their sessions">
+      <img class="phone" src="images/iphone-chat.png" alt="Visor on the iPhone: the same session's chat">
+    </section>
+
+    <section id="features" class="features">
+      <h2>What it does</h2>
+      <div class="grid">
+        <article>
+          <h3>Every computer, one list</h3>
+          <p>Each computer running Visor Server is a section of sessions, with its connection in the header.
+             Add one by pasting its connection code or scanning its QR code.</p>
+        </article>
+        <article>
+          <h3>A chat that keeps up</h3>
+          <p>Replies stream in as they are written, tool calls fold into a line, pictures and files open in place,
+             and what you have read stays on the device to read offline.</p>
+        </article>
+        <article>
+          <h3>Questions and approvals</h3>
+          <p>When an agent asks you something, the question opens with its options. In manual mode, every tool call
+             waits for your Allow or Deny.</p>
+        </article>
+        <article>
+          <h3>The agents' own commands</h3>
+          <p>Slash commands come from the agent itself, completed as you type: <code>/compact</code>,
+             <code>/goal</code>, <code>/login</code> and the rest.</p>
+        </article>
+        <article>
+          <h3>Any way in</h3>
+          <p>A LAN, a VPN, a reverse proxy, a tunnel, or plain SSH to the computer: the server does not care
+             which, and the app tries them all at once and keeps the fastest.</p>
+        </article>
+        <article>
+          <h3>Agents that talk to each other</h3>
+          <p>A session can message sessions on your other computers, carried by an app connected to both.
+             No server ever learns another's address or password.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="screens" aria-label="The iPhone app">
+      <h2>On the iPhone</h2>
+      <div class="strip">
+        <figure><img src="images/iphone-sessions.png" alt="The sessions on a computer"><figcaption>Sessions</figcaption></figure>
+        <figure><img src="images/iphone-chat.png" alt="A session's chat"><figcaption>Chat</figcaption></figure>
+        <figure><img src="images/iphone-question.png" alt="The agent asking a question with options"><figcaption>Questions</figcaption></figure>
+        <figure><img src="images/iphone-models.png" alt="Choosing the model and how it approves"><figcaption>Models</figcaption></figure>
+        <figure><img src="images/iphone-inspector.png" alt="A session's details"><figcaption>Details</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="install" class="install">
+      <h2>Install</h2>
+      <ol class="steps">
+        <li>
+          <h3>Run Visor Server on your Mac</h3>
+          <p>Download <strong>Visor-Server</strong> from the
+             <a href="https://github.com/AttilaTheFun/visor/releases/latest">latest release</a>, drag it to
+             Applications and open it. It lives in the menu bar and asks you for a password first.</p>
+        </li>
+        <li>
+          <h3>Set up your agents</h3>
+          <p>Visor runs the agents you already have, signed in as you: <code>claude</code>,
+             <code>codex login</code>, or <a href="https://github.com/AttilaTheFun/open_router_cli">openrouter</a>
+             <code>auth login</code>.</p>
+        </li>
+        <li>
+          <h3>Add the computer to your devices</h3>
+          <p>On the Mac, download <strong>Visor</strong> from the same release. Paste the connection code from the
+             menu bar, or scan its QR code. The iPhone and iPad app is built from source for now
+             (<a href="https://github.com/AttilaTheFun/visor#building">Building</a>).</p>
+        </li>
+      </ol>
+      <div class="other">
+        <h3>Linux and Windows</h3>
+        <p>The same server as a command, built with Swift 6.2 or later:</p>
+        <pre><code>swift build -c release --product visor-server
+.build/release/visor-server start   # in the background
+.build/release/visor-server code    # the connection code to add it with</code></pre>
+      </div>
+      <p class="warning">Visor gives whoever connects to it the run of your computer, much like an SSH login.
+        Keep it on your own network or behind a front that authenticates, and read the
+        <a href="https://github.com/AttilaTheFun/visor#security">security notes</a> before you install it.</p>
+    </section>
+  </main>
+
+  <footer>
+    <a href="https://github.com/AttilaTheFun/visor">GitHub</a>
+    <a href="https://github.com/AttilaTheFun/visor/releases">Releases</a>
+    <a href="https://github.com/AttilaTheFun/visor/blob/main/docs/protocol.md">Protocol</a>
+    <a href="https://github.com/AttilaTheFun/visor/blob/main/docs/DEVELOPMENT.md">Development</a>
+  </footer>
+</body>
+</html>

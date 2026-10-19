@@ -58,6 +58,37 @@ public final class CodexHarness: AgentHarness {
         }
     }
 
+    /// The account as Codex says it now: `codex app-server`, `initialize`,
+    /// then `account/read` and `account/rateLimits/read`, then the process
+    /// is ended. OpenAI resets the limits now and then, which no session
+    /// hears of until it runs a turn.
+    public func readAccount() async -> AgentAccount? {
+        guard let executable = ToolPath.resolve("codex") else { return nil }
+        let read = Mutex<(plan: String?, subscription: Bool, limits: [UsageLimit]?, answered: Set<Int>)>((nil, false, nil, []))
+        let account = await Command.ask(executable, ["app-server"], saying: [
+            #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"visor","version":"1"}}}"#,
+            #"{"jsonrpc":"2.0","method":"initialized","params":{}}"#,
+            #"{"jsonrpc":"2.0","id":2,"method":"account/read","params":{}}"#,
+            #"{"jsonrpc":"2.0","id":3,"method":"account/rateLimits/read","params":{"excludeResetCreditDetails":true}}"#,
+        ], environment: ToolPath.environment()) { line -> AgentAccount?? in
+            read.withLock { read in
+                for output in CodexOutput.parse(line) {
+                    switch output {
+                    case .reply(let id, _, _, _, _): read.answered.insert(id)
+                    case .plan(let plan, let subscription): (read.plan, read.subscription) = (plan, subscription)
+                    case .rateLimits(let limits): read.limits = limits.limits
+                    default: break
+                    }
+                }
+                guard read.answered.isSuperset(of: [2, 3]) else { return nil }
+                // Answered without its limits: nothing to show.
+                guard let limits = read.limits else { return .some(nil) }
+                return AgentAccount(plan: read.plan, subscription: read.subscription, limits: limits, updated: Date().timeIntervalSince1970)
+            }
+        }
+        return account ?? nil
+    }
+
     /// `model/list`'s entries as the catalog's: the visible ones, named
     /// codename first ("Astra 6"), their efforts, and which is default.
     static func parse(models list: [[String: Any]]) -> ModelList {

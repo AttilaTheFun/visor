@@ -27,6 +27,12 @@ extension VisorServer {
         if request.method == "POST", parts.count == 2, parts[0] == "migration", authorized(request) {
             return routeMigration(parts[1], body: Envelope.decodeBody(request.body), respond: respond)
         }
+        if request.method == "GET", parts.count == 1, parts[0] == "account", authorized(request) {
+            guard let agent = Self.query(request.path)["agent"].flatMap(AgentKind.init(wire:)) else {
+                return respond(HTTPResponse(400, "{\"error\":\"agent required\"}"))
+            }
+            return answerAccount(of: agent, respond: respond)
+        }
         if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "commands", authorized(request) {
             guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
             var e = Envelope(type: "commands")
@@ -316,7 +322,7 @@ extension VisorServer {
 
     private func restSessionAction(_ call: RESTCall) -> HTTPResponse {
         let action = call.parts[2]
-        guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "keepBranch", "continueBranch", "permissions", "settings",
+        guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "stopAgent", "startAgent", "keepBranch", "continueBranch", "permissions", "settings",
                "approve", "rename", "acknowledge", "signIn"].contains(action) else {
             return HTTPResponse(404, "{\"error\":\"unknown action\"}")
         }

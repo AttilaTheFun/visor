@@ -92,7 +92,8 @@ extension VisorServer {
             let name = Self.pushName(for: info)
             var said = false
             if state.waiting, !old.waiting {
-                push(name, "Waiting for approval", session: info.id, kind: "waiting", status: state.status)
+                let asked = info.pendingApproval?.questions?.first.map { "Asks: " + $0.question }
+                push(name, asked ?? "Waiting for approval", session: info.id, kind: "waiting", status: state.status)
                 said = true
             }
             if state.failed, !old.failed {

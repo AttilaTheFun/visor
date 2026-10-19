@@ -108,6 +108,12 @@ final class SignInTests: XCTestCase {
         for _ in 0..<40 { await Task.yield() }
     }
 
+    /// Yields until `condition` holds, or long enough that it never will: a
+    /// busy runner can take more than `settle`'s turns.
+    private func settle(until condition: () -> Bool) async {
+        for _ in 0..<2000 where !condition() { await Task.yield() }
+    }
+
     func testHelloThenTokenLogin() async {
         let host = AgentServerConnection(record: AgentServerRecord(name: "", address: "mac.example"))
         host.connect()
@@ -198,7 +204,7 @@ final class SignInTests: XCTestCase {
         await settle()
         ConnectionLog.shared.clear()
         host.resume()
-        await settle()
+        await settle { ConnectionLog.shared.text.contains("the channel answered") }
         XCTAssertTrue(ConnectionLog.shared.text.contains("the channel answered"), "on the pong, not after the second")
         socket.elapse(1000)
         await settle()

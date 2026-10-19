@@ -35,6 +35,8 @@ struct ComposeSessionSheet: View {
     @State private var choiceID = ""
     /// The first message, where the server starts a session only with one.
     @State private var message = ""
+    /// A folder was picked here: the latest project no longer stands in.
+    @State private var placePicked = false
 
     /// Only a computer that is answering can start a session.
     private var host: AgentServerConnection? {
@@ -57,16 +59,18 @@ struct ComposeSessionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Where") {
-                    if store.connectedServers.isEmpty {
+                if store.connectedServers.isEmpty {
+                    Section {
                         Text("No computer is connected. Sessions start on a computer that is answering; check Computers.")
                             .font(.footnote)
                             .foregroundColor(.secondary)
                     }
-                    // Which server, when there is a choice; one connected
-                    // server is where the session goes.
-                    if store.connectedServers.count > 1 {
-                        Picker("Server", selection: $serverID) {
+                }
+                // Which server, when there is a choice; one connected
+                // server is where the session goes.
+                if store.connectedServers.count > 1 {
+                    Section("Computer") {
+                        Picker("Computer", selection: $serverID) {
                             ForEach(store.connectedServers) { host in
                                 Text(host.record.name.isEmpty ? host.record.address : host.record.name).tag(host.id)
                             }
@@ -74,7 +78,9 @@ struct ComposeSessionSheet: View {
                         .pickerStyle(.menu)
                         .accessibilityIdentifier("computer")
                     }
-                    if let host, starting.fromChoices {
+                }
+                if let host, starting.fromChoices {
+                    Section("Start From") {
                         if host.startChoices.isEmpty {
                             Text("No choices from this server yet.").foregroundColor(.secondary)
                         } else {
@@ -86,20 +92,29 @@ struct ComposeSessionSheet: View {
                             .pickerStyle(.menu)
                             .accessibilityIdentifier("choice")
                         }
-                    } else if host != nil {
-                        // One row: the folder's path, which opens the
-                        // folder browser.
+                    }
+                } else if host != nil {
+                    // The computer's projects, the latest first, to pick
+                    // with a tap; any other folder from the browser.
+                    Section("Project") {
+                        if !recentProjects.contains(where: { $0.cwd == cwd }) {
+                            ProjectChoice(name: AgentServerConnection.Project(cwd: cwd, sessions: []).folderName, path: cwd,
+                                          chosen: true) {}
+                        }
+                        ForEach(recentProjects) { project in
+                            ProjectChoice(name: project.name, path: project.cwd, chosen: project.cwd == cwd) {
+                                cwd = project.cwd
+                                placePicked = true
+                            }
+                        }
                         Button { browsing = true } label: {
-                            HStack {
-                                Text("Project")
-                                Spacer(minLength: 12)
-                                Text(cwd.trimmed.isEmpty ? "~" : cwd)
-                                    .font(.callout.monospaced())
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.head)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.footnote)
+                            HStack(spacing: 12) {
+                                Image(systemName: "folder")
+                                    .foregroundColor(.accentColor)
+                                Text("Other Folder…")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
                                     .foregroundColor(.secondary)
                             }
                             .contentShape(Rectangle())
@@ -108,7 +123,7 @@ struct ComposeSessionSheet: View {
                         .accessibilityIdentifier("project")
                     }
                 }
-                Section("Harness") {
+                Section {
                     Picker("Agent", selection: $agent) {
                         ForEach(AgentKind.allCases, id: \.self) { kind in
                             Text(pickerTitle(for: kind)).tag(kind)
@@ -158,7 +173,10 @@ struct ComposeSessionSheet: View {
                     }
                 }
                 Section {
-                    TextField(defaultTitle, text: $title)
+                    // The default as the field's prompt, its name hidden: a
+                    // Mac's form shows a field's title as a label beside it.
+                    TextField("Name", text: $title, prompt: Text(defaultTitle))
+                        .labelsHidden()
                         .accessibilityIdentifier("title")
                 } header: {
                     Text("Name")
@@ -186,6 +204,7 @@ struct ComposeSessionSheet: View {
                     }
                 }
             }
+            .insetGroupedForm()
             .navigationTitle("New Session")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
@@ -201,28 +220,32 @@ struct ComposeSessionSheet: View {
                 }
             }
         }
-        .presentationDetentsMediumLarge()
+        .presentationDetentsLarge()
         .sheet(isPresented: $browsing) {
             if let host {
                 FolderPicker(host: host, start: cwd) { chosen in
                     host.addProject(chosen)
                     cwd = chosen
+                    placePicked = true
                 }
             }
         }
         .onAppear {
             if host?.id != serverID { serverID = store.connectedServers.first?.id ?? "" }
-            if cwd.isEmpty { useHome() }
+            if cwd.isEmpty { useLatestProject() }
             useChoices()
             if !available.contains(agent), let first = AgentKind.allCases.first(where: available.contains) { agent = first }
         }
         .onChange(of: serverID) {
-            useHome()
+            useLatestProject()
             choiceID = ""
             useChoices()
             resumable = []
         }
         .onChange(of: host?.startChoices ?? []) { useChoices() }
+        // The computer's projects arrive after the sheet opens: the latest
+        // stands in until a folder is picked.
+        .onChange(of: recentProjects.first?.cwd) { if !placePicked { useLatestProject() } }
         .onChange(of: resuming) { if resuming { loadResumable() } }
         .onChange(of: agent) { if resuming { loadResumable() } }
         .onChange(of: cwd) { if resuming { loadResumable() } }
@@ -238,6 +261,22 @@ struct ComposeSessionSheet: View {
     private var defaultTitle: String {
         let siblings = host?.projects.first { $0.cwd == place }?.sessions.filter { $0.agent == agent }.count ?? 0
         return "\(agent.title) \(siblings + 1)"
+    }
+
+    /// The computer's projects, the most recently used first: its folders
+    /// that are still there, by their sessions' latest activity.
+    private var recentProjects: [AgentServerConnection.Project] {
+        guard let host else { return [] }
+        func latest(_ project: AgentServerConnection.Project) -> Double {
+            (project.sessions + project.archived).map { $0.updated ?? $0.created }.max() ?? 0
+        }
+        return Array(host.projects.filter { !$0.missing && $0.cwd != "~" }.sorted { latest($0) > latest($1) }.prefix(6))
+    }
+
+    /// Where a new session starts unless another is picked: the project
+    /// used last, or the home folder on a computer with none.
+    private func useLatestProject() {
+        if let latest = recentProjects.first { cwd = latest.cwd } else { useHome() }
     }
 
     /// The computer's home folder, by its full path once the computer
@@ -291,5 +330,37 @@ struct ComposeSessionSheet: View {
                 waiting = false
             }
         }
+    }
+}
+
+/// A folder to start in, as a row: its name, its path, and a check when
+/// it is the one chosen.
+@MainActor
+private struct ProjectChoice: View {
+    let name: String
+    let path: String
+    let chosen: Bool
+    let choose: () -> Void
+
+    var body: some View {
+        Button(action: choose) {
+            HStack(spacing: 12) {
+                Image(systemName: "folder.fill")
+                    .foregroundColor(.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                    Text(path)
+                        .font(.caption.monospaced())
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
+                Spacer()
+                if chosen { Image(systemName: "checkmark").foregroundColor(.accentColor) }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("project-" + name)
     }
 }

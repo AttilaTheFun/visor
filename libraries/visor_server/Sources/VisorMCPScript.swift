@@ -15,7 +15,9 @@ enum VisorMCPScript {
 // Deny. Every call goes to the menu bar app over its WebSocket.
 //
 // Env: VISOR_PORT, VISOR_TOKEN (the app's agent-side secret), VISOR_SESSION,
-// VISOR_APPROVALS ("1" in manual mode: offer `approve`).
+// VISOR_APPROVALS ("1": offer `approve`; for Claude always, so that its
+// questions (AskUserQuestion) come to the user, and in manual mode every
+// tool call too).
 const port = process.env.VISOR_PORT || "7433";
 const token = process.env.VISOR_TOKEN || "";
 const session = process.env.VISOR_SESSION || "";
@@ -104,10 +106,14 @@ function handle(line) {
            rows: args.count === undefined ? undefined : Math.round(Number(args.count)) })
       .then(({ ok, text }) => send({ jsonrpc: "2.0", id, result: { isError: !ok, content: [{ type: "text", text }] } }));
   } else if (method === "tools/call") {
-    ask(params?.arguments || {}).then((allow) => {
+    const args = params?.arguments || {};
+    ask(args).then(({ allow, answers }) => {
+      // A question's answers go back in the tool's own input, as Claude
+      // Code takes them: { answers: { <question>: <answer> } }.
+      const input = args.input || {};
       const decision = allow
-        ? { behavior: "allow", updatedInput: params?.arguments?.input || {} }
-        : { behavior: "deny", message: "The user denied this from Visor." };
+        ? { behavior: "allow", updatedInput: answers ? { ...input, answers } : input }
+        : { behavior: "deny", message: args.tool_name === "AskUserQuestion" ? "The user did not answer from Visor." : "The user denied this from Visor." };
       send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(decision) }] } });
     });
   } else if (method === "ping") {
@@ -139,19 +145,22 @@ function ask(args) {
   return new Promise((resolve) => {
     const requestID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let ws;
-    try { ws = new WebSocket(`ws://127.0.0.1:${port}`); } catch { resolve(false); return; }
-    const done = (allow) => { try { ws.close(); } catch {} resolve(allow); };
+    const no = { allow: false };
+    try { ws = new WebSocket(`ws://127.0.0.1:${port}`); } catch { resolve(no); return; }
+    const done = (result) => { try { ws.close(); } catch {} resolve(result); };
+    const questions = args.tool_name === "AskUserQuestion" ? args.input?.questions : undefined;
     ws.onopen = () => ws.send(JSON.stringify({
       type: "approval_request", token, session, id: requestID,
-      text: args.tool_name || "tool", prompt: summary(args.input),
+      text: args.tool_name || "tool", prompt: questions ? (questions[0]?.question || "") : summary(args.input),
+      ...(questions ? { questions } : {}),
     }));
     ws.onmessage = (m) => {
       let e; try { e = JSON.parse(m.data); } catch { return; }
-      if (e.type === "approval_result" && e.id === requestID) done(e.busy === true);
-      if (e.type === "error") done(false);
+      if (e.type === "approval_result" && e.id === requestID) done({ allow: e.busy === true, answers: e.answers });
+      if (e.type === "error") done(no);
     };
-    ws.onerror = () => done(false);
-    ws.onclose = () => resolve(false);
+    ws.onerror = () => done(no);
+    ws.onclose = () => resolve(no);
   });
 }
 

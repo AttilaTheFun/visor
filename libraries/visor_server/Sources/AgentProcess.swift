@@ -35,6 +35,9 @@ public protocol AgentProcess: AnyObject {
     var resumeCommand: String? { get }
     /// Sends a user turn; spawns (or resumes) the process as needed.
     func send(_ text: String) throws
+    /// Spawns (or resumes) the process now, ahead of any turn, as Start
+    /// Agent and Restart Agent ask; nothing when it is running already.
+    func start() throws
     /// Whether these words are a turn of the agent's, or a command its
     /// process takes itself (Codex's /goal, /compact), which starts a turn
     /// only if the agent then says one began.
@@ -63,6 +66,9 @@ public protocol AgentProcess: AnyObject {
     /// this message rather than where its own reading of its file would,
     /// when the file went on elsewhere; nil, where it would.
     func resume(at message: String?)
+    /// The user's answers to a question the agent asked (`.question`), by
+    /// question; nil when the user would not answer.
+    func answer(_ request: String, with answers: [String: String]?)
 }
 
 public extension AgentProcess {
@@ -71,6 +77,8 @@ public extension AgentProcess {
     func carryGoal(_ objective: String) -> Bool { false }
 
     func resume(at message: String?) {}
+
+    func answer(_ request: String, with answers: [String: String]?) {}
 
     /// Without its own way to end a turn, an interrupt is a stop: the
     /// process goes, and the next message spawns another that resumes.

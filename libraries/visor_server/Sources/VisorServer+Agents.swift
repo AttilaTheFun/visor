@@ -18,7 +18,8 @@ extension VisorServer {
         let process = harness.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
         process.model = info.model
         process.effort = info.effort
-        process.approvalEnvironment = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]
+        process.approvalEnvironment = AgentEnvironmentFile.read(info.agent)
+            .merging(["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]) { _, ours in ours }
         return process
     }
 
@@ -90,7 +91,7 @@ extension VisorServer {
         // it waits for that turn to end, as any queued message does.
         // (A session held while the agent before it goes gets its queue
         // when that agent has gone: release.)
-        for record in sessions where !record.info.archived && !record.info.queued.isEmpty && !record.info.busy && !record.held {
+        for record in sessions where !record.info.archived && !record.info.queued.isEmpty && !record.info.busy && !record.waits {
             deliverQueued(record)
         }
         if !ids.isEmpty { broadcastSessions() }
@@ -102,7 +103,7 @@ extension VisorServer {
     /// is cut short. The new agent starts with the next message, which is
     /// when resuming matters. With `rereading`, the transcript is read
     /// again, since the file may have moved on under another writer.
-    func rebuild(_ record: SessionRecord, rereading: Bool = false) {
+    func rebuild(_ record: SessionRecord, rereading: Bool = false, then gone: (@MainActor () -> Void)? = nil) {
         record.restartWhenIdle = false
         let old = record.process
         record.replaceProcess(makeProcess(record.info, resume: old.resumeID))
@@ -116,22 +117,73 @@ extension VisorServer {
         Task {
             await old.end(within: .seconds(3))
             if rereading { record.followFile() }
+            gone?()
             release(record)
         }
     }
 
     /// Ends the session's agent and makes a new one on the same
-    /// conversation, as the user asked: the new one starts with the next
-    /// message, and a turn the old one was working on is carried on by a
-    /// nudge that goes first.
+    /// conversation, as the user asked: stopping until the old one has
+    /// gone, then starting, then running; a turn the old one was working
+    /// on is carried on by a nudge that goes first.
     func restartAgent(_ record: SessionRecord) {
         Self.log("restarting the agent of \(record.info.title) (\(record.info.id))")
         let working = record.info.busy
-        rebuild(record)
+        setAgentState(record, .stopping)
+        rebuild(record) { [weak self] in self?.launchAgent(record) }
         if working {
             record.enqueue(Self.restartNudge, images: [], first: true)
             saveArchive()
         }
+        broadcastSessions()
+    }
+
+    /// Ends the session's agent and keeps it ended, as the user asked:
+    /// stopping until it has gone, then stopped, through a launch of the
+    /// server too, until Start Agent. A turn in flight is cut short and
+    /// not carried on; what is said meanwhile waits in the queue.
+    func stopAgent(_ record: SessionRecord) {
+        Self.log("stopping the agent of \(record.info.title) (\(record.info.id))")
+        setAgentState(record, .stopping)
+        // Nothing is owed: a later launch resumes no turn.
+        record.interrupted = false
+        rebuild(record) { [weak self] in self?.setAgentState(record, .stopped) }
+    }
+
+    /// Starts the stopped agent again, as the user asked; what waited in
+    /// the queue then goes over.
+    func startAgent(_ record: SessionRecord) {
+        Self.log("starting the agent of \(record.info.title) (\(record.info.id))")
+        launchAgent(record)
+        release(record)
+    }
+
+    /// The agent's process started now rather than by the next message:
+    /// starting, then running once it is up. One that cannot start (its
+    /// tool is not found) is stopped, and the session says why.
+    func launchAgent(_ record: SessionRecord) {
+        // Put away meanwhile (archived while it was stopping): no agent.
+        guard !record.info.archived else { return }
+        setAgentState(record, .starting)
+        if !record.isBound { bind(record) }
+        do {
+            try record.process.start()
+            // Kept with its pid, which finds this agent again if we are
+            // killed outright.
+            setAgentState(record, .running)
+        } catch {
+            broadcast(record.apply(.failure(error.localizedDescription)), session: record)
+            setAgentState(record, .stopped)
+            if case AgentProcessError.toolMissing(let tool) = error { Task { await ToolPath.locate([tool]) } }
+        }
+    }
+
+    /// Where the session's agent is now: kept with the session and told
+    /// to every client.
+    func setAgentState(_ record: SessionRecord, _ state: AgentState) {
+        guard record.info.agentState != state else { return }
+        record.info.agentState = state
+        saveArchive()
         broadcastSessions()
     }
 
@@ -177,7 +229,7 @@ extension VisorServer {
     /// that froze the Mac). A loop, not recursion, and it stops the moment
     /// a message was not taken.
     func deliverQueued(_ record: SessionRecord) {
-        while !record.held, !record.info.busy, !record.info.archived, let next = record.takeNextQueued() {
+        while !record.waits, !record.info.busy, !record.info.archived, let next = record.takeNextQueued() {
             let waiting = record.info.queued.count
             broadcastSessions()
             deliver(next.text, to: record, images: next.images)
@@ -203,7 +255,7 @@ extension VisorServer {
         // turn and goes over as soon as the agent falls idle — interrupting
         // is a deliberate act (`stop`), not the cost of typing.
         // Nor is anything said while the agent before this one is going.
-        if record.info.busy || record.held {
+        if record.info.busy || record.waits {
             // Clearing the goal is stopping it: it goes ahead of anything
             // waiting, and the turn working toward the goal is stopped now
             // rather than run to its end.
@@ -211,7 +263,7 @@ extension VisorServer {
             record.enqueue(text, images: images, first: clearsGoal)
             saveArchive()
             broadcastSessions()
-            if clearsGoal, record.info.busy, !record.held { record.process.interrupt() }
+            if clearsGoal, record.info.busy, !record.waits { record.process.interrupt() }
             return
         }
         record.appendUser(text, images: images)
@@ -282,8 +334,9 @@ extension VisorServer {
         // Nothing to say is nothing sent.
         broadcast(record.apply(event), session: record)
         switch event {
-        case .context, .session, .background, .goal:
-            // These land in the session list, not an envelope.
+        case .context, .session, .background, .goal, .question:
+            // These land in the session list, not an envelope (a question
+            // as the session's waiting, besides its own envelope).
             broadcastSessions()
         case .spent, .memory:
             broadcastSessionsSoon()
@@ -311,7 +364,7 @@ extension VisorServer {
             broadcastSessions()
             // An archived session takes no turns, and one whose last
             // agent is still going waits for it.
-            guard !busy, !record.info.archived, !record.held else { return }
+            guard !busy, !record.info.archived, !record.waits else { return }
             if record.restartWhenIdle {
                 // Rebuilt rather than merely stopped: a flag the agent
                 // takes at launch (its permission mode, its model)

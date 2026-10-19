@@ -47,4 +47,8 @@ public enum AgentEvent: Sendable {
     /// How much memory the agent and what it runs are using, as its host
     /// says (nil once it has gone).
     case memory(Int64?)
+    /// The agent asks the user something and waits (Codex's
+    /// request_user_input): shown as the session's pending approval, with
+    /// its questions; the answers go back through `AgentProcess.answer`.
+    case question(ApprovalRequest)
 }

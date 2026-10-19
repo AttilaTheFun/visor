@@ -57,6 +57,8 @@ extension Envelope {
         e.later = value["later"].bool
         e.follows = value["follows"].string
         e.signIn = value["signIn"].string
+        e.questions = value["questions"].array?.compactMap(AgentQuestion.init(json:))
+        if case .object(let map) = value["answers"] { e.answers = map.compactMapValues(\.string) }
         e.status = value["status"].array?.compactMap(StatusItem.init(json:))
         e.streams = value["streams"].array?.compactMap { item in
             guard let id = item["id"].string, let text = item["text"].string else { return nil }
@@ -125,6 +127,8 @@ extension Envelope {
         putBool("later", later)
         put("follows", follows)
         put("signIn", signIn)
+        if let questions { o["questions"] = .array(questions.map(\.json)) }
+        if let answers { o["answers"] = .object(answers.mapValues(JSONValue.string)) }
         if let status { o["status"] = .array(status.map(\.json)) }
         if let streams { o["streams"] = .array(streams.map { .object(["id": .string($0.id), "text": .string($0.text)]) }) }
         if let images, !images.isEmpty { o["images"] = .array(images.map(JSONValue.string)) }
