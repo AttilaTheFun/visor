@@ -50,7 +50,9 @@ pkill -f "xcodebuild.*visor_probe" 2>/dev/null
 kill "$BAZEL" 2>/dev/null
 wait "$BAZEL" 2>/dev/null
 cat "$LOG"
-if grep -q "Test Suite 'Selected tests' passed" "$LOG"; then
+# Passed only if no case failed: xcodebuild runs the cases in batches, each
+# its own "Selected tests", and a later batch's pass hid an earlier failure.
+if grep -q "Test Suite 'Selected tests' passed" "$LOG" && ! grep -q "^Test Case '.*' failed" "$LOG"; then
   echo "iOS UI tests passed"
 else
   echo "iOS UI tests failed (or never ran)" >&2
