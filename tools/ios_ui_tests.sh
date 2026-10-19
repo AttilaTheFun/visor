@@ -29,6 +29,10 @@ if [ -n "$SIM" ]; then
   xcrun simctl boot "$SIM" 2>/dev/null || true
   xcrun simctl uninstall "$SIM" com.LoganShire.VisorClient.iOS 2>/dev/null || true
   xcrun simctl privacy "$SIM" reset all com.LoganShire.VisorClient.iOS 2>/dev/null || true
+  # No keyboard suggestions over the keys: what they say is learned and
+  # comes in late, a picture's noise ("and disc is" one run, nothing the
+  # next). Autocorrection stays: a case types through one.
+  xcrun simctl spawn "$SIM" defaults write com.apple.Preferences KeyboardPrediction -bool NO
 fi
 bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
   --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \

@@ -726,12 +726,10 @@ Migrate…, as between computers. Built so far: the settings.
   before it if it hasn't finished. Beside the tests and every platform's
   build (GitHub's runners), its `build` job builds the iPhone app and the
   Mac's disk images, signed, on the release Mac's self-hosted runner
-  (tools/build_packages.sh), and its `review` job reads the run's screens
-  and UI tests (the `ios-ui` and `mac-screens` jobs' artifacts) into the
-  review store; neither runs for a fork's pull request. What the runner does
-  with them is its own (`$PIPELINE_CI`: the builds to the release server,
-  the runs to the review store, each under its commit, branch and pull
-  request). Each run's build number is one past the version's highest on
+  (tools/build_packages.sh); not for a fork's pull request. What the runner
+  does with them is its own (`$PIPELINE_CI`: the builds to the release
+  server, under their commit, branch and pull request). The proof (the
+  screens and UI tests) is not CI's (Logan, 19 Oct): see below. Each run's build number is one past the version's highest on
   the release server (its `number` job: `$PIPELINE_CI number`), stamped
   into the four Info.plists before building and used for the runs, so
   every build published is one more without a commit to bump it. main
@@ -899,7 +897,7 @@ The iOS probe's `testLearningOfEarlierRowsMovesNothing` guards that jump
 with no computer: the fixture's `learns-earlier` screen opens the chat
 with no earlier rows known and, ten seconds on, answers its sync with
 word of some, as a server's first answer after a launch can; the test
-fails if the last row moves. CI runs it (the `ios-ui` job, in the
+fails if the last row moves. The proof runs it (`tools/proof.sh`, in the
 simulator, through `tools/ios_ui_tests.sh`, which goes by what the tests
 say; xcodebuild gathers no simulator diagnostics after them, which took
 minutes and read as a timeout). To run it here (or in a VM),
@@ -916,17 +914,28 @@ screen brings rows in twelve and twenty-six seconds after it opens;
 `testRowsArrivingWhileReadingAboveMoveNothing` scrolls up and checks that
 nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
-rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and CI).
+rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 
-The snapshot, UI and unit tests run in CI and on any Mac with Xcode (a VM
-for quick turns), never on the lab's phones (Logan, 18 Oct: the lab is for
-what needs real hardware, a sensor or a benchmark on a device). CI's
-`ios-ui` job runs, in each orientation, the fixture's screens and then the
-UI cases, each recorded with its pictures, and keeps them as the run's
-artifacts (`ios-portrait`, `ios-landscape`, `mac-screenshots` from the
-`mac-screens` job). The run's `review` job has the release Mac read a
-commit's artifacts into the review store
-(releases: `pipeline-ci test`, `//reviews/harnesses:visor_harness`).
+CI runs the unit tests and builds; the snapshot and UI tests, the proof,
+run on an agent's Mac or a test VM, never on the lab's phones (Logan, 18
+Oct: the lab is for what needs real hardware, a sensor or a benchmark on a
+device; 19 Oct: "run the fast tests and builds on ci but the snapshot and
+other verification proof locally … the agents can publish their proof
+tagged with a commit it ran on to the review server"). For each commit
+pushed to a pull request, and each merged to main:
+
+    tools/proof.sh            # .proof/: ios-portrait, ios-landscape (+ mac-screenshots with PROOF_MAC=1, on a test VM)
+    cd ~/Developer/releases && bazel run //reviews/harnesses:publish_proof -- \
+      visor ~/Developer/visor ~/Developer/visor/.proof --pull-request <n>   # main's: no --pull-request
+
+`tools/proof.sh` runs, in each orientation, the fixture's screens and
+then the UI cases, each recorded, on the iPhone 17 simulator (iOS 27,
+keyboard suggestions off: their words are noise in a picture), and the
+Mac's screens only with `PROOF_MAC=1`: the tool draws a window and makes
+it key, so only in a test VM, never on a Mac someone uses. publish_proof
+files it with the review server under the commit and its build (the
+number CI's `number` job gave the commit), where Reviews shows it as the
+pull request's or the release's runs.
 
 The same cases can run on a phone, for what needs one: the device lab's iPhone XS (iOS 18, on the
 Mac mini; `~/Developer/device_lab`), in a lease:
