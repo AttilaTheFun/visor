@@ -1,8 +1,24 @@
 name: CI
+# Every commit pushed to a pull request, and main's: the tests, the iPhone
+# simulator's screens and UI tests in each orientation and the Mac's screens
+# (kept as this run's artifacts), every platform's build; then, on the
+# release Mac's runner (self-hosted, release-mac), the pull request's
+# packages built, signed and published to Releases, and its runs read into
+# Reviews. A newer push to the pull request cancels this run if it hasn't
+# finished. main requires every job green on a pull request's head commit
+# before it merges. A fork's pull request never runs on the release Mac.
 on:
   pull_request:
   push:
     branches: [main]
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # main's runs are never cut short: a release's dossier reads its tag's.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
 jobs:
   test:
     # Xcode 27, the toolchain the code is written against.
@@ -56,6 +72,9 @@ jobs:
         orientation: [portrait, landscape]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The commit itself (a pull request's head), as it is reviewed.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Simulator
         run: |
           runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' | head -1)"
@@ -94,6 +113,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The commit itself (a pull request's head), as it is reviewed.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Build
         run: bazel build //tools/mac_screenshots
       - name: Pictures
@@ -191,3 +213,50 @@ jobs:
           $status = $LASTEXITCODE
           Get-Content server.log, server-errors.log
           exit $status
+
+  # The pull request's packages (the iPhone's .ipa, the Mac's apps signed
+  # and notarized), published to Releases as its builds, or the version's
+  # on a pre-release branch (release-*). What is done with them is the
+  # runner's ($PIPELINE_CI).
+  build:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: $PIPELINE_CI prepare
+      - run: tools/build_packages.sh
+      - run: $PIPELINE_CI publish Visor dist/packages/*
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIPELINE_SHA: ${{ github.event.pull_request.head.sha }}
+          PIPELINE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PIPELINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+
+  # This run's screens and UI tests (the ios-ui and mac-screens jobs'
+  # artifacts) read into Reviews as the pull request's runs, or the
+  # version's dossier on a pre-release branch; failed ones too, so they
+  # can be seen there.
+  review:
+    needs: [ios-ui, mac-screens]
+    if: >-
+      !cancelled() && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/review
+      - run: $PIPELINE_CI test Visor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIPELINE_ARTIFACTS: ${{ runner.temp }}/review
+          PIPELINE_SHA: ${{ github.event.pull_request.head.sha }}
+          PIPELINE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PIPELINE_PULL_REQUEST: ${{ github.event.pull_request.number }}

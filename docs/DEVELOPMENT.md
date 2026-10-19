@@ -721,17 +721,19 @@ Migrate…, as between computers. Built so far: the settings.
 - agent_ui changes: commit+push there, put the revision in
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
-- Builds and runs of a branch, before it merges: a push to a branch of
-  this repository (never a fork's) whose head commit's message says
-  `:build:`, or `:build:` said in a pull request's conversation by its
-  owner or a collaborator (Reviews' Conversation), runs build.yml on the
-  release Mac's self-hosted runner (tools/build_packages.sh: the iPhone
-  app and the Mac's disk images, signed), and `:test:`, said either way,
-  runs test.yml (the screens and UI tests); the words count anywhere in
-  the message. What the runner does with them is its own (`$PIPELINE_CI`:
-  the builds to the release server, the runs to the review server, each
-  under its commit, branch and pull request). Either can also be run by
-  hand (workflow_dispatch). A tag `v<version>` on main runs release.yml:
+- Builds and runs of a pull request, before it merges (Logan, 19 Oct): every
+  commit pushed to it runs ci.yml whole, and a newer push cancels the run
+  before it if it hasn't finished. Beside the tests and every platform's
+  build (GitHub's runners), its `build` job builds the iPhone app and the
+  Mac's disk images, signed, on the release Mac's self-hosted runner
+  (tools/build_packages.sh), and its `review` job reads the run's screens
+  and UI tests (the `ios-ui` and `mac-screens` jobs' artifacts) into the
+  review store; neither runs for a fork's pull request. What the runner does
+  with them is its own (`$PIPELINE_CI`: the builds to the release server,
+  the runs to the review store, each under its commit, branch and pull
+  request). main requires every job green on the head commit to merge, so
+  a pull request that can merge has its builds in Releases and its runs in
+  Reviews. A tag `v<version>` on main runs release.yml:
   the version built and published as its release candidate, notes drafted
   from every pull request merged since the tag before, then the whole
   suite run as the version's dossier.
@@ -914,8 +916,8 @@ what needs real hardware, a sensor or a benchmark on a device). CI's
 `ios-ui` job runs, in each orientation, the fixture's screens and then the
 UI cases, each recorded with its pictures, and keeps them as the run's
 artifacts (`ios-portrait`, `ios-landscape`, `mac-screenshots` from the
-`mac-screens` job). `:test:` (test.yml) and a tag (release.yml) have the
-release Mac read a commit's artifacts into the review store
+`mac-screens` job). The run's `review` job, and a tag's release.yml, have
+the release Mac read a commit's artifacts into the review store
 (releases: `pipeline-ci test`, `//reviews/harnesses:visor_harness`).
 
 The same cases can run on a phone, for what needs one: the device lab's iPhone XS (iOS 18, on the
