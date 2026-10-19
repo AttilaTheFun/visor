@@ -13,7 +13,7 @@ public enum SavedDrafts {
 
     /// The draft kept for a session, or nothing.
     public static func draft(server: String, session: String) -> String {
-        guard !VisorFixture.active else { return "" }
+        guard !VisorFixture.active else { return VisorFixture.draft(session: session) }
         return VisorHost.settings?.get(key: key(server, session)) ?? ""
     }
 

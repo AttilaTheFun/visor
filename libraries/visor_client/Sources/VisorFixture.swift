@@ -15,8 +15,9 @@ public enum VisorFixture {
     /// Whether the app is showing the canned computer.
     @MainActor public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
     /// The screen to open on: sessions, chat, question, goal, inspector,
-    /// models, search, connect or new-session ("" for the app's own first
-    /// screen); also earlier
+    /// models, search, connect, new-session or commands (the chat with "/"
+    /// in its composer, its slash commands offered) ("" for the app's own
+    /// first screen); also earlier
     /// (a page of earlier rows goes in), learns-earlier (the chat, told
     /// ten seconds on that there are rows before it), arrivals (the
     /// chat, with rows coming in twelve and twenty-six seconds on) and
@@ -25,6 +26,13 @@ public enum VisorFixture {
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }
     @MainActor public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
+
+    /// The draft a session opens with: "/" in the chat on the commands
+    /// screen, so its slash commands are offered with nothing typed;
+    /// otherwise none (the fixture keeps no drafts).
+    @MainActor public static func draft(session: String) -> String {
+        screen == "commands" && session == chatSession ? "/" : ""
+    }
     /// "dark" or "light" for pictures in one look whatever the device's
     /// (`-visor.fixture.appearance dark`); "" for the device's.
     @MainActor public static var appearance: String { active ? (VisorHost.settings?.get(key: "fixture.appearance") ?? "") : "" }
