@@ -335,7 +335,9 @@ public struct VisorRootView: View {
             try? await Task.sleep(nanoseconds: 300_000_000)
             sidebarFocused = true
         }
-        .task(id: search.trimmed) { await searchMessages(search.trimmed) }
+        // Asked again as a computer connects: a search typed (or opened on)
+        // before it was found none of its messages, and kept none.
+        .task(id: "\(search.trimmed)|\(store.servers.filter { $0.state == .connected }.count)") { await searchMessages(search.trimmed) }
         .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 440)
     }
 
