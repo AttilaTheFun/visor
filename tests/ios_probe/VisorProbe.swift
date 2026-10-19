@@ -23,6 +23,13 @@ final class VisorProbe: XCTestCase {
         await MainActor.run { XCUIDevice.shared.orientation = Self.runOrientation }
     }
 
+    /// Every case leaves the device upright: a simulator left on its side
+    /// gave the next tests on it (another app's snapshot tests, too) a
+    /// landscape phone's insets.
+    override nonisolated func tearDown() async throws {
+        await MainActor.run { XCUIDevice.shared.orientation = .portrait }
+    }
+
     /// The send, as a person does it, for a screen recording to be taken
     /// of: the session named by VISOR_FRAMES_SESSION is opened, the
     /// composer tapped (the on-screen keyboard comes up), a message typed
