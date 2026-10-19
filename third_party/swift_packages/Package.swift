@@ -13,7 +13,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            revision: "587f88936e7280347e0690bc134c7c1c325fc86a"
+            revision: "69d7297c7892a7faafc8dd3cef45d74845c233c1"
         ),
         // SSH as a road to a server: the client's own SSH connection, a
         // port forwarded to the server on its loopback (SSHAgentServer).
