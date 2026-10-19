@@ -7,6 +7,7 @@
 
 import AppKit
 import SwiftUI
+import Synchronization
 import VisorClient
 import VisorServices
 import VisorUI
@@ -39,10 +40,28 @@ enum MacScreenshots {
         window.setFrameOrigin(NSPoint(x: 0, y: 0))
         window.makeKeyAndOrderFront(nil)
         app.activate()
+        // Kept the key window until it is pictured: on CI's Mac the app
+        // was sometimes not active by then, and the window drew as an
+        // inactive one (no selection's highlight), so the same screen came
+        // out two ways. Asked again every half second, in every run loop
+        // mode (a menu's tracking too).
+        let keyed = Mutex(false)
+        let keep = Timer(timeInterval: 0.5, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                if !window.isKeyWindow || !app.isActive {
+                    app.activate()
+                    window.makeKeyAndOrderFront(nil)
+                }
+                let now = window.isKeyWindow && app.isActive
+                keyed.withLock { $0 = now }
+            }
+        }
+        RunLoop.main.add(keep, forMode: .common)
         // Off the main thread, so a screen that keeps it busy (a menu's
         // tracking) is captured all the same, and the tool always ends.
         let number = window.windowNumber
         DispatchQueue.global().asyncAfter(deadline: .now() + 6) {
+            FileHandle.standardError.write(Data("window key when pictured: \(keyed.withLock { $0 })\n".utf8))
             capture(["-l\(number)", "-o", "-x", out])
             // No picture of the window: the whole screen, to see why.
             if !FileManager.default.fileExists(atPath: out) {
