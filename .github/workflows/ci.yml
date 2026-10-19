@@ -41,18 +41,76 @@ jobs:
   # computer, on the snapshot fixture. The thread must not move when it
   # learns there are rows before it (the jump on the first send after a
   # launch, 0.26). A simulator build needs no signing team.
+  # The iPhone app on the simulator, in each orientation: the snapshot
+  # fixture's screens, then the UI test cases, each recorded with its
+  # pictures. What they make is kept as this run's artifacts (ios-portrait,
+  # ios-landscape), which a release's dossier is read from
+  # (releases: pipeline-ci test). The same runs on a VM, or any Mac with
+  # Xcode: tools/ios_ui_tests.sh.
   ios-ui:
     runs-on: xcode-27
-    timeout-minutes: 40
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        orientation: [portrait, landscape]
     steps:
       - uses: actions/checkout@v4
-      # Judged by what the tests say, not Bazel's exit: xcodebuild's
-      # teardown can hang well past a pass (tools/ios_ui_tests.sh).
-      - name: UI tests (iOS simulator)
+      - name: Simulator
+        run: |
+          runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' | head -1)"
+          id="$(xcrun simctl list devices | grep -F "BAZEL_TEST_iPhone 17_27.0 (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
+          [ -n "$id" ] || id="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.0" "iPhone 17" "$runtime")"
+          xcrun simctl boot "$id" 2>/dev/null || true
+          xcrun simctl bootstatus "$id"
+          xcrun simctl status_bar "$id" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+      - name: The fixture's screens
+        env:
+          VISOR_UI_CASES: VisorProbe/${{ matrix.orientation == 'landscape' && 'testFixtureScreensLandscape' || 'testFixtureScreens' }}
         run: tools/ios_ui_tests.sh
+      - name: UI tests, recorded
+        env:
+          VISOR_PROBE_ORIENTATION: ${{ matrix.orientation }}
+        run: |
+          set -o pipefail
+          tools/ios_ui_tests.sh | tee ui-tests.log
+      - name: Keep
+        if: always()
+        run: |
+          mkdir -p kept/screens
+          cp /private/tmp/visor_probe/fixture-*.png kept/screens/ 2>/dev/null || true
+          cp -R bazel-testlogs/tests/ios_probe/visor_probe/test.outputs/tests.xcresult kept/ 2>/dev/null || true
+          cp ui-tests.log kept/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-${{ matrix.orientation }}
+          path: kept
 
-  # The same on Xcode 26 (GitHub's macOS 26 image): the toolchain a year
-  # behind, which forks and contributors may still be on.
+  # The Mac client's screens on the screenshot fixture (mac-screenshots), for
+  # a release's dossier too.
+  mac-screens:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: bazel build //tools/mac_screenshots
+      - name: Pictures
+        timeout-minutes: 10
+        run: |
+          mkdir -p shots
+          tool="$(bazel cquery --output=files //tools/mac_screenshots 2>/dev/null | head -1)"
+          for screen in chat question models inspector new-session; do
+            "$tool" "$screen" "$PWD/shots/mac-$screen.png" dark
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-screenshots
+          path: shots/*.png
+
   xcode26:
     runs-on: macos-26
     steps:

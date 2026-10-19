@@ -3,9 +3,10 @@ name: Release
 # (self-hosted, release-mac): built with the release signing (the Mac's
 # Developer ID, notarized) and published to the release server as the
 # version's release candidate, its notes every pull request merged since
-# the tag before; then the whole suite (the simulator, the device lab, the
-# Mac's pictures) run into the review server as the version's dossier, to
-# be signed off before the version is promoted. What is done with the
+# the tag before; then CI's runs of the tagged commit (the simulator's
+# screens and UI tests in each orientation, the Mac's screens) read into the
+# review server as the version's dossier, to be signed off before the
+# version is promoted. What is done with the
 # packages and the runs is the runner's ($PIPELINE_CI).
 on:
   push:
@@ -13,6 +14,8 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  # CI's run of the tagged commit (main's), and its artifacts.
+  actions: read
 concurrency:
   group: release-${{ github.ref }}
 jobs:
@@ -42,4 +45,3 @@ jobs:
       - run: $PIPELINE_CI test Visor
         env:
           GH_TOKEN: ${{ github.token }}
-          PIPELINE_TEST_TARGETS: ios iphone-xs macos

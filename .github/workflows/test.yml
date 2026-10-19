@@ -1,8 +1,10 @@
 name: Test
-# A branch's commit's screens and UI tests, run on the release Mac's runner
-# (self-hosted, release-mac) for review before it merges: a push whose head
-# commit says :test:, a pull request's conversation saying :test: (by its
-# owner or a collaborator), or by hand. Never a fork's. Where the runs go is
+# A branch's commit's screens and UI tests put in for review before it
+# merges: a push whose head commit says :test:, a pull request's
+# conversation saying :test: (by its owner or a collaborator), or by hand.
+# Never a fork's. The runs themselves are CI's (its simulator in each
+# orientation, its Mac: ci.yml's artifacts); the release Mac's runner
+# (self-hosted, release-mac) reads them into the review store, which is
 # the runner's ($PIPELINE_CI).
 on:
   push:
@@ -13,8 +15,8 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  # The Mac's pictures: the Screenshots workflow started for the commit.
-  actions: write
+  # CI's run of the commit, and its artifacts.
+  actions: read
 concurrency:
   group: test-${{ github.event.issue.number || github.ref }}
   cancel-in-progress: true

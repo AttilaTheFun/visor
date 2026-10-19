@@ -891,7 +891,8 @@ with no earlier rows known and, ten seconds on, answers its sync with
 word of some, as a server's first answer after a launch can; the test
 fails if the last row moves. CI runs it (the `ios-ui` job, in the
 simulator, through `tools/ios_ui_tests.sh`, which goes by what the tests
-say because xcodebuild's teardown can hang past a pass). To run it here,
+say; xcodebuild gathers no simulator diagnostics after them, which took
+minutes and read as a timeout). To run it here (or in a VM),
 after touching the thread's rows or its scrolling, `tools/ios_ui_tests.sh`
 or:
 `bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64
@@ -907,7 +908,17 @@ nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
 rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and CI).
 
-The same cases run on a phone: the device lab's iPhone XS (iOS 18, on the
+The snapshot, UI and unit tests run in CI and on any Mac with Xcode (a VM
+for quick turns), never on the lab's phones (Logan, 18 Oct: the lab is for
+what needs real hardware, a sensor or a benchmark on a device). CI's
+`ios-ui` job runs, in each orientation, the fixture's screens and then the
+UI cases, each recorded with its pictures, and keeps them as the run's
+artifacts (`ios-portrait`, `ios-landscape`, `mac-screenshots` from the
+`mac-screens` job). `:test:` (test.yml) and a tag (release.yml) have the
+release Mac read a commit's artifacts into the review store
+(releases: `pipeline-ci test`, `//reviews/harnesses:visor_harness`).
+
+The same cases can run on a phone, for what needs one: the device lab's iPhone XS (iOS 18, on the
 Mac mini; `~/Developer/device_lab`), in a lease:
 `device-lab run --device iphone-xs -- tools/ios_device_tests.sh`. The
 phone runs `//tests/ios_probe:visor_probe_device`, whose host is the app

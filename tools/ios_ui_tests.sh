@@ -1,11 +1,21 @@
 #!/bin/bash
 # The iOS probe's cases that need no computer (the snapshot fixture), in the
-# simulator, judged by what the tests say: xcodebuild's teardown can hang
-# long after they have finished, which Bazel then reports as a timeout. Once
-# the tests have said how they went, xcodebuild is stopped. CI runs this.
+# simulator, judged by what the tests say. xcodebuild's teardown took minutes
+# after the tests had finished, gathering the simulator's diagnostics (none
+# are gathered now: -collect-test-diagnostics never), which Bazel reported as
+# a timeout; once the tests have said how they went, xcodebuild is given a
+# while to write its result bundle, then stopped. CI runs this, in
+# each orientation, and keeps what it made for review; so can a VM, or any
+# Mac with Xcode.
 #
 #   tools/ios_ui_tests.sh
 #   VISOR_UI_CASES=VisorProbe/testSiteShots tools/ios_ui_tests.sh   # other cases
+#   VISOR_PROBE_ORIENTATION=landscape tools/ios_ui_tests.sh          # on their side
+#
+# Each case is recorded (XCTest's screen recording) and its pictures kept,
+# in the result bundle bazel-testlogs/tests/ios_probe/visor_probe/
+# test.outputs/tests.xcresult; the fixture's screens (testFixtureScreens,
+# testFixtureScreensLandscape) also in /private/tmp/visor_probe.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 CASES="${VISOR_UI_CASES:-VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning,VisorProbe/testFixtureSlashCommands,VisorProbe/testFixtureQuestion,VisorProbe/testABurstOfRowsAtTheEndIsFollowedToItsEnd,VisorProbe/testTypingThroughAnAutocorrectionKeepsTheCaret}"
@@ -22,6 +32,10 @@ if [ -n "$SIM" ]; then
 fi
 bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
   --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \
+  --test_env=VISOR_PROBE_ORIENTATION="${VISOR_PROBE_ORIENTATION:-portrait}" \
+  --test_arg=--xctestrun_attachment_lifetime=keepAlways --test_arg=--xctestrun_screen_capture_format=screenRecording \
+  --test_arg=--xcodebuild_args=-collect-test-diagnostics --test_arg=--xcodebuild_args=never \
+  --nozip_undeclared_test_outputs \
   --spawn_strategy=local --nocache_test_results --test_output=streamed \
   --test_filter="$CASES" > "$LOG" 2>&1 &
 BAZEL=$!
@@ -29,8 +43,9 @@ while kill -0 "$BAZEL" 2>/dev/null; do
   grep -q "Test Suite 'Selected tests' \(passed\|failed\)" "$LOG" && break
   sleep 5
 done
-# The lines after the verdict, then the hang, if there is one, cut short.
-sleep 3
+# The result bundle written after the verdict (its recordings take a
+# while), then the hang, if there is one, cut short.
+for _ in $(seq 1 60); do kill -0 "$BAZEL" 2>/dev/null || break; sleep 3; done
 pkill -f "xcodebuild.*visor_probe" 2>/dev/null
 kill "$BAZEL" 2>/dev/null
 wait "$BAZEL" 2>/dev/null
