@@ -18,10 +18,14 @@ cd "$(dirname "$0")/.."
 OUT="${PROOF_DIR:-$PWD/.proof}"
 rm -rf "$OUT"
 mkdir -p "$OUT"
-# The simulator as CI's was: iPhone 17, iOS 27, the status bar at 9:41.
+# The simulator as CI's was: iPhone 17, iOS 27, the status bar at 9:41,
+# and new (erased): another app's tests on it leave their state, such as a
+# permission prompt over every screen.
 runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' | head -1)"
 id="$(xcrun simctl list devices | grep -F "BAZEL_TEST_iPhone 17_27.0 (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
 [ -n "$id" ] || id="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.0" "iPhone 17" "$runtime")"
+xcrun simctl shutdown "$id" 2>/dev/null || true
+xcrun simctl erase "$id"
 xcrun simctl boot "$id" 2>/dev/null || true
 xcrun simctl bootstatus "$id" >/dev/null
 xcrun simctl status_bar "$id" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
@@ -35,6 +39,8 @@ for orientation in portrait landscape; do
   VISOR_PROBE_ORIENTATION="$orientation" tools/ios_ui_tests.sh > "$kept/ui-tests.log" 2>&1 || status=1
   cp /private/tmp/visor_probe/fixture-*.png "$kept/screens/" 2>/dev/null || true
   cp -R bazel-testlogs/tests/ios_probe/visor_probe/test.outputs/tests.xcresult "$kept/" 2>/dev/null || true
+  # Bazel's outputs are read-only, and xcresulttool writes as it reads.
+  chmod -R u+w "$kept" 2>/dev/null || true
   echo "ios-$orientation: $(ls "$kept/screens" | wc -l | tr -d ' ') screens, $(grep -c "^Test Case '.*' passed" "$kept/ui-tests.log") cases passed, $(grep -c "^Test Case '.*' failed" "$kept/ui-tests.log") failed"
 done
 if [ "${PROOF_MAC:-0}" = 1 ]; then
