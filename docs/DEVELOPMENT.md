@@ -734,13 +734,17 @@ Migrate…, as between computers. Built so far: the settings.
   request). Each run's build number is one past the version's highest on
   the release server (its `number` job: `$PIPELINE_CI number`), stamped
   into the four Info.plists before building and used for the runs, so
-  every build published is one more without a commit to bump it; a tag's
-  release takes the next the same way. main requires every job green on the head commit to merge, so
-  a pull request that can merge has its builds in Releases and its runs in
-  Reviews. A tag `v<version>` on main runs release.yml:
-  the version built and published as its release candidate, notes drafted
-  from every pull request merged since the tag before, then the whole
-  suite run as the version's dossier.
+  every build published is one more without a commit to bump it. main
+  requires every job green on the head commit to merge, so a pull request
+  that can merge has its builds in Releases and its runs in Reviews. CI runs
+  again on each commit merged to main (a squash is a commit of its own), and
+  its builds and runs are the version's. A release is of one of those
+  commits: an agent proposes it as a draft GitHub release
+  (`agent-token gh claude release create v<version> --draft --target <sha>`),
+  Logan reviews it in Reviews (its CI, builds, screens, and the pull
+  requests since the last release) and approves it there, which makes the
+  tag and promotes that commit's builds in Releases; nothing is built from
+  the tag (releases: docs/RELEASE_PROCESS.md).
 - Rules (AGENTS.md): every change through a pull request, no attribution lines; no
   Combine; visor_client/visor_ui stay Foundation-free of networking,
   JSON, UserDefaults (they build for the web — `String.trimmingCharacters`
@@ -920,8 +924,8 @@ what needs real hardware, a sensor or a benchmark on a device). CI's
 `ios-ui` job runs, in each orientation, the fixture's screens and then the
 UI cases, each recorded with its pictures, and keeps them as the run's
 artifacts (`ios-portrait`, `ios-landscape`, `mac-screenshots` from the
-`mac-screens` job). The run's `review` job, and a tag's release.yml, have
-the release Mac read a commit's artifacts into the review store
+`mac-screens` job). The run's `review` job has the release Mac read a
+commit's artifacts into the review store
 (releases: `pipeline-ci test`, `//reviews/harnesses:visor_harness`).
 
 The same cases can run on a phone, for what needs one: the device lab's iPhone XS (iOS 18, on the

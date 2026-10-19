@@ -1,12 +1,15 @@
 name: CI
-# Every commit pushed to a pull request, and main's: the tests, the iPhone
-# simulator's screens and UI tests in each orientation and the Mac's screens
-# (kept as this run's artifacts), every platform's build; then, on the
-# release Mac's runner (self-hosted, release-mac), the pull request's
-# packages built, signed and published to Releases, and its runs read into
-# Reviews. A newer push to the pull request cancels this run if it hasn't
-# finished. main requires every job green on a pull request's head commit
-# before it merges. A fork's pull request never runs on the release Mac.
+# Every commit pushed to a pull request, and each one merged to main (a
+# squash is a commit of its own): the tests, the iPhone simulator's screens
+# and UI tests in each orientation and the Mac's screens (kept as this
+# run's artifacts), every platform's build; then, on the release Mac's
+# runner (self-hosted, release-mac), the commit's packages built, signed
+# and published to Releases, and its runs read into Reviews: a pull
+# request's, or main's, which are the version's and what a release of that
+# commit is reviewed and released with. A newer push to the pull request
+# cancels this run if it hasn't finished. main requires every job green on
+# a pull request's head commit before it merges. A fork's pull request
+# never runs on the release Mac.
 on:
   pull_request:
   push:
@@ -218,7 +221,7 @@ jobs:
   # version's highest on the release server, so every build published is
   # one more.
   number:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 5
     outputs:
@@ -230,10 +233,11 @@ jobs:
       - id: next
         run: echo "build=$($PIPELINE_CI number Visor applications/visor_ios/Info.plist)" >> "$GITHUB_OUTPUT"
 
-  # The pull request's packages (the iPhone's .ipa, the Mac's apps signed
-  # and notarized) at that number, published to Releases as its builds, or
-  # the version's on a pre-release branch (release-*). What is done with
-  # them is the runner's ($PIPELINE_CI).
+  # The commit's packages (the iPhone's .ipa, the Mac's apps signed and
+  # notarized) at that number, published to Releases as the pull request's
+  # builds, or the version's on a pre-release branch (release-*) or main.
+  # What is done with them is the runner's ($PIPELINE_CI). (On main the pull
+  # request's values are empty, and it takes the push's own.)
   build:
     needs: number
     runs-on: [self-hosted, release-mac]
@@ -254,8 +258,8 @@ jobs:
 
   # This run's screens and UI tests (the ios-ui and mac-screens jobs'
   # artifacts) read into Reviews as the pull request's runs, or the
-  # version's dossier on a pre-release branch; failed ones too, so they
-  # can be seen there.
+  # version's on a pre-release branch or main; failed ones too, so they can
+  # be seen there.
   review:
     needs: [number, ios-ui, mac-screens]
     if: >-
