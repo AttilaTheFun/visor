@@ -26,7 +26,9 @@ public struct VisorNotificationID: Sendable, Equatable {
     /// kind, the session, and the address before them.
     public static func target(of id: String) -> (computer: String, session: String)? {
         if id.contains(separator) {
-            let parts = id.components(separatedBy: separator)
+            // The standard library's split, as everything here: the module
+            // imports nothing, and is built where Foundation is not loaded.
+            let parts = id.split(separator: Character(separator), omittingEmptySubsequences: false).map(String.init)
             guard parts.count >= 2, !parts[0].isEmpty, !parts[1].isEmpty else { return nil }
             return (parts[0], parts[1])
         }
