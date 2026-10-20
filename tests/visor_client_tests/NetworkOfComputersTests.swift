@@ -380,6 +380,27 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertTrue(serverB.authorizedKeys.isEmpty, "not connected: not handed the key")
         XCTAssertEqual(store.notice, "The device's key is authorized on Scripted Mac: it can connect over SSH now.")
     }
+
+    /// A sign-in link names a computer by its address, whatever the
+    /// address holds; opened, that computer's settings are asked for.
+    func testASignInLinkShowsItsComputersSettings() async {
+        let link = SignInLink(computer: "https://host/path?x=1")
+        XCTAssertEqual(link.link, "visor://sign-in?computer=https%3A%2F%2Fhost%2Fpath%3Fx%3D1")
+        XCTAssertEqual(SignInLink(parsing: " " + link.link + "\n"), link)
+        XCTAssertNil(SignInLink(parsing: "visor://sign-in?other=1"))
+        XCTAssertNil(SignInLink(parsing: "visor://connect?code=abc"))
+        VisorHost.settings = MemorySettings()
+        let a = AgentServerRecord(name: "A", address: "https://host/path?x=1", secret: "a-pw", provider: "scripted")
+        _ = scripted(a)
+        VisorHost.settings?.set(key: "hosts", value: JSONValue.array([a.json]).encoded())
+        let store = VisorStore()
+        for _ in 0..<5 { await settle() }
+        XCTAssertEqual(store.open(link.link)?.record.address, a.address)
+        XCTAssertEqual(store.openingSettings, a.address)
+        store.openingSettings = nil
+        XCTAssertNil(store.open(SignInLink(computer: "https://elsewhere").link), "a computer not held here")
+        XCTAssertNil(store.openingSettings)
+    }
 }
 
 private extension AgentServerConnection {

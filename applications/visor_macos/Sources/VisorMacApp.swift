@@ -67,9 +67,14 @@ struct VisorMacApp: App {
                 .environment(store)
                 .frame(minWidth: 720, minHeight: 480)
                 // visor://connect?code=… — a connection code from a QR
-                // code or a link adds that computer.
+                // code or a link adds that computer; visor://sign-in shows
+                // a computer's settings.
                 .onOpenURL { url in store.open(url.absoluteString) }
+                // Every link to the window that is open, brought forward,
+                // rather than a new window for each.
+                .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
+        .handlesExternalEvents(matching: ["*"])
         // The sidebar, and a thread about as wide as the transcript grows.
         .defaultSize(width: 1200, height: 820)
         // The Mac keeps the computers in its menu bar; a phone and the web
