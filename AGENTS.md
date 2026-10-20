@@ -22,7 +22,7 @@ to one focused change, and say in it how the change was verified.
   version in third_party/swift_packages/Package.swift + Package.resolved
   (re-resolve with `swift package resolve`, delete `.build`), swift_sql in
   the root Package.swift too (the SwiftPM server). Releases are tagged
-  `vMAJOR.MINOR.PATCH`, and the apps' version is the release's (0.36.0).
+  `vMAJOR.MINOR.PATCH`, and the apps' version and the module's (MODULE.bazel) are the release's (0.36.0).
   A branch in development may pin a revision of something not yet
   released; a release may not: CI's `pins` job (tools/released_pins.sh)
   fails on main's commits until every pin is a released version, and
