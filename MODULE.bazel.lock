@@ -308,7 +308,7 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "9iMl/x5uGTLwIPJ+BF7duI1h0f5fqIeHsYNMuzqOZzQ=",
-        "usagesDigest": "BEXVSdfBoCc8/aODWbC/od9B0GmBJHxeZdwooGdvFQQ=",
+        "usagesDigest": "VQAeH7MHqYSX8fjzvxUCpJU7Fw4/n1p9l7Kysx3F45M=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
@@ -626,7 +626,7 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "rGypP5nrTI9oaJIH2p4vvfzarcXFntsjmKbWV4stK2I=",
-        "usagesDigest": "taOoM/5SsF2F+/w3Pr7wJmPzMZmf9g7XuPLstdPjBwg=",
+        "usagesDigest": "vMrHlnSq49PPjsAbuclJCetbyikKyWgqG6nI95rTbYg=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",

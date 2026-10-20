@@ -1,3 +1,5 @@
+import Foundation
+
 /// A local notification's id: the computer's address, the session and what
 /// it says (a turn finished, an approval, a goal). A newer one with the
 /// same id replaces the older, and opening it goes to the session. The

@@ -18,6 +18,15 @@ import PackageDescription
 /// broken by a context change") in everything that imports Foundation.
 let strict: [SwiftSetting] = [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-as-errors"], .when(platforms: [.macOS, .linux]))]
 
+/// The client's host services, built on their own here, on Linux's CI
+/// (`swift build --target VisorServices`): a file that uses Foundation
+/// without importing it fails here as it does in Visor on Isomer (the web,
+/// Android), not only there. On Apple's systems another module's Foundation
+/// leaks into the lookup and hides it.
+let clientServices: [Target] = [
+    .target(name: "VisorServices", path: "libraries/visor_services/Sources", swiftSettings: strict),
+]
+
 /// The libraries every system's server is built from.
 let shared: [Target] = [
     .target(name: "VisorProtocol", path: "libraries/visor_protocol/Sources", swiftSettings: strict),
@@ -82,5 +91,5 @@ let package = Package(
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
     // swift_sql at its release, as third_party/swift_packages pins it.
     dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0")],
-    targets: shared + system + tests
+    targets: clientServices + shared + system + tests
 )
