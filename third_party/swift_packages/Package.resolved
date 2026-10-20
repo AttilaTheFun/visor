@@ -5,7 +5,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/agent_ui.git",
       "state" : {
-        "revision" : "b53487e47dd091b8eee4d8f5e8d40a05418b3eae"
+        "revision" : "b4d004cff1651ea0b5d8562a84b33c90ed5ff79b"
       }
     },
     {
@@ -99,12 +99,12 @@
       }
     },
     {
-      "identity" : "swift_sqlite",
+      "identity" : "swift_sql",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AttilaTheFun/swift_sqlite.git",
+      "location" : "https://github.com/AttilaTheFun/swift_sql.git",
       "state" : {
-        "revision" : "70f0c45d6d1fc46b5a07e3fac59094aacd062585",
-        "version" : "0.34.0"
+        "revision" : "feb21a6e9fe3aeac72c055c4092c34106a4f19df",
+        "version" : "0.35.0"
       }
     },
     {

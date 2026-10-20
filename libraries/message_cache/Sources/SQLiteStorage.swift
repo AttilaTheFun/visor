@@ -1,10 +1,10 @@
-// The cache in SQLite (swift_sqlite): rows by place, an index of their
+// The cache in SQLite (swift_sql): rows by place, an index of their
 // words, the tree of their source lines. On every host: the file a cache
 // opened with `MessageCache.open(named:)` keeps. The tables are the ones
 // SQLite.swift made before (schema 7), so a cache kept by an earlier build
 // reads on.
 
-import SwiftSQLite
+import SwiftSQL
 import VisorProtocol
 
 public final class SQLiteStorage: MessageStorage {

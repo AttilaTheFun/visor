@@ -631,7 +631,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 55d5d44df9d990ad4ae76ffa578b8755491795956c18dd83cddeacf8097ce7bf"
+          "FILE:@@//third_party/swift_packages/Package.resolved 75f9a0c2ae92b52f8035ca11cafb498f1bb0fe6e832da362baf443ee0bee148a"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -645,7 +645,7 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "b53487e47dd091b8eee4d8f5e8d40a05418b3eae",
+              "commit": "b4d004cff1651ea0b5d8562a84b33c90ed5ff79b",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
               "env": {},
               "env_inherit": [],
@@ -676,13 +676,13 @@
               "bazel_target_mods": ""
             }
           },
-          "swiftpkg_swift_sqlite": {
+          "swiftpkg_swift_sql": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
-              "bazel_package_name": "swiftpkg_swift_sqlite",
-              "commit": "70f0c45d6d1fc46b5a07e3fac59094aacd062585",
-              "remote": "https://github.com/AttilaTheFun/swift_sqlite.git",
-              "version": "0.34.0",
+              "bazel_package_name": "swiftpkg_swift_sql",
+              "commit": "feb21a6e9fe3aeac72c055c4092c34106a4f19df",
+              "remote": "https://github.com/AttilaTheFun/swift_sql.git",
+              "version": "0.35.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -878,7 +878,7 @@
           "explicitRootModuleDirectDeps": [
             "swiftpkg_agent_ui",
             "swiftpkg_swift_nio_ssh",
-            "swiftpkg_swift_sqlite",
+            "swiftpkg_swift_sql",
             "swift_package"
           ],
           "explicitRootModuleDirectDevDeps": [],

@@ -1,13 +1,13 @@
 {
-  "originHash" : "3de9684ab7904063ef5e2927c8949cab899fb12bc27d8efa4fdf6b6029d67e54",
+  "originHash" : "9a38daccd31775384507f209fce66b505336801c9f239d267092a40d4d1e038a",
   "pins" : [
     {
-      "identity" : "swift_sqlite",
+      "identity" : "swift_sql",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AttilaTheFun/swift_sqlite.git",
+      "location" : "https://github.com/AttilaTheFun/swift_sql.git",
       "state" : {
-        "revision" : "70f0c45d6d1fc46b5a07e3fac59094aacd062585",
-        "version" : "0.34.0"
+        "revision" : "feb21a6e9fe3aeac72c055c4092c34106a4f19df",
+        "version" : "0.35.0"
       }
     }
   ],
