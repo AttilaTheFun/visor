@@ -37,6 +37,15 @@ public enum ToolPath {
         }
     }
 
+    /// A search path for an agent: the server's own first, as it is (so a
+    /// wrapper there stays the tool), then each of `extra` it does not
+    /// already hold, once.
+    public static func searchPath(_ path: String, then extra: [String], separator: Character) -> String {
+        var parts = path.split(separator: separator).map(String.init)
+        for directory in extra where !directory.isEmpty && !parts.contains(directory) { parts.append(directory) }
+        return parts.joined(separator: String(separator))
+    }
+
     /// The environment for a spawned agent: ours, with the tool
     /// directories on its search path and any trace of a surrounding
     /// Claude Code session removed (a nested session refuses to start).

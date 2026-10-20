@@ -53,6 +53,9 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     /// from its message_start; each delta is named with it.
     private var streamingMessageID = ""
     private var streamCounter = 0
+    /// The permission mode the running agent was asked to start in, until
+    /// it says which it started in.
+    private var askedMode: String?
 
     /// - Parameter resume: the session id to pick up (an unarchived session).
     public init(cwd: String, skipPermissions: Bool, resume: String? = nil, tool: String = "claude") {
@@ -62,6 +65,18 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         self.tool = tool
         (events, emit) = AsyncStream.makeStream()
     }
+
+    /// The mode a session's agent is started in: manual accepts edits and
+    /// asks for the rest; auto-approving bypasses permissions, or for
+    /// Claude under a policy that disables that, Claude's auto mode.
+    static func permissionMode(skip: Bool, tool: String, policy: ClaudeManagedPolicy) -> String {
+        guard skip else { return "acceptEdits" }
+        return tool == "claude" ? policy.autoApproveMode : "bypassPermissions"
+    }
+
+    /// Whether the agent started in another permission mode than the one
+    /// asked for.
+    static func startedOtherwise(asked: String, reported: String) -> Bool { !reported.isEmpty && reported != asked }
 
     static func quoted(_ path: String) -> String {
         path.contains(" ") ? "'\(path)'" : path
@@ -172,7 +187,9 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: prompt)
         if let mcp { args += ["--mcp-config", mcp] }
         // Manual: edits are accepted, everything else asks the user.
-        args += ["--permission-mode", skipPermissions ? "bypassPermissions" : "acceptEdits"]
+        let mode = Self.permissionMode(skip: skipPermissions, tool: tool, policy: tool == "claude" ? .current : ClaudeManagedPolicy())
+        askedMode = mode
+        args += ["--permission-mode", mode]
         if mcp != nil, prompt { args += ["--permission-prompt-tool", "mcp__visor__approve"] }
         if let model, !model.isEmpty { args += ["--model", model] }
         if let effort, !effort.isEmpty { args += ["--effort", effort] }
@@ -185,7 +202,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         // The agent is told which session it is, so it can name itself
         // when it asks the server to restart (VISOR_SESSION).
         let environment = ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
-        let child = try AgentChildren.start(executable: executable, arguments: args, directory: (cwd as NSString).expandingTildeInPath,
+        let child = try AgentChildren.start(executable: executable, arguments: args, directory: HostFolders.resolve(cwd),
                                             environment: environment, session: approvalEnvironment["VISOR_SESSION"])
         self.child = child
         follow(child)
@@ -235,7 +252,15 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         switch output {
         case .commands(let list):
             emit.yield(.commands(list))
-        case .began(let session, let model, let keySource):
+        case .began(let session, let model, let keySource, let mode):
+            // Started in another mode than asked, auto-approving: a policy
+            // kept it from approving tools itself, so the user approves
+            // them (Visor never answers for them).
+            if skipPermissions, let asked = askedMode, let mode, Self.startedOtherwise(asked: asked, reported: mode) {
+                emit.yield(.manual("Claude started in its \u{201C}\(mode)\u{201D} mode, not \u{201C}\(asked)\u{201D}: an administrator's "
+                    + "policy limits its permission modes. This session is Manual now, and asks you before each tool it runs."))
+            }
+            askedMode = nil
             // The turn has begun: an interrupt asked for before it is sent.
             turnStarting = false
             if stopWhenBegun { interrupt() }

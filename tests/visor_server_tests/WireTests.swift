@@ -133,18 +133,21 @@ final class WireTests: ServerTestCase {
     func testPicturesAreMeasuredFromTheirHeaders() {
         func be(_ value: Int, _ bytes: Int) -> [UInt8] { (0..<bytes).reversed().map { UInt8(truncatingIfNeeded: value >> ($0 * 8)) } }
         func le(_ value: Int, _ bytes: Int) -> [UInt8] { (0..<bytes).map { UInt8(truncatingIfNeeded: value >> ($0 * 8)) } }
-        let png: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] + be(13, 4) + Array("IHDR".utf8) + be(1206, 4) + be(2622, 4) + [8, 6, 0, 0, 0]
+        // Joined part by part, not as one long sum: a chain of `+` over
+        // array literals is more than some compilers type-check in time.
+        func joined(_ parts: [UInt8]...) -> [UInt8] { Array(parts.joined()) }
+        let png = joined([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], be(13, 4), Array("IHDR".utf8), be(1206, 4), be(2622, 4), [8, 6, 0, 0, 0])
         XCTAssertEqual(HeaderImageMeasuring.measure(png), ImageSize(width: 1206, height: 2622))
-        let gif: [UInt8] = Array("GIF89a".utf8) + le(320, 2) + le(200, 2) + [UInt8](repeating: 0, count: 20)
+        let gif = joined(Array("GIF89a".utf8), le(320, 2), le(200, 2), [UInt8](repeating: 0, count: 20))
         XCTAssertEqual(HeaderImageMeasuring.measure(gif), ImageSize(width: 320, height: 200))
-        let webp: [UInt8] = Array("RIFF".utf8) + le(100, 4) + Array("WEBPVP8X".utf8) + le(10, 4) + [0, 0, 0, 0] + le(799, 3) + le(599, 3)
+        let webp = joined(Array("RIFF".utf8), le(100, 4), Array("WEBPVP8X".utf8), le(10, 4), [0, 0, 0, 0], le(799, 3), le(599, 3))
         XCTAssertEqual(HeaderImageMeasuring.measure(webp), ImageSize(width: 800, height: 600))
         // A JPEG whose EXIF says it is turned a quarter (orientation 6): its
         // size as shown is its stored one turned.
-        let exif: [UInt8] = Array("Exif".utf8) + [0, 0] + Array("MM".utf8) + be(42, 2) + be(8, 4) + be(1, 2)
-            + be(0x0112, 2) + be(3, 2) + be(1, 4) + be(6, 2) + [0, 0] + be(0, 4)
-        let jpeg: [UInt8] = [0xFF, 0xD8, 0xFF, 0xE1] + be(exif.count + 2, 2) + exif
-            + [0xFF, 0xC0] + be(17, 2) + [8] + be(3024, 2) + be(4032, 2) + [3] + [UInt8](repeating: 0, count: 9)
+        let exif = joined(Array("Exif".utf8), [0, 0], Array("MM".utf8), be(42, 2), be(8, 4), be(1, 2),
+                          be(0x0112, 2), be(3, 2), be(1, 4), be(6, 2), [0, 0], be(0, 4))
+        let jpeg = joined([0xFF, 0xD8, 0xFF, 0xE1], be(exif.count + 2, 2), exif,
+                          [0xFF, 0xC0], be(17, 2), [8], be(3024, 2), be(4032, 2), [3], [UInt8](repeating: 0, count: 9))
         XCTAssertEqual(HeaderImageMeasuring.measure(jpeg), ImageSize(width: 3024, height: 4032))
         XCTAssertNil(HeaderImageMeasuring.measure(Array("not a picture at all, just words".utf8)))
     }

@@ -53,6 +53,52 @@ final class AgentLogTests: ServerTestCase {
         XCTAssertEqual(more.first?.parentUuid, "m3")
     }
 
+    /// A restarted Codex session, read with the head it stood at (its
+    /// first prompt): the second turn carries on from it, so its reply is
+    /// where the conversation ends and nothing is abandoned.
+    func testARestartedCodexSessionKeepsItsLaterTurns() {
+        let data = jsonl([
+            ["type": "response_item", "ordinal": 1, "payload": ["type": "message", "id": "p1", "role": "user",
+                                                                 "content": [["type": "input_text", "text": "First"]]]],
+            ["type": "response_item", "ordinal": 2, "payload": ["type": "message", "id": "r1", "role": "assistant",
+                                                                 "content": [["type": "output_text", "text": "One."]]]],
+            ["type": "event_msg", "ordinal": 3, "payload": ["type": "token_count"]],
+            ["type": "response_item", "ordinal": 4, "payload": ["type": "message", "id": "p2", "role": "user",
+                                                                 "content": [["type": "input_text", "text": "Second"]]]],
+            ["type": "response_item", "ordinal": 5, "payload": ["type": "function_call_output", "id": "o2", "call_id": "c2", "output": "ok"]],
+            ["type": "response_item", "ordinal": 6, "payload": ["type": "message", "id": "r2", "role": "assistant",
+                                                                 "content": [["type": "output_text", "text": "Two."]]]],
+            ["type": "event_msg", "ordinal": 7, "payload": ["type": "token_count"]],
+        ])
+        let lines = CodexRolloutParser().lines(in: data)
+        XCTAssertEqual(lines.map(\.type), ["user", "assistant", "event_msg", "user", "user", "assistant", "event_msg"])
+        let nodes = lines.map { ClaudeBranch.Node(uuid: $0.uuid, parentUuid: $0.parentUuid, isPrompt: $0.isPrompt, isMessage: $0.isMessage) }
+        let shape = ClaudeBranch.current(nodes: nodes, head: "p1")
+        XCTAssertEqual(shape.leaf, "r2")
+        XCTAssertEqual(shape.abandoned, [])
+        XCTAssertEqual(shape.prompts, ["p1", "p2"])
+        XCTAssertFalse(shape.wentOnElsewhere)
+    }
+
+    /// Codex's folder is $CODEX_HOME when it is set (with ~ expanded), and
+    /// a thread's rollout is found under it; else ~/.codex.
+    func testCodexHomeHoldsTheRollouts() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("visor-codex-home-" + UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let day = folder.appendingPathComponent("sessions/2026/10/20", isDirectory: true)
+        try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+        let rollout = day.appendingPathComponent("rollout-2026-10-20T10-00-00-t42.jsonl", isDirectory: false)
+        try Data("{}\n".utf8).write(to: rollout)
+
+        let root = SessionCatalog.codexRoot(environment: ["CODEX_HOME": folder.path])
+        XCTAssertEqual(root.standardizedFileURL.path, folder.standardizedFileURL.path)
+        XCTAssertEqual(SessionCatalog.codexRollout(id: "t42", in: root)?.lastPathComponent, rollout.lastPathComponent)
+        XCTAssertNil(SessionCatalog.codexRollout(id: "t43", in: root))
+        XCTAssertEqual(SessionCatalog.codexRoot(environment: ["CODEX_HOME": "~/elsewhere"]).path,
+                       (NSHomeDirectory() as NSString).appendingPathComponent("elsewhere"))
+        XCTAssertEqual(SessionCatalog.codexRoot(environment: [:]).path, SessionCatalog.home.appendingPathComponent(".codex").path)
+    }
+
     func testOpenRouterLogReadsAsRows() {
         let data = jsonl([
             ["id": "u1", "message": ["role": "user", "content": "Add a README"]],

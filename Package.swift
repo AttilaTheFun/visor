@@ -26,8 +26,8 @@ let shared: [Target] = [
         name: "MessageCache",
         dependencies: [
             "VisorProtocol",
-            // SQLite (swift_sqlite, as in the Bazel build) on every system.
-            .product(name: "SwiftSQLite", package: "swift_sqlite"),
+            // SQLite (swift_sql, as in the Bazel build) on every system.
+            .product(name: "SwiftSQL", package: "swift_sql"),
         ],
         path: "libraries/message_cache/Sources",
         swiftSettings: strict
@@ -80,7 +80,7 @@ let package = Package(
     name: "visor",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
-    // swift_sqlite at its release, as third_party/swift_packages pins it.
-    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sqlite.git", exact: "0.34.0")],
+    // swift_sql at its release, as third_party/swift_packages pins it.
+    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0")],
     targets: shared + system + tests
 )

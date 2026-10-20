@@ -42,7 +42,7 @@ final class UsageTests: ServerTestCase {
         XCTAssertEqual(ClaudeOutput.parse(#"{"type":"result","subtype":"success","is_error":false,"result":"ok"}"#),
                        [.result(failure: nil, spent: nil)])
         XCTAssertEqual(ClaudeOutput.parse(#"{"type":"system","subtype":"init","session_id":"s","model":"m","apiKeySource":"none"}"#),
-                       [.began(session: "s", model: "m", keySource: "none")])
+                       [.began(session: "s", model: "m", keySource: "none", mode: nil)])
     }
 
     /// A subscription's windows, five-hour first, then the week, then any

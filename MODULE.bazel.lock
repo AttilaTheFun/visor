@@ -308,7 +308,7 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "9iMl/x5uGTLwIPJ+BF7duI1h0f5fqIeHsYNMuzqOZzQ=",
-        "usagesDigest": "QHkQJwMaiaxt1b5Sh2GOwPDZovr6ohS+KPXkg8za0vA=",
+        "usagesDigest": "BEXVSdfBoCc8/aODWbC/od9B0GmBJHxeZdwooGdvFQQ=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
@@ -626,12 +626,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "rGypP5nrTI9oaJIH2p4vvfzarcXFntsjmKbWV4stK2I=",
-        "usagesDigest": "A6DC8dr8R+csaQN9mtHB7VQKYf4oVWviykcn2SbbbHw=",
+        "usagesDigest": "taOoM/5SsF2F+/w3Pr7wJmPzMZmf9g7XuPLstdPjBwg=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 55d5d44df9d990ad4ae76ffa578b8755491795956c18dd83cddeacf8097ce7bf"
+          "FILE:@@//third_party/swift_packages/Package.resolved e07929a8b713862310e754d490a23fb3c90463edeccfa5d02d94b54d0fa0149e"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -645,8 +645,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "b53487e47dd091b8eee4d8f5e8d40a05418b3eae",
+              "commit": "7d4c213d05da4b035e493188013fe47fe52609aa",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
+              "version": "0.36.1",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -676,13 +677,13 @@
               "bazel_target_mods": ""
             }
           },
-          "swiftpkg_swift_sqlite": {
+          "swiftpkg_swift_sql": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
-              "bazel_package_name": "swiftpkg_swift_sqlite",
-              "commit": "70f0c45d6d1fc46b5a07e3fac59094aacd062585",
-              "remote": "https://github.com/AttilaTheFun/swift_sqlite.git",
-              "version": "0.34.0",
+              "bazel_package_name": "swiftpkg_swift_sql",
+              "commit": "feb21a6e9fe3aeac72c055c4092c34106a4f19df",
+              "remote": "https://github.com/AttilaTheFun/swift_sql.git",
+              "version": "0.35.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -860,8 +861,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_swiftterm",
-              "commit": "839d4fa1ffd4ea2ede5664e1c1fb13cc5771e11a",
+              "commit": "2dad6a1e516f755bed77cf9bbd09455062f54758",
               "remote": "https://github.com/migueldeicaza/SwiftTerm.git",
+              "version": "1.99.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -878,7 +880,7 @@
           "explicitRootModuleDirectDeps": [
             "swiftpkg_agent_ui",
             "swiftpkg_swift_nio_ssh",
-            "swiftpkg_swift_sqlite",
+            "swiftpkg_swift_sql",
             "swift_package"
           ],
           "explicitRootModuleDirectDevDeps": [],

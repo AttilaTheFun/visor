@@ -197,24 +197,40 @@ public final class AgentServerConnection: Identifiable {
         guard let notifications = VisorHost.notifications, !serverPushes else { return }
         for new in after {
             guard let old = before.first(where: { $0.id == new.id }), !new.archived, !new.ended else { continue }
+            // What the session said as its turn began: the user's message.
+            if !old.busy, new.busy { turnPrompts[new.id] = new.preview ?? "" }
+            let prompt = old.busy && !new.busy ? turnPrompts.removeValue(forKey: new.id) : nil
             let title = new.title.isEmpty ? new.agent.title : new.title
-            // "<server>/<session>/<kind>": the id replaces an older one,
-            // and says where to go when the notification is opened.
-            let key = record.address + "/" + new.id
+            // The server, the session and what it says: the id replaces an
+            // older one, and says where to go when it is opened.
+            let id = { (kind: String) in VisorNotificationID(computer: self.record.address, session: new.id, kind: kind).rawValue }
             if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval {
                 if let question = approval.questions?.first {
-                    notifications.notify(id: key + "/approval", title: "\(title) asks", body: question.question)
+                    notifications.notify(id: id("approval"), title: "\(title) asks", body: question.question)
                 } else {
-                    notifications.notify(id: key + "/approval", title: "\(title) is waiting",
+                    notifications.notify(id: id("approval"), title: "\(title) is waiting",
                                          body: "Allow \(approval.tool)? " + approval.summary)
                 }
             }
             if let goal = old.goal, new.goal == nil {
-                notifications.notify(id: key + "/goal", title: "\(title): goal done", body: goal)
+                notifications.notify(id: id("goal"), title: "\(title): goal done", body: goal)
             } else if old.busy, !new.busy {
-                notifications.notify(id: key + "/turn", title: "\(title) finished", body: new.preview ?? "")
+                notifications.notify(id: id("turn"), title: "\(title) finished", body: Self.finishedBody(new.preview, prompt: prompt))
             }
         }
+    }
+
+    /// What each session said as its turn began (the user's message), by
+    /// session id, until the turn ends.
+    private var turnPrompts: [String: String] = [:]
+
+    /// What a "finished" notification says: the session's newest words,
+    /// unless they are what it said as the turn began — the user's own
+    /// message, the agent having said nothing since (or its row not read
+    /// yet).
+    static func finishedBody(_ preview: String?, prompt: String?) -> String {
+        guard let preview, !preview.isEmpty, preview != prompt else { return "Ready for your reply" }
+        return preview
     }
 
     /// The slash commands a session's agent takes, as the server knows

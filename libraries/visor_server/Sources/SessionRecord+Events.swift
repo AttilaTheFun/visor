@@ -97,6 +97,10 @@ extension SessionRecord {
         case .notice(let words):
             notice = words
             return ephemeralEnvelope
+        case .manual(let words):
+            setPermissions(skip: false)
+            notice = words
+            return ephemeralEnvelope
         case .memory(let bytes):
             info.memory = bytes
             return nil

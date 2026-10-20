@@ -5,7 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/agent_ui.git",
       "state" : {
-        "revision" : "b53487e47dd091b8eee4d8f5e8d40a05418b3eae"
+        "revision" : "7d4c213d05da4b035e493188013fe47fe52609aa",
+        "version" : "0.36.1"
       }
     },
     {
@@ -99,12 +100,12 @@
       }
     },
     {
-      "identity" : "swift_sqlite",
+      "identity" : "swift_sql",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AttilaTheFun/swift_sqlite.git",
+      "location" : "https://github.com/AttilaTheFun/swift_sql.git",
       "state" : {
-        "revision" : "70f0c45d6d1fc46b5a07e3fac59094aacd062585",
-        "version" : "0.34.0"
+        "revision" : "feb21a6e9fe3aeac72c055c4092c34106a4f19df",
+        "version" : "0.35.0"
       }
     },
     {
@@ -112,7 +113,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/migueldeicaza/SwiftTerm.git",
       "state" : {
-        "revision" : "839d4fa1ffd4ea2ede5664e1c1fb13cc5771e11a"
+        "revision" : "2dad6a1e516f755bed77cf9bbd09455062f54758",
+        "version" : "1.99.0"
       }
     }
   ],

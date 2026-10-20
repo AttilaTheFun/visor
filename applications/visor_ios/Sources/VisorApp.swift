@@ -43,7 +43,8 @@ struct VisorApp: App {
             VisorRootView()
                 .environment(store)
                 // visor://connect?code=… — scanning a Mac's QR code with
-                // the camera opens this, and adds that computer.
+                // the camera opens this, and adds that computer;
+                // visor://sign-in shows a computer's settings.
                 .onOpenURL { url in store.open(url.absoluteString) }
         }
     }

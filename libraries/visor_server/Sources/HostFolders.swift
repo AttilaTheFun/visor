@@ -4,9 +4,18 @@ import VisorProtocol
 
 /// The host's folders, for the client's picker.
 enum HostFolders {
-    static func resolve(_ path: String) -> String {
-        let expanded = (path.isEmpty ? "~" : path) as NSString
-        return expanded.expandingTildeInPath
+    /// Where the picker starts, and where a session given no folder (or
+    /// "~") works: $VISOR_HOME_FOLDER when it is set, else the user's home.
+    static func home(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
+        if let set = environment["VISOR_HOME_FOLDER"], !set.isEmpty { return (set as NSString).expandingTildeInPath }
+        return ("~" as NSString).expandingTildeInPath
+    }
+
+    /// A folder as the host names it: "" and "~" are the home folder;
+    /// another path has its "~" expanded.
+    static func resolve(_ path: String, environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
+        if path.isEmpty || path == "~" { return home(environment) }
+        return (path as NSString).expandingTildeInPath
     }
 
     /// The subfolders of `path` (hidden ones skipped), sorted.

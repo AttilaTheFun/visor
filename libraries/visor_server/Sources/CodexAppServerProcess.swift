@@ -47,6 +47,9 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     /// Questions Codex asked the user and waits on, by the request shown:
     /// the app server's request id, and each question's id by its words.
     private var questionsAsked: [String: (rpc: Int, ids: [String: String])] = [:]
+    /// The agent's messages whose words have been streamed, by item id,
+    /// until each completes: one sent only whole is shown then.
+    private var streamedItems: Set<String> = []
 
     public init(cwd: String, skipPermissions: Bool, resume: String?) {
         self.cwd = cwd
@@ -208,7 +211,7 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     /// sandbox, no prompts — so nothing asks a question over this channel.
     private func threadParams() -> [String: Any] {
         var params: [String: Any] = [
-            "cwd": (cwd as NSString).expandingTildeInPath,
+            "cwd": HostFolders.resolve(cwd),
             "approvalPolicy": "never",
             "sandbox": skipPermissions ? "danger-full-access" : "workspace-write",
         ]
@@ -220,7 +223,7 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         guard let executable = ToolPath.resolve("codex") else { throw AgentProcessError.toolMissing("codex") }
         // Visor's MCP server: the other sessions.
         let child = try AgentChildren.start(executable: executable, arguments: ["app-server"] + Self.questionArguments + VisorMCP.codexArguments(approvalEnvironment),
-                                            directory: (cwd as NSString).expandingTildeInPath,
+                                            directory: HostFolders.resolve(cwd),
                                             environment: ToolPath.environment().merging(approvalEnvironment) { _, ours in ours },
                                             session: approvalEnvironment["VISOR_SESSION"])
         self.child = child
@@ -299,6 +302,18 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         return await withCheckedContinuation { replies[id] = $0 }
     }
 
+    /// The agent's words for a message: a piece as it streams, or the
+    /// whole as the message completes — shown only if none of it streamed,
+    /// so a streamed message is not shown twice.
+    func say(item: String, text: String, whole: Bool) {
+        if whole {
+            guard streamedItems.remove(item) == nil, !text.isEmpty else { return }
+        } else {
+            streamedItems.insert(item)
+        }
+        emit.yield(.delta(message: item, text: text))
+    }
+
     private func take(_ output: CodexOutput, from child: any AgentChild) {
         switch output {
         case .reply(let id, let thread, let turn, let error, let goal):
@@ -327,7 +342,9 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
             child.write(["jsonrpc": "2.0", "id": id, "result": ["decision": "denied"]])
             emit.yield(.activity("Declined: \(method)"))
         case .text(let item, let text):
-            emit.yield(.delta(message: item, text: text))
+            say(item: item, text: text, whole: false)
+        case .messageCompleted(let item, let text):
+            say(item: item, text: text, whole: true)
         case .toolStarted(let id, let name, let label):
             emit.yield(.activity(label))
             emit.yield(.toolStarted(id: id, name: name, label: label, tasks: nil))
@@ -341,6 +358,7 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
             if let failure { emit.yield(.failure(failure)) }
             // A question the turn asked waits no longer.
             questionsAsked = [:]
+            streamedItems = []
             turnID = nil
             turnStarting = false
             stopWhenStarted = false

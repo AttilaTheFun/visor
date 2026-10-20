@@ -92,7 +92,7 @@ final class HostedChild: AgentChild {
                 if !process.isRunning { break }
                 try? await Task.sleep(for: .milliseconds(50))
             }
-            child.erred.yield(Data("The agent's host did not start.\n".utf8))
+            child.erred.yield(Data((AgentChildren.undetachable("its host did not start, or exited before it listened") + "\n").utf8))
             child.ended(AgentExit(status: -1, signaled: false))
         }
         return child

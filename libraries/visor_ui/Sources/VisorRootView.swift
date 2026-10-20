@@ -212,6 +212,13 @@ public struct VisorRootView: View {
             selection = .session(SessionSelection(serverID: host.id, sessionID: target.session))
             if compact { compactColumn = .detail }
         }
+        // A sign-in link: its computer's settings, where it is signed in to.
+        .onChange(of: store.openingSettings) { _, address in
+            guard let address, let host = store.server(named: address) else { return }
+            store.openingSettings = nil
+            selection = .computer(serverID: host.id)
+            if compact { compactColumn = .detail }
+        }
         // Backing out on a phone is deselecting: the row is no longer
         // open, so it is no longer lit, and tapping it opens it again.
         .onChange(of: compactColumn) { _, column in

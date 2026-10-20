@@ -19,16 +19,16 @@ The repos (github.com/AttilaTheFun):
 | Repo | What |
 | --- | --- |
 | `visor` | This repo: server, protocol, client, UI, caches, Apple apps. Bazel module `visor`. |
-| `agent_ui` | SwiftPM package: AgentUI (the chat: transcript, composer, footer), NavigationUI, InboxUI, MessagesUI. Pinned by revision in third_party/swift_packages/Package.swift. |
+| `agent_ui` | SwiftPM package: AgentUI (the chat: transcript, composer, footer), NavigationUI, InboxUI, MessagesUI. Pinned by version in third_party/swift_packages/Package.swift (a revision only on a branch, before its release). |
 | `open_router_cli` | SwiftPM: OpenRouterKit (client, streaming, ORAgent loop, coding tools, sessions, config, Claude's stream-json) and the `openrouter` CLI, which Visor drives. |
 
 Third-party: swift-nio-ssh 0.9 (SSH for the client and the server,
 through libraries/visor_ssh; it parses OpenSSH key lines but writes none,
 so `NIOSSHPublicKey+OpenSSH.swift` writes the kept host key from the
 key's bytes, read through reflection — a line to offer upstream instead),
-SQLite (the caches, through swift_sqlite: the system's on Apple's
+SQLite (the caches, through swift_sql: the system's on Apple's
 systems, its vendored amalgamation 3.53.4 elsewhere, WebAssembly included; a
-Swift package, by revision in third_party/swift_packages like agent_ui),
+Swift package, by version in third_party/swift_packages like agent_ui),
 rules_swift_package_manager (rspm) brings SwiftPM packages into Bazel as `@swiftpkg_<identity>` — the
 identity keeps its dot: `@swiftpkg_agent_ui//:AgentUI`.
 
@@ -182,8 +182,8 @@ in place when the file's copy arrives (`user-file-<uuid>`, words compared
 trimmed); file rows insert before trailing unsettled user rows.
 
 **Message cache** (`libraries/message_cache`, module `MessageCache`): one
-API over a `MessageStorage` — `SQLiteStorage` on every host (swift_sqlite's
-`SwiftSQLite`, `@swiftpkg_swift_sqlite//:SwiftSQLite`: the system's SQLite on Apple's
+API over a `MessageStorage` — `SQLiteStorage` on every host (swift_sql's
+`SwiftSQL`, `@swiftpkg_swift_sql//:SwiftSQL`: the system's SQLite on Apple's
 systems, its amalgamation with FTS5 elsewhere, WebAssembly included), or
 `MemoryStorage` for tests and the fixture. `MessageCache.directory` is
 where a host keeps the file (else Application Support). The SwiftPM build

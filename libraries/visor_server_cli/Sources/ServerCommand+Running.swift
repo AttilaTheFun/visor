@@ -13,7 +13,7 @@ extension ServerCommand {
     func run(_ options: ServerOptions) async throws {
         let log = CommandLineLog(path: options.log)
         let pidFile = self.pidFile
-        let cleanUp: @Sendable () -> Void = { try? FileManager.default.removeItem(at: pidFile) }
+        let cleanUp: @Sendable () -> Void = { Self.removePidFile(pidFile) }
         let platform = system.platform(log: { log.write($0) },
                                        lifecycle: CommandLineLifecycle(system: system, options: options, cleanUp: cleanUp))
         ServerPlatform.current = platform

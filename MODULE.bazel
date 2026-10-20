@@ -4,7 +4,7 @@ iPhone, iPad and Mac that drives them."""
 
 module(
     name = "visor",
-    version = "0.1.0",
+    version = "0.36.0",
 )
 
 bazel_dep(name = "platforms", version = "1.1.0")
@@ -42,7 +42,7 @@ use_repo(
     "swift_package",
     "swiftpkg_agent_ui",
     "swiftpkg_swift_nio_ssh",
-    "swiftpkg_swift_sqlite",
+    "swiftpkg_swift_sql",
 )
 
 # The builder's own signing values (the Apple team), from .bazelrc.user.

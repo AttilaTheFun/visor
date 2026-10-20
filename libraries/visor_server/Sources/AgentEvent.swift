@@ -41,6 +41,10 @@ public enum AgentEvent: Sendable {
     /// The goal the agent itself says it works toward (Codex's), or none:
     /// met (`met`), or cleared.
     case goal(String?, met: Bool)
+    /// The agent started in another permission mode than the one asked
+    /// for (an administrator's policy kept it from auto-approving): the
+    /// session is manual from here, and says why.
+    case manual(String)
     /// Something to tell the user about the session, in words: the answer
     /// to a command that has no row of its own.
     case notice(String)

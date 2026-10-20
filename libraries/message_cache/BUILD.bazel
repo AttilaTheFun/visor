@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 # The message cache: a session's rows, where they came from, and how far
 # they were synced — the same on the server (from the agents' own files)
-# and on a client (from the server). SQLite on every host (swift_sqlite);
+# and on a client (from the server). SQLite on every host (swift_sql);
 # in memory only for tests and the screenshot fixture.
 swift_library(
     name = "message_cache",
@@ -15,6 +15,6 @@ swift_library(
     deps = [
         "//:foundation",
         "//libraries/visor_protocol",
-        "@swiftpkg_swift_sqlite//:SwiftSQLite",
+        "@swiftpkg_swift_sql//:SwiftSQL",
     ],
 )

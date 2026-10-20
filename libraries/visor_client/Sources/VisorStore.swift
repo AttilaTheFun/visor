@@ -27,6 +27,9 @@ public final class VisorStore {
     /// A session a notification the user opened is about, for the view to
     /// open; cleared once it has.
     public var opening: NotificationTarget?
+    /// A computer whose settings a `visor://sign-in` link asked for (its
+    /// address), for the view to show; cleared once it has.
+    public var openingSettings: String?
     /// Bumped when a server's record changes, so views of the store refresh.
     private var revision = 0
     /// Under the key an earlier build saved its computers.
@@ -170,12 +173,20 @@ public final class VisorStore {
     /// added (or its password updated) and connected. A
     /// `visor://authorize` link (another device's SSH key, scanned): the
     /// key is handed to every computer connected here, so that device
-    /// comes in over SSH. Nil when the text is neither, or for a key.
+    /// comes in over SSH. A `visor://sign-in` link: the computer it names
+    /// has its settings shown, to sign in there. Nil when the text is none
+    /// of these, or for a key.
     @discardableResult
     public func open(_ text: String) -> AgentServerConnection? {
         if let link = SSHKeyLink(parsing: text) {
             authorize(link.key)
             return nil
+        }
+        if let link = SignInLink(parsing: text) {
+            guard let server = server(named: link.computer) else { return nil }
+            addingServer = false
+            openingSettings = server.record.address
+            return server
         }
         guard let code = ConnectionCode(parsing: text) else { return nil }
         addingServer = false

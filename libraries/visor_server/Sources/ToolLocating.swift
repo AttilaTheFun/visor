@@ -15,6 +15,10 @@ public protocol ToolLocating: Sendable {
     /// Asks the system where a tool is (the login shell, which knows the
     /// user's PATH); nil when it does not know. Takes a while.
     func ask(for tool: String) async -> String?
+    /// Where Claude Code reads the settings an administrator manages for
+    /// it (managed preferences, a managed-settings.json): its permission
+    /// modes may be limited there.
+    var claudeManagedSettings: [String] { get }
     /// The environment a tool is started with: `base` with the tool
     /// directories on its search path.
     func environment(_ base: [String: String]) -> [String: String]

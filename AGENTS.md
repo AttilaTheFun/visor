@@ -18,11 +18,15 @@ to one focused change, and say in it how the change was verified.
 - No Apple team ids, certificates, provisioning profiles or device UDIDs in
   the repository: the team comes from the builder's own `.bazelrc.user`
   (tools/signing), which is not checked in.
-- Dependencies: BCR versions in MODULE.bazel; agent_ui by revision in
-  third_party/swift_packages/Package.swift + Package.resolved (re-resolve
-  with `swift package resolve`, delete `.build`), as is swift_sqlite (and
-  in the root Package.swift for the SwiftPM server) — its tag's commit at
-  a release.
+- Dependencies: BCR versions in MODULE.bazel; agent_ui and swift_sql by
+  version in third_party/swift_packages/Package.swift + Package.resolved
+  (re-resolve with `swift package resolve`, delete `.build`), swift_sql in
+  the root Package.swift too (the SwiftPM server). Releases are tagged
+  `vMAJOR.MINOR.PATCH`, and the apps' version and the module's (MODULE.bazel) are the release's (0.36.0).
+  A branch in development may pin a revision of something not yet
+  released; a release may not: CI's `pins` job (tools/released_pins.sh)
+  fails on main's commits until every pin is a released version, and
+  Reviews holds the release until it passes.
 - Every Swift target is built in the Swift 6 language mode with warnings
   as errors: `copts = STRICT_SWIFT` (tools/swift/defs.bzl), which a new
   target takes too. (It holds while `//:swift_ui` is the system SwiftUI;
