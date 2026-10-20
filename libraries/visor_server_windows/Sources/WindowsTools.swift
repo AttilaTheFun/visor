@@ -47,10 +47,12 @@ public struct WindowsTools: ToolLocating {
         }
     }
 
+    public var claudeManagedSettings: [String] { ["C:\\Program Files\\ClaudeCode\\managed-settings.json"] }
+
     public func environment(_ base: [String: String]) -> [String: String] {
         var environment = base
         let key = base.keys.first { $0.caseInsensitiveCompare("PATH") == .orderedSame } ?? "Path"
-        environment[key] = (directories + [base[key] ?? ""]).joined(separator: ";")
+        environment[key] = ToolPath.searchPath(base[key] ?? "", then: directories, separator: ";")
         return environment
     }
 

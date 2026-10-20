@@ -13,6 +13,9 @@ enum CodexOutput: Sendable {
     /// id the answer goes back under.
     case questions(id: Int, [(id: String, question: AgentQuestion)])
     case text(item: String, String)
+    /// The agent's message, whole, as its item completed: shown when none
+    /// of it was streamed (Codex may send a message only whole).
+    case messageCompleted(item: String, text: String)
     case toolStarted(id: String, name: String, label: String)
     case reasoningStarted
     /// A turn began: one asked for, or one Codex started itself (working
@@ -94,7 +97,11 @@ enum CodexOutput: Sendable {
             }
         case "item/completed":
             guard let item = params["item"] as? [String: Any], let id = item["id"] as? String else { return [] }
-            return [.itemCompleted(id: id, reasoning: item["type"] as? String == "reasoning")]
+            let completed = CodexOutput.itemCompleted(id: id, reasoning: item["type"] as? String == "reasoning")
+            if item["type"] as? String == "agentMessage", let text = item["text"] as? String {
+                return [.messageCompleted(item: id, text: text), completed]
+            }
+            return [completed]
         case "turn/started":
             guard let id = (params["turn"] as? [String: Any])?["id"] as? String else { return [] }
             return [.turnStarted(id: id)]

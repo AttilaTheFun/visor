@@ -128,6 +128,15 @@ public struct ServerCommand {
     /// port: "<pid> <port>".
     var pidFile: URL { system.dataDirectory.appendingPathComponent("visor-server.pid") }
 
+    /// Removes the pid file if it is this process's. One naming another
+    /// process is left: the server already running, which a run refused
+    /// for it must not leave without its file.
+    static func removePidFile(_ file: URL, ownPID: Int32 = ProcessInfo.processInfo.processIdentifier) {
+        let named = (try? String(contentsOf: file, encoding: .utf8))?.split(whereSeparator: \.isWhitespace).first.flatMap { Int32($0) }
+        guard named == nil || named == ownPID else { return }
+        try? FileManager.default.removeItem(at: file)
+    }
+
     /// The process running the server, if one is.
     func runningProcess(_ platform: ServerPlatform) -> Int32? {
         guard let text = try? String(contentsOf: pidFile, encoding: .utf8),

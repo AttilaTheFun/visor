@@ -13,7 +13,7 @@ extension SessionCatalog {
     static func agentFolder(_ agent: AgentKind) -> URL? {
         switch agent {
         case .claude: ClaudeSessionFiles.configDirectory()
-        case .codex: home.appendingPathComponent(".codex", isDirectory: true)
+        case .codex: codexRoot()
         case .openrouter: openrouterRoot
         }
     }

@@ -13,9 +13,10 @@ enum ClaudeOutput: Sendable, Equatable {
     }
 
     case commands([SlashCommand])
-    /// The run began: its session id, the model it runs, and where its
-    /// key came from ("none": a subscription's login).
-    case began(session: String?, model: String?, keySource: String?)
+    /// The run began: its session id, the model it runs, where its key
+    /// came from ("none": a subscription's login) and the permission mode
+    /// it started in.
+    case began(session: String?, model: String?, keySource: String?, mode: String?)
     /// A new assistant message is starting to stream.
     case messageStarted(id: String?)
     case text(String)
@@ -51,7 +52,7 @@ enum ClaudeOutput: Sendable, Equatable {
             }
             if object["subtype"] as? String == "init" {
                 outputs.append(.began(session: object["session_id"] as? String, model: object["model"] as? String,
-                                      keySource: object["apiKeySource"] as? String))
+                                      keySource: object["apiKeySource"] as? String, mode: object["permissionMode"] as? String))
             }
             if object["subtype"] as? String == "usage_limits" { outputs.append(.limits(Self.keyLimits(object))) }
             if object["subtype"] as? String == "background_tasks_changed", let tasks = object["tasks"] as? [[String: Any]] {

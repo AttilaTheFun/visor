@@ -12,7 +12,7 @@ enum ProjectSurvey {
     /// then the repositories the conversation names, most named first.
     @concurrent
     static func projects(cwd: String, conversation: URL?, home: String, limit: Int = 12) async -> [MigrationProject] {
-        let folder = (cwd as NSString).expandingTildeInPath
+        let folder = HostFolders.resolve(cwd)
         let own = await repository(at: folder) ?? MigrationProject(path: folder)
         var found = [own]
         guard let conversation else { return found }

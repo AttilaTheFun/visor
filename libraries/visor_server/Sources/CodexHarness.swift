@@ -120,9 +120,9 @@ public final class CodexHarness: AgentHarness {
     /// default from its config; a single default model when the cache is
     /// empty.
     static func catalog() -> AgentCatalog {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let root = SessionCatalog.codexRoot()
         var models: [AgentModel] = []
-        if let data = try? Data(contentsOf: home.appendingPathComponent(".codex/models_cache.json", isDirectory: false)),
+        if let data = try? Data(contentsOf: root.appendingPathComponent("models_cache.json", isDirectory: false)),
            let object = try? JSONSerialization.jsonObject(with: data),
            let list = ((object as? [String: Any])?["models"] as? [[String: Any]]) ?? (object as? [[String: Any]]) {
             for entry in list where (entry["visibility"] as? String ?? "list") == "list" {
@@ -134,7 +134,7 @@ public final class CodexHarness: AgentHarness {
             }
         }
         var defaultModel: String?
-        if let config = try? String(contentsOf: home.appendingPathComponent(".codex/config.toml", isDirectory: false), encoding: .utf8) {
+        if let config = try? String(contentsOf: root.appendingPathComponent("config.toml", isDirectory: false), encoding: .utf8) {
             for line in config.split(separator: "\n") {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if trimmed.hasPrefix("model ="), let quote = trimmed.firstIndex(of: "\"") {

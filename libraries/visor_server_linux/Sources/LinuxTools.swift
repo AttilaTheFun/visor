@@ -23,10 +23,12 @@ public struct LinuxTools: ToolLocating {
         await POSIXUser.locate(tool, with: POSIXUser.loginShell(fallback: "/bin/sh"))
     }
 
+    public var claudeManagedSettings: [String] { ["/etc/claude-code/managed-settings.json"] }
+
     public func environment(_ base: [String: String]) -> [String: String] {
         var environment = base
         let extra = ["\(home)/.local/bin", "\(home)/.claude/local", "\(home)/.npm-global/bin", "/usr/local/bin"]
-        environment["PATH"] = (extra + [base["PATH"] ?? "/usr/bin:/bin"]).joined(separator: ":")
+        environment["PATH"] = ToolPath.searchPath(base["PATH"] ?? "/usr/bin:/bin", then: extra, separator: ":")
         return environment
     }
 

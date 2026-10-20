@@ -24,10 +24,14 @@ public struct MacTools: ToolLocating {
         await POSIXUser.locate(tool, with: "/bin/zsh")
     }
 
+    public var claudeManagedSettings: [String] {
+        ["/Library/Managed Preferences/com.anthropic.claudecode.plist", "/Library/Application Support/ClaudeCode/managed-settings.json"]
+    }
+
     public func environment(_ base: [String: String]) -> [String: String] {
         var environment = base
         let extra = ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.claude/local"]
-        environment["PATH"] = (extra + [base["PATH"] ?? "/usr/bin:/bin"]).joined(separator: ":")
+        environment["PATH"] = ToolPath.searchPath(base["PATH"] ?? "/usr/bin:/bin", then: extra, separator: ":")
         return environment
     }
 

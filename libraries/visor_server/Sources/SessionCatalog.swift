@@ -1,8 +1,8 @@
 // The agents' own session stores, for resuming a conversation that began
 // elsewhere: Claude Code keeps one JSONL per session under
 // ~/.claude/projects/<cwd with / and . as ->/, Codex one rollout JSONL per
-// session under ~/.codex/sessions/<y>/<m>/<d>/. Both are read for the first
-// user prompt (the title) and the time. The openrouter CLI keeps one JSON
+// session under ~/.codex/sessions/<y>/<m>/<d>/ (CODEX_HOME moves it). Both
+// are read for the first user prompt (the title) and the time. The openrouter CLI keeps one JSON
 // per session under ~/.openrouter/sessions/ (OPENROUTER_HOME moves it).
 
 import ClaudeTranscript
@@ -122,6 +122,15 @@ enum SessionCatalog {
         return result
     }
 
+    /// Codex's own folder: $CODEX_HOME when it is set (as Codex reads it,
+    /// and the agents this server starts inherit it), else ~/.codex.
+    static func codexRoot(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
+        if let custom = environment["CODEX_HOME"], !custom.isEmpty {
+            return URL(fileURLWithPath: (custom as NSString).expandingTildeInPath, isDirectory: true)
+        }
+        return home.appendingPathComponent(".codex", isDirectory: true)
+    }
+
     /// ~/.openrouter, or OPENROUTER_HOME — the CLI's own rule.
     static var openrouterRoot: URL {
         if let custom = ProcessInfo.processInfo.environment["OPENROUTER_HOME"], !custom.isEmpty {
@@ -208,7 +217,7 @@ enum SessionCatalog {
     }
 
     private static func codex(cwd: String?) -> [ResumableSession] {
-        let root = home.appendingPathComponent(".codex/sessions", isDirectory: true)
+        let root = codexRoot().appendingPathComponent("sessions", isDirectory: true)
         guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.contentModificationDateKey]) else { return [] }
         var files: [(URL, Date)] = []
         for case let file as URL in enumerator where file.pathExtension == "jsonl" {
@@ -270,9 +279,9 @@ enum SessionCatalog {
         return TranscriptAssembler.rows(in: ClaudeBranch.current(of: ClaudeTranscriptParser.lines(contentsOf: file)).records)
     }
 
-    /// The rollout file of a Codex thread.
-    static func codexRollout(id: String) -> URL? {
-        let root = home.appendingPathComponent(".codex/sessions", isDirectory: true)
+    /// The rollout file of a Codex thread, under Codex's folder.
+    static func codexRollout(id: String, in folder: URL = codexRoot()) -> URL? {
+        let root = folder.appendingPathComponent("sessions", isDirectory: true)
         guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return nil }
         for case let candidate as URL in enumerator where candidate.pathExtension == "jsonl" && candidate.lastPathComponent.contains(id) {
             return candidate

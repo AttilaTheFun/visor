@@ -32,10 +32,11 @@ public final class NativeVisorNotificationService: VisorNotificationService {
         content.title = title
         content.body = body
         content.sound = .default
-        let parts = id.split(separator: "/").map(String.init)
-        content.threadIdentifier = parts.prefix(2).joined(separator: "/")
         // Where to go when it is opened, as a push says it.
-        if parts.count >= 2 { content.userInfo = ["computer": parts[0], "session": parts[1]] }
+        if let target = VisorNotificationID.target(of: id) {
+            content.threadIdentifier = target.computer + VisorNotificationID.separator + target.session
+            content.userInfo = ["computer": target.computer, "session": target.session]
+        }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }
 }

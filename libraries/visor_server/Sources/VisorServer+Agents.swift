@@ -24,8 +24,8 @@ extension VisorServer {
     }
 
     /// Each provider's models: Claude's aliases and effort levels; Codex's
-    /// from its models cache (~/.codex/models_cache.json, the listed ones)
-    /// with the default from ~/.codex/config.toml.
+    /// from its models cache (models_cache.json in ~/.codex or $CODEX_HOME,
+    /// the listed ones) with the default from its config.toml there.
     func catalogs() -> [AgentCatalog] {
         harnesses.all.map { harness in
             var catalog = harness.catalog()
@@ -334,7 +334,7 @@ extension VisorServer {
         // Nothing to say is nothing sent.
         broadcast(record.apply(event), session: record)
         switch event {
-        case .context, .session, .background, .goal, .question:
+        case .context, .session, .background, .goal, .question, .manual:
             // These land in the session list, not an envelope (a question
             // as the session's waiting, besides its own envelope).
             broadcastSessions()
