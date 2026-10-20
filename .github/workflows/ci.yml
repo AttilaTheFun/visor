@@ -142,6 +142,17 @@ jobs:
           Get-Content server.log, server-errors.log
           exit $status
 
+  # Ready to release: every dependency pinned to a released version
+  # (tools/released_pins.sh). Run on main's commits, which releases are of;
+  # a pull request may still pin a revision. Reviews holds a release until
+  # it passes.
+  pins:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/released_pins.sh
+
   # The build number this commit's build takes, and its proof is filed
   # under: one past the version's highest on the release server, so every
   # build published is one more, and kept there as the commit's.
