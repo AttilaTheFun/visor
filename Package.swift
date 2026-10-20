@@ -18,11 +18,11 @@ import PackageDescription
 /// broken by a context change") in everything that imports Foundation.
 let strict: [SwiftSetting] = [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-as-errors"], .when(platforms: [.macOS, .linux]))]
 
-/// The client's host services as Visor on Isomer compiles them (the web,
-/// Android): the standard library alone. Built here, on Linux's CI
-/// (`swift build --target VisorServices`), so a file that reaches for
-/// Foundation without importing it fails here too, not only there (on
-/// Apple's systems another module's Foundation leaks into the lookup).
+/// The client's host services, built on their own here, on Linux's CI
+/// (`swift build --target VisorServices`): a file that uses Foundation
+/// without importing it fails here as it does in Visor on Isomer (the web,
+/// Android), not only there. On Apple's systems another module's Foundation
+/// leaks into the lookup and hides it.
 let clientServices: [Target] = [
     .target(name: "VisorServices", path: "libraries/visor_services/Sources", swiftSettings: strict),
 ]

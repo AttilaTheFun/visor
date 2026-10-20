@@ -108,8 +108,9 @@ jobs:
           node-version: 22
       - name: Build
         run: swift build --product visor-server
-      # The client's host services with the standard library alone, as
-      # Visor on Isomer builds them (Package.swift's clientServices).
+      # The client's host services on their own: a file that uses
+      # Foundation without importing it fails here, as in Visor on Isomer
+      # (Package.swift's clientServices).
       - name: Build the client's services
         run: swift build --target VisorServices
       - name: Test
