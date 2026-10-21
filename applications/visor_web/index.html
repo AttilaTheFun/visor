@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Visor</title>
+  <link rel="icon" type="image/png" href="./assets/Visor-1024.png">
+  <link rel="apple-touch-icon" href="./assets/Visor-1024.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Visor">
+  <!-- On the home screen the app runs to the top of the screen, under the
+       status bar; the navigation bar's frost reaches up behind it. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- The status-bar tint follows the page's ground (black / white). -->
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <style>
+    :root { color-scheme: light dark; }
+    html, body { margin: 0; height: 100%; background: light-dark(#fff, #000); }
+    #canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script src="./runtime/react.production.min.js"></script>
+  <script src="./runtime/react-dom.production.min.js"></script>
+  <script type="module">
+    // Surface uncaught errors on the page (no devtools on a phone).
+    const showError = (message) => {
+      let box = document.getElementById("iso-error");
+      if (!box) { box = document.createElement("pre"); box.id = "iso-error"; box.style.cssText = "position:fixed;left:8px;right:8px;bottom:8px;max-height:40%;overflow:auto;margin:0;padding:10px;font:12px monospace;color:#fff;background:#b00;border-radius:8px;z-index:2000;white-space:pre-wrap"; document.body.appendChild(box); }
+      box.textContent += message + "\n";
+    };
+    window.addEventListener("error", (e) => showError((e.message || String(e.error)) + (e.error && e.error.stack ? "\n" + String(e.error.stack).split("\n").slice(0, 6).join("\n") : "")));
+    window.addEventListener("unhandledrejection", (e) => showError("unhandled: " + (e.reason && e.reason.stack ? String(e.reason.stack).split("\n").slice(0, 6).join("\n") : String(e.reason))));
+    import { boot } from "./runtime/boot.js";
+    import { Dependencies } from "./app_bridge.js";
+
+    // --- The client's services (libraries/visor_services), in the browser ---
+
+    // Settings: localStorage.
+    const prefix = "visor.";
+    // The snapshot tests' fixture switch, from the page's URL
+    // (?fixture=snapshot&screen=chat): for this page load only.
+    const launch = new URLSearchParams(location.search);
+    const launchOverrides = {};
+    if (launch.get("fixture")) launchOverrides["fixture"] = launch.get("fixture");
+    if (launch.get("screen")) launchOverrides["fixture.screen"] = launch.get("screen");
+    // What the client tells the servers it reports to: this page's name,
+    // build and system. The build is the iPhone app's Installer ships
+    // (applications/visor_isomer_ios/Info.plist), bumped with it.
+    const host = { "host.deviceName": "Web", "host.appVersion": "0.37.0 (32)", "host.platform": "web" };
+    const settings = {
+      get(key) { return key in host ? host[key] : key in launchOverrides ? launchOverrides[key] : (localStorage.getItem(prefix + key) || ""); },
+      set(key, value) { if (value) localStorage.setItem(prefix + key, value); else localStorage.removeItem(prefix + key); },
+    };
+
+    // Served beside the server itself — a reverse proxy that fronts this
+    // site and Visor Server's API at one origin (`https://proxy.example/
+    // visor/` and `…/visor/api`, say): with no computer saved yet, this
+    // origin is the computer, found by its `/api/hello` (answered, or
+    // asking for the password). GitHub Pages has no `/api/hello`, and
+    // nothing happens there. The fixture never looks.
+    // (Since visor 0.23 the computers are kept under "secret.hosts", moved
+    // there from "hosts" on first read: either means some are saved.)
+    if (!settings.get("hosts") && !settings.get("secret.hosts") && !launch.get("fixture")) {
+      try {
+        const root = location.origin + location.pathname.replace(/\/[^/]*$/, "");
+        const r = await fetch(root + "/api/hello", { cache: "no-store" });
+        if (r.ok || r.status === 401) {
+          const hello = r.ok ? await r.json().catch(() => null) : null;
+          const id = "origin-" + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
+          settings.set("hosts", JSON.stringify([{ id, name: (hello && hello.host) || location.host, address: root, provider: "visor", everConnected: false, secret: "" }]));
+        }
+      } catch (_) {}
+    }
+
+    // Sockets: one WebSocket per id; events queue up and `next` hands them
+    // out one at a time ("open", "message <text>", "close <reason>",
+    // "error <reason>"), rejecting once the socket is gone.
+    const sockets = new Map();
+    let nextID = 1;
+    const socket = {
+      open(url) {
+        const id = nextID++;
+        const entry = { ws: null, events: [], waiter: null, closed: false };
+        const push = (event) => {
+          if (entry.closed) return;
+          if (entry.waiter) { const w = entry.waiter; entry.waiter = null; w.resolve(event); }
+          else entry.events.push(event);
+        };
+        const finish = () => {
+          entry.closed = true;
+          if (entry.waiter) { const w = entry.waiter; entry.waiter = null; w.reject(new Error("socket closed")); }
+        };
+        try {
+          const ws = new WebSocket(url);
+          entry.ws = ws;
+          ws.onopen = () => push("open");
+          ws.onmessage = (m) => push("message " + (typeof m.data === "string" ? m.data : ""));
+          ws.onerror = () => push("error connection failed");
+          ws.onclose = (e) => { push("close " + (e.reason || ("code " + e.code))); finish(); };
+        } catch (error) {
+          push("error " + String(error));
+          finish();
+        }
+        sockets.set(id, entry);
+        return id;
+      },
+      send(id, text) { const entry = sockets.get(id); if (entry && entry.ws && entry.ws.readyState === 1) entry.ws.send(text); },
+      disconnect(id) {
+        const entry = sockets.get(id);
+        if (!entry) return;
+        try { entry.ws && entry.ws.close(); } catch (_) {}
+        entry.closed = true;
+        if (entry.waiter) { const w = entry.waiter; entry.waiter = null; w.reject(new Error("socket closed")); }
+        sockets.delete(id);
+      },
+      delay(milliseconds) { return new Promise((resolve) => setTimeout(resolve, milliseconds)); },
+      next(id) {
+        const entry = sockets.get(id);
+        if (!entry) return Promise.reject(new Error("no such socket"));
+        if (entry.events.length) {
+          const event = entry.events.shift();
+          if (entry.closed && !entry.events.length) sockets.delete(id);
+          return Promise.resolve(event);
+        }
+        if (entry.closed) { sockets.delete(id); return Promise.reject(new Error("socket closed")); }
+        return new Promise((resolve, reject) => { entry.waiter = { resolve, reject }; });
+      },
+    };
+
+    // HTTPS: fetch; a non-2xx status is an error carrying the body.
+    const http = {
+      async request(method, url, body, authorization) {
+        const r = await fetch(url, { method, headers: { Authorization: "Bearer " + authorization, ...(body ? { "Content-Type": "application/json" } : {}) }, body: body || undefined });
+        const text = await r.text();
+        if (!r.ok) throw new Error("HTTP " + r.status + ": " + text.slice(0, 200));
+        return text;
+      },
+    };
+
+    // The message cache is SQLite in the app's files now (Application
+    // Support, which Isomer keeps in this origin's IndexedDB): the database
+    // the page kept it in before 0.33 goes, once.
+    try { indexedDB.deleteDatabase("visor-cache"); } catch (_) { /* no IndexedDB */ }
+
+    const dependencies = {
+      socket: Dependencies.socketBridge(() => socket),
+      http: Dependencies.httpBridge(() => http),
+      settings: Dependencies.settingsBridge(() => settings),
+    };
+    boot({ canvas: document.getElementById("canvas"), wasmURL: "./app.wasm", rendererName: "react", dependencies, documentScroll: true })
+      .catch((error) => { document.body.insertAdjacentHTML("beforeend", '<pre id="error"></pre>'); document.getElementById("error").textContent = String(error); });
+  </script>
+</body>
+</html>

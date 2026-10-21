@@ -8,3 +8,5 @@ bazel-*
 # Release disk images (tools/release_mac.sh).
 dist/
 .proof/
+# Python caches of tools/isomer.
+__pycache__/

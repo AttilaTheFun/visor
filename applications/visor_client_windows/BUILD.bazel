@@ -1,0 +1,30 @@
+load("@rules_swift//swift:swift.bzl", "swift_binary", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The client on windows: visor's libraries under isomer's SwiftUI, with
+# visor's own Foundation implementations of its services compiled here
+# for this platform's Foundation. Built on a windows host (unverifiable from a Mac).
+swift_library(
+    name = "native_services",
+    srcs = ["//libraries/visor_services:native_srcs"],
+    module_name = "VisorServicesNative",
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = ["//libraries/visor_services"],
+)
+
+swift_binary(
+    name = "visor_client_windows",
+    srcs = ["App.swift"],
+    copts = ["-parse-as-library"],
+    module_name = "VisorDesktop",
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":native_services",
+        "@isomer//windows/libraries/swift_ui",
+        "@isomer//windows/libraries/swift_ui:isomer_bridge",
+        "//libraries/visor_client",
+        "//libraries/visor_services",
+        "//libraries/visor_ui",
+    ],
+)

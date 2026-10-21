@@ -112,6 +112,13 @@ SwiftUI` and `import Foundation` come from: by default
 system frameworks on Apple's platforms and Isomer's own on the web and
 Android.
 
+Blue Visor, the same client on Isomer, is built here too: the web client
+(applications/visor_web, at https://attilathefun.github.io/visor/app/),
+Android (applications/visor_android), the iPhone as WebAssembly
+(applications/visor_isomer_ios) and natively against Isomer
+(applications/visor_isomer_compiled_ios), Linux and Windows
+(applications/visor_client_linux, …_windows). docs/isomer.md says how.
+
 ## Security
 
 Visor gives whoever connects to it the run of your Mac. Read this before

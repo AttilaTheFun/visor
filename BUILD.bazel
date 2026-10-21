@@ -25,23 +25,27 @@ label_flag(
     build_setting_default = "@isomer//:foundation",
 )
 
-# The system pasteboard (module VisorPasteboard: `Pasteboard.string`): by
-# default AppKit's or UIKit's, none elsewhere. A host with a clipboard of
-# its own sets the flag to its library of that module:
+# The system pasteboard (module VisorPasteboard: `Pasteboard.string`), per
+# configuration (libraries/visor_pasteboard_isomer): AppKit's or UIKit's
+# where SwiftUI is Apple's (libraries/visor_pasteboard), Isomer's Clipboard
+# where it is Isomer's (the web, Android, Linux, Windows, and a feature
+# compiled against Isomer's frameworks). A host with a clipboard of its own
+# sets the flag to its library of that module:
 #   --@visor//:pasteboard=@<host>//:pasteboard
 label_flag(
     name = "pasteboard",
-    build_setting_default = "//libraries/visor_pasteboard",
+    build_setting_default = "//libraries/visor_pasteboard_isomer",
 )
 
 # The camera (module VisorCamera: `Camera.available` and the `cameraCapture`
-# modifier): by default UIKit's picker on an iPhone or iPad, none elsewhere.
-# A host with a camera of its own sets the flag to its library of that
-# module:
+# modifier), per configuration (libraries/visor_camera_isomer): UIKit's
+# picker on an iPhone or iPad where SwiftUI is Apple's (none on a Mac;
+# libraries/visor_camera), Isomer's cameraCapture where it is Isomer's. A
+# host with a camera of its own sets the flag to its library of that module:
 #   --@visor//:camera=@<host>//:camera
 label_flag(
     name = "camera",
-    build_setting_default = "//libraries/visor_camera",
+    build_setting_default = "//libraries/visor_camera_isomer",
 )
 
 xcodeproj(

@@ -1,0 +1,57 @@
+load("@rules_apple//apple:ios.bzl", "ios_ui_test")
+load("@rules_apple//apple/testing/default_runner:ios_xctestrun_runner.bzl", "ios_xctestrun_runner")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+# Blue Visor's fixture screens on the iPhone simulator, pictured as red
+# Visor's probe pictures red's (visor's tests/ios_probe), for the review
+# server to hold against red's same-named pictures. Run by
+# tools/isomer/snapshots/snapshots.py (targets ios, ios-landscape); by hand:
+#   bazel test //tests/isomer_ios_fixture:fixture_shots -c opt --ios_multi_cpus=sim_arm64 \
+#     --spawn_strategy=local --nocache_test_results \
+#     --test_filter=BlueFixtureShots/testFixtureScreens
+# The pictures land in /private/tmp/visor_isomer_fixture.
+
+swift_library(
+    name = "shots_lib",
+    testonly = True,
+    srcs = ["BlueFixtureShots.swift"],
+    module_name = "BlueFixtureShots",
+    tags = ["manual"],
+)
+
+sh_binary(
+    name = "simulator_ready",
+    srcs = ["simulator_ready.sh"],
+)
+
+sh_binary(
+    name = "simulator_delete",
+    srcs = ["simulator_delete.sh"],
+)
+
+# The device red's CI pictures (an iPhone 17 on iOS 27), made new for each
+# run rather than rules_apple's shared "BAZEL_TEST_<device>_<version>"
+# simulator, which any session's tests on this Mac would use too; given
+# red's status bar before the test, deleted after it.
+ios_xctestrun_runner(
+    name = "iphone_17_runner",
+    attachment_lifetime = "keepAlways",
+    clean_up_simulator_action = ":simulator_delete",
+    device_type = "iPhone 17",
+    os_version = "27.0",
+    pre_action = ":simulator_ready",
+    reuse_simulator = False,
+)
+
+ios_ui_test(
+    name = "fixture_shots",
+    minimum_os_version = "18.0",
+    runner = ":iphone_17_runner",
+    tags = ["manual"],
+    test_host = "//applications/visor_isomer_ios",
+    # Eleven launches of an interpreted reactor, each orientation its own
+    # case: a few minutes.
+    timeout = "long",
+    deps = [":shots_lib"],
+)
