@@ -30,14 +30,22 @@ sh_binary(
     srcs = ["simulator_delete.sh"],
 )
 
+sh_binary(
+    name = "simulator_create",
+    srcs = ["simulator_create.sh"],
+)
+
 # The device red's CI pictures (an iPhone 17 on iOS 27), made new for each
-# run rather than rules_apple's shared "BAZEL_TEST_<device>_<version>"
-# simulator, which any session's tests on this Mac would use too; given
-# red's status bar before the test, deleted after it.
+# run under a name of its own (simulator_create.sh) rather than rules_apple's
+# shared "BAZEL_TEST_<device>_<version>" simulator, which any session's tests
+# on this Mac use too (rules_apple's creator reuses it whatever
+# reuse_simulator says); given red's status bar before the test, deleted
+# after it.
 ios_xctestrun_runner(
     name = "iphone_17_runner",
     attachment_lifetime = "keepAlways",
     clean_up_simulator_action = ":simulator_delete",
+    create_simulator_action = ":simulator_create",
     device_type = "iPhone 17",
     os_version = "27.0",
     pre_action = ":simulator_ready",

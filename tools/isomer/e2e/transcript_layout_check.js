@@ -24,7 +24,10 @@ const site = process.argv[2];
 if (!site) { console.error("usage: transcript_layout_check.js <site dir>"); process.exit(2); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CODE_START = "vsr1-eyJ2Ijox";
-const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+// $CHROME, else Chrome where it is installed: the app on a Mac, google-chrome
+// on Linux (CI's hosted runners).
+const chrome = process.env.CHROME || (process.platform === "darwin"
+  ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "google-chrome");
 const profile = fs.mkdtempSync("/tmp/transcript-layout-check-");
 const sitePort = 8600 + Math.floor(Math.random() * 400);
 const stub = spawn("python3", [path.join(__dirname, "stub_server.py"), path.resolve(site), String(sitePort)], { stdio: "ignore" });

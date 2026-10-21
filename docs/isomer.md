@@ -86,6 +86,24 @@ builds with the default; the tools below pass `-c opt` themselves.
   traps out of range): the end-to-end test's stand-in server sends numbers
   a 32-bit client can't hold, and the client must survive them.
 
+## CI
+
+visor's CI (.github/workflows/ci.yml) builds and checks blue on every pull
+request and every commit to main:
+- `blue-web` (hosted Linux): the web client built and its tests run, then
+  the end-to-end test, the transcript layout and the composer checks in
+  headless Chrome.
+- `blue-android` (hosted Linux): the APK as it ships (arm64), built. The
+  emulator flow and the Android transcript and composer checks are in the
+  local CI for now; they join `blue-android`, on the runner's x86_64
+  emulator, with isomer 0.38, whose Swift library follows the APK's ABI.
+- `blue-ios` (the release Mac): the WasmKit and compiled iPhone apps built
+  for the simulator, and the snapshots of the iPhone in both orientations
+  and of Mobile Safari, against tests/snapshots.
+
+The harnesses take Chrome from `$CHROME` where it isn't at its usual place,
+and `VISOR_SNAPSHOT_RUN_DIR` says where a snapshot run goes.
+
 ## Local CI
 
 `tools/isomer/ci/local_ci.sh [--review DIR] [suite…]` runs blue's suites in

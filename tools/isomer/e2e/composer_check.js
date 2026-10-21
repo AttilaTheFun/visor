@@ -27,7 +27,10 @@ const server = http.createServer((req, res) => {
     res.end(data);
   });
 });
-const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+// $CHROME, else Chrome where it is installed: the app on a Mac, google-chrome
+// on Linux (CI's hosted runners).
+const chrome = process.env.CHROME || (process.platform === "darwin"
+  ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "google-chrome");
 const profile = fs.mkdtempSync("/tmp/composer-check-");
 let proc = null;
 const finish = (code) => {
