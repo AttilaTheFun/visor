@@ -230,15 +230,9 @@ jobs:
           clang lld binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev
           libncurses-dev libsqlite3-dev libstdc++-13-dev libxml2-dev libz3-dev
           pkg-config tzdata zlib1g-dev
-      # The repository cache kept between runs. And no lockfile: isomer 0.36.0's
-      # android_tools extension doesn't say it depends on the host, so
-      # MODULE.bazel.lock (written on a Mac) gives Linux the Mac's emulator and
-      # platform tools. Drop --lockfile_mode=off once isomer declares it
-      # os_dependent.
-      - name: Bazel's repository cache, no lockfile
-        run: |
-          echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
-          echo "common --lockfile_mode=off" >> ~/.bazelrc
+      # The repository cache kept between runs.
+      - name: Bazel's repository cache
+        run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
       - name: Build
         run: bazel build -c opt //applications/visor_web:visor_web_site
       - name: Test
@@ -291,15 +285,9 @@ jobs:
           clang lld binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev
           libncurses-dev libsqlite3-dev libstdc++-13-dev libxml2-dev libz3-dev
           pkg-config tzdata zlib1g-dev
-      # The repository cache kept between runs. And no lockfile: isomer 0.36.0's
-      # android_tools extension doesn't say it depends on the host, so
-      # MODULE.bazel.lock (written on a Mac) gives Linux the Mac's emulator and
-      # platform tools. Drop --lockfile_mode=off once isomer declares it
-      # os_dependent.
-      - name: Bazel's repository cache, no lockfile
-        run: |
-          echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
-          echo "common --lockfile_mode=off" >> ~/.bazelrc
+      # The repository cache kept between runs.
+      - name: Bazel's repository cache
+        run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
       - name: Build
         run: bazel build -c opt //applications/visor_android:visor_android_apk
 
