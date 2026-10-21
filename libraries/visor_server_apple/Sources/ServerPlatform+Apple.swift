@@ -1,5 +1,6 @@
 import Foundation
 import os
+import VisorProtocol
 import VisorServer
 import VisorServerPOSIX
 
@@ -12,7 +13,7 @@ extension ServerPlatform {
     static var bundleVersion: String {
         guard let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return "" }
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        return build.map { "\(short) (\($0))" } ?? short
+        return VersionTitle.of(version: short, build: build)
     }
 
     public static func apple(secrets: any SecretStore = KeychainSecrets()) -> ServerPlatform {
