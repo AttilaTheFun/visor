@@ -1,0 +1,16 @@
+--- a/swiftpkg/internal/minimum_os_transition.bzl	2026-10-14 12:02:23
++++ b/swiftpkg/internal/minimum_os_transition.bzl	2026-10-14 12:02:23
+@@ -53,6 +53,13 @@
+     if import_error:
+         fail(import_error)
+ 
++    # visor_isomer: a package is built at its importer's minimum when that is
++    # higher. AgentUI says iOS 16 here (Isomer's SwiftUI, in the compiled blue
++    # Visor), and the red Visor, at 18, builds it with Apple's SwiftUI at 18.
++    importer_minimum_os = settings[minimum_os_config.option]
++    if importer_minimum_os and _version_tuple(importer_minimum_os) > _version_tuple(minimum_os):
++        minimum_os = _version_string(importer_minimum_os)
++
+     outputs[minimum_os_config.option] = minimum_os
+ 
+     # Set the minimum_os_version flag in addition to the OS specific flag

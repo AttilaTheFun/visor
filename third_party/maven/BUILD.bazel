@@ -1,0 +1,2 @@
+# rules_android's Maven lock (MODULE.bazel's maven.install).
+exports_files(["rules_android_maven_install.json"])

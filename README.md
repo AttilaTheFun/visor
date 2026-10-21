@@ -106,9 +106,11 @@ the deploy loop.
 
 Pull requests into `main`. Read AGENTS.md for the rules the code keeps.
 
-`//:swift_ui` is a label flag for where `import SwiftUI` comes from. On
-Apple it points at nothing (the system framework); a build that carries
-the client to another platform sets it to its own SwiftUI.
+`//:swift_ui` and `//:foundation` are label flags for where `import
+SwiftUI` and `import Foundation` come from: by default
+[Isomer](https://github.com/AttilaTheFun/isomer)'s labels, which are the
+system frameworks on Apple's platforms and Isomer's own on the web and
+Android.
 
 ## Security
 

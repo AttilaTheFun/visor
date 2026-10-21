@@ -1,5 +1,3 @@
-load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("@rules_swift//swift:swift.bzl", "swift_library")
 load(
     "@rules_xcodeproj//xcodeproj:defs.bzl",
     "top_level_target",
@@ -8,33 +6,24 @@ load(
 
 package(default_visibility = ["//visibility:public"])
 
-# Where `import SwiftUI` comes from. On Apple it is the system framework and
-# this points at nothing; a host that carries the client elsewhere (a
-# browser, Android, Linux, Windows) sets the flag to its own SwiftUI:
+# Where `import SwiftUI` comes from: isomer's label, which is the system
+# framework on Apple's platforms (nothing to link) and Isomer's on the web,
+# Android, Linux and Windows and in a feature compiled against Isomer's
+# frameworks. A host with a SwiftUI of its own may still set the flag:
 #   --@visor//:swift_ui=@<host>//:swift_ui
 label_flag(
     name = "swift_ui",
-    build_setting_default = ":system_swift_ui",
+    build_setting_default = "@isomer//:swift_ui",
 )
 
-# The system SwiftUI: nothing to link, the import is implicit.
-swift_library(
-    name = "system_swift_ui",
-    srcs = ["SystemSwiftUI.swift"],
-    module_name = "VisorSystemSwiftUI",
-)
-
-# Where `import Foundation` comes from, the same way: on Apple the system's,
-# and this points at nothing; a host whose platform has no Foundation of its
-# own (a browser, Android) sets it to the one it builds:
+# Where `import Foundation` comes from, the same way: isomer's label, the
+# system's on Apple's platforms, Linux and Windows, and Isomer's on the web
+# and Android:
 #   --@visor//:foundation=@<host>//:foundation
 label_flag(
     name = "foundation",
-    build_setting_default = ":system_foundation",
+    build_setting_default = "@isomer//:foundation",
 )
-
-# The system Foundation: nothing to link, the import is implicit.
-cc_library(name = "system_foundation")
 
 # The system pasteboard (module VisorPasteboard: `Pasteboard.string`): by
 # default AppKit's or UIKit's, none elsewhere. A host with a clipboard of
