@@ -93,9 +93,10 @@ request and every commit to main:
 - `blue-web` (hosted Linux): the web client built and its tests run, then
   the end-to-end test, the transcript layout and the composer checks in
   headless Chrome.
-- `blue-android` (hosted Linux): the APK as it ships (arm64), and one for
-  the runner's x86_64 emulator (isomer's hermetic emulator, under KVM), on
-  which the UI flow, the transcript layout and the composer checks run.
+- `blue-android` (hosted Linux): the APK as it ships (arm64), built. The
+  emulator flow and the Android transcript and composer checks are in the
+  local CI for now; they join `blue-android`, on the runner's x86_64
+  emulator, with isomer 0.38, whose Swift library follows the APK's ABI.
 - `blue-ios` (the release Mac): the WasmKit and compiled iPhone apps built
   for the simulator, and the snapshots of the iPhone in both orientations
   and of Mobile Safari, against tests/snapshots.

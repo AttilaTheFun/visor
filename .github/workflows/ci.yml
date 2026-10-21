@@ -259,16 +259,17 @@ jobs:
           path: review
           if-no-files-found: ignore
 
-  # Blue Visor on Android: the APK as it ships (arm64) built, then one for
-  # the runner's x86_64 emulator (isomer's hermetic emulator takes the host's
-  # architecture, under KVM), on which the UI flow runs in portrait and
-  # landscape, and the transcript and composer checks.
+  # Blue Visor on Android: the APK as it ships (arm64, its Swift and its
+  # Kotlin) built on hosted Linux. The emulator flow and the transcript and
+  # composer checks stay in the local proof (tools/isomer/ci/local_ci.sh)
+  # for now: the runner's emulator is x86_64, and isomer 0.36's
+  # kt_swift_library builds the Swift library for aarch64 whatever ABI the
+  # APK is for. They come here, on an x86_64 build, with isomer 0.38, whose
+  # library follows the APK's ABI.
   blue-android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    timeout-minutes: 120
     env:
-      # The emulator's architecture, for the harnesses' builds.
-      VISOR_SNAPSHOT_BAZEL_FLAGS: --android_platforms=@rules_android//:x86_64
       # rules_swift wants Bazel's C toolchain to be clang (the runner's
       # default is gcc), as isomer's Linux container sets it.
       CC: clang
@@ -299,52 +300,8 @@ jobs:
         run: |
           echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
           echo "common --lockfile_mode=off" >> ~/.bazelrc
-      - name: KVM for the emulator
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Build (as shipped, arm64)
+      - name: Build
         run: bazel build -c opt //applications/visor_android:visor_android_apk
-      - name: Build (x86_64, for the emulator)
-        run: bazel build -c opt $VISOR_SNAPSHOT_BAZEL_FLAGS //applications/visor_android:visor_android_apk
-      - name: Boot the emulator
-        run: |
-          # Without the runner's own Android SDK in the environment: the
-          # emulator reads ANDROID_HOME before isomer's ANDROID_SDK_ROOT (its
-          # hermetic SDK) and finds no system image there. (isomer's
-          # run_emulator.sh is to set ANDROID_HOME itself.)
-          (env -u ANDROID_HOME -u ANDROID_SDK_ROOT -u ANDROID_NDK_HOME -u ANDROID_NDK_ROOT \
-            bazel run @isomer//tools/android/emulator -- -no-window -no-audio -port 5554 > emulator.log 2>&1 &)
-          ADB="$(cd tools/isomer/uitests && python3 -c 'from android_flow import adb_path; print(adb_path())')"
-          for _ in $(seq 1 120); do
-            [ "$("$ADB" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && exit 0
-            sleep 5
-          done
-          tail -50 emulator.log; exit 1
-      - name: UI flow
-        run: python3 tools/isomer/uitests/android_flow.py --review review
-      - name: Transcript layout
-        run: python3 tools/isomer/uitests/transcript_layout_android.py $VISOR_SNAPSHOT_BAZEL_FLAGS
-      - name: Composer
-        run: python3 tools/isomer/uitests/composer_android.py $VISOR_SNAPSHOT_BAZEL_FLAGS
-      # The emulator's log and what was installed, for a run that failed.
-      - name: logcat
-        if: always()
-        run: |
-          ADB="$(cd tools/isomer/uitests && python3 -c 'from android_flow import adb_path; print(adb_path())')"
-          "$ADB" -s emulator-5554 logcat -d > logcat.txt 2>&1 || true
-          "$ADB" -s emulator-5554 shell dumpsys package com.loganshire.visor > package.txt 2>&1 || true
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: blue-android-review
-          path: |
-            review
-            emulator.log
-            logcat.txt
-            package.txt
-          if-no-files-found: ignore
 
   # Blue Visor on the iPhone: the WasmKit app and the one compiled against
   # Isomer's frameworks, for the simulator (no signing team needed), then
