@@ -940,7 +940,7 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "9iMl/x5uGTLwIPJ+BF7duI1h0f5fqIeHsYNMuzqOZzQ=",
-        "usagesDigest": "WRz6OznRpTMBw8LHLQGldCzpPx2ihSXa6ZB79sXZr1w=",
+        "usagesDigest": "pE+hrnsqfedTgrx8Ul4rcmpPxTwDFeB32SXl42fk42g=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
@@ -1793,12 +1793,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "rGypP5nrTI9oaJIH2p4vvfzarcXFntsjmKbWV4stK2I=",
-        "usagesDigest": "5YSWDSKh/1Wo7cWIQ/MtW06JpgLog5L6l5Cqo8Qte5w=",
+        "usagesDigest": "bTOpj1nNBMLakbUmGxydc7qepMHmfHJjJrsmItzIOpg=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved e07929a8b713862310e754d490a23fb3c90463edeccfa5d02d94b54d0fa0149e"
+          "FILE:@@//third_party/swift_packages/Package.resolved 42a5d8c9c2eb5dbde072816df30b8bb4fe38fe8b63fd2a8770586393de793f48"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1812,9 +1812,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "7d4c213d05da4b035e493188013fe47fe52609aa",
+              "commit": "cce4559d2c86fbdf7d6f8d75cc246caf8ae6928f",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
-              "version": "0.36.1",
+              "version": "0.38.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1846,6 +1846,10 @@
                   "'@@isomer+//:foundation'"
                 ],
                 "MessagesUI": [
+                  "'@@isomer+//:swift_ui'",
+                  "'@@isomer+//:foundation'"
+                ],
+                "MarkdownViews": [
                   "'@@isomer+//:swift_ui'",
                   "'@@isomer+//:foundation'"
                 ],
