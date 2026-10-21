@@ -12,4 +12,5 @@ xcrun simctl status_bar "$SIMULATOR_UDID" override --time 9:41 --batteryState ch
 # snapshots.py to report (a capture showing another app's alert was traced
 # this way).
 mkdir -p /private/tmp/visor_isomer_fixture
-xcrun simctl list devices | grep -F "$SIMULATOR_UDID" | sed 's/^ *//' > /private/tmp/visor_isomer_fixture/simulator.txt || true
+# (Its name and state, not its UDID: the log is a public CI run's.)
+xcrun simctl list devices | grep -F "$SIMULATOR_UDID" | sed -E 's/ *\([0-9A-F-]{36}\)//; s/^ *//' > /private/tmp/visor_isomer_fixture/simulator.txt || true
