@@ -220,8 +220,16 @@ jobs:
           path: ~/.cache/bazel-repo
           key: bazel-repo-blue-web-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'third_party/swift_packages/Package.resolved') }}
           restore-keys: bazel-repo-blue-web-
-      - name: clang and lld
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq clang lld
+      # What swift.org's Ubuntu 24.04 toolchain builds and links against
+      # (its Dockerfile's packages, as in isomer's Linux container): the
+      # host tools Bazel builds with it (swift_ffi's generator, the macro
+      # plugins) link Foundation's libcurl and libxml2.
+      - name: The Swift toolchain's system packages
+        run: >
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends
+          clang lld binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev
+          libncurses-dev libsqlite3-dev libstdc++-13-dev libxml2-dev libz3-dev
+          pkg-config tzdata zlib1g-dev
       - name: Bazel's repository cache
         run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
       - name: Build
@@ -262,8 +270,16 @@ jobs:
           path: ~/.cache/bazel-repo
           key: bazel-repo-blue-android-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'third_party/swift_packages/Package.resolved') }}
           restore-keys: bazel-repo-blue-android-
-      - name: clang and lld
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq clang lld
+      # What swift.org's Ubuntu 24.04 toolchain builds and links against
+      # (its Dockerfile's packages, as in isomer's Linux container): the
+      # host tools Bazel builds with it (swift_ffi's generator, the macro
+      # plugins) link Foundation's libcurl and libxml2.
+      - name: The Swift toolchain's system packages
+        run: >
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends
+          clang lld binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev
+          libncurses-dev libsqlite3-dev libstdc++-13-dev libxml2-dev libz3-dev
+          pkg-config tzdata zlib1g-dev
       - name: Bazel's repository cache
         run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
       - name: KVM for the emulator
