@@ -101,12 +101,12 @@ final class AuthTests: ServerTestCase {
         XCTAssertTrue(server.admits(localAddress: nil))
         XCTAssertTrue(server.admits(localAddress: "127.0.0.1"))
         XCTAssertTrue(server.admits(localAddress: "192.168.1.20"))
-        XCTAssertTrue(server.admits(localAddress: "100.90.45.11"))
+        XCTAssertTrue(server.admits(localAddress: "100.64.0.11"))
         server.settings.lan = false
         XCTAssertFalse(server.admits(localAddress: "192.168.1.20"))
-        XCTAssertTrue(server.admits(localAddress: "100.90.45.11"), "a VPN's range")
+        XCTAssertTrue(server.admits(localAddress: "100.64.0.11"), "a VPN's range")
         server.settings.vpn = false
-        XCTAssertFalse(server.admits(localAddress: "100.90.45.11"))
+        XCTAssertFalse(server.admits(localAddress: "100.64.0.11"))
         XCTAssertTrue(server.admits(localAddress: "127.0.0.1"), "this computer always")
         XCTAssertEqual(NetworkAddress(address: "10.0.0.5", interface: "utun3").kind, .vpn)
         XCTAssertTrue(NetworkAddress.isLinkLocal("169.254.179.38"))

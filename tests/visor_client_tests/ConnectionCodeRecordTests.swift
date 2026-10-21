@@ -20,17 +20,17 @@ final class ConnectionCodeRecordTests: XCTestCase {
         VisorHost.ssh = nil
     }
 
-    private let sshFirst = ConnectionCode(name: "MacBook", host: "ssh://logan@100.73.57.115", password: "pw", id: "mb",
-                                          paths: ["http://100.73.57.115:7433"])
+    private let sshFirst = ConnectionCode(name: "MacBook", host: "ssh://me@100.64.0.12", password: "pw", id: "mb",
+                                          paths: ["http://100.64.0.12:7433"])
 
     func testARecordFromACodeKeepsItsIdAndPaths() {
         let record = AgentServerRecord(code: sshFirst)
-        XCTAssertEqual(record.address, "ssh://logan@100.73.57.115")
+        XCTAssertEqual(record.address, "ssh://me@100.64.0.12")
         XCTAssertEqual(record.serverID, "mb")
-        XCTAssertEqual(record.paths, ["http://100.73.57.115:7433"])
+        XCTAssertEqual(record.paths, ["http://100.64.0.12:7433"])
         XCTAssertEqual(record.authentication, "", "the code named none")
         // A device without SSH takes the other path.
-        XCTAssertEqual(AgentServerConnection(record: record).pathsToTry(), ["http://100.73.57.115:7433"])
+        XCTAssertEqual(AgentServerConnection(record: record).pathsToTry(), ["http://100.64.0.12:7433"])
     }
 
     /// Added through the form (store.add) as through a link: a code that
@@ -48,7 +48,7 @@ final class ConnectionCodeRecordTests: XCTestCase {
 
     /// Known only over SSH, with no SSH here: no path, and a plain failure.
     func testAComputerKnownOnlyOverSSHSaysSoWithoutSSH() async {
-        let record = AgentServerRecord(name: "MacBook", address: "ssh://logan@100.73.57.115", secret: "pw", provider: "scripted")
+        let record = AgentServerRecord(name: "MacBook", address: "ssh://me@100.64.0.12", secret: "pw", provider: "scripted")
         let server = ScriptedServer()
         ScriptedProvider.servers[record.id] = server
         AgentServerProviders.register(ScriptedProvider())

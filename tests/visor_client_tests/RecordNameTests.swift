@@ -9,14 +9,14 @@ import XCTest
 final class RecordNameTests: XCTestCase {
     func testTheUsersNameOutlastsTheServers() {
         var record = AgentServerRecord(name: "", address: "http://10.0.0.2:7433")
-        record.takeServerName("Logan's Mac Mini")
-        XCTAssertEqual(record.name, "Logan's Mac Mini")
+        record.takeServerName("Studio Mac")
+        XCTAssertEqual(record.name, "Studio Mac")
         XCTAssertFalse(record.renamed)
 
         record.rename(to: "  Mini  ")
         XCTAssertEqual(record.name, "Mini")
         XCTAssertTrue(record.renamed)
-        record.takeServerName("Logan's Mac Mini")
+        record.takeServerName("Studio Mac")
         XCTAssertEqual(record.name, "Mini", "the sign-in's name does not replace the user's")
 
         // Saved and read back, the choice holds.
@@ -28,7 +28,7 @@ final class RecordNameTests: XCTestCase {
 
         record.rename(to: "")
         XCTAssertFalse(record.renamed)
-        record.takeServerName("Logan's Mac Mini")
-        XCTAssertEqual(record.name, "Logan's Mac Mini")
+        record.takeServerName("Studio Mac")
+        XCTAssertEqual(record.name, "Studio Mac")
     }
 }

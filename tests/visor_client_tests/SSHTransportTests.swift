@@ -85,7 +85,7 @@ final class SSHTransportTests: XCTestCase {
         VisorHost.ssh = nil
     }
 
-    private func record(_ address: String = "logan@mini.local") -> AgentServerRecord {
+    private func record(_ address: String = "me@mini.local") -> AgentServerRecord {
         AgentServerRecord(name: "Mini", address: address, secret: "pw")
     }
 
@@ -93,21 +93,21 @@ final class SSHTransportTests: XCTestCase {
     /// and the jump hosts after `?via=`; an `ssh://` prefix and the
     /// spaces around are not minded; anything else is not one.
     func testTheAddressIsUserAtHostWithAPortAndTheWayThere() {
-        let plain = SSHAddress("logan@mini.local")
-        XCTAssertEqual(plain?.target, SSHAddress.Hop(user: "logan", host: "mini.local", port: 22))
+        let plain = SSHAddress("me@mini.local")
+        XCTAssertEqual(plain?.target, SSHAddress.Hop(user: "me", host: "mini.local", port: 22))
         XCTAssertEqual(plain?.via, [])
-        let full = SSHAddress(" ssh://logan@100.90.45.11:2299?via=me@jump.example,me@inner:2200\n")
-        XCTAssertEqual(full?.target, SSHAddress.Hop(user: "logan", host: "100.90.45.11", port: 2299))
+        let full = SSHAddress(" ssh://me@100.64.0.11:2299?via=me@jump.example,me@inner:2200\n")
+        XCTAssertEqual(full?.target, SSHAddress.Hop(user: "me", host: "100.64.0.11", port: 2299))
         XCTAssertEqual(full?.via, [SSHAddress.Hop(user: "me", host: "jump.example"), SSHAddress.Hop(user: "me", host: "inner", port: 2200)])
         XCTAssertEqual(full?.route.count, 3)
-        XCTAssertEqual(full?.display, "logan@100.90.45.11:2299 via me@jump.example, me@inner:2200")
+        XCTAssertEqual(full?.display, "me@100.64.0.11:2299 via me@jump.example, me@inner:2200")
         XCTAssertNil(SSHAddress("mini.local"))
         XCTAssertNil(SSHAddress("https://mini.local"))
         XCTAssertNil(SSHAddress("@mini.local"))
-        XCTAssertNil(SSHAddress("logan@"))
-        XCTAssertNil(SSHAddress("logan@mini:port"))
-        XCTAssertNil(SSHAddress("logan@mini?via=nobody"))
-        XCTAssertEqual(SSHAddress.hostKeySetting(SSHAddress.Hop(user: "logan", host: "mini", port: 22)), "ssh.hostkey.logan@mini:22")
+        XCTAssertNil(SSHAddress("me@"))
+        XCTAssertNil(SSHAddress("me@mini:port"))
+        XCTAssertNil(SSHAddress("me@mini?via=nobody"))
+        XCTAssertEqual(SSHAddress.hostKeySetting(SSHAddress.Hop(user: "me", host: "mini", port: 22)), "ssh.hostkey.me@mini:22")
     }
 
     /// Signing in connects as the user with no host key the first time,
@@ -119,9 +119,9 @@ final class SSHTransportTests: XCTestCase {
         let name = try await server.authenticate(record())
         XCTAssertEqual(name, "Mini")
         XCTAssertEqual(ssh.connects.count, 1)
-        XCTAssertEqual(ssh.connects[0].route, [VisorSSHHop(user: "logan", host: "mini.local", port: 22)])
+        XCTAssertEqual(ssh.connects[0].route, [VisorSSHHop(user: "me", host: "mini.local", port: 22)])
         XCTAssertEqual(ssh.connects[0].hostKeys, [nil])
-        XCTAssertEqual(settings.kept(key: "ssh.hostkey.logan@mini.local:22"), "ssh-ed25519 AAAAhost mini")
+        XCTAssertEqual(settings.kept(key: "ssh.hostkey.me@mini.local:22"), "ssh-ed25519 AAAAhost mini")
         XCTAssertEqual(ssh.sessions[0].attached, ["nc -U ~/.visor/server.sock"])
         XCTAssertEqual(ssh.sessions[0].forwarded, [], "the port is not needed")
         XCTAssertEqual(http.urls, ["http://127.0.0.1:60001/api/hello"])
@@ -151,12 +151,12 @@ final class SSHTransportTests: XCTestCase {
     /// hop's key kept under its own name.
     func testJumpHostsAreOnTheWayAndEachKeyIsKept() async throws {
         ssh.hostKeysGiven = ["ssh-ed25519 AAAAjump", "ssh-ed25519 AAAAhost mini"]
-        let server = VisorAgentServer(record: record("logan@10.0.0.2?via=logan@jump.example:2200"))
-        _ = try await server.authenticate(record("logan@10.0.0.2?via=logan@jump.example:2200"))
-        XCTAssertEqual(ssh.connects[0].route, [VisorSSHHop(user: "logan", host: "jump.example", port: 2200), VisorSSHHop(user: "logan", host: "10.0.0.2", port: 22)])
+        let server = VisorAgentServer(record: record("me@10.0.0.2?via=me@jump.example:2200"))
+        _ = try await server.authenticate(record("me@10.0.0.2?via=me@jump.example:2200"))
+        XCTAssertEqual(ssh.connects[0].route, [VisorSSHHop(user: "me", host: "jump.example", port: 2200), VisorSSHHop(user: "me", host: "10.0.0.2", port: 22)])
         XCTAssertEqual(ssh.connects[0].hostKeys, [nil, nil])
-        XCTAssertEqual(settings.kept(key: "ssh.hostkey.logan@jump.example:2200"), "ssh-ed25519 AAAAjump")
-        XCTAssertEqual(settings.kept(key: "ssh.hostkey.logan@10.0.0.2:22"), "ssh-ed25519 AAAAhost mini")
+        XCTAssertEqual(settings.kept(key: "ssh.hostkey.me@jump.example:2200"), "ssh-ed25519 AAAAjump")
+        XCTAssertEqual(settings.kept(key: "ssh.hostkey.me@10.0.0.2:22"), "ssh-ed25519 AAAAhost mini")
     }
 
     /// A computer whose host key changed is refused with a message; one

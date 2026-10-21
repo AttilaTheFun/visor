@@ -4,8 +4,8 @@ name: CI
 # platform's build; then, on the release Mac's runner (self-hosted,
 # release-mac), the commit's packages built, signed and published to
 # Releases. The proof (the simulator's screens and UI tests, recorded, and
-# the Mac's screens) is not made here (Logan, 19 Oct: GitHub's Mac minutes
-# go fast): an agent makes it on its own Mac or a test VM (tools/proof.sh)
+# the Mac's screens) is not made here (GitHub's hosted Mac minutes are
+# billed): an agent makes it on its own Mac or a test VM (tools/proof.sh)
 # and publishes it to the review server tagged with the commit (releases:
 # publish_proof). A newer push to the pull request cancels this run if it
 # hasn't finished. main requires every job green on a pull request's head

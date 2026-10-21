@@ -404,7 +404,7 @@ final class VisorProbe: XCTestCase {
     /// change (a reply that ran on while the app was away), is followed
     /// to its end: the list scrolls before it has measured them, and the
     /// rows it measures afterwards must not leave the thread short of its
-    /// end (the "half a page back" Logan saw on coming back to a session).
+    /// end (the "half a page back" seen on coming back to a session).
     func testABurstOfRowsAtTheEndIsFollowedToItsEnd() throws {
         XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
@@ -423,8 +423,8 @@ final class VisorProbe: XCTestCase {
     /// keyboard lengthened ("dont" to "don't") goes after it. The field says
     /// where its caret is a moment after the words change, and the caret
     /// from the words before, handed back to it in that moment, moved it a
-    /// letter back: "I don't kno whatw" (Logan: "weird jumps in the text
-    /// insertion point when typing").
+    /// letter back: "I don't kno whatw" (the caret jumped about while
+    /// typing).
     func testTypingThroughAnAutocorrectionKeepsTheCaret() throws {
         XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()

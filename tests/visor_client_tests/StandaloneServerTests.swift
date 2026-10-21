@@ -108,11 +108,11 @@ final class StandaloneServerTests: XCTestCase {
     /// server that stands alone keeps its address and sign-in either way.
     func testACodeChangesTheSignInOnlyWhenItSaysHow() {
         let store = VisorStore()
-        let first = store.open(ConnectionCode(name: "Mini", host: "http://100.90.45.11:7433", password: "pw", id: "mini", auth: "none").link)
+        let first = store.open(ConnectionCode(name: "Mini", host: "http://100.64.0.11:7433", password: "pw", id: "mini", auth: "none").link)
         XCTAssertEqual(first?.record.authentication, NoAuthenticator.name, "the code said none")
-        _ = store.open(ConnectionCode(name: "Mini", host: "http://100.90.45.11:7433", password: "pw2", id: "mini").link)
+        _ = store.open(ConnectionCode(name: "Mini", host: "http://100.64.0.11:7433", password: "pw2", id: "mini").link)
         XCTAssertEqual(first?.record.authentication, NoAuthenticator.name, "a code that does not say leaves it")
-        _ = store.open(ConnectionCode(name: "Mini", host: "http://100.90.45.11:7433", password: "pw3", id: "mini", auth: "password").link)
+        _ = store.open(ConnectionCode(name: "Mini", host: "http://100.64.0.11:7433", password: "pw3", id: "mini", auth: "password").link)
         XCTAssertEqual(first?.record.authentication, PasswordAuthenticator.name)
         XCTAssertEqual(ConnectionCode(parsing: ConnectionCode(name: "x", host: "http://a", password: "p", auth: "none").link)?.auth, "none")
 
