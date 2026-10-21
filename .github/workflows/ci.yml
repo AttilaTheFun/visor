@@ -328,6 +328,13 @@ jobs:
         run: python3 tools/isomer/uitests/transcript_layout_android.py $VISOR_SNAPSHOT_BAZEL_FLAGS
       - name: Composer
         run: python3 tools/isomer/uitests/composer_android.py $VISOR_SNAPSHOT_BAZEL_FLAGS
+      # The emulator's log and what was installed, for a run that failed.
+      - name: logcat
+        if: always()
+        run: |
+          ADB="$(cd tools/isomer/uitests && python3 -c 'from android_flow import adb_path; print(adb_path())')"
+          "$ADB" -s emulator-5554 logcat -d > logcat.txt 2>&1 || true
+          "$ADB" -s emulator-5554 shell dumpsys package com.loganshire.visor > package.txt 2>&1 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -335,6 +342,8 @@ jobs:
           path: |
             review
             emulator.log
+            logcat.txt
+            package.txt
           if-no-files-found: ignore
 
   # Blue Visor on the iPhone: the WasmKit app and the one compiled against
