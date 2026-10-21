@@ -310,7 +310,12 @@ jobs:
         run: bazel build -c opt $VISOR_SNAPSHOT_BAZEL_FLAGS //applications/visor_android:visor_android_apk
       - name: Boot the emulator
         run: |
-          (bazel run @isomer//tools/android/emulator -- -no-window -no-audio -port 5554 > emulator.log 2>&1 &)
+          # Without the runner's own Android SDK in the environment: the
+          # emulator reads ANDROID_HOME before isomer's ANDROID_SDK_ROOT (its
+          # hermetic SDK) and finds no system image there. (isomer's
+          # run_emulator.sh is to set ANDROID_HOME itself.)
+          (env -u ANDROID_HOME -u ANDROID_SDK_ROOT -u ANDROID_NDK_HOME -u ANDROID_NDK_ROOT \
+            bazel run @isomer//tools/android/emulator -- -no-window -no-audio -port 5554 > emulator.log 2>&1 &)
           ADB="$(cd tools/isomer/uitests && python3 -c 'from android_flow import adb_path; print(adb_path())')"
           for _ in $(seq 1 120); do
             [ "$("$ADB" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && exit 0
