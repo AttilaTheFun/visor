@@ -2,7 +2,10 @@
 
 Read README.md for the parts, docs/protocol.md for the wire format, and
 docs/DEVELOPMENT.md for the setup, the architecture as built, the deploy
-loop, probes, gotchas and open items.
+loop, probes, gotchas and open items. docs/isomer.md is blue Visor's (the
+client on Isomer: the web, Android, the iPhone as WebAssembly): its apps,
+its rules, and its local CI, end-to-end and snapshot harnesses
+(tools/isomer).
 
 ## Changes
 
@@ -29,9 +32,9 @@ to one focused change, and say in it how the change was verified.
   Reviews holds the release until it passes.
 - Every Swift target is built in the Swift 6 language mode with warnings
   as errors: `copts = STRICT_SWIFT` (tools/swift/defs.bzl), which a new
-  target takes too. (It holds while `//:swift_ui` is the system SwiftUI;
-  a host that builds the client against its own compiles it by its own
-  rules.) No `nonisolated(unsafe)`, no `@unchecked Sendable`, no lock
+  target takes too. (It holds for Apple builds against Apple's SwiftUI;
+  a build against Isomer's — the web, Android, Linux, Windows, or a
+  compiled feature — compiles it by Isomer's rules.) No `nonisolated(unsafe)`, no `@unchecked Sendable`, no lock
   where an actor or the main actor is what is meant; shared state that
   truly is shared across threads sits in a `Mutex`. A callback the system
   makes on a queue of its own is built outside the main actor (a
@@ -45,7 +48,12 @@ to one focused change, and say in it how the change was verified.
   `JSONValue` and the client reaches the host only through
   libraries/visor_services and an `AgentServer` — no Foundation
   networking or UserDefaults in visor_client or visor_ui, so the same code
-  can be carried to other platforms by a build that provides those.
+  builds on Isomer (the web, Android) as it does on Apple's platforms.
+- Visor depends on Isomer (from 0.37): isomer, and the rules_swift fork it
+  needs, come from the project's Bazel registry by version. `//:swift_ui`
+  and `//:foundation` default to isomer's labels, which are Apple's own on
+  Apple's platforms and Isomer's elsewhere. A file that uses Foundation
+  imports it, even where another module has loaded it.
 - The server library (libraries/visor_server) has no conditional
   compilation and no platform checks: what differs between systems is a
   protocol in its `ServerPlatform`, implemented per system

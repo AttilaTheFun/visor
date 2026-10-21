@@ -1,0 +1,44 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("@isomer//tools/wasm:defs.bzl", "isomer_web_app")
+
+package(default_visibility = ["//visibility:public"])
+
+# The app entry is the same on every host isomer adds.
+exports_files(["App.swift"])
+
+# The client on the web: the same VisorUI screens, compiled to wasm against
+# isomer's SwiftUI, in a static site (index.html brings the socket and
+# settings services in JavaScript). Served by this repository's Pages from
+# each release (tools/isomer/package_site.sh). From an https page the host must be reached
+# over wss:// — the menu bar app's Tailscale Serve option.
+swift_library(
+    name = "app_lib",
+    srcs = ["App.swift"],
+    alwayslink = True,
+    copts = ["-parse-as-library"],
+    module_name = "VisorWeb",
+    tags = ["manual"],
+    deps = [
+        "//libraries/visor_services_ffi",
+        "//libraries/visor_client",
+        "//libraries/visor_services",
+        "//libraries/visor_ui",
+        "@swiftpkg_agent_ui//:AgentUI",
+        "@isomer//wasm/libraries/swift_ui",
+        "@isomer//wasm/libraries/swift_ui:isomer_bridge",
+    ],
+)
+
+filegroup(
+    name = "icons",
+    srcs = ["//artwork/app-icon:Visor-1024.png"],
+)
+
+isomer_web_app(
+    name = "visor_web",
+    assets = [":icons"],
+    index = "index.html",
+    query = "renderer=react",
+    site_visibility = ["//visibility:public"],
+    swift_library = ":app_lib",
+)

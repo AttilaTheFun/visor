@@ -1,0 +1,43 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Isomer's side of visor's camera seam (//:camera, whose default is the
+# alias below). The module name is the seam's.
+swift_library(
+    name = "isomer_camera",
+    srcs = ["Camera.swift"],
+    module_name = "VisorCamera",
+    # Only where the alias below picks it: an Apple build of Apple's SwiftUI
+    # (a plain `bazel build //...` here) has no Isomer cameraCapture for it to
+    # call, and its wrapper would call itself.
+    target_compatible_with = select({
+        "@isomer//apple/compiled:feature_on": [],
+        "@platforms//os:wasi": [],
+        "@platforms//os:android": [],
+        "@platforms//os:linux": [],
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "@isomer//:foundation",
+        "@isomer//:isomer",
+        "@isomer//:swift_ui",
+    ],
+)
+
+# The seam's library: Isomer's camera (above) where SwiftUI is Isomer's (the
+# web, Android, Linux, Windows, and a feature compiled against Isomer's
+# frameworks on an Apple platform); visor's own where it is Apple's (red
+# Visor).
+alias(
+    name = "visor_camera_isomer",
+    actual = select({
+        "@isomer//apple/compiled:feature_on": ":isomer_camera",
+        "@platforms//os:wasi": ":isomer_camera",
+        "@platforms//os:android": ":isomer_camera",
+        "@platforms//os:linux": ":isomer_camera",
+        "@platforms//os:windows": ":isomer_camera",
+        "//conditions:default": "//libraries/visor_camera",
+    }),
+)

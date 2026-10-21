@@ -1,0 +1,73 @@
+load("@isomer//apple/compiled:defs.bzl", "isomer_compiled_feature")
+load("@rules_apple//apple:ios.bzl", "ios_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Visor compiled against Isomer's frameworks (com.LoganShire.VisorIsomer,
+# 0.32): the client's Swift built natively, with Isomer's SwiftUI, PhotosUI
+# and Isomer module where Apple's would be (isomer's apple/compiled), linked
+# into a host that draws its tree with Apple's SwiftUI (WasmView over the
+# native engine). Observation and Synchronization are Isomer's too, so iOS 16
+# (Foundation is still Apple's).
+#
+#   bazel build //applications/visor_isomer_compiled_ios --ios_multi_cpus=sim_arm64
+
+swift_library(
+    name = "feature_lib",
+    srcs = ["Feature.swift"],
+    copts = ["-parse-as-library"],
+    module_name = "VisorCompiledFeature",
+    tags = ["manual"],
+    deps = [
+        "@isomer//:swift_ui",
+        "@isomer//apple/libraries/compiled_swift_ui:hot_bridge",
+        "//libraries/visor_client",
+        "//libraries/visor_services",
+        "//libraries/visor_ui",
+    ],
+)
+
+isomer_compiled_feature(
+    name = "feature",
+    tags = ["manual"],
+    deps = [":feature_lib"],
+)
+
+swift_library(
+    name = "app_lib",
+    srcs = ["App.swift"],
+    module_name = "VisorIsomerCompiledApp",
+    tags = ["manual"],
+    deps = [
+        "@isomer//apple/libraries/native_runtime",
+        "@isomer//apple/libraries/wasm_view",
+    ],
+)
+
+ios_application(
+    name = "visor_isomer_compiled_ios",
+    app_icons = ["//artwork/visor_isomer_icon:app_icon"],
+    bundle_id = "com.LoganShire.VisorIsomer",
+    # Device signing as the wasm build's (its own app ID, the team's
+    # wildcard development profile); simulator builds need neither.
+    entitlements = select({
+        "@apple_support//constraints:device": "//applications/visor_isomer_ios:VisorIsomer.entitlements",
+        "//conditions:default": None,
+    }),
+    families = [
+        "iphone",
+        "ipad",
+    ],
+    infoplists = ["Info.plist"],
+    minimum_os_version = "16.0",
+    provisioning_profile = select({
+        "@apple_support//constraints:device": "//applications/visor_isomer_ios:xcode_managed_profile",
+        "//conditions:default": None,
+    }),
+    tags = ["manual"],
+    deps = [
+        ":app_lib",
+        ":feature",
+    ],
+)

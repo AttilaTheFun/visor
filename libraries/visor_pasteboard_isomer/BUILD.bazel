@@ -1,0 +1,31 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Isomer's side of visor's pasteboard seam (//:pasteboard, whose default is
+# the alias below). The module name is the seam's.
+swift_library(
+    name = "isomer_pasteboard",
+    srcs = glob(["*.swift"]),
+    module_name = "VisorPasteboard",
+    deps = [
+        "@isomer//:foundation",
+        "@isomer//:isomer",
+    ],
+)
+
+# The seam's library: Isomer's clipboard (above) where SwiftUI is Isomer's (the
+# web, Android, Linux, Windows, and a feature compiled against Isomer's
+# frameworks on an Apple platform); visor's own where it is Apple's (red
+# Visor).
+alias(
+    name = "visor_pasteboard_isomer",
+    actual = select({
+        "@isomer//apple/compiled:feature_on": ":isomer_pasteboard",
+        "@platforms//os:wasi": ":isomer_pasteboard",
+        "@platforms//os:android": ":isomer_pasteboard",
+        "@platforms//os:linux": ":isomer_pasteboard",
+        "@platforms//os:windows": ":isomer_pasteboard",
+        "//conditions:default": "//libraries/visor_pasteboard",
+    }),
+)

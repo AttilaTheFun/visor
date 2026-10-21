@@ -1,6 +1,38 @@
 common --enable_bzlmod
+
+# Modules from the project's registry first (isomer, and the forks it needs),
+# then the Bazel Central Registry.
+common --registry=https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main
+common --registry=https://bcr.bazel.build
+
+# isomer's hermetic Android NDK and SDK: their licenses, which resolving its
+# toolchains needs even for a build only for Apple's platforms.
+common --repo_env=ACCEPTED_ANDROID_NDK_LICENSE_VERSION=r27c
+common --repo_env=ACCEPTED_ANDROID_SDK_LICENSE_VERSION=35
+common --android_platforms=@rules_android//:arm64-v8a
+
+# rules_java's hermetic JDK 17, for rules_android's Java actions.
+common --java_language_version=17
+common --java_runtime_version=remotejdk_17
+common --tool_java_language_version=17
+common --tool_java_runtime_version=remotejdk_17
 build --apple_platform_type=macos
 build --macos_minimum_os=15.0
 build --ios_minimum_os=18.0
+# rules_swift_package_manager wraps every package target in a minimum-OS
+# transition: with these already at the packages' values it changes nothing,
+# so a package stays in its importer's configuration (otherwise isomer's
+# modules build twice and clang refuses the second's module map).
+build --minimum_os_version=15.0
+build --host_macos_minimum_os=15.0
+
+# swift_ffi's macro plugin (isomer's, for blue Visor's bridges) is built by
+# the Xcode Swift toolchain; loaded inside the sandbox it can't reach the
+# Swift runtime's dylibs, so Swift compiles run local.
+build --strategy=SwiftCompile=local
+
+# Isomer's Foundation, on the web and Android, with the dates and numbers the
+# client formats (FoundationInternationalization).
+build --@isomer//foundation:internationalization
 # Your own settings, such as the signing team (tools/signing).
 try-import %workspace%/.bazelrc.user
