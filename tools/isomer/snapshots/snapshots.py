@@ -250,6 +250,9 @@ class IOS:
                                "--test_arg=--xcodebuild_args=-collect-test-diagnostics", "--test_arg=--xcodebuild_args=never"],
                               cwd=ROOT, capture_output=True, text=True)
         self.log = done.stdout + done.stderr
+        simulator = os.path.join(self.pictures, "simulator.txt")
+        if os.path.exists(simulator):
+            log(f"{self.manifest_target} fixture simulator: {open(simulator).read().strip()}")
         if done.returncode != 0:
             log("ios fixture probe failed:", " | ".join(l for l in self.log.splitlines() if "error:" in l and "warning" not in l)[-600:])
             if not os.path.isdir(self.pictures):
