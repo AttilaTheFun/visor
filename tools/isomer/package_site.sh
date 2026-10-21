@@ -30,5 +30,7 @@ cp -RL "$SITE"/. "$WORK"/
 chmod -R u+w "$WORK"
 touch "$WORK/.nojekyll"
 python3 tools/isomer/e2e/run.py "$WORK"
-tar -czf "$OUT" -C "$WORK" .
+# No AppleDouble files (._*): macOS's tar writes a file's extended
+# attributes as one beside it, which a Linux tar unpacks as files.
+COPYFILE_DISABLE=1 tar -czf "$OUT" -C "$WORK" .
 echo "wrote $OUT ($(du -h "$OUT" | cut -f1)), built on $(git rev-parse --short HEAD)"

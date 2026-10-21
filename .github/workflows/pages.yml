@@ -10,6 +10,10 @@ name: Site
 #   gh workflow run pages.yml [-f tag=<tag>]
 # A release's run is on its tag, so the github-pages environment must let
 # tags deploy (Settings > Environments > github-pages: a tag rule `v*`).
+# Pages names a deployment by its commit: a release on a commit a push to
+# main has already deployed (one that changed site/ or this file) reports
+# success and changes nothing. Then deploy from a later commit on main:
+#   gh workflow run pages.yml --ref main
 on:
   push:
     branches: [main]
@@ -48,6 +52,8 @@ jobs:
           if gh release download "$@" --repo "$GITHUB_REPOSITORY" --pattern visor-isomer-site.tar.gz; then
             mkdir -p site/app
             tar -xzf visor-isomer-site.tar.gz -C site/app
+            # AppleDouble files a macOS tar may have added (._*).
+            find site/app -name '._*' -delete
             test -f site/app/index.html && test -f site/app/app.wasm
           else
             echo "No visor-isomer-site.tar.gz on ${TAG:-the latest release}: the site goes up without the web client."
