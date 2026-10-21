@@ -1572,7 +1572,7 @@
     "@@isomer+//tools/android:extensions.bzl%android_tools": {
       "os:osx,arch:aarch64": {
         "bzlTransitiveDigest": "k+KVmZZM9GG6V3/GKQ8lZd6Nm/Rcjal0sh2SCGktwe8=",
-        "usagesDigest": "5aWoitX/wenU15EUhb2kMKrmJjYTFhjUuHzcH3mNyHc=",
+        "usagesDigest": "/Vtzg5FvXRMAnAcum482vIC2R/ZkuCYRStlXsbQfc9k=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -1750,7 +1750,7 @@
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "qHbR00gVzVzkxX+PRtv4UGcUFMtBz7TK9CNYUWH8nIE=",
-        "usagesDigest": "wxNDa085+XmWGkjicpidEjPiTycHdt985AFFXL/oYe4=",
+        "usagesDigest": "7GkmcWabkMuha4jU+gOMk/XZNpDFXFK2sEM4DKcV5J0=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "androidsdk": {
