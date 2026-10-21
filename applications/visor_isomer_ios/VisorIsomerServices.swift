@@ -305,8 +305,8 @@ final class SettingsBridgeHost: SettingsBridge {
         // iOS suspends the app in the background and its sockets with it.
         if key == "host.socketsDropInBackground" { return "1" }
         if key == "host.appVersion" {
-            let info = Bundle.main.infoDictionary ?? [:]
-            return "\(info["CFBundleShortVersionString"] as? String ?? "") (\(info["CFBundleVersion"] as? String ?? ""))"
+            // MAJOR.MINOR.BUILD, as every app shows it (the build number is 1).
+            return Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         }
         return UserDefaults.standard.string(forKey: "visor." + key) ?? ""
     }

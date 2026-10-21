@@ -29,7 +29,7 @@ isomer_android_app(
     label = "Visor",
     icon = "//artwork/visor_isomer_icon:ic_launcher.png",
     package = "com.loganshire.visor",
-    version_code = 67,
+    version_code = 38000,
     version_name = "0.38.0",
     services_installer = "dev.isomer.runtime.VisorAndroidServices.install(intent)",
     # visor://connect?code=… links (a scanned QR code, a pasted code) open the app.

@@ -13,11 +13,10 @@ import VisorUI
 struct VisorCompiledFeature: App {
     @State private var store: VisorStore
 
-    /// This app's version and build ("0.32 (1)").
+    /// This app's version, MAJOR.MINOR.BUILD ("0.38.4"), as every app shows
+    /// it (the build number is always 1).
     static var bundleVersion: String {
-        guard let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return "" }
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        return build.map { "\(short) (\($0))" } ?? short
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     }
 
     init() {
