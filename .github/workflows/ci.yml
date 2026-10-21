@@ -236,6 +236,9 @@ jobs:
         run: bazel build -c opt //applications/visor_web:visor_web_site
       - name: Test
         run: bazel test -c opt --test_output=errors //applications/visor_web/...
+      # ffmpeg makes the end-to-end test's recordings (its review's videos).
+      - name: ffmpeg
+        run: sudo apt-get install -y -qq --no-install-recommends ffmpeg
       - name: End to end
         run: python3 tools/isomer/e2e/run.py --review review
       - name: Transcript layout
