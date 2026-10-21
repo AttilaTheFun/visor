@@ -1,13 +1,29 @@
 name: Site
 # The site (site/) on GitHub Pages, from main: a static page, put up as it
 # is. Its pictures come from the Screenshots workflow's artifacts.
+#
+# Blue Visor's web client goes up beside it, at app/: the
+# visor-isomer-site.tar.gz a release carries (tools/isomer/package_site.sh,
+# built on the release's commit and attached to its draft), from the
+# release being published, the tag given by hand, or else the latest
+# release. Compiled output never goes into git.
+#   gh workflow run pages.yml [-f tag=<tag>]
+# A release's run is on its tag, so the github-pages environment must let
+# tags deploy (Settings > Environments > github-pages: a tag rule `v*`).
 on:
   push:
     branches: [main]
     paths:
       - 'site/**'
       - '.github/workflows/pages.yml'
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release whose visor-isomer-site.tar.gz goes up at app/ (empty for the latest release)
+        required: false
+        default: ""
 permissions:
   contents: read
   pages: write
@@ -23,6 +39,19 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Blue Visor's web client, from a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          if [ -n "$TAG" ]; then set -- "$TAG"; else set --; fi
+          if gh release download "$@" --repo "$GITHUB_REPOSITORY" --pattern visor-isomer-site.tar.gz; then
+            mkdir -p site/app
+            tar -xzf visor-isomer-site.tar.gz -C site/app
+            test -f site/app/index.html && test -f site/app/app.wasm
+          else
+            echo "No visor-isomer-site.tar.gz on ${TAG:-the latest release}: the site goes up without the web client."
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

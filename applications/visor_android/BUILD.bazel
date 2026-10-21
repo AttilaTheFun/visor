@@ -1,0 +1,43 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("@isomer//tools/android:defs.bzl", "isomer_android_app")
+
+package(default_visibility = ["//visibility:public"])
+
+# The client on Android: visor's libraries under isomer's SwiftUI,
+# with the host's services in Kotlin (VisorServices.kt) handed over through
+# the generated installVisorBridges before the runtime starts.
+swift_library(
+    name = "app_swift",
+    srcs = ["//applications/visor_web:App.swift"],
+    alwayslink = True,
+    copts = ["-parse-as-library"],
+    module_name = "VisorAndroid",
+    tags = ["manual"],
+    deps = [
+        "//libraries/visor_services_ffi",
+        "@isomer//android/libraries/swift_ui",
+        "@isomer//android/libraries/swift_ui:isomer_bridge",
+        "//libraries/visor_client",
+        "//libraries/visor_services",
+        "//libraries/visor_ui",
+        "@swiftpkg_agent_ui//:AgentUI",
+    ],
+)
+
+isomer_android_app(
+    name = "visor_android",
+    label = "Visor",
+    icon = "//artwork/visor_isomer_icon:ic_launcher.png",
+    package = "com.loganshire.visor",
+    version_code = 66,
+    version_name = "0.37.0",
+    services_installer = "dev.isomer.runtime.VisorAndroidServices.install(intent)",
+    # visor://connect?code=… links (a scanned QR code, a pasted code) open the app.
+    url_scheme = "visor",
+    # A server reached over plain HTTP (visor 0.21: `http://<tailscale ip>:7433`,
+    # a LAN address; the network carries the privacy): Android blocks
+    # cleartext by default from API 28.
+    uses_cleartext_traffic = True,
+    services_kt = "VisorServices.kt",
+    swift_library = ":app_swift",
+)

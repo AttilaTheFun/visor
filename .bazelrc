@@ -26,6 +26,11 @@ build --ios_minimum_os=18.0
 build --minimum_os_version=15.0
 build --host_macos_minimum_os=15.0
 
+# swift_ffi's macro plugin (isomer's, for blue Visor's bridges) is built by
+# the Xcode Swift toolchain; loaded inside the sandbox it can't reach the
+# Swift runtime's dylibs, so Swift compiles run local.
+build --strategy=SwiftCompile=local
+
 # Isomer's Foundation, on the web and Android, with the dates and numbers the
 # client formats (FoundationInternationalization).
 build --@isomer//foundation:internationalization

@@ -2,7 +2,10 @@
 
 Read README.md for the parts, docs/protocol.md for the wire format, and
 docs/DEVELOPMENT.md for the setup, the architecture as built, the deploy
-loop, probes, gotchas and open items.
+loop, probes, gotchas and open items. docs/isomer.md is blue Visor's (the
+client on Isomer: the web, Android, the iPhone as WebAssembly): its apps,
+its rules, and its local CI, end-to-end and snapshot harnesses
+(tools/isomer).
 
 ## Changes
 

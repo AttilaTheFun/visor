@@ -1,0 +1,16 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+# Builds the seam overrides with a call site like visor's, for wasm and
+# Android (`bazel build //tests/isomer_seams --platforms=@isomer//tools/platforms:wasm32`).
+swift_library(
+    name = "isomer_seams",
+    srcs = ["Seams.swift"],
+    module_name = "VisorSeamsCheck",
+    tags = ["manual"],
+    deps = [
+        "//libraries/visor_camera_isomer",
+        "//libraries/visor_pasteboard_isomer",
+        "@isomer//:foundation",
+        "@isomer//:swift_ui",
+    ],
+)
