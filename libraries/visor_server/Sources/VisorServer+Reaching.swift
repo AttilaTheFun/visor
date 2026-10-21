@@ -39,12 +39,16 @@ extension VisorServer {
     }
 
     /// `http(s)://<address>:<port>` for each address on a path that is
-    /// on, the VPN's first.
+    /// on, the VPN's first; and while the LAN is, the computer's name on it
+    /// (`<name>.local`), which still reaches it when the network has given
+    /// it another address.
     public var httpPaths: [String] {
         let scheme = servesTLS ? "https" : "http"
         let addresses = ServerPlatform.current.host.networkAddresses()
         let open = addresses.filter { $0.kind == .vpn && settings.vpn } + addresses.filter { $0.kind == .lan && settings.lan }
-        return open.map { "\(scheme)://\($0.address):\(port)" }
+        var paths = open.map { "\(scheme)://\($0.address):\(port)" }
+        if settings.lan, let name = ServerPlatform.current.host.localNetworkName() { paths.append("\(scheme)://\(name):\(port)") }
+        return paths
     }
 
     /// `ssh://<user>@<address>` for each of this computer's addresses,
@@ -53,7 +57,9 @@ extension VisorServer {
         guard settings.sshEnabled else { return [] }
         let user = NSUserName()
         guard !user.isEmpty else { return [] }
-        return ServerPlatform.current.host.networkAddresses().map { "ssh://\(user)@\($0.address)" }
+        var paths = ServerPlatform.current.host.networkAddresses().map { "ssh://\(user)@\($0.address)" }
+        if let name = ServerPlatform.current.host.localNetworkName() { paths.append("ssh://\(user)@\(name)") }
+        return paths
     }
 
     /// Whether a connection that arrived on `localAddress` is let in: this

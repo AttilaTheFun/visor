@@ -15,9 +15,15 @@ public struct HostDetails: Sendable {
     /// The same, each with its interface and which network path it is;
     /// a system that names no interfaces tells them apart by range.
     public var networkAddresses: @Sendable () -> [NetworkAddress]
+    /// This computer's name on its local network, as multicast DNS answers
+    /// it ("Studio-Mac.local"): the same when the network gives it another
+    /// address. Nil where the system names none.
+    public var localNetworkName: @Sendable () -> String?
 
     public init(name: String, version: String = "", dataDirectory: URL, addresses: @escaping @Sendable () -> [String] = { [] },
-                networkAddresses: (@Sendable () -> [NetworkAddress])? = nil) {
+                networkAddresses: (@Sendable () -> [NetworkAddress])? = nil,
+                localNetworkName: @escaping @Sendable () -> String? = { nil }) {
+        self.localNetworkName = localNetworkName
         self.name = name
         self.version = version
         self.dataDirectory = dataDirectory
