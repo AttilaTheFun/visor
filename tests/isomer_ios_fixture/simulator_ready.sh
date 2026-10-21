@@ -8,3 +8,9 @@ xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$SIMULATOR_UDID" -b >/dev/null
 xcrun simctl ui "$SIMULATOR_UDID" appearance light
 xcrun simctl status_bar "$SIMULATOR_UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+# Which simulator the runner gave the test, kept beside the pictures for
+# snapshots.py to report (a capture showing another app's alert was traced
+# this way).
+mkdir -p /private/tmp/visor_isomer_fixture
+# (Its name and state, not its UDID: the log is a public CI run's.)
+xcrun simctl list devices | grep -F "$SIMULATOR_UDID" | sed -E 's/ *\([0-9A-F-]{36}\)//; s/^ *//' > /private/tmp/visor_isomer_fixture/simulator.txt || true

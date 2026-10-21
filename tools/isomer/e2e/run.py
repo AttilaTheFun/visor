@@ -45,7 +45,8 @@ def encode(record, out):
     """The screencast's frames (page_check.js's PAGE_CHECK_RECORD) as an MP4,
     each frame held until the next came."""
     frames = json.load(open(os.path.join(record, "frames.json")))
-    if not frames:
+    # No ffmpeg (a CI runner without it): the review keeps its screens, without a recording.
+    if not frames or not shutil.which("ffmpeg"):
         return False
     with open(os.path.join(record, "list.txt"), "w") as f:
         for i, frame in enumerate(frames):
