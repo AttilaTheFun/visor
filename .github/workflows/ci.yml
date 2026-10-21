@@ -208,6 +208,11 @@ jobs:
   blue-web:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    env:
+      # rules_swift wants Bazel's C toolchain to be clang (the runner's
+      # default is gcc), as isomer's Linux container sets it.
+      CC: clang
+      CXX: clang++
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -215,6 +220,8 @@ jobs:
           path: ~/.cache/bazel-repo
           key: bazel-repo-blue-web-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'third_party/swift_packages/Package.resolved') }}
           restore-keys: bazel-repo-blue-web-
+      - name: clang and lld
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq clang lld
       - name: Bazel's repository cache
         run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
       - name: Build
@@ -244,6 +251,10 @@ jobs:
     env:
       # The emulator's architecture, for the harnesses' builds.
       VISOR_SNAPSHOT_BAZEL_FLAGS: --android_platforms=@rules_android//:x86_64
+      # rules_swift wants Bazel's C toolchain to be clang (the runner's
+      # default is gcc), as isomer's Linux container sets it.
+      CC: clang
+      CXX: clang++
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -251,6 +262,8 @@ jobs:
           path: ~/.cache/bazel-repo
           key: bazel-repo-blue-android-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'third_party/swift_packages/Package.resolved') }}
           restore-keys: bazel-repo-blue-android-
+      - name: clang and lld
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq clang lld
       - name: Bazel's repository cache
         run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
       - name: KVM for the emulator
@@ -305,10 +318,23 @@ jobs:
           bazel build -c opt --ios_multi_cpus=sim_arm64
           //applications/visor_isomer_ios
           //applications/visor_isomer_compiled_ios
+      # Mobile Safari's simulator is this job's own, made new for the run and
+      # deleted after it (the iPhone fixture's runner makes and deletes its
+      # own), so it never meets the proof's or the releases runner's.
+      - name: A fresh simulator for Mobile Safari
+        run: |
+          xcrun simctl list -j devices | python3 -c 'import json, sys; [print(d["udid"]) for r in json.load(sys.stdin)["devices"].values() for d in r if d["name"] == "blue-ci-web-mobile"]' |
+            while read -r udid; do xcrun simctl shutdown "$udid" 2>/dev/null || true; xcrun simctl delete "$udid"; done
       - name: Snapshots
         run: python3 tools/isomer/snapshots/snapshots.py run --targets ios,ios-landscape,web-mobile
         env:
           VISOR_SNAPSHOT_RUN_DIR: ${{ runner.temp }}/blue-snapshots
+          VISOR_SNAPSHOT_SIMULATOR: blue-ci-web-mobile
+      - name: Delete Mobile Safari's simulator
+        if: always()
+        run: |
+          xcrun simctl list -j devices | python3 -c 'import json, sys; [print(d["udid"]) for r in json.load(sys.stdin)["devices"].values() for d in r if d["name"] == "blue-ci-web-mobile"]' |
+            while read -r udid; do xcrun simctl shutdown "$udid" 2>/dev/null || true; xcrun simctl delete "$udid"; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
