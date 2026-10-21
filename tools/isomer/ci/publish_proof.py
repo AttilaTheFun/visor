@@ -13,7 +13,7 @@ Each run dir is what the local CI keeps: a snapshots.py run (one folder per
 target) or the UI tests' --review folder. Every target folder with a
 manifest.json goes, staged as review-<target> with its references inside,
 through the review tooling's publish-proof (`//reviews/harnesses:publish_proof`,
-in the checkout at $RELEASES_CHECKOUT, ~/Developer/releases by default).
+in the checkout at $REVIEWS_CHECKOUT, ~/Developer/reviews by default).
 Blue's runs only: red's local pictures (app "Visor") are red's to publish.
 
 The commit is the manifests' own unless given (the local CI writes the
@@ -26,7 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "snapshots"))
 from publish_review import stage  # noqa: E402
 
-RELEASES = os.path.expanduser(os.environ.get("RELEASES_CHECKOUT", "~/Developer/releases"))
+REVIEWS = os.path.expanduser(os.environ.get("REVIEWS_CHECKOUT", "~/Developer/reviews"))
 # The review server's Mac, as `ssh` reaches it (user@host).
 LAB = os.environ.get("REVIEW_SERVER_HOST", "")
 
@@ -74,7 +74,7 @@ def main():
                    "runs", stage_dir, "--commit", commit]
         if args.pull_request: command += ["--pull-request", args.pull_request]
         if args.branch: command += ["--branch", args.branch]
-        done = subprocess.run(command, cwd=RELEASES, env=env)
+        done = subprocess.run(command, cwd=REVIEWS, env=env)
         sys.exit(done.returncode)
 
 

@@ -924,7 +924,7 @@ ran on (GitHub's hosted Mac minutes are billed). For each commit
 pushed to a pull request, and each merged to main:
 
     tools/proof.sh            # .proof/: ios-portrait, ios-landscape (+ mac-screenshots with PROOF_MAC=1, on a test VM)
-    cd ~/Developer/releases && bazel run //reviews/harnesses:publish_proof -- \
+    cd ~/Developer/reviews && bazel run //reviews/harnesses:publish_proof -- \
       visor ~/Developer/visor ~/Developer/visor/.proof --pull-request <n>   # main's: no --pull-request
 
 `tools/proof.sh` runs, in each orientation, the fixture's screens and
