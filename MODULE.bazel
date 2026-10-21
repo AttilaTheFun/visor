@@ -11,11 +11,11 @@ bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
 bazel_dep(name = "apple_support", version = "2.8.4")
 # rules_swift from the project's registry (AttilaTheFun/bazel_registry,
-# before the BCR in .bazelrc): 4.1.0.isomer.1 is upstream's 4.1.0 with
-# rules_swift#1860 (the wasi-threads SDK, not yet merged) and isomer's two
-# patches. It sorts above the releases the graph asks for, so every module
+# before the BCR in .bazelrc): 4.1.0.isomer.2 is upstream's 4.1.0 with
+# rules_swift#1860 (the wasi-threads SDK, not yet merged), isomer's two
+# patches, and the worker's incremental-copy fix (upstream #1905, from 4.2.0). It sorts above the releases the graph asks for, so every module
 # gets it; the Apple apps build on it as they did on 4.1.0.
-bazel_dep(name = "rules_swift", version = "4.1.0.isomer.1")
+bazel_dep(name = "rules_swift", version = "4.1.0.isomer.2")
 
 # The server's one C file (libraries/visor_server_posix/c); already in the
 # graph at this version through rules_swift.
@@ -86,7 +86,7 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.36.0")
+bazel_dep(name = "isomer", version = "0.36.1")
 
 # flatbuffers' released Swift BUILD glob misses Sources/FlatBuffers/Vectors/,
 # and its Foundation use breaks under WASI: isomer's patches, which a root
