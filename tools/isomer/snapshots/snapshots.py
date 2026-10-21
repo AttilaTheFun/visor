@@ -527,7 +527,9 @@ def write_manifest(run_dir, target, kind, rows, started):
         json.dump(manifest, f, indent=1)
 
 def run(targets, screens):
-    run_dir = f"/tmp/visor-snapshots/{time.strftime('%Y%m%d-%H%M%S')}"
+    # VISOR_SNAPSHOT_RUN_DIR: where the run goes (CI keeps it as an artifact);
+    # by default a new folder under /tmp/visor-snapshots.
+    run_dir = os.environ.get("VISOR_SNAPSHOT_RUN_DIR") or f"/tmp/visor-snapshots/{time.strftime('%Y%m%d-%H%M%S')}"
     # Two runs at once (the lab's phone and this Mac's targets) can start in
     # the same second.
     if os.path.exists(run_dir):

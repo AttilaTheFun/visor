@@ -16,7 +16,10 @@ const { spawn } = require("child_process");
 const fs = require("fs");
 const [url, text, seconds = "40"] = process.argv.slice(2);
 if (!url || !text) { console.error("usage: page_check.js <url> <text> [seconds]"); process.exit(2); }
-const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+// $CHROME, else Chrome where it is installed: the app on a Mac, google-chrome
+// on Linux (CI's hosted runners).
+const chrome = process.env.CHROME || (process.platform === "darwin"
+  ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "google-chrome");
 const profile = fs.mkdtempSync("/tmp/page-check-");
 const port = 9400 + Math.floor(Math.random() * 400);
 const proc = spawn(chrome, ["--headless=new", "--disable-gpu", "--use-mock-keychain", "--password-store=basic",

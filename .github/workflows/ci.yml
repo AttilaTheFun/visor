@@ -199,3 +199,119 @@ jobs:
           PIPELINE_SHA: ${{ github.event.pull_request.head.sha }}
           PIPELINE_BRANCH: ${{ github.event.pull_request.head.ref }}
           PIPELINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+
+  # Blue Visor (the client on Isomer: docs/isomer.md), its web client: built
+  # optimized, its tests run, then checked in headless Chrome: the end-to-end
+  # test against the stand-in server on its three roads, the transcript's
+  # layout and the composer typed into. Hosted Linux; Bazel's downloads (the
+  # Swift toolchain and its wasm SDKs) kept between runs.
+  blue-web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: bazel-repo-blue-web-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'third_party/swift_packages/Package.resolved') }}
+          restore-keys: bazel-repo-blue-web-
+      - name: Bazel's repository cache
+        run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
+      - name: Build
+        run: bazel build -c opt //applications/visor_web:visor_web_site
+      - name: Test
+        run: bazel test -c opt --test_output=errors //applications/visor_web/...
+      - name: End to end
+        run: python3 tools/isomer/e2e/run.py --review review
+      - name: Transcript layout
+        run: node tools/isomer/e2e/transcript_layout_check.js "$(bazel cquery -c opt --output=files //applications/visor_web:visor_web_site)"
+      - name: Composer
+        run: node tools/isomer/e2e/composer_check.js "$(bazel cquery -c opt --output=files //applications/visor_web:visor_web_site)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blue-web-review
+          path: review
+          if-no-files-found: ignore
+
+  # Blue Visor on Android: the APK as it ships (arm64) built, then one for
+  # the runner's x86_64 emulator (isomer's hermetic emulator takes the host's
+  # architecture, under KVM), on which the UI flow runs in portrait and
+  # landscape, and the transcript and composer checks.
+  blue-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      # The emulator's architecture, for the harnesses' builds.
+      VISOR_SNAPSHOT_BAZEL_FLAGS: --android_platforms=@rules_android//:x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-repo
+          key: bazel-repo-blue-android-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'third_party/swift_packages/Package.resolved') }}
+          restore-keys: bazel-repo-blue-android-
+      - name: Bazel's repository cache
+        run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Build (as shipped, arm64)
+        run: bazel build -c opt //applications/visor_android:visor_android_apk
+      - name: Build (x86_64, for the emulator)
+        run: bazel build -c opt $VISOR_SNAPSHOT_BAZEL_FLAGS //applications/visor_android:visor_android_apk
+      - name: Boot the emulator
+        run: |
+          (bazel run @isomer//tools/android/emulator -- -no-window -no-audio -port 5554 > emulator.log 2>&1 &)
+          ADB="$(cd tools/isomer/uitests && python3 -c 'from android_flow import adb_path; print(adb_path())')"
+          for _ in $(seq 1 120); do
+            [ "$("$ADB" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && exit 0
+            sleep 5
+          done
+          tail -50 emulator.log; exit 1
+      - name: UI flow
+        run: python3 tools/isomer/uitests/android_flow.py --review review
+      - name: Transcript layout
+        run: python3 tools/isomer/uitests/transcript_layout_android.py $VISOR_SNAPSHOT_BAZEL_FLAGS
+      - name: Composer
+        run: python3 tools/isomer/uitests/composer_android.py $VISOR_SNAPSHOT_BAZEL_FLAGS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blue-android-review
+          path: |
+            review
+            emulator.log
+          if-no-files-found: ignore
+
+  # Blue Visor on the iPhone: the WasmKit app and the one compiled against
+  # Isomer's frameworks, for the simulator (no signing team needed), then
+  # its fixture's screens in each orientation and the web client's in
+  # Mobile Safari, against tests/snapshots. On the release Mac: GitHub's
+  # hosted Mac minutes are billed. The harness makes its simulators and
+  # removes them after.
+  blue-ios:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Build
+        run: >
+          bazel build -c opt --ios_multi_cpus=sim_arm64
+          //applications/visor_isomer_ios
+          //applications/visor_isomer_compiled_ios
+      - name: Snapshots
+        run: python3 tools/isomer/snapshots/snapshots.py run --targets ios,ios-landscape,web-mobile
+        env:
+          VISOR_SNAPSHOT_RUN_DIR: ${{ runner.temp }}/blue-snapshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blue-ios-snapshots
+          path: ${{ runner.temp }}/blue-snapshots
+          if-no-files-found: ignore
