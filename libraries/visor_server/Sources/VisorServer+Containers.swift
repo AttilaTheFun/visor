@@ -38,7 +38,7 @@ extension VisorServer {
     /// How Visor's tools in a container reach this server: the address
     /// set, else this computer's LAN address (a container resolves no
     /// `.local` names) at the server's port.
-    var containerServerURL: String {
+    public var containerServerURL: String {
         let set = settings.ossCallback.trimmingCharacters(in: .whitespaces)
         if !set.isEmpty { return set }
         let addresses = ServerPlatform.current.host.networkAddresses()
@@ -49,9 +49,7 @@ extension VisorServer {
     /// Where a session's agent runs, when that is a container.
     func placement(for info: SessionInfo) -> ContainerPlacement? {
         guard let container = info.container else { return nil }
-        let client = ossClient.flatMap { $0.server == container.server ? $0 : nil }
-            ?? OSSClient(server: container.server, token: Self.secrets.get("ossToken") ?? "")
-        return ContainerPlacement(client: client, session: container.id, serverURL: containerServerURL)
+        return ContainerPlacement(server: container.server, session: container.id, serverURL: containerServerURL)
     }
 
     /// The folder a session works in, in its container: the repository's
@@ -102,9 +100,13 @@ extension VisorServer {
     /// reading on from where that launch left off.
     func pickUp(_ record: SessionRecord, container stored: StoredContainerProcess) {
         defer { record.leftContainer = nil }
-        guard let placement = placement(for: record.info), let hostable = record.process as? HostableProcess else { return release(record) }
+        guard let placement = placement(for: record.info), let hostable = record.process as? HostableProcess else {
+            Self.log("could not pick up the agent of \(record.info.title) (\(record.info.id)) in its container: \(record.info.container == nil ? "no container" : "no adapter for it")")
+            return release(record)
+        }
         if !record.isBound { bind(record) }
-        hostable.adopt(OSSChild.attach(client: placement.client, session: placement.session, process: stored.process, out: stored.out, err: stored.err),
+        hostable.adopt(OSSChild.attach(server: placement.server, token: ContainerPlacement.token, session: placement.session,
+                                       process: stored.process, out: stored.out, err: stored.err),
                        carried: stored.carried ?? [:])
         record.followFile()
         Self.log("picked up the agent of \(record.info.title) (\(record.info.id)) in its container")

@@ -78,6 +78,7 @@ struct StoredSession: Codable {
         queuedImages = try c.decodeIfPresent([[String]].self, forKey: .queuedImages)
         reportedUsage = try c.decodeIfPresent(SessionUsage.self, forKey: .reportedUsage)
         host = try c.decodeIfPresent(StoredHost.self, forKey: .host)
+        containerProcess = try c.decodeIfPresent(StoredContainerProcess.self, forKey: .containerProcess)
         head = try c.decodeIfPresent(String.self, forKey: .head)
         leaf = try c.decodeIfPresent(String.self, forKey: .leaf)
         otherBranch = try c.decodeIfPresent(String.self, forKey: .otherBranch)

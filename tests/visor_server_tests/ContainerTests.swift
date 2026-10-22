@@ -14,10 +14,15 @@ import XCTest
 /// oss as the server reaches it: what it was asked, and its answers.
 final class FakeOSS: HTTPFetching {
     let asked = Mutex<[OutgoingRequest]>([])
-    /// The agent's output, and how many asks it takes to end.
+    /// The agent's output, and whether it ends once that is read (else it
+    /// runs on, saying nothing more).
     let output: Data
+    let ends: Bool
 
-    init(output: Data = Data()) { self.output = output }
+    init(output: Data = Data(), ends: Bool = true) {
+        self.output = output
+        self.ends = ends
+    }
 
     func fetch(_ request: OutgoingRequest) async throws -> OutgoingRequest.Answer {
         asked.withLock { $0.append(request) }
@@ -30,8 +35,10 @@ final class FakeOSS: HTTPFetching {
         case let ("GET", path) where path.hasPrefix("/v1/agents/c1/processes/p1/output?stream=out&from="):
             let from = Int(path.split(separator: "=")[2].split(separator: "&")[0]) ?? 0
             let rest = from < output.count ? output.dropFirst(from) : Data()
+            // Held open a moment while there is nothing new, as oss holds it.
+            if rest.isEmpty, !ends { try await Task.sleep(for: .milliseconds(50)) }
             return .init(status: 200, body: Data(rest),
-                         headers: ["oss-offset": String(output.count), "oss-state": rest.isEmpty ? "exited" : "running", "oss-status": "0"])
+                         headers: ["oss-offset": String(output.count), "oss-state": rest.isEmpty && ends ? "exited" : "running", "oss-status": "0"])
         case let ("GET", path) where path.hasPrefix("/v1/agents/c1/processes/p1/output?stream=err"):
             return .init(status: 200, body: Data(), headers: ["oss-offset": "0", "oss-state": "exited", "oss-status": "0"])
         default:
@@ -61,7 +68,8 @@ final class ContainerTests: ServerTestCase {
     func testTheAgentsInputGoesInOrderAndItsOutputIsReadToItsEnd() async throws {
         let oss = FakeOSS(output: Data("{\"type\":\"result\"}\n".utf8))
         ServerPlatform.current.fetching = oss
-        let child = OSSChild.start(client: client, session: "c1", command: ["claude", "-p"], environment: ["VISOR_SESSION": "s"], directory: "/root/work/visor")
+        let child = OSSChild.start(server: client.server, token: { "secret" }, session: "c1", command: ["claude", "-p"],
+                                   environment: ["VISOR_SESSION": "s"], directory: "/root/work/visor")
         child.write(["n": 1])
         child.write(["n": 2])
         child.closeInput()
@@ -84,7 +92,7 @@ final class ContainerTests: ServerTestCase {
     }
 
     func testAnAgentInAContainerHasVisorsToolsAndOssesWhereItCanReachThem() throws {
-        let placement = ContainerPlacement(client: client, session: "c1", serverURL: "ws://192.168.4.52:7433")
+        let placement = ContainerPlacement(server: "http://oss.test:7480", session: "c1", serverURL: "ws://192.168.4.52:7433")
         let config = try XCTUnwrap(VisorMCP.claudeConfig(["VISOR_SESSION": "s", "VISOR_TOKEN": "t"], approvals: true, container: placement))
         let servers = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(config.utf8)) as? [String: Any])?["mcpServers"] as? [String: Any])
         let visor = try XCTUnwrap(servers["visor"] as? [String: Any])
@@ -134,6 +142,35 @@ final class ContainerTests: ServerTestCase {
         XCTAssertNil(made.stored.agentPID)
     }
 
+    /// The agent an earlier launch left running in its container is picked
+    /// up, and what is said next goes to it, not to a new one.
+    func testAnAgentLeftRunningIsPickedUpAndTold() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-tests-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let oss = FakeOSS(ends: false)
+        ServerPlatform.current.fetching = oss
+        let server = VisorServer(port: 7996)
+        defer { server.stop() }
+        server.settings.ossServer = "http://oss.test:7480"
+        server.setOSSToken("secret")
+        var info = SessionInfo(id: "s2", agent: .claude, cwd: "/root/work", title: "Claude", created: 0)
+        info.container = SessionContainer(server: "http://oss.test:7480", id: "c1")
+        let record = SessionRecord(info: info, process: server.makeProcess(info, resume: "r1"), entries: [])
+        server.sessions.append(record)
+        server.pickUp(record, container: StoredContainerProcess(process: "p1", out: 0, err: 0, carried: nil))
+        XCTAssertNotNil((record.process as? HostableProcess)?.containerChild, "the agent left running is this session's again")
+        server.deliver("Carry on", to: record)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(oss.requests("POST", containing: "/processes").filter { $0.url.hasSuffix("/processes") }.isEmpty, "no new agent started")
+        let told = oss.requests("POST", containing: "/processes/p1/input").map { String(decoding: $0.body, as: UTF8.self) }
+        XCTAssertEqual(told.count, 1)
+        XCTAssertTrue(told.first?.contains("Carry on") == true)
+        XCTAssertEqual(record.stored.containerProcess?.process, "p1")
+        XCTAssertNil(record.stored.agentPID)
+    }
+
     func testAContainerOnTheWireAndOnDisk() throws {
         var info = SessionInfo(id: "s", agent: .codex, cwd: "/root/work", title: "Codex", created: 0)
         info.container = SessionContainer(server: "http://oss.test:7480", id: "c1", image: "visor-agent")
@@ -144,5 +181,8 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(start?.repository, "o/r")
         let stored = StoredContainerProcess(process: "p1", out: 120, err: 4, carried: ["turn": "t"])
         XCTAssertEqual(try JSONDecoder().decode(StoredContainerProcess.self, from: JSONEncoder().encode(stored)), stored)
+        // Read back with its session, as the next launch reads it.
+        let session = StoredSession(info: info, entries: [], resumeID: "r", shape: StoredSession.currentShape, containerProcess: stored)
+        XCTAssertEqual(try JSONDecoder().decode(StoredSession.self, from: JSONEncoder().encode(session)).containerProcess, stored)
     }
 }

@@ -212,7 +212,9 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         }
         // The agent is told which session it is, so it can name itself
         // when it asks the server to restart (VISOR_SESSION).
-        let environment = container.map { approvalEnvironment.merging(["VISOR_URL": $0.serverURL]) { _, ours in ours } }
+        // In a container the agent is root, which Claude Code refuses to
+        // bypass permissions as unless told it is in a sandbox (it is).
+        let environment = container.map { approvalEnvironment.merging(["VISOR_URL": $0.serverURL, "IS_SANDBOX": "1"]) { _, ours in ours } }
             ?? ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
         let child = try AgentChildren.start(executable: executable, arguments: args, directory: container == nil ? HostFolders.resolve(cwd) : cwd,
                                             environment: environment, session: approvalEnvironment["VISOR_SESSION"], container: container)

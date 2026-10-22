@@ -40,8 +40,10 @@ final class ContainerLogMirror {
         let folder = Self.folder.appendingPathComponent(session, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let mirror = ContainerLogMirror(url: folder.appendingPathComponent(id + ".jsonl", isDirectory: false), format: format)
-        let url = mirror.url, client = placement.client, container = placement.session
+        let url = mirror.url, server = placement.server, container = placement.session
         mirror.copying = Task.detached {
+            // oss's token as kept when each ask is made.
+            let client: @Sendable () async -> OSSClient = { await OSSClient(server: server, token: MainActor.run { ContainerPlacement.token() }) }
             guard let path = await Self.remotePath(agent: agent, id: id, cwd: cwd, client: client, session: container) else { return }
             await Self.copy(path, of: container, client: client, to: url)
         }
@@ -56,13 +58,13 @@ final class ContainerLogMirror {
     /// The log's path in the container's home: Claude's under its project
     /// folder for `cwd` (named the same way there as here); Codex's
     /// rollout, found by its thread's id once Codex has written it.
-    nonisolated static func remotePath(agent: AgentKind, id: String, cwd: String, client: OSSClient, session: String) async -> String? {
+    nonisolated static func remotePath(agent: AgentKind, id: String, cwd: String, client: @Sendable () async -> OSSClient, session: String) async -> String? {
         switch agent {
         case .claude:
             return ".claude/projects/\(ClaudeSessionFiles.projectDirectoryName(for: cwd))/\(id).jsonl"
         case .codex:
             for _ in 0..<120 where !Task.isCancelled {
-                let found = (try? await client.run(session, ["sh", "-c", "find /root/.codex/sessions -name '*\(id).jsonl' 2>/dev/null | head -1"])) ?? ""
+                let found = (try? await client().run(session, ["sh", "-c", "find /root/.codex/sessions -name '*\(id).jsonl' 2>/dev/null | head -1"])) ?? ""
                 let path = found.trimmingCharacters(in: .whitespacesAndNewlines)
                 if path.hasPrefix("/root/") { return String(path.dropFirst("/root/".count)) }
                 try? await Task.sleep(for: .seconds(2))
@@ -76,12 +78,12 @@ final class ContainerLogMirror {
     /// Copies the file on as it grows: what is past the copy's end,
     /// appended; a file that shrank (written anew) copied again from its
     /// start. oss out of reach is asked again, less often the longer it is.
-    nonisolated static func copy(_ path: String, of session: String, client: OSSClient, to url: URL) async {
+    nonisolated static func copy(_ path: String, of session: String, client: @Sendable () async -> OSSClient, to url: URL) async {
         var offset = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
         var failures = 0
         while !Task.isCancelled {
             do {
-                guard let part = try await client.readFile(session, path: path, from: offset, wait: OSSClient.longestWait) else {
+                guard let part = try await client().readFile(session, path: path, from: offset, wait: OSSClient.longestWait) else {
                     try? await Task.sleep(for: .seconds(1))
                     continue
                 }

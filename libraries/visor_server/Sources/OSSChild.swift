@@ -8,7 +8,11 @@ import Foundation
 
 @MainActor
 final class OSSChild: AgentChild {
-    let client: OSSClient
+    /// oss's address, and its token as kept when each request is made: a
+    /// token kept after the agent was picked up is the one it is asked with.
+    private let server: String
+    private let token: @MainActor () -> String
+    private var client: OSSClient { OSSClient(server: server, token: token()) }
     /// oss's session: the container the agent runs in.
     let session: String
     /// The agent's process there, once started.
@@ -34,8 +38,9 @@ final class OSSChild: AgentChild {
     private var writing: Task<Void, Never>?
     private var readers: [Task<Void, Never>] = []
 
-    private init(client: OSSClient, session: String) {
-        self.client = client
+    private init(server: String, token: @escaping @MainActor () -> String, session: String) {
+        self.server = server
+        self.token = token
         self.session = session
         (output, said) = AsyncStream.makeStream()
         (errors, erred) = AsyncStream.makeStream()
@@ -51,8 +56,10 @@ final class OSSChild: AgentChild {
     /// Starts `command` in the session's container, in `directory`, with
     /// `environment`; what is written before it has started waits for it,
     /// and a start that fails is said and ends it.
-    static func start(client: OSSClient, session: String, command: [String], environment: [String: String], directory: String) -> OSSChild {
-        let child = OSSChild(client: client, session: session)
+    static func start(server: String, token: @escaping @MainActor () -> String, session: String, command: [String],
+                      environment: [String: String], directory: String) -> OSSChild {
+        let child = OSSChild(server: server, token: token, session: session)
+        let client = child.client
         child.started = Task { [weak child] in
             do {
                 let started = try await client.startProcess(session, command: command, environment: environment, directory: directory)
@@ -68,8 +75,8 @@ final class OSSChild: AgentChild {
 
     /// The agent an earlier server left running in the container, read on
     /// from where that server left off.
-    static func attach(client: OSSClient, session: String, process: String, out: Int, err: Int) -> OSSChild {
-        let child = OSSChild(client: client, session: session)
+    static func attach(server: String, token: @escaping @MainActor () -> String, session: String, process: String, out: Int, err: Int) -> OSSChild {
+        let child = OSSChild(server: server, token: token, session: session)
         child.outOffset = out
         child.errOffset = err
         child.started = Task { process }

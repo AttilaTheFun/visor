@@ -636,42 +636,38 @@ on|off` serves the socket file for SSH clients (Linux; not Windows),
 standalone on` keeps it to itself (see the protocol's network of
 computers); `run` and `start` take the same as options (`--password`,
 `--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`,
-`--machines`, `--provisioning`), for a
+`--oss`, `--oss-token-file`, `--oss-image`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server
 is built and tried in CI (a throwaway session over its WebSocket); it has
 not been run against real agents.
 
-**Virtual machines** (being built). A server may run agents' sessions
-in virtual machines on its own computer, each started with a GitHub
-repository, an agent and a platform (`MachinePlatform`: macOS, with
-Xcode, Bazel and Homebrew; Ubuntu with a desktop, apt, Bazel and git),
-wiped before it is used again. How many of each it may run at once is
-the owner's to set (`ServerSettings.machines`: none unless set; macOS
-two per Mac), in the menu bar app's settings or `visor-server machines
-<platform> <n>`. The machines are made by a provisioning script
-(`ServerSettings.provisioningScript`, `visor-server provisioning
-<path>`; empty for Visor's own), so a company can bring its own images,
-network and tools. Its contract: the server runs `<script> <action>
---platform <macos|linux> --machine <id>`, one action at a time; its
-answer is one JSON object on stdout, its progress on stderr (the
-session's activity), a non-zero exit a failure said in the session.
-`provision` (also `--repository <owner/name>` and `--agent <kind>`; in
-its environment the repository's token, the agent's sign-in, and
-`VISOR_HOST_URL` and `VISOR_MACHINE_TOKEN`, how the wrapper inside
-reaches this server) makes a machine ready, the repository cloned to
-`~/Developer/<repo>` and Visor's wrapper installed, and answers
-`{"machine": id}`; `start` and `stop` boot it (the wrapper starts with
-it and connects out to the server) and shut it down, answering
-`{"state": …}`; `reclaim` wipes it back to its image and returns it to
-the pool; `delete` removes it and its disk; `status` answers the state
-of each machine it knows, for a server that restarts. What it makes is
-kept out of Time Machine (`tmutil addexclusion` on the machines' folder
-and each machine as it is made): machines are wiped and made again,
-never backed up, and must not fill local snapshots. A session in a
-machine has the machine's states (provisioning, starting, running,
-stopping, stopped, reclaimed) and is moved in and out of machines by
-Migrate…, as between computers. Built so far: the settings.
+**Containers (oss).** A session's agent may run in a container on an
+oss server (OS Server, AttilaTheFun/oss) rather than on the computer:
+oss hosts the containers (an Apple container on a Mac); the server drives
+them over oss's API (OSSClient, VisorServer+Containers.swift). Set with
+`visor-server oss <url> <token file>` (or the menu bar app's Containers),
+`oss image <name>` for an image of your own, `oss callback <ws://host:port>`
+for how a container reaches this server (by default this computer's LAN IP
+at the server's port: a container resolves no `.local` names). A session
+started with `container` (and a `repository`, owner/name) makes an oss
+session (its container idle, the repository cloned into
+`/root/work/<name>`, labelled `visor.session`), writes Visor's MCP script
+into its home (`/root/.visor/visor_mcp.js`), and runs Claude or Codex there
+as an oss process (OSSChild): input written in order, output read by
+offset, held open (`output?from=&wait=`). The agent works on whatever the
+Visor server does: a restart or a quit lets go of it and writes down its
+process and offsets (StoredContainerProcess, never a local pid), and the
+next launch reads on from there (`pickUp(_:container:)`). Its log is
+mirrored here from the container (ContainerLogMirror, `files?from=&wait=`)
+and indexed as an agent's own. Visor's tools reach this server at
+VISOR_URL; oss's (`oss mcp`: leasing machines — VMs, simulators,
+emulators — with the session's own scoped token) sit beside them in the
+agent's MCP config. Claude runs with IS_SANDBOX=1 there (it is root in the
+container). oss's token is read when each request is made. Ending the
+session removes its container. Not done yet: moving a session into or out
+of a container (Migrate… refuses it). Sign-ins inside the containers are
+oss's (its agent.env and agent-home).
 
 ## 4. The working loop
 
