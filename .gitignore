@@ -10,3 +10,5 @@ dist/
 .proof/
 # Python caches of tools/isomer.
 __pycache__/
+# Linux builds (tools/linux/build.sh).
+.linux/
