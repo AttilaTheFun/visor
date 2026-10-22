@@ -87,7 +87,15 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.36.1")
+# --- Until isomer 0.38 is released with this one (they go out together),
+# --- isomer's main by its commit; then 0.38.N from the registry, as CI's
+# --- pins check asks of a release.
+bazel_dep(name = "isomer", version = "0.38.0")
+git_override(
+    module_name = "isomer",
+    commit = "94c358ce4ede20e043cf2b5787cf6237bab639bb",
+    remote = "https://github.com/AttilaTheFun/isomer.git",
+)
 
 # flatbuffers' released Swift BUILD glob misses Sources/FlatBuffers/Vectors/,
 # and its Foundation use breaks under WASI: isomer's patches, which a root
