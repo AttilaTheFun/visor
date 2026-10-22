@@ -650,9 +650,11 @@ them over oss's API (OSSClient, VisorServer+Containers.swift). Set with
 `oss image <name>` for an image of your own, `oss callback <ws://host:port>`
 for how a container reaches this server (by default this computer's LAN IP
 at the server's port: a container resolves no `.local` names). A session
-started with `container` (and a `repository`, owner/name) makes an oss
-session (its container idle, the repository cloned into
-`/root/work/<name>`, labelled `visor.session`), writes Visor's MCP script
+started with `container` (and a `repository`: GitHub's owner/name, or a
+git URL) makes an oss session (its container idle, labelled
+`visor.session`), clones the repository into `/root/work/<name>` as a
+process there whose end it waits for (oss's own clone, given a repository,
+runs unwatched: a failed one left an empty folder), writes Visor's MCP script
 into its home (`/root/.visor/visor_mcp.js`), and runs Claude or Codex there
 as an oss process (OSSChild): input written in order, output read by
 offset, held open (`output?from=&wait=`). The agent works on whatever the

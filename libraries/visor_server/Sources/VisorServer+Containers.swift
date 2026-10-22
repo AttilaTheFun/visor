@@ -55,8 +55,23 @@ extension VisorServer {
     /// The folder a session works in, in its container: the repository's
     /// clone, or `/root/work` with none.
     static func containerFolder(repository: String?) -> String {
-        guard let name = repository?.split(separator: "/").last, !name.isEmpty else { return "/root/work" }
+        guard let name = repository.map(repositoryName), !name.isEmpty else { return "/root/work" }
         return "/root/work/" + name
+    }
+
+    /// What oss clones: a repository given as GitHub's `owner/name` at its
+    /// GitHub address, and a git URL of any host as it is.
+    static func cloneURL(repository: String) -> String {
+        let parts = repository.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts.contains(where: \.isEmpty), !repository.contains(":"), !repository.hasPrefix(".") else { return repository }
+        return "https://github.com/\(repository).git"
+    }
+
+    /// A repository's name, as git names its clone: the last part of its
+    /// path or URL, without `.git`.
+    static func repositoryName(_ repository: String) -> String {
+        let last = repository.split(whereSeparator: { $0 == "/" || $0 == ":" }).last.map(String.init) ?? ""
+        return last.hasSuffix(".git") ? String(last.dropLast(4)) : last
     }
 
     /// Starts a session whose agent runs in a container on oss: oss makes
@@ -72,12 +87,22 @@ extension VisorServer {
         let repository = envelope.repository?.trimmingCharacters(in: .whitespaces).nilIfEmpty
         let image = settings.ossImage.trimmingCharacters(in: .whitespaces).nilIfEmpty
         let given = (envelope.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = given.isEmpty ? "\(agent.title) in \(repository.map { String($0.split(separator: "/").last ?? "") } ?? "a container")" : String(given.prefix(60))
+        let title = given.isEmpty ? "\(agent.title) in \(repository.map(Self.repositoryName) ?? "a container")" : String(given.prefix(60))
         let skip = envelope.skipPermissions ?? true
         Task {
             do {
-                let made = try await oss.makeSession(agent: agent.rawValue, labels: ["visor.session": id], repository: repository, image: image)
-                try await oss.writeFile(made, path: String(ContainerPlacement.scriptPath.dropFirst("/root/".count)), data: Data(VisorMCPScript.source.utf8))
+                let made = try await oss.makeSession(agent: agent.rawValue, labels: ["visor.session": id], image: image)
+                do {
+                    if let repository {
+                        try await oss.clone(made, url: Self.cloneURL(repository: repository), into: Self.containerFolder(repository: repository))
+                    }
+                    try await oss.writeFile(made, path: String(ContainerPlacement.scriptPath.dropFirst("/root/".count)),
+                                            data: Data(VisorMCPScript.source.utf8))
+                } catch {
+                    // No session here to end it: the container goes now.
+                    try? await oss.removeSession(made)
+                    throw error
+                }
                 var info = SessionInfo(id: id, agent: agent, cwd: Self.containerFolder(repository: repository), title: title, skipPermissions: skip,
                                        created: Date().timeIntervalSince1970)
                 info.container = SessionContainer(server: oss.server, id: made, repository: repository, image: image)

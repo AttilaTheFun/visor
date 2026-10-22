@@ -33,11 +33,11 @@ struct OSSClient: Sendable {
     // MARK: Sessions
 
     /// A session made, its container up and idle (no agent of oss's own):
-    /// labelled with Visor's session, `repository` cloned into
-    /// `/root/work/<name>`, from `image` (oss's own when nil). Its id.
-    func makeSession(agent: String, labels: [String: String], repository: String?, image: String?) async throws -> String {
+    /// labelled with Visor's session, from `image` (oss's own when nil).
+    /// Its id. (Its repository is cloned by `clone`, whose end is known:
+    /// oss's own clone, given a repository here, runs on its own.)
+    func makeSession(agent: String, labels: [String: String], image: String?) async throws -> String {
         var body: [String: Any] = ["agent": agent, "launch": false, "holder": "visor", "labels": labels]
-        if let repository, !repository.isEmpty { body["repository"] = repository }
         if let image, !image.isEmpty { body["image"] = image }
         let answer = try await call("POST", "/v1/agents", json: body, timeout: 300)
         guard let id = Self.object(answer.body)?["id"] as? String else { throw Failure(words: "oss made no session") }
@@ -73,6 +73,25 @@ struct OSSClient: Sendable {
         try Self.check(answer)
         guard let size = answer.headers["oss-size"].flatMap(Int.init) else { return FilePart(data: answer.body, size: answer.body.count, whole: true) }
         return FilePart(data: answer.body, size: size, whole: false)
+    }
+
+    /// A repository cloned into `folder` in the session's container, git's
+    /// own end awaited (ten minutes at most); why not, when it was not.
+    func clone(_ session: String, url: String, into folder: String) async throws {
+        let process = try await startProcess(session, command: ["git", "clone", "-q", url, folder], environment: [:], directory: "/root")
+        var errors = Data()
+        let deadline = Date().addingTimeInterval(600)
+        while Date() < deadline {
+            let got = try await output(session, process: process.id, stream: "err", from: errors.count, wait: Self.longestWait)
+            errors.append(got.data)
+            guard got.state == "running" || !got.data.isEmpty else {
+                if got.status == 0 { return }
+                let said = String(decoding: errors, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+                throw Failure(words: "Cloning \(url) failed" + (said.isEmpty ? "." : ": \(said)"))
+            }
+        }
+        try? await signal(session, process: process.id, "KILL")
+        throw Failure(words: "Cloning \(url) took more than ten minutes.")
     }
 
     /// What a short command prints in the session's container, once it has

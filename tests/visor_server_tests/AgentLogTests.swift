@@ -53,6 +53,20 @@ final class AgentLogTests: ServerTestCase {
         XCTAssertEqual(more.first?.parentUuid, "m3")
     }
 
+    /// The AGENTS.md files Codex read come as a user message of its own,
+    /// which the user never typed: no row.
+    func testCodexsAgentsInstructionsAreNoRow() {
+        let data = jsonl([
+            ["type": "response_item", "ordinal": 1, "payload": ["type": "message", "id": "m0", "role": "user",
+                                                                 "content": [["type": "input_text",
+                                                                              "text": "# AGENTS.md instructions for /root/work/r\n\n<INSTRUCTIONS>\n…"]]]],
+            ["type": "response_item", "ordinal": 2, "payload": ["type": "message", "id": "m1", "role": "user",
+                                                                 "content": [["type": "input_text", "text": "List the folder"]]]],
+        ])
+        let rows = TranscriptAssembler.rows(in: CodexRolloutParser().lines(in: data).compactMap(\.record))
+        XCTAssertEqual(rows.map(\.text), ["List the folder"])
+    }
+
     /// A restarted Codex session, read with the head it stood at (its
     /// first prompt): the second turn carries on from it, so its reply is
     /// where the conversation ends and nothing is abandoned.

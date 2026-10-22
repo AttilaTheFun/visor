@@ -18,10 +18,15 @@ final class FakeOSS: HTTPFetching {
     /// runs on, saying nothing more).
     let output: Data
     let ends: Bool
+    /// What a process writes to its errors, and its exit status.
+    let errors: Data
+    let status: Int
 
-    init(output: Data = Data(), ends: Bool = true) {
+    init(output: Data = Data(), ends: Bool = true, errors: Data = Data(), status: Int = 0) {
         self.output = output
         self.ends = ends
+        self.errors = errors
+        self.status = status
     }
 
     func fetch(_ request: OutgoingRequest) async throws -> OutgoingRequest.Answer {
@@ -39,8 +44,10 @@ final class FakeOSS: HTTPFetching {
             if rest.isEmpty, !ends { try await Task.sleep(for: .milliseconds(50)) }
             return .init(status: 200, body: Data(rest),
                          headers: ["oss-offset": String(output.count), "oss-state": rest.isEmpty && ends ? "exited" : "running", "oss-status": "0"])
-        case let ("GET", path) where path.hasPrefix("/v1/agents/c1/processes/p1/output?stream=err"):
-            return .init(status: 200, body: Data(), headers: ["oss-offset": "0", "oss-state": "exited", "oss-status": "0"])
+        case let ("GET", path) where path.hasPrefix("/v1/agents/c1/processes/p1/output?stream=err&from="):
+            let from = Int(path.split(separator: "=")[2].split(separator: "&")[0]) ?? 0
+            let rest = from < errors.count ? errors.dropFirst(from) : Data()
+            return .init(status: 200, body: Data(rest), headers: ["oss-offset": String(errors.count), "oss-state": "exited", "oss-status": String(status)])
         default:
             return .init(status: 200, body: Data("{}".utf8))
         }
@@ -131,8 +138,11 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(made.info.title, "Claude Code in visor")
         let asked = try XCTUnwrap(oss.requests("POST", containing: "/v1/agents").first)
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: asked.body) as? [String: Any])
-        XCTAssertEqual(body["repository"] as? String, "AttilaTheFun/visor")
+        XCTAssertNil(body["repository"], "cloned by the server, which waits for the clone, not by oss on its own")
         XCTAssertEqual(body["launch"] as? Bool, false)
+        let cloned = try XCTUnwrap(oss.requests("POST", containing: "/processes").first)
+        let clone = try XCTUnwrap(JSONSerialization.jsonObject(with: cloned.body) as? [String: Any])
+        XCTAssertEqual(clone["command"] as? [String], ["git", "clone", "-q", "https://github.com/AttilaTheFun/visor.git", "/root/work/visor"])
         XCTAssertEqual((body["labels"] as? [String: String])?["visor.session"], "s1")
         let script = try XCTUnwrap(oss.requests("PUT", containing: "/files/").first)
         XCTAssertTrue(script.url.hasSuffix("/v1/agents/c1/files/.visor/visor_mcp.js"))
@@ -140,6 +150,38 @@ final class ContainerTests: ServerTestCase {
         // Its agent runs there: a pid there is no process of this computer's.
         XCTAssertNotNil((made.process as? HostableProcess)?.container)
         XCTAssertNil(made.stored.agentPID)
+    }
+
+    /// A clone that fails says why, and its container goes: no session
+    /// is left in an empty folder.
+    func testAFailedCloneSaysWhyAndLeavesNoContainer() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-tests-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let oss = FakeOSS(errors: Data("fatal: repository 'https://github.com/o/missing.git/' not found\n".utf8), status: 128)
+        ServerPlatform.current.fetching = oss
+        let server = VisorServer(port: 7997)
+        defer { server.stop() }
+        server.settings.ossServer = "http://oss.test:7480"
+        server.setOSSToken("secret")
+        let ended: Result<SessionRecord, OSSClient.Failure> = await withCheckedContinuation { done in
+            server.startInContainer(.startInContainer(id: "s2", agent: .codex, title: "", skipPermissions: true, repository: "o/missing"),
+                                    from: nil) { done.resume(returning: $0) }
+        }
+        guard case .failure(let failure) = ended else { return XCTFail("started all the same") }
+        XCTAssertEqual(failure.words, "Cloning https://github.com/o/missing.git failed: fatal: repository 'https://github.com/o/missing.git/' not found")
+        XCTAssertEqual(oss.requests("DELETE", containing: "/v1/agents/c1").count, 1)
+        XCTAssertFalse(server.sessions.contains { $0.info.id == "s2" })
+    }
+
+    func testARepositoryIsClonedFromWhereItIsNamed() {
+        XCTAssertEqual(VisorServer.cloneURL(repository: "AttilaTheFun/visor"), "https://github.com/AttilaTheFun/visor.git")
+        XCTAssertEqual(VisorServer.cloneURL(repository: "git@github.com:o/r.git"), "git@github.com:o/r.git")
+        XCTAssertEqual(VisorServer.cloneURL(repository: "https://gitlab.com/o/r"), "https://gitlab.com/o/r")
+        XCTAssertEqual(VisorServer.containerFolder(repository: "git@github.com:o/r.git"), "/root/work/r")
+        XCTAssertEqual(VisorServer.containerFolder(repository: "https://gitlab.com/o/r"), "/root/work/r")
+        XCTAssertEqual(VisorServer.containerFolder(repository: nil), "/root/work")
     }
 
     /// The agent an earlier launch left running in its container is picked
