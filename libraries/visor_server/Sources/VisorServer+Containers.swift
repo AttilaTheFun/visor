@@ -1,26 +1,32 @@
 // Sessions whose agents run in containers on an oss server (OS Server,
 // AttilaTheFun/oss) rather than on this computer. oss hosts the
-// containers; this server drives them over oss's API: it makes a session
-// there (a container, the repository cloned into /root/work), writes
-// Visor's MCP script into its home, and runs the agent there as a process
-// whose input it writes and whose output it reads on from where it was
-// left (OSSChild) — through a restart of this server too. The agent has
-// Visor's tools, and oss's for leasing machines.
+// containers; this server drives them over oss's API (OSSClient): it makes
+// a container from Visor's agent image (tools/oss/visor-agent), clones the
+// repository into /root/work, writes Visor's MCP script into its home, and
+// runs the agent there as a process whose input it writes and whose output
+// it reads on from where it was left (OSSChild) — through a restart of
+// this server too. The agent has Visor's tools, and oss's for leasing
+// machines.
 //
 //     visor-server oss <url> <token file>    the oss server, and its token
-//     visor-server oss image <name> | -      the image containers are made from
+//     visor-server oss image <name> | -      the image containers are made from (visor-agent)
 //     visor-server oss callback <ws-url> | -  how a container reaches this server
 
 import Foundation
+import OSSClient
 import VisorProtocol
 
 extension VisorServer {
-    /// The oss server sessions' agents can run on, when one is set and its
-    /// token kept.
+    /// The image a container is made from unless another is set: Visor's
+    /// own (tools/oss/visor-agent), with the agents in it, built on the oss
+    /// server under this name; oss's own default is a plain Linux.
+    public nonisolated static let containerImage = "visor-agent"
+
+    /// The oss server sessions' agents can run on, when one is set (at an
+    /// address that is a URL) and its token kept.
     var ossClient: OSSClient? {
-        let server = settings.ossServer.trimmingCharacters(in: .whitespaces)
-        guard !server.isEmpty, let token = Self.secrets.get("ossToken"), !token.isEmpty else { return nil }
-        return OSSClient(server: server.hasSuffix("/") ? String(server.dropLast()) : server, token: token)
+        guard let server = settings.ossServer.trimmingCharacters(in: .whitespaces).nilIfEmpty, !(Self.secrets.get("ossToken") ?? "").isEmpty else { return nil }
+        return ContainerPlacement.client(server: server)
     }
 
     /// Whether a session can be started in a container here.
@@ -49,7 +55,7 @@ extension VisorServer {
     /// Where a session's agent runs, when that is a container.
     func placement(for info: SessionInfo) -> ContainerPlacement? {
         guard let container = info.container else { return nil }
-        return ContainerPlacement(server: container.server, session: container.id, serverURL: containerServerURL)
+        return ContainerPlacement(server: container.server, container: container.id, serverURL: containerServerURL)
     }
 
     /// The folder a session works in, in its container: the repository's
@@ -75,48 +81,55 @@ extension VisorServer {
     }
 
     /// Starts a session whose agent runs in a container on oss: oss makes
-    /// it (the repository cloned in), Visor's MCP script is written into
-    /// it, and the session is added; `done` is told the session, or why
-    /// not. The agent starts with its first message, as on this computer.
-    func startInContainer(_ envelope: Envelope, from client: ClientConnection?, done: @escaping @MainActor (Result<SessionRecord, OSSClient.Failure>) -> Void) {
-        guard let agent = envelope.agent else { return done(.failure(OSSClient.Failure(words: "Which agent?"))) }
+    /// the container, the repository is cloned into it, its SSH key made
+    /// and Visor's MCP script written, and the session is added; `done` is
+    /// told the session, or why not. The agent starts with its first
+    /// message, as on this computer.
+    func startInContainer(_ envelope: Envelope, from client: ClientConnection?, done: @escaping @MainActor (Result<SessionRecord, OSSError>) -> Void) {
+        guard let agent = envelope.agent else { return done(.failure(OSSError(status: 0, message: "Which agent?"))) }
         guard let oss = ossClient else {
-            return done(.failure(OSSClient.Failure(words: "This computer has no oss server to run agents in containers on: visor-server oss <url> <token file>.")))
+            return done(.failure(OSSError(status: 0, message: "This computer has no oss server to run agents in containers on: visor-server oss <url> <token file>.")))
         }
         let id = envelope.id ?? UUID().uuidString
         let repository = envelope.repository?.trimmingCharacters(in: .whitespaces).nilIfEmpty
-        let image = settings.ossImage.trimmingCharacters(in: .whitespaces).nilIfEmpty
+        let image = settings.ossImage.trimmingCharacters(in: .whitespaces).nilIfEmpty ?? Self.containerImage
+        let server = settings.ossServer.trimmingCharacters(in: .whitespaces)
         let given = (envelope.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let title = given.isEmpty ? "\(agent.title) in \(repository.map(Self.repositoryName) ?? "a container")" : String(given.prefix(60))
         let skip = envelope.skipPermissions ?? true
         Task {
             do {
-                let made = try await oss.makeSession(agent: agent.rawValue, labels: ["visor.session": id], image: image)
+                // Made from an image the oss server has (built there), which
+                // can take a while the first time.
+                var making = oss
+                making.timeout = 300
+                let made = try await making.startContainer(ContainerRequest(holder: "visor", image: image, labels: ["visor.session": id])).id
                 do {
                     if let repository {
                         try await oss.clone(made, url: Self.cloneURL(repository: repository), into: Self.containerFolder(repository: repository))
                     }
-                    try await oss.writeFile(made, path: String(ContainerPlacement.scriptPath.dropFirst("/root/".count)),
-                                            data: Data(VisorMCPScript.source.utf8))
+                    try await oss.makeSSHKey(made)
+                    try await oss.writeFile(made, String(ContainerPlacement.scriptPath.dropFirst("/root/".count)), Data(VisorMCPScript.source.utf8))
                 } catch {
                     // No session here to end it: the container goes now.
-                    try? await oss.removeSession(made)
+                    try? await oss.remove(container: made)
                     throw error
                 }
                 var info = SessionInfo(id: id, agent: agent, cwd: Self.containerFolder(repository: repository), title: title, skipPermissions: skip,
                                        created: Date().timeIntervalSince1970)
-                info.container = SessionContainer(server: oss.server, id: made, repository: repository, image: image)
+                info.container = SessionContainer(server: server, id: made, repository: repository, image: image)
                 let record = SessionRecord(info: info, process: makeProcess(info, resume: nil), entries: [])
                 sessions.append(record)
                 if let client { record.subscribers.insert(ObjectIdentifier(client)) }
-                Self.log("session started in a container on \(oss.server): \(title) (\(agent.title))\(repository.map { ", \($0) cloned" } ?? "")")
+                Self.log("session started in a container on \(server): \(title) (\(agent.title))\(repository.map { ", \($0) cloned" } ?? "")")
                 saveArchive()
                 broadcastSessions()
                 done(.success(record))
-            } catch let failure as OSSClient.Failure {
-                done(.failure(failure))
+            } catch let error as OSSError {
+                // oss's own refusals say they are oss's.
+                done(.failure(error.status == 0 ? error : OSSError(status: error.status, message: "oss: \(error.message)")))
             } catch {
-                done(.failure(OSSClient.Failure(words: error.localizedDescription)))
+                done(.failure(OSSError(status: 0, message: error.localizedDescription)))
             }
         }
     }
@@ -130,7 +143,7 @@ extension VisorServer {
             return release(record)
         }
         if !record.isBound { bind(record) }
-        hostable.adopt(OSSChild.attach(server: placement.server, token: ContainerPlacement.token, session: placement.session,
+        hostable.adopt(OSSChild.attach(client: placement.client, container: placement.container,
                                        process: stored.process, out: stored.out, err: stored.err),
                        carried: stored.carried ?? [:])
         record.followFile()
@@ -144,7 +157,7 @@ extension VisorServer {
         guard let container = info.container, let placement = placement(for: info) else { return }
         Task {
             do {
-                try await placement.client.removeSession(container.id)
+                try await placement.client.remove(container: container.id)
                 Self.log("removed the container of \(info.title) on \(container.server)")
             } catch {
                 Self.log("could not remove the container of \(info.title) on \(container.server): \(error.localizedDescription)")

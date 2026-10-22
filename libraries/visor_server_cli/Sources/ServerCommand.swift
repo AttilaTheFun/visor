@@ -58,7 +58,8 @@ public struct ServerCommand {
                    keeps its token, `oss -` takes it off. oss hosts the
                    containers, and leases the agents in them machines (VMs,
                    simulators, emulators). `oss image <name>|-` is the image
-                   they are made from (oss's own by default); `oss callback
+                   they are made from (Visor's visor-agent by default, built
+                   on the oss server from tools/oss/visor-agent); `oss callback
                    <ws://host:port>|-` is how they reach this server (this
                    computer's LAN address by default).
 

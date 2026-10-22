@@ -58,7 +58,7 @@ extension ServerCommand {
     static func ossWords(_ settings: ServerSettings, tokenKept: Bool) -> String {
         guard !settings.ossServer.isEmpty else { return "Containers: none (`oss <url> <token file>` runs sessions' agents in containers on an oss server)." }
         return "Containers: on oss at \(settings.ossServer)" + (tokenKept ? "" : ", with no token kept (`oss <url> <token file>`)")
-            + ", from " + (settings.ossImage.isEmpty ? "oss's own image" : "the image \(settings.ossImage)")
+            + ", from the image " + (settings.ossImage.isEmpty ? VisorServer.containerImage : settings.ossImage)
             + (settings.ossCallback.isEmpty ? "." : "; they reach this server at \(settings.ossCallback).")
     }
 }

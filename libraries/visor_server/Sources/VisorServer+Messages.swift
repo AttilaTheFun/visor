@@ -4,6 +4,7 @@
 import ClaudeTranscript
 import MessageCache
 import Foundation
+import OSSClient
 import VisorProtocol
 
 extension VisorServer {
@@ -83,7 +84,7 @@ extension VisorServer {
         // Its agent in a container on oss: made there first.
         if envelope.container == true {
             return startInContainer(envelope, from: client) { result in
-                if case .failure(let failure) = result { client?.send(.error(failure.words)) }
+                if case .failure(let failure) = result { client?.send(.error(failure.message)) }
             }
         }
         guard let agent = envelope.agent else { return }

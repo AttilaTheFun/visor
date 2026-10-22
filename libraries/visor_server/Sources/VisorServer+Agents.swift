@@ -18,8 +18,12 @@ extension VisorServer {
         let process = harness.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
         process.model = info.model
         process.effort = info.effort
-        process.approvalEnvironment = AgentEnvironmentFile.read(info.agent)
-            .merging(["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]) { _, ours in ours }
+        // Visor's own, and this computer's agents/<kind>.env for an agent
+        // here: its paths and git sign-in are this computer's, so an agent
+        // in a container has only Visor's (and the oss server's sign-ins
+        // for its image).
+        let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]
+        process.approvalEnvironment = info.container == nil ? AgentEnvironmentFile.read(info.agent).merging(own) { _, ours in ours } : own
         // An agent in a container on oss runs there.
         (process as? HostableProcess)?.container = placement(for: info)
         return process

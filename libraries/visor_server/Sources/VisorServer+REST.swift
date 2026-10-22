@@ -4,6 +4,7 @@
 import ClaudeTranscript
 import MessageCache
 import Foundation
+import OSSClient
 import VisorProtocol
 
 extension VisorServer {
@@ -35,7 +36,7 @@ extension VisorServer {
             return startInContainer(e, from: nil) { result in
                 switch result {
                 case .success(let record): respond(.json(Envelope.sessions([record.info]).encoded()))
-                case .failure(let failure): respond(HTTPResponse(502, Envelope.error(failure.words).encoded()))
+                case .failure(let failure): respond(HTTPResponse(502, Envelope.error(failure.message).encoded()))
                 }
             }
         }

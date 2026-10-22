@@ -645,31 +645,36 @@ not been run against real agents.
 **Containers (oss).** A session's agent may run in a container on an
 oss server (OS Server, AttilaTheFun/oss) rather than on the computer:
 oss hosts the containers (an Apple container on a Mac); the server drives
-them over oss's API (OSSClient, VisorServer+Containers.swift). Set with
+them over oss's API (`/v1/containers`) with oss's own client, OSSClient
+(the oss package by version, its requests through the platform's HTTP
+client: PlatformOSSTransport), in VisorServer+Containers.swift. Set with
 `visor-server oss <url> <token file>` (or the menu bar app's Containers),
-`oss image <name>` for an image of your own, `oss callback <ws://host:port>`
-for how a container reaches this server (by default this computer's LAN IP
-at the server's port: a container resolves no `.local` names). A session
-started with `container` (and a `repository`: GitHub's owner/name, or a
-git URL) makes an oss session (its container idle, labelled
-`visor.session`), clones the repository into `/root/work/<name>` as a
-process there whose end it waits for (oss's own clone, given a repository,
-runs unwatched: a failed one left an empty folder), writes Visor's MCP script
-into its home (`/root/.visor/visor_mcp.js`), and runs Claude or Codex there
-as an oss process (OSSChild): input written in order, output read by
-offset, held open (`output?from=&wait=`). The agent works on whatever the
-Visor server does: a restart or a quit lets go of it and writes down its
-process and offsets (StoredContainerProcess, never a local pid), and the
-next launch reads on from there (`pickUp(_:container:)`). Its log is
-mirrored here from the container (ContainerLogMirror, `files?from=&wait=`)
-and indexed as an agent's own. Visor's tools reach this server at
-VISOR_URL; oss's (`oss mcp`: leasing machines — VMs, simulators,
-emulators — with the session's own scoped token) sit beside them in the
-agent's MCP config. Claude runs with IS_SANDBOX=1 there (it is root in the
-container). oss's token is read when each request is made. Ending the
-session removes its container. Not done yet: moving a session into or out
-of a container (Migrate… refuses it). Sign-ins inside the containers are
-oss's (its agent.env and agent-home).
+`oss image <name>` for another image than Visor's visor-agent, `oss
+callback <ws://host:port>` for how a container reaches this server (by
+default this computer's LAN IP at the server's port: a container resolves
+no `.local` names). The image is Visor's (tools/oss/visor-agent, built on
+the oss server: tools/oss/README.md): oss's default is a plain Linux, and
+the agents' sign-ins are the oss server's for that image alone
+(`~/.config/oss/images/visor-agent.env` and `.home/`). A session started
+with `container` (and a `repository`: GitHub's owner/name, or a git URL)
+makes a container (labelled `visor.session`), clones the repository into
+`/root/work/<name>` as a process there whose end it waits for (a failed
+clone is said and the container removed), makes the container's SSH key
+(`~/.ssh/id_ed25519`, which oss's leases are reached with), writes Visor's
+MCP script into its home (`/root/.visor/visor_mcp.js`), and runs Claude or
+Codex there as an oss process (OSSChild): input written in order, output
+read by offset, held open (`output?from=&wait=`). The agent works on
+whatever the Visor server does: a restart or a quit lets go of it and
+writes down its process and offsets (StoredContainerProcess, never a local
+pid), and the next launch reads on from there (`pickUp(_:container:)`).
+Its log is mirrored here from the container (ContainerLogMirror,
+`files?from=&wait=`) and indexed as an agent's own. Visor's tools reach
+this server at VISOR_URL; oss's (`oss mcp`: leasing machines — VMs,
+simulators, emulators — with the container's own scoped token) sit beside
+them in the agent's MCP config. Claude runs with IS_SANDBOX=1 there (it is
+root in the container). oss's token is read when each request is made.
+Ending the session removes its container. Not done yet: moving a session
+into or out of a container (Migrate… refuses it).
 
 ## 4. The working loop
 

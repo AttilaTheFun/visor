@@ -46,8 +46,8 @@ enum AgentChildren {
     static func start(executable: String, arguments: [String], directory: String, environment: [String: String],
                       session: String?, container: ContainerPlacement? = nil) throws -> any AgentChild {
         if let container {
-            return OSSChild.start(server: container.server, token: ContainerPlacement.token, session: container.session,
-                                  command: [executable] + arguments, environment: environment, directory: directory)
+            return OSSChild.start(client: container.client, container: container.container, command: [executable] + arguments,
+                                  environment: environment, directory: directory)
         }
         if detach, let session {
             if let problem = hostProblem() { throw AgentProcessError.spawnFailed(undetachable(problem)) }

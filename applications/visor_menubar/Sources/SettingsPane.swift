@@ -166,7 +166,7 @@ struct SettingsPane: View {
                 SecureField(server.ossTokenKept ? "Token (kept)" : "Token", text: $ossToken)
                     .focused($editing, equals: .ossToken)
                     .onSubmit { apply(.ossToken) }
-                TextField("Image (empty: oss's own)", text: $ossImage)
+                TextField("Image (empty: \(VisorServer.containerImage))", text: $ossImage)
                     .focused($editing, equals: .ossImage)
                     .onSubmit { apply(.ossImage) }
                 TextField("How containers reach this Mac (empty: its LAN address)", text: $ossCallback)

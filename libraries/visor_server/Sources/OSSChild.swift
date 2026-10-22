@@ -5,16 +5,14 @@
 // Its adapter drives it as it would one on the server's own pipes.
 
 import Foundation
+import OSSClient
 
 @MainActor
 final class OSSChild: AgentChild {
-    /// oss's address, and its token as kept when each request is made: a
-    /// token kept after the agent was picked up is the one it is asked with.
-    private let server: String
-    private let token: @MainActor () -> String
-    private var client: OSSClient { OSSClient(server: server, token: token()) }
-    /// oss's session: the container the agent runs in.
-    let session: String
+    /// oss, asked with its token as kept when each request is made.
+    private let client: OSSClient
+    /// The container the agent runs in.
+    let container: String
     /// The agent's process there, once started.
     private(set) var process: String?
     let output: AsyncStream<Data>
@@ -38,10 +36,9 @@ final class OSSChild: AgentChild {
     private var writing: Task<Void, Never>?
     private var readers: [Task<Void, Never>] = []
 
-    private init(server: String, token: @escaping @MainActor () -> String, session: String) {
-        self.server = server
-        self.token = token
-        self.session = session
+    private init(client: OSSClient, container: String) {
+        self.client = client
+        self.container = container
         (output, said) = AsyncStream.makeStream()
         (errors, erred) = AsyncStream.makeStream()
         (notices, noticed) = AsyncStream.makeStream()
@@ -53,17 +50,15 @@ final class OSSChild: AgentChild {
         }
     }
 
-    /// Starts `command` in the session's container, in `directory`, with
+    /// Starts `command` in the container, in `directory`, with
     /// `environment`; what is written before it has started waits for it,
     /// and a start that fails is said and ends it.
-    static func start(server: String, token: @escaping @MainActor () -> String, session: String, command: [String],
-                      environment: [String: String], directory: String) -> OSSChild {
-        let child = OSSChild(server: server, token: token, session: session)
-        let client = child.client
+    static func start(client: OSSClient, container: String, command: [String], environment: [String: String], directory: String) -> OSSChild {
+        let child = OSSChild(client: client, container: container)
         child.started = Task { [weak child] in
             do {
-                let started = try await client.startProcess(session, command: command, environment: environment, directory: directory)
-                child?.begin(process: started.id, pid: started.pid)
+                let started = try await client.startProcess(container, ProcessRequest(command: command, environment: environment, directory: directory))
+                child?.begin(process: started.id, pid: started.pid ?? 0)
                 return started.id
             } catch {
                 child?.fail("Error: the agent could not be started in its container: \(error.localizedDescription)")
@@ -75,8 +70,8 @@ final class OSSChild: AgentChild {
 
     /// The agent an earlier server left running in the container, read on
     /// from where that server left off.
-    static func attach(server: String, token: @escaping @MainActor () -> String, session: String, process: String, out: Int, err: Int) -> OSSChild {
-        let child = OSSChild(server: server, token: token, session: session)
+    static func attach(client: OSSClient, container: String, process: String, out: Int, err: Int) -> OSSChild {
+        let child = OSSChild(client: client, container: container)
         child.outOffset = out
         child.errOffset = err
         child.started = Task { process }
@@ -87,37 +82,37 @@ final class OSSChild: AgentChild {
     private func begin(process: String, pid: Int32) {
         self.process = process
         self.pid = pid
-        readers = [Task { [weak self] in await self?.follow("out", process: process) },
-                   Task { [weak self] in await self?.follow("err", process: process) }]
+        readers = [Task { [weak self] in await self?.follow(.output, process: process) },
+                   Task { [weak self] in await self?.follow(.errors, process: process) }]
     }
 
     /// One of its streams, as it comes; the output's end is the agent's.
     /// oss out of reach is asked again, less often the longer it is: the
     /// agent works on there meanwhile.
-    private func follow(_ stream: String, process: String) async {
+    private func follow(_ stream: OSSClient.Stream, process: String) async {
         var failures = 0
         while !Task.isCancelled {
             do {
-                let from = stream == "out" ? outOffset : errOffset
-                let got = try await client.output(session, process: process, stream: stream, from: from, wait: OSSClient.longestWait)
+                let from = stream == .output ? outOffset : errOffset
+                let got = try await client.output(container, process, stream: stream, from: from, wait: OSSClient.longestWait)
                 failures = 0
                 if !got.data.isEmpty {
-                    if stream == "out" {
-                        outOffset = got.next
+                    if stream == .output {
+                        outOffset = got.offset
                         said.yield(got.data)
                     } else {
-                        errOffset = got.next
+                        errOffset = got.offset
                         erred.yield(got.data)
                     }
                 }
-                guard got.state == "running" || !got.data.isEmpty else {
-                    if stream == "out" { ended(AgentExit(status: Int32(got.status ?? -1), signaled: got.state == "lost")) } else { erred.finish() }
+                guard got.state == .running || !got.data.isEmpty else {
+                    if stream == .output { ended(AgentExit(status: got.status ?? -1, signaled: got.state == .lost)) } else { erred.finish() }
                     return
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 failures += 1
-                if failures == 3, stream == "out" { noticed.yield("oss can't be reached: the agent works on in its container, and is heard from again once oss answers.") }
+                if failures == 3, stream == .output { noticed.yield("oss can't be reached: the agent works on in its container, and is heard from again once oss answers.") }
                 try? await Task.sleep(for: .seconds(min(30, 2 * failures)))
             }
         }
@@ -149,12 +144,12 @@ final class OSSChild: AgentChild {
     func closeInput() { send(Data(), close: true) }
 
     private func send(_ data: Data, close: Bool) {
-        let previous = writing, started = started, client = client, session = session
+        let previous = writing, started = started, client = client, container = container
         writing = Task { [weak self] in
             await previous?.value
             guard let process = await started?.value else { return }
             do {
-                try await client.input(session, process: process, data: data, close: close)
+                try await client.input(container, process, data, close: close)
             } catch {
                 self?.erred.yield(Data("Error: what was written to the agent did not reach it: \(error.localizedDescription)\n".utf8))
             }
@@ -189,6 +184,6 @@ final class OSSChild: AgentChild {
 
     private func signal(_ name: String) async {
         guard let process = await started?.value else { return }
-        try? await client.signal(session, process: process, name)
+        _ = try? await client.signal(container, process, name)
     }
 }

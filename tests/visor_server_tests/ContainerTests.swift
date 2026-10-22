@@ -6,6 +6,7 @@
 // this computer's), and says so on the wire. oss is a fake here.
 
 import Foundation
+import OSSClient
 import Synchronization
 import VisorProtocol
 @testable import VisorServer
@@ -31,23 +32,22 @@ final class FakeOSS: HTTPFetching {
 
     func fetch(_ request: OutgoingRequest) async throws -> OutgoingRequest.Answer {
         asked.withLock { $0.append(request) }
-        let path = request.url.replacingOccurrences(of: "http://oss.test:7480", with: "")
+        let url = URLComponents(string: request.url)
+        let path = url?.path ?? ""
+        let query = Dictionary((url?.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { _, last in last })
         switch (request.method, path) {
-        case ("POST", "/v1/agents"):
-            return .init(status: 201, body: Data(#"{"id":"c1"}"#.utf8))
-        case ("POST", "/v1/agents/c1/processes"):
-            return .init(status: 201, body: Data(#"{"id":"p1","pid":42,"state":"running"}"#.utf8))
-        case let ("GET", path) where path.hasPrefix("/v1/agents/c1/processes/p1/output?stream=out&from="):
-            let from = Int(path.split(separator: "=")[2].split(separator: "&")[0]) ?? 0
-            let rest = from < output.count ? output.dropFirst(from) : Data()
+        case ("POST", "/v1/containers"):
+            return .init(status: 201, body: Data(#"{"id":"c1","holder":"visor","state":"running","created":"2026-10-22T12:00:00Z","name":"oss-container-c1"}"#.utf8))
+        case ("POST", "/v1/containers/c1/processes"), ("POST", "/v1/containers/c1/processes/p1/signal"):
+            return .init(status: 201, body: Data(#"{"id":"p1","container":"c1","command":[],"started":"2026-10-22T12:00:00Z","state":"running","pid":42,"outputSize":0,"errorSize":0}"#.utf8))
+        case ("GET", "/v1/containers/c1/processes/p1/output"):
+            let from = Int(query["from"] ?? "") ?? 0
+            let stream = query["stream"] == "err" ? errors : output
+            let rest = from < stream.count ? stream.dropFirst(from) : Data()
             // Held open a moment while there is nothing new, as oss holds it.
             if rest.isEmpty, !ends { try await Task.sleep(for: .milliseconds(50)) }
             return .init(status: 200, body: Data(rest),
-                         headers: ["oss-offset": String(output.count), "oss-state": rest.isEmpty && ends ? "exited" : "running", "oss-status": "0"])
-        case let ("GET", path) where path.hasPrefix("/v1/agents/c1/processes/p1/output?stream=err&from="):
-            let from = Int(path.split(separator: "=")[2].split(separator: "&")[0]) ?? 0
-            let rest = from < errors.count ? errors.dropFirst(from) : Data()
-            return .init(status: 200, body: Data(rest), headers: ["oss-offset": String(errors.count), "oss-state": "exited", "oss-status": String(status)])
+                         headers: ["oss-offset": String(stream.count), "oss-state": rest.isEmpty && ends ? "exited" : "running", "oss-status": String(status)])
         default:
             return .init(status: 200, body: Data("{}".utf8))
         }
@@ -70,12 +70,12 @@ final class ContainerTests: ServerTestCase {
         ServerPlatform.current.fetching = fetching
     }
 
-    private let client = OSSClient(server: "http://oss.test:7480", token: "secret")
+    private let client = OSSClient(server: URL(string: "http://oss.test:7480")!, token: "secret", transport: PlatformOSSTransport())
 
     func testTheAgentsInputGoesInOrderAndItsOutputIsReadToItsEnd() async throws {
         let oss = FakeOSS(output: Data("{\"type\":\"result\"}\n".utf8))
         ServerPlatform.current.fetching = oss
-        let child = OSSChild.start(server: client.server, token: { "secret" }, session: "c1", command: ["claude", "-p"],
+        let child = OSSChild.start(client: client, container: "c1", command: ["claude", "-p"],
                                    environment: ["VISOR_SESSION": "s"], directory: "/root/work/visor")
         child.write(["n": 1])
         child.write(["n": 2])
@@ -99,7 +99,7 @@ final class ContainerTests: ServerTestCase {
     }
 
     func testAnAgentInAContainerHasVisorsToolsAndOssesWhereItCanReachThem() throws {
-        let placement = ContainerPlacement(server: "http://oss.test:7480", session: "c1", serverURL: "ws://192.168.4.52:7433")
+        let placement = try XCTUnwrap(ContainerPlacement(server: "http://oss.test:7480", container: "c1", serverURL: "ws://192.168.4.52:7433"))
         let config = try XCTUnwrap(VisorMCP.claudeConfig(["VISOR_SESSION": "s", "VISOR_TOKEN": "t"], approvals: true, container: placement))
         let servers = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(config.utf8)) as? [String: Any])?["mcpServers"] as? [String: Any])
         let visor = try XCTUnwrap(servers["visor"] as? [String: Any])
@@ -134,18 +134,19 @@ final class ContainerTests: ServerTestCase {
                                     from: nil) { done.resume(with: $0.mapError { $0 as Error }) }
         }
         XCTAssertEqual(made.info.cwd, "/root/work/visor")
-        XCTAssertEqual(made.info.container, SessionContainer(server: "http://oss.test:7480", id: "c1", repository: "AttilaTheFun/visor"))
+        XCTAssertEqual(made.info.container, SessionContainer(server: "http://oss.test:7480", id: "c1", repository: "AttilaTheFun/visor", image: "visor-agent"))
         XCTAssertEqual(made.info.title, "Claude Code in visor")
-        let asked = try XCTUnwrap(oss.requests("POST", containing: "/v1/agents").first)
+        let asked = try XCTUnwrap(oss.requests("POST", containing: "/v1/containers").first { $0.url.hasSuffix("/v1/containers") })
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: asked.body) as? [String: Any])
-        XCTAssertNil(body["repository"], "cloned by the server, which waits for the clone, not by oss on its own")
-        XCTAssertEqual(body["launch"] as? Bool, false)
-        let cloned = try XCTUnwrap(oss.requests("POST", containing: "/processes").first)
-        let clone = try XCTUnwrap(JSONSerialization.jsonObject(with: cloned.body) as? [String: Any])
-        XCTAssertEqual(clone["command"] as? [String], ["git", "clone", "-q", "https://github.com/AttilaTheFun/visor.git", "/root/work/visor"])
+        XCTAssertEqual(body["image"] as? String, "visor-agent", "Visor's own image, with the agents in it")
+        XCTAssertEqual(body["holder"] as? String, "visor")
+        let commands = try oss.requests("POST", containing: "/processes").filter { $0.url.hasSuffix("/processes") }
+            .map { try XCTUnwrap(JSONSerialization.jsonObject(with: $0.body) as? [String: Any])["command"] as? [String] }
+        XCTAssertEqual(commands.first, ["git", "clone", "-q", "https://github.com/AttilaTheFun/visor.git", "/root/work/visor"])
+        XCTAssertTrue(commands.last??.last?.contains("ssh-keygen") == true, "its own SSH key, for the machines it leases")
         XCTAssertEqual((body["labels"] as? [String: String])?["visor.session"], "s1")
         let script = try XCTUnwrap(oss.requests("PUT", containing: "/files/").first)
-        XCTAssertTrue(script.url.hasSuffix("/v1/agents/c1/files/.visor/visor_mcp.js"))
+        XCTAssertTrue(script.url.hasSuffix("/v1/containers/c1/files/.visor/visor_mcp.js"))
         XCTAssertEqual(String(decoding: script.body, as: UTF8.self), VisorMCPScript.source)
         // Its agent runs there: a pid there is no process of this computer's.
         XCTAssertNotNil((made.process as? HostableProcess)?.container)
@@ -165,14 +166,35 @@ final class ContainerTests: ServerTestCase {
         defer { server.stop() }
         server.settings.ossServer = "http://oss.test:7480"
         server.setOSSToken("secret")
-        let ended: Result<SessionRecord, OSSClient.Failure> = await withCheckedContinuation { done in
+        let ended: Result<SessionRecord, OSSError> = await withCheckedContinuation { done in
             server.startInContainer(.startInContainer(id: "s2", agent: .codex, title: "", skipPermissions: true, repository: "o/missing"),
                                     from: nil) { done.resume(returning: $0) }
         }
         guard case .failure(let failure) = ended else { return XCTFail("started all the same") }
-        XCTAssertEqual(failure.words, "Cloning https://github.com/o/missing.git failed: fatal: repository 'https://github.com/o/missing.git/' not found")
-        XCTAssertEqual(oss.requests("DELETE", containing: "/v1/agents/c1").count, 1)
+        XCTAssertEqual(failure.message, "Cloning https://github.com/o/missing.git failed: fatal: repository 'https://github.com/o/missing.git/' not found")
+        XCTAssertEqual(oss.requests("DELETE", containing: "/v1/containers/c1").count, 1)
         XCTAssertFalse(server.sessions.contains { $0.info.id == "s2" })
+    }
+
+    /// This computer's agents/<kind>.env (its paths, its git sign-in) is
+    /// for its agents here: one in a container has only Visor's own.
+    func testAnAgentInAContainerHasNoneOfThisComputersEnvironment() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-tests-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("agents"), withIntermediateDirectories: true)
+        try "GIT_AUTHOR_NAME=Here\n".write(to: root.appendingPathComponent("agents/claude.env"), atomically: true, encoding: .utf8)
+        let host = ServerPlatform.current.host
+        defer { ServerPlatform.current.host = host }
+        ServerPlatform.current.host.dataDirectory = root
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7995)
+        defer { server.stop() }
+        var info = SessionInfo(id: "h", agent: .claude, cwd: "/tmp", title: "Here", created: 0)
+        XCTAssertEqual(server.makeProcess(info, resume: nil).approvalEnvironment["GIT_AUTHOR_NAME"], "Here")
+        info.container = SessionContainer(server: "http://oss.test:7480", id: "c1")
+        let contained = server.makeProcess(info, resume: nil).approvalEnvironment
+        XCTAssertNil(contained["GIT_AUTHOR_NAME"])
+        XCTAssertEqual(contained["VISOR_SESSION"], "h")
     }
 
     func testARepositoryIsClonedFromWhereItIsNamed() {
