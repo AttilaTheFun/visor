@@ -25,6 +25,8 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     public var model: String?
     public var effort: String?
     public var approvalEnvironment: [String: String] = [:]
+    /// Where its agent runs when that is a container on oss.
+    var container: ContainerPlacement?
     /// The running agent. One that was stopped is no longer this, and what
     /// it still says is not passed on.
     private var child: (any AgentChild)?
@@ -118,10 +120,11 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     public func resume(at message: String?) { resumeAt = message }
 
     var hostedChild: HostedChild? { running() as? HostedChild }
+    var containerChild: OSSChild? { running() as? OSSChild }
     var carried: [String: String] { [:] }
 
     /// An agent left running by an earlier launch: heard from here on.
-    func adopt(_ child: HostedChild, carried: [String: String]) {
+    func adopt(_ child: any AgentChild, carried: [String: String]) {
         self.child = child
         follow(child)
     }
@@ -175,7 +178,14 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     }
 
     private func spawn() throws -> any AgentChild {
-        guard let executable = ToolPath.resolve(tool) else { throw AgentProcessError.toolMissing(tool) }
+        // In a container: the agent by its name on the container's path.
+        let executable: String
+        if container != nil {
+            executable = tool
+        } else {
+            guard let found = ToolPath.resolve(tool) else { throw AgentProcessError.toolMissing(tool) }
+            executable = found
+        }
         var args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
         // Visor's MCP server: the other sessions, and the permission prompt
         // answered from the client. Claude Code offers its questions to the
@@ -184,10 +194,11 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         // questions come to it; manual, every tool call too. (The
         // OpenRouter CLI has it only in manual mode, as before.)
         let prompt = !skipPermissions || tool == "claude"
-        let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: prompt)
+        let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: prompt, container: container)
         if let mcp { args += ["--mcp-config", mcp] }
         // Manual: edits are accepted, everything else asks the user.
-        let mode = Self.permissionMode(skip: skipPermissions, tool: tool, policy: tool == "claude" ? .current : ClaudeManagedPolicy())
+        // This computer's managed policy is not a container's.
+        let mode = Self.permissionMode(skip: skipPermissions, tool: tool, policy: tool == "claude" && container == nil ? .current : ClaudeManagedPolicy())
         askedMode = mode
         args += ["--permission-mode", mode]
         if mcp != nil, prompt { args += ["--permission-prompt-tool", "mcp__visor__approve"] }
@@ -201,9 +212,10 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         }
         // The agent is told which session it is, so it can name itself
         // when it asks the server to restart (VISOR_SESSION).
-        let environment = ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
-        let child = try AgentChildren.start(executable: executable, arguments: args, directory: HostFolders.resolve(cwd),
-                                            environment: environment, session: approvalEnvironment["VISOR_SESSION"])
+        let environment = container.map { approvalEnvironment.merging(["VISOR_URL": $0.serverURL]) { _, ours in ours } }
+            ?? ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
+        let child = try AgentChildren.start(executable: executable, arguments: args, directory: container == nil ? HostFolders.resolve(cwd) : cwd,
+                                            environment: environment, session: approvalEnvironment["VISOR_SESSION"], container: container)
         self.child = child
         follow(child)
         return child

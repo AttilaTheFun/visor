@@ -23,8 +23,11 @@ struct SettingsPane: View {
     /// The field being edited, so leaving it applies what was typed: an
     /// address that only Return applied was easy to leave unapplied.
     @FocusState private var editing: EditedField?
-    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword, provisioningScript }
-    @State private var provisioningScript = ""
+    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword, ossServer, ossToken, ossImage, ossCallback }
+    @State private var ossServer = ""
+    @State private var ossToken = ""
+    @State private var ossImage = ""
+    @State private var ossCallback = ""
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
@@ -157,20 +160,24 @@ struct SettingsPane: View {
                 Text("Agents")
             }
             Section {
-                ForEach(MachinePlatform.allCases, id: \.self) { platform in
-                    let count = server.settings.maxMachines(platform)
-                    Stepper(value: Binding(get: { count }, set: { server.settings.setMaxMachines(platform, $0) }),
-                            in: 0...(platform.hostLimit ?? 16)) {
-                        LabeledContent(platform.title, value: count == 0 ? "None" : "\(count) at a time")
-                    }
-                }
-                TextField("Provisioning script (empty: Visor's own)", text: $provisioningScript)
-                    .focused($editing, equals: .provisioningScript)
-                    .onSubmit { apply(.provisioningScript) }
-                Text("Agents' sessions in virtual machines on this Mac, each wiped before it is used again: none unless allowed here (macOS allows two per Mac). A provisioning script of your own makes the machines from your own images, network and tools.")
+                TextField("oss server (http://host:7480)", text: $ossServer)
+                    .focused($editing, equals: .ossServer)
+                    .onSubmit { apply(.ossServer) }
+                SecureField(server.ossTokenKept ? "Token (kept)" : "Token", text: $ossToken)
+                    .focused($editing, equals: .ossToken)
+                    .onSubmit { apply(.ossToken) }
+                TextField("Image (empty: oss's own)", text: $ossImage)
+                    .focused($editing, equals: .ossImage)
+                    .onSubmit { apply(.ossImage) }
+                TextField("How containers reach this Mac (empty: its LAN address)", text: $ossCallback)
+                    .focused($editing, equals: .ossCallback)
+                    .onSubmit { apply(.ossCallback) }
+                Text(server.containersAvailable
+                     ? "Sessions can start with their agent in a container on oss, a repository cloned into it, with Visor's tools and oss's for leasing machines (VMs, simulators, emulators). oss hosts the containers."
+                     : "Set an oss server (OS Server) and its token to start sessions with their agent in a container there rather than on this Mac.")
                     .font(.caption).foregroundColor(.secondary)
             } header: {
-                Text("Virtual machines")
+                Text("Containers")
             }
             Section {
                 let current = server.apnsKey
@@ -214,7 +221,9 @@ struct SettingsPane: View {
         .onAppear {
             publicAddress = server.settings.publicAddress
             tlsPath = server.settings.tlsIdentityPath
-            provisioningScript = server.settings.provisioningScript
+            ossServer = server.settings.ossServer
+            ossImage = server.settings.ossImage
+            ossCallback = server.settings.ossCallback
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
@@ -225,7 +234,10 @@ struct SettingsPane: View {
         .onDisappear {
             apply(.publicAddress)
             apply(.tlsPath)
-            apply(.provisioningScript)
+            apply(.ossServer)
+            apply(.ossToken)
+            apply(.ossImage)
+            apply(.ossCallback)
         }
     }
 
@@ -238,9 +250,19 @@ struct SettingsPane: View {
             if server.settings.publicAddress != publicAddress { server.settings.publicAddress = publicAddress }
         case .tlsPath:
             if server.settings.tlsIdentityPath != tlsPath { server.settings.tlsIdentityPath = tlsPath }
-        case .provisioningScript:
-            let path = provisioningScript.trimmingCharacters(in: .whitespaces)
-            if server.settings.provisioningScript != path { server.settings.provisioningScript = path }
+        case .ossServer:
+            let address = ossServer.trimmingCharacters(in: .whitespaces)
+            if server.settings.ossServer != address { server.settings.ossServer = address }
+        case .ossToken:
+            guard !ossToken.isEmpty else { return }
+            server.setOSSToken(ossToken)
+            ossToken = ""
+        case .ossImage:
+            let image = ossImage.trimmingCharacters(in: .whitespaces)
+            if server.settings.ossImage != image { server.settings.ossImage = image }
+        case .ossCallback:
+            let address = ossCallback.trimmingCharacters(in: .whitespaces)
+            if server.settings.ossCallback != address { server.settings.ossCallback = address }
         case .tlsPassword:
             // The identity with its password, as Return always applied them.
             guard !tlsPassword.isEmpty else { return }

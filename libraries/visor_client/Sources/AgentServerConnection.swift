@@ -83,6 +83,9 @@ public final class AgentServerConnection: Identifiable {
     @ObservationIgnored public private(set) var transcripts: [String: SessionTranscript] = [:]
     /// Each provider's models, from the host.
     public internal(set) var catalogs: [AgentCatalog] = []
+    /// The server can start a session whose agent runs in a container on
+    /// its oss, rather than on the computer.
+    public internal(set) var containersAvailable = false
     /// The Visor Server it runs, as it said at sign-in ("0.31 (8)").
     public private(set) var serverVersion: String?
     /// The store saves when the address or credentials change.
@@ -787,7 +790,8 @@ public final class AgentServerConnection: Identifiable {
 
     private func handle(_ event: AgentServerEvent) {
         switch event {
-        case .welcome(let name, let list, let catalogs):
+        case .welcome(let name, let list, let catalogs, let containers):
+            containersAvailable = containers
             note("connected: welcome \(log.since(channelAsked)) ms after the channel was asked for, \(list.count) sessions")
             quiet = false
             state = .connected

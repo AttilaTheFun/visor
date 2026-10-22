@@ -68,6 +68,10 @@ public protocol AgentServer: AnyObject {
     /// Starts a session with the id the client chose. The sessions the
     /// answer names are taken into the list.
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo]
+    /// Starts a session whose agent runs in a container on the server's
+    /// oss, `repository` (owner/name) cloned into it; answered once the
+    /// container is made.
+    func startSessionInContainer(id: String, agent: AgentKind, title: String, skipPermissions: Bool, repository: String?) async throws -> [SessionInfo]
     /// One command on a session; the sessions the answer names are taken
     /// into the list (after `.end`, they replace it).
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo]
@@ -197,6 +201,10 @@ public extension AgentServer {
         return (try await authenticate(record), record.address)
     }
     var starting: SessionStarting { .inFolders }
+
+    func startSessionInContainer(id: String, agent: AgentKind, title: String, skipPermissions: Bool, repository: String?) async throws -> [SessionInfo] {
+        throw AgentServerError.message("This server runs no agents in containers.")
+    }
     func startChoices() async throws -> [StartChoice] { [] }
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool,
                       firstMessage: String) async throws -> SessionInfo {

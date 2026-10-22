@@ -80,6 +80,12 @@ extension VisorServer {
     }
 
     private func performStart(_ envelope: Envelope, from client: ClientConnection?) {
+        // Its agent in a container on oss: made there first.
+        if envelope.container == true {
+            return startInContainer(envelope, from: client) { result in
+                if case .failure(let failure) = result { client?.send(.error(failure.words)) }
+            }
+        }
         guard let agent = envelope.agent else { return }
         let id = envelope.id ?? UUID().uuidString
         let cwd = (envelope.cwd?.isEmpty == false ? envelope.cwd! : "~")
@@ -279,6 +285,8 @@ extension VisorServer {
         guard let record = session(envelope.session) else { return }
         record.process.stop()
         record.markEnded()
+        // Its container goes with it.
+        removeContainer(of: record.info)
         sessions.removeAll { $0 === record }
         dropWaiters(for: record.info.id)
         Self.log("session ended: \(record.info.title)")

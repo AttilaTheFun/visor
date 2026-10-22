@@ -64,6 +64,7 @@ extension VisorServer {
         let asked = Self.requestedResumes()
         var orphans: [(session: String, pid: Int32, resume: String?)] = []
         var hosted: [(record: SessionRecord, host: StoredHost, pid: Int32?, resume: String?)] = []
+        var contained: [(record: SessionRecord, process: StoredContainerProcess)] = []
         for item in stored {
             var info = item.info
             info.busy = false
@@ -84,7 +85,9 @@ extension VisorServer {
             // One left under its host is picked up instead (pickUp).
             if item.host == nil, let pid = item.agentPID { orphans.append((info.id, pid, item.resumeID)) }
             // Running when we went away, so running again now.
-            if item.host == nil, item.interrupted == true, !asked.contains("none"), asked.contains(info.id) || asked.contains("all") {
+            // (One in its container works on there, and is picked up.)
+            if item.host == nil, item.containerProcess == nil, item.interrupted == true, !asked.contains("none"),
+               asked.contains(info.id) || asked.contains("all") {
                 pendingResumes.append(info.id)
             }
             var entries = item.entries
@@ -106,7 +109,11 @@ extension VisorServer {
             let files = item.queuedImages ?? []
             record.queuedImages = info.queued.indices.map { $0 < files.count ? files[$0] : [] }
             record.primePreview()
-            record.held = item.agentPID != nil || item.host != nil
+            record.held = item.agentPID != nil || item.host != nil || item.containerProcess != nil
+            if let process = item.containerProcess {
+                record.leftContainer = process
+                contained.append((record, process))
+            }
             if let host = item.host {
                 record.leftHost = host
                 hosted.append((record, host, item.agentPID, item.resumeID))
@@ -118,6 +125,7 @@ extension VisorServer {
         for left in hosted {
             Task { await pickUp(left.record, host: left.host, agentPID: left.pid, resume: left.resume) }
         }
+        for left in contained { pickUp(left.record, container: left.process) }
         guard !orphans.isEmpty else { return }
         // Until its orphan is gone, what is said to a session waits.
         Task {

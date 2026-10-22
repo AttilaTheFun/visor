@@ -27,6 +27,18 @@ extension VisorServer {
         if request.method == "POST", parts.count == 2, parts[0] == "migration", authorized(request) {
             return routeMigration(parts[1], body: Envelope.decodeBody(request.body), respond: respond)
         }
+        // A session whose agent runs in a container: answered once oss has
+        // made it.
+        if request.method == "POST", parts == ["sessions"], authorized(request), Envelope.decodeBody(request.body).container == true {
+            var e = Envelope.decodeBody(request.body)
+            e.type = "start"
+            return startInContainer(e, from: nil) { result in
+                switch result {
+                case .success(let record): respond(.json(Envelope.sessions([record.info]).encoded()))
+                case .failure(let failure): respond(HTTPResponse(502, Envelope.error(failure.words).encoded()))
+                }
+            }
+        }
         if request.method == "GET", parts.count == 1, parts[0] == "account", authorized(request) {
             guard let agent = Self.query(request.path)["agent"].flatMap(AgentKind.init(wire:)) else {
                 return respond(HTTPResponse(400, "{\"error\":\"agent required\"}"))
@@ -142,6 +154,7 @@ extension VisorServer {
         var e = Envelope.hello(host: hostName, login: "", token: issueToken())
         e.id = id
         e.version = Self.version
+        if containersAvailable { e.container = true }
         if isStandalone {
             // Reached only where the client found it: nothing more to learn.
             e.standalone = true

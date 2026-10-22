@@ -159,6 +159,11 @@ public struct Envelope: Codable, Sendable {
     /// client added it at (a front of its own: an authenticating proxy),
     /// its own addresses not shared, and kept out of the relay.
     public var standalone: Bool?
+    /// `start`: the session's agent runs in a container on the server's
+    /// oss rather than on the computer, with `repository` (owner/name)
+    /// cloned into it. `hello` and `sessions`: the server can start one.
+    public var container: Bool?
+    public var repository: String?
     /// A device's push token, hex (`push`), with its kind ("ios", "macos")
     /// and service ("sandbox", "production").
     public var deviceToken: String?
@@ -214,6 +219,12 @@ extension Envelope {
                              resume: String? = nil) -> Envelope {
         var e = Envelope(type: "start"); e.id = id; e.agent = agent; e.cwd = cwd; e.title = title; e.skipPermissions = skipPermissions
         e.resume = resume; return e
+    }
+    /// A session whose agent runs in a container on the server's oss, with
+    /// `repository` (owner/name, or none) cloned into it.
+    public static func startInContainer(id: String, agent: AgentKind, title: String, skipPermissions: Bool, repository: String?) -> Envelope {
+        var e = Envelope(type: "start"); e.id = id; e.agent = agent; e.title = title; e.skipPermissions = skipPermissions
+        e.container = true; e.repository = repository; return e
     }
     public static func send(session: String, text: String, images: [String] = []) -> Envelope {
         var e = Envelope(type: "send"); e.session = session; e.text = text

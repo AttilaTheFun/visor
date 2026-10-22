@@ -29,17 +29,23 @@ extension SessionRecord {
         stopFollowing()
         followed = id
         let agent = info.agent, cwd = info.cwd, session = info.id
+        // An agent in a container: its log is mirrored here from there, and
+        // the copy is what is read.
+        if let placement = (process as? HostableProcess)?.container {
+            logMirror = ContainerLogMirror.start(agent: agent, id: id, cwd: cwd, session: session, placement: placement)
+        }
+        let mirror = logMirror
         following = Task { [weak self] in
             // Not written yet (the agent announces its id before its first
             // record): looked for again shortly, for as long as a first
             // turn could take.
-            var log = AgentLog.locate(agent: agent, id: id, cwd: cwd)
+            var log = mirror.map(\.located) ?? AgentLog.locate(agent: agent, id: id, cwd: cwd)
             var looks = 0
             while log == nil, looks < 240 {
                 looks += 1
                 try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled else { return }
-                log = AgentLog.locate(agent: agent, id: id, cwd: cwd)
+                log = mirror.map(\.located) ?? AgentLog.locate(agent: agent, id: id, cwd: cwd)
             }
             guard let log, !Task.isCancelled else { return }
             // The cache catches up with the file off the main actor and
@@ -64,6 +70,8 @@ extension SessionRecord {
     func stopFollowing() {
         following?.cancel()
         following = nil
+        logMirror?.stop()
+        logMirror = nil
         indexer = nil
         followed = nil
     }

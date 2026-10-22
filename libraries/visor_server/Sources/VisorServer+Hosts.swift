@@ -44,8 +44,11 @@ extension VisorServer {
         // No more is heard from the hosts, so what is written down is
         // where each next launch picks up; a moment for what is already
         // on its way to be taken.
-        let leaving = sessions.filter { ($0.process as? HostableProcess)?.hostedChild != nil }
-        for record in leaving { (record.process as? HostableProcess)?.hostedChild?.detach() }
+        let leaving = sessions.filter { ($0.process as? HostableProcess)?.hostedChild != nil || ($0.process as? HostableProcess)?.containerChild != nil }
+        for record in leaving {
+            (record.process as? HostableProcess)?.hostedChild?.detach()
+            (record.process as? HostableProcess)?.containerChild?.detach()
+        }
         try? await Task.sleep(for: .milliseconds(200))
         for record in sessions where record.info.busy { record.interrupted = true }
         saveArchive()

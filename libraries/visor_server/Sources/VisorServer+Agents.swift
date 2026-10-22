@@ -20,6 +20,8 @@ extension VisorServer {
         process.effort = info.effort
         process.approvalEnvironment = AgentEnvironmentFile.read(info.agent)
             .merging(["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]) { _, ours in ours }
+        // An agent in a container on oss runs there.
+        (process as? HostableProcess)?.container = placement(for: info)
         return process
     }
 

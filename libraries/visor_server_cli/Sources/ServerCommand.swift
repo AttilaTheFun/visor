@@ -53,14 +53,14 @@ public struct ServerCommand {
                    between computers; `standalone off` (the default)
                    shares them. Also
                    VISOR_STANDALONE=1.
-          machines Shows how many virtual machines of each platform (macos,
-                   linux) the server may run agents' sessions in at once;
-                   `machines <platform> <n>` sets it. None by default
-                   (0 takes a platform off); macOS allows 2 per computer.
-          provisioning
-                   Shows the script that provisions a machine and wraps it
-                   and the agent inside it; `provisioning <path>` sets your
-                   own, `provisioning -` goes back to Visor's.
+          oss      Shows the oss server (OS Server) sessions' agents may run
+                   in containers on; `oss <url> <token file>` sets it and
+                   keeps its token, `oss -` takes it off. oss hosts the
+                   containers, and leases the agents in them machines (VMs,
+                   simulators, emulators). `oss image <name>|-` is the image
+                   they are made from (oss's own by default); `oss callback
+                   <ws://host:port>|-` is how they reach this server (this
+                   computer's LAN address by default).
 
         Options for run and start:
           --port <n>   The port, for the socket and the REST side alike (7433).
@@ -70,7 +70,7 @@ public struct ServerCommand {
           --password <word>          --auth password|none
           --lan on|off  --vpn on|off  --ssh on|off
           --address <url>|-          --standalone on|off
-          --machines <platform>=<n>,…  --provisioning <path>|-
+          --oss <url>|-  --oss-token-file <path>  --oss-image <name>|-
         In its environment:
           VISOR_DETACH_AGENT_HOST=0|1
                        1 (the default): each session's agent runs under
@@ -106,8 +106,7 @@ public struct ServerCommand {
             case "auth": try auth(rest.first)
             case "address": address(rest.first)
             case "standalone": try standalone(rest.first)
-            case "machines": try machines(rest)
-            case "provisioning": try provisioning(rest.first)
+            case "oss": try oss(rest)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")
             }

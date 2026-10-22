@@ -41,9 +41,14 @@ enum AgentChildren {
     }
 
     /// `session` is the Visor session the agent is for: an agent with one is
-    /// hosted, when agents are detached.
+    /// hosted, when agents are detached. With `container`, it runs in that
+    /// container on oss instead, kept there whatever this server does.
     static func start(executable: String, arguments: [String], directory: String, environment: [String: String],
-                      session: String?) throws -> any AgentChild {
+                      session: String?, container: ContainerPlacement? = nil) throws -> any AgentChild {
+        if let container {
+            return OSSChild.start(client: container.client, session: container.session, command: [executable] + arguments,
+                                  environment: environment, directory: directory)
+        }
         if detach, let session {
             if let problem = hostProblem() { throw AgentProcessError.spawnFailed(undetachable(problem)) }
             guard let hosting = ServerPlatform.current.agentHosts else { throw AgentProcessError.spawnFailed(undetachable("this system has no agent host")) }

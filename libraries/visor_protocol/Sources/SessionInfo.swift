@@ -77,6 +77,9 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// Where its agent is: nil from a server of 0.34 or before, whose
     /// agents are only ever restarted.
     public var agentState: AgentState?
+    /// The container its agent runs in, when it runs in one rather than on
+    /// the computer (oss); nil, on the computer.
+    public var container: SessionContainer?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -132,5 +135,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         otherBranch = try c.decodeIfPresent(String.self, forKey: .otherBranch)
         // A state a later build wrote, which this one has not heard of, is none.
         agentState = (try? c.decodeIfPresent(AgentState.self, forKey: .agentState)) ?? nil
+        container = try c.decodeIfPresent(SessionContainer.self, forKey: .container)
     }
 }

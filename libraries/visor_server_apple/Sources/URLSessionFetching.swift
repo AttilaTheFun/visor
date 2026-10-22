@@ -12,6 +12,11 @@ public struct URLSessionFetching: HTTPFetching {
         for (name, value) in request.headers { outgoing.setValue(value, forHTTPHeaderField: name) }
         if !request.body.isEmpty { outgoing.httpBody = request.body }
         let (data, response) = try await URLSession.shared.data(for: outgoing)
-        return OutgoingRequest.Answer(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: data)
+        let http = response as? HTTPURLResponse
+        var headers: [String: String] = [:]
+        for (name, value) in http?.allHeaderFields ?? [:] {
+            if let name = name as? String, let value = value as? String { headers[name.lowercased()] = value }
+        }
+        return OutgoingRequest.Answer(status: http?.statusCode ?? 0, body: data, headers: headers)
     }
 }
