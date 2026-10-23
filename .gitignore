@@ -10,3 +10,6 @@ dist/
 .proof/
 # Python caches of tools/isomer.
 __pycache__/
+
+# Apple's SDKs, packaged for building on Linux (rules_applecross): never checked in.
+/apple-sdks.tar.zst

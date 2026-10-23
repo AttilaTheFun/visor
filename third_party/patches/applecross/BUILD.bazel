@@ -1,0 +1,4 @@
+# rules_applecross's patches to rules_apple and apple_support (its main's
+# patches/, as its MODULE.bazel applies them), repeated here because only the
+# root module's overrides apply.
+exports_files(glob(["*.patch"]))
