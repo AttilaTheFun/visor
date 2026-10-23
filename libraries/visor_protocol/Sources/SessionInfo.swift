@@ -46,6 +46,11 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// was said. A turn in flight is not interrupted for it: the queue is
     /// handed over when the agent next falls idle.
     public var queued: [String] = []
+    /// What the user said that the agent has been handed and has not yet
+    /// written to its log, while it works (Codex compacting its context
+    /// before it writes the message, for minutes): a client shows each as
+    /// the user's row until the transcript carries it.
+    public var delivered: [String] = []
     /// Seconds since 1970.
     public var created: Double
     /// The start of the latest message, for a list of sessions to show
@@ -124,6 +129,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         contextLimit = try c.decodeIfPresent(Int.self, forKey: .contextLimit)
         usage = try c.decodeIfPresent(SessionUsage.self, forKey: .usage)
         queued = try c.decodeIfPresent([String].self, forKey: .queued) ?? []
+        delivered = try c.decodeIfPresent([String].self, forKey: .delivered) ?? []
         created = try c.decodeIfPresent(Double.self, forKey: .created) ?? 0
         preview = try c.decodeIfPresent(String.self, forKey: .preview)
         updated = try c.decodeIfPresent(Double.self, forKey: .updated)

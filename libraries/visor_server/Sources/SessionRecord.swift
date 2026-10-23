@@ -184,6 +184,8 @@ public final class SessionRecord {
         // A session made here, or from a server that keeps no state:
         // running unless put away.
         if info.agentState == nil { self.info.agentState = info.archived ? .stopped : .running }
+        // Nothing is on its way to an agent this launch has not handed it.
+        self.info.delivered = []
         self.process = process
         self.entries = entries
         self.shownPrompts = shownPrompts

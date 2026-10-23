@@ -49,6 +49,7 @@ extension SessionRecord {
             return .status(session: info.id, items: turn.items)
         case .busy(let value):
             info.busy = value
+            noteDelivered()
             // A wake-up that has come and gone with no next one set: the
             // loop is over.
             if !value, let wake = info.loopWake, wake < Date().timeIntervalSince1970 {
