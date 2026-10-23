@@ -94,7 +94,7 @@ use_repo(signing, "visor_signing")
 bazel_dep(name = "isomer", version = "0.38.0")
 git_override(
     module_name = "isomer",
-    commit = "94c358ce4ede20e043cf2b5787cf6237bab639bb",
+    commit = "5dda9034e3583b261f99d0af3849f1449521aada",
     remote = "https://github.com/AttilaTheFun/isomer.git",
 )
 
