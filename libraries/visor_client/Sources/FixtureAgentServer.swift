@@ -85,6 +85,19 @@ final class FixtureAgentServer: AgentServer {
             e.more = true
             return Self.wire(e)
         }
+        if VisorFixture.screen == "torrent", session == VisorFixture.chatSession, (1...40).contains(revision) {
+            // A reply pouring in: four seconds after the chat opens, a row
+            // every quarter second for ten seconds, each after the last.
+            try await Task.sleep(nanoseconds: revision == 1 ? 4_000_000_000 : 250_000_000)
+            let row = TranscriptEntry(id: "torrent-\(revision)", role: .assistant,
+                                      text: "Row \(revision) of the reply: the sync queue drained another batch of offline rows, "
+                                          + "checked each against the server's copy, and moved on to the next.")
+            var e = Envelope.transcript(session: session, entries: [row], streaming: "", activity: nil, busy: false, error: nil)
+            e.after = [revision == 1 ? VisorFixture.transcript.last?.id ?? "" : "torrent-\(revision - 1)"]
+            e.revision = revision + 1
+            e.generation = 1
+            return Self.wire(e)
+        }
         if VisorFixture.screen == "arrivals", session == VisorFixture.chatSession, revision == 1 || revision == 2 {
             // Rows come in as a reply would: two twelve seconds on, one
             // more fourteen seconds after, each after the last there was.
