@@ -28,7 +28,7 @@ let package = Package(
         // containers on an oss server.
         .package(
             url: "https://github.com/AttilaTheFun/oss.git",
-            exact: "0.1.0"
+            exact: "0.2.0"
         ),
     ]
 )

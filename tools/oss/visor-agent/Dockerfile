@@ -13,7 +13,7 @@
 # oss's CLI for Linux, its Swift standard library linked in: the release
 # the Visor server's client is (Package.swift).
 FROM docker.io/library/swift:6.2-noble AS oss
-ARG OSS_REF=v0.1.0
+ARG OSS_REF=v0.2.0
 RUN git clone --depth 1 --branch "${OSS_REF}" https://github.com/AttilaTheFun/oss /src \
  && cd /src && swift build -c release --static-swift-stdlib --product oss && cp .build/release/oss /oss
 
