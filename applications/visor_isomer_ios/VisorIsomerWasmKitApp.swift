@@ -1,7 +1,7 @@
 // Visor as wasm on WasmKit: the client — the same VisorUI screens the web
 // and Android run, under isomer's SwiftUI — compiled to a wasm reactor and
 // interpreted by WasmKit (isomer's WasmKitRuntime) in a native shell, which
-// serves it its services (VisorIsomerServices, shared with the WAMR build)
+// serves it its services (VisorIsomerServices)
 // and draws its tree with real SwiftUI.
 //
 // Two reactors are bundled: one built for wasm32-unknown-wasip1-threads,
@@ -26,7 +26,7 @@ struct VisorIsomerWasmKitApp: App {
         && ProcessInfo.processInfo.environment["ISO_WASMKIT_THREADS"] != "0" ? "visor_threads" : "visor"
 
     init() {
-        // WasmKit, not WasmView's default WAMR. The guest's home is the
+        // WasmKit as the engine. The guest's home is the
         // app's own container, as when the same app runs compiled.
         WasmRuntimeRegistry.register {
             let runtime = WasmKitRuntime()
