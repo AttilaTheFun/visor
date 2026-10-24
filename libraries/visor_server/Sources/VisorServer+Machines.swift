@@ -40,6 +40,27 @@ extension VisorServer {
         Self.secrets.set("ossToken", token.isEmpty ? nil : token)
     }
 
+    /// `GET /oss`: the oss server sessions lease from, and whether its
+    /// token is kept (never the token).
+    func restOSS(_ call: RESTCall) -> HTTPResponse {
+        .json(JSONValue.object(["server": .string(settings.ossServer), "tokenKept": .bool(ossTokenKept)]).encoded())
+    }
+
+    /// `POST /oss {server, token}`: sets the oss server and keeps its token,
+    /// as Settings › Machines does (the server keeps it with its own
+    /// secrets, which it reads without asking); an empty server takes it
+    /// off. What each session leases is asked again.
+    func restSetOSS(_ call: RESTCall) -> HTTPResponse {
+        let body = parseJSON(call.request.body) ?? .object([:])
+        if let server = body["server"].string {
+            settings.ossServer = server.trimmingCharacters(in: .whitespaces)
+            if settings.ossServer.isEmpty { setOSSToken(nil) }
+        }
+        if let token = body["token"].string { setOSSToken(token) }
+        Task { await refreshLeases() }
+        return restOSS(call)
+    }
+
     /// Who holds a session's leases, as oss is told.
     static func leaseHolder(session: String) -> String { "visor:" + session }
 

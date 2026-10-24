@@ -90,6 +90,8 @@ under `/api`.
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript); or `container: true` for a session whose agent runs in a Linux container on the server's computer, which sees `cwd` at the same path (answered once the container is made; 502 with `error` when it could not be) | `sessions` with the new one |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
 | `POST /sessions/<id>/contain` | `container` (true: into a container on its computer; false: out of it) | `sessions` with that one, once its agent has moved; 409 with `error` while it works, or when no container could be made |
+| `GET /oss` | | `server` (the oss server sessions lease machines from) and `tokenKept` (never the token) |
+| `POST /oss` | `server` (empty: none), `token` | as `GET /oss`; the token kept with the server's own secrets, as Settings › Machines keeps it |
 | `GET /machines` | `session=<id>` | `leases`: the machines the session leases from the server's oss, each with `host` (oss's address, resolved) and its forwarded `sshPort`, `sshUser`, `vncPort`, `vncPassword`, `adbPort`, or a simulator's `udid` |
 | `GET /machines/status` | | oss's `server`, its `capacity` (`platform`, `limit`, `leased`) and `bases` (`platform`, `config`) |
 | `POST /machines` | `session`, `platform`, `config`, `minutes`, `wait`, `key` (an SSH public key for the VM) | the lease, leased in the session's name (holder `visor:<session>`) |
