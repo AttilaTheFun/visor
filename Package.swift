@@ -93,8 +93,8 @@ let package = Package(
     name: "visor",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
-    // swift_sql and oss as third_party/swift_packages pins them.
+    // swift_sql and oss at their releases, as third_party/swift_packages pins them.
     dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0"),
-                   .package(url: "https://github.com/AttilaTheFun/oss.git", revision: "e8cfce0285ec03e5ad2755a7bc7c08471fc68b8b")],
+                   .package(url: "https://github.com/AttilaTheFun/oss.git", exact: "0.3.0")],
     targets: clientServices + shared + system + tests
 )
