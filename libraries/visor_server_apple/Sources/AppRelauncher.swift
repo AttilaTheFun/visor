@@ -19,6 +19,8 @@ import VisorServer
 public struct AppRelauncher: ServerLifecycle {
     /// How long a new build has to stay up before it is trusted.
     public static let watch = 120
+    /// How long a new build has to answer the first time while it runs.
+    public static let firstAnswer = 600
 
     public init() {}
 
@@ -96,12 +98,14 @@ public struct AppRelauncher: ServerLifecycle {
         return nil
     }
 
-    /// The shell that watches the opened build for `watch` seconds, and
-    /// undoes the update (or, with nothing to undo, opens it once more) if
-    /// it does not stay up.
+    /// The shell that watches the opened build — up to `firstAnswer`
+    /// seconds for it to answer the first time while it runs (a Mac's first
+    /// run of a new build can wait on the system's checks before any of it
+    /// runs), then `seconds` more — and undoes the update (or, with nothing
+    /// to undo, opens it once more) if it does not stay up.
     @MainActor
     static func watching(destination: String, backup: String?, serving: Bool, newVersion: String, oldVersion: String,
-                         open: String, seconds: Int = watch) -> String {
+                         open: String, seconds: Int = watch, firstAnswer: Int = firstAnswer) -> String {
         let running = "pgrep -f \(quoted(destination + "/Contents/MacOS/")) >/dev/null"
         let answers = "curl -s -o /dev/null -m 3 -w '%{http_code}' http://127.0.0.1:\(Envelope.defaultPort)/api/hello | grep -qv '^000$'"
         let undo: String
@@ -124,11 +128,16 @@ public struct AppRelauncher: ServerLifecycle {
         }
         return """
         sleep 3
-        why=""; served=\(serving ? 0 : 1); i=0
-        while [ $i -lt \(max(1, seconds / 2)) ]; do
+        why=""; served=\(serving ? 0 : 1); i=0; up=0
+        while :; do
           if ! \(running); then why="it quit or crashed"; break; fi
           \(answers) && served=1
-          sleep 2; i=$((i+1))
+          if [ $served = 1 ]; then
+            up=$((up+1)); [ $up -ge \(max(1, seconds / 2)) ] && break
+          else
+            i=$((i+1)); [ $i -ge \(max(1, firstAnswer / 2)) ] && break
+          fi
+          sleep 2
         done
         [ -z "$why" ] && [ $served = 0 ] && why="it never answered on port \(Envelope.defaultPort)"
         if [ -n "$why" ]; then
