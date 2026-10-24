@@ -76,10 +76,17 @@ public struct AppRelauncher: ServerLifecycle {
             }
         }
         let open = "open -a \(Self.quoted(destination)) --args --resume-sessions \(Self.quoted(sessions))"
+        // A build that came as a download (a Taildrop, a browser) carries
+        // the quarantine through its bundle, and its first open waits on
+        // the system's "downloaded from the Internet" question on the Mac's
+        // screen, the server not running meanwhile: lifted, once the system
+        // accepts the build (notarized, Developer ID).
+        let accept = "spctl --assess --type execute \(Self.quoted(destination)) >/dev/null 2>&1 && xattr -rd com.apple.quarantine \(Self.quoted(destination)) 2>/dev/null"
         let script = """
         while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done
         sleep 0.5
-        \(install)\(open)
+        \(install)\(accept)
+        \(open)
         \(Self.watching(destination: destination, backup: backup, serving: VisorServer.shared.listening,
                         newVersion: newVersion, oldVersion: Self.version(of: Bundle.main), open: open))
         """
