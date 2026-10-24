@@ -88,13 +88,13 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-# --- Until isomer 0.38 is released with this one (they go out together),
-# --- isomer's main by its commit; then 0.38.N from the registry, as CI's
-# --- pins check asks of a release.
+# --- Until isomer 0.39 is released with this one (they go out together),
+# --- isomer's main by its commit (onScrollPhaseChange, isomer#15); then
+# --- 0.39.N from the registry, as CI's pins check asks of a release.
 bazel_dep(name = "isomer", version = "0.38.0")
 git_override(
     module_name = "isomer",
-    commit = "5dda9034e3583b261f99d0af3849f1449521aada",
+    commit = "318c9f2f4b9cc531e3ce41ede8f11a1d9337887f",
     remote = "https://github.com/AttilaTheFun/isomer.git",
 )
 
