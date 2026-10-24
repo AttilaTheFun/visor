@@ -58,9 +58,10 @@ struct SessionCardRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            // Only when there is something to show: an empty column would
-            // still take the row's spacing from its words.
-            if SessionPlaceMark.shows(session) || Self.hasActivity(session) {
+            // Where it runs over what happens, when it says where; else what
+            // happens alone, as before (an empty column would take the row's
+            // spacing from its words).
+            if SessionPlaceMark.shows(session) {
                 VStack(alignment: .trailing, spacing: 6) {
                     SessionPlaceMark(session: session)
                         .font(.caption)
@@ -68,15 +69,11 @@ struct SessionCardRow: View {
                         .accessibilityIdentifier("place-" + session.id)
                     activity
                 }
+            } else {
+                activity
             }
         }
         .accessibilityIdentifier("session-" + session.id)
-    }
-
-    /// Something is happening: the agent works, waits to be allowed
-    /// something, or waits on work in the background.
-    static func hasActivity(_ session: SessionInfo) -> Bool {
-        session.busy || session.pendingApproval != nil || !session.background.isEmpty
     }
 
     /// What is happening, under where it runs.
