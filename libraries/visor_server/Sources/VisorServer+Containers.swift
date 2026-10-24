@@ -35,9 +35,11 @@ extension VisorServer {
             problem = "an agent in a container reaches this server over the network: turn on “Reachable from the network”"
         }
         guard problem != containerProblem else { return }
+        let was = containersAvailable
         containerProblem = problem
         Self.log(problem.map { "containers: none (\($0))" } ?? "containers: ready")
-        broadcastSessions()
+        // The clients hear only whether a session can start in one.
+        if containersAvailable != was { broadcastSessions() }
     }
 
     /// How Visor's tools in a container reach this server: the address
