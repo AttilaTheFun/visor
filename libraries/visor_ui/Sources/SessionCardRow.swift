@@ -4,12 +4,12 @@ import SwiftUI
 import VisorClient
 import VisorProtocol
 
-/// A session in the sidebar: its name, the full path of its folder, the first lines of
-/// the latest message, and the machines it leases; at the trailing edge
-/// where its agent runs (a container, or the computer's system), and what
-/// is happening — a spinner while the agent works, a raised hand while it
-/// waits to be allowed something. Whether the computer answers is its
-/// section's.
+/// A session in the sidebar: where its agent runs (a container, or the
+/// computer's system), its name, its goal and loop, and at the end of that
+/// line what is happening — a spinner while the agent works, a raised hand
+/// while it waits to be allowed something; then the full path of its
+/// folder, the first lines of the latest message, and the machines it
+/// leases. Whether the computer answers is its section's.
 @MainActor
 struct SessionCardRow: View {
     let session: SessionInfo
@@ -18,65 +18,63 @@ struct SessionCardRow: View {
     var selected = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Text(session.title.isEmpty ? session.agent.title : session.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                    // Working toward a goal, or looping: marked in the list.
-                    if session.goal != nil {
-                        Image(systemName: "flag.fill").font(.caption).foregroundStyle(mark)
-                            .accessibilityLabel("Working toward a goal")
-                    }
-                    if session.loopWake != nil || session.loopCron != nil {
-                        Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(mark)
-                            .accessibilityLabel("Looping")
-                    }
-                }
-                Text(session.cwd)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(session.preview ?? "No messages yet")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                // Between turns, what the agent is waiting on in the
-                // background: a monitor, a command, an agent of its own.
-                if !session.busy, let waiting = Self.waitingLine(session.background) {
-                    Text(waiting)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .accessibilityIdentifier("waiting-" + session.id)
-                }
-                if !session.leases.isEmpty {
-                    LeaseMarks(leases: session.leases)
-                        .accessibilityIdentifier("leases-" + session.id)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Where it runs over what happens, when it says where; else what
-            // happens alone, as before (an empty column would take the row's
-            // spacing from its words).
-            if SessionPlaceMark.shows(session) {
-                VStack(alignment: .trailing, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
+            // Where it runs, its name, its goal and loop; at the line's end
+            // what is happening.
+            HStack(spacing: 4) {
+                // Only when it says (an empty mark would take the line's
+                // spacing on Isomer).
+                if SessionPlaceMark.shows(session) {
                     SessionPlaceMark(session: session)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("place-" + session.id)
-                    activity
                 }
-            } else {
+                Text(session.title.isEmpty ? session.agent.title : session.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                // Working toward a goal, or looping: marked in the list.
+                if session.goal != nil {
+                    Image(systemName: "flag.fill").font(.caption).foregroundStyle(mark)
+                        .accessibilityLabel("Working toward a goal")
+                }
+                if session.loopWake != nil || session.loopCron != nil {
+                    Image(systemName: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(mark)
+                        .accessibilityLabel("Looping")
+                }
+                Spacer(minLength: 8)
                 activity
             }
+            Text(session.cwd)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text(session.preview ?? "No messages yet")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            // Between turns, what the agent is waiting on in the
+            // background: a monitor, a command, an agent of its own.
+            if !session.busy, let waiting = Self.waitingLine(session.background) {
+                Text(waiting)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("waiting-" + session.id)
+            }
+            if !session.leases.isEmpty {
+                LeaseMarks(leases: session.leases)
+                    .padding(.top, 2)
+                    .accessibilityIdentifier("leases-" + session.id)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("session-" + session.id)
     }
 
-    /// What is happening, under where it runs.
+    /// What is happening: the agent works, waits to be allowed something,
+    /// or waits on work in the background.
     @ViewBuilder private var activity: some View {
         if session.busy {
             // Screenshot tests want the same pixels every run.

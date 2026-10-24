@@ -8,15 +8,15 @@ struct LeaseMarks: View {
     let leases: [SessionLease]
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             ForEach(leases, id: \.id) { lease in
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     Self.mark(lease.platform)
                     Text(Self.name(lease.platform))
                 }
-                .font(.caption2)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
+                .font(.footnote.weight(.medium))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
                 .background(Capsule().fill(Color.secondary.opacity(0.15)))
                 .opacity(lease.state == "ready" ? 1 : 0.5)
                 .accessibilityElement(children: .combine)
