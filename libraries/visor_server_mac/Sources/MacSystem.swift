@@ -35,7 +35,7 @@ public struct MacSystem: CommandLineSystem {
             images: ImageIOMeasuring(),
             files: DispatchFileWatching(),
             tools: MacTools(),
-            host: HostDetails(name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName, dataDirectory: data,
+            host: HostDetails(name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName, system: "macos", dataDirectory: data,
                               addresses: { NetworkAddresses.all().map(\.address) },
                               networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } },
                               localNetworkName: { LocalNetworkName.current() }, resolve: { POSIXResolver.ipv4($0) }),

@@ -185,6 +185,7 @@ extension VisorServer {
             } else {
                 record.info.container = nil
             }
+            record.placed()
             Self.log("session \(into ? "moved into a container" : "moved out of its container"): \(record.info.title) (\(record.info.id))")
             rebuild(record) {
                 if let left { self.removeContainer(left) }

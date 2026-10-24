@@ -87,6 +87,9 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     public var container: SessionContainer?
     /// The machines it leases through the server from the server's oss.
     public var leases: [SessionLease] = []
+    /// The system its agent runs on: "macos", "linux" or "windows" (in a
+    /// container, "linux"); nil from a server of 0.37 or before.
+    public var system: String?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -145,5 +148,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         agentState = (try? c.decodeIfPresent(AgentState.self, forKey: .agentState)) ?? nil
         container = try c.decodeIfPresent(SessionContainer.self, forKey: .container)
         leases = try c.decodeIfPresent([SessionLease].self, forKey: .leases) ?? []
+        system = try c.decodeIfPresent(String.self, forKey: .system)
     }
 }

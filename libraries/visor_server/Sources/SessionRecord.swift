@@ -180,6 +180,7 @@ public final class SessionRecord {
         if info.agentState == nil { self.info.agentState = info.archived ? .stopped : .running }
         // Nothing is on its way to an agent this launch has not handed it.
         self.info.delivered = []
+        self.info.system = Self.system(of: info)
         self.process = process
         self.entries = entries
         self.shownPrompts = shownPrompts
@@ -240,6 +241,15 @@ public final class SessionRecord {
 
     /// The folder the session runs in, after the project moved.
     func setCWD(_ cwd: String) { info.cwd = cwd }
+
+    /// What its agent runs on, for its row: this computer's system, or
+    /// Linux in a container.
+    func placed() { info.system = Self.system(of: info) }
+
+    static func system(of info: SessionInfo) -> String? {
+        let system = info.container != nil ? "linux" : ServerPlatform.current.host.system
+        return system.isEmpty ? nil : system
+    }
 
     /// Swaps in an agent built for the new folder; the transcript stays.
     func replaceProcess(_ replacement: AgentProcess) {

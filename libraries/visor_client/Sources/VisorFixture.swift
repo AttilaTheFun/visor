@@ -56,7 +56,7 @@ public enum VisorFixture {
     static let moviePath = "/Users/visor/Movies/banner.mov"
     static let now: Double = 1_790_000_000
 
-    static var sessions: [SessionInfo] {
+    @MainActor static var sessions: [SessionInfo] {
         func session(_ id: String, _ agent: AgentKind, _ cwd: String, _ title: String, model: String, preview: String,
                      busy: Bool = false, age: Double) -> SessionInfo {
             var info = SessionInfo(id: id, agent: agent, cwd: cwd, title: title, busy: busy, model: model, created: now - age - 3600)
@@ -78,14 +78,29 @@ public enum VisorFixture {
                            model: "sonnet", preview: "Drafted the notes for 2.4 with the three fixes.", age: 7200)
         docs.goal = "The release notes cover every change since 2.3"
         docs.loopCron = "*/30 * * * *"
-        return [
+        var widget = session("fixture-busy", .codex, "/Users/visor/Developer/weather", "Widget layout",
+                             model: "gpt-5.5", preview: "Laying out the medium widget.", busy: true, age: 300)
+        var sessions = [
             chat,
-            session("fixture-busy", .codex, "/Users/visor/Developer/weather", "Widget layout",
-                    model: "gpt-5.5", preview: "Laying out the medium widget.", busy: true, age: 300),
+            widget,
             docs,
             session("fixture-api", .codex, "/Users/visor/Developer/api", "Rate limits",
                     model: "gpt-5.5", preview: "The limiter now allows bursts of 20 per minute.", age: 86_400),
         ]
+        // On the `machines` screen, where each runs and what it leases:
+        // the widget's agent in a container, with a simulator and an
+        // emulator; the rest on the Mac.
+        if screen == "machines" {
+            widget.container = SessionContainer(id: "visor-fixture-busy", image: "visor-agent")
+            widget.leases = [SessionLease(id: "lease-ios", platform: "ios", config: "iphone", state: "ready", expires: now + 3000),
+                             SessionLease(id: "lease-android", platform: "android", config: "phone", state: "creating", expires: now + 3600)]
+            sessions = sessions.map { $0.id == widget.id ? widget : $0 }.map { session in
+                var session = session
+                session.system = session.container == nil ? "macos" : "linux"
+                return session
+            }
+        }
+        return sessions
     }
 
     static var catalogs: [AgentCatalog] {
