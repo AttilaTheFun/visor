@@ -227,6 +227,19 @@ final class ContainerTests: ServerTestCase {
         XCTAssertTrue(answer.body.contains(#""tokenKept":true"#))
     }
 
+    /// A lease's ports are reached at oss's address: an address, not a
+    /// `.local` name, and in a container this computer's LAN address where
+    /// oss is on this computer's loopback (the container's loopback is its
+    /// own).
+    func testALeaseIsReachedWhereTheSessionCanReachIt() {
+        let resolve: (String) -> String? = { $0 == "oss-mac.local" ? "192.168.4.40" : nil }
+        XCTAssertEqual(VisorServer.leaseHost(oss: "127.0.0.1", inContainer: true, lan: "192.168.4.52", resolve: resolve), "192.168.4.52")
+        XCTAssertEqual(VisorServer.leaseHost(oss: "localhost", inContainer: true, lan: "192.168.4.52", resolve: resolve), "192.168.4.52")
+        XCTAssertEqual(VisorServer.leaseHost(oss: "127.0.0.1", inContainer: false, lan: "192.168.4.52", resolve: resolve), "127.0.0.1")
+        XCTAssertEqual(VisorServer.leaseHost(oss: "oss-mac.local", inContainer: true, lan: "192.168.4.52", resolve: resolve), "192.168.4.40")
+        XCTAssertEqual(VisorServer.leaseHost(oss: "oss.example", inContainer: false, lan: nil, resolve: resolve), "oss.example")
+    }
+
     func testAContainerAndLeasesOnTheWire() throws {
         var info = SessionInfo(id: "s", agent: .codex, cwd: "/Users/someone/repo", title: "Codex", created: 0)
         info.container = SessionContainer(id: "visor-s", image: "visor-agent")

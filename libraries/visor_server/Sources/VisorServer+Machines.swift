@@ -124,10 +124,11 @@ extension VisorServer {
         }
         guard let record else { return respond(Self.machinesError(404, "No such session here: \(sessionID.isEmpty ? "(none given)" : sessionID).")) }
         let holder = Self.leaseHolder(session: record.info.id)
+        let inContainer = record.info.container != nil
         Task {
             let answer: HTTPResponse
             do {
-                answer = try await machines(oss, request.method, Array(parts.dropFirst()), body: body, holder: holder)
+                answer = try await machines(oss, request.method, Array(parts.dropFirst()), body: body, holder: holder, inContainer: inContainer)
             } catch let error as OSSError {
                 answer = Self.machinesError(error.status == 0 ? 502 : error.status, "oss: \(error.message)")
             } catch {
@@ -138,12 +139,12 @@ extension VisorServer {
         }
     }
 
-    private func machines(_ oss: OSSClient, _ method: String, _ parts: [String], body: JSONValue, holder: String) async throws -> HTTPResponse {
-        // oss's address as an address: a container resolves no `.local`
-        // names, and an agent in one reaches the lease's ports by it.
+    private func machines(_ oss: OSSClient, _ method: String, _ parts: [String], body: JSONValue, holder: String,
+                          inContainer: Bool) async throws -> HTTPResponse {
         let name = oss.host
         let resolve = ServerPlatform.current.host.resolve
-        let host = await Task.detached { resolve(name) }.value ?? name
+        let lan = ServerPlatform.current.host.networkAddresses().first { $0.kind == .lan }?.address
+        let host = await Task.detached { Self.leaseHost(oss: name, inContainer: inContainer, lan: lan, resolve: resolve) }.value
         switch (method, parts.count, parts.last) {
         case ("GET", 0, _):
             let held = try await oss.leases().filter { $0.holder == holder }
@@ -192,6 +193,17 @@ extension VisorServer {
         default:
             return Self.machinesError(404, "No such request.")
         }
+    }
+
+    /// Where a session reaches a lease's ports (oss's own address, where it
+    /// forwards them): as an address, since a container resolves no
+    /// `.local` names; and, for a session in a container, this computer's
+    /// LAN address in place of a loopback one (oss on this computer, which
+    /// forwards on every address), loopback there being the container's own.
+    nonisolated static func leaseHost(oss: String, inContainer: Bool, lan: String?, resolve: (String) -> String?) -> String {
+        let loopback = oss == "localhost" || oss == "::1" || oss.hasPrefix("127.")
+        if loopback { return inContainer ? (lan ?? oss) : oss }
+        return resolve(oss) ?? oss
     }
 
     /// What oss has: its bases, and how many of each kind are leased.
