@@ -143,6 +143,8 @@ extension VisorServer {
         case ("POST", 1, "push"): restRegisterPushDevice(call)
         case ("POST", 2, "ssh") where parts[1] == "keys": restAuthorizeSSHKey(call)
         case ("POST", 1, "restart"): restRestart(call)
+        case ("GET", 1, "oss"): restOSS(call)
+        case ("POST", 1, "oss"): restSetOSS(call)
         case ("POST", 1, "quit"): restQuit(call)
         case ("POST", 1, "sessions"): restStartSession(call)
         case ("DELETE", 2, "sessions"): restEndSession(call)

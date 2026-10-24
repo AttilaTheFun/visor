@@ -9,6 +9,11 @@ import VisorProtocol
 struct SessionPlaceMark: View {
     let session: SessionInfo
 
+    /// Whether there is a mark to show.
+    static func shows(_ session: SessionInfo) -> Bool {
+        session.container != nil || ["macos", "linux", "windows"].contains(session.system ?? "")
+    }
+
     var body: some View {
         if session.container != nil {
             Image(systemName: "shippingbox").accessibilityLabel("In a container")

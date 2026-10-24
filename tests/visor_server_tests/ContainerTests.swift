@@ -194,6 +194,21 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(containers.removed.withLock { $0 }, ["visor-s3"])
     }
 
+    /// oss is set over the API as Settings sets it: its token kept with the
+    /// server's own secrets, and never said back.
+    func testOSSIsSetOverTheAPI() async {
+        let server = await server(FakeContainers(), port: 7991)
+        defer { server.stop() }
+        var request = HTTPRequest(method: "POST", path: "/api/oss", headers: [:], body: #"{"server":"http://oss.test:7480","token":"secret"}"#)
+        request.trusted = true
+        let answer = server.route(request)
+        XCTAssertEqual(server.settings.ossServer, "http://oss.test:7480")
+        XCTAssertTrue(server.ossTokenKept)
+        XCTAssertEqual(VisorServer.secrets.get("ossToken"), "secret")
+        XCTAssertFalse(answer.body.contains("secret"), "the token is never said back")
+        XCTAssertTrue(answer.body.contains(#""tokenKept":true"#))
+    }
+
     func testAContainerAndLeasesOnTheWire() throws {
         var info = SessionInfo(id: "s", agent: .codex, cwd: "/Users/someone/repo", title: "Codex", created: 0)
         info.container = SessionContainer(id: "visor-s", image: "visor-agent")

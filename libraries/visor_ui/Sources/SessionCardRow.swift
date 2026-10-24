@@ -58,11 +58,18 @@ struct SessionCardRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .trailing, spacing: 6) {
-                SessionPlaceMark(session: session)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("place-" + session.id)
+            // Where it runs over what happens, when it says where; else what
+            // happens alone, as before (an empty column would take the row's
+            // spacing from its words).
+            if SessionPlaceMark.shows(session) {
+                VStack(alignment: .trailing, spacing: 6) {
+                    SessionPlaceMark(session: session)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("place-" + session.id)
+                    activity
+                }
+            } else {
                 activity
             }
         }
