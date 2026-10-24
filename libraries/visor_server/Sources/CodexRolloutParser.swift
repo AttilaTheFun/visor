@@ -44,9 +44,7 @@ final class CodexRolloutParser: LinearLogParser, AgentLogParser {
                         // A goal the user set, paused, resumed or cleared:
                         // the command as they typed it.
                         if let goalText { return .user(text: goalText, images: []) }
-                        // Codex's own context (instructions, environment)
-                        // comes as user messages in angle brackets.
-                        if text.isEmpty || text.hasPrefix("<") { return nil }
+                        if Self.isContext(text) { return nil }
                         return .user(text: text, images: [])
                     case "assistant":
                         guard !text.isEmpty else { return nil }
@@ -159,6 +157,14 @@ final class CodexRolloutParser: LinearLogParser, AgentLogParser {
             return text[status.upperBound...].hasPrefix("paused") ? "/goal pause" : "/goal resume"
         }
         return nil
+    }
+
+    /// Whether a user message in the rollout is Codex's own context, not
+    /// the user's words: its instructions and environment, in angle
+    /// brackets, or the AGENTS.md files it read ("# AGENTS.md instructions
+    /// for <folder>").
+    static func isContext(_ text: String) -> Bool {
+        text.isEmpty || text.hasPrefix("<") || text.hasPrefix("# AGENTS.md instructions for ")
     }
 
     /// The words of a content array (input_text / output_text parts).

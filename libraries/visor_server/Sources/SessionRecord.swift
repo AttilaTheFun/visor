@@ -178,6 +178,9 @@ public final class SessionRecord {
         // A session made here, or from a server that keeps no state:
         // running unless put away.
         if info.agentState == nil { self.info.agentState = info.archived ? .stopped : .running }
+        // Nothing is on its way to an agent this launch has not handed it.
+        self.info.delivered = []
+        self.info.system = Self.system(of: info)
         self.process = process
         self.entries = entries
         self.shownPrompts = shownPrompts
@@ -199,7 +202,7 @@ public final class SessionRecord {
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
         StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
-                      otherBranch: otherBranch, branchKept: branchKept ? true : nil)
+                             otherBranch: otherBranch, branchKept: branchKept ? true : nil)
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or
@@ -238,6 +241,15 @@ public final class SessionRecord {
 
     /// The folder the session runs in, after the project moved.
     func setCWD(_ cwd: String) { info.cwd = cwd }
+
+    /// What its agent runs on, for its row: this computer's system, or
+    /// Linux in a container.
+    func placed() { info.system = Self.system(of: info) }
+
+    static func system(of info: SessionInfo) -> String? {
+        let system = info.container != nil ? "linux" : ServerPlatform.current.host.system
+        return system.isEmpty ? nil : system
+    }
 
     /// Swaps in an agent built for the new folder; the transcript stays.
     func replaceProcess(_ replacement: AgentProcess) {

@@ -27,8 +27,8 @@ _TOP_LEVEL = {
     "//command_line_option:compiler": None,
     "//command_line_option:fission": [],
     "//command_line_option:grte_top": None,
-    # Optimized, whatever the app's mode: an unoptimized reactor overflows
-    # WAMR's interpreter stack (a plain `bazel build` of the app is
+    # Optimized, whatever the app's mode: an unoptimized reactor overflowed
+    # the interpreter's stack (a plain `bazel build` of the app is
     # fastbuild).
     "//command_line_option:compilation_mode": "opt",
 }

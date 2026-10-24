@@ -160,6 +160,7 @@ extension SessionRecord {
     /// Drops the words sent that these rows now carry.
     func settle(in rows: [TranscriptEntry]) {
         unwritten.removeAll { userRows(rows, saying: $0.text) > $0.seen }
+        noteDelivered()
     }
 
     /// Whether a prompt in the file is one this server sent — words it has

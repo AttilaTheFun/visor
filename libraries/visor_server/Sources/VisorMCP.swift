@@ -29,27 +29,41 @@ enum VisorMCP {
     }
 
     /// Node and the script, when both are here and the session has its
-    /// environment (which is how the script reaches the menu bar app).
-    private static func launch(_ environment: [String: String]) -> (node: String, script: String)? {
-        guard !environment.isEmpty, let script, let node = ToolPath.resolve("node") else { return nil }
+    /// environment (which is how the script reaches the menu bar app). In a
+    /// container, the container's node and the script among Visor's tools
+    /// there (ContainerTools).
+    private static func launch(_ environment: [String: String], container: ContainerPlacement?) -> (node: String, script: String)? {
+        guard !environment.isEmpty else { return nil }
+        if container != nil { return ("node", ContainerPlacement.scriptPath) }
+        guard let script, let node = ToolPath.resolve("node") else { return nil }
         return (node, script)
+    }
+
+    /// What the script is given: the session's environment, where this
+    /// server is when the agent is in a container, and whether it offers
+    /// `approve`.
+    private static func scriptEnvironment(_ environment: [String: String], container: ContainerPlacement?, approvals: Bool) -> [String: String] {
+        var env = environment
+        if approvals { env["VISOR_APPROVALS"] = "1" }
+        if let container { env["VISOR_URL"] = container.serverURL }
+        return env
     }
 
     /// Claude's `--mcp-config`: the server as JSON. With `approvals`, the
     /// `approve` tool is offered too, for `--permission-prompt-tool`.
-    static func claudeConfig(_ environment: [String: String], approvals: Bool) -> String? {
-        guard let launch = launch(environment) else { return nil }
-        var env = environment
-        if approvals { env["VISOR_APPROVALS"] = "1" }
-        let config: [String: Any] = ["mcpServers": ["visor": ["command": launch.node, "args": [launch.script], "env": env]]]
-        guard let data = try? JSONSerialization.data(withJSONObject: config) else { return nil }
+    static func claudeConfig(_ environment: [String: String], approvals: Bool, container: ContainerPlacement? = nil) -> String? {
+        guard let launch = launch(environment, container: container) else { return nil }
+        let env = scriptEnvironment(environment, container: container, approvals: approvals)
+        let servers: [String: Any] = ["visor": ["command": launch.node, "args": [launch.script], "env": env]]
+        guard let data = try? JSONSerialization.data(withJSONObject: ["mcpServers": servers]) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
     /// Codex's `-c` overrides that add the server.
-    static func codexArguments(_ environment: [String: String]) -> [String] {
-        guard let launch = launch(environment) else { return [] }
-        let env = environment.sorted { $0.key < $1.key }.map { "\($0.key)=\(toml($0.value))" }.joined(separator: ", ")
+    static func codexArguments(_ environment: [String: String], container: ContainerPlacement? = nil) -> [String] {
+        guard let launch = launch(environment, container: container) else { return [] }
+        let env = scriptEnvironment(environment, container: container, approvals: false).sorted { $0.key < $1.key }
+            .map { "\($0.key)=\(toml($0.value))" }.joined(separator: ", ")
         return ["-c", "mcp_servers.visor.command=\(toml(launch.node))",
                 "-c", "mcp_servers.visor.args=[\(toml(launch.script))]",
                 "-c", "mcp_servers.visor.env={\(env)}"]

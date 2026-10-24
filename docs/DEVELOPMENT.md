@@ -636,42 +636,62 @@ on|off` serves the socket file for SSH clients (Linux; not Windows),
 standalone on` keeps it to itself (see the protocol's network of
 computers); `run` and `start` take the same as options (`--password`,
 `--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`,
-`--machines`, `--provisioning`), for a
+`--oss`, `--oss-token-file`, `--oss-image`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server
 is built and tried in CI (a throwaway session over its WebSocket); it has
 not been run against real agents.
 
-**Virtual machines** (being built). A server may run agents' sessions
-in virtual machines on its own computer, each started with a GitHub
-repository, an agent and a platform (`MachinePlatform`: macOS, with
-Xcode, Bazel and Homebrew; Ubuntu with a desktop, apt, Bazel and git),
-wiped before it is used again. How many of each it may run at once is
-the owner's to set (`ServerSettings.machines`: none unless set; macOS
-two per Mac), in the menu bar app's settings or `visor-server machines
-<platform> <n>`. The machines are made by a provisioning script
-(`ServerSettings.provisioningScript`, `visor-server provisioning
-<path>`; empty for Visor's own), so a company can bring its own images,
-network and tools. Its contract: the server runs `<script> <action>
---platform <macos|linux> --machine <id>`, one action at a time; its
-answer is one JSON object on stdout, its progress on stderr (the
-session's activity), a non-zero exit a failure said in the session.
-`provision` (also `--repository <owner/name>` and `--agent <kind>`; in
-its environment the repository's token, the agent's sign-in, and
-`VISOR_HOST_URL` and `VISOR_MACHINE_TOKEN`, how the wrapper inside
-reaches this server) makes a machine ready, the repository cloned to
-`~/Developer/<repo>` and Visor's wrapper installed, and answers
-`{"machine": id}`; `start` and `stop` boot it (the wrapper starts with
-it and connects out to the server) and shut it down, answering
-`{"state": …}`; `reclaim` wipes it back to its image and returns it to
-the pool; `delete` removes it and its disk; `status` answers the state
-of each machine it knows, for a server that restarts. What it makes is
-kept out of Time Machine (`tmutil addexclusion` on the machines' folder
-and each machine as it is made): machines are wiped and made again,
-never backed up, and must not fill local snapshots. A session in a
-machine has the machine's states (provisioning, starting, running,
-stopping, stopped, reclaimed) and is moved in and out of machines by
-Migrate…, as between computers. Built so far: the settings.
+**Containers.** A session's agent may run in a Linux container on its
+Visor server's own computer rather than on it directly: Apple's container
+on a Mac (`ServerPlatform.containers`, AppleContainers over the
+`container` tool; none elsewhere yet), in VisorServer+Containers.swift.
+The container is made from Visor's image (tools/containers/visor-agent,
+built on each Mac: `container build --tag visor-agent --file
+tools/containers/visor-agent/Dockerfile tools/containers/visor-agent`;
+`visor-server containers image <name>` for another) with every processor
+and the agents' memory limit, and sees: the session's folder at the same
+path (so its files, git and the agent's own log are the Mac's), the
+agent's log folder for that folder (Claude's
+`~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`), Xcode
+read-only at `/Applications/Xcode.app`, and Visor's tools read-only at
+`/opt/visor` (ContainerTools: `visor_mcp.js`, and `visor`). The agents'
+sign-ins for containers are the server's own, never the image's
+(ContainerSignIns: `<data>/containers/agent.env` with
+CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
+`<data>/containers/codex`, mounted at `/root/.codex` with the computer's
+sessions folder in it, signed in once on its own — `container run -it --rm
+--mount type=bind,source=<that folder>,target=/root/.codex visor-agent codex
+login --device-auth` — never a copy of the computer's, since Codex rotates
+its refresh token and the first copy to refresh signs out the other; and
+`<data>/containers/home/`, other files copied into each container's home);
+the container makes its own SSH key.
+The agent runs under its host like any other (HostedChild), as
+`container exec` (started again first if the container stopped), its
+variables in a file only this user reads (`hosts/<session>.env`, never on
+a command line): a restart of the server leaves it working and picks it
+up the native way. A session starts in a container with `container: true`
+and a folder, and moves into or out of one with `contain` (its agent made
+again on the other side, the container it leaves removed; not while it
+works). Ending the session removes its container. An agent in a container
+reaches this server over the network (VISOR_URL: this computer's LAN
+address unless `visor-server containers callback <ws-url>` says
+otherwise), so containers need “Reachable from the network”. Bazel in the
+image keeps its output on the container's own disk and makes no
+convenience links in the mounted repository (/etc/bazel.bazelrc).
+
+**Machines (oss).** Sessions — in containers or not — lease machines
+(macOS, Linux and Windows VMs, iOS simulators, Android emulators) from an
+oss server (OS Server, AttilaTheFun/oss) through their Visor server, which
+holds oss's token (`visor-server oss <url> <token file>`, or the menu bar
+app's Machines) and leases in the session's name (holder
+`visor:<session>`; VisorServer+Machines.swift, with OSSClient through the
+platform's HTTP client). The session asks with `visor machine …`
+(VisorCommandScript, a Node script on the agents' path here and in each
+container); what each session holds is asked of oss every 30 seconds and
+shown with it (`SessionInfo.leases`). SSH, VNC and adb reach a lease at
+oss's address, resolved for the container (which resolves no `.local`
+names), on the ports oss forwards.
 
 ## 4. The working loop
 
@@ -924,7 +944,7 @@ ran on (GitHub's hosted Mac minutes are billed). For each commit
 pushed to a pull request, and each merged to main:
 
     tools/proof.sh            # .proof/: ios-portrait, ios-landscape (+ mac-screenshots with PROOF_MAC=1, on a test VM)
-    cd ~/Developer/releases && bazel run //reviews/harnesses:publish_proof -- \
+    cd ~/Developer/reviews && bazel run //reviews/harnesses:publish_proof -- \
       visor ~/Developer/visor ~/Developer/visor/.proof --pull-request <n>   # main's: no --pull-request
 
 `tools/proof.sh` runs, in each orientation, the fixture's screens and

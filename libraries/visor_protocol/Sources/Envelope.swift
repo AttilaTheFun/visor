@@ -159,6 +159,11 @@ public struct Envelope: Codable, Sendable {
     /// client added it at (a front of its own: an authenticating proxy),
     /// its own addresses not shared, and kept out of the relay.
     public var standalone: Bool?
+    /// `start`: the session's agent runs in a container on the server's
+    /// computer rather than on the computer itself, its folder mounted
+    /// there. `contain`: the session moves into its container (true) or out
+    /// of it (false). `hello` and `sessions`: the server can run one.
+    public var container: Bool?
     /// A device's push token, hex (`push`), with its kind ("ios", "macos")
     /// and service ("sandbox", "production").
     public var deviceToken: String?
@@ -214,6 +219,17 @@ extension Envelope {
                              resume: String? = nil) -> Envelope {
         var e = Envelope(type: "start"); e.id = id; e.agent = agent; e.cwd = cwd; e.title = title; e.skipPermissions = skipPermissions
         e.resume = resume; return e
+    }
+    /// A session whose agent runs in a container on the server's computer,
+    /// working in `cwd` there (mounted in the container at the same path).
+    public static func startInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool) -> Envelope {
+        var e = start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions); e.container = true; return e
+    }
+    /// Moves a session's agent into a container on its computer (`true`) or
+    /// out of it onto the computer itself (`false`): the same folder and
+    /// conversation, its agent started again on the other side.
+    public static func contain(session: String, _ container: Bool) -> Envelope {
+        var e = Envelope(type: "contain"); e.session = session; e.container = container; return e
     }
     public static func send(session: String, text: String, images: [String] = []) -> Envelope {
         var e = Envelope(type: "send"); e.session = session; e.text = text

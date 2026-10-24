@@ -33,6 +33,9 @@ public struct ServerPlatform: Sendable {
     /// Hosts the agents run under, apart from the server; nil where they
     /// are the server's own children.
     public var agentHosts: (any AgentHosting)?
+    /// The Linux containers sessions' agents can run in; nil where there
+    /// are none.
+    public var containers: (any ContainerRunning)?
     /// What the server says it is doing, a line at a time.
     public var log: @Sendable (String) -> Void
 
@@ -40,7 +43,7 @@ public struct ServerPlatform: Sendable {
                 secrets: any SecretStore, fetching: any HTTPFetching, pushSigning: (any PushSigning)?,
                 images: any ImageMeasuring, files: any FileWatching, tools: any ToolLocating, host: HostDetails,
                 lifecycle: any ServerLifecycle, agentHosts: (any AgentHosting)? = nil,
-                log: @escaping @Sendable (String) -> Void) {
+                containers: (any ContainerRunning)? = nil, log: @escaping @Sendable (String) -> Void) {
         self.listening = listening
         self.processes = processes
         self.secrets = secrets
@@ -52,6 +55,7 @@ public struct ServerPlatform: Sendable {
         self.host = host
         self.lifecycle = lifecycle
         self.agentHosts = agentHosts
+        self.containers = containers
         self.log = log
     }
 

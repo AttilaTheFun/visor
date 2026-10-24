@@ -3,6 +3,7 @@
 
 import SwiftUI
 import VisorClient
+import VisorProtocol
 import VisorServices
 import VisorUI
 
@@ -18,7 +19,7 @@ struct VisorApp: App {
     static var bundleVersion: String {
         guard let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return "" }
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        return build.map { "\(short) (\($0))" } ?? short
+        return VersionTitle.of(version: short, build: build)
     }
 
     init() {

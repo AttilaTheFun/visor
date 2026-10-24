@@ -29,6 +29,7 @@ swift_library(
     deps = [
         "//:foundation",
         "//libraries/visor_client",
+        "//libraries/visor_protocol",
         "//libraries/visor_services",
         "//libraries/visor_ui",
     ],

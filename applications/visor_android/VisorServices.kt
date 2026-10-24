@@ -292,7 +292,9 @@ class PreferencesSettings : SettingsBridge {
         val context = HostServices.appContext ?: return ""
         return try {
             val info = context.packageManager.getPackageInfo(context.packageName, 0)
-            "${info.versionName} (${info.longVersionCode})"
+            // MAJOR.MINOR.BUILD, as every app shows it (the versionCode,
+            // MAJOR×1,000,000 + MINOR×1,000 + BUILD, is Android's alone).
+            info.versionName ?: ""
         } catch (error: Exception) {
             ""
         }

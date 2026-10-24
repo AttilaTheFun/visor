@@ -36,7 +36,8 @@ public struct LinuxSystem: CommandLineSystem {
             images: HeaderImageMeasuring(),
             files: PollingFileWatching(),
             tools: LinuxTools(),
-            host: HostDetails(name: ProcessInfo.processInfo.hostName, dataDirectory: data, addresses: { POSIXAddresses.all() }),
+            host: HostDetails(name: ProcessInfo.processInfo.hostName, system: "linux", dataDirectory: data, addresses: { POSIXAddresses.all() },
+                              resolve: { POSIXResolver.ipv4($0) }),
             lifecycle: lifecycle,
             agentHosts: POSIXAgentHosting.beside(executable),
             log: log

@@ -1,5 +1,6 @@
 import Foundation
 import os
+import VisorProtocol
 import VisorServer
 import VisorServerPOSIX
 
@@ -12,7 +13,7 @@ extension ServerPlatform {
     static var bundleVersion: String {
         guard let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return "" }
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        return build.map { "\(short) (\($0))" } ?? short
+        return VersionTitle.of(version: short, build: build)
     }
 
     public static func apple(secrets: any SecretStore = KeychainSecrets()) -> ServerPlatform {
@@ -27,13 +28,18 @@ extension ServerPlatform {
             images: ImageIOMeasuring(),
             files: DispatchFileWatching(),
             tools: MacTools(),
-            host: HostDetails(name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName, version: bundleVersion, dataDirectory: data,
+            host: HostDetails(name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName, system: "macos", version: bundleVersion, dataDirectory: data,
                               addresses: { NetworkAddresses.all().map(\.address) },
-                              networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } }),
+                              networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } },
+                              localNetworkName: { LocalNetworkName.current() }, resolve: { POSIXResolver.ipv4($0) }),
             lifecycle: AppRelauncher(),
             // In the app's bundle, beside its own program.
             agentHosts: POSIXAgentHosting(program: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/visor-agent-host", isDirectory: false).path),
-            log: { line in logger.info("\(line, privacy: .public)") }
+            // Apple's container, where it is installed.
+            containers: AppleContainers(),
+            // At notice, which the system keeps on disk (info is held in
+            // memory only, and gone when it is wanted).
+            log: { line in logger.notice("\(line, privacy: .public)") }
         )
     }
 }

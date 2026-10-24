@@ -116,7 +116,7 @@ The screens and UI tests are the proof of a commit:
 `tools/isomer/ci/publish_proof.py [--commit SHA] [--pull-request N] <run
 dir>…` sends a run's targets (each a `manifest.json` beside its files) to
 the review server through the review tooling's `publish-proof` (a checkout
-at `RELEASES_CHECKOUT`), with the server's Mac from `REVIEW_SERVER_HOST`.
+at `REVIEWS_CHECKOUT`), with the server's Mac from `REVIEW_SERVER_HOST`.
 With `--pull-request` the runs are kept with that pull request's head;
 without, under the version they report.
 

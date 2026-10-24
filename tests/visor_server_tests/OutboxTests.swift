@@ -53,4 +53,29 @@ final class OutboxTests: ServerTestCase {
         XCTAssertNil(older.queuedImages)
         XCTAssertEqual(older.info.queued, ["Look at this"])
     }
+
+    /// A message handed over from the queue is in neither the queue nor the
+    /// thread until the agent's log has it (Codex compacting its context
+    /// first, for minutes): the session says it was delivered meanwhile,
+    /// while the agent works, never an agent's own command.
+    func testWhatTheAgentHasNotWrittenDownIsSaidDelivered() {
+        let r = record()
+        _ = r.apply(.busy(true))
+        r.appendUser("remove the label")
+        r.appendUser("/goal ship it")
+        XCTAssertEqual(r.info.delivered, ["remove the label"])
+        // Written to the log: no longer on its way.
+        _ = r.take(fileRow: TranscriptEntry(id: "user-file-1", role: .user, text: "remove the label"))
+        XCTAssertEqual(r.info.delivered, [])
+        // The turn over: nothing is on its way, whatever was not written.
+        r.appendUser("and the case")
+        XCTAssertEqual(r.info.delivered, ["and the case"])
+        _ = r.apply(.busy(false))
+        XCTAssertEqual(r.info.delivered, [])
+        // Neither kept on disk nor read back from it.
+        _ = r.apply(.busy(true))
+        XCTAssertEqual(r.info.delivered, ["and the case"])
+        let reloaded = SessionRecord(info: r.info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))
+        XCTAssertEqual(reloaded.info.delivered, [])
+    }
 }

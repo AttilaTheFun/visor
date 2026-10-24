@@ -12,12 +12,25 @@ extension SessionRecord {
     func appendUser(_ text: String, images: [String] = []) {
         error = nil
         unwritten.append((text: text, seen: userRows(entries, saying: text)))
+        noteDelivered()
         // The session's summary is the latest thing said, already.
         if let preview = Self.preview(of: TranscriptEntry(id: "", role: .user, text: text)), preview != info.preview {
             info.preview = preview
             info.updated = Date().timeIntervalSince1970
             onInfoChanged?()
         }
+    }
+
+    /// What the agent has been handed and has not written to its log yet,
+    /// while it works, as clients are told it (`delivered`): a message
+    /// that left the queue is otherwise in neither the queue nor the
+    /// thread until the log has it. Not the agent's own commands (`/goal`),
+    /// which its log may never write.
+    func noteDelivered() {
+        let delivered = info.busy ? unwritten.map(\.text).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/") } : []
+        guard delivered != info.delivered else { return }
+        info.delivered = delivered
+        onInfoChanged?()
     }
 
     /// Holds a message, and its files, until the turn ends: behind what

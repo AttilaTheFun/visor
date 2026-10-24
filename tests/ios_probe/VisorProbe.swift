@@ -290,7 +290,7 @@ final class VisorProbe: XCTestCase {
     private func fixtureShots(_ orientation: UIDeviceOrientation) {
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         XCUIDevice.shared.orientation = orientation
-        for screen in ["sessions", "chat", "question", "goal", "inspector", "models", "search", "connect", "new-session", "commands"] {
+        for screen in ["sessions", "machines", "chat", "question", "goal", "inspector", "models", "search", "connect", "new-session", "commands"] {
             let app = XCUIApplication()
             app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", screen]
             app.launch()

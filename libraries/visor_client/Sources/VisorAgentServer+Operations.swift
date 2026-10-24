@@ -39,6 +39,14 @@ extension VisorAgentServer {
         try await call("POST", "/sessions", .start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions, resume: resume)).sessions ?? []
     }
 
+    public func startSessionInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool) async throws -> [SessionInfo] {
+        try await call("POST", "/sessions", .startInContainer(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions)).sessions ?? []
+    }
+
+    public func contain(session: String, into: Bool) async throws -> [SessionInfo] {
+        try await call("POST", "/sessions/\(session)/contain", .contain(session: session, into)).sessions ?? []
+    }
+
     public func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] {
         let base = "/sessions/\(session)"
         let reply: Envelope

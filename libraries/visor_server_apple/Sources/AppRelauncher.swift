@@ -139,11 +139,11 @@ public struct AppRelauncher: ServerLifecycle {
         """
     }
 
-    /// "0.31 (2)", as a bundle names its version.
+    /// "0.38.7" ("0.31 (2)" before 0.38), as a bundle names its version.
     static func version(of bundle: Bundle) -> String {
         let short = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
-        return "\(short) (\(build))"
+        return VersionTitle.of(version: short, build: build)
     }
 
     @MainActor

@@ -158,21 +158,21 @@ jobs:
       - uses: actions/checkout@v4
       - run: tools/released_pins.sh
 
-  # The build number this commit's build takes, and its proof is filed
-  # under: one past the version's highest on the release server, so every
-  # build published is one more, and kept there as the commit's.
+  # The version this commit's build takes, and its proof is filed under:
+  # MAJOR.MINOR.BUILD, BUILD one past the line's highest on the release
+  # server (the plist says MAJOR.MINOR.0), kept there as the commit's.
   number:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 5
     outputs:
-      build: ${{ steps.next.outputs.build }}
+      version: ${{ steps.next.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - id: next
-        run: echo "build=$($PIPELINE_CI number Visor applications/visor_ios/Info.plist)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$($PIPELINE_CI number Visor applications/visor_ios/Info.plist)" >> "$GITHUB_OUTPUT"
         env:
           # The commit itself (a pull request's head, not its merge ref).
           PIPELINE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -191,7 +191,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: $PIPELINE_CI prepare
-      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.build }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist
+      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.version }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist
       - run: tools/build_packages.sh
       - run: $PIPELINE_CI publish Visor dist/packages/*
         env:

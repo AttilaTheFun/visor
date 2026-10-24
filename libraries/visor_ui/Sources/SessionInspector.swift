@@ -66,7 +66,10 @@ struct SessionInspector: View {
                 }
                 SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)
                 if !session.archived {
-                    Section { AgentStateButtons(host: host, session: session) }
+                    Section {
+                        AgentStateButtons(host: host, session: session)
+                        ContainerButton(host: host, session: session)
+                    }
                 }
                 Section {
                     Button("Archive", action: archive)
