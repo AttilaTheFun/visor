@@ -350,18 +350,22 @@ final class VisorProbe: XCTestCase {
         // held a moment before letting go, as when reading back.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
             .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)),
-                   withVelocity: 100, thenHoldForDuration: 1)
+                   withVelocity: 50, thenHoldForDuration: 1)
         Thread.sleep(forTimeInterval: 1.5)
-        let read = ["layout I want for the offline banner", "the sync notes", "Found it.", "Rows now sync in the background"]
-            .lazy.map { app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", $0)).firstMatch }
-            .first { $0.exists && $0.isHittable }
-        let watched = try XCTUnwrap(read, "the thread was pulled back to its end while the rows came in")
+        // The rows that waited for the drag went in below, counted on the
+        // pill: the thread was not taken back to its end.
+        let pill = app.buttons["new-rows-pill"]
+        XCTAssertTrue(pill.exists, "the thread was taken back to its end when the user let go")
+        // Whatever is in view stays put while rows keep coming for seconds
+        // more. (Which rows those are depends on how many had come in when
+        // the drag began, which varies with how long the busy app keeps
+        // the test waiting.)
+        let rows = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Row ' OR label CONTAINS 'Found it.' OR label CONTAINS 'the sync notes'"))
+        let watched = try XCTUnwrap(rows.allElementsBoundByIndex.first { $0.isHittable }, "no row in view")
         let before = watched.frame
-        // Rows keep coming for seconds more: the thread stays put.
         Thread.sleep(forTimeInterval: 3)
         XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "the thread moved under the user while the rows came in")
-        let pill = app.buttons["new-rows-pill"]
-        XCTAssertTrue(pill.waitForExistence(timeout: 10), "no pill for the rows that came in below")
+        XCTAssertTrue(pill.exists, "the pill went while the rows kept coming below")
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         shot(app, "torrent-read-above")
         // The reply over, the pill's tap goes down to its last row.
