@@ -58,15 +58,25 @@ struct SessionCardRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .trailing, spacing: 6) {
-                SessionPlaceMark(session: session)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("place-" + session.id)
-                activity
+            // Only when there is something to show: an empty column would
+            // still take the row's spacing from its words.
+            if SessionPlaceMark.shows(session) || Self.hasActivity(session) {
+                VStack(alignment: .trailing, spacing: 6) {
+                    SessionPlaceMark(session: session)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("place-" + session.id)
+                    activity
+                }
             }
         }
         .accessibilityIdentifier("session-" + session.id)
+    }
+
+    /// Something is happening: the agent works, waits to be allowed
+    /// something, or waits on work in the background.
+    static func hasActivity(_ session: SessionInfo) -> Bool {
+        session.busy || session.pendingApproval != nil || !session.background.isEmpty
     }
 
     /// What is happening, under where it runs.
