@@ -5,16 +5,22 @@ import VisorServer
 /// A Mac's containers: Apple's container (github.com/apple/container), each
 /// a Linux machine of its own, driven through its command-line tool.
 public struct AppleContainers: ContainerRunning {
-    /// The tool, where its installer puts it.
+    /// The tool: where Apple's installer puts it, else where Homebrew does,
+    /// else the first on the path.
     let tool: String
 
-    public init(tool: String = "/usr/local/bin/container") {
-        self.tool = tool
+    public init(tool: String? = nil) {
+        self.tool = tool ?? Self.locate() ?? "/usr/local/bin/container"
+    }
+
+    static func locate(path: String = ProcessInfo.processInfo.environment["PATH"] ?? "") -> String? {
+        let places = ["/usr/local/bin", "/opt/homebrew/bin"] + path.split(separator: ":").map(String.init)
+        return places.map { $0 + "/container" }.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     public func problem() async -> String? {
         guard FileManager.default.isExecutableFile(atPath: tool) else {
-            return "Apple's container is not installed (github.com/apple/container)"
+            return "Apple's container is not installed (github.com/apple/container, or `brew install container`)"
         }
         guard let status = try? await Self.run(tool, ["system", "status"]), status.status == 0 else {
             return "Apple's container is not started (`container system start`)"
