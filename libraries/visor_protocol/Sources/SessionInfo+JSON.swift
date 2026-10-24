@@ -24,6 +24,7 @@ extension SessionInfo {
         if let agentState { o["agentState"] = .string(agentState.rawValue) }
         if let container { o["container"] = container.json }
         if !leases.isEmpty { o["leases"] = .array(leases.map(\.json)) }
+        if let system { o["system"] = .string(system) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -52,6 +53,7 @@ extension SessionInfo {
         agentState = json["agentState"].string.flatMap(AgentState.init(rawValue:))
         container = SessionContainer(json: json["container"])
         leases = json["leases"].array?.compactMap(SessionLease.init(json:)) ?? []
+        system = json["system"].string
         preview = json["preview"].string
         updated = json["updated"].double
     }

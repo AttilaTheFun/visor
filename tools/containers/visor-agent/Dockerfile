@@ -1,8 +1,9 @@
 # Visor's agent image: the Linux a session's agent runs in when it runs in a
 # container on its Visor server's Mac (Apple's container). Claude Code and
 # Codex, with Node (which also runs Visor's MCP script and `visor`), Swift
-# (which Bazel's Swift package rules ask for on Linux), git, ssh, tmux,
-# Python and Bazel (bazelisk). The Visor server makes each session's
+# 6.4.0 (which Bazel's Swift package rules ask for on Linux; the same as
+# rules_applecross builds Apple apps with), git, ssh, tmux, Python, Bazel
+# (bazelisk), and what Isomer's Linux apps link (SDL, GL, GTK, WebKitGTK). The Visor server makes each session's
 # container from it (its `containers image` setting, visor-agent by
 # default). Build it on each Mac whose Visor server runs containers, again
 # to take newer agents:
@@ -14,12 +15,15 @@
 #   <Visor's data>/containers/agent.env   CLAUDE_CODE_OAUTH_TOKEN=… (`claude setup-token`)
 #   <Visor's data>/containers/home/       .codex/auth.json (Codex's ChatGPT sign-in), copied in
 
-FROM docker.io/library/swift:6.3.3-noble
+FROM docker.io/library/swift:6.4.0-noble
 ARG TARGETARCH
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client tmux python3 unzip zip less procps ripgrep bubblewrap \
-      libxml2 libgcc-13-dev lld \
+      libxml2 libgcc-13-dev lld clang pkg-config \
+      libsdl2-dev libsdl2-ttf-dev libcurl4-openssl-dev libgl-dev libegl-dev libglvnd-dev libsqlite3-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
  && rm -rf /var/lib/apt/lists/*
+# Isomer's Linux builds compile their C with clang.
+ENV CC=clang CXX=clang++
 # Node 22, from Node's own image.
 COPY --from=docker.io/library/node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=docker.io/library/node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules

@@ -34,7 +34,7 @@ public struct WindowsSystem: CommandLineSystem {
             images: HeaderImageMeasuring(),
             files: PollingFileWatching(),
             tools: WindowsTools(),
-            host: HostDetails(name: ProcessInfo.processInfo.hostName, dataDirectory: data),
+            host: HostDetails(name: ProcessInfo.processInfo.hostName, system: "windows", dataDirectory: data),
             lifecycle: lifecycle,
             log: log
         )

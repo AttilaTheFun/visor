@@ -29,6 +29,9 @@ public struct AppleContainers: ContainerRunning {
         }
         for (key, value) in spec.labels.sorted(by: { $0.key < $1.key }) { arguments += ["--label", "\(key)=\(value)"] }
         if let cpus = spec.cpus { arguments += ["--cpus", String(cpus)] }
+        // x86_64 Linux programs run in it too, where the Mac has Rosetta
+        // (Android's build tools come for x86_64 alone).
+        if Self.hasRosetta { arguments += ["--rosetta"] }
         if let memory = spec.memory { arguments += ["--memory", "\(max(memory / 1_048_576, 512))M"] }
         arguments += [spec.image, "sleep", "infinity"]
         let made = try await Self.run(tool, arguments)
@@ -63,6 +66,9 @@ public struct AppleContainers: ContainerRunning {
             """
         return ShellCommand("/bin/sh", ["-c", script, "visor-container", tool, name, directory, environmentFile, executable] + arguments)
     }
+
+    /// Rosetta is installed on this Mac.
+    static var hasRosetta: Bool { FileManager.default.fileExists(atPath: "/Library/Apple/usr/libexec/oah/libRosettaRuntime") }
 
     /// Runs the tool to its end: its status, and what it wrote (standard
     /// output and error together).

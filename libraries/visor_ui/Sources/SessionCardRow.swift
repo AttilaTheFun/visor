@@ -5,9 +5,11 @@ import VisorClient
 import VisorProtocol
 
 /// A session in the sidebar: its name, the full path of its folder, the first lines of
-/// the latest message; and at the trailing edge what is happening — a
-/// spinner while the agent works, a raised hand while it waits to be
-/// allowed something. Whether the computer answers is its section's.
+/// the latest message, and the machines it leases; at the trailing edge
+/// where its agent runs (a container, or the computer's system), and what
+/// is happening — a spinner while the agent works, a raised hand while it
+/// waits to be allowed something. Whether the computer answers is its
+/// section's.
 @MainActor
 struct SessionCardRow: View {
     let session: SessionInfo
@@ -50,26 +52,41 @@ struct SessionCardRow: View {
                         .lineLimit(1)
                         .accessibilityIdentifier("waiting-" + session.id)
                 }
+                if !session.leases.isEmpty {
+                    LeaseMarks(leases: session.leases)
+                        .accessibilityIdentifier("leases-" + session.id)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if session.busy {
-                // Screenshot tests want the same pixels every run.
-                if VisorFixture.active {
-                    Image(systemName: "ellipsis.circle.fill").foregroundStyle(.secondary)
-                        .accessibilityLabel("Working")
-                } else {
-                    ProgressView().controlSize(.small)
-                        .accessibilityLabel("Working")
-                }
-            } else if session.pendingApproval != nil {
-                Image(systemName: "hand.raised.fill").foregroundColor(.yellow)
-                    .accessibilityLabel("Waiting for approval")
-            } else if !session.background.isEmpty {
-                Image(systemName: "clock").foregroundStyle(.secondary)
-                    .accessibilityLabel("Waiting on background work")
+            VStack(alignment: .trailing, spacing: 6) {
+                SessionPlaceMark(session: session)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("place-" + session.id)
+                activity
             }
         }
         .accessibilityIdentifier("session-" + session.id)
+    }
+
+    /// What is happening, under where it runs.
+    @ViewBuilder private var activity: some View {
+        if session.busy {
+            // Screenshot tests want the same pixels every run.
+            if VisorFixture.active {
+                Image(systemName: "ellipsis.circle.fill").foregroundStyle(.secondary)
+                    .accessibilityLabel("Working")
+            } else {
+                ProgressView().controlSize(.small)
+                    .accessibilityLabel("Working")
+            }
+        } else if session.pendingApproval != nil {
+            Image(systemName: "hand.raised.fill").foregroundColor(.yellow)
+                .accessibilityLabel("Waiting for approval")
+        } else if !session.background.isEmpty {
+            Image(systemName: "clock").foregroundStyle(.secondary)
+                .accessibilityLabel("Waiting on background work")
+        }
     }
 
     /// The goal's and the loop's marks: the accent, or the words' color on
