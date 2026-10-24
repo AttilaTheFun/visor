@@ -45,6 +45,9 @@ common --incompatible_repo_env_ignores_action_env
 common:linux --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 common:linux --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1
 common:linux --repo_env=BAZEL_DO_NOT_DETECT_SWIFT_TOOLCHAIN=1
+# The SDKs from /Applications/Xcode.app (a Visor container's, mounted from the
+# Mac): a missing one is an error, not a silent turn to an SDK archive.
+common:linux --repo_env=RULES_APPLECROSS_LOCAL_XCODE=1
 # rules_applecross's rules_apple asks where bundling runs: here, on a Mac.
 build:macos --extra_toolchains=@rules_applecross//toolchain:apple_bundling_on_macos
 build:linux --extra_toolchains=@apple_cross_toolchain//:all
