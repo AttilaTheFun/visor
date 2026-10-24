@@ -72,8 +72,12 @@ extension VisorServer {
         var mounts = [ContainerMount(source: folder, target: folder)]
         switch agent {
         case .codex:
+            // Codex's home in the containers (their own sign-in, one for
+            // all: its refreshes go to one file), then the computer's
+            // sessions folder in it, where the session's log is kept.
             let sessions = SessionCatalog.codexRoot().appendingPathComponent("sessions", isDirectory: true)
             try? FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+            mounts.append(ContainerMount(source: ContainerSignIns.codexHome.path, target: "/root/.codex"))
             mounts.append(ContainerMount(source: sessions.path, target: "/root/.codex/sessions"))
         default:
             let name = ClaudeSessionFiles.projectDirectoryName(for: folder)

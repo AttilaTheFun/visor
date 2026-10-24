@@ -13,7 +13,11 @@
 # (read-only, from the server). Its sign-ins live with the Visor server,
 # never in the image (ContainerSignIns):
 #   <Visor's data>/containers/agent.env   CLAUDE_CODE_OAUTH_TOKEN=… (`claude setup-token`)
-#   <Visor's data>/containers/home/       .codex/auth.json (Codex's ChatGPT sign-in), copied in
+#   <Visor's data>/containers/codex/      Codex's home in every container, mounted: its own
+#                                         sign-in, made once (never a copy of the Mac's):
+#     container run -it --rm --mount type=bind,source="<Visor's data>/containers/codex",target=/root/.codex \
+#       visor-agent codex login --device-auth
+#   <Visor's data>/containers/home/       other files, copied into each container's home
 
 FROM docker.io/library/swift:6.4.0-noble
 ARG TARGETARCH

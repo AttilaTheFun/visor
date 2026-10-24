@@ -5,11 +5,26 @@ import Foundation
 /// the Mac's keychain), and never in the image:
 ///
 ///     <data>/containers/agent.env   CLAUDE_CODE_OAUTH_TOKEN=… (`claude setup-token`)
-///     <data>/containers/home/       copied into each container's home when it is
-///                                   made: .codex/auth.json (Codex's ChatGPT sign-in)
+///     <data>/containers/codex/      Codex's home in every container (its
+///                                   sessions folder the computer's): a sign-in of
+///                                   its own, made once in a container
+///                                   (`codex login --device-auth`), never a copy
+///                                   of the computer's: Codex rotates its refresh
+///                                   token, and the first of two copies to
+///                                   refresh signs the other out
+///     <data>/containers/home/       other files copied into each container's
+///                                   home when it is made
 enum ContainerSignIns {
     /// Where they are kept.
     static var folder: URL { ServerPlatform.current.host.dataDirectory.appendingPathComponent("containers", isDirectory: true) }
+
+    /// Codex's home in every container, made (this user's alone) when asked
+    /// for.
+    static var codexHome: URL {
+        let home = folder.appendingPathComponent("codex", isDirectory: true)
+        try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        return home
+    }
 
     /// The variables every agent in a container starts with.
     static func environment() -> [String: String] {

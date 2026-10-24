@@ -113,6 +113,24 @@ final class ContainerTests: ServerTestCase {
         XCTAssertNotNil((made.process as? HostableProcess)?.container)
     }
 
+    /// Codex in a container: the containers' own Codex home (one sign-in for
+    /// all, never a copy of the computer's), the computer's sessions folder
+    /// in it.
+    func testCodexInAContainerHasTheContainersOwnHome() async throws {
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7990)
+        defer { server.stop() }
+        _ = try await start(server, .startInContainer(id: "c1", agent: .codex, cwd: root.appendingPathComponent("work").path, title: "",
+                                                      skipPermissions: true)).get()
+        let mounts = try XCTUnwrap(containers.made.withLock { $0.first }).mounts
+        let home = try XCTUnwrap(mounts.firstIndex { $0.target == "/root/.codex" })
+        let sessions = try XCTUnwrap(mounts.firstIndex { $0.target == "/root/.codex/sessions" })
+        XCTAssertEqual(mounts[home].source, root.appendingPathComponent("containers/codex").path)
+        XCTAssertLessThan(home, sessions, "the home first, the sessions folder in it after")
+        let mode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: mounts[home].source)[.posixPermissions] as? Int)
+        XCTAssertEqual(mode & 0o077, 0, "this user's alone")
+    }
+
     /// A folder that is not on the computer says so, and no container is made.
     func testAMissingFolderSaysSoAndMakesNoContainer() async {
         let containers = FakeContainers()

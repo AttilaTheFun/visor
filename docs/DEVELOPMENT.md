@@ -658,8 +658,14 @@ read-only at `/Applications/Xcode.app`, and Visor's tools read-only at
 `/opt/visor` (ContainerTools: `visor_mcp.js`, and `visor`). The agents'
 sign-ins for containers are the server's own, never the image's
 (ContainerSignIns: `<data>/containers/agent.env` with
-CLAUDE_CODE_OAUTH_TOKEN, and `<data>/containers/home/`, copied into each
-container's home: `.codex/auth.json`); the container makes its own SSH key.
+CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
+`<data>/containers/codex`, mounted at `/root/.codex` with the computer's
+sessions folder in it, signed in once on its own — `container run -it --rm
+--mount type=bind,source=<that folder>,target=/root/.codex visor-agent codex
+login --device-auth` — never a copy of the computer's, since Codex rotates
+its refresh token and the first copy to refresh signs out the other; and
+`<data>/containers/home/`, other files copied into each container's home);
+the container makes its own SSH key.
 The agent runs under its host like any other (HostedChild), as
 `container exec` (started again first if the container stopped), its
 variables in a file only this user reads (`hosts/<session>.env`, never on
