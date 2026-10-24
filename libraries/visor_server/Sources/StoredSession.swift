@@ -30,9 +30,6 @@ struct StoredSession: Codable {
     /// The agent's host, when the agent was left running under one for the
     /// next launch to pick up.
     var host: StoredHost?
-    /// The agent's process in its container, when it was left running
-    /// there (a session whose agent runs on oss).
-    var containerProcess: StoredContainerProcess?
     /// Where the conversation stood in the agent's file (SessionRecord).
     var head: String?
     var leaf: String?
@@ -43,7 +40,6 @@ struct StoredSession: Codable {
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
          interrupted: Bool? = nil, agentPID: Int32? = nil, shownPrompts: [String]? = nil, notice: String? = nil,
          queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil,
-         containerProcess: StoredContainerProcess? = nil,
          head: String? = nil, leaf: String? = nil, otherBranch: String? = nil, branchKept: Bool? = nil) {
         self.info = info
         self.entries = entries
@@ -56,7 +52,6 @@ struct StoredSession: Codable {
         self.queuedImages = queuedImages
         self.reportedUsage = reportedUsage
         self.host = host
-        self.containerProcess = containerProcess
         self.head = head
         self.leaf = leaf
         self.otherBranch = otherBranch
@@ -78,7 +73,6 @@ struct StoredSession: Codable {
         queuedImages = try c.decodeIfPresent([[String]].self, forKey: .queuedImages)
         reportedUsage = try c.decodeIfPresent(SessionUsage.self, forKey: .reportedUsage)
         host = try c.decodeIfPresent(StoredHost.self, forKey: .host)
-        containerProcess = try c.decodeIfPresent(StoredContainerProcess.self, forKey: .containerProcess)
         head = try c.decodeIfPresent(String.self, forKey: .head)
         leaf = try c.decodeIfPresent(String.self, forKey: .leaf)
         otherBranch = try c.decodeIfPresent(String.self, forKey: .otherBranch)

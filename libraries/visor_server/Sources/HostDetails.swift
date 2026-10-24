@@ -19,11 +19,17 @@ public struct HostDetails: Sendable {
     /// it ("Studio-Mac.local"): the same when the network gives it another
     /// address. Nil where the system names none.
     public var localNetworkName: @Sendable () -> String?
+    /// A name's IPv4 address as this computer resolves it, for those who
+    /// cannot (an agent in a container resolves no `.local` names); nil
+    /// where it cannot be.
+    public var resolve: @Sendable (String) -> String?
 
     public init(name: String, version: String = "", dataDirectory: URL, addresses: @escaping @Sendable () -> [String] = { [] },
                 networkAddresses: (@Sendable () -> [NetworkAddress])? = nil,
-                localNetworkName: @escaping @Sendable () -> String? = { nil }) {
+                localNetworkName: @escaping @Sendable () -> String? = { nil },
+                resolve: @escaping @Sendable (String) -> String? = { _ in nil }) {
         self.localNetworkName = localNetworkName
+        self.resolve = resolve
         self.name = name
         self.version = version
         self.dataDirectory = dataDirectory

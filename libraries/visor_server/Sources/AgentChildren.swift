@@ -41,22 +41,46 @@ enum AgentChildren {
     }
 
     /// `session` is the Visor session the agent is for: an agent with one is
-    /// hosted, when agents are detached. With `container`, it runs in that
-    /// container on oss instead, kept there whatever this server does.
+    /// hosted, when agents are detached. With `container`, the agent runs
+    /// in that container (`executable` by its name on the container's
+    /// path), under a host here like any other: its variables, and the
+    /// sign-ins for containers, in a file only this user reads.
     static func start(executable: String, arguments: [String], directory: String, environment: [String: String],
                       session: String?, container: ContainerPlacement? = nil) throws -> any AgentChild {
+        var command = ServerPlatform.current.tools.command(executable, arguments)
+        var environment = environment
+        // Visor's tools on the agent's path here (the `visor` command); a
+        // container's image has them on its own.
+        if container == nil, let tools = ContainerTools.folder {
+            environment["PATH"] = tools.path + (environment["PATH"].map { ":" + $0 } ?? "")
+        }
         if let container {
-            return OSSChild.start(client: container.client, container: container.container, command: [executable] + arguments,
-                                  environment: environment, directory: directory)
+            let file = try writeEnvironment(environment.merging(ContainerSignIns.environment()) { ours, _ in ours },
+                                            for: session ?? container.name)
+            command = container.runtime.command(in: container.name, executable: executable, arguments: arguments, directory: directory,
+                                                environmentFile: file.path)
+            environment = ToolPath.environment()
         }
         if detach, let session {
             if let problem = hostProblem() { throw AgentProcessError.spawnFailed(undetachable(problem)) }
             guard let hosting = ServerPlatform.current.agentHosts else { throw AgentProcessError.spawnFailed(undetachable("this system has no agent host")) }
-            let command = ServerPlatform.current.tools.command(executable, arguments)
             return try HostedChild.start(executable: command.executable, arguments: command.arguments, directory: directory,
                                          environment: environment, session: session, in: folder, memoryLimit: memoryLimit,
                                          hosting: hosting)
         }
-        return try PipedChild(executable: executable, arguments: arguments, directory: directory, environment: environment)
+        return try PipedChild(executable: command.executable, arguments: command.arguments, directory: directory, environment: environment)
+    }
+
+    /// Writes an agent's variables for its container, readable by this
+    /// user alone: the file the container's tool reads them from.
+    private static func writeEnvironment(_ environment: [String: String], for session: String) throws -> URL {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent(session + ".env", isDirectory: false)
+        let lines = environment.filter { !$0.value.contains("\n") }.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)\n" }.joined()
+        guard FileManager.default.createFile(atPath: file.path, contents: Data(lines.utf8), attributes: [.posixPermissions: 0o600]) else {
+            throw AgentProcessError.spawnFailed("Visor could not write the agent's variables for its container to \(file.path)")
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        return file
     }
 }

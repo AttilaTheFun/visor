@@ -25,7 +25,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     public var model: String?
     public var effort: String?
     public var approvalEnvironment: [String: String] = [:]
-    /// Where its agent runs when that is a container on oss.
+    /// Where its agent runs when that is a container here.
     var container: ContainerPlacement?
     /// The running agent. One that was stopped is no longer this, and what
     /// it still says is not passed on.
@@ -120,7 +120,6 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     public func resume(at message: String?) { resumeAt = message }
 
     var hostedChild: HostedChild? { running() as? HostedChild }
-    var containerChild: OSSChild? { running() as? OSSChild }
     var carried: [String: String] { [:] }
 
     /// An agent left running by an earlier launch: heard from here on.
@@ -216,7 +215,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         // bypass permissions as unless told it is in a sandbox (it is).
         let environment = container.map { approvalEnvironment.merging(["VISOR_URL": $0.serverURL, "IS_SANDBOX": "1"]) { _, ours in ours } }
             ?? ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
-        let child = try AgentChildren.start(executable: executable, arguments: args, directory: container == nil ? HostFolders.resolve(cwd) : cwd,
+        let child = try AgentChildren.start(executable: executable, arguments: args, directory: HostFolders.resolve(cwd),
                                             environment: environment, session: approvalEnvironment["VISOR_SESSION"], container: container)
         self.child = child
         follow(child)

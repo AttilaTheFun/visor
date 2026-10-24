@@ -102,9 +102,6 @@ public final class SessionRecord {
     /// The host an earlier launch left the agent under, until this one
     /// has picked it up or found it gone (VisorServer+Hosts.swift).
     var leftHost: StoredHost?
-    /// The agent an earlier launch left running in its container, until it
-    /// is picked up.
-    var leftContainer: StoredContainerProcess?
 
     /// The agent that ran before this one has been told to go and is not
     /// yet gone: what is said waits, so that two agents never hold the
@@ -134,9 +131,6 @@ public final class SessionRecord {
     /// Finding the file, then hearing what the indexer says of it; the
     /// conversation it is the file of.
     var following: Task<Void, Never>?
-    /// The copy here of its agent's log in its container, kept up with
-    /// while the file is followed.
-    var logMirror: ContainerLogMirror?
     var followed: String?
     /// Whether the cache holds rows before the first one here, and the row
     /// the first one here follows ("" for none; nil when not known).
@@ -206,20 +200,8 @@ public final class SessionRecord {
     var stored: StoredSession {
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
-        // An agent in a container has no pid on this computer: its pid
-        // there is written down as no local process's, which a later
-        // launch would otherwise end as one of ours left behind.
-        let local = containerProcess == nil && info.container == nil
-        return StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: local ? process.processID : nil, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host, containerProcess: containerProcess, head: head, leaf: leaf,
+        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
                              otherBranch: otherBranch, branchKept: branchKept ? true : nil)
-    }
-
-    /// The agent's process in its container as it stands, for the next
-    /// launch to read on from (or the one an earlier launch left, until it
-    /// is picked up).
-    var containerProcess: StoredContainerProcess? {
-        guard let hostable = process as? HostableProcess, let child = hostable.containerChild, let id = child.process else { return leftContainer }
-        return StoredContainerProcess(process: id, out: child.outOffset, err: child.errOffset, carried: hostable.carried)
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or

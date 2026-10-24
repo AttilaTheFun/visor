@@ -83,8 +83,10 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// agents are only ever restarted.
     public var agentState: AgentState?
     /// The container its agent runs in, when it runs in one rather than on
-    /// the computer (oss); nil, on the computer.
+    /// the computer itself; nil, on the computer.
     public var container: SessionContainer?
+    /// The machines it leases through the server from the server's oss.
+    public var leases: [SessionLease] = []
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -142,5 +144,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         // A state a later build wrote, which this one has not heard of, is none.
         agentState = (try? c.decodeIfPresent(AgentState.self, forKey: .agentState)) ?? nil
         container = try c.decodeIfPresent(SessionContainer.self, forKey: .container)
+        leases = try c.decodeIfPresent([SessionLease].self, forKey: .leases) ?? []
     }
 }

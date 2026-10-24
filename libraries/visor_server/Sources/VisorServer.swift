@@ -208,6 +208,14 @@ public final class VisorServer {
     /// app is restarted against a file it understands.
     var storeIsReadable = true
 
+    /// Why sessions cannot run in containers here, as last found
+    /// (`checkContainers`); nil when they can.
+    var containerProblem: String? = "not looked for yet"
+
+    /// The machines each session leases from oss, as last asked
+    /// (`refreshLeases`): by session id.
+    var leases: [String: [SessionLease]] = [:]
+
     /// The last write of the sessions failed; cleared by the next that works.
     var savingFailed = false
 

@@ -28,8 +28,8 @@ extension VisorServer {
         if request.method == "POST", parts.count == 2, parts[0] == "migration", authorized(request) {
             return routeMigration(parts[1], body: Envelope.decodeBody(request.body), respond: respond)
         }
-        // A session whose agent runs in a container: answered once oss has
-        // made it.
+        // A session whose agent runs in a container: answered once its
+        // container is made.
         if request.method == "POST", parts == ["sessions"], authorized(request), Envelope.decodeBody(request.body).container == true {
             var e = Envelope.decodeBody(request.body)
             e.type = "start"
@@ -39,6 +39,21 @@ extension VisorServer {
                 case .failure(let failure): respond(HTTPResponse(502, Envelope.error(failure.message).encoded()))
                 }
             }
+        }
+        // Into its container or out of it: answered once it has moved.
+        if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "contain", authorized(request) {
+            guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
+            guard let into = Envelope.decodeBody(request.body).container else { return respond(HTTPResponse(400, "{\"error\":\"container?\"}")) }
+            return contain(record, into: into) { result in
+                switch result {
+                case .success: respond(.json(Envelope.sessions([record.info]).encoded()))
+                case .failure(let failure): respond(HTTPResponse(409, Envelope.error(failure.message).encoded()))
+                }
+            }
+        }
+        // The machines a session leases from oss, through this server.
+        if parts.first == "machines", authorized(request) {
+            return answerMachines(request, parts: parts, respond: respond)
         }
         if request.method == "GET", parts.count == 1, parts[0] == "account", authorized(request) {
             guard let agent = Self.query(request.path)["agent"].flatMap(AgentKind.init(wire:)) else {

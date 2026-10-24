@@ -31,10 +31,12 @@ extension ServerPlatform {
             host: HostDetails(name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName, version: bundleVersion, dataDirectory: data,
                               addresses: { NetworkAddresses.all().map(\.address) },
                               networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } },
-                              localNetworkName: { LocalNetworkName.current() }),
+                              localNetworkName: { LocalNetworkName.current() }, resolve: { POSIXResolver.ipv4($0) }),
             lifecycle: AppRelauncher(),
             // In the app's bundle, beside its own program.
             agentHosts: POSIXAgentHosting(program: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/visor-agent-host", isDirectory: false).path),
+            // Apple's container, where it is installed.
+            containers: AppleContainers(),
             // At notice, which the system keeps on disk (info is held in
             // memory only, and gone when it is wanted).
             log: { line in logger.notice("\(line, privacy: .public)") }

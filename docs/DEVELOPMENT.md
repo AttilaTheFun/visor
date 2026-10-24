@@ -642,39 +642,50 @@ server set up wholly by its command line; it serves no TLS
 is built and tried in CI (a throwaway session over its WebSocket); it has
 not been run against real agents.
 
-**Containers (oss).** A session's agent may run in a container on an
-oss server (OS Server, AttilaTheFun/oss) rather than on the computer:
-oss hosts the containers (an Apple container on a Mac); the server drives
-them over oss's API (`/v1/containers`) with oss's own client, OSSClient
-(the oss package by version, its requests through the platform's HTTP
-client: PlatformOSSTransport), in VisorServer+Containers.swift. Set with
-`visor-server oss <url> <token file>` (or the menu bar app's Containers),
-`oss image <name>` for another image than Visor's visor-agent, `oss
-callback <ws://host:port>` for how a container reaches this server (by
-default this computer's LAN IP at the server's port: a container resolves
-no `.local` names). The image is Visor's (tools/oss/visor-agent, built on
-the oss server: tools/oss/README.md): oss's default is a plain Linux, and
-the agents' sign-ins are the oss server's for that image alone
-(`~/.config/oss/images/visor-agent.env` and `.home/`). A session started
-with `container` (and a `repository`: GitHub's owner/name, or a git URL)
-makes a container (labelled `visor.session`), clones the repository into
-`/root/work/<name>` as a process there whose end it waits for (a failed
-clone is said and the container removed), makes the container's SSH key
-(`~/.ssh/id_ed25519`, which oss's leases are reached with), writes Visor's
-MCP script into its home (`/root/.visor/visor_mcp.js`), and runs Claude or
-Codex there as an oss process (OSSChild): input written in order, output
-read by offset, held open (`output?from=&wait=`). The agent works on
-whatever the Visor server does: a restart or a quit lets go of it and
-writes down its process and offsets (StoredContainerProcess, never a local
-pid), and the next launch reads on from there (`pickUp(_:container:)`).
-Its log is mirrored here from the container (ContainerLogMirror,
-`files?from=&wait=`) and indexed as an agent's own. Visor's tools reach
-this server at VISOR_URL; oss's (`oss mcp`: leasing machines — VMs,
-simulators, emulators — with the container's own scoped token) sit beside
-them in the agent's MCP config. Claude runs with IS_SANDBOX=1 there (it is
-root in the container). oss's token is read when each request is made.
-Ending the session removes its container. Not done yet: moving a session
-into or out of a container (Migrate… refuses it).
+**Containers.** A session's agent may run in a Linux container on its
+Visor server's own computer rather than on it directly: Apple's container
+on a Mac (`ServerPlatform.containers`, AppleContainers over the
+`container` tool; none elsewhere yet), in VisorServer+Containers.swift.
+The container is made from Visor's image (tools/containers/visor-agent,
+built on each Mac: `container build --tag visor-agent --file
+tools/containers/visor-agent/Dockerfile tools/containers/visor-agent`;
+`visor-server containers image <name>` for another) with every processor
+and the agents' memory limit, and sees: the session's folder at the same
+path (so its files, git and the agent's own log are the Mac's), the
+agent's log folder for that folder (Claude's
+`~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`), Xcode
+read-only at `/Applications/Xcode.app`, and Visor's tools read-only at
+`/opt/visor` (ContainerTools: `visor_mcp.js`, and `visor`). The agents'
+sign-ins for containers are the server's own, never the image's
+(ContainerSignIns: `<data>/containers/agent.env` with
+CLAUDE_CODE_OAUTH_TOKEN, and `<data>/containers/home/`, copied into each
+container's home: `.codex/auth.json`); the container makes its own SSH key.
+The agent runs under its host like any other (HostedChild), as
+`container exec` (started again first if the container stopped), its
+variables in a file only this user reads (`hosts/<session>.env`, never on
+a command line): a restart of the server leaves it working and picks it
+up the native way. A session starts in a container with `container: true`
+and a folder, and moves into or out of one with `contain` (its agent made
+again on the other side, the container it leaves removed; not while it
+works). Ending the session removes its container. An agent in a container
+reaches this server over the network (VISOR_URL: this computer's LAN
+address unless `visor-server containers callback <ws-url>` says
+otherwise), so containers need “Reachable from the network”. Bazel in the
+image keeps its output on the container's own disk and makes no
+convenience links in the mounted repository (/etc/bazel.bazelrc).
+
+**Machines (oss).** Sessions — in containers or not — lease machines
+(macOS, Linux and Windows VMs, iOS simulators, Android emulators) from an
+oss server (OS Server, AttilaTheFun/oss) through their Visor server, which
+holds oss's token (`visor-server oss <url> <token file>`, or the menu bar
+app's Machines) and leases in the session's name (holder
+`visor:<session>`; VisorServer+Machines.swift, with OSSClient through the
+platform's HTTP client). The session asks with `visor machine …`
+(VisorCommandScript, a Node script on the agents' path here and in each
+container); what each session holds is asked of oss every 30 seconds and
+shown with it (`SessionInfo.leases`). SSH, VNC and adb reach a lease at
+oss's address, resolved for the container (which resolves no `.local`
+names), on the ports oss forwards.
 
 ## 4. The working loop
 

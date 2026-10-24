@@ -65,17 +65,18 @@ public final class HTTPServer {
     }
 
     /// A complete request from the bytes so far, or nil while more is needed.
+    /// Asked again as each piece arrives: nothing but the head is read
+    /// until the body is all there (a large one — an app sent to a leased
+    /// machine — arrives in thousands of pieces).
     nonisolated static func parse(_ data: Data) -> HTTPRequest? {
-        let bytes = [UInt8](data)
-        guard let end = headerEnd(bytes) else { return nil }
-        let head = String(decoding: bytes[..<end], as: UTF8.self)
+        guard let blank = data.range(of: Data([13, 10, 13, 10])) else { return nil }
+        let head = String(decoding: data[data.startIndex..<blank.lowerBound], as: UTF8.self)
         let requestLine = (head.components(separatedBy: "\r\n").first ?? "").split(separator: " ")
         guard requestLine.count >= 2 else { return nil }
         let headers = headers(head)
         let length = Int(headers["content-length"] ?? "0") ?? 0
-        let bodyStart = end + 4
-        guard bytes.count - bodyStart >= length else { return nil }
-        let body = String(decoding: bytes[bodyStart..<(bodyStart + length)], as: UTF8.self)
+        guard data.endIndex - blank.upperBound >= length else { return nil }
+        let body = String(decoding: data[blank.upperBound..<(blank.upperBound + length)], as: UTF8.self)
         return HTTPRequest(method: String(requestLine[0]), path: String(requestLine[1]), headers: headers, body: body)
     }
 

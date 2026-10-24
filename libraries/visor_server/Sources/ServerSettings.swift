@@ -53,24 +53,24 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// server's own children. On unless turned off; VISOR_DETACH_AGENT_HOST
     /// (0 or 1) overrides it (VisorServer.detachesAgents).
     public var detachAgents = true
-    /// The oss server (OS Server) sessions' agents may run in containers
-    /// on, rather than on this computer: its API's address
-    /// ("http://host:7480"); empty for none. Its token is kept with the
-    /// server's secrets ("ossToken"). oss hosts the containers; this server
-    /// drives them.
+    /// The oss server (OS Server) whose machines sessions lease through
+    /// this server (macOS, Linux and Windows VMs, iOS simulators, Android
+    /// emulators): its API's address ("http://host:7480"); empty for none.
+    /// Its token is kept with the server's secrets ("ossToken").
     public var ossServer = ""
-    /// The image oss makes those containers from; empty for oss's own.
-    public var ossImage = ""
+    /// The image sessions' containers are made from; empty for Visor's own
+    /// (`VisorServer.containerImage`).
+    public var containerImage = ""
     /// How an agent in a container reaches this server (Visor's tools for
-    /// it): a ws:// address; empty for this computer's name on its LAN, at
-    /// the server's port.
-    public var ossCallback = ""
+    /// it): a ws:// address; empty for this computer's LAN address, at the
+    /// server's port.
+    public var containerCallback = ""
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             detachAgents, ossServer, ossImage, ossCallback
+             detachAgents, ossServer, containerImage, containerCallback
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -86,8 +86,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         try c.encode(standalone, forKey: .standalone)
         try c.encode(detachAgents, forKey: .detachAgents)
         if !ossServer.isEmpty { try c.encode(ossServer, forKey: .ossServer) }
-        if !ossImage.isEmpty { try c.encode(ossImage, forKey: .ossImage) }
-        if !ossCallback.isEmpty { try c.encode(ossCallback, forKey: .ossCallback) }
+        if !containerImage.isEmpty { try c.encode(containerImage, forKey: .containerImage) }
+        if !containerCallback.isEmpty { try c.encode(containerCallback, forKey: .containerCallback) }
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -113,8 +113,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         authentication = try c.decodeIfPresent(String.self, forKey: .authentication) ?? "password"
         detachAgents = try c.decodeIfPresent(Bool.self, forKey: .detachAgents) ?? true
         ossServer = try c.decodeIfPresent(String.self, forKey: .ossServer) ?? ""
-        ossImage = try c.decodeIfPresent(String.self, forKey: .ossImage) ?? ""
-        ossCallback = try c.decodeIfPresent(String.self, forKey: .ossCallback) ?? ""
+        containerImage = try c.decodeIfPresent(String.self, forKey: .containerImage) ?? ""
+        containerCallback = try c.decodeIfPresent(String.self, forKey: .containerCallback) ?? ""
     }
 
     public func keep(at url: URL) {
