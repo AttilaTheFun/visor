@@ -39,10 +39,9 @@ struct ComposeSessionSheet: View {
     @State private var message = ""
     /// A folder was picked here: the latest project no longer stands in.
     @State private var placePicked = false
-    /// The agent runs in a container on the computer's oss, with this
-    /// repository (owner/name) cloned into it, rather than in a folder.
+    /// The agent runs in a Linux container on the computer, which sees the
+    /// folder, rather than on the computer itself.
     @State private var inContainer = false
-    @State private var repository = ""
 
     /// Only a computer that is answering can start a session.
     private var host: AgentServerConnection? {
@@ -88,7 +87,7 @@ struct ComposeSessionSheet: View {
                         .accessibilityIdentifier("computer")
                     }
                 }
-                // On this computer or in a container on its oss.
+                // On the computer itself, or in a container on it.
                 if let host, host.containersAvailable, !starting.fromChoices {
                     Section {
                         Picker("Runs", selection: $inContainer) {
@@ -99,21 +98,11 @@ struct ComposeSessionSheet: View {
                         .accessibilityIdentifier("where")
                     } footer: {
                         if inContainer {
-                            Text("The agent runs in a container on oss, with Visor's tools and oss's for leasing machines: VMs, simulators, emulators.")
+                            Text("The agent runs in a Linux container on the computer, which sees the project's folder and Xcode, and nothing else of it.")
                         }
                     }
                 }
-                if containerChosen {
-                    Section {
-                        TextField("owner/name", text: $repository)
-                            .autocorrectionDisabled()
-                            .accessibilityIdentifier("repository")
-                    } header: {
-                        Text("Repository")
-                    } footer: {
-                        Text("Cloned into the container, where the agent works. Optional.")
-                    }
-                } else if let host, starting.fromChoices {
+                if let host, starting.fromChoices {
                     Section("Start From") {
                         if host.startChoices.isEmpty {
                             Text("No choices from this server yet.").foregroundColor(.secondary)
@@ -355,8 +344,8 @@ struct ComposeSessionSheet: View {
         Task {
             do {
                 if containerChosen {
-                    let id = try await host.startInContainer(agent: agent, title: title.trimmed, skipPermissions: true,
-                                                             repository: repository.trimmed.isEmpty ? nil : repository.trimmed)
+                    let id = try await host.startInContainer(agent: agent, cwd: place, title: title.trimmed, skipPermissions: true)
+                    host.addProject(place)
                     dismiss()
                     started(host.id, id)
                     return

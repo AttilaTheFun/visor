@@ -35,13 +35,12 @@ public extension AgentServerConnection {
     }
 
     /// Starts a session whose agent runs in a container on the server's
-    /// oss, `repository` (owner/name) cloned into it, and returns its id
-    /// once the server has made it, subscribed; what went wrong is thrown.
+    /// computer, working in `cwd`, and returns its id once the server has
+    /// made it, subscribed; what went wrong is thrown.
     @discardableResult
-    func startInContainer(id: String = AgentServerRecord.newID(), agent: AgentKind, title: String, skipPermissions: Bool,
-                          repository: String?) async throws -> String {
-        let list = try await server.startSessionInContainer(id: id, agent: agent, title: title, skipPermissions: skipPermissions,
-                                                            repository: repository)
+    func startInContainer(id: String = AgentServerRecord.newID(), agent: AgentKind, cwd: String, title: String,
+                          skipPermissions: Bool) async throws -> String {
+        let list = try await server.startSessionInContainer(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions)
         transcript(for: id).loaded = true
         take(list, replacing: false)
         subscribe(id)

@@ -1,23 +1,16 @@
 /// Where a session's agent runs when it is not on the computer itself: a
-/// container that an oss server hosts (an Apple container on a Mac, a
-/// Podman or Docker one on Linux), which the Visor
-/// server drives over oss's API. The agent's folder is the container's
-/// (`SessionInfo.cwd`, under `/root/work`).
+/// Linux container the Visor server runs on its own computer (Apple's
+/// container on a Mac). The session's folder is the computer's, mounted in
+/// the container at the same path, so the agent works on the same files
+/// and keeps the same log whichever side it runs on.
 public struct SessionContainer: Codable, Hashable, Sendable {
-    /// The oss server it is on (its API's address).
-    public var server: String
-    /// oss's own id for the container.
+    /// The container's name on the computer.
     public var id: String
-    /// The repository cloned into it (GitHub's owner/name, or a git URL),
-    /// when one was.
-    public var repository: String?
     /// The image it was made from.
     public var image: String?
 
-    public init(server: String, id: String, repository: String? = nil, image: String? = nil) {
-        self.server = server
+    public init(id: String, image: String? = nil) {
         self.id = id
-        self.repository = repository
         self.image = image
     }
 }

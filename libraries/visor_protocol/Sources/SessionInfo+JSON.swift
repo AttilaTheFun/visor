@@ -12,6 +12,7 @@ extension SessionInfo {
         if let reportedModel { o["reportedModel"] = .string(reportedModel) }
         if let contextUsed { o["contextUsed"] = .number(Double(contextUsed)) }
         if !queued.isEmpty { o["queued"] = .array(queued.map(JSONValue.string)) }
+        if !delivered.isEmpty { o["delivered"] = .array(delivered.map(JSONValue.string)) }
         if let contextLimit { o["contextLimit"] = .number(Double(contextLimit)) }
         if let usage { o["usage"] = usage.json }
         if let goal { o["goal"] = .string(goal) }
@@ -22,6 +23,7 @@ extension SessionInfo {
         if let otherBranch { o["otherBranch"] = .string(otherBranch) }
         if let agentState { o["agentState"] = .string(agentState.rawValue) }
         if let container { o["container"] = container.json }
+        if !leases.isEmpty { o["leases"] = .array(leases.map(\.json)) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -38,6 +40,7 @@ extension SessionInfo {
         contextUsed = json["contextUsed"].int
         reportedModel = json["reportedModel"].string
         queued = json["queued"].array?.compactMap(\.string) ?? []
+        delivered = json["delivered"].array?.compactMap(\.string) ?? []
         contextLimit = json["contextLimit"].int
         usage = SessionUsage(json: json["usage"])
         goal = json["goal"].string
@@ -48,6 +51,7 @@ extension SessionInfo {
         otherBranch = json["otherBranch"].string
         agentState = json["agentState"].string.flatMap(AgentState.init(rawValue:))
         container = SessionContainer(json: json["container"])
+        leases = json["leases"].array?.compactMap(SessionLease.init(json:)) ?? []
         preview = json["preview"].string
         updated = json["updated"].double
     }

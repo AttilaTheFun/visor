@@ -69,6 +69,7 @@ extension VisorServer {
         case "keepBranch": performKeepBranch(envelope)
         case "continueBranch": performContinueBranch(envelope)
         case "end": performEnd(envelope)
+        case "contain": performContain(envelope, from: client)
         // A client's heartbeat: answered at once, to that client only.
         case "ping": client?.send(.pong())
         // What a client of 0.31 or before says to a terminal session:
@@ -81,7 +82,7 @@ extension VisorServer {
     }
 
     private func performStart(_ envelope: Envelope, from client: ClientConnection?) {
-        // Its agent in a container on oss: made there first.
+        // Its agent in a container here: the container made first.
         if envelope.container == true {
             return startInContainer(envelope, from: client) { result in
                 if case .failure(let failure) = result { client?.send(.error(failure.message)) }
@@ -250,6 +251,15 @@ extension VisorServer {
     /// A running agent restarted. A stopped one is started (what a client
     /// of 0.34 or before, which offers only Restart, means by it); one
     /// starting or stopping is left to get there.
+    /// Into its container, or out of it: what fails is said to the client
+    /// that asked.
+    private func performContain(_ envelope: Envelope, from client: ClientConnection?) {
+        guard let record = session(envelope.session), let into = envelope.container else { return }
+        contain(record, into: into) { result in
+            if case .failure(let failure) = result { client?.send(.error(failure.message)) }
+        }
+    }
+
     private func performRestartAgent(_ envelope: Envelope) {
         guard let record = session(envelope.session), !record.info.archived else { return }
         switch record.info.agentState {
@@ -287,7 +297,7 @@ extension VisorServer {
         record.process.stop()
         record.markEnded()
         // Its container goes with it.
-        removeContainer(of: record.info)
+        if let container = record.info.container { removeContainer(container) }
         sessions.removeAll { $0 === record }
         dropWaiters(for: record.info.id)
         Self.log("session ended: \(record.info.title)")

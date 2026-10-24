@@ -7,10 +7,11 @@
 //   VISOR_PORT=7533 VISOR_TOKEN=staging node tools/probes/order.mjs
 // Ended with Ctrl-C (or SIGTERM), which ends its agents first.
 //
-// To try sessions in containers on oss: VISOR_STAGING_OSS=<oss's address>
-// and VISOR_STAGING_OSS_TOKEN_FILE=<its token's file>; with
-// VISOR_STAGING_LAN=1 it is reached on the LAN too, as an agent in a
-// container reaches it for Visor's tools.
+// To try sessions in containers (Apple's container, with the visor-agent
+// image built): VISOR_STAGING_LAN=1, so it is reached on the LAN too, as an
+// agent in a container reaches it for Visor's tools. To lease machines
+// from oss through it: VISOR_STAGING_OSS=<oss's address> and
+// VISOR_STAGING_OSS_TOKEN_FILE=<its token's file>.
 
 import Foundation
 import VisorServer
@@ -44,7 +45,7 @@ struct StagingServer {
             server.settings.ossServer = oss
             let file = environment["VISOR_STAGING_OSS_TOKEN_FILE"].map { ($0 as NSString).expandingTildeInPath } ?? ""
             server.setOSSToken(try? String(contentsOfFile: file, encoding: .utf8))
-            print("Sessions can start in containers on oss at \(oss)\(server.containersAvailable ? "" : ", once its token is kept"); they reach this server at \(server.containerServerURL)")
+            print("Sessions lease machines from oss at \(oss)\(server.ossTokenKept ? "" : ", once its token is kept")")
         }
         setlinebuf(stdout)
         print("Visor staging server: http://127.0.0.1:\(port) (the socket at /, the API at /api), password \(password)")

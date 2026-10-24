@@ -46,9 +46,7 @@ single_version_override(
         "//third_party/patches/applecross:rules_apple_bundletool_path.patch",
         "//third_party/patches/applecross:rules_apple_no_absolute_tool_paths.patch",
         "//third_party/patches/applecross:rules_apple_codesign_inputs_sdk_tools.patch",
-        "//third_party/patches/applecross:rules_apple_python_stub_interpreter.patch",
         "//third_party/patches/applecross:rules_apple_alticonstool_missing_icons.patch",
-        "//third_party/patches/applecross:rules_apple_dossier_zipfile.patch",
         "//third_party/patches/applecross:rules_apple_xctoolrunner_sorted_listdir.patch",
         "//third_party/patches:rules_apple_device_xctrunner.patch",
     ],
@@ -57,14 +55,14 @@ single_version_override(
 
 # Building the Apple apps on Linux: rules_applecross (its clean-room actool,
 # ibtool, codesign and swift-stdlib-tool, LLD), the Swift that built the Apple
-# SDKs, and the SDKs from Xcode 27.0, packaged by its tools/package-sdks.sh
-# into apple-sdks.tar.zst at the workspace's root (never checked in: Apple's).
-# A Mac reads its own Xcode instead. The toolchains are registered on Linux
-# only (.bazelrc, build:linux), so a Mac builds as before.
+# SDKs, and the SDKs of the Xcode at /Applications/Xcode.app: a Mac's own, or
+# the Mac's mounted read-only in a Visor session's container (never checked
+# in: Apple's). The toolchains are registered on Linux only (.bazelrc,
+# build:linux), so a Mac builds as before.
 bazel_dep(name = "rules_applecross", version = "0.0.3")
 git_override(
     module_name = "rules_applecross",
-    commit = "81a5d536b92f1b86dab568ea29784e3a9756e1c6",
+    commit = "8306750f3e1d2c2bf41572717abc988ca563a9fd",
     remote = "https://github.com/apple-cross-toolchain/rules_applecross.git",
 )
 bazel_dep(name = "llvm", version = "0.8.25")
@@ -80,7 +78,6 @@ apple_cross_toolchain.swift(
 )
 apple_cross_toolchain.configure(
     name = "apple_cross_toolchain",
-    apple_sdk_path = "apple-sdks.tar.zst",
     local_xcode = True,
     swift_tools = {
         "aarch64": "@applecross_swift_ubuntu24.04-aarch64//:tools",
@@ -159,15 +156,7 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-# --- Until isomer 0.38 is released with this one (they go out together),
-# --- isomer's main by its commit; then 0.38.N from the registry, as CI's
-# --- pins check asks of a release.
-bazel_dep(name = "isomer", version = "0.38.0")
-git_override(
-    module_name = "isomer",
-    commit = "94c358ce4ede20e043cf2b5787cf6237bab639bb",
-    remote = "https://github.com/AttilaTheFun/isomer.git",
-)
+bazel_dep(name = "isomer", version = "0.38.13")
 
 # flatbuffers' released Swift BUILD glob misses Sources/FlatBuffers/Vectors/,
 # and its Foundation use breaks under WASI: isomer's patches, which a root

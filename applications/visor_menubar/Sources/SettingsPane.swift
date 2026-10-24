@@ -23,11 +23,11 @@ struct SettingsPane: View {
     /// The field being edited, so leaving it applies what was typed: an
     /// address that only Return applied was easy to leave unapplied.
     @FocusState private var editing: EditedField?
-    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword, ossServer, ossToken, ossImage, ossCallback }
+    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword, ossServer, ossToken, containerImage, containerCallback }
     @State private var ossServer = ""
     @State private var ossToken = ""
-    @State private var ossImage = ""
-    @State private var ossCallback = ""
+    @State private var containerImage = ""
+    @State private var containerCallback = ""
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
@@ -160,24 +160,30 @@ struct SettingsPane: View {
                 Text("Agents")
             }
             Section {
+                TextField("Image (empty: \(VisorServer.containerImage))", text: $containerImage)
+                    .focused($editing, equals: .containerImage)
+                    .onSubmit { apply(.containerImage) }
+                TextField("How containers reach this Mac (empty: its LAN address)", text: $containerCallback)
+                    .focused($editing, equals: .containerCallback)
+                    .onSubmit { apply(.containerCallback) }
+                Text(server.containersAvailable
+                     ? "Sessions can run their agent in a Linux container on this Mac (Apple's container), which sees the session's folder and Xcode, and nothing else of the Mac."
+                     : "Install Apple's container (github.com/apple/container) and turn on “Reachable from the network” to run sessions' agents in Linux containers on this Mac.")
+                    .font(.caption).foregroundColor(.secondary)
+            } header: {
+                Text("Containers")
+            }
+            Section {
                 TextField("oss server (http://host:7480)", text: $ossServer)
                     .focused($editing, equals: .ossServer)
                     .onSubmit { apply(.ossServer) }
                 SecureField(server.ossTokenKept ? "Token (kept)" : "Token", text: $ossToken)
                     .focused($editing, equals: .ossToken)
                     .onSubmit { apply(.ossToken) }
-                TextField("Image (empty: \(VisorServer.containerImage))", text: $ossImage)
-                    .focused($editing, equals: .ossImage)
-                    .onSubmit { apply(.ossImage) }
-                TextField("How containers reach this Mac (empty: its LAN address)", text: $ossCallback)
-                    .focused($editing, equals: .ossCallback)
-                    .onSubmit { apply(.ossCallback) }
-                Text(server.containersAvailable
-                     ? "Sessions can start with their agent in a container on oss, a repository cloned into it, with Visor's tools and oss's for leasing machines (VMs, simulators, emulators). oss hosts the containers."
-                     : "Set an oss server (OS Server) and its token to start sessions with their agent in a container there rather than on this Mac.")
+                Text("Sessions here, in containers or not, lease machines (macOS, Linux and Windows VMs, iOS simulators, Android emulators) from this oss server through Visor Server, with `visor machine …`. The token stays here.")
                     .font(.caption).foregroundColor(.secondary)
             } header: {
-                Text("Containers")
+                Text("Machines (oss)")
             }
             Section {
                 let current = server.apnsKey
@@ -222,8 +228,8 @@ struct SettingsPane: View {
             publicAddress = server.settings.publicAddress
             tlsPath = server.settings.tlsIdentityPath
             ossServer = server.settings.ossServer
-            ossImage = server.settings.ossImage
-            ossCallback = server.settings.ossCallback
+            containerImage = server.settings.containerImage
+            containerCallback = server.settings.containerCallback
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
@@ -236,8 +242,8 @@ struct SettingsPane: View {
             apply(.tlsPath)
             apply(.ossServer)
             apply(.ossToken)
-            apply(.ossImage)
-            apply(.ossCallback)
+            apply(.containerImage)
+            apply(.containerCallback)
         }
     }
 
@@ -257,12 +263,12 @@ struct SettingsPane: View {
             guard !ossToken.isEmpty else { return }
             server.setOSSToken(ossToken)
             ossToken = ""
-        case .ossImage:
-            let image = ossImage.trimmingCharacters(in: .whitespaces)
-            if server.settings.ossImage != image { server.settings.ossImage = image }
-        case .ossCallback:
-            let address = ossCallback.trimmingCharacters(in: .whitespaces)
-            if server.settings.ossCallback != address { server.settings.ossCallback = address }
+        case .containerImage:
+            let image = containerImage.trimmingCharacters(in: .whitespaces)
+            if server.settings.containerImage != image { server.settings.containerImage = image }
+        case .containerCallback:
+            let address = containerCallback.trimmingCharacters(in: .whitespaces)
+            if server.settings.containerCallback != address { server.settings.containerCallback = address }
         case .tlsPassword:
             // The identity with its password, as Return always applied them.
             guard !tlsPassword.isEmpty else { return }

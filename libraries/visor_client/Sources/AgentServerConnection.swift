@@ -1346,6 +1346,15 @@ public final class AgentServerConnection: Identifiable {
     public func stopAgent(_ sessionID: String) { act(.stopAgent, on: sessionID) }
     public func startAgent(_ sessionID: String) { act(.startAgent, on: sessionID) }
 
+    /// Moves the session's agent into a container on its computer (`into`),
+    /// or out of it onto the computer: the same folder and conversation.
+    public func contain(_ sessionID: String, into: Bool) {
+        perform { [weak self] in
+            let list = try await self?.server.contain(session: sessionID, into: into) ?? []
+            self?.take(list, replacing: false)
+        }
+    }
+
     /// The conversation went on elsewhere: keep to the branch shown (the
     /// next message carries it on and makes it the newest again), or
     /// continue the newest branch instead.

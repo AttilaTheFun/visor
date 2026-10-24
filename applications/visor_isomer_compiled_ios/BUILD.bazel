@@ -8,8 +8,9 @@ package(default_visibility = ["//visibility:public"])
 # 0.32): the client's Swift built natively, with Isomer's SwiftUI, PhotosUI
 # and Isomer module where Apple's would be (isomer's apple/compiled), linked
 # into a host that draws its tree with Apple's SwiftUI (WasmView over the
-# native engine). Observation and Synchronization are Isomer's too, so iOS 16
-# (Foundation is still Apple's).
+# native engine). Observation and Synchronization are Isomer's too
+# (Foundation is still Apple's). iOS 18: WasmView, the host, needs it since
+# isomer 0.38.
 #
 #   bazel build //applications/visor_isomer_compiled_ios --ios_multi_cpus=sim_arm64
 
@@ -60,7 +61,7 @@ ios_application(
         "ipad",
     ],
     infoplists = ["Info.plist"],
-    minimum_os_version = "16.0",
+    minimum_os_version = "18.0",
     provisioning_profile = select({
         "@apple_support//constraints:device": "//applications/visor_isomer_ios:xcode_managed_profile",
         "//conditions:default": None,

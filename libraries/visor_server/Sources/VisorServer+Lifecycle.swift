@@ -38,11 +38,6 @@ extension VisorServer {
     /// written down as running, so the next launch can carry it on: this is
     /// the record of the shutdown, however the app was quit.
     public func endAll() async {
-        // Agents in containers on oss work on there, and the next launch
-        // reads on from where this one stopped: let go of first, so where
-        // each was read to is what is written down.
-        let contained = sessions.filter { ($0.process as? HostableProcess)?.containerChild != nil }
-        for record in contained { (record.process as? HostableProcess)?.containerChild?.detach() }
         for record in sessions where record.info.busy { record.interrupted = true }
         saveArchive()
         // What the agents say as they go is not heard: the record of the
@@ -51,8 +46,7 @@ extension VisorServer {
         // Waited for, not merely asked: an agent that outlives the app
         // runs on with nobody at the other end of its pipes. All at once:
         // each has its own few seconds to go.
-        let ending = sessions.filter { record in !contained.contains { $0 === record } }
-            .map { record in Task { await record.process.end(within: .seconds(4)) } }
+        let ending = sessions.map { record in Task { await record.process.end(within: .seconds(4)) } }
         for task in ending { await task.value }
         agentsEnded = true
     }

@@ -417,6 +417,7 @@ public struct VisorRootView: View {
         }
         Button { host.archive(session.id) } label: { Label("Archive", systemImage: "archivebox") }
         AgentStateButtons(host: host, session: session)
+        if !session.archived { ContainerButton(host: host, session: session) }
         // To another computer connected now; this one keeps the session
         // until the user removes it.
         let others = store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }

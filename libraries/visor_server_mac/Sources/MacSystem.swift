@@ -38,9 +38,10 @@ public struct MacSystem: CommandLineSystem {
             host: HostDetails(name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName, dataDirectory: data,
                               addresses: { NetworkAddresses.all().map(\.address) },
                               networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } },
-                              localNetworkName: { LocalNetworkName.current() }),
+                              localNetworkName: { LocalNetworkName.current() }, resolve: { POSIXResolver.ipv4($0) }),
             lifecycle: lifecycle,
             agentHosts: POSIXAgentHosting.beside(executable),
+            containers: AppleContainers(),
             log: log
         )
     }

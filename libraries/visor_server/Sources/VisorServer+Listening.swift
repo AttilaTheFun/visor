@@ -42,6 +42,8 @@ extension VisorServer {
         listenForSSH()
         keepModelsFresh()
         resumePending()
+        Task { await checkContainers() }
+        watchLeases()
     }
 
     /// The socket file: `~/.visor/server.sock`, short enough for a socket

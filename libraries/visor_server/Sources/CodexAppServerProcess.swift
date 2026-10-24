@@ -27,7 +27,7 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     public var model: String?
     public var effort: String?
     public var approvalEnvironment: [String: String] = [:]
-    /// Where its agent runs when that is a container on oss.
+    /// Where its agent runs when that is a container here.
     var container: ContainerPlacement?
 
     private let cwd: String
@@ -73,7 +73,6 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     }
 
     var hostedChild: HostedChild? { running() as? HostedChild }
-    var containerChild: OSSChild? { running() as? OSSChild }
     /// The turn in flight, which an interrupt names.
     var carried: [String: String] { turnID.map { ["turn": $0] } ?? [:] }
 
@@ -214,7 +213,7 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     /// sandbox, no prompts — so nothing asks a question over this channel.
     private func threadParams() -> [String: Any] {
         var params: [String: Any] = [
-            "cwd": container == nil ? HostFolders.resolve(cwd) : cwd,
+            "cwd": HostFolders.resolve(cwd),
             "approvalPolicy": "never",
             "sandbox": skipPermissions ? "danger-full-access" : "workspace-write",
         ]
@@ -233,10 +232,10 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         }
         let environment = container.map { approvalEnvironment.merging(["VISOR_URL": $0.serverURL]) { _, ours in ours } }
             ?? ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
-        // Visor's MCP server: the other sessions (and oss's, in a container).
+        // Visor's MCP server: the other sessions.
         let child = try AgentChildren.start(executable: executable,
                                             arguments: ["app-server"] + Self.questionArguments + VisorMCP.codexArguments(approvalEnvironment, container: container),
-                                            directory: container == nil ? HostFolders.resolve(cwd) : cwd,
+                                            directory: HostFolders.resolve(cwd),
                                             environment: environment,
                                             session: approvalEnvironment["VISOR_SESSION"], container: container)
         self.child = child

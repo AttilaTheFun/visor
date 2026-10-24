@@ -1,252 +1,215 @@
-// Sessions whose agents run in containers on oss: the server makes the
-// container (the repository cloned in, Visor's MCP script written into
-// it), runs the agent there as a process whose input it writes in order
-// and whose output it reads on from where it was left, gives the agent
-// Visor's tools and oss's, writes down where it was read to (and no pid of
-// this computer's), and says so on the wire. oss is a fake here.
+// Sessions whose agents run in containers on the server's own computer: the
+// server makes the container (the session's folder, the agent's log folder,
+// Xcode and Visor's tools mounted; the sign-ins for containers written into
+// its home; an SSH key made), runs the agent there under its host through
+// the container's tool with its variables in a file only this user reads,
+// moves a session into and out of its container, and says so on the wire.
+// The containers are a fake here.
 
+import ClaudeTranscript
 import Foundation
-import OSSClient
 import Synchronization
 import VisorProtocol
 @testable import VisorServer
 import XCTest
 
-/// oss as the server reaches it: what it was asked, and its answers.
-final class FakeOSS: HTTPFetching {
-    let asked = Mutex<[OutgoingRequest]>([])
-    /// The agent's output, and whether it ends once that is read (else it
-    /// runs on, saying nothing more).
-    let output: Data
-    let ends: Bool
-    /// What a process writes to its errors, and its exit status.
-    let errors: Data
-    let status: Int
+/// A computer's containers, as the server drives them: what it was asked.
+final class FakeContainers: ContainerRunning {
+    let made = Mutex<[ContainerSpec]>([])
+    let removed = Mutex<[String]>([])
+    let executed = Mutex<[(name: String, command: [String], input: Data?)]>([])
+    let environmentFiles = Mutex<[String]>([])
+    let missing: String?
 
-    init(output: Data = Data(), ends: Bool = true, errors: Data = Data(), status: Int = 0) {
-        self.output = output
-        self.ends = ends
-        self.errors = errors
-        self.status = status
+    init(missing: String? = nil) {
+        self.missing = missing
     }
 
-    func fetch(_ request: OutgoingRequest) async throws -> OutgoingRequest.Answer {
-        asked.withLock { $0.append(request) }
-        let url = URLComponents(string: request.url)
-        let path = url?.path ?? ""
-        let query = Dictionary((url?.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { _, last in last })
-        switch (request.method, path) {
-        case ("POST", "/v1/containers"):
-            return .init(status: 201, body: Data(#"{"id":"c1","holder":"visor","state":"running","created":"2026-10-22T12:00:00Z","name":"oss-container-c1"}"#.utf8))
-        case ("POST", "/v1/containers/c1/processes"), ("POST", "/v1/containers/c1/processes/p1/signal"):
-            return .init(status: 201, body: Data(#"{"id":"p1","container":"c1","command":[],"started":"2026-10-22T12:00:00Z","state":"running","pid":42,"outputSize":0,"errorSize":0}"#.utf8))
-        case ("GET", "/v1/containers/c1/processes/p1/output"):
-            let from = Int(query["from"] ?? "") ?? 0
-            let stream = query["stream"] == "err" ? errors : output
-            let rest = from < stream.count ? stream.dropFirst(from) : Data()
-            // Held open a moment while there is nothing new, as oss holds it.
-            if rest.isEmpty, !ends { try await Task.sleep(for: .milliseconds(50)) }
-            return .init(status: 200, body: Data(rest),
-                         headers: ["oss-offset": String(stream.count), "oss-state": rest.isEmpty && ends ? "exited" : "running", "oss-status": String(status)])
-        default:
-            return .init(status: 200, body: Data("{}".utf8))
-        }
+    func problem() async -> String? { missing }
+
+    func run(_ spec: ContainerSpec) async throws { made.withLock { $0.append(spec) } }
+
+    func isRunning(_ name: String) async -> Bool? {
+        made.withLock { made in removed.withLock { made.contains { $0.name == name } && !$0.contains(name) } } ? true : nil
     }
 
-    func requests(_ method: String, containing part: String) -> [OutgoingRequest] {
-        asked.withLock { $0.filter { $0.method == method && $0.url.contains(part) } }
+    func remove(_ name: String) async throws { removed.withLock { $0.append(name) } }
+
+    func execute(_ name: String, _ command: [String], input: Data?) async throws -> (status: Int32, output: String) {
+        executed.withLock { $0.append((name, command, input)) }
+        return (0, "")
+    }
+
+    func command(in name: String, executable: String, arguments: [String], directory: String, environmentFile: String) -> ShellCommand {
+        environmentFiles.withLock { $0.append(environmentFile) }
+        return ShellCommand("/bin/sh", ["-c", "cat >/dev/null"])
     }
 }
 
 @MainActor
 final class ContainerTests: ServerTestCase {
-    private var fetching: (any HTTPFetching)!
+    private var platform: ServerPlatform!
+    private var root: URL!
 
     override func setUp() async throws {
-        fetching = ServerPlatform.current.fetching
-    }
-
-    override func tearDown() async throws {
-        ServerPlatform.current.fetching = fetching
-    }
-
-    private let client = OSSClient(server: URL(string: "http://oss.test:7480")!, token: "secret", transport: PlatformOSSTransport())
-
-    func testTheAgentsInputGoesInOrderAndItsOutputIsReadToItsEnd() async throws {
-        let oss = FakeOSS(output: Data("{\"type\":\"result\"}\n".utf8))
-        ServerPlatform.current.fetching = oss
-        let child = OSSChild.start(client: client, container: "c1", command: ["claude", "-p"],
-                                   environment: ["VISOR_SESSION": "s"], directory: "/root/work/visor")
-        child.write(["n": 1])
-        child.write(["n": 2])
-        child.closeInput()
-        var heard = Data()
-        for await chunk in child.output { heard.append(chunk) }
-        XCTAssertEqual(String(decoding: heard, as: UTF8.self), "{\"type\":\"result\"}\n")
-        let exit = await child.exit.value
-        XCTAssertEqual(exit.status, 0)
-        XCTAssertEqual(child.outOffset, heard.count, "where a later server reads on from")
-        // Written in order, then the end of input.
-        try await Task.sleep(for: .milliseconds(200))
-        let inputs = oss.requests("POST", containing: "/input").map { ($0.url.hasSuffix("close=1"), String(decoding: $0.body, as: UTF8.self)) }
-        XCTAssertEqual(inputs.map(\.1), ["{\"n\":1}\n", "{\"n\":2}\n", ""])
-        XCTAssertEqual(inputs.map(\.0), [false, false, true])
-        let started = try XCTUnwrap(oss.requests("POST", containing: "/processes").first)
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: started.body) as? [String: Any])
-        XCTAssertEqual(body["command"] as? [String], ["claude", "-p"])
-        XCTAssertEqual(body["directory"] as? String, "/root/work/visor")
-        XCTAssertEqual(started.headers["Authorization"], "Bearer secret")
-    }
-
-    func testAnAgentInAContainerHasVisorsToolsAndOssesWhereItCanReachThem() throws {
-        let placement = try XCTUnwrap(ContainerPlacement(server: "http://oss.test:7480", container: "c1", serverURL: "ws://192.168.4.52:7433"))
-        let config = try XCTUnwrap(VisorMCP.claudeConfig(["VISOR_SESSION": "s", "VISOR_TOKEN": "t"], approvals: true, container: placement))
-        let servers = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(config.utf8)) as? [String: Any])?["mcpServers"] as? [String: Any])
-        let visor = try XCTUnwrap(servers["visor"] as? [String: Any])
-        XCTAssertEqual(visor["command"] as? String, "node")
-        XCTAssertEqual(visor["args"] as? [String], [ContainerPlacement.scriptPath])
-        XCTAssertEqual((visor["env"] as? [String: String])?["VISOR_URL"], "ws://192.168.4.52:7433")
-        let oss = try XCTUnwrap(servers["oss"] as? [String: Any])
-        XCTAssertEqual(oss["command"] as? String, "oss")
-        XCTAssertEqual(oss["args"] as? [String], ["mcp"])
-        let codex = VisorMCP.codexArguments(["VISOR_SESSION": "s"], container: placement)
-        XCTAssertTrue(codex.contains("mcp_servers.oss.command=\"oss\""))
-        XCTAssertTrue(codex.contains { $0.contains("VISOR_URL=\"ws://192.168.4.52:7433\"") })
-    }
-
-    func testASessionStartsInAContainerWithItsRepositoryAndSaysSo() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-tests-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        VisorServer.storeRoot = root
-        VisorServer.secrets = MemorySecrets()
-        let oss = FakeOSS()
-        ServerPlatform.current.fetching = oss
-        let server = VisorServer(port: 7997)
-        defer { server.stop() }
-        XCTAssertFalse(server.containersAvailable)
-        server.settings.ossServer = "http://oss.test:7480"
-        server.setOSSToken("secret")
-        XCTAssertTrue(server.containersAvailable)
-        XCTAssertEqual(server.sessionsEnvelope().container, true, "clients are told a session can start in a container")
-
-        let made: SessionRecord = try await withCheckedThrowingContinuation { done in
-            server.startInContainer(.startInContainer(id: "s1", agent: .claude, title: "", skipPermissions: true, repository: "AttilaTheFun/visor"),
-                                    from: nil) { done.resume(with: $0.mapError { $0 as Error }) }
-        }
-        XCTAssertEqual(made.info.cwd, "/root/work/visor")
-        XCTAssertEqual(made.info.container, SessionContainer(server: "http://oss.test:7480", id: "c1", repository: "AttilaTheFun/visor", image: "visor-agent"))
-        XCTAssertEqual(made.info.title, "Claude Code in visor")
-        let asked = try XCTUnwrap(oss.requests("POST", containing: "/v1/containers").first { $0.url.hasSuffix("/v1/containers") })
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: asked.body) as? [String: Any])
-        XCTAssertEqual(body["image"] as? String, "visor-agent", "Visor's own image, with the agents in it")
-        XCTAssertEqual(body["holder"] as? String, "visor")
-        let commands = try oss.requests("POST", containing: "/processes").filter { $0.url.hasSuffix("/processes") }
-            .map { try XCTUnwrap(JSONSerialization.jsonObject(with: $0.body) as? [String: Any])["command"] as? [String] }
-        XCTAssertEqual(commands.first, ["git", "clone", "-q", "https://github.com/AttilaTheFun/visor.git", "/root/work/visor"])
-        XCTAssertTrue(commands.last??.last?.contains("ssh-keygen") == true, "its own SSH key, for the machines it leases")
-        XCTAssertEqual((body["labels"] as? [String: String])?["visor.session"], "s1")
-        let script = try XCTUnwrap(oss.requests("PUT", containing: "/files/").first)
-        XCTAssertTrue(script.url.hasSuffix("/v1/containers/c1/files/.visor/visor_mcp.js"))
-        XCTAssertEqual(String(decoding: script.body, as: UTF8.self), VisorMCPScript.source)
-        // Its agent runs there: a pid there is no process of this computer's.
-        XCTAssertNotNil((made.process as? HostableProcess)?.container)
-        XCTAssertNil(made.stored.agentPID)
-    }
-
-    /// A clone that fails says why, and its container goes: no session
-    /// is left in an empty folder.
-    func testAFailedCloneSaysWhyAndLeavesNoContainer() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-tests-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        VisorServer.storeRoot = root
-        VisorServer.secrets = MemorySecrets()
-        let oss = FakeOSS(errors: Data("fatal: repository 'https://github.com/o/missing.git/' not found\n".utf8), status: 128)
-        ServerPlatform.current.fetching = oss
-        let server = VisorServer(port: 7997)
-        defer { server.stop() }
-        server.settings.ossServer = "http://oss.test:7480"
-        server.setOSSToken("secret")
-        let ended: Result<SessionRecord, OSSError> = await withCheckedContinuation { done in
-            server.startInContainer(.startInContainer(id: "s2", agent: .codex, title: "", skipPermissions: true, repository: "o/missing"),
-                                    from: nil) { done.resume(returning: $0) }
-        }
-        guard case .failure(let failure) = ended else { return XCTFail("started all the same") }
-        XCTAssertEqual(failure.message, "Cloning https://github.com/o/missing.git failed: fatal: repository 'https://github.com/o/missing.git/' not found")
-        XCTAssertEqual(oss.requests("DELETE", containing: "/v1/containers/c1").count, 1)
-        XCTAssertFalse(server.sessions.contains { $0.info.id == "s2" })
-    }
-
-    /// This computer's agents/<kind>.env (its paths, its git sign-in) is
-    /// for its agents here: one in a container has only Visor's own.
-    func testAnAgentInAContainerHasNoneOfThisComputersEnvironment() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-tests-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("agents"), withIntermediateDirectories: true)
-        try "GIT_AUTHOR_NAME=Here\n".write(to: root.appendingPathComponent("agents/claude.env"), atomically: true, encoding: .utf8)
-        let host = ServerPlatform.current.host
-        defer { ServerPlatform.current.host = host }
+        platform = ServerPlatform.current
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-tests-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("work"), withIntermediateDirectories: true)
         ServerPlatform.current.host.dataDirectory = root
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
-        let server = VisorServer(port: 7995)
+        ClaudeSessionFiles.home = root
+    }
+
+    override func tearDown() async throws {
+        ServerPlatform.current = platform
+        ClaudeSessionFiles.home = FileManager.default.homeDirectoryForCurrentUser
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    /// A server whose computer runs `containers`, reachable from the network
+    /// (as an agent in a container reaches it), its check made.
+    private func server(_ containers: FakeContainers, port: UInt16) async -> VisorServer {
+        ServerPlatform.current.containers = containers
+        let server = VisorServer(port: port)
+        server.settings.lan = true
+        await server.checkContainers()
+        return server
+    }
+
+    private func start(_ server: VisorServer, _ envelope: Envelope) async -> Result<SessionRecord, ContainerFailure> {
+        await withCheckedContinuation { done in server.startInContainer(envelope, from: nil) { done.resume(returning: $0) } }
+    }
+
+    func testASessionStartsInAContainerThatSeesItsFolder() async throws {
+        let signIns = root.appendingPathComponent("containers/home/.codex", isDirectory: true)
+        try FileManager.default.createDirectory(at: signIns, withIntermediateDirectories: true)
+        try Data("{\"auth\":1}".utf8).write(to: signIns.appendingPathComponent("auth.json"))
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7997)
         defer { server.stop() }
-        var info = SessionInfo(id: "h", agent: .claude, cwd: "/tmp", title: "Here", created: 0)
+        XCTAssertTrue(server.containersAvailable)
+        XCTAssertEqual(server.sessionsEnvelope().container, true, "clients are told a session can start in a container")
+
+        let folder = root.appendingPathComponent("work").path
+        let made = try await start(server, .startInContainer(id: "S1", agent: .claude, cwd: folder, title: "", skipPermissions: true)).get()
+        XCTAssertEqual(made.info.cwd, folder)
+        XCTAssertEqual(made.info.container, SessionContainer(id: "visor-s1", image: "visor-agent"))
+        let spec = try XCTUnwrap(containers.made.withLock { $0.first })
+        XCTAssertEqual(spec.image, "visor-agent", "Visor's own image, with the agents in it")
+        XCTAssertEqual(spec.labels["visor.session"], "S1")
+        let resolved = HostFolders.resolve(folder)
+        XCTAssertTrue(spec.mounts.contains(ContainerMount(source: resolved, target: resolved)), "the folder, at the same path")
+        let project = ClaudeSessionFiles.projectDirectoryName(for: resolved)
+        XCTAssertTrue(spec.mounts.contains { $0.target == "/root/.claude/projects/" + project && !$0.readOnly }, "where Claude keeps its log, seen here")
+        XCTAssertTrue(spec.mounts.contains { $0.target == ContainerPlacement.toolsFolder && $0.readOnly }, "Visor's tools")
+        let tools = try XCTUnwrap(spec.mounts.first { $0.target == ContainerPlacement.toolsFolder }).source
+        XCTAssertEqual(try String(contentsOfFile: tools + "/visor_mcp.js", encoding: .utf8), VisorMCPScript.source)
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: tools + "/visor"))
+        let executed = containers.executed.withLock { $0 }
+        XCTAssertEqual(executed.first?.command.last, "/root/.codex/auth.json", "the sign-ins copied into its home")
+        XCTAssertEqual(executed.first?.input, Data("{\"auth\":1}".utf8))
+        XCTAssertTrue(executed.last?.command.last?.contains("ssh-keygen") == true, "its own SSH key, for the machines it leases")
+        XCTAssertNotNil((made.process as? HostableProcess)?.container)
+    }
+
+    /// A folder that is not on the computer says so, and no container is made.
+    func testAMissingFolderSaysSoAndMakesNoContainer() async {
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7994)
+        defer { server.stop() }
+        let ended = await start(server, .startInContainer(id: "s2", agent: .codex, cwd: "/no/such/folder", title: "", skipPermissions: true))
+        guard case .failure(let failure) = ended else { return XCTFail("started all the same") }
+        XCTAssertEqual(failure.message, "There is no folder /no/such/folder on this computer.")
+        XCTAssertTrue(containers.made.withLock { $0.isEmpty })
+        XCTAssertFalse(server.sessions.contains { $0.info.id == "s2" })
+    }
+
+    /// No container tool, or a server only on loopback: none can start, and
+    /// the clients are not offered it.
+    func testContainersNeedTheToolAndTheNetwork() async {
+        let missing = await server(FakeContainers(missing: "Apple's container is not installed"), port: 7993)
+        defer { missing.stop() }
+        XCTAssertFalse(missing.containersAvailable)
+        XCTAssertNil(missing.sessionsEnvelope().container)
+        ServerPlatform.current.containers = FakeContainers()
+        let loopback = VisorServer(port: 7992)
+        defer { loopback.stop() }
+        loopback.settings.lan = false
+        loopback.settings.vpn = false
+        await loopback.checkContainers()
+        XCTAssertFalse(loopback.containersAvailable, "an agent in a container reaches the server over the network")
+    }
+
+    /// The agent's variables (and the sign-ins for containers) go to the
+    /// container's tool in a file this user alone reads, never on a command
+    /// line; this computer's own agents/<kind>.env is not among them.
+    func testAnAgentInAContainerHasItsVariablesInAFileOfItsOwn() async throws {
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("agents"), withIntermediateDirectories: true)
+        try "GIT_AUTHOR_NAME=Here\n".write(to: root.appendingPathComponent("agents/claude.env"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("containers"), withIntermediateDirectories: true)
+        try "CLAUDE_CODE_OAUTH_TOKEN=sign-in\n".write(to: root.appendingPathComponent("containers/agent.env"), atomically: true, encoding: .utf8)
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7995)
+        defer { server.stop() }
+        AgentChildren.detach = false
+        defer { AgentChildren.detach = true }
+        var info = SessionInfo(id: "h", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Here", created: 0)
         XCTAssertEqual(server.makeProcess(info, resume: nil).approvalEnvironment["GIT_AUTHOR_NAME"], "Here")
-        info.container = SessionContainer(server: "http://oss.test:7480", id: "c1")
-        let contained = server.makeProcess(info, resume: nil).approvalEnvironment
-        XCTAssertNil(contained["GIT_AUTHOR_NAME"])
-        XCTAssertEqual(contained["VISOR_SESSION"], "h")
+        info.container = SessionContainer(id: "visor-h")
+        let placement = try XCTUnwrap(server.placement(for: info))
+        let child = try AgentChildren.start(executable: "claude", arguments: ["-p"], directory: info.cwd,
+                                            environment: ["VISOR_SESSION": "h"], session: "h", container: placement)
+        child.closeInput()
+        _ = await child.exit.value
+        let file = try XCTUnwrap(containers.environmentFiles.withLock { $0.first })
+        let text = try String(contentsOfFile: file, encoding: .utf8)
+        XCTAssertTrue(text.contains("VISOR_SESSION=h\n"))
+        XCTAssertTrue(text.contains("CLAUDE_CODE_OAUTH_TOKEN=sign-in\n"))
+        XCTAssertFalse(text.contains("GIT_AUTHOR_NAME"))
+        let mode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: file)[.posixPermissions] as? Int)
+        XCTAssertEqual(mode & 0o077, 0, "readable by this user alone")
     }
 
-    func testARepositoryIsClonedFromWhereItIsNamed() {
-        XCTAssertEqual(VisorServer.cloneURL(repository: "AttilaTheFun/visor"), "https://github.com/AttilaTheFun/visor.git")
-        XCTAssertEqual(VisorServer.cloneURL(repository: "git@github.com:o/r.git"), "git@github.com:o/r.git")
-        XCTAssertEqual(VisorServer.cloneURL(repository: "https://gitlab.com/o/r"), "https://gitlab.com/o/r")
-        XCTAssertEqual(VisorServer.containerFolder(repository: "git@github.com:o/r.git"), "/root/work/r")
-        XCTAssertEqual(VisorServer.containerFolder(repository: "https://gitlab.com/o/r"), "/root/work/r")
-        XCTAssertEqual(VisorServer.containerFolder(repository: nil), "/root/work")
-    }
-
-    /// The agent an earlier launch left running in its container is picked
-    /// up, and what is said next goes to it, not to a new one.
-    func testAnAgentLeftRunningIsPickedUpAndTold() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-tests-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        VisorServer.storeRoot = root
-        VisorServer.secrets = MemorySecrets()
-        let oss = FakeOSS(ends: false)
-        ServerPlatform.current.fetching = oss
-        let server = VisorServer(port: 7996)
+    /// A session moves into a container and out again: the same folder,
+    /// its agent made again for the other side, the container it leaves
+    /// removed.
+    func testASessionMovesIntoItsContainerAndOutAgain() async throws {
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7996)
         defer { server.stop() }
-        server.settings.ossServer = "http://oss.test:7480"
-        server.setOSSToken("secret")
-        var info = SessionInfo(id: "s2", agent: .claude, cwd: "/root/work", title: "Claude", created: 0)
-        info.container = SessionContainer(server: "http://oss.test:7480", id: "c1")
-        let record = SessionRecord(info: info, process: server.makeProcess(info, resume: "r1"), entries: [])
+        let info = SessionInfo(id: "s3", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Claude", created: 0)
+        let record = SessionRecord(info: info, process: server.makeProcess(info, resume: nil), entries: [])
         server.sessions.append(record)
-        server.pickUp(record, container: StoredContainerProcess(process: "p1", out: 0, err: 0, carried: nil))
-        XCTAssertNotNil((record.process as? HostableProcess)?.containerChild, "the agent left running is this session's again")
-        server.deliver("Carry on", to: record)
-        try await Task.sleep(for: .milliseconds(300))
-        XCTAssertTrue(oss.requests("POST", containing: "/processes").filter { $0.url.hasSuffix("/processes") }.isEmpty, "no new agent started")
-        let told = oss.requests("POST", containing: "/processes/p1/input").map { String(decoding: $0.body, as: UTF8.self) }
-        XCTAssertEqual(told.count, 1)
-        XCTAssertTrue(told.first?.contains("Carry on") == true)
-        XCTAssertEqual(record.stored.containerProcess?.process, "p1")
-        XCTAssertNil(record.stored.agentPID)
+        let into: Result<Void, ContainerFailure> = await withCheckedContinuation { done in server.contain(record, into: true) { done.resume(returning: $0) } }
+        XCTAssertNoThrow(try into.get())
+        XCTAssertEqual(record.info.container?.id, "visor-s3")
+        XCTAssertEqual(record.info.cwd, info.cwd)
+        XCTAssertNotNil((record.process as? HostableProcess)?.container, "its agent made again for the container")
+        let out: Result<Void, ContainerFailure> = await withCheckedContinuation { done in server.contain(record, into: false) { done.resume(returning: $0) } }
+        XCTAssertNoThrow(try out.get())
+        XCTAssertNil(record.info.container)
+        XCTAssertNil((record.process as? HostableProcess)?.container)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(containers.removed.withLock { $0 }, ["visor-s3"])
     }
 
-    func testAContainerOnTheWireAndOnDisk() throws {
-        var info = SessionInfo(id: "s", agent: .codex, cwd: "/root/work", title: "Codex", created: 0)
-        info.container = SessionContainer(server: "http://oss.test:7480", id: "c1", image: "visor-agent")
+    func testAContainerAndLeasesOnTheWire() throws {
+        var info = SessionInfo(id: "s", agent: .codex, cwd: "/Users/someone/repo", title: "Codex", created: 0)
+        info.container = SessionContainer(id: "visor-s", image: "visor-agent")
+        info.leases = [SessionLease(id: "l1", platform: "ios", config: "vanilla", state: "ready", expires: 1_800_000_000)]
         XCTAssertEqual(SessionInfo(json: info.json)?.container, info.container)
+        XCTAssertEqual(SessionInfo(json: info.json)?.leases, info.leases)
         XCTAssertEqual(try JSONDecoder().decode(SessionInfo.self, from: JSONEncoder().encode(info)).container, info.container)
-        let start = Envelope.decode(Envelope.startInContainer(id: "s", agent: .codex, title: "", skipPermissions: true, repository: "o/r").encoded())
+        let start = Envelope.decode(Envelope.startInContainer(id: "s", agent: .codex, cwd: "/Users/someone/repo", title: "", skipPermissions: true).encoded())
         XCTAssertEqual(start?.container, true)
-        XCTAssertEqual(start?.repository, "o/r")
-        let stored = StoredContainerProcess(process: "p1", out: 120, err: 4, carried: ["turn": "t"])
-        XCTAssertEqual(try JSONDecoder().decode(StoredContainerProcess.self, from: JSONEncoder().encode(stored)), stored)
-        // Read back with its session, as the next launch reads it.
-        let session = StoredSession(info: info, entries: [], resumeID: "r", shape: StoredSession.currentShape, containerProcess: stored)
-        XCTAssertEqual(try JSONDecoder().decode(StoredSession.self, from: JSONEncoder().encode(session)).containerProcess, stored)
+        XCTAssertEqual(start?.cwd, "/Users/someone/repo")
+        let contain = Envelope.decode(Envelope.contain(session: "s", false).encoded())
+        XCTAssertEqual(contain?.type, "contain")
+        XCTAssertEqual(contain?.container, false)
+        // A container of the oss days (its server, its repository) reads as
+        // the container it names.
+        let old = Data(#"{"server":"http://oss.test:7480","id":"c1","repository":"o/r"}"#.utf8)
+        XCTAssertEqual(try JSONDecoder().decode(SessionContainer.self, from: old), SessionContainer(id: "c1"))
     }
 }

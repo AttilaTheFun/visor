@@ -46,9 +46,6 @@ extension VisorServer {
     func migrationOffer(_ body: Envelope) async -> Envelope {
         ageMigrations()
         guard let record = session(body.session) else { return .error("No such session") }
-        guard record.info.container == nil else {
-            return .error("“\(record.info.title)” runs in a container on oss: moving a session out of its container is not done yet.")
-        }
         guard let resume = record.process.resumeID, !resume.isEmpty else {
             return .error("“\(record.info.title)” has no conversation to move yet: send it a message first.")
         }
