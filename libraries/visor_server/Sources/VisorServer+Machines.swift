@@ -215,6 +215,8 @@ extension VisorServer {
             }
             let bases: [JSONValue] = status.bases.map { .object(["platform": .string($0.platform.rawValue), "config": .string($0.config)]) }
             return .json(JSONValue.object(["server": .string(oss.server.absoluteString), "capacity": .array(capacity), "bases": .array(bases)]).encoded())
+        } catch let error as OSSError {
+            return machinesError(error.status == 0 ? 502 : error.status, "oss: \(error.message)")
         } catch {
             return machinesError(502, "oss: \(error.localizedDescription)")
         }

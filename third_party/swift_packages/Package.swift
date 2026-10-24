@@ -24,11 +24,12 @@ let package = Package(
             url: "https://github.com/AttilaTheFun/swift_sql.git",
             exact: "0.35.0"
         ),
-        // oss's client (OSSClient): the server runs sessions' agents in
-        // containers on an oss server.
+        // oss's client (OSSClient): the machines sessions lease through
+        // the server. By oss#6's commit (0.3.0: machines only, its status
+        // without the container fields) until v0.3.0 is released.
         .package(
             url: "https://github.com/AttilaTheFun/oss.git",
-            exact: "0.2.0"
+            revision: "362b61b21f755c8adfa991f76872a5c0474dfffa"
         ),
     ]
 )

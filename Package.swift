@@ -44,7 +44,7 @@ let shared: [Target] = [
     .target(name: "AgentHostWire", path: "libraries/agent_host_wire/Sources", swiftSettings: strict),
     .target(name: "VisorServer",
             dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire",
-                           // oss's client: sessions' agents in containers.
+                           // oss's client: the machines sessions lease.
                            .product(name: "OSSClient", package: "oss")],
             path: "libraries/visor_server/Sources", swiftSettings: strict),
     .target(name: "VisorServerCLI", dependencies: ["VisorServer", "VisorProtocol"],
@@ -93,8 +93,8 @@ let package = Package(
     name: "visor",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
-    // swift_sql and oss at their releases, as third_party/swift_packages pins them.
+    // swift_sql and oss as third_party/swift_packages pins them.
     dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0"),
-                   .package(url: "https://github.com/AttilaTheFun/oss.git", exact: "0.2.0")],
+                   .package(url: "https://github.com/AttilaTheFun/oss.git", revision: "362b61b21f755c8adfa991f76872a5c0474dfffa")],
     targets: clientServices + shared + system + tests
 )
