@@ -25,11 +25,11 @@ let package = Package(
             exact: "0.35.0"
         ),
         // oss's client (OSSClient): the machines sessions lease through
-        // the server. By oss#6's commit (0.3.0: machines only, its status
+        // the server. By oss main's commit (0.3.0: machines only, its status
         // without the container fields) until v0.3.0 is released.
         .package(
             url: "https://github.com/AttilaTheFun/oss.git",
-            revision: "362b61b21f755c8adfa991f76872a5c0474dfffa"
+            revision: "e8cfce0285ec03e5ad2755a7bc7c08471fc68b8b"
         ),
     ]
 )
