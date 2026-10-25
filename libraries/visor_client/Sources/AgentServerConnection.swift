@@ -1360,9 +1360,9 @@ public final class AgentServerConnection: Identifiable {
 
     /// Moves the session's agent into a container on its computer (`into`),
     /// or out of it onto the computer: the same folder and conversation.
-    public func contain(_ sessionID: String, into: Bool) {
+    public func contain(_ sessionID: String, into: Bool, size: ContainerSize? = nil) {
         perform { [weak self] in
-            let list = try await self?.server.contain(session: sessionID, into: into) ?? []
+            let list = try await self?.server.contain(session: sessionID, into: into, size: size) ?? []
             self?.take(list, replacing: false)
         }
     }

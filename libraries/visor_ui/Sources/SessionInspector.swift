@@ -24,6 +24,8 @@ struct SessionInspector: View {
     let archive: () -> Void
     let end: () -> Void
     @State private var title = ""
+    /// The container's size sheet is open.
+    @State private var sizing = false
     /// The session's title as last put in the field: what is typed is a
     /// rename only where it differs from this, so a field left as it was
     /// never renames the session back.
@@ -55,6 +57,10 @@ struct SessionInspector: View {
                     LabeledContent("Folder", value: session.cwd)
                     LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
                     LabeledContent("State", value: AgentStateButtons.stateTitle(session))
+                    if let size = session.container?.size {
+                        LabeledContent("Container", value: "\(size.cpus) cores · \(size.memoryBytes / ContainerSize.gigabyte) GB · "
+                                       + ContainerSizeRows.diskWords(size.diskBytes / ContainerSize.gigabyte) + " disk")
+                    }
                     // The agent and what it runs, as its host says.
                     if let memory = session.memory { LabeledContent("Memory", value: MigrationSheet.size(Int(clamping: memory))) }
                     // To carry the conversation on in the agent's own
@@ -68,7 +74,7 @@ struct SessionInspector: View {
                 if !session.archived {
                     Section {
                         AgentStateButtons(host: host, session: session)
-                        ContainerButton(host: host, session: session)
+                        ContainerButton(host: host, session: session) { sizing = true }
                     }
                 }
                 Section {
@@ -77,6 +83,9 @@ struct SessionInspector: View {
                 }
             }
             .insetGroupedForm()
+            .sheet(isPresented: $sizing) {
+                ContainerSizeSheet(host: host, session: session) { sizing = false }
+            }
             // Titled only as a sheet: as a pane beside the chat, its title
             // would stand in for the window's, which is the session's.
             .titled("Details", when: asSheet)

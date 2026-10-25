@@ -36,6 +36,8 @@ struct ResourcesScreen: View {
                     }
                 } header: {
                     Text("Containers")
+                } footer: {
+                    if let warning = Self.overcommitted(resources) { Text(warning) }
                 }
                 Section {
                     if resources.machines.isEmpty {
@@ -71,6 +73,18 @@ struct ResourcesScreen: View {
                 try? await Task.sleep(nanoseconds: Self.interval)
             }
         }
+    }
+
+    /// Said when the containers may use more memory together than the
+    /// computer has: they take it as they need it, and keep it until they
+    /// stop, so it is fine while they idle and not if they all build at
+    /// once.
+    static func overcommitted(_ resources: ServerResources) -> String? {
+        guard let computer = resources.host else { return nil }
+        let given = resources.containers.compactMap(\.memoryLimitBytes).reduce(0, +)
+        guard given > computer.memoryBytes else { return nil }
+        return "Together the containers may use \(ResourceRow.bytes(given)), more than this computer's \(ResourceRow.bytes(computer.memoryBytes)): "
+            + "fine while they idle, not if they all build at once. A container keeps the memory it has used until it stops."
     }
 
     /// A session's name, as the list shows it.

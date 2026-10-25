@@ -42,6 +42,8 @@ struct ComposeSessionSheet: View {
     /// The agent runs in a Linux container on the computer, which sees the
     /// folder, rather than on the computer itself.
     @State private var inContainer = false
+    /// What the session's container is given, when it runs in one.
+    @State private var containerSize = ContainerSize.standard
 
     /// Only a computer that is answering can start a session.
     private var host: AgentServerConnection? {
@@ -104,6 +106,16 @@ struct ComposeSessionSheet: View {
                     } footer: {
                         if inContainer {
                             Text("The agent runs in a Linux container on the computer, which sees the project's folder and Xcode, and nothing else of it.")
+                        }
+                    }
+                    // What the container is given.
+                    if inContainer {
+                        Section {
+                            ContainerSizeRows(size: $containerSize)
+                        } header: {
+                            Text("Container")
+                        } footer: {
+                            Text(ContainerSizeRows.heavyNote)
                         }
                     }
                 }
@@ -343,7 +355,8 @@ struct ComposeSessionSheet: View {
         Task {
             do {
                 if containerChosen {
-                    let id = try await host.startInContainer(agent: agent, cwd: place, title: title.trimmed, skipPermissions: true)
+                    let id = try await host.startInContainer(agent: agent, cwd: place, title: title.trimmed, skipPermissions: true,
+                                                             size: containerSize)
                     host.addProject(place)
                     dismiss()
                     started(host.id, id)

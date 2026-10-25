@@ -649,8 +649,15 @@ on a Mac (`ServerPlatform.containers`, AppleContainers over the
 The container is made from Visor's image (tools/containers/visor-agent,
 built on each Mac: `container build --tag visor-agent --file
 tools/containers/visor-agent/Dockerfile tools/containers/visor-agent`;
-`visor-server containers image <name>` for another) with every processor
-and the agents' memory limit, and sees: the session's folder at the same
+`visor-server containers image <name>` for another) with the size the
+session asked for (ContainerSize: 6 cores, 16 GB of memory and 128 GB of
+disk unless asked otherwise, fitted to what the Mac has; the disk is a
+volume of that size at /var/cache/bazel, where the image keeps Bazel's
+output, since Apple's container sets no limit on a container's own disk).
+A session in a container is resized by making its container again at the
+new size (`contain` with a size): its agent ended, the container removed
+but its disk kept (unless the disk's size changed), the new one made and the
+agent started again there. It sees: the session's folder at the same
 path (so its files, git and the agent's own log are the Mac's), the
 agent's log folder for that folder (Claude's
 `~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's

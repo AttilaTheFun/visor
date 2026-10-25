@@ -359,6 +359,25 @@ final class VisorProbe: XCTestCase {
         app.terminate()
     }
 
+    /// New Session, In a Container chosen: what the container is given,
+    /// 6 cores, 16 GB and 128 GB unless changed.
+    func testNewSessionInAContainerOffersItsSize() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "new-session"]
+        app.launch()
+        let choice = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'In a Container'")).firstMatch
+        XCTAssertTrue(choice.waitForExistence(timeout: 10), "no In a Container choice")
+        choice.tap()
+        let cores = app.descendants(matching: .any)["container-cpus"].firstMatch
+        XCTAssertTrue(cores.waitForExistence(timeout: 5), "no size rows for the container")
+        XCTAssertTrue(app.staticTexts["6 cores"].exists || app.buttons["6 cores"].exists, "not 6 cores to start")
+        Thread.sleep(forTimeInterval: 1)
+        shot(app, "new-session-container")
+        app.terminate()
+    }
+
     /// New Session at one of the largest text sizes: where the session runs
     /// is a row each, its words whole (a segmented control cut them short
     /// there: "In a Contain…").

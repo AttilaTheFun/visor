@@ -259,7 +259,7 @@ extension VisorServer {
     /// that asked.
     private func performContain(_ envelope: Envelope, from client: ClientConnection?) {
         guard let record = session(envelope.session), let into = envelope.container else { return }
-        contain(record, into: into) { result in
+        contain(record, into: into, size: envelope.containerSize) { result in
             if case .failure(let failure) = result { client?.send(.error(failure.message)) }
         }
     }
