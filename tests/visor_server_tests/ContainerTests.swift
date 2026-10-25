@@ -131,6 +131,53 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(mode & 0o077, 0, "this user's alone")
     }
 
+    /// openrouter in a container: the containers' own openrouter home (their
+    /// key), the computer's sessions folder in it, where the server reads
+    /// the session's log.
+    func testOpenRouterInAContainerHasTheContainersOwnHome() async throws {
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7970)
+        defer { server.stop() }
+        _ = try await start(server, .startInContainer(id: "o1", agent: .openrouter, cwd: root.appendingPathComponent("work").path, title: "",
+                                                      skipPermissions: true)).get()
+        let mounts = try XCTUnwrap(containers.made.withLock { $0.first }).mounts
+        let home = try XCTUnwrap(mounts.firstIndex { $0.target == "/root/.openrouter" })
+        let sessions = try XCTUnwrap(mounts.firstIndex { $0.target == "/root/.openrouter/sessions" })
+        XCTAssertEqual(mounts[home].source, root.appendingPathComponent("containers/openrouter").path)
+        XCTAssertEqual(mounts[sessions].source, root.appendingPathComponent(".openrouter/sessions").path)
+        XCTAssertLessThan(home, sessions, "the home first, the sessions folder in it after")
+        XCTAssertFalse(mounts.contains { $0.target.hasPrefix("/root/.claude") }, "none of Claude's folders")
+        let mode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: mounts[home].source)[.posixPermissions] as? Int)
+        XCTAssertEqual(mode & 0o077, 0, "this user's alone")
+    }
+
+    /// A client signed in over the WebSocket hears that a session can start
+    /// in a container (its welcome), and hears again with the list when
+    /// that changes: New Session offered no Runs to a phone on the live
+    /// channel, whose welcome never said.
+    func testTheLiveChannelSaysWhetherContainersAreOnOffer() async throws {
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7971)
+        defer { server.stop() }
+        server.password = "pw"
+        let stream = EnvelopeStream()
+        // Its socket opened, as a client's WebSocket opens it, and held.
+        let upgrade = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+            + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        let client = ClientConnection(stream: stream, received: Data(upgrade.utf8))
+        client.start()
+        server.connections[ObjectIdentifier(client)] = client
+        server.handle(Envelope.login(password: "pw", client: "test"), from: client)
+        let welcome = try XCTUnwrap(stream.envelopes.first { $0.type == "welcome" })
+        XCTAssertEqual(welcome.container, true, "the welcome says containers are on offer")
+
+        server.settings.lan = false
+        server.settings.vpn = false
+        await server.checkContainers()
+        let list = try XCTUnwrap(stream.envelopes.last { $0.type == "sessions" })
+        XCTAssertEqual(list.container, false, "the list says they no longer are")
+    }
+
     /// A folder that is not on the computer says so, and no container is made.
     func testAMissingFolderSaysSoAndMakesNoContainer() async {
         let containers = FakeContainers()
@@ -149,7 +196,7 @@ final class ContainerTests: ServerTestCase {
         let missing = await server(FakeContainers(missing: "Apple's container is not installed"), port: 7993)
         defer { missing.stop() }
         XCTAssertFalse(missing.containersAvailable)
-        XCTAssertNil(missing.sessionsEnvelope().container)
+        XCTAssertEqual(missing.sessionsEnvelope().container, false, "the clients are told so")
         ServerPlatform.current.containers = FakeContainers()
         let loopback = VisorServer(port: 7992)
         defer { loopback.stop() }
@@ -257,5 +304,24 @@ final class ContainerTests: ServerTestCase {
         // the container it names.
         let old = Data(#"{"server":"http://oss.test:7480","id":"c1","repository":"o/r"}"#.utf8)
         XCTAssertEqual(try JSONDecoder().decode(SessionContainer.self, from: old), SessionContainer(id: "c1"))
+    }
+}
+
+/// What the server wrote to a client: the envelopes in its frames
+/// (unmasked, as a server sends them).
+private final class EnvelopeStream: ByteStream {
+    var sent: [Data] = []
+    func receive(_ chunk: @escaping @MainActor (Data?) -> Void) {}
+    func send(_ data: Data, sent: (@MainActor () -> Void)?) { self.sent.append(data); sent?() }
+    func close() {}
+
+    var envelopes: [Envelope] {
+        sent.compactMap { data in
+            let bytes = [UInt8](data)
+            guard bytes.count >= 2, bytes[0] & 0x0F == 1 else { return nil }
+            let length = Int(bytes[1] & 0x7F)
+            let start = length == 126 ? 4 : length == 127 ? 10 : 2
+            return Envelope.decode(String(decoding: bytes[start...], as: UTF8.self))
+        }
     }
 }

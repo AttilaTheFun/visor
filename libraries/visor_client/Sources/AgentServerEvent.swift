@@ -5,10 +5,11 @@ import VisorServices
 public enum AgentServerEvent: Sendable {
     /// The channel is open and signed in: the server's name, its sessions
     /// and its harnesses' catalogs, and whether it can start a session
-    /// whose agent runs in a container (on its oss).
+    /// whose agent runs in a container on its computer.
     case welcome(name: String, sessions: [SessionInfo], catalogs: [AgentCatalog], containers: Bool = false)
-    /// A new list of the server's sessions.
-    case sessions([SessionInfo])
+    /// A new list of the server's sessions, and whether containers are on
+    /// offer now (nil from a server that does not say with the list).
+    case sessions([SessionInfo], containers: Bool? = nil)
     /// The harnesses' catalogs changed (a tool installed, models refreshed).
     case catalogs([AgentCatalog])
     /// An agent's account changed: its plan, or how near its limits it is.

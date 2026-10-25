@@ -653,7 +653,8 @@ tools/containers/visor-agent/Dockerfile tools/containers/visor-agent`;
 and the agents' memory limit, and sees: the session's folder at the same
 path (so its files, git and the agent's own log are the Mac's), the
 agent's log folder for that folder (Claude's
-`~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`), Xcode
+`~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
+`~/.openrouter/sessions`), Xcode
 read-only at `/Applications/Xcode.app`, and Visor's tools read-only at
 `/opt/visor` (ContainerTools: `visor_mcp.js`, and `visor`). The agents'
 sign-ins for containers are the server's own, never the image's
@@ -663,7 +664,10 @@ CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
 sessions folder in it, signed in once on its own — `container run -it --rm
 --mount type=bind,source=<that folder>,target=/root/.codex visor-agent codex
 login --device-auth` — never a copy of the computer's, since Codex rotates
-its refresh token and the first copy to refresh signs out the other; and
+its refresh token and the first copy to refresh signs out the other;
+openrouter's the same way, `<data>/containers/openrouter` at
+`/root/.openrouter`, its key set once with `openrouter auth login` in a
+container (or OPENROUTER_API_KEY in agent.env); and
 `<data>/containers/home/`, other files copied into each container's home);
 the container makes its own SSH key.
 The agent runs under its host like any other (HostedChild), as

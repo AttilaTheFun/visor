@@ -79,7 +79,14 @@ extension VisorServer {
             try? FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
             mounts.append(ContainerMount(source: ContainerSignIns.codexHome.path, target: "/root/.codex"))
             mounts.append(ContainerMount(source: sessions.path, target: "/root/.codex/sessions"))
-        default:
+        case .openrouter:
+            // The same for openrouter: its home in the containers (their
+            // key), the computer's sessions folder in it.
+            let sessions = SessionCatalog.openrouterRoot.appendingPathComponent("sessions", isDirectory: true)
+            try? FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+            mounts.append(ContainerMount(source: ContainerSignIns.openrouterHome.path, target: "/root/.openrouter"))
+            mounts.append(ContainerMount(source: sessions.path, target: "/root/.openrouter/sessions"))
+        case .claude:
             let name = ClaudeSessionFiles.projectDirectoryName(for: folder)
             let project = ClaudeSessionFiles.projectsRoot().appendingPathComponent(name, isDirectory: true)
             try? FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)

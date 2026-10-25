@@ -38,7 +38,11 @@ extension VisorServer {
                 return
             }
             client.authenticated = true
-            client.send(.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs()))
+            var welcome = Envelope.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs())
+            // Whether a session can start in a container here: New
+            // Session offers it only then.
+            welcome.container = containersAvailable
+            client.send(welcome)
             return
         }
         perform(envelope, from: client)
