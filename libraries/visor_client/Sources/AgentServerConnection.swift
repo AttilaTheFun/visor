@@ -878,7 +878,14 @@ public final class AgentServerConnection: Identifiable {
     static let pageRows = 50
 
     public func transcript(for sessionID: String) -> SessionTranscript {
-        if let existing = transcripts[sessionID] { return existing }
+        if let existing = transcripts[sessionID] {
+            // Let go of when it was left: its rows read back from the cache
+            // now, so a screen opened on it draws them from its first frame
+            // rather than "Loading…" until it appears and subscribes (its
+            // sync starts again then).
+            if existing.released, !existing.loaded { fill(existing, from: cacheKey(sessionID)) }
+            return existing
+        }
         let transcript = SessionTranscript()
         let key = cacheKey(sessionID)
         fill(transcript, from: key)
@@ -1000,7 +1007,7 @@ public final class AgentServerConnection: Identifiable {
         let transcript = transcript(for: sessionID)
         if transcript.released {
             transcript.released = false
-            fill(transcript, from: cacheKey(sessionID))
+            if !transcript.loaded { fill(transcript, from: cacheKey(sessionID)) }
             startSyncing(sessionID, transcript)
         }
         // The agent's commands, known before a message is sent: a message

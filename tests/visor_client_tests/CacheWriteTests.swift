@@ -114,6 +114,11 @@ final class CacheWriteTests: XCTestCase {
         XCTAssertTrue(transcript.entries.isEmpty)
         XCTAssertTrue(transcript.released)
         XCTAssertEqual(server.unsubscribed, ["S"])
+        // A screen opened on it asks for its transcript first: the rows are
+        // there before the screen appears (no "Loading…" on the way back).
+        XCTAssertTrue(host.transcript(for: "S") === transcript)
+        XCTAssertTrue(transcript.loaded)
+        XCTAssertEqual(transcript.entries.last?.id, "r299")
         host.subscribe("S")
         await settle()
         XCTAssertFalse(transcript.released)
