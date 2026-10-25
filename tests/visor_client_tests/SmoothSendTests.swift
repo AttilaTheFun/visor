@@ -183,6 +183,30 @@ final class SmoothSendTests: XCTestCase {
         XCTAssertEqual(t.info?.title, "Renamed")
         XCTAssertEqual(t.announced, start + 1)
     }
+
+    /// What the agent was handed from the queue and has not written down
+    /// yet is the user's row after the record's, once: not again for a
+    /// message the thread shows already.
+    func testADeliveredMessageIsShownUntilTheRecordCarriesIt() {
+        let t = SessionTranscript()
+        t.sync(transcript([user("u-old", "earlier")], revision: 1, generation: 1))
+        var info = SessionInfo(id: "s", agent: .codex, cwd: "/tmp", title: "t", created: 0)
+        info.delivered = ["remove the label"]
+        t.info = info
+        XCTAssertEqual(t.deliveredEntries.map(\.text), ["remove the label"])
+        // The record has it (its files listed after the words): shown once.
+        t.sync(transcript([user("u-old", "earlier"), user("user-file-1", "remove the label\n\nAttached image:\n- /a.png")],
+                          revision: 2, generation: 1))
+        XCTAssertEqual(t.deliveredEntries, [])
+        // Sent from here to an idle agent and shown already: not twice.
+        let sent = TranscriptEntry(id: "sending-x", role: .user, text: "and the case")
+        var out = SessionTranscript.Outgoing(id: sent.id, entry: sent, sinceRevision: t.revision)
+        out.shown = true
+        t.sending.append(out)
+        info.delivered = ["and the case"]
+        t.info = info
+        XCTAssertEqual(t.deliveredEntries, [])
+    }
 }
 
 /// A message sent to an idle agent is in the thread at once, and its copy

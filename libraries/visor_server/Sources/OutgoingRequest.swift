@@ -17,14 +17,17 @@ public struct OutgoingRequest: Sendable {
         self.timeout = timeout
     }
 
-    /// What came back.
+    /// What came back: its status, its body, and its headers (names in
+    /// lowercase).
     public struct Answer: Sendable {
         public var status: Int
         public var body: Data
+        public var headers: [String: String]
 
-        public init(status: Int, body: Data) {
+        public init(status: Int, body: Data, headers: [String: String] = [:]) {
             self.status = status
             self.body = body
+            self.headers = headers
         }
     }
 }

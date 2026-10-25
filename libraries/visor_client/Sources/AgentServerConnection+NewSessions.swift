@@ -34,6 +34,19 @@ public extension AgentServerConnection {
         return id
     }
 
+    /// Starts a session whose agent runs in a container on the server's
+    /// computer, working in `cwd`, and returns its id once the server has
+    /// made it, subscribed; what went wrong is thrown.
+    @discardableResult
+    func startInContainer(id: String = AgentServerRecord.newID(), agent: AgentKind, cwd: String, title: String,
+                          skipPermissions: Bool) async throws -> String {
+        let list = try await server.startSessionInContainer(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions)
+        transcript(for: id).loaded = true
+        take(list, replacing: false)
+        subscribe(id)
+        return id
+    }
+
     /// Asks the server for the choices a new session starts from; what
     /// was had is kept when it does not answer.
     func loadStartChoices() async {

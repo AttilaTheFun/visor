@@ -23,8 +23,11 @@ struct SettingsPane: View {
     /// The field being edited, so leaving it applies what was typed: an
     /// address that only Return applied was easy to leave unapplied.
     @FocusState private var editing: EditedField?
-    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword, provisioningScript }
-    @State private var provisioningScript = ""
+    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword, ossServer, ossToken, containerImage, containerCallback }
+    @State private var ossServer = ""
+    @State private var ossToken = ""
+    @State private var containerImage = ""
+    @State private var containerCallback = ""
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
@@ -157,20 +160,30 @@ struct SettingsPane: View {
                 Text("Agents")
             }
             Section {
-                ForEach(MachinePlatform.allCases, id: \.self) { platform in
-                    let count = server.settings.maxMachines(platform)
-                    Stepper(value: Binding(get: { count }, set: { server.settings.setMaxMachines(platform, $0) }),
-                            in: 0...(platform.hostLimit ?? 16)) {
-                        LabeledContent(platform.title, value: count == 0 ? "None" : "\(count) at a time")
-                    }
-                }
-                TextField("Provisioning script (empty: Visor's own)", text: $provisioningScript)
-                    .focused($editing, equals: .provisioningScript)
-                    .onSubmit { apply(.provisioningScript) }
-                Text("Agents' sessions in virtual machines on this Mac, each wiped before it is used again: none unless allowed here (macOS allows two per Mac). A provisioning script of your own makes the machines from your own images, network and tools.")
+                TextField("Image (empty: \(VisorServer.containerImage))", text: $containerImage)
+                    .focused($editing, equals: .containerImage)
+                    .onSubmit { apply(.containerImage) }
+                TextField("How containers reach this Mac (empty: its LAN address)", text: $containerCallback)
+                    .focused($editing, equals: .containerCallback)
+                    .onSubmit { apply(.containerCallback) }
+                Text(server.containersAvailable
+                     ? "Sessions can run their agent in a Linux container on this Mac (Apple's container), which sees the session's folder and Xcode, and nothing else of the Mac."
+                     : "Install Apple's container (github.com/apple/container) and turn on “Reachable from the network” to run sessions' agents in Linux containers on this Mac.")
                     .font(.caption).foregroundColor(.secondary)
             } header: {
-                Text("Virtual machines")
+                Text("Containers")
+            }
+            Section {
+                TextField("oss server (http://host:7480)", text: $ossServer)
+                    .focused($editing, equals: .ossServer)
+                    .onSubmit { apply(.ossServer) }
+                SecureField(server.ossTokenKept ? "Token (kept)" : "Token", text: $ossToken)
+                    .focused($editing, equals: .ossToken)
+                    .onSubmit { apply(.ossToken) }
+                Text("Sessions here, in containers or not, lease machines (macOS, Linux and Windows VMs, iOS simulators, Android emulators) from this oss server through Visor Server, with `visor machine …`. The token stays here.")
+                    .font(.caption).foregroundColor(.secondary)
+            } header: {
+                Text("Machines (oss)")
             }
             Section {
                 let current = server.apnsKey
@@ -214,7 +227,9 @@ struct SettingsPane: View {
         .onAppear {
             publicAddress = server.settings.publicAddress
             tlsPath = server.settings.tlsIdentityPath
-            provisioningScript = server.settings.provisioningScript
+            ossServer = server.settings.ossServer
+            containerImage = server.settings.containerImage
+            containerCallback = server.settings.containerCallback
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
@@ -225,7 +240,10 @@ struct SettingsPane: View {
         .onDisappear {
             apply(.publicAddress)
             apply(.tlsPath)
-            apply(.provisioningScript)
+            apply(.ossServer)
+            apply(.ossToken)
+            apply(.containerImage)
+            apply(.containerCallback)
         }
     }
 
@@ -238,9 +256,19 @@ struct SettingsPane: View {
             if server.settings.publicAddress != publicAddress { server.settings.publicAddress = publicAddress }
         case .tlsPath:
             if server.settings.tlsIdentityPath != tlsPath { server.settings.tlsIdentityPath = tlsPath }
-        case .provisioningScript:
-            let path = provisioningScript.trimmingCharacters(in: .whitespaces)
-            if server.settings.provisioningScript != path { server.settings.provisioningScript = path }
+        case .ossServer:
+            let address = ossServer.trimmingCharacters(in: .whitespaces)
+            if server.settings.ossServer != address { server.settings.ossServer = address }
+        case .ossToken:
+            guard !ossToken.isEmpty else { return }
+            server.setOSSToken(ossToken)
+            ossToken = ""
+        case .containerImage:
+            let image = containerImage.trimmingCharacters(in: .whitespaces)
+            if server.settings.containerImage != image { server.settings.containerImage = image }
+        case .containerCallback:
+            let address = containerCallback.trimmingCharacters(in: .whitespaces)
+            if server.settings.containerCallback != address { server.settings.containerCallback = address }
         case .tlsPassword:
             // The identity with its password, as Return always applied them.
             guard !tlsPassword.isEmpty else { return }

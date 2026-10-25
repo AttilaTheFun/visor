@@ -3,6 +3,8 @@
 // The folder is picked from the computer's projects or browsed for; a
 // server that sets sessions up its own way offers its named choices in
 // place of folders, and asks for the first message the session starts with.
+// A server with oss offers a container in place of a folder: the agent
+// runs there, a repository cloned into it.
 // Sessions start in auto mode (no permission prompts — nobody is at the
 // computer to answer them); the chat's model sheet switches to manual.
 
@@ -37,22 +39,28 @@ struct ComposeSessionSheet: View {
     @State private var message = ""
     /// A folder was picked here: the latest project no longer stands in.
     @State private var placePicked = false
+    /// The agent runs in a Linux container on the computer, which sees the
+    /// folder, rather than on the computer itself.
+    @State private var inContainer = false
 
     /// Only a computer that is answering can start a session.
     private var host: AgentServerConnection? {
         store.connectedServers.first { $0.id == serverID } ?? store.connectedServers.first
     }
     private var starting: SessionStarting { host?.starting ?? .inFolders }
+    /// The computer can run the agent in a container, and it is asked to.
+    private var containerChosen: Bool { inContainer && (host?.containersAvailable ?? false) }
     /// Where the session starts: the folder, or the server's choice.
     private var place: String { starting.fromChoices ? choiceID : cwd.trimmed }
     /// Picking up an agent's own session needs a folder to look in and a
     /// session that starts without a message.
-    private var canResume: Bool { starting == .inFolders }
+    private var canResume: Bool { starting == .inFolders && !containerChosen }
     private var available: Set<AgentKind> {
         Set((host?.catalogs ?? []).filter(\.available).map(\.agent))
     }
     private var ready: Bool {
-        host != nil && !waiting && !place.isEmpty && !(resuming && canResume && resumeID.trimmed.isEmpty)
+        if containerChosen { return host != nil && !waiting }
+        return host != nil && !waiting && !place.isEmpty && !(resuming && canResume && resumeID.trimmed.isEmpty)
             && (!starting.withFirstMessage || !message.trimmed.isEmpty)
     }
 
@@ -77,6 +85,21 @@ struct ComposeSessionSheet: View {
                         }
                         .pickerStyle(.menu)
                         .accessibilityIdentifier("computer")
+                    }
+                }
+                // On the computer itself, or in a container on it.
+                if let host, host.containersAvailable, !starting.fromChoices {
+                    Section {
+                        Picker("Runs", selection: $inContainer) {
+                            Text("On the Computer").tag(false)
+                            Text("In a Container").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityIdentifier("where")
+                    } footer: {
+                        if inContainer {
+                            Text("The agent runs in a Linux container on the computer, which sees the project's folder and Xcode, and nothing else of it.")
+                        }
                     }
                 }
                 if let host, starting.fromChoices {
@@ -254,7 +277,8 @@ struct ComposeSessionSheet: View {
     /// A kind as the picker names it: marked when this computer cannot
     /// run it, its tool not installed.
     private func pickerTitle(for kind: AgentKind) -> String {
-        guard !available.contains(kind), !(host?.catalogs.isEmpty ?? true) else { return kind.title }
+        // A container's agents are its image's, not the computer's.
+        guard !containerChosen, !available.contains(kind), !(host?.catalogs.isEmpty ?? true) else { return kind.title }
         return "\(kind.title) (not installed)"
     }
 
@@ -319,6 +343,13 @@ struct ComposeSessionSheet: View {
         let place = place
         Task {
             do {
+                if containerChosen {
+                    let id = try await host.startInContainer(agent: agent, cwd: place, title: title.trimmed, skipPermissions: true)
+                    host.addProject(place)
+                    dismiss()
+                    started(host.id, id)
+                    return
+                }
                 let id = try await host.start(agent: agent, cwd: place, title: title.trimmed, skipPermissions: true,
                                               resume: resuming && canResume ? resumeID.trimmed : nil,
                                               firstMessage: starting.withFirstMessage ? message.trimmed : nil)

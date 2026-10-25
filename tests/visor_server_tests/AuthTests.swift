@@ -177,7 +177,13 @@ final class AuthTests: ServerTestCase {
         let path = VisorServer.socketPath
         for _ in 0..<50 where !FileManager.default.fileExists(atPath: path) { try? await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertTrue(FileManager.default.fileExists(atPath: path), path)
-        let mode = try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? Int
+        // Closed to others a moment after it is made (bound, then its mode
+        // set): read once that has happened, not in between.
+        var mode = try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? Int
+        for _ in 0..<50 where mode.map({ $0 & 0o777 }) != 0o600 {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            mode = try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? Int
+        }
         XCTAssertEqual(mode.map { $0 & 0o777 }, 0o600)
 
         // As the client reaches it (`nc -U` on the computer): a connection

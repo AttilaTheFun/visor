@@ -74,6 +74,7 @@ extension Envelope {
         e.receipt = RelayReceipt(json: value["receipt"])
         e.codes = ConnectionCodes(json: value["codes"])
         e.standalone = value["standalone"].bool
+        e.container = value["container"].bool
         e.resumable = value["resumable"].array?.compactMap(ResumableSession.init(json:))
         e.deviceToken = value["deviceToken"].string
         e.platform = value["platform"].string
@@ -140,6 +141,7 @@ extension Envelope {
         if let receipt { o["receipt"] = receipt.json }
         if let codes { o["codes"] = codes.json }
         putBool("standalone", standalone)
+        putBool("container", container)
         if let resumable { o["resumable"] = .array(resumable.map(\.json)) }
         if let deviceToken { o["deviceToken"] = .string(deviceToken) }
         if let platform { o["platform"] = .string(platform) }

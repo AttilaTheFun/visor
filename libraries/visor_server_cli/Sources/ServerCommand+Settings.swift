@@ -27,9 +27,7 @@ extension ServerCommand {
               : "Clients through this computer's SSH reach the port, with the password (`ssh on` lets them in without).")
         print("Reverse proxy: " + (settings.proxyEnabled && !settings.publicAddress.isEmpty ? "on, at \(settings.publicAddress)." : "off (`address <url>` sets one)."))
         print("Clients are told " + (Self.reachableAddress(platform, settings).map { "\($0)." } ?? "no address: only this computer and SSH reach the server."))
-        let machines = MachinePlatform.allCases.filter { settings.maxMachines($0) > 0 }.map { "\($0.title), \(Self.machineCount(settings.maxMachines($0)))" }
-        print("Virtual machines: " + (machines.isEmpty ? "none (`machines <platform> <n>` allows them)." : machines.joined(separator: "; ") + ", provisioned by "
-              + (settings.provisioningScript.isEmpty ? "Visor's own script." : settings.provisioningScript + ".")))
+        print(Self.ossWords(settings, tokenKept: !(platform.secrets.get("ossToken") ?? "").isEmpty))
     }
 
     /// The address clients are told, as the server would make it.

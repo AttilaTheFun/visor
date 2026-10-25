@@ -403,10 +403,12 @@ struct AgentScreen: View {
     /// The record's rows, each under the id it keeps through its copies.
     /// The record's rows, then what was just sent to an idle agent: in the
     /// thread at once, under the id its copy in the record takes over, so
-    /// the row stays where it is when the record catches up.
+    /// the row stays where it is when the record catches up. Then what the
+    /// agent was handed from the queue and has not written down yet.
     private var rows: [TranscriptMessage] {
         transcript.entries.map { TranscriptMessage($0, host: host.id, id: transcript.displayID(of: $0)) }
             + transcript.sending.filter(\.shown).map { TranscriptMessage($0.entry, host: host.id, id: $0.id) }
+            + transcript.deliveredEntries.map { TranscriptMessage($0, host: host.id, id: $0.id) }
     }
 
     /// The session's name, as the sidebar lists it.

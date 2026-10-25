@@ -4,8 +4,9 @@ import VisorServices
 /// What a server says over its live channel.
 public enum AgentServerEvent: Sendable {
     /// The channel is open and signed in: the server's name, its sessions
-    /// and its harnesses' catalogs.
-    case welcome(name: String, sessions: [SessionInfo], catalogs: [AgentCatalog])
+    /// and its harnesses' catalogs, and whether it can start a session
+    /// whose agent runs in a container (on its oss).
+    case welcome(name: String, sessions: [SessionInfo], catalogs: [AgentCatalog], containers: Bool = false)
     /// A new list of the server's sessions.
     case sessions([SessionInfo])
     /// The harnesses' catalogs changed (a tool installed, models refreshed).

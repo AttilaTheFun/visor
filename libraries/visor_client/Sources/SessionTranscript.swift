@@ -416,6 +416,22 @@ public final class SessionTranscript {
         }
     }
 
+    /// What the agent has been handed and has not written to its log yet
+    /// (the session's `delivered`: a message that left the queue while
+    /// Codex compacts its context, say), as the user's rows after the
+    /// record's: none the thread shows already (sent from here to an idle
+    /// agent, or the record's last message of the user's, in its words).
+    public var deliveredEntries: [TranscriptEntry] {
+        let delivered = info?.delivered ?? []
+        guard !delivered.isEmpty else { return [] }
+        let shown = sending.filter(\.shown).map(\.entry.text)
+        let last = entries.last { $0.role == .user }?.text
+        return delivered.enumerated().compactMap { index, text in
+            if shown.contains(text) || last == text || last?.hasPrefix(text + "\n\nAttached ") == true { return nil }
+            return TranscriptEntry(id: "delivered-\(index)", role: .user, text: text)
+        }
+    }
+
     /// Drops an outgoing message once the transcript has moved past when
     /// it was sent and carries an identical message: it is on the record.
     func settleSending() {

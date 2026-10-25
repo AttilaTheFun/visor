@@ -70,22 +70,18 @@ swift_library(
 # The reactor: isomer's iso_hot bridge (the ABI WasmView drives) + the
 # client, linked twice. First with every symbol exported and nothing
 # dropped, only to read which exports the hosts call (swift_ffi's
-# wasm_export_list: swift_ffi's entries, the bridge's, what WAMR reads);
-# then, the one shipped, exporting just those and dropping whatever they
-# do not reach. Exported whole, the module kept every function and value in
+# wasm_export_list: swift_ffi's entries, the bridge's, what the runtime
+# reads); then, the one shipped, exporting just those and dropping whatever
+# they do not reach. Exported whole, the module kept every function and value in
 # the program (144,233 exports, a 10 MB export section). Its function names
-# (9.6 MB) are kept only for the interpreter's profiler
-# (`--define wamr_profile=1`). The 16 MiB stack matches isomer's other
-# reactors.
+# (9.6 MB) are stripped. The 16 MiB stack matches isomer's other reactors.
 _SINGLE_LINKOPTS = [
     "-Xlinker",
     "-z",
     "-Xlinker",
     "stack-size=16777216",
     # Memory enough for a long session from the start: each growth cost the
-    # interpreter milliseconds (84 while scrolling a 200-row thread), and
-    # WAMR maps the whole range up front anyway (pages unused are not
-    # resident).
+    # interpreter milliseconds (84 while scrolling a 200-row thread).
     "-Xlinker",
     "--initial-memory=268435456",
 ]
@@ -152,24 +148,14 @@ swift_binary(
         "-Xlinker",
         "--gc-sections",
         "@$(location :reactor_exports)",
-    ] + _SINGLE_LINKOPTS + select({
-        ":profile": [],
-        "//conditions:default": [
-            "-Xlinker",
-            "--strip-all",
-        ],
-    }),
+    ] + _SINGLE_LINKOPTS + [
+        "-Xlinker",
+        "--strip-all",
+    ],
     linkshared = True,
     module_name = "visor_reactor",
     tags = ["manual"],
     deps = _SINGLE_DEPS + [":icu_data"],
-)
-
-# `--define wamr_profile=1`: the interpreter's profiler, which names
-# functions from the module's name section.
-config_setting(
-    name = "profile",
-    define_values = {"wamr_profile": "1"},
 )
 
 transition_binary(

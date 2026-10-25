@@ -6,6 +6,12 @@
 // the real ones. Point the probes at it:
 //   VISOR_PORT=7533 VISOR_TOKEN=staging node tools/probes/order.mjs
 // Ended with Ctrl-C (or SIGTERM), which ends its agents first.
+//
+// To try sessions in containers (Apple's container, with the visor-agent
+// image built): VISOR_STAGING_LAN=1, so it is reached on the LAN too, as an
+// agent in a container reaches it for Visor's tools. To lease machines
+// from oss through it: VISOR_STAGING_OSS=<oss's address> and
+// VISOR_STAGING_OSS_TOKEN_FILE=<its token's file>.
 
 import Foundation
 import VisorServer
@@ -23,10 +29,24 @@ struct StagingServer {
         // A Mac's platform, with its password in memory rather than the
         // keychain the installed server uses.
         ServerPlatform.current = .apple(secrets: MemorySecrets())
+        // Its log on its own output too, where whoever ran it reads it.
+        let systemLog = ServerPlatform.current.log
+        ServerPlatform.current.log = { line in
+            systemLog(line)
+            print(line)
+        }
         // Its socket file beside its data, not the installed server's.
         VisorServer.socketPathOverride = "/tmp/visor-staging-\(port).sock"
 
         let server = VisorServer.staging(port: port, root: root, password: password)
+        let environment = ProcessInfo.processInfo.environment
+        if environment["VISOR_STAGING_LAN"] == "1" { server.settings.lan = true }
+        if let oss = environment["VISOR_STAGING_OSS"], !oss.isEmpty {
+            server.settings.ossServer = oss
+            let file = environment["VISOR_STAGING_OSS_TOKEN_FILE"].map { ($0 as NSString).expandingTildeInPath } ?? ""
+            server.setOSSToken(try? String(contentsOfFile: file, encoding: .utf8))
+            print("Sessions lease machines from oss at \(oss)\(server.ossTokenKept ? "" : ", once its token is kept")")
+        }
         setlinebuf(stdout)
         print("Visor staging server: http://127.0.0.1:\(port) (the socket at /, the API at /api), password \(password)")
         print("Kept in \(root.path)")

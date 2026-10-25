@@ -243,7 +243,7 @@ enum SessionCatalog {
                    let parts = payload["content"] as? [[String: Any]] {
                     let text = parts.compactMap { $0["type"] as? String == "input_text" ? $0["text"] as? String : nil }.joined(separator: " ")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                    if text.isEmpty || text.hasPrefix("<") { continue }
+                    if CodexRolloutParser.isContext(text) { continue }
                     title = text
                     break
                 }

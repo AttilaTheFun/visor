@@ -84,7 +84,8 @@ extension VisorServer {
             // One left under its host is picked up instead (pickUp).
             if item.host == nil, let pid = item.agentPID { orphans.append((info.id, pid, item.resumeID)) }
             // Running when we went away, so running again now.
-            if item.host == nil, item.interrupted == true, !asked.contains("none"), asked.contains(info.id) || asked.contains("all") {
+            if item.host == nil, item.interrupted == true, !asked.contains("none"),
+               asked.contains(info.id) || asked.contains("all") {
                 pendingResumes.append(info.id)
             }
             var entries = item.entries

@@ -17,8 +17,10 @@ enum VisorMCPScript {
 // Env: VISOR_PORT, VISOR_TOKEN (the app's agent-side secret), VISOR_SESSION,
 // VISOR_APPROVALS ("1": offer `approve`; for Claude always, so that its
 // questions (AskUserQuestion) come to the user, and in manual mode every
-// tool call too).
+// tool call too), and VISOR_URL where the server is not this computer's
+// own (an agent in a container on oss: ws://host:port).
 const port = process.env.VISOR_PORT || "7433";
+const serverURL = process.env.VISOR_URL || `ws://127.0.0.1:${port}`;
 const token = process.env.VISOR_TOKEN || "";
 const session = process.env.VISOR_SESSION || "";
 const approvals = process.env.VISOR_APPROVALS === "1";
@@ -128,7 +130,7 @@ function call(fields) {
   return new Promise((resolve) => {
     const requestID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let ws;
-    try { ws = new WebSocket(`ws://127.0.0.1:${port}`); } catch { resolve({ ok: false, text: "Visor is not reachable." }); return; }
+    try { ws = new WebSocket(serverURL); } catch { resolve({ ok: false, text: "Visor is not reachable." }); return; }
     let settled = false;
     const done = (result) => { if (settled) return; settled = true; try { ws.close(); } catch {} resolve(result); };
     ws.onopen = () => ws.send(JSON.stringify({ type: "agent", token, client: session, id: requestID, ...fields }));
@@ -146,7 +148,7 @@ function ask(args) {
     const requestID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let ws;
     const no = { allow: false };
-    try { ws = new WebSocket(`ws://127.0.0.1:${port}`); } catch { resolve(no); return; }
+    try { ws = new WebSocket(serverURL); } catch { resolve(no); return; }
     const done = (result) => { try { ws.close(); } catch {} resolve(result); };
     const questions = args.tool_name === "AskUserQuestion" ? args.input?.questions : undefined;
     ws.onopen = () => ws.send(JSON.stringify({

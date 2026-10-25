@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/agent_ui.git",
       "state" : {
-        "revision" : "7d4c213d05da4b035e493188013fe47fe52609aa",
-        "version" : "0.36.1"
+        "revision" : "d83a86ea12dc3ad3d23825e85ed475954e5ddba7",
+        "version" : "0.38.1"
       }
     },
     {
@@ -16,6 +16,15 @@
       "state" : {
         "revision" : "aa3626829160917d4378330617971977cbd78f5b",
         "version" : "1.0.1"
+      }
+    },
+    {
+      "identity" : "oss",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AttilaTheFun/oss.git",
+      "state" : {
+        "revision" : "e8cfce0285ec03e5ad2755a7bc7c08471fc68b8b",
+        "version" : "0.3.0"
       }
     },
     {
