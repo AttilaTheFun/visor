@@ -87,15 +87,20 @@ struct ComposeSessionSheet: View {
                         .accessibilityIdentifier("computer")
                     }
                 }
-                // On the computer itself, or in a container on it.
+                // On the computer itself, or in a container on it: a row
+                // each, which wrap at any text size (a segment's words are
+                // cut short at the larger ones: "In a Contain…").
                 if let host, host.containersAvailable, !starting.fromChoices {
                     Section {
                         Picker("Runs", selection: $inContainer) {
                             Text("On the Computer").tag(false)
                             Text("In a Container").tag(true)
                         }
-                        .pickerStyle(.segmented)
+                        .pickerStyle(.inline)
+                        .labelsHidden()
                         .accessibilityIdentifier("where")
+                    } header: {
+                        Text("Runs")
                     } footer: {
                         if inContainer {
                             Text("The agent runs in a Linux container on the computer, which sees the project's folder and Xcode, and nothing else of it.")
@@ -117,24 +122,18 @@ struct ComposeSessionSheet: View {
                         }
                     }
                 } else if host != nil {
-                    // The computer's projects, the latest first, to pick
-                    // with a tap; any other folder from the browser.
+                    // The folder chosen (the latest project's until another
+                    // is picked), and the row that opens the browser for
+                    // another.
                     Section("Project") {
-                        if !recentProjects.contains(where: { $0.cwd == cwd }) {
-                            ProjectChoice(name: AgentServerConnection.Project(cwd: cwd, sessions: []).folderName, path: cwd,
-                                          chosen: true) {}
-                        }
-                        ForEach(recentProjects) { project in
-                            ProjectChoice(name: project.name, path: project.cwd, chosen: project.cwd == cwd) {
-                                cwd = project.cwd
-                                placePicked = true
-                            }
-                        }
+                        ChosenProject(name: recentProjects.first { $0.cwd == cwd }?.name
+                                          ?? AgentServerConnection.Project(cwd: cwd, sessions: []).folderName,
+                                      path: cwd)
                         Button { browsing = true } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: "folder")
                                     .foregroundColor(.accentColor)
-                                Text("Other Folder…")
+                                Text("Choose Folder…")
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.footnote.weight(.semibold))
@@ -364,34 +363,26 @@ struct ComposeSessionSheet: View {
     }
 }
 
-/// A folder to start in, as a row: its name, its path, and a check when
-/// it is the one chosen.
+/// The folder the session starts in, as a row: its name and its path.
 @MainActor
-private struct ProjectChoice: View {
+private struct ChosenProject: View {
     let name: String
     let path: String
-    let chosen: Bool
-    let choose: () -> Void
 
     var body: some View {
-        Button(action: choose) {
-            HStack(spacing: 12) {
-                Image(systemName: "folder.fill")
-                    .foregroundColor(.accentColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(name)
-                    Text(path)
-                        .font(.caption.monospaced())
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-                Spacer()
-                if chosen { Image(systemName: "checkmark").foregroundColor(.accentColor) }
+        HStack(spacing: 12) {
+            Image(systemName: "folder.fill")
+                .foregroundColor(.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                Text(path)
+                    .font(.caption.monospaced())
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
-            .contentShape(Rectangle())
+            Spacer()
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("project-" + name)
+        .accessibilityIdentifier("project-chosen")
     }
 }
