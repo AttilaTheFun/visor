@@ -95,6 +95,6 @@ let package = Package(
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
     // swift_sql and oss at their releases, as third_party/swift_packages pins them.
     dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0"),
-                   .package(url: "https://github.com/AttilaTheFun/oss.git", revision: "bd5c3aba053c2b9883aae52394dc45953da6694e")],
+                   .package(url: "https://github.com/AttilaTheFun/oss.git", revision: "2538f07811d8508d4037d1429d4c87ed42e2a8bd")],
     targets: clientServices + shared + system + tests
 )
