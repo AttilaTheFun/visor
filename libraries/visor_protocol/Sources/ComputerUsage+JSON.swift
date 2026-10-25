@@ -1,4 +1,4 @@
-extension HostUsage {
+extension ComputerUsage {
     var json: JSONValue {
         var o: [String: JSONValue] = ["cpus": .number(Double(cpus)), "memoryBytes": .number(Double(memoryBytes))]
         if let name { o["name"] = .string(name) }

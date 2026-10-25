@@ -1,6 +1,6 @@
 /// What a machine a session leases from oss is using (a VM, a simulator,
 /// an emulator), as oss says; nothing where its oss does not say.
-public struct MachineUsage: Codable, Hashable, Sendable {
+public struct LeaseUsage: Codable, Hashable, Sendable {
     /// oss's id for the lease, its platform and configuration.
     public var id: String
     public var platform: String

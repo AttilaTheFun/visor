@@ -22,8 +22,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/oss.git",
       "state" : {
-        "revision" : "e8cfce0285ec03e5ad2755a7bc7c08471fc68b8b",
-        "version" : "0.3.0"
+        "revision" : "bd5c3aba053c2b9883aae52394dc45953da6694e"
       }
     },
     {

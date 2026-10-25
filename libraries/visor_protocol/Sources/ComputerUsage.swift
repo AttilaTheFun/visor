@@ -1,6 +1,6 @@
 /// A computer's processors and memory, as its server or its oss says
 /// they are being used.
-public struct HostUsage: Codable, Hashable, Sendable {
+public struct ComputerUsage: Codable, Hashable, Sendable {
     /// The computer's name.
     public var name: String?
     /// Its processor cores.

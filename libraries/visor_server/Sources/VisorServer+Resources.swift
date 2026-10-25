@@ -3,6 +3,7 @@
 // sessions lease from oss.
 
 import Foundation
+import OSSClient
 import VisorProtocol
 
 extension VisorServer {
@@ -22,10 +23,10 @@ extension VisorServer {
             try? await Task.sleep(for: Self.readingGap)
         }
 
-        var host: HostUsage?
+        var host: ComputerUsage?
         if let now = platform.load?.sample() {
             let percent = resourceReadings.host.flatMap { now.cpuPercent(since: $0.sample) }
-            host = HostUsage(name: hostName, cpus: now.cpus, cpuPercent: percent, memoryBytes: Int64(clamping: now.memoryBytes),
+            host = ComputerUsage(name: hostName, cpus: now.cpus, cpuPercent: percent, memoryBytes: Int64(clamping: now.memoryBytes),
                              memoryUsedBytes: Int64(clamping: now.memoryUsedBytes))
             resourceReadings.host = (now, .now)
         }
@@ -43,12 +44,39 @@ extension VisorServer {
             keep(stats, at: at)
         }
 
-        let machines = leases.flatMap { session, held in
-            held.map { MachineUsage(id: $0.id, platform: $0.platform, config: $0.config, session: session) }
-        }.sorted { $0.id < $1.id }
-        let note: String? = machines.isEmpty ? nil : "oss does not say yet what each machine is using."
+        // The machines this server's sessions lease, with what oss says
+        // each is using (an older oss says nothing of it).
+        var machines = leases.flatMap { session, held in
+            held.map { LeaseUsage(id: $0.id, platform: $0.platform, config: $0.config, session: session) }
+        }
+        var machinesHost: ComputerUsage?
+        var note: String?
+        if let oss = ossClient, !machines.isEmpty {
+            do {
+                let usage = try await oss.usage()
+                machinesHost = ComputerUsage(name: usage.host.name, cpus: usage.host.cpus, cpuPercent: usage.host.cpuPercent,
+                                             memoryBytes: usage.host.memoryBytes, memoryUsedBytes: usage.host.memoryUsedBytes)
+                machines = Self.measured(machines, by: usage.machines)
+            } catch {
+                note = "oss does not say what each machine is using (it says so from 0.5)."
+            }
+        }
         return ServerResources(sampledAt: Date().timeIntervalSince1970, host: host, containers: containers.sorted { $0.id < $1.id },
-                               machines: machines, machinesNote: note)
+                               machines: machines.sorted { $0.id < $1.id }, machinesHost: machinesHost, machinesNote: note)
+    }
+
+    /// The sessions' machines with oss's numbers for each, by its lease.
+    static func measured(_ machines: [LeaseUsage], by usage: [MachineUsage]) -> [LeaseUsage] {
+        let byLease = Dictionary(usage.map { ($0.id, $0) }) { first, _ in first }
+        return machines.map { machine in
+            guard let used = byLease[machine.id] else { return machine }
+            var measured = machine
+            measured.cpus = used.cpus
+            measured.cpuPercent = used.cpuPercent
+            measured.memoryLimitBytes = used.memoryLimitBytes
+            measured.memoryBytes = used.memoryBytes
+            return measured
+        }
     }
 
     private func keep(_ stats: [ContainerStats], at: ContinuousClock.Instant = .now) {

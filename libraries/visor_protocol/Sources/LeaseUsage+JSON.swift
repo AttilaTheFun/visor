@@ -1,4 +1,4 @@
-extension MachineUsage {
+extension LeaseUsage {
     var json: JSONValue {
         var o: [String: JSONValue] = ["id": .string(id), "platform": .string(platform)]
         if let config { o["config"] = .string(config) }

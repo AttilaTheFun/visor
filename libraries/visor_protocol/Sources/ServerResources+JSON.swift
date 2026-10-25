@@ -10,9 +10,9 @@ extension ServerResources {
 
     init?(json: JSONValue) {
         guard let sampledAt = json["sampledAt"].double else { return nil }
-        self.init(sampledAt: sampledAt, host: HostUsage(json: json["host"]),
+        self.init(sampledAt: sampledAt, host: ComputerUsage(json: json["host"]),
                   containers: json["containers"].array?.compactMap(ContainerUsage.init(json:)) ?? [],
-                  machines: json["machines"].array?.compactMap(MachineUsage.init(json:)) ?? [],
-                  machinesHost: HostUsage(json: json["machinesHost"]), machinesNote: json["machinesNote"].string)
+                  machines: json["machines"].array?.compactMap(LeaseUsage.init(json:)) ?? [],
+                  machinesHost: ComputerUsage(json: json["machinesHost"]), machinesNote: json["machinesNote"].string)
     }
 }

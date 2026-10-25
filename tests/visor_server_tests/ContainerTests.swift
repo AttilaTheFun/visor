@@ -8,6 +8,7 @@
 
 import ClaudeTranscript
 import Foundation
+import OSSClient
 import Synchronization
 import VisorProtocol
 @testable import VisorServer
@@ -205,7 +206,16 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(container.cpuPercent, 0, "no processor time between its two readings")
         XCTAssertEqual(container.memoryLimitBytes, 4 << 30)
         XCTAssertEqual(resources.machines.map(\.session), ["r1"])
-        XCTAssertNotNil(resources.machinesNote)
+        XCTAssertNil(resources.machines.first?.cpuPercent, "no oss here to say")
+
+        // oss's numbers, by lease: an emulator's and its allotment; a lease
+        // oss does not mention keeps none.
+        let measured = VisorServer.measured([LeaseUsage(id: "l1", platform: "android", session: "r1"), LeaseUsage(id: "l2", platform: "ios")],
+                                            by: [MachineUsage(id: "l1", platform: .android, config: "phone", holder: "visor:r1", cpus: 4,
+                                                              memoryLimitBytes: 4 << 30, cpuPercent: 120, memoryBytes: 3 << 30)])
+        XCTAssertEqual(measured.first?.cpuPercent, 120)
+        XCTAssertEqual(measured.first?.memoryLimitBytes, 4 << 30)
+        XCTAssertNil(measured.last?.cpuPercent)
 
         // Its share of a core between readings: a second's time in two.
         let start = ContinuousClock.now
