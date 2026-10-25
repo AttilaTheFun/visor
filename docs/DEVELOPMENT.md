@@ -653,11 +653,9 @@ tools/containers/visor-agent/Dockerfile tools/containers/visor-agent`;
 session asked for (ContainerSize: 6 cores, 16 GB of memory and 128 GB of
 disk unless asked otherwise, fitted to what the Mac has; the disk is a
 volume of that size at /var/cache/bazel, where the image keeps Bazel's
-output, since Apple's container sets no limit on a container's own disk).
-A session in a container is resized by making its container again at the
-new size (`contain` with a size): its agent ended, the container removed
-but its disk kept (unless the disk's size changed), the new one made and the
-agent started again there. It sees: the session's folder at the same
+output, since Apple's container sets no limit on a container's own disk),
+chosen before the container is made (New Session, Move into a Container).
+It sees: the session's folder at the same
 path (so its files, git and the agent's own log are the Mac's), the
 agent's log folder for that folder (Claude's
 `~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's

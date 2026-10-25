@@ -73,9 +73,9 @@ public protocol AgentServer: AnyObject {
     /// made.
     func startSessionInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool,
                                  size: ContainerSize?) async throws -> [SessionInfo]
-    /// Moves a session's agent into a container on its computer (`into`) of
-    /// `size` (its container made again at that size, when it is in one),
-    /// or out of it onto the computer; answered once it has moved.
+    /// Moves a session's agent into a container on its computer (`into`)
+    /// given `size`, or out of it onto the computer; answered once it has
+    /// moved.
     func contain(session: String, into: Bool, size: ContainerSize?) async throws -> [SessionInfo]
     /// One command on a session; the sessions the answer names are taken
     /// into the list (after `.end`, they replace it).

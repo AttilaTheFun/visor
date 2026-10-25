@@ -34,12 +34,7 @@ final class FakeContainers: ContainerRunning {
         made.withLock { made in removed.withLock { made.contains { $0.name == name } && !$0.contains(name) } } ? true : nil
     }
 
-    /// The containers removed with their disks kept, for the next.
-    let keptDisks = Mutex<[String]>([])
-    func remove(_ name: String, keepingDisk: Bool) async throws {
-        removed.withLock { $0.append(name) }
-        if keepingDisk { keptDisks.withLock { $0.append(name) } }
-    }
+    func remove(_ name: String, keepingDisk: Bool) async throws { removed.withLock { $0.append(name) } }
 
     /// What `stats` says.
     let reported = Mutex<[ContainerStats]>([])
@@ -231,9 +226,9 @@ final class ContainerTests: ServerTestCase {
     }
 
     /// A container is given what was asked, within what the computer has:
-    /// 6 cores, 16 GB and 128 GB unless asked otherwise; and made again at
-    /// another size in place, its disk kept and its agent started again.
-    func testAContainerIsGivenItsSizeAndResizedInPlace() async throws {
+    /// 6 cores, 16 GB and 128 GB unless asked otherwise, chosen before it is
+    /// made (New Session, Move into a Container).
+    func testAContainerIsGivenTheSizeAskedFor() async throws {
         let containers = FakeContainers()
         let server = await server(containers, port: 7973)
         defer { server.stop() }
@@ -246,27 +241,24 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(first.disk, UInt64(128 * gigabyte))
         XCTAssertEqual(first.diskTarget, "/var/cache/bazel", "where Visor's image keeps Bazel's output")
 
-        let bigger = ContainerSize(cpus: 2, memoryBytes: 4 * gigabyte, diskBytes: 64 * gigabyte)
-        let moved: Result<Void, ContainerFailure> = await withCheckedContinuation { done in
-            server.contain(standard, into: true, size: bigger) { done.resume(returning: $0) }
-        }
-        XCTAssertNoThrow(try moved.get())
-        XCTAssertEqual(standard.info.container?.size, VisorServer.fitted(bigger))
+        let asked = ContainerSize(cpus: 2, memoryBytes: 4 * gigabyte, diskBytes: 64 * gigabyte)
+        let sized = try await start(server, .startInContainer(id: "z2", agent: .claude, cwd: work, title: "", skipPermissions: true,
+                                                              size: asked)).get()
+        XCTAssertEqual(sized.info.container?.size, VisorServer.fitted(asked))
         let second = try XCTUnwrap(containers.made.withLock { $0.last })
-        XCTAssertEqual(containers.made.withLock { $0.count }, 2, "made again")
         XCTAssertEqual(second.cpus, 2)
         XCTAssertEqual(second.memory, UInt64(4 * gigabyte))
-        XCTAssertEqual(containers.keptDisks.withLock { $0 }, [VisorServer.containerName(session: "z1")], "its disk kept for the new one")
+        XCTAssertEqual(second.disk, UInt64(64 * gigabyte))
 
         // Within what the computer has.
         let fitted = VisorServer.fitted(ContainerSize(cpus: 64, memoryBytes: 200 * gigabyte, diskBytes: 1), cores: 12,
                                         memory: UInt64(32 * gigabyte))
         XCTAssertEqual(fitted, ContainerSize(cpus: 12, memoryBytes: 28 * gigabyte, diskBytes: 16 * gigabyte))
         // And over the wire, both ways.
-        let asked = Envelope.decode(Envelope.contain(session: "z1", true, size: bigger).encoded())
-        XCTAssertEqual(asked?.containerSize, bigger)
-        let told = Envelope.decode(Envelope.sessions([standard.info]).encoded())
-        XCTAssertEqual(told?.sessions?.first?.container?.size, VisorServer.fitted(bigger))
+        let moved = Envelope.decode(Envelope.contain(session: "z1", true, size: asked).encoded())
+        XCTAssertEqual(moved?.containerSize, asked)
+        let told = Envelope.decode(Envelope.sessions([sized.info]).encoded())
+        XCTAssertEqual(told?.sessions?.first?.container?.size, VisorServer.fitted(asked))
     }
 
     /// A folder that is not on the computer says so, and no container is made.

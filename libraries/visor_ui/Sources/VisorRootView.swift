@@ -26,8 +26,7 @@ public struct VisorRootView: View {
     @State private var endSession = ViewAction()
     @State private var composing = false
     @State private var renamingSession: SessionTarget?
-    /// The session whose container's size is being chosen (moving it into
-    /// one, or resizing the one it is in).
+    /// The session moving into a container, its size being chosen.
     @State private var sizingContainer: SessionTarget?
     @State private var renamingProject: ProjectTarget?
     @State private var deletingSession: SessionTarget?

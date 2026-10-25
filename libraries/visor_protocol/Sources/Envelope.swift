@@ -236,8 +236,7 @@ extension Envelope {
     /// Moves a session's agent into a container on its computer (`true`) or
     /// out of it onto the computer itself (`false`): the same folder and
     /// conversation, its agent started again on the other side.
-    /// With a size, into a container of that size: one the session is in
-    /// already is made again at it (its agent started again there).
+    /// With a size, into a container given that much.
     public static func contain(session: String, _ container: Bool, size: ContainerSize? = nil) -> Envelope {
         var e = Envelope(type: "contain"); e.session = session; e.container = container; e.containerSize = size; return e
     }

@@ -194,13 +194,8 @@ extension VisorServer {
     /// out of its container onto this computer: the same folder and
     /// conversation, its agent started again on the other side. Not while
     /// it works: the container it leaves is removed, and the turn with it.
-    /// Into a container of another size when it is in one already: that
-    /// one is made again at the size (`resize`).
     func contain(_ record: SessionRecord, into: Bool, size: ContainerSize? = nil,
                  done: @escaping @MainActor (Result<Void, ContainerFailure>) -> Void) {
-        if into, let size, let current = record.info.container, current.size != Self.fitted(size) {
-            return resize(record, to: size, done: done)
-        }
         guard into != (record.info.container != nil) else { return done(.success(())) }
         guard !record.info.busy else { return done(.failure(ContainerFailure(message: "The agent is working: move it once its turn has ended."))) }
         Task {
@@ -225,36 +220,6 @@ extension VisorServer {
             saveArchive()
             broadcastSessions()
             done(.success(()))
-        }
-    }
-
-    /// A session's container made again at another size (a container's
-    /// processors and memory are fixed when it is made): its agent ended,
-    /// the container removed but its disk kept, the new one made, and the
-    /// agent started again there. Not while it works. Should the new one
-    /// not be made, the session runs on the computer, and says why.
-    func resize(_ record: SessionRecord, to size: ContainerSize, done: @escaping @MainActor (Result<Void, ContainerFailure>) -> Void) {
-        guard !record.info.busy else { return done(.failure(ContainerFailure(message: "The agent is working: resize its container once its turn has ended."))) }
-        guard let runtime = ServerPlatform.current.containers, let old = record.info.container else {
-            return done(.failure(ContainerFailure(message: "This computer cannot run containers.")))
-        }
-        record.held = true
-        Task {
-            await record.process.end(within: .seconds(3))
-            try? await runtime.remove(old.id, keepingDisk: true)
-            var failure: ContainerFailure?
-            do {
-                record.info.container = try await makeContainer(session: record.info.id, agent: record.info.agent, folder: record.info.cwd, size: size)
-            } catch {
-                record.info.container = nil
-                failure = ContainerFailure(message: "The container could not be made again (\((error as? ContainerFailure)?.message ?? error.localizedDescription)): the session runs on the computer now.")
-            }
-            record.placed()
-            Self.log("session's container resized: \(record.info.title) (\(record.info.id))")
-            rebuild(record)
-            saveArchive()
-            broadcastSessions()
-            done(failure.map { .failure($0) } ?? .success(()))
         }
     }
 
