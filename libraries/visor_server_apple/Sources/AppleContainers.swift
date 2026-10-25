@@ -56,6 +56,28 @@ public struct AppleContainers: ContainerRunning {
         guard removed.status == 0 else { throw AppleContainersError(message: removed.output.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
+    /// `container stats` for the running ones (processor time and memory),
+    /// with the cores each was given from `container list`.
+    public func stats() async -> [ContainerStats] {
+        guard let read = try? await Self.run(tool, ["stats", "--no-stream", "--format", "json"]), read.status == 0,
+              let rows = try? JSONSerialization.jsonObject(with: Data(read.output.utf8)) as? [[String: Any]] else { return [] }
+        var cores: [String: Int] = [:]
+        if let listed = try? await Self.run(tool, ["list", "--format", "json"]), listed.status == 0,
+           let containers = try? JSONSerialization.jsonObject(with: Data(listed.output.utf8)) as? [[String: Any]] {
+            for container in containers {
+                let configuration = container["configuration"] as? [String: Any]
+                if let id = configuration?["id"] as? String, let cpus = (configuration?["resources"] as? [String: Any])?["cpus"] as? Int {
+                    cores[id] = cpus
+                }
+            }
+        }
+        return rows.compactMap { row in
+            guard let id = row["id"] as? String, let used = (row["cpuUsageUsec"] as? NSNumber)?.uint64Value else { return nil }
+            return ContainerStats(id: id, cpuMicroseconds: used, cpus: cores[id], memoryUsedBytes: (row["memoryUsageBytes"] as? NSNumber)?.uint64Value,
+                                  memoryLimitBytes: (row["memoryLimitBytes"] as? NSNumber)?.uint64Value)
+        }
+    }
+
     public func execute(_ name: String, _ command: [String], input: Data?) async throws -> (status: Int32, output: String) {
         try await Self.run(tool, ["exec"] + (input == nil ? [] : ["--interactive"]) + [name] + command, input: input)
     }

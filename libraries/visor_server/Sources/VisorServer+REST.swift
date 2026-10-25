@@ -51,6 +51,15 @@ extension VisorServer {
                 }
             }
         }
+        // What the computer is using, and its containers and machines.
+        if request.method == "GET", parts == ["resources"], authorized(request) {
+            Task {
+                var e = Envelope(type: "resources")
+                e.resources = await self.resources()
+                respond(.json(e.encoded()))
+            }
+            return
+        }
         // The machines a session leases from oss, through this server.
         if parts.first == "machines", authorized(request) {
             return answerMachines(request, parts: parts, respond: respond)

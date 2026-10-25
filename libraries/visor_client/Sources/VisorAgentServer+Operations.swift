@@ -99,6 +99,10 @@ extension VisorAgentServer {
         try await call("GET", "/account?agent=\(agent.rawValue)").account
     }
 
+    public func resources() async throws -> ServerResources? {
+        try await call("GET", "/resources").resources
+    }
+
     public func relocateSessions(from cwd: String, to destination: String) async throws -> [SessionInfo] {
         var e = Envelope(type: "relocate")
         e.path = cwd

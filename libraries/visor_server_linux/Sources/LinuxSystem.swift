@@ -40,6 +40,7 @@ public struct LinuxSystem: CommandLineSystem {
                               resolve: { POSIXResolver.ipv4($0) }),
             lifecycle: lifecycle,
             agentHosts: POSIXAgentHosting.beside(executable),
+            load: ProcHostLoad(),
             log: log
         )
     }

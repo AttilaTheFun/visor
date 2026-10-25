@@ -14,6 +14,9 @@ public enum ContentSelection: Hashable {
     case archived(serverID: String, cwd: String)
     /// Everything archived on a computer, whichever folder it ran in.
     case hostArchive(serverID: String)
+    /// What a computer is using: its processors and memory, its sessions'
+    /// containers and the machines they lease.
+    case resources(serverID: String)
 
     var session: SessionSelection? { if case .session(let value) = self { value } else { nil } }
     var serverID: String? {
@@ -23,6 +26,7 @@ public enum ContentSelection: Hashable {
         case .session(let value): value.serverID
         case .archived(let serverID, _): serverID
         case .hostArchive(let serverID): serverID
+        case .resources(let serverID): serverID
         }
     }
 }

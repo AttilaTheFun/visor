@@ -23,4 +23,11 @@ public protocol ContainerRunning: Sendable {
     /// `environmentFile` on this computer: what an agent's host runs.
     func command(in name: String, executable: String, arguments: [String], directory: String,
                  environmentFile: String) -> ShellCommand
+    /// What each running container is using now.
+    func stats() async -> [ContainerStats]
+}
+
+extension ContainerRunning {
+    /// None said, where the containers cannot say.
+    public func stats() async -> [ContainerStats] { [] }
 }
