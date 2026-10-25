@@ -126,7 +126,10 @@ final class ScriptedServer: AgentServer {
         return [SessionInfo(id: id, agent: agent, cwd: cwd, title: title, created: 0)]
     }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] { actions.append((action, session)); return [] }
-    func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { sent.append((session, text)); return [] }
+    /// What a send is answered with: the sessions as the server has them
+    /// after it.
+    var sendAnswer: [SessionInfo] = []
+    func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { sent.append((session, text)); return sendAnswer }
 
     /// How it sets up new sessions, its choices, and whether it keeps
     /// titles and an archive of its own.

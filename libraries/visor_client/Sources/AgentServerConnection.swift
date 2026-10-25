@@ -834,7 +834,8 @@ public final class AgentServerConnection: Identifiable {
             note("the server answered with an error: \(message)")
             quiet = false
             state = .failed(message)
-        case .sessions(let list):
+        case .sessions(let list, let containers):
+            if let containers { containersAvailable = containers }
             let before = sessions
             sessions = list
             if state == .connected { notifyChanges(from: before, to: sessions) }
@@ -1290,13 +1291,24 @@ public final class AgentServerConnection: Identifiable {
 
     /// Posts one message. Taken, one that waits for the turn to end is no
     /// longer on its way: the server's queue holds it from here (one sent to
-    /// an idle agent stays in the thread until the record carries it). Not
-    /// taken, it is not on its way at all, and the user is told.
+    /// an idle agent stays in the thread until the record carries it). One
+    /// the server handed straight to the agent though it looked busy from
+    /// here (the session's state a moment behind) goes in the thread now,
+    /// as if it had looked idle, rather than nowhere until the agent's log
+    /// has it, after the reply has begun. Not taken, it is not on its way
+    /// at all, and the user is told.
     private func post(_ sessionID: String, outgoing id: String, text: String, images: [String]) async {
         let session = transcript(for: sessionID)
         do {
-            take(try await server.sendMessage(sessionID, text: text, images: images), replacing: false)
-            session.sending.removeAll { $0.id == id && !$0.shown }
+            let answer = try await server.sendMessage(sessionID, text: text, images: images)
+            take(answer, replacing: false)
+            // A command stays out: its log may never write it back.
+            if !text.hasPrefix("/"), let info = answer.first(where: { $0.id == sessionID }), !info.queued.contains(text),
+               let index = session.sending.firstIndex(where: { $0.id == id }) {
+                session.sending[index].shown = true
+            } else {
+                session.sending.removeAll { $0.id == id && !$0.shown }
+            }
             commandError = nil
         } catch {
             session.sending.removeAll { $0.id == id }

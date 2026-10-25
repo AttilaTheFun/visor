@@ -312,6 +312,53 @@ final class VisorProbe: XCTestCase {
         }
     }
 
+    /// A message sent goes in the thread at once, though the user was
+    /// typing a moment before (the thread holds other rows back while they
+    /// type): before the agent's reply can begin, never after its thinking.
+    func testASentMessageIsInTheThreadAtOnce() throws {
+        XCUIDevice.shared.orientation = Self.runOrientation
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "chat"]
+        app.launch()
+        let field = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "no composer")
+        field.tap()
+        let words = "In the thread at once"
+        field.typeText(words)
+        let send = app.buttons["Send"].firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 5), "no send button")
+        // Sent straight after the last key, as a person sends.
+        send.tap()
+        let sent = Date()
+        let row = app.staticTexts[words]
+        while !row.exists && Date().timeIntervalSince(sent) < 5 { }
+        let waited = Date().timeIntervalSince(sent)
+        NSLog("VISOR_SEND_IN_THREAD %.3f", waited)
+        shot(app, "sent-in-thread")
+        XCTAssertTrue(row.exists, "the sent message never went in the thread")
+        // The thread held rows back for 0.6 s after typing stopped, and the
+        // sent one with them.
+        XCTAssertLessThan(waited, 0.5, "the sent message went in the thread \(waited) s after the send")
+        app.terminate()
+    }
+
+    /// New Session at one of the largest text sizes: where the session runs
+    /// is a row each, its words whole (a segmented control cut them short
+    /// there: "In a Contain…").
+    func testNewSessionAtALargeTextSize() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "new-session",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL"]
+        app.launch()
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'In a Container'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "no In a Container choice")
+        Thread.sleep(forTimeInterval: 2)
+        shot(app, "new-session-large-text")
+        app.terminate()
+    }
+
     /// Learning that there are rows before the thread's moves nothing in
     /// it: the fixture's chat opens with none known, and ten seconds on its
     /// sync says there are some, as a server's first answer after a launch
