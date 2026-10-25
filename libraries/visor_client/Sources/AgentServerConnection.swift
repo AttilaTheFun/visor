@@ -378,6 +378,20 @@ public final class AgentServerConnection: Identifiable {
                     : (try await server.authenticate(record), path)
                 guard let self, self.generation == mine, self.wantsConnection else { return }
                 self.signingIn = nil
+                // Another computer answered at one of this one's paths (an
+                // address two computers share: a bridge to each's own
+                // containers is 192.168.64.1 on every Mac): it is not this
+                // one's. The path goes and the next is tried, rather than
+                // this computer taking the other's id — and then being
+                // folded into it as the same computer, gone from the list.
+                if let identity = server.identity, !self.record.serverID.isEmpty, identity.id != self.record.serverID,
+                   path != self.record.address {
+                    self.note("\(path) reached another computer (\(identity.id.prefix(8))), not this one: that path goes")
+                    self.update { $0.forgetPath(path) }
+                    server.closeChannel()
+                    self.dropped("another computer at \(path)")
+                    return
+                }
                 self.note("signed in after \(self.log.since(started)) ms; opening the channel")
                 self.path = path
                 self.lastGoodPath = path

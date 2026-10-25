@@ -76,6 +76,11 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         return out
     }
 
+    /// Lets go of a path found to reach another computer.
+    public mutating func forgetPath(_ path: String) {
+        paths.removeAll { $0 == path }
+    }
+
     /// Takes in addresses the server says it is reached at.
     /// Whether any was new.
     @discardableResult

@@ -275,6 +275,17 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(String(decoding: try XCTUnwrap(files[".netrc"]), as: UTF8.self), "machine 192.168.4.51 login bazel password read-token\n")
     }
 
+    /// A bridge to the computer's own containers or VMs is none of the
+    /// addresses a server gives: it is the same address on every computer.
+    func testABridgeIsNotOneOfTheServersAddresses() {
+        for bridge in ["bridge100", "bridge0", "docker0", "br-1a2b3c", "virbr0", "cni0", "lxcbr0"] {
+            XCTAssertTrue(NetworkInterfaces.isBridge(bridge), bridge)
+        }
+        for network in ["en0", "en1", "utun4", "eth0", "wlan0", "tailscale0"] {
+            XCTAssertFalse(NetworkInterfaces.isBridge(network), network)
+        }
+    }
+
     /// A folder that is not on the computer says so, and no container is made.
     func testAMissingFolderSaysSoAndMakesNoContainer() async {
         let containers = FakeContainers()

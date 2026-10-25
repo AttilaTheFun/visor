@@ -1,8 +1,9 @@
 import Foundation
 import VisorServer
 
-/// This computer's IPv4 addresses, loopback left out, from the system's
-/// list of interfaces (getifaddrs).
+/// This computer's IPv4 addresses, loopback and its bridges to its own
+/// containers and VMs left out, from the system's list of interfaces
+/// (getifaddrs).
 public enum POSIXAddresses {
     public static func all() -> [String] {
         var result: [String] = []
@@ -11,7 +12,8 @@ public enum POSIXAddresses {
         defer { freeifaddrs(list) }
         for pointer in sequence(first: first, next: { $0.pointee.ifa_next }) {
             let entry = pointer.pointee
-            guard let address = entry.ifa_addr, Int32(address.pointee.sa_family) == AF_INET else { continue }
+            guard let address = entry.ifa_addr, Int32(address.pointee.sa_family) == AF_INET,
+                  !NetworkInterfaces.isBridge(String(cString: entry.ifa_name)) else { continue }
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             if getnameinfo(address, socklen_t(MemoryLayout<sockaddr_in>.size), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
                 let text = String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)

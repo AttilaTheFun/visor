@@ -30,10 +30,16 @@ final class ScriptedServer: AgentServer {
     var signedInBy: [String] = []
     var refused: Set<String> = []
     var identity: ServerIdentity?
+    /// Who answers at a path, where it is not `identity` (another computer
+    /// at an address two share).
+    var identityAt: [String: ServerIdentity] = [:]
+    private var usual: ServerIdentity??
 
     func authenticate(_ record: AgentServerRecord) async throws -> String? {
         if hangs { await withCheckedContinuation { hung.append($0) } }
         signedInBy.append(record.address)
+        if usual == nil { usual = .some(identity) }
+        identity = identityAt[record.address] ?? usual ?? identity
         if refused.contains(record.address) { throw ScriptedFailure(status: 0) }
         return try signIn.get()
     }
