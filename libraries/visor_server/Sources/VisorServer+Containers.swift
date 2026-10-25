@@ -129,7 +129,8 @@ extension VisorServer {
             throw ContainerFailure(message: "Could not make the container from \(image): \(error.localizedDescription)")
         }
         do {
-            for file in ContainerSignIns.homeFiles() {
+            // The sign-ins for containers, then oss's Bazel cache.
+            for file in ContainerSignIns.homeFiles() + (await buildCacheFiles()) {
                 let path = "/root/" + file.path
                 let wrote = try await runtime.execute(name, ["sh", "-c", "mkdir -p \"$(dirname \"$1\")\" && cat > \"$1\" && chmod 600 \"$1\"", "sh", path],
                                                       input: file.data)

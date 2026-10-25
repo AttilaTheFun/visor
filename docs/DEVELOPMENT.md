@@ -675,7 +675,11 @@ openrouter's the same way, `<data>/containers/openrouter` at
 `/root/.openrouter`, its key set once with `openrouter auth login` in a
 container (or OPENROUTER_API_KEY in agent.env); and
 `<data>/containers/home/`, other files copied into each container's home);
-the container makes its own SSH key.
+the container makes its own SSH key. Where the server has an oss with a
+Bazel cache (`GET /v1/cache`), the container's home gets a `.bazelrc` naming
+it read-only (`--noremote_upload_local_results`) and a `.netrc` with the
+read token, as oss sets up its VMs: what CI built (its populate jobs) is
+fetched, not built again (VisorServer+BuildCache).
 The agent runs under its host like any other (HostedChild), as
 `container exec` (started again first if the container stopped), its
 variables in a file only this user reads (`hosts/<session>.env`, never on

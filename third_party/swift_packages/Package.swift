@@ -13,7 +13,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            revision: "3c74af906e76199d27cd5da0221d01a6b4c737eb"
+            revision: "372e4725ef1dad03f32bef806d16aa9d90b835d7"
         ),
         // SSH as a road to a server: the client's own SSH connection, a
         // port forwarded to the server on its loopback (SSHAgentServer).
@@ -25,11 +25,10 @@ let package = Package(
             exact: "0.35.0"
         ),
         // oss's client (OSSClient): the machines sessions lease through
-        // the server, and what each is using (oss main's commit, #8, until
-        // 0.5.0 is published).
+        // the server, and what each is using (0.5.0).
         .package(
             url: "https://github.com/AttilaTheFun/oss.git",
-            revision: "2538f07811d8508d4037d1429d4c87ed42e2a8bd"
+            exact: "0.5.0"
         ),
     ]
 )

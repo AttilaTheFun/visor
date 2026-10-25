@@ -263,6 +263,18 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(told?.sessions?.first?.container?.size, VisorServer.fitted(asked))
     }
 
+    /// A container's Bazel reads oss's cache, read-only: the home's
+    /// .bazelrc names it and .netrc holds the read token for that host.
+    func testAContainerReadsOSSsBuildCache() throws {
+        let cache = CacheInfo(port: 7490, readToken: "read-token", bytes: 0, maxBytes: 1, freeBytes: 1, hits: 0, misses: 0, writes: 0, evicted: 0)
+        let files = Dictionary(uniqueKeysWithValues: VisorServer.buildCacheFiles(host: "192.168.4.51", cache: cache).map { ($0.path, $0.data) })
+        let rc = String(decoding: try XCTUnwrap(files[".bazelrc"]), as: UTF8.self)
+        XCTAssertTrue(rc.contains("build --remote_cache=http://192.168.4.51:7490"))
+        XCTAssertTrue(rc.contains("build --noremote_upload_local_results"), "read-only")
+        XCTAssertFalse(rc.contains("read-token"), "the token is not in the .bazelrc, which --announce_rc prints")
+        XCTAssertEqual(String(decoding: try XCTUnwrap(files[".netrc"]), as: UTF8.self), "machine 192.168.4.51 login bazel password read-token\n")
+    }
+
     /// A folder that is not on the computer says so, and no container is made.
     func testAMissingFolderSaysSoAndMakesNoContainer() async {
         let containers = FakeContainers()
