@@ -246,8 +246,10 @@ final class ContainerTests: ServerTestCase {
                                                               size: asked)).get()
         XCTAssertEqual(sized.info.container?.size, VisorServer.fitted(asked))
         let second = try XCTUnwrap(containers.made.withLock { $0.last })
-        XCTAssertEqual(second.cpus, 2)
-        XCTAssertEqual(second.memory, UInt64(4 * gigabyte))
+        // As asked, where this computer has that much (a CI runner may
+        // have less memory than 4 GB beside its own 4).
+        XCTAssertEqual(second.cpus, VisorServer.fitted(asked).cpus)
+        XCTAssertEqual(second.memory, UInt64(VisorServer.fitted(asked).memoryBytes))
         XCTAssertEqual(second.disk, UInt64(64 * gigabyte))
 
         // Within what the computer has.
