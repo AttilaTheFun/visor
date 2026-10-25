@@ -335,6 +335,49 @@ final class VisorProbe: XCTestCase {
         app.terminate()
     }
 
+    /// A reply pouring in does not fight the user scrolling up through it:
+    /// the fixture's chat gets a row every quarter second, the thread is
+    /// dragged up while they come, and it stays where it was left, a pill
+    /// counting what came in below, whose tap goes down to the newest.
+    func testScrollingUpWhileARowPoursInIsNotFought() throws {
+        XCUIDevice.shared.orientation = Self.runOrientation
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "torrent"]
+        app.launch()
+        let started = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Row 3 of the reply'")).firstMatch
+        XCTAssertTrue(started.waitForExistence(timeout: 15), "the reply did not start pouring in")
+        // Up the thread while the rows keep coming, slowly and the finger
+        // held a moment before letting go, as when reading back.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)),
+                   withVelocity: 50, thenHoldForDuration: 1)
+        Thread.sleep(forTimeInterval: 1.5)
+        // The rows that waited for the drag went in below, counted on the
+        // pill: the thread was not taken back to its end.
+        let pill = app.buttons["new-rows-pill"]
+        XCTAssertTrue(pill.exists, "the thread was taken back to its end when the user let go")
+        // Whatever is in view stays put while rows keep coming for seconds
+        // more. (Which rows those are depends on how many had come in when
+        // the drag began, which varies with how long the busy app keeps
+        // the test waiting.)
+        let rows = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Row ' OR label CONTAINS 'Found it.' OR label CONTAINS 'the sync notes'"))
+        let watched = try XCTUnwrap(rows.allElementsBoundByIndex.first { $0.isHittable }, "no row in view")
+        let before = watched.frame
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "the thread moved under the user while the rows came in")
+        XCTAssertTrue(pill.exists, "the pill went while the rows kept coming below")
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        shot(app, "torrent-read-above")
+        // The reply over, the pill's tap goes down to its last row.
+        Thread.sleep(forTimeInterval: 8)
+        pill.tap()
+        let newest = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Row 40 of the reply'")).firstMatch
+        XCTAssertTrue(newest.waitForExistence(timeout: 5), "the reply's last row is not in the thread")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(newest.isHittable, "the pill's tap did not take the thread down to the newest row")
+        app.terminate()
+    }
+
     /// Rows coming in while the thread is read further up move nothing in
     /// it: the fixture's chat, scrolled up, gets two rows twelve seconds on
     /// and one more fourteen seconds after. What was read stays where it was,

@@ -253,7 +253,7 @@ public struct VisorRootView: View {
         still.disablesAnimations = true
         withTransaction(still) {
             switch screen {
-            case "chat", "inspector", "models", "learns-earlier", "arrivals", "burst", "question", "commands":
+            case "chat", "inspector", "models", "learns-earlier", "arrivals", "burst", "torrent", "question", "commands":
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
                 if compact { compactColumn = .detail }
             case "goal", "earlier":

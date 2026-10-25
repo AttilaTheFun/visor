@@ -654,8 +654,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.66.0.bcr.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.70.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.1.1/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.38.13/MODULE.bazel": "6d35090c41999110583431be05ac668a4fc989ce4942fa37b986627aab95891b",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.38.13/source.json": "fd81d49ea78a63df6f111579ea9768cc3c2c9d00d7a929519effccf5038ebf6d",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.38.15/MODULE.bazel": "733240baa5955609d92c121c29f8bbbacf2a7a5aa78e5e8d6626b2b04a19b4a7",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.38.15/source.json": "cf622c9215d77bd857767ecb912a634baff314082b048a6cdb7a0cec928791ff",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.4.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jsoncpp/1.9.5/MODULE.bazel": "not found",
@@ -1040,7 +1040,7 @@
     "@@aspect_rules_ts+//ts:extensions.bzl%ext": {
       "general": {
         "bzlTransitiveDigest": "39Imx8fj/wmgCRC4TUG38yih5rg7z9GUkCWi0sDE+LA=",
-        "usagesDigest": "m5V/RsK5A33fKiyyGs+FGZWACs531QoUlIKSPs+mebc=",
+        "usagesDigest": "E6aX5JUoqPAzfFBoszciAtBsvsNGVcMRWnSstw+isrg=",
         "recordedInputs": [
           "REPO_MAPPING:aspect_rules_ts+,aspect_rules_ts aspect_rules_ts+",
           "REPO_MAPPING:aspect_rules_ts+,bazel_tools bazel_tools"
@@ -1560,7 +1560,7 @@
     "@@isomer+//tools/android:extensions.bzl%android_tools": {
       "os:osx,arch:aarch64": {
         "bzlTransitiveDigest": "k+KVmZZM9GG6V3/GKQ8lZd6Nm/Rcjal0sh2SCGktwe8=",
-        "usagesDigest": "/Vtzg5FvXRMAnAcum482vIC2R/ZkuCYRStlXsbQfc9k=",
+        "usagesDigest": "RXehJqYUjpOuNDciV4vK1l173zvnHsF0xq+X7GKUxxU=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -1633,7 +1633,7 @@
     "@@isomer+//tools/wasm:extensions.bzl%wasm_tools": {
       "general": {
         "bzlTransitiveDigest": "4sWkWFiytNpozmcCtTYcMkDIhtiS5kjbFGlOVWEzFp8=",
-        "usagesDigest": "Rcb4zAhQze09cLEJ5y6K04fuUWEEm2nxi4NpXQi4BTM=",
+        "usagesDigest": "lP0LOX7D/bIm/fPCTLK0kMcr7RcUcVvlTfafF3M4vo4=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -1738,7 +1738,7 @@
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "qHbR00gVzVzkxX+PRtv4UGcUFMtBz7TK9CNYUWH8nIE=",
-        "usagesDigest": "7GkmcWabkMuha4jU+gOMk/XZNpDFXFK2sEM4DKcV5J0=",
+        "usagesDigest": "l1jFvZ2kr1OoXc1aGVRkij/93h8rGgDmlMGX76iUwtY=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "androidsdk": {
@@ -1786,7 +1786,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved f3f1edb366ba02dcaa87bfb4e09f7fb04c39aba8cd57dbecacfa9fc4a07ba6b5"
+          "FILE:@@//third_party/swift_packages/Package.resolved 56d72b015ff9f39d9d743e2787fdc575ea20a5eee84c14ae5c6742654f531b8d"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1800,9 +1800,8 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "cce4559d2c86fbdf7d6f8d75cc246caf8ae6928f",
+              "commit": "d83a86ea12dc3ad3d23825e85ed475954e5ddba7",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
-              "version": "0.38.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
