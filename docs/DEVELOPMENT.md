@@ -532,7 +532,8 @@ Settings" last (edit or remove). Compose offers only
 `store.connectedHosts`.
 
 **Menu bar app** Settings: the connection code (QR + copy), the password
-(required), the network (whose the Mac is, the front's state).
+(required), the network (whose the Mac is, the front's state). Its menu
+never shows the password: Copy Password puts it on the pasteboard.
 `POST /api/restart {path, session}` installs a bundle over itself via
 a detached relauncher and resumes named sessions with a nudge
 ("[Visor] The Visor server restarted while you were working…"). The
