@@ -653,9 +653,9 @@ VisorServer+Containers.swift. The container is made from Visor's image
 server asks for its own version's, `visor-server containers image <ref>`
 for another) with the size the session asked for (ContainerSize: 6 cores,
 16 GB of memory and 128 GB of disk unless asked otherwise, fitted to what
-the Mac has; the disk is a volume oss keeps, `visor-<session>-build` at
-/var/cache/bazel, where the image keeps Bazel's output, deleted with the
-session or when it leaves its container), chosen before the container is
+the Mac has; the disk is a volume, `visor-<session>-build` at
+/var/cache/bazel, where the image keeps Bazel's output, which goes with the
+container's lease), chosen before the container is
 made (New Session, Move into a Container), held until released (`minutes:
 0`) and run with Rosetta for x86_64 programs. It sees: the session's
 folder at the same

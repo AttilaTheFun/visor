@@ -177,7 +177,7 @@ final class ContainerTests: ServerTestCase {
     /// A container is given what was asked, within what the computer has:
     /// 6 cores, 16 GB and 128 GB unless asked otherwise, chosen before it is
     /// made (New Session, Move into a Container); its disk for builds is a
-    /// volume oss keeps, at Bazel's output folder.
+    /// volume at Bazel's output folder that goes with the lease.
     func testAContainerIsGivenTheSizeAskedFor() async throws {
         let oss = FakeOSS()
         let server = await server(FakeContainerExec(), oss: oss, port: 7973)
@@ -188,8 +188,8 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(standard.info.container?.size, VisorServer.fitted(.standard))
         let first = try XCTUnwrap(oss.server().asked.last?.container)
         XCTAssertEqual(first.cpus, VisorServer.fitted(.standard).cpus)
-        XCTAssertEqual(first.volumes, [ContainerVolume(name: "visor-z1-build", destination: "/var/cache/bazel", sizeBytes: 128 * gigabyte, keep: true)],
-                       "where Visor's image keeps Bazel's output")
+        XCTAssertEqual(first.volumes, [ContainerVolume(name: "visor-z1-build", destination: "/var/cache/bazel", sizeBytes: 128 * gigabyte)],
+                       "where Visor's image keeps Bazel's output, gone with the lease")
 
         let asked = ContainerSize(cpus: 2, memoryBytes: 4 * gigabyte, diskBytes: 64 * gigabyte)
         let sized = try await start(server, .startInContainer(id: "z2", agent: .claude, cwd: work, title: "", skipPermissions: true,
@@ -330,7 +330,7 @@ final class ContainerTests: ServerTestCase {
 
     /// A session moves into a container and out again: the same folder,
     /// its agent made again for the other side, the container it leaves
-    /// released and its disk deleted.
+    /// released (its disk with it).
     func testASessionMovesIntoItsContainerAndOutAgain() async throws {
         let oss = FakeOSS()
         let server = await server(FakeContainerExec(), oss: oss, port: 7996)
@@ -349,7 +349,6 @@ final class ContainerTests: ServerTestCase {
         XCTAssertNil((record.process as? HostableProcess)?.container)
         try await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(oss.server().released, ["c1"])
-        XCTAssertEqual(oss.server().deletedVolumes, ["visor-s3-build"])
     }
 
     /// A session's machines come from every server set, each used through

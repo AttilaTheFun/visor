@@ -48,6 +48,12 @@ ws.onmessage = ev => {
     return;
   }
   if (e.session !== id) return;
+  // The agent's own failure: it did not start (the transcript's error), or
+  // it failed its turn (not signed in in the container, say).
+  if (phase === 'asking' && (e.type === 'failure' || (e.type === 'transcript' && e.error))) {
+    log('the agent failed:', e.message ?? e.error);
+    return finish();
+  }
   if (['transcript', 'entry'].includes(e.type)) {
     for (const row of e.entries ?? []) {
       if (row.role !== 'assistant' || !row.text || answered) continue;

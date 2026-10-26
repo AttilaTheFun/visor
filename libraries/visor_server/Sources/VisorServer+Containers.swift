@@ -145,15 +145,15 @@ extension VisorServer {
         let name = Self.containerName(session: session)
         let image = settings.containerImage.trimmingCharacters(in: .whitespaces).isEmpty ? defaultContainerImage : settings.containerImage
         let holder = Self.leaseHolder(session: session)
-        // One left by an earlier attempt goes first (its disk kept, for
-        // this one to take up).
+        // One left by an earlier attempt goes first.
         await releaseContainers(held: holder)
         // What it is given, within what this computer has.
         let given = Self.fitted(size)
         let spec = ContainerSpec(image: image, cpus: given.cpus, memoryBytes: given.memoryBytes,
                                  mounts: Self.containerMounts(agent: agent, folder: resolved, tools: tools),
+                                 // Its disk for builds goes with the lease.
                                  volumes: [ContainerVolume(name: name + "-build", destination: ContainerPlacement.buildOutput,
-                                                           sizeBytes: given.diskBytes, keep: true)],
+                                                           sizeBytes: given.diskBytes)],
                                  rosetta: true)
         let client: OSSClient
         let lease: Lease
@@ -179,7 +179,7 @@ extension VisorServer {
             guard key.status == 0 else { throw ContainerFailure(message: "Could not make the container's SSH key: \(key.output)") }
             return SessionContainer(id: lease.id, image: image, size: given, socket: socket)
         } catch {
-            await releaseContainer(lease.id, session: session, keepingDisk: false)
+            await releaseContainer(lease.id)
             throw error
         }
     }
@@ -196,7 +196,7 @@ extension VisorServer {
     }
 
     /// Releases the containers `holder` holds (an earlier attempt's, left
-    /// behind), their disks kept.
+    /// behind).
     private func releaseContainers(held holder: String) async {
         for client in ossClients {
             guard let held = try? await client.leases() else { continue }
@@ -207,12 +207,11 @@ extension VisorServer {
         }
     }
 
-    /// Releases a session's container, and its disk unless kept.
-    private func releaseContainer(_ id: String, session: String, keepingDisk: Bool) async {
+    /// Releases a session's container, and its disk with it.
+    private func releaseContainer(_ id: String) async {
         guard let client = await lender(of: id) else { return }
         try? await client.release(id)
         leaseClients[id] = nil
-        if !keepingDisk { try? await client.deleteVolume(Self.containerName(session: session) + "-build") }
     }
 
     /// A size asked for, within what this computer has: no more cores than
@@ -285,7 +284,7 @@ extension VisorServer {
             record.placed()
             Self.log("session \(into ? "moved into a container" : "moved out of its container"): \(record.info.title) (\(record.info.id))")
             rebuild(record) {
-                if let left { self.removeContainer(left, session: record.info.id) }
+                if let left { self.removeContainer(left) }
             }
             saveArchive()
             broadcastSessions()
@@ -295,12 +294,12 @@ extension VisorServer {
 
     /// A session's container gone, with its disk (its session ended here,
     /// or left it).
-    func removeContainer(_ container: SessionContainer, session: String) {
+    func removeContainer(_ container: SessionContainer) {
         guard container.socket != nil else {
             return Self.log("the container \(container.id) is Apple's, from before OS Server ran them: `container delete --force \(container.id)` removes it")
         }
         Task {
-            await releaseContainer(container.id, session: session, keepingDisk: false)
+            await releaseContainer(container.id)
             Self.log("released the container \(container.id)")
         }
     }

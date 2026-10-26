@@ -41,6 +41,9 @@ struct StagingServer {
 
         let server = VisorServer.staging(port: port, root: root, password: password)
         let environment = ProcessInfo.processInfo.environment
+        // No agent host beside a staging build: its agents are its own
+        // children (VISOR_DETACH_AGENT_HOST=1, with a host there, says otherwise).
+        if environment["VISOR_DETACH_AGENT_HOST"] != "1" { server.settings.detachAgents = false }
         if environment["VISOR_STAGING_LAN"] == "1" { server.settings.lan = true }
         if let image = environment["VISOR_STAGING_IMAGE"], !image.isEmpty { server.settings.containerImage = image }
         if let oss = environment["VISOR_STAGING_OSS"], !oss.isEmpty {
