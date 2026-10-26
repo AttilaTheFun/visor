@@ -741,13 +741,14 @@ resolves no `.local` names), on the ports that server forwards.
   (fastbuild). `bazel-bin` points at the LAST configuration built — always
   locate outputs with `bazel cquery [-c opt] --output=files <target>`.
 - Build on Linux (a container, say): the same targets, with no Xcode. The
-  Apple apps build with rules_applecross (MODULE.bazel, `build:linux` in
-  .bazelrc) from Xcode 27.0's SDK archive, which `.bazelrc.user` locates:
+  Apple apps build with rules_applecross (MODULE.bazel, `apple_on_linux` in
+  .bazelrc) from Xcode 27.0's SDK archive. `.bazelrc.user` turns it on,
+  `build:linux --config=apple_on_linux`, and says where the archive is:
   `common --distdir=<folder holding apple-sdks-27.0.tar.gz>`, or
   `common --downloader_config=<file>` whose line `rewrite
   apple-sdks\.invalid/.* http://<oss host>:7490/files/sha256/<its sha256>`
   sends it to an OS Server that serves it (the container's .netrc has the
-  token). The iPhone app, the Linux client (`//applications/visor_client_linux`;
+  token). Without it (CI's Linux runners) Linux builds what runs on Linux. The iPhone app, the Linux client (`//applications/visor_client_linux`;
   the server is `swift build --product visor-server`), the web site and the
   Android APK build there as on a Mac.
 - Test: `bazel test //tests/visor_server_tests //tests/visor_client_tests
