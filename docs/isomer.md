@@ -179,6 +179,10 @@ flow takes it too.
   lease (`ANDROID_SERIAL` and the lab's adb from it), with references of
   their own.
 - `red-ios`, `web-desktop`, `macos`: red's app on the iPhone simulator, and
-  desktop Safari and the Mac app in a macOS test VM.
+  desktop Safari and the Mac app on a Mac leased from oss (`visor machine` in
+  a Visor session, `oss machine` outside one), released when the run ends.
+  Safari's site goes to the guest, and safaridriver's port comes back, over
+  the run's SSH connection; the Mac app's window is cropped from the
+  machine's own screenshot. The guest's look is dark, said outright.
 
 Never another session's simulator or emulator: the harness uses its own.
