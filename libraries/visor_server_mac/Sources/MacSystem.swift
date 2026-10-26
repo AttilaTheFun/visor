@@ -41,7 +41,7 @@ public struct MacSystem: CommandLineSystem {
                               localNetworkName: { LocalNetworkName.current() }, resolve: { POSIXResolver.ipv4($0) }),
             lifecycle: lifecycle,
             agentHosts: POSIXAgentHosting.beside(executable),
-            containers: AppleContainers(),
+            containerExec: OSSContainerExec(),
             log: log
         )
     }

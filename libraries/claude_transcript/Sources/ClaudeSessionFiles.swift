@@ -31,10 +31,13 @@ public enum ClaudeSessionFiles {
     }
 
     /// The project directory's name for a folder.
-    public static func projectDirectoryName(for cwd: String) -> String {
+    /// `followingLinks` false: the path as given, for a Claude Code that
+    /// sees it where none of its links are (a container's mount of it).
+    public static func projectDirectoryName(for cwd: String, followingLinks: Bool = true) -> String {
         // The folder as Claude Code sees it: the real path, then every
         // "/", "." and "_" as "-".
-        var name = realPath((cwd as NSString).expandingTildeInPath)
+        let path = (cwd as NSString).expandingTildeInPath
+        var name = followingLinks ? realPath(path) : path
         for character in ["/", ".", "_"] { name = name.replacingOccurrences(of: character, with: "-") }
         return name
     }

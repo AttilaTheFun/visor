@@ -138,11 +138,16 @@ async function main() {
   switch (verb) {
     case "status": {
       const status = await call("GET", "/status");
-      const lines = [`oss at ${status.server}`];
-      for (const c of status.capacity) lines.push(`  ${c.platform}: ${c.leased} of ${c.limit} leased`);
-      const configs = {};
-      for (const b of status.bases) (configs[b.platform] = configs[b.platform] || []).push(b.config);
-      for (const [platform, list] of Object.entries(configs)) lines.push(`  ${platform} configs: ${list.join(", ")}`);
+      const lines = [];
+      // Each server that answered, nearest first (a machine comes from the
+      // nearest with room for it).
+      for (const server of status.servers || [status]) {
+        lines.push(`oss at ${server.server}${server.distance ? ` (${server.name}, ${server.distance})` : ""}`);
+        for (const c of server.capacity) if (c.platform !== "container") lines.push(`  ${c.platform}: ${c.leased} of ${c.limit} leased`);
+        const configs = {};
+        for (const b of server.bases) if (b.platform !== "container") (configs[b.platform] = configs[b.platform] || []).push(b.config);
+        for (const [platform, list] of Object.entries(configs)) lines.push(`  ${platform} configs: ${list.join(", ")}`);
+      }
       return say(status, lines.join("\n"));
     }
     case "lease": {

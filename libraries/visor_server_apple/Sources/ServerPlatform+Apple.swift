@@ -35,8 +35,8 @@ extension ServerPlatform {
             lifecycle: AppRelauncher(),
             // In the app's bundle, beside its own program.
             agentHosts: POSIXAgentHosting(program: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/visor-agent-host", isDirectory: false).path),
-            // Apple's container, where it is installed.
-            containers: AppleContainers(),
+            // Commands in the containers leased from OS Server on this Mac.
+            containerExec: OSSContainerExec(),
             // At notice, which the system keeps on disk (info is held in
             // memory only, and gone when it is wanted).
             log: { line in logger.notice("\(line, privacy: .public)") }

@@ -1,13 +1,15 @@
-// The machines sessions lease from this server's oss (OS Server,
+// The machines sessions lease from this server's oss servers (OS Server,
 // AttilaTheFun/oss): macOS, Linux and Windows VMs, iOS simulators, Android
-// emulators. A session asks this server — the `visor` command in it
-// (ContainerTools), natively or in a container — and this server asks oss
-// in the session's name, with oss's token, which the session never holds.
-// What each session holds is kept up with, and shown with it
-// (SessionInfo.leases).
+// emulators, each from the nearest server with room for it (OSSPool). A
+// session asks this server — the `visor` command in it (ContainerTools),
+// natively or in a container — and this server asks oss in the session's
+// name, with each server's token, which the session never holds. What each
+// session holds is kept up with, and shown with it (SessionInfo.leases).
 //
+//     GET    /oss                                      the servers, and whether each one's token is kept
+//     POST   /oss                 {server, token?, remove?}   one added (or its token kept), or taken off
 //     GET    /machines?session=<id>                   the session's leases
-//     GET    /machines/status                          what oss has, and how much is leased
+//     GET    /machines/status                          what each server has, and how much is leased
 //     POST   /machines            {session, platform, config?, minutes?, wait?, key?}
 //     GET    /machines/<id>?session=<id>               one of them
 //     POST   /machines/<id>/renew {session, minutes?}
@@ -16,48 +18,90 @@
 //     POST   /machines/<id>/command {session, arguments}   simctl or adb, as oss runs it
 //     POST   /machines/<id>/upload  {session, name, data: base64}
 //
-// SSH, VNC and adb reach the lease at oss's own address, on the ports oss
-// forwards for it (in each lease's answer).
+// SSH, VNC and adb reach the lease at its server's own address, on the
+// ports that server forwards for it (in each lease's answer).
 
 import Foundation
 import OSSClient
 import VisorProtocol
 
 extension VisorServer {
-    /// The oss server sessions lease machines from, when one is set (at an
-    /// address that is a URL) and its token kept.
-    var ossClient: OSSClient? {
-        guard !settings.ossServer.trimmingCharacters(in: .whitespaces).isEmpty, ossTokenKept else { return nil }
-        return OSSAccess.client(server: settings.ossServer)
+    /// The oss servers set, as kept.
+    public var ossServers: [String] { settings.ossServers.map(OSSAccess.normalized).filter { !$0.isEmpty } }
+
+    /// A client of each server set whose token is kept.
+    var ossClients: [OSSClient] { ossServers.filter(ossTokenKept).compactMap(OSSAccess.client(server:)) }
+
+    /// The servers set whose token is kept, leased from as one; nil for none.
+    var ossPool: OSSPool? {
+        let servers = ossServers.filter(ossTokenKept)
+        return servers.isEmpty ? nil : OSSAccess.pool(servers: servers)
     }
 
-    /// Whether oss's token is kept.
-    public var ossTokenKept: Bool { !(Self.secrets.get("ossToken") ?? "").isEmpty }
+    /// Where `server`'s token is kept with the server's secrets.
+    public nonisolated static func ossTokenKey(_ server: String) -> String { OSSAccess.tokenKey(server) }
 
-    /// Keeps oss's token (with the server's secrets); nil or empty lets it go.
-    public func setOSSToken(_ token: String?) {
-        let token = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        Self.secrets.set("ossToken", token.isEmpty ? nil : token)
+    /// `server` as kept: no trailing slash.
+    public nonisolated static func ossAddress(_ server: String) -> String { OSSAccess.normalized(server) }
+
+    /// Whether `server`'s token is kept.
+    public func ossTokenKept(_ server: String) -> Bool { !OSSAccess.token(OSSAccess.tokenKey(server)).isEmpty }
+
+    /// Adds `server` (where it is not set yet), and keeps its token when
+    /// one is given; what each session leases is asked again.
+    public func setOSSServer(_ server: String, token: String? = nil) {
+        let address = OSSAccess.normalized(server)
+        guard OSSAccess.url(address) != nil else { return }
+        if !ossServers.contains(address) { settings.ossServers.append(address) }
+        if let token = token?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
+            Self.secrets.set(OSSAccess.tokenKey(address), token)
+        }
+        Task {
+            await refreshLeases()
+            await checkContainers()
+        }
     }
 
-    /// `GET /oss`: the oss server sessions lease from, and whether its
-    /// token is kept (never the token).
+    /// Takes `server` off, and its token.
+    public func removeOSSServer(_ server: String) {
+        let address = OSSAccess.normalized(server)
+        settings.ossServers.removeAll { OSSAccess.normalized($0) == address }
+        Self.secrets.set(OSSAccess.tokenKey(address), nil)
+        Task {
+            await refreshLeases()
+            await checkContainers()
+        }
+    }
+
+    /// The token kept from before several servers, taken over as the first
+    /// server's.
+    func adoptOSSToken() {
+        if let first = ossServers.first { OSSAccess.adoptSingleToken(for: first) }
+    }
+
+    /// `GET /oss`: the servers sessions lease from, and whether each one's
+    /// token is kept (never a token).
     func restOSS(_ call: RESTCall) -> HTTPResponse {
-        .json(JSONValue.object(["server": .string(settings.ossServer), "tokenKept": .bool(ossTokenKept)]).encoded())
+        let servers: [JSONValue] = ossServers.map { .object(["server": .string($0), "tokenKept": .bool(ossTokenKept($0))]) }
+        return .json(JSONValue.object(["servers": .array(servers)]).encoded())
     }
 
-    /// `POST /oss {server, token}`: sets the oss server and keeps its token,
-    /// as Settings › Machines does (the server keeps it with its own
-    /// secrets, which it reads without asking); an empty server takes it
-    /// off. What each session leases is asked again.
+    /// `POST /oss {server, token?, remove?}`: adds a server and keeps its
+    /// token, as Settings › Machines does (the server keeps it with its own
+    /// secrets, which it reads without asking), or takes it off; an empty
+    /// server takes them all off.
     func restSetOSS(_ call: RESTCall) -> HTTPResponse {
         let body = parseJSON(call.request.body) ?? .object([:])
-        if let server = body["server"].string {
-            settings.ossServer = server.trimmingCharacters(in: .whitespaces)
-            if settings.ossServer.isEmpty { setOSSToken(nil) }
+        let server = body["server"].string.map(OSSAccess.normalized) ?? ""
+        if server.isEmpty, body["server"].string != nil {
+            for each in ossServers { removeOSSServer(each) }
+        } else if body["remove"].bool == true {
+            removeOSSServer(server)
+        } else if OSSAccess.url(server) != nil {
+            setOSSServer(server, token: body["token"].string)
+        } else if !server.isEmpty {
+            return Self.machinesError(400, "\(server) is not an address (http://host:7480).")
         }
-        if let token = body["token"].string { setOSSToken(token) }
-        Task { await refreshLeases() }
         return restOSS(call)
     }
 
@@ -77,18 +121,29 @@ extension VisorServer {
         }
     }
 
-    /// Asks oss what this server's sessions lease, and tells the clients of
-    /// each session whose leases changed.
+    /// Asks each server what this server's sessions lease, and tells the
+    /// clients of each session whose leases changed. A server that does
+    /// not answer keeps what it lent as last known.
     func refreshLeases() async {
-        guard let oss = ossClient, let all = try? await oss.leases() else {
-            if !leases.isEmpty { showLeases([:]) }
-            return
-        }
+        let clients = ossClients
         var held: [String: [SessionLease]] = [:]
-        for lease in all where lease.holder.hasPrefix("visor:") {
-            let session = String(lease.holder.dropFirst("visor:".count))
-            held[session, default: []].append(Self.sessionLease(lease))
+        var lenders: [String: OSSClient] = [:]
+        var silent = Set(clients.map(\.server))
+        for client in clients {
+            guard let all = try? await client.leases() else { continue }
+            silent.remove(client.server)
+            for lease in all where lease.holder.hasPrefix("visor:") {
+                lenders[lease.id] = client
+                // A container is shown as the session's own, not as a machine.
+                guard lease.platform != .container else { continue }
+                held[String(lease.holder.dropFirst("visor:".count)), default: []].append(Self.sessionLease(lease))
+            }
         }
+        for (id, client) in leaseClients where silent.contains(client.server) {
+            lenders[id] = client
+            for (session, kept) in leases { held[session, default: []] += kept.filter { $0.id == id } }
+        }
+        leaseClients = lenders
         showLeases(held)
     }
 
@@ -113,13 +168,13 @@ extension VisorServer {
     func answerMachines(_ request: HTTPRequest, parts: [String], respond: @escaping (HTTPResponse) -> Void) {
         let query = Self.query(request.path)
         let body = parseJSON(request.body) ?? .object([:])
-        guard let oss = ossClient else {
+        guard let pool = ossPool else {
             return respond(Self.machinesError(503, "This computer's Visor server has no oss server to lease machines from (Visor Server's settings, or `visor-server oss <url> <token file>`)."))
         }
         let sessionID = query["session"] ?? body["session"].string ?? ""
         let record = session(sessionID)
         if parts == ["machines", "status"], request.method == "GET" {
-            Task { respond(await Self.machinesStatus(oss)) }
+            Task { respond(await Self.machinesStatus(pool)) }
             return
         }
         guard let record else { return respond(Self.machinesError(404, "No such session here: \(sessionID.isEmpty ? "(none given)" : sessionID).")) }
@@ -128,7 +183,7 @@ extension VisorServer {
         Task {
             let answer: HTTPResponse
             do {
-                answer = try await machines(oss, request.method, Array(parts.dropFirst()), body: body, holder: holder, inContainer: inContainer)
+                answer = try await machines(pool, request.method, Array(parts.dropFirst()), body: body, holder: holder, inContainer: inContainer)
             } catch let error as OSSError {
                 answer = Self.machinesError(error.status == 0 ? 502 : error.status, "oss: \(error.message)")
             } catch {
@@ -139,38 +194,59 @@ extension VisorServer {
         }
     }
 
-    private func machines(_ oss: OSSClient, _ method: String, _ parts: [String], body: JSONValue, holder: String,
-                          inContainer: Bool) async throws -> HTTPResponse {
+    /// Where a session reaches the leases of the server `oss` answers for.
+    private func leaseHost(_ oss: OSSClient, inContainer: Bool) async -> String {
         let name = oss.host
         let resolve = ServerPlatform.current.host.resolve
         let lan = ServerPlatform.current.host.networkAddresses().first { $0.kind == .lan }?.address
-        let host = await Task.detached { Self.leaseHost(oss: name, inContainer: inContainer, lan: lan, resolve: resolve) }.value
-        switch (method, parts.count, parts.last) {
-        case ("GET", 0, _):
-            let held = try await oss.leases().filter { $0.holder == holder }
-            return .json(JSONValue.object(["leases": .array(held.map { Self.leaseJSON($0, host: host) })]).encoded())
-        case ("POST", 0, _):
-            guard let platform = body["platform"].string.flatMap(Platform.init(rawValue:)) else {
-                return Self.machinesError(400, "Which machine? One of: \(Platform.allCases.map(\.rawValue).joined(separator: ", ")).")
+        return await Task.detached { Self.leaseHost(oss: name, inContainer: inContainer, lan: lan, resolve: resolve) }.value
+    }
+
+    /// The server that lent `id`, as last known, else whichever says it has it.
+    func lender(of id: String) async -> OSSClient? {
+        if let known = leaseClients[id] { return known }
+        for client in ossClients where (try? await client.lease(id)) != nil {
+            leaseClients[id] = client
+            return client
+        }
+        return nil
+    }
+
+    private func machines(_ pool: OSSPool, _ method: String, _ parts: [String], body: JSONValue, holder: String,
+                          inContainer: Bool) async throws -> HTTPResponse {
+        switch (method, parts.count) {
+        case ("GET", 0):
+            var held: [JSONValue] = []
+            for client in ossClients {
+                guard let all = try? await client.leases() else { continue }
+                let host = await leaseHost(client, inContainer: inContainer)
+                held += all.filter { $0.holder == holder && $0.platform != .container }.map { Self.leaseJSON($0, host: host) }
+            }
+            return .json(JSONValue.object(["leases": .array(held)]).encoded())
+        case ("POST", 0):
+            let machines = Platform.allCases.filter { $0 != .container }
+            guard let platform = body["platform"].string.flatMap(Platform.init(rawValue:)), platform != .container else {
+                return Self.machinesError(400, "Which machine? One of: \(machines.map(\.rawValue).joined(separator: ", ")).")
             }
             let request = LeaseRequest(platform: platform, config: body["config"].string, minutes: body["minutes"].int, holder: holder,
                                        sshPublicKey: body["key"].string)
-            var leasing = oss
-            leasing.timeout = 900
-            let lease = try await leasing.lease(request, waitForCapacity: body["wait"].bool ?? false)
-            return .json(Self.leaseJSON(lease, host: host).encoded())
+            let (client, lease) = try await pool.lease(request, waitForCapacity: body["wait"].bool ?? false)
+            leaseClients[lease.id] = client
+            return .json(Self.leaseJSON(lease, host: await leaseHost(client, inContainer: inContainer)).encoded())
         default:
             break
         }
         // One lease: this session's, or none of its business.
-        guard let id = parts.first else { return Self.machinesError(404, "No such machine.") }
+        guard let id = parts.first, let oss = await lender(of: id) else { return Self.machinesError(404, "No such machine.") }
         let lease = try await oss.lease(id)
-        guard lease.holder == holder else { return Self.machinesError(404, "This session holds no machine \(id).") }
+        guard lease.holder == holder, lease.platform != .container else { return Self.machinesError(404, "This session holds no machine \(id).") }
+        let host = await leaseHost(oss, inContainer: inContainer)
         switch (method, parts.count, parts.count > 1 ? parts[1] : nil) {
         case ("GET", 1, _):
             return .json(Self.leaseJSON(lease, host: host).encoded())
         case ("DELETE", 1, _):
             try await oss.release(id)
+            leaseClients[id] = nil
             return .json(JSONValue.object(["released": .string(id)]).encoded())
         case ("POST", 2, "renew"?):
             return .json(Self.leaseJSON(try await oss.renew(id, minutes: body["minutes"].int), host: host).encoded())
@@ -206,20 +282,20 @@ extension VisorServer {
         return resolve(oss) ?? oss
     }
 
-    /// What oss has: its bases, and how many of each kind are leased.
-    private static func machinesStatus(_ oss: OSSClient) async -> HTTPResponse {
-        do {
-            let status = try await oss.status()
-            let capacity: [JSONValue] = status.capacity.map {
+    /// What each server that answers has, nearest first: its bases, and
+    /// how many of each kind are leased.
+    private static func machinesStatus(_ pool: OSSPool) async -> HTTPResponse {
+        let reached = await pool.reach()
+        guard !reached.isEmpty else { return machinesError(502, "oss: no server answered") }
+        let servers: [JSONValue] = reached.map { server in
+            let capacity: [JSONValue] = server.status.capacity.map {
                 .object(["platform": .string($0.platform.rawValue), "limit": .number(Double($0.limit)), "leased": .number(Double($0.leased))])
             }
-            let bases: [JSONValue] = status.bases.map { .object(["platform": .string($0.platform.rawValue), "config": .string($0.config)]) }
-            return .json(JSONValue.object(["server": .string(oss.server.absoluteString), "capacity": .array(capacity), "bases": .array(bases)]).encoded())
-        } catch let error as OSSError {
-            return machinesError(error.status == 0 ? 502 : error.status, "oss: \(error.message)")
-        } catch {
-            return machinesError(502, "oss: \(error.localizedDescription)")
+            let bases: [JSONValue] = server.status.bases.map { .object(["platform": .string($0.platform.rawValue), "config": .string($0.config)]) }
+            return .object(["name": .string(server.name), "server": .string(server.client.server.absoluteString),
+                            "distance": .string(server.distance.description), "capacity": .array(capacity), "bases": .array(bases)])
         }
+        return .json(JSONValue.object(["servers": .array(servers)]).encoded())
     }
 
     /// A lease as a session is told it: with where to reach it (oss's own

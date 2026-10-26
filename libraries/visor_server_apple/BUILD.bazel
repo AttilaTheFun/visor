@@ -5,8 +5,8 @@ package(default_visibility = ["//visibility:public"])
 
 # The server's platform on a Mac (ServerPlatform.apple): the Network
 # framework's sockets, the keychain, CryptoKit and URLSession for pushes,
-# ImageIO, the kernel's word on files, the app's relauncher — with the
-# POSIX signals.
+# ImageIO, the kernel's word on files, the app's relauncher, commands in
+# OS Server's containers (OSSClient's exec) — with the POSIX signals.
 swift_library(
     name = "visor_server_apple",
     copts = STRICT_SWIFT,
@@ -19,5 +19,6 @@ swift_library(
         "//libraries/visor_protocol",
         "//libraries/visor_server",
         "//libraries/visor_server_posix",
+        "@swiftpkg_oss//:OSSClient",
     ],
 )

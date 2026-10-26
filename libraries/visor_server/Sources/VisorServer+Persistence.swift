@@ -93,6 +93,13 @@ extension VisorServer {
                 let rebuilt = harnesses.harness(for: info.agent)?.transcript(id: resume, cwd: info.cwd, limit: SessionRecord.servedRows) ?? []
                 if !rebuilt.isEmpty { entries = rebuilt }
             }
+            // A container from before OS Server ran them (Apple's container):
+            // the session runs on this computer from now on, and moves into
+            // a container again as any other.
+            if let container = info.container, container.socket == nil {
+                Self.log("session \(info.id) left its container \(container.id), Apple's, from before OS Server ran them: its agent runs on this computer now (`container delete --force \(container.id)` removes the old one)")
+                info.container = nil
+            }
             let record = SessionRecord(info: info, process: makeProcess(info, resume: item.resumeID), entries: entries,
                                        shownPrompts: item.shownPrompts ?? [], notice: item.notice)
             record.refreshResume()

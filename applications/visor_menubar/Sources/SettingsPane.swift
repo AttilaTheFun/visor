@@ -160,30 +160,42 @@ struct SettingsPane: View {
                 Text("Agents")
             }
             Section {
-                TextField("Image (empty: \(VisorServer.containerImage))", text: $containerImage)
+                TextField("Image (empty: \(server.defaultContainerImage))", text: $containerImage)
                     .focused($editing, equals: .containerImage)
                     .onSubmit { apply(.containerImage) }
                 TextField("How containers reach this Mac (empty: its LAN address)", text: $containerCallback)
                     .focused($editing, equals: .containerCallback)
                     .onSubmit { apply(.containerCallback) }
                 Text(server.containersAvailable
-                     ? "Sessions can run their agent in a Linux container on this Mac (Apple's container), which sees the session's folder and Xcode, and nothing else of the Mac."
-                     : "Install Apple's container (github.com/apple/container) and turn on “Reachable from the network” to run sessions' agents in Linux containers on this Mac.")
+                     ? "Sessions can run their agent in a Linux container on this Mac, leased from its OS Server, which sees the session's folder and Xcode, and nothing else of the Mac."
+                     : "Install OS Server on this Mac, add it under Machines and Containers with its token, and turn on “Reachable from the network” to run sessions' agents in Linux containers here.")
                     .font(.caption).foregroundColor(.secondary)
             } header: {
                 Text("Containers")
             }
             Section {
-                TextField("oss server (http://host:7480)", text: $ossServer)
+                ForEach(server.ossServers, id: \.self) { address in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(address)
+                            Text(server.ossTokenKept(address) ? "Token kept" : "No token kept: add it again with its token")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Button("Remove") { server.removeOSSServer(address) }
+                    }
+                }
+                TextField("Add an oss server (http://host:7480)", text: $ossServer)
                     .focused($editing, equals: .ossServer)
-                    .onSubmit { apply(.ossServer) }
-                SecureField(server.ossTokenKept ? "Token (kept)" : "Token", text: $ossToken)
+                SecureField("Its token", text: $ossToken)
                     .focused($editing, equals: .ossToken)
-                    .onSubmit { apply(.ossToken) }
-                Text("Sessions here, in containers or not, lease machines (macOS, Linux and Windows VMs, iOS simulators, Android emulators) from this oss server through Visor Server, with `visor machine …`. The token stays here.")
+                    .onSubmit { addOSSServer() }
+                Button("Add Server") { addOSSServer() }
+                    .disabled(ossServer.trimmingCharacters(in: .whitespaces).isEmpty || ossToken.isEmpty)
+                Text("Sessions here, in containers or not, lease machines (macOS, Linux and Windows VMs, iOS simulators, Android emulators) through Visor Server with `visor machine …`, each from the nearest of these servers with room for it. Containers come from the one on this Mac. The tokens stay here.")
                     .font(.caption).foregroundColor(.secondary)
             } header: {
-                Text("Machines (oss)")
+                Text("Machines and Containers (oss)")
             }
             Section {
                 let current = server.apnsKey
@@ -227,7 +239,6 @@ struct SettingsPane: View {
         .onAppear {
             publicAddress = server.settings.publicAddress
             tlsPath = server.settings.tlsIdentityPath
-            ossServer = server.settings.ossServer
             containerImage = server.settings.containerImage
             containerCallback = server.settings.containerCallback
             keyID = server.apnsKey.keyID
@@ -240,11 +251,18 @@ struct SettingsPane: View {
         .onDisappear {
             apply(.publicAddress)
             apply(.tlsPath)
-            apply(.ossServer)
-            apply(.ossToken)
             apply(.containerImage)
             apply(.containerCallback)
         }
+    }
+
+    /// The server typed, added with its token typed.
+    private func addOSSServer() {
+        let address = ossServer.trimmingCharacters(in: .whitespaces)
+        guard !address.isEmpty, !ossToken.isEmpty else { return }
+        server.setOSSServer(address, token: ossToken)
+        ossServer = ""
+        ossToken = ""
     }
 
     /// What was typed in a field, applied: on Return, on leaving the field,
@@ -256,13 +274,8 @@ struct SettingsPane: View {
             if server.settings.publicAddress != publicAddress { server.settings.publicAddress = publicAddress }
         case .tlsPath:
             if server.settings.tlsIdentityPath != tlsPath { server.settings.tlsIdentityPath = tlsPath }
-        case .ossServer:
-            let address = ossServer.trimmingCharacters(in: .whitespaces)
-            if server.settings.ossServer != address { server.settings.ossServer = address }
-        case .ossToken:
-            guard !ossToken.isEmpty else { return }
-            server.setOSSToken(ossToken)
-            ossToken = ""
+        case .ossServer, .ossToken:
+            break
         case .containerImage:
             let image = containerImage.trimmingCharacters(in: .whitespaces)
             if server.settings.containerImage != image { server.settings.containerImage = image }

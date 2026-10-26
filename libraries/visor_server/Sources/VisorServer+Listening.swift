@@ -43,6 +43,7 @@ extension VisorServer {
         keepModelsFresh()
         resumePending()
         Task { await checkContainers() }
+        adoptOSSToken()
         watchLeases()
     }
 

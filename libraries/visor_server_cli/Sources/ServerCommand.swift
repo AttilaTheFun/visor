@@ -53,10 +53,12 @@ public struct ServerCommand {
                    between computers; `standalone off` (the default)
                    shares them. Also
                    VISOR_STANDALONE=1.
-          oss      Shows the oss server (OS Server) sessions lease machines
-                   from through this server (VMs, simulators, emulators;
-                   `visor machine …` in a session); `oss <url> <token file>`
-                   sets it and keeps its token, `oss -` takes it off.
+          oss      Shows the oss servers (OS Server) sessions lease through
+                   this server: machines (VMs, simulators, emulators;
+                   `visor machine …` in a session) from the nearest with
+                   room, containers from this computer's. `oss <url> <token
+                   file>` adds one and keeps its token, `oss - <url>` takes
+                   one off, `oss -` takes them all off.
           containers
                    Shows how sessions' containers are made on this computer
                    (Apple's container on a Mac). `containers image <name>|-`
