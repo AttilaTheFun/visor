@@ -4,7 +4,7 @@ iPhone, iPad and Mac that drives them."""
 
 module(
     name = "visor",
-    version = "0.38.0",
+    version = "0.39.0",
 )
 
 bazel_dep(name = "platforms", version = "1.1.0")
@@ -88,7 +88,7 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.38.15")
+bazel_dep(name = "isomer", version = "0.39.1")
 
 # flatbuffers' released Swift BUILD glob misses Sources/FlatBuffers/Vectors/,
 # and its Foundation use breaks under WASI: isomer's patches, which a root

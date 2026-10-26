@@ -44,7 +44,7 @@ IPA="$(bazel cquery --ios_multi_cpus=sim_arm64 --output=files //applications/vis
 unzip -qo "$IPA" -d "$OUT/app"
 xcrun simctl install "$SIM" "$OUT/app/Payload/visor_ios.app"
 xcrun simctl status_bar "$SIM" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
-  --cellularMode notSupported --batteryState discharging --batteryLevel 100
+  --cellularMode active --cellularBars 4 --operatorName "" --batteryState charged --batteryLevel 100
 
 launch() {
   xcrun simctl terminate "$SIM" $APP 2>/dev/null || true

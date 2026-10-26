@@ -378,6 +378,20 @@ public final class AgentServerConnection: Identifiable {
                     : (try await server.authenticate(record), path)
                 guard let self, self.generation == mine, self.wantsConnection else { return }
                 self.signingIn = nil
+                // Another computer answered at one of this one's paths (an
+                // address two computers share: a bridge to each's own
+                // containers is 192.168.64.1 on every Mac): it is not this
+                // one's. The path goes and the next is tried, rather than
+                // this computer taking the other's id — and then being
+                // folded into it as the same computer, gone from the list.
+                if let identity = server.identity, !self.record.serverID.isEmpty, identity.id != self.record.serverID,
+                   path != self.record.address {
+                    self.note("\(path) reached another computer (\(identity.id.prefix(8))), not this one: that path goes")
+                    self.update { $0.forgetPath(path) }
+                    server.closeChannel()
+                    self.dropped("another computer at \(path)")
+                    return
+                }
                 self.note("signed in after \(self.log.since(started)) ms; opening the channel")
                 self.path = path
                 self.lastGoodPath = path
@@ -834,7 +848,8 @@ public final class AgentServerConnection: Identifiable {
             note("the server answered with an error: \(message)")
             quiet = false
             state = .failed(message)
-        case .sessions(let list):
+        case .sessions(let list, let containers):
+            if let containers { containersAvailable = containers }
             let before = sessions
             sessions = list
             if state == .connected { notifyChanges(from: before, to: sessions) }
@@ -877,7 +892,14 @@ public final class AgentServerConnection: Identifiable {
     static let pageRows = 50
 
     public func transcript(for sessionID: String) -> SessionTranscript {
-        if let existing = transcripts[sessionID] { return existing }
+        if let existing = transcripts[sessionID] {
+            // Let go of when it was left: its rows read back from the cache
+            // now, so a screen opened on it draws them from its first frame
+            // rather than "Loading…" until it appears and subscribes (its
+            // sync starts again then).
+            if existing.released, !existing.loaded { fill(existing, from: cacheKey(sessionID)) }
+            return existing
+        }
         let transcript = SessionTranscript()
         let key = cacheKey(sessionID)
         fill(transcript, from: key)
@@ -999,7 +1021,7 @@ public final class AgentServerConnection: Identifiable {
         let transcript = transcript(for: sessionID)
         if transcript.released {
             transcript.released = false
-            fill(transcript, from: cacheKey(sessionID))
+            if !transcript.loaded { fill(transcript, from: cacheKey(sessionID)) }
             startSyncing(sessionID, transcript)
         }
         // The agent's commands, known before a message is sent: a message
@@ -1290,13 +1312,24 @@ public final class AgentServerConnection: Identifiable {
 
     /// Posts one message. Taken, one that waits for the turn to end is no
     /// longer on its way: the server's queue holds it from here (one sent to
-    /// an idle agent stays in the thread until the record carries it). Not
-    /// taken, it is not on its way at all, and the user is told.
+    /// an idle agent stays in the thread until the record carries it). One
+    /// the server handed straight to the agent though it looked busy from
+    /// here (the session's state a moment behind) goes in the thread now,
+    /// as if it had looked idle, rather than nowhere until the agent's log
+    /// has it, after the reply has begun. Not taken, it is not on its way
+    /// at all, and the user is told.
     private func post(_ sessionID: String, outgoing id: String, text: String, images: [String]) async {
         let session = transcript(for: sessionID)
         do {
-            take(try await server.sendMessage(sessionID, text: text, images: images), replacing: false)
-            session.sending.removeAll { $0.id == id && !$0.shown }
+            let answer = try await server.sendMessage(sessionID, text: text, images: images)
+            take(answer, replacing: false)
+            // A command stays out: its log may never write it back.
+            if !text.hasPrefix("/"), let info = answer.first(where: { $0.id == sessionID }), !info.queued.contains(text),
+               let index = session.sending.firstIndex(where: { $0.id == id }) {
+                session.sending[index].shown = true
+            } else {
+                session.sending.removeAll { $0.id == id && !$0.shown }
+            }
             commandError = nil
         } catch {
             session.sending.removeAll { $0.id == id }
@@ -1348,9 +1381,9 @@ public final class AgentServerConnection: Identifiable {
 
     /// Moves the session's agent into a container on its computer (`into`),
     /// or out of it onto the computer: the same folder and conversation.
-    public func contain(_ sessionID: String, into: Bool) {
+    public func contain(_ sessionID: String, into: Bool, size: ContainerSize? = nil) {
         perform { [weak self] in
-            let list = try await self?.server.contain(session: sessionID, into: into) ?? []
+            let list = try await self?.server.contain(session: sessionID, into: into, size: size) ?? []
             self?.take(list, replacing: false)
         }
     }

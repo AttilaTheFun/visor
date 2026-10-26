@@ -407,6 +407,35 @@ final class SendIsImmediateTests: XCTestCase {
         XCTAssertTrue(transcript.displayID(of: transcript.entries.last!).hasPrefix("sending-"))
     }
 
+    /// Sent while the session looked busy from here, a message waits in the
+    /// composer's queue; if the server handed it straight to the agent (its
+    /// queue does not hold it), it goes in the thread as soon as the
+    /// server says so, before the reply. One the server queued stays the
+    /// queue's.
+    func testAMessageHandedStraightToTheAgentGoesInTheThread() async throws {
+        let host = host()
+        let transcript = host.transcript(for: "s")
+        transcript.busy = true
+        ScriptedProvider.server.sendAnswer = [SessionInfo(id: "s", agent: .claude, cwd: "/w", title: "", busy: true, created: 0)]
+        host.sendMessage("s", text: "Then run the tests")
+        XCTAssertEqual(transcript.sending.map(\.shown), [false], "looked busy: the composer's queue")
+        try await waitFor { transcript.sending.first?.shown == true }
+        XCTAssertEqual(transcript.sending.map(\.entry.text), ["Then run the tests"])
+
+        var queued = SessionInfo(id: "s", agent: .claude, cwd: "/w", title: "", busy: true, created: 0)
+        queued.queued = ["And then commit"]
+        ScriptedProvider.server.sendAnswer = [queued]
+        host.sendMessage("s", text: "And then commit")
+        try await waitFor { ScriptedProvider.server.sent.count == 2 && transcript.sending.count == 1 }
+        XCTAssertEqual(transcript.sending.map(\.entry.text), ["Then run the tests"], "the queued one is the queue's")
+    }
+
+    /// Waits a little while for something to come true.
+    private func waitFor(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
+        for _ in 0..<200 where !condition() { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertTrue(condition(), "never came true", file: file, line: line)
+    }
+
     func testWordsAndTheirCommandAreBothThereAtOnce() {
         let host = host()
         host.sessionCommands["s"] = [SlashCommand(name: "goal", description: "", argumentHint: "")]

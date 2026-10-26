@@ -12,8 +12,9 @@ public protocol ContainerRunning: Sendable {
     func run(_ spec: ContainerSpec) async throws
     /// Whether the container is there (nil when not) and running.
     func isRunning(_ name: String) async -> Bool?
-    /// Removes the container, stopping it first.
-    func remove(_ name: String) async throws
+    /// Removes the container, stopping it first, and its disk unless it is
+    /// kept for the container made again in its place.
+    func remove(_ name: String, keepingDisk: Bool) async throws
     /// Runs `command` in the container to its end, `input` its standard
     /// input: its status, and what it wrote to standard output and error.
     func execute(_ name: String, _ command: [String], input: Data?) async throws -> (status: Int32, output: String)

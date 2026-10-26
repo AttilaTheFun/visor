@@ -18,15 +18,22 @@ final class FixtureAgentServer: AgentServer {
         Envelope.decode(envelope.encoded()) ?? envelope
     }
 
-    /// The fixture's sessions and catalogs, as a `welcome` carries them.
+    /// The fixture's sessions and catalogs, as a `welcome` carries them,
+    /// from a computer that runs agents in containers too (New Session's
+    /// Runs).
     static var welcome: Envelope {
-        wire(.welcome(host: VisorFixture.record.name, sessions: VisorFixture.sessions, catalogs: VisorFixture.catalogs))
+        var welcome = Envelope.welcome(host: VisorFixture.record.name, sessions: VisorFixture.sessions, catalogs: VisorFixture.catalogs)
+        welcome.container = true
+        return wire(welcome)
     }
 
     func openChannel(onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
         self.onEvent = onEvent
         let welcome = Self.welcome
-        Task { onEvent(.welcome(name: welcome.host ?? "", sessions: welcome.sessions ?? [], catalogs: welcome.catalogs ?? [])) }
+        Task {
+            onEvent(.welcome(name: welcome.host ?? "", sessions: welcome.sessions ?? [], catalogs: welcome.catalogs ?? [],
+                             containers: welcome.container == true))
+        }
     }
 
     func closeChannel() { onEvent = nil }

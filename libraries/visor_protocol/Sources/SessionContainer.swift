@@ -8,9 +8,12 @@ public struct SessionContainer: Codable, Hashable, Sendable {
     public var id: String
     /// The image it was made from.
     public var image: String?
+    /// What it was given of the computer; nil for one made before sizes.
+    public var size: ContainerSize?
 
-    public init(id: String, image: String? = nil) {
+    public init(id: String, image: String? = nil, size: ContainerSize? = nil) {
         self.id = id
         self.image = image
+        self.size = size
     }
 }

@@ -654,8 +654,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.66.0.bcr.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.70.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.1.1/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.38.15/MODULE.bazel": "733240baa5955609d92c121c29f8bbbacf2a7a5aa78e5e8d6626b2b04a19b4a7",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.38.15/source.json": "cf622c9215d77bd857767ecb912a634baff314082b048a6cdb7a0cec928791ff",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.1/MODULE.bazel": "4a28d73eb3d1ea0a47a292a4fcbd9f727fdba19e0e0ab5feb48e8dcd19096c46",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.1/source.json": "ce9438712128c6fef0b93530900f180c3305719cb3372b1656920dd38073b9ae",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.4.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jsoncpp/1.9.5/MODULE.bazel": "not found",
@@ -928,7 +928,7 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "9iMl/x5uGTLwIPJ+BF7duI1h0f5fqIeHsYNMuzqOZzQ=",
-        "usagesDigest": "pE+hrnsqfedTgrx8Ul4rcmpPxTwDFeB32SXl42fk42g=",
+        "usagesDigest": "kKWv9Sy80qJd8c4+caUkd8wunxZAMsyF8bn3m/Vd8WE=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
@@ -1040,7 +1040,7 @@
     "@@aspect_rules_ts+//ts:extensions.bzl%ext": {
       "general": {
         "bzlTransitiveDigest": "39Imx8fj/wmgCRC4TUG38yih5rg7z9GUkCWi0sDE+LA=",
-        "usagesDigest": "E6aX5JUoqPAzfFBoszciAtBsvsNGVcMRWnSstw+isrg=",
+        "usagesDigest": "TIhucFAhHGfA9qa6pylNpRA3RuynS22z8H9rJUbJAoU=",
         "recordedInputs": [
           "REPO_MAPPING:aspect_rules_ts+,aspect_rules_ts aspect_rules_ts+",
           "REPO_MAPPING:aspect_rules_ts+,bazel_tools bazel_tools"
@@ -1781,12 +1781,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "rGypP5nrTI9oaJIH2p4vvfzarcXFntsjmKbWV4stK2I=",
-        "usagesDigest": "bTOpj1nNBMLakbUmGxydc7qepMHmfHJjJrsmItzIOpg=",
+        "usagesDigest": "nzLMOLH4l3rSNV1NiaJ3TPjWWQMFF1vyOcMbYD9+RAo=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 790695aa50b1fc46ebbfc450e1b59aaeeab5d2eb4f8ca68f3a146670be76fb2d"
+          "FILE:@@//third_party/swift_packages/Package.resolved d4c8325e860972a3b7c8bb13a3f4d506bb39ded3d92b5d063cc98155e84c6e4f"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1800,9 +1800,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "d83a86ea12dc3ad3d23825e85ed475954e5ddba7",
+              "commit": "7678f6282b76b626ea5ff1e0a22f925cd62cf2ce",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
-              "version": "0.38.1",
+              "version": "0.39.2",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1891,45 +1891,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_oss",
-              "commit": "e8cfce0285ec03e5ad2755a7bc7c08471fc68b8b",
+              "commit": "4cfa7bc129a2202307ebc9b7a86a22eb200fbb53",
               "remote": "https://github.com/AttilaTheFun/oss.git",
-              "version": "0.3.0",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": ""
-            }
-          },
-          "swiftpkg_h": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_h",
-              "commit": "aa3626829160917d4378330617971977cbd78f5b",
-              "remote": "https://github.com/rarestype/h",
-              "version": "1.0.1",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": ""
-            }
-          },
-          "swiftpkg_swift_argument_parser": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_swift_argument_parser",
-              "commit": "6a52f3251125d74daf04fcbd5e6f08a75d074382",
-              "remote": "https://github.com/apple/swift-argument-parser",
-              "version": "1.8.2",
+              "version": "0.8.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -2031,24 +1995,6 @@
               "bazel_target_mods": ""
             }
           },
-          "swiftpkg_swift_png": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_swift_png",
-              "commit": "8a0bcd4df5e4b307c804937776a56dd6ecdf6396",
-              "remote": "https://github.com/tayloraswift/swift-png",
-              "version": "4.5.1",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": ""
-            }
-          },
           "swiftpkg_swift_system": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
@@ -2056,24 +2002,6 @@
               "commit": "869129b7bf4ecc57b97d0193ad29690ca2134750",
               "remote": "https://github.com/apple/swift-system.git",
               "version": "1.8.1",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": ""
-            }
-          },
-          "swiftpkg_swiftterm": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_swiftterm",
-              "commit": "2dad6a1e516f755bed77cf9bbd09455062f54758",
-              "remote": "https://github.com/migueldeicaza/SwiftTerm.git",
-              "version": "1.99.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",

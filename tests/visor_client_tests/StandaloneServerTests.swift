@@ -71,6 +71,28 @@ final class StandaloneServerTests: XCTestCase {
         XCTAssertEqual(AgentServerRecord(json: host.record.json)?.standalone, true)
     }
 
+    /// One of a computer's paths reaches another computer (a bridge to a
+    /// Mac's own containers, 192.168.64.1 on every Mac): that path goes and
+    /// the next is tried; the computer keeps its own id (taking the other's,
+    /// it was folded into that one and gone from the list).
+    func testAPathThatReachesAnotherComputerGoes() async {
+        VisorHost.ssh = ScriptedSSH()
+        defer { VisorHost.ssh = nil }
+        var record = AgentServerRecord(name: "Mini", address: "https://mini.example.com", secret: "pw", provider: "scripted",
+                                       paths: ["ssh://logan@192.168.64.1"])
+        record.serverID = "mini"
+        let server = scripted(record)
+        server.identity = ServerIdentity(id: "mini", addresses: ["https://mini.example.com"])
+        server.identityAt["ssh://logan@192.168.64.1"] = ServerIdentity(id: "macbook", addresses: [])
+        let host = AgentServerConnection(record: record)
+        host.connect()
+        for _ in 0..<20 { await settle() }
+        XCTAssertEqual(server.signedInBy.first, "ssh://logan@192.168.64.1", "the shared path tried first")
+        XCTAssertEqual(host.record.serverID, "mini", "its own id kept")
+        XCTAssertFalse(host.record.paths.contains("ssh://logan@192.168.64.1"), "the path to the other computer is gone")
+        XCTAssertEqual(host.path, "https://mini.example.com")
+    }
+
     /// An authenticator that isolates: the same, whatever the server says.
     func testAnIsolatingAuthenticatorKeepsTheServerAlone() async {
         let record = AgentServerRecord(name: "Sandbox", address: "https://front.example.com/visor", secret: "token", provider: "scripted",

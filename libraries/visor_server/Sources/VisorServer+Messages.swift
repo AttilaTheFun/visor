@@ -38,7 +38,11 @@ extension VisorServer {
                 return
             }
             client.authenticated = true
-            client.send(.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs()))
+            var welcome = Envelope.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs())
+            // Whether a session can start in a container here: New
+            // Session offers it only then.
+            welcome.container = containersAvailable
+            client.send(welcome)
             return
         }
         perform(envelope, from: client)
@@ -255,7 +259,7 @@ extension VisorServer {
     /// that asked.
     private func performContain(_ envelope: Envelope, from client: ClientConnection?) {
         guard let record = session(envelope.session), let into = envelope.container else { return }
-        contain(record, into: into) { result in
+        contain(record, into: into, size: envelope.containerSize) { result in
             if case .failure(let failure) = result { client?.send(.error(failure.message)) }
         }
     }

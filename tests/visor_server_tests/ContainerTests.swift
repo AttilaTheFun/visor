@@ -8,6 +8,7 @@
 
 import ClaudeTranscript
 import Foundation
+import OSSClient
 import Synchronization
 import VisorProtocol
 @testable import VisorServer
@@ -33,7 +34,7 @@ final class FakeContainers: ContainerRunning {
         made.withLock { made in removed.withLock { made.contains { $0.name == name } && !$0.contains(name) } } ? true : nil
     }
 
-    func remove(_ name: String) async throws { removed.withLock { $0.append(name) } }
+    func remove(_ name: String, keepingDisk: Bool) async throws { removed.withLock { $0.append(name) } }
 
     func execute(_ name: String, _ command: [String], input: Data?) async throws -> (status: Int32, output: String) {
         executed.withLock { $0.append((name, command, input)) }
@@ -94,7 +95,7 @@ final class ContainerTests: ServerTestCase {
         let folder = root.appendingPathComponent("work").path
         let made = try await start(server, .startInContainer(id: "S1", agent: .claude, cwd: folder, title: "", skipPermissions: true)).get()
         XCTAssertEqual(made.info.cwd, folder)
-        XCTAssertEqual(made.info.container, SessionContainer(id: "visor-s1", image: "visor-agent"))
+        XCTAssertEqual(made.info.container, SessionContainer(id: "visor-s1", image: "visor-agent", size: VisorServer.fitted(.standard)))
         let spec = try XCTUnwrap(containers.made.withLock { $0.first })
         XCTAssertEqual(spec.image, "visor-agent", "Visor's own image, with the agents in it")
         XCTAssertEqual(spec.labels["visor.session"], "S1")
@@ -131,6 +132,114 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(mode & 0o077, 0, "this user's alone")
     }
 
+    /// openrouter in a container: the containers' own openrouter home (their
+    /// key), the computer's sessions folder in it, where the server reads
+    /// the session's log.
+    func testOpenRouterInAContainerHasTheContainersOwnHome() async throws {
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7970)
+        defer { server.stop() }
+        _ = try await start(server, .startInContainer(id: "o1", agent: .openrouter, cwd: root.appendingPathComponent("work").path, title: "",
+                                                      skipPermissions: true)).get()
+        let mounts = try XCTUnwrap(containers.made.withLock { $0.first }).mounts
+        let home = try XCTUnwrap(mounts.firstIndex { $0.target == "/root/.openrouter" })
+        let sessions = try XCTUnwrap(mounts.firstIndex { $0.target == "/root/.openrouter/sessions" })
+        XCTAssertEqual(mounts[home].source, root.appendingPathComponent("containers/openrouter").path)
+        XCTAssertEqual(mounts[sessions].source, root.appendingPathComponent(".openrouter/sessions").path)
+        XCTAssertLessThan(home, sessions, "the home first, the sessions folder in it after")
+        XCTAssertFalse(mounts.contains { $0.target.hasPrefix("/root/.claude") }, "none of Claude's folders")
+        let mode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: mounts[home].source)[.posixPermissions] as? Int)
+        XCTAssertEqual(mode & 0o077, 0, "this user's alone")
+    }
+
+    /// A client signed in over the WebSocket hears that a session can start
+    /// in a container (its welcome), and hears again with the list when
+    /// that changes: New Session offered no Runs to a phone on the live
+    /// channel, whose welcome never said.
+    func testTheLiveChannelSaysWhetherContainersAreOnOffer() async throws {
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7971)
+        defer { server.stop() }
+        server.password = "pw"
+        let stream = EnvelopeStream()
+        // Its socket opened, as a client's WebSocket opens it, and held.
+        let upgrade = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+            + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        let client = ClientConnection(stream: stream, received: Data(upgrade.utf8))
+        client.start()
+        server.connections[ObjectIdentifier(client)] = client
+        server.handle(Envelope.login(password: "pw", client: "test"), from: client)
+        let welcome = try XCTUnwrap(stream.envelopes.first { $0.type == "welcome" })
+        XCTAssertEqual(welcome.container, true, "the welcome says containers are on offer")
+
+        server.settings.lan = false
+        server.settings.vpn = false
+        await server.checkContainers()
+        let list = try XCTUnwrap(stream.envelopes.last { $0.type == "sessions" })
+        XCTAssertEqual(list.container, false, "the list says they no longer are")
+    }
+
+    /// A container is given what was asked, within what the computer has:
+    /// 6 cores, 16 GB and 128 GB unless asked otherwise, chosen before it is
+    /// made (New Session, Move into a Container).
+    func testAContainerIsGivenTheSizeAskedFor() async throws {
+        let containers = FakeContainers()
+        let server = await server(containers, port: 7973)
+        defer { server.stop() }
+        let gigabyte = ContainerSize.gigabyte
+        let work = root.appendingPathComponent("work").path
+        let standard = try await start(server, .startInContainer(id: "z1", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        XCTAssertEqual(standard.info.container?.size, VisorServer.fitted(.standard))
+        let first = try XCTUnwrap(containers.made.withLock { $0.last })
+        XCTAssertEqual(first.cpus, VisorServer.fitted(.standard).cpus)
+        XCTAssertEqual(first.disk, UInt64(128 * gigabyte))
+        XCTAssertEqual(first.diskTarget, "/var/cache/bazel", "where Visor's image keeps Bazel's output")
+
+        let asked = ContainerSize(cpus: 2, memoryBytes: 4 * gigabyte, diskBytes: 64 * gigabyte)
+        let sized = try await start(server, .startInContainer(id: "z2", agent: .claude, cwd: work, title: "", skipPermissions: true,
+                                                              size: asked)).get()
+        XCTAssertEqual(sized.info.container?.size, VisorServer.fitted(asked))
+        let second = try XCTUnwrap(containers.made.withLock { $0.last })
+        // As asked, where this computer has that much (a CI runner may
+        // have less memory than 4 GB beside its own 4).
+        XCTAssertEqual(second.cpus, VisorServer.fitted(asked).cpus)
+        XCTAssertEqual(second.memory, UInt64(VisorServer.fitted(asked).memoryBytes))
+        XCTAssertEqual(second.disk, UInt64(64 * gigabyte))
+
+        // Within what the computer has.
+        let fitted = VisorServer.fitted(ContainerSize(cpus: 64, memoryBytes: 200 * gigabyte, diskBytes: 1), cores: 12,
+                                        memory: UInt64(32 * gigabyte))
+        XCTAssertEqual(fitted, ContainerSize(cpus: 12, memoryBytes: 28 * gigabyte, diskBytes: 16 * gigabyte))
+        // And over the wire, both ways.
+        let moved = Envelope.decode(Envelope.contain(session: "z1", true, size: asked).encoded())
+        XCTAssertEqual(moved?.containerSize, asked)
+        let told = Envelope.decode(Envelope.sessions([sized.info]).encoded())
+        XCTAssertEqual(told?.sessions?.first?.container?.size, VisorServer.fitted(asked))
+    }
+
+    /// A container's Bazel reads oss's cache, read-only: the home's
+    /// .bazelrc names it and .netrc holds the read token for that host.
+    func testAContainerReadsOSSsBuildCache() throws {
+        let cache = CacheInfo(port: 7490, readToken: "read-token", bytes: 0, maxBytes: 1, freeBytes: 1, hits: 0, misses: 0, writes: 0, evicted: 0)
+        let files = Dictionary(uniqueKeysWithValues: VisorServer.buildCacheFiles(host: "192.168.4.51", cache: cache).map { ($0.path, $0.data) })
+        let rc = String(decoding: try XCTUnwrap(files[".bazelrc"]), as: UTF8.self)
+        XCTAssertTrue(rc.contains("build --remote_cache=http://192.168.4.51:7490"))
+        XCTAssertTrue(rc.contains("build --noremote_upload_local_results"), "read-only")
+        XCTAssertFalse(rc.contains("read-token"), "the token is not in the .bazelrc, which --announce_rc prints")
+        XCTAssertEqual(String(decoding: try XCTUnwrap(files[".netrc"]), as: UTF8.self), "machine 192.168.4.51 login bazel password read-token\n")
+    }
+
+    /// A bridge to the computer's own containers or VMs is none of the
+    /// addresses a server gives: it is the same address on every computer.
+    func testABridgeIsNotOneOfTheServersAddresses() {
+        for bridge in ["bridge100", "bridge0", "docker0", "br-1a2b3c", "virbr0", "cni0", "lxcbr0"] {
+            XCTAssertTrue(NetworkInterfaces.isBridge(bridge), bridge)
+        }
+        for network in ["en0", "en1", "utun4", "eth0", "wlan0", "tailscale0"] {
+            XCTAssertFalse(NetworkInterfaces.isBridge(network), network)
+        }
+    }
+
     /// A folder that is not on the computer says so, and no container is made.
     func testAMissingFolderSaysSoAndMakesNoContainer() async {
         let containers = FakeContainers()
@@ -149,7 +258,7 @@ final class ContainerTests: ServerTestCase {
         let missing = await server(FakeContainers(missing: "Apple's container is not installed"), port: 7993)
         defer { missing.stop() }
         XCTAssertFalse(missing.containersAvailable)
-        XCTAssertNil(missing.sessionsEnvelope().container)
+        XCTAssertEqual(missing.sessionsEnvelope().container, false, "the clients are told so")
         ServerPlatform.current.containers = FakeContainers()
         let loopback = VisorServer(port: 7992)
         defer { loopback.stop() }
@@ -257,5 +366,24 @@ final class ContainerTests: ServerTestCase {
         // the container it names.
         let old = Data(#"{"server":"http://oss.test:7480","id":"c1","repository":"o/r"}"#.utf8)
         XCTAssertEqual(try JSONDecoder().decode(SessionContainer.self, from: old), SessionContainer(id: "c1"))
+    }
+}
+
+/// What the server wrote to a client: the envelopes in its frames
+/// (unmasked, as a server sends them).
+private final class EnvelopeStream: ByteStream {
+    var sent: [Data] = []
+    func receive(_ chunk: @escaping @MainActor (Data?) -> Void) {}
+    func send(_ data: Data, sent: (@MainActor () -> Void)?) { self.sent.append(data); sent?() }
+    func close() {}
+
+    var envelopes: [Envelope] {
+        sent.compactMap { data in
+            let bytes = [UInt8](data)
+            guard bytes.count >= 2, bytes[0] & 0x0F == 1 else { return nil }
+            let length = Int(bytes[1] & 0x7F)
+            let start = length == 126 ? 4 : length == 127 ? 10 : 2
+            return Envelope.decode(String(decoding: bytes[start...], as: UTF8.self))
+        }
     }
 }

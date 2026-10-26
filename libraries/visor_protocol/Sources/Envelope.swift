@@ -45,6 +45,8 @@ public struct Envelope: Codable, Sendable {
     /// account: how `agent` is paid for and how near its limits it is,
     /// changed since its catalog was sent.
     public var account: AgentAccount?
+    /// start (in a container), contain: what the container is given.
+    public var containerSize: ContainerSize?
     // settings: the session's model and effort (nil keeps the current one)
     public var model: String?
     public var effort: String?
@@ -222,14 +224,19 @@ extension Envelope {
     }
     /// A session whose agent runs in a container on the server's computer,
     /// working in `cwd` there (mounted in the container at the same path).
-    public static func startInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool) -> Envelope {
-        var e = start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions); e.container = true; return e
+    public static func startInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool,
+                                        size: ContainerSize? = nil) -> Envelope {
+        var e = start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions)
+        e.container = true
+        e.containerSize = size
+        return e
     }
     /// Moves a session's agent into a container on its computer (`true`) or
     /// out of it onto the computer itself (`false`): the same folder and
     /// conversation, its agent started again on the other side.
-    public static func contain(session: String, _ container: Bool) -> Envelope {
-        var e = Envelope(type: "contain"); e.session = session; e.container = container; return e
+    /// With a size, into a container given that much.
+    public static func contain(session: String, _ container: Bool, size: ContainerSize? = nil) -> Envelope {
+        var e = Envelope(type: "contain"); e.session = session; e.container = container; e.containerSize = size; return e
     }
     public static func send(session: String, text: String, images: [String] = []) -> Envelope {
         var e = Envelope(type: "send"); e.session = session; e.text = text

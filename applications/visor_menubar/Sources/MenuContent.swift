@@ -34,10 +34,11 @@ struct MenuContent: View {
                 }
                 Text("Scan it, or paste a code into Visor on a phone or another Mac")
             }
+            // Never shown in the menu (it is open on a shared screen as
+            // much as anywhere): copied for whoever needs it.
             if !server.password.isEmpty {
-                Button("Password: \(server.password)") { copy(server.password) }
+                Button("Copy Password") { copy(server.password) }
                 Text("What every client signs in with")
-                Text("Click the name or the password to copy it")
                 Divider()
             }
             Text("\(server.clientCount) client\(server.clientCount == 1 ? "" : "s") connected")

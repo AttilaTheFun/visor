@@ -30,6 +30,17 @@ public struct AppleContainers: ContainerRunning {
 
     public func run(_ spec: ContainerSpec) async throws {
         var arguments = ["run", "--detach", "--name", spec.name]
+        if let disk = spec.disk {
+            let volume = Self.disk(of: spec.name)
+            // One kept from before at another size goes: a volume is not
+            // made larger or smaller.
+            if let had = await diskSize(volume), had != disk { _ = try? await Self.run(tool, ["volume", "delete", volume]) }
+            if await diskSize(volume) == nil {
+                let made = try await Self.run(tool, ["volume", "create", "-s", "\(disk / 1_048_576)M", volume])
+                guard made.status == 0 else { throw AppleContainersError(message: made.output.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            }
+            arguments += ["--volume", "\(volume):\(spec.diskTarget)"]
+        }
         for mount in spec.mounts {
             arguments += ["--mount", "type=bind,source=\(mount.source),target=\(mount.target)" + (mount.readOnly ? ",readonly" : "")]
         }
@@ -51,9 +62,21 @@ public struct AppleContainers: ContainerRunning {
         return (container["status"] as? String) == "running"
     }
 
-    public func remove(_ name: String) async throws {
+    public func remove(_ name: String, keepingDisk: Bool) async throws {
         let removed = try await Self.run(tool, ["delete", "--force", name])
         guard removed.status == 0 else { throw AppleContainersError(message: removed.output.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        if !keepingDisk, await diskSize(Self.disk(of: name)) != nil { _ = try? await Self.run(tool, ["volume", "delete", Self.disk(of: name)]) }
+    }
+
+    /// The name of a container's disk of its own.
+    static func disk(of container: String) -> String { container + "-build" }
+
+    /// A volume's size in bytes; nil when there is no such volume.
+    private func diskSize(_ volume: String) async -> UInt64? {
+        guard let read = try? await Self.run(tool, ["volume", "inspect", volume]), read.status == 0,
+              let volumes = try? JSONSerialization.jsonObject(with: Data(read.output.utf8)) as? [[String: Any]],
+              let size = ((volumes.first?["configuration"] as? [String: Any])?["sizeInBytes"] as? NSNumber)?.uint64Value else { return nil }
+        return size
     }
 
     public func execute(_ name: String, _ command: [String], input: Data?) async throws -> (status: Int32, output: String) {

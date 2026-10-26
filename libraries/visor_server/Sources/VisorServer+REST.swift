@@ -43,8 +43,9 @@ extension VisorServer {
         // Into its container or out of it: answered once it has moved.
         if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "contain", authorized(request) {
             guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
-            guard let into = Envelope.decodeBody(request.body).container else { return respond(HTTPResponse(400, "{\"error\":\"container?\"}")) }
-            return contain(record, into: into) { result in
+            let body = Envelope.decodeBody(request.body)
+            guard let into = body.container else { return respond(HTTPResponse(400, "{\"error\":\"container?\"}")) }
+            return contain(record, into: into, size: body.containerSize) { result in
                 switch result {
                 case .success: respond(.json(Envelope.sessions([record.info]).encoded()))
                 case .failure(let failure): respond(HTTPResponse(409, Envelope.error(failure.message).encoded()))

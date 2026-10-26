@@ -79,7 +79,14 @@ extension VisorServer {
             try? FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
             mounts.append(ContainerMount(source: ContainerSignIns.codexHome.path, target: "/root/.codex"))
             mounts.append(ContainerMount(source: sessions.path, target: "/root/.codex/sessions"))
-        default:
+        case .openrouter:
+            // The same for openrouter: its home in the containers (their
+            // key), the computer's sessions folder in it.
+            let sessions = SessionCatalog.openrouterRoot.appendingPathComponent("sessions", isDirectory: true)
+            try? FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+            mounts.append(ContainerMount(source: ContainerSignIns.openrouterHome.path, target: "/root/.openrouter"))
+            mounts.append(ContainerMount(source: sessions.path, target: "/root/.openrouter/sessions"))
+        case .claude:
             let name = ClaudeSessionFiles.projectDirectoryName(for: folder)
             let project = ClaudeSessionFiles.projectsRoot().appendingPathComponent(name, isDirectory: true)
             try? FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
@@ -95,7 +102,7 @@ extension VisorServer {
     /// its mounts, the sign-ins for containers copied into its home, and an
     /// SSH key of its own (for the machines it leases). Removed again when
     /// any of that fails.
-    func makeContainer(session: String, agent: AgentKind, folder: String) async throws -> SessionContainer {
+    func makeContainer(session: String, agent: AgentKind, folder: String, size: ContainerSize = .standard) async throws -> SessionContainer {
         if containerProblem != nil { await checkContainers() }
         if let containerProblem { throw ContainerFailure(message: "This computer cannot run containers: \(containerProblem).") }
         guard let runtime = ServerPlatform.current.containers, let tools = ContainerTools.folder else {
@@ -108,21 +115,22 @@ extension VisorServer {
         }
         let name = Self.containerName(session: session)
         let image = settings.containerImage.trimmingCharacters(in: .whitespaces).isEmpty ? Self.containerImage : settings.containerImage
-        // One left by an earlier attempt goes first.
-        if await runtime.isRunning(name) != nil { try? await runtime.remove(name) }
-        // Every processor, and as much memory as a session's agent may use
-        // here (half the computer's, unless set): builds in it are as fast
-        // as on the computer.
+        // One left by an earlier attempt goes first (its disk kept, for
+        // this one to take up).
+        if await runtime.isRunning(name) != nil { try? await runtime.remove(name, keepingDisk: true) }
+        // What it is given, within what this computer has.
+        let given = Self.fitted(size)
         let spec = ContainerSpec(name: name, image: image, mounts: Self.containerMounts(agent: agent, folder: resolved, tools: tools),
-                                 labels: ["visor.session": session], cpus: ProcessInfo.processInfo.activeProcessorCount,
-                                 memory: AgentChildren.memoryLimit == 0 ? AgentChildren.defaultMemoryLimit : AgentChildren.memoryLimit)
+                                 labels: ["visor.session": session], cpus: given.cpus, memory: UInt64(given.memoryBytes),
+                                 disk: UInt64(given.diskBytes))
         do {
             try await runtime.run(spec)
         } catch {
             throw ContainerFailure(message: "Could not make the container from \(image): \(error.localizedDescription)")
         }
         do {
-            for file in ContainerSignIns.homeFiles() {
+            // The sign-ins for containers, then oss's Bazel cache.
+            for file in ContainerSignIns.homeFiles() + (await buildCacheFiles()) {
                 let path = "/root/" + file.path
                 let wrote = try await runtime.execute(name, ["sh", "-c", "mkdir -p \"$(dirname \"$1\")\" && cat > \"$1\" && chmod 600 \"$1\"", "sh", path],
                                                       input: file.data)
@@ -132,10 +140,22 @@ extension VisorServer {
                                                 input: nil)
             guard key.status == 0 else { throw ContainerFailure(message: "Could not make the container's SSH key: \(key.output)") }
         } catch {
-            try? await runtime.remove(name)
+            try? await runtime.remove(name, keepingDisk: false)
             throw error
         }
-        return SessionContainer(id: name, image: image)
+        return SessionContainer(id: name, image: image, size: given)
+    }
+
+    /// A size asked for, within what this computer has: no more cores than
+    /// it has, no more memory than it has but 4 GB (for itself), whole
+    /// gigabytes, and at least a core, 2 GB of memory and 16 GB of disk.
+    static func fitted(_ size: ContainerSize, cores: Int = ProcessInfo.processInfo.activeProcessorCount,
+                       memory: UInt64 = ProcessInfo.processInfo.physicalMemory) -> ContainerSize {
+        let gigabyte = ContainerSize.gigabyte
+        func whole(_ bytes: Int64) -> Int64 { (bytes + gigabyte / 2) / gigabyte * gigabyte }
+        let most = max(2 * gigabyte, (Int64(clamping: memory) - 4 * gigabyte) / gigabyte * gigabyte)
+        return ContainerSize(cpus: min(max(size.cpus, 1), max(cores, 1)), memoryBytes: min(max(whole(size.memoryBytes), 2 * gigabyte), most),
+                             diskBytes: max(whole(size.diskBytes), 16 * gigabyte))
     }
 
     /// Starts a session whose agent runs in a container here, in the folder
@@ -153,7 +173,7 @@ extension VisorServer {
         let skip = envelope.skipPermissions ?? true
         Task {
             do {
-                let container = try await makeContainer(session: id, agent: agent, folder: cwd)
+                let container = try await makeContainer(session: id, agent: agent, folder: cwd, size: envelope.containerSize ?? .standard)
                 var info = SessionInfo(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skip, created: Date().timeIntervalSince1970)
                 info.container = container
                 let record = SessionRecord(info: info, process: makeProcess(info, resume: nil), entries: [])
@@ -171,18 +191,20 @@ extension VisorServer {
         }
     }
 
-    /// Moves a session's agent into a container here (`into`), or out of
-    /// its container onto this computer: the same folder and conversation,
-    /// its agent started again on the other side. Not while it works: the
-    /// container it leaves is removed, and the turn with it.
-    func contain(_ record: SessionRecord, into: Bool, done: @escaping @MainActor (Result<Void, ContainerFailure>) -> Void) {
+    /// Moves a session's agent into a container here (`into`) of `size`, or
+    /// out of its container onto this computer: the same folder and
+    /// conversation, its agent started again on the other side. Not while
+    /// it works: the container it leaves is removed, and the turn with it.
+    func contain(_ record: SessionRecord, into: Bool, size: ContainerSize? = nil,
+                 done: @escaping @MainActor (Result<Void, ContainerFailure>) -> Void) {
         guard into != (record.info.container != nil) else { return done(.success(())) }
         guard !record.info.busy else { return done(.failure(ContainerFailure(message: "The agent is working: move it once its turn has ended."))) }
         Task {
             let left = record.info.container
             if into {
                 do {
-                    record.info.container = try await makeContainer(session: record.info.id, agent: record.info.agent, folder: record.info.cwd)
+                    record.info.container = try await makeContainer(session: record.info.id, agent: record.info.agent, folder: record.info.cwd,
+                                                                    size: size ?? .standard)
                 } catch let failure as ContainerFailure {
                     return done(.failure(failure))
                 } catch {
@@ -202,12 +224,13 @@ extension VisorServer {
         }
     }
 
-    /// A session's container gone (its session ended here, or left it).
+    /// A session's container gone, with its disk (its session ended here,
+    /// or left it).
     func removeContainer(_ container: SessionContainer) {
         guard let runtime = ServerPlatform.current.containers else { return }
         Task {
             do {
-                try await runtime.remove(container.id)
+                try await runtime.remove(container.id, keepingDisk: false)
                 Self.log("removed the container \(container.id)")
             } catch {
                 Self.log("could not remove the container \(container.id): \(error.localizedDescription)")

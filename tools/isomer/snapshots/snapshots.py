@@ -25,16 +25,18 @@ Targets:
                from the lease); its own references, the phone's screen size;
                held in portrait, however the phone lies
   android-lab-landscape  the same, held in landscape (references of its own)
-  web-desktop  the web client in desktop Safari, in the macOS test VM
-               (~/Developer/macos_vm), driven by safaridriver there
-  macos        the macOS app, in the test VM
+  web-desktop  the web client in desktop Safari, on a Mac leased from oss
+               (`visor machine` in a Visor session, `oss machine` outside
+               one), driven by safaridriver there
+  macos        the macOS app, on the same lease, its window cropped from the
+               machine's screenshot
 
-Nothing here touches this Mac's own screen: Safari and the Mac app run in the
-VM, the iOS targets in the simulator, Android in the emulator or the lab's
+Nothing here touches this Mac's own screen: Safari and the Mac app run on the
+leased Mac, the iOS targets in the simulator, Android in the emulator or the lab's
 phone (never a person's own). Exit status is
 1 when anything changed or failed, so a merge can be held on it.
 """
-import argparse, atexit, functools, http.server, json, os, plistlib, re, shutil, socket, subprocess, sys, threading, time, urllib.request, zipfile
+import argparse, atexit, functools, http.server, json, os, plistlib, re, shlex, shutil, socket, subprocess, sys, threading, time, urllib.request, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
@@ -51,7 +53,10 @@ ANDROID_PACKAGE = "com.loganshire.visor"
 # another session's device.
 SIMULATOR_NAME = os.environ.get("VISOR_SNAPSHOT_SIMULATOR", "visor-snapshots")
 SIMULATOR_TYPE = os.environ.get("VISOR_SNAPSHOT_SIMULATOR_TYPE", "iPhone 17 Pro")
-VM = os.path.expanduser(os.environ.get("MACOS_VM", "~/Developer/macos_vm"))
+# desktop Safari's site on this Mac's loopback and safaridriver's port here,
+# both carried to and from the leased Mac over SSH
+WEB_DESKTOP_PORT = int(os.environ.get("VISOR_SNAPSHOT_WEB_PORT", "8791"))
+WEB_DRIVER_PORT = int(os.environ.get("VISOR_SNAPSHOT_DRIVER_PORT", "4444"))
 # Safari's bottom toolbar on the iPhone simulator, in screenshot pixels.
 SAFARI_TOOLBAR = int(os.environ.get("VISOR_SNAPSHOT_SAFARI_TOOLBAR", "300"))
 # The emulator's status bar (24dp at 2.625x), in screenshot pixels.
@@ -118,7 +123,7 @@ def bazel_output(target, *flags, suffix=""):
     files = sh(["bazel", "cquery", *flags, "--output=files", target]).stdout.split()
     return next(os.path.join(ROOT, f) for f in files if f.endswith(suffix))
 
-# --- the web site, served to a simulator (loopback) or the VM (its host address)
+# --- the web site, served on the loopback (to a simulator, or the leased Mac over SSH)
 
 def serve(directory, host, port):
     class Quiet(http.server.SimpleHTTPRequestHandler):
@@ -170,7 +175,8 @@ def simulator():
     sh(["xcrun", "simctl", "bootstatus", udid, "-b"])
     sh(["xcrun", "simctl", "ui", udid, "appearance", "light"])
     sh(["xcrun", "simctl", "status_bar", udid, "override", "--time", "9:41", "--dataNetwork", "wifi", "--wifiMode", "active",
-        "--wifiBars", "3", "--cellularMode", "notSupported", "--batteryState", "charged", "--batteryLevel", "100"])
+        "--wifiBars", "3", "--cellularMode", "active", "--cellularBars", "4", "--operatorName", "",
+        "--batteryState", "charged", "--batteryLevel", "100"])
     _simulator = udid
     return udid
 
@@ -189,7 +195,9 @@ class WebMobile:
         recording = SimulatorRecording(self.udid, out[:-4] + ".mp4")
         sh(["xcrun", "simctl", "openurl", self.udid, web_url("http://localhost:8791", screen)])
         time.sleep(SETTLE)
-        sh(["xcrun", "simctl", "io", self.udid, "screenshot", out])
+        # The display's mask (its corners and the Dynamic Island) drawn black:
+        # unmasked, the island shows or not with whatever the system is doing.
+        sh(["xcrun", "simctl", "io", self.udid, "screenshot", "--mask=black", out])
         recording.stop()
         # The page only: Safari's toolbar (its tab count grows with every
         # capture, and a load-progress line comes and goes) is not the app.
@@ -221,7 +229,9 @@ class RedIOS:
         # The whole settle: a sheet's Liquid Glass buttons are still easing
         # in at half of it.
         time.sleep(SETTLE)
-        sh(["xcrun", "simctl", "io", self.udid, "screenshot", out])
+        # The display's mask (its corners and the Dynamic Island) drawn black:
+        # unmasked, the island shows or not with whatever the system is doing.
+        sh(["xcrun", "simctl", "io", self.udid, "screenshot", "--mask=black", out])
         recording.stop()
     def finish(self):
         sh(["xcrun", "simctl", "terminate", self.udid, IOS_BUNDLE], check=False)
@@ -307,13 +317,21 @@ class Android:
     def setup(self):
         a = [self.adb, "-s", self.serial, "shell"]
         sh(a + ["cmd", "uimode", "night", "no"])
-        # A fixed status bar (System UI demo mode).
+        # A fixed status bar (System UI demo mode): 9:41, Wi-Fi and a full battery.
+        # The cellular network is hidden, since the emulator draws a shown one
+        # differently from run to run, and the whole sequence goes twice, a few
+        # seconds apart, since SystemUI may still be settling just after boot.
         sh(a + ["settings", "put", "global", "sysui_demo_allowed", "1"])
-        for extras in (["-e", "command", "enter"], ["-e", "command", "clock", "-e", "hhmm", "0941"],
-                       ["-e", "command", "battery", "-e", "level", "100", "-e", "plugged", "false"],
-                       ["-e", "command", "network", "-e", "wifi", "show", "-e", "level", "4"],
-                       ["-e", "command", "notifications", "-e", "visible", "false"]):
-            sh(a + ["am", "broadcast", "-a", "com.android.systemui.demo"] + extras)
+        for attempt in range(2):
+            if attempt: time.sleep(4)
+            for extras in (["-e", "command", "exit"], ["-e", "command", "enter"],
+                           ["-e", "command", "clock", "-e", "hhmm", "0941"],
+                           ["-e", "command", "battery", "-e", "level", "100", "-e", "plugged", "false"],
+                           ["-e", "command", "network", "-e", "wifi", "show", "-e", "level", "4", "-e", "fully", "true"],
+                           ["-e", "command", "network", "-e", "mobile", "hide"],
+                           ["-e", "command", "network", "-e", "nosim", "hide"],
+                           ["-e", "command", "notifications", "-e", "visible", "false"]):
+                sh(a + ["am", "broadcast", "-a", "com.android.systemui.demo"] + extras)
         apk = bazel_output("//applications/visor_android:visor_android_apk", "-c", "opt", suffix=".apk")
         if apk.endswith("_unsigned.apk"):
             apk = apk.replace("_unsigned.apk", ".apk")
@@ -423,39 +441,72 @@ class AndroidLabLandscape(AndroidLab):
         # landscape the picture is the check.
         return []
 
-# --- the macOS test VM (desktop Safari and the Mac app)
+# --- a Mac leased from oss (desktop Safari and the Mac app): through `visor
+# machine` in a Visor session, `oss machine` outside one; one lease for the
+# run, released when it ends
 
-def vm_guest():
-    """user@address of the running guest (its DHCP lease, by its MAC address)."""
-    mac = open(os.path.expanduser("~/VMs/macos_vm/MACAddress")).read().strip().lower()
-    mac = ":".join(p.lstrip("0") or "0" for p in mac.split(":"))
-    lease = open("/var/db/dhcpd_leases").read().split("}")
-    for entry in lease:
-        if f"hw_address=1,{mac}" in entry:
-            return os.environ.get("MACOS_VM_USER", "runner") + "@" + entry.split("ip_address=")[1].split()[0]
-    raise SystemExit("the macOS test VM isn't running: ~/Developer/macos_vm/macvm.sh run --headless &")
+def machine():
+    return ["visor", "machine"] if os.environ.get("VISOR_SESSION") else ["oss", "machine"]
 
-def guest(*args, check=True):
-    return sh([os.path.join(VM, "guest.sh"), *args], check=check, env={**os.environ, "GUEST": vm_guest()})
+@functools.lru_cache(None)
+def mac_lease():
+    if machine()[0] == "visor":
+        lease = json.loads(sh(machine() + ["lease", "macos", "--json"]).stdout)
+    else:
+        # oss's own lease JSON leaves the host to its client: its exports say it.
+        exports = sh(machine() + ["lease", "macos", "--exports"]).stdout
+        values = dict(line[len("export "):].split("=", 1) for line in exports.splitlines() if line.startswith("export "))
+        values = {key: (shlex.split(value) or [""])[0] for key, value in values.items()}
+        lease = {"id": values["OSS_ID"], "host": values["OSS_HOST"], "sshPort": values["OSS_SSH_PORT"], "sshUser": values["OSS_SSH_USER"]}
+    atexit.register(lambda: sh(machine() + ["release", lease["id"]], check=False))
+    log("leased a Mac:", lease["id"])
+    mac = {"id": lease["id"], "target": f"{lease['sshUser']}@{lease['host']}", "port": str(lease["sshPort"])}
+    # The dark look, said outright: the lease's image runs dark, and turning a
+    # running session light takes System Events and a consent no one is there
+    # to give; said here, a session started again stays dark too.
+    sh(guest_ssh(mac) + ["defaults write -g AppleInterfaceStyle -string Dark; defaults write -g AppleInterfaceStyleSwitchesAutomatically -bool false"])
+    return mac
+
+def guest_ssh(mac, *options):
+    return ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "LogLevel=ERROR", "-p", mac["port"], *options, mac["target"]]
+
+def guest(command, check=True):
+    """A command in the leased Mac (its login session's, with `as_user`)."""
+    return sh(guest_ssh(mac_lease()) + [command], check=check)
+
+def as_user(command):
+    return f"sudo -n launchctl asuser $(id -u) {command}"
 
 class WebDesktop:
-    describe = {"app": "Visor Isomer", "device": "Safari, macOS test VM", "orientation": ""}
+    describe = {"app": "Visor Isomer", "device": "Safari, macOS (an oss lease)", "orientation": ""}
 
-    """Desktop Safari in the VM, through safaridriver (WebDriver): a fixed
-    window size and a screenshot of the page alone, without Safari's chrome."""
+    """Desktop Safari on a leased Mac, through safaridriver (WebDriver): a fixed
+    window size and a screenshot of the page alone, without Safari's chrome.
+    One SSH connection runs safaridriver in the guest's login session, forwards
+    its port here, and forwards the site, served on this Mac's loopback, to the
+    guest's: whatever network the guest is on."""
     def prepare(self):
-        self.server = serve(web_site(), "192.168.64.1", 8791)
-        guest("ssh", "pkill -x safaridriver; (safaridriver -p 4444 >/dev/null 2>&1 &)")
-        self.tunnel = subprocess.Popen(["ssh", "-N", "-o", "ExitOnForwardFailure=yes", "-L", "4444:127.0.0.1:4444", vm_guest()])
-        time.sleep(3)
+        self.server = serve(web_site(), "127.0.0.1", WEB_DESKTOP_PORT)
+        guest("sudo -n safaridriver --enable; pkill -x safaridriver; pkill -x Safari; true")
+        self.tunnel = subprocess.Popen(guest_ssh(mac_lease(), "-o", "ExitOnForwardFailure=yes",
+                                                 "-L", f"{WEB_DRIVER_PORT}:127.0.0.1:4444",
+                                                 "-R", f"{WEB_DESKTOP_PORT}:127.0.0.1:{WEB_DESKTOP_PORT}")
+                                       + [as_user("/usr/bin/safaridriver -p 4444")])
+        for _ in range(30):
+            try:
+                if self.webdriver("GET", "/status").get("ready"): break
+            except Exception:
+                pass
+            time.sleep(1)
         self.session = self.webdriver("POST", "/session", {"capabilities": {"alwaysMatch": {"browserName": "safari"}}})["sessionId"]
         self.webdriver("POST", f"/session/{self.session}/window/rect", {"width": 1280, "height": 860, "x": 0, "y": 0})
     def webdriver(self, method, path, body=None):
-        request = urllib.request.Request("http://127.0.0.1:4444" + path, method=method,
+        request = urllib.request.Request(f"http://127.0.0.1:{WEB_DRIVER_PORT}" + path, method=method,
                                          data=None if body is None else json.dumps(body).encode(), headers={"Content-Type": "application/json"})
         return json.loads(urllib.request.urlopen(request, timeout=60).read())["value"]
     def capture(self, screen, out):
-        self.webdriver("POST", f"/session/{self.session}/url", {"url": web_url("http://192.168.64.1:8791", screen)})
+        self.webdriver("POST", f"/session/{self.session}/url", {"url": web_url(f"http://127.0.0.1:{WEB_DESKTOP_PORT}", screen)})
         time.sleep(SETTLE)
         import base64
         with open(out, "wb") as f:
@@ -464,13 +515,29 @@ class WebDesktop:
         try: self.webdriver("DELETE", f"/session/{self.session}")
         except Exception: pass
         self.tunnel.terminate()
-        guest("ssh", "pkill -x safaridriver", check=False)
+        guest("pkill -x safaridriver; pkill -x Safari; true", check=False)
         self.server.shutdown()
+        self.server.server_close()
+
+# The windows on the guest's screen, from CGWindowList (no permission needed
+# for owners and frames): "owner layer x y width height", one a line.
+WINDOWS_JS = """ObjC.import('CoreGraphics');
+const list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly | $.kCGWindowListExcludeDesktopElements, 0));
+const out = [];
+for (let i = 0; i < list.count; i++) {
+  const w = list.objectAtIndex(i), b = w.objectForKey('kCGWindowBounds');
+  out.push([ObjC.unwrap(w.objectForKey('kCGWindowOwnerName')), ObjC.unwrap(w.objectForKey('kCGWindowLayer'))]
+    .concat(['X', 'Y', 'Width', 'Height'].map(k => ObjC.unwrap(b.objectForKey(k)))).join('\\t'));
+}
+out.join('\\n');"""
 
 class MacOS:
     # Red Visor's Mac app.
-    describe = {"app": "Visor", "device": "macOS test VM", "orientation": ""}
+    describe = {"app": "Visor", "device": "macOS (an oss lease)", "orientation": ""}
 
+    """The Mac app on a leased Mac: the machine's screenshot (its own, taken
+    from outside the guest, so no permission in it), cropped to the app's
+    window as CGWindowList gives its frame (no menu bar, Dock or wallpaper)."""
     def prepare(self):
         archive = bazel_output("//applications/visor_macos:visor_macos", suffix=".zip")
         unpacked = "/tmp/visor-snapshot-macos"
@@ -479,19 +546,35 @@ class MacOS:
         self.app = os.path.join(unpacked, next(n for n in os.listdir(unpacked) if n.endswith(".app")))
         # zipfile drops the executable bits
         sh(["chmod", "-R", "u+x", os.path.join(self.app, "Contents", "MacOS")])
-        guest("ssh", "pkill -x Visor; rm -rf ~/Applications/Visor.app; mkdir -p ~/Applications", check=False)
-        subprocess.run(["scp", "-rq", self.app, f"{vm_guest()}:Applications/Visor.app"], check=True)
+        mac = mac_lease()
+        guest("pkill -x Visor; rm -rf ~/Applications/Visor.app; mkdir -p ~/Applications", check=False)
+        subprocess.run(guest_ssh(mac) + ["cat > /tmp/windows.js"], input=WINDOWS_JS.encode(), check=True)
+        subprocess.run(["scp", "-rq", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+                        "-o", "LogLevel=ERROR", "-P", mac["port"], self.app, f"{mac['target']}:Applications/Visor.app"], check=True)
     def capture(self, screen, out):
         # A fresh window each time: no restored frame or state.
-        guest("ssh", "pkill -x Visor; sleep 1; rm -rf ~/Library/Saved\\ Application\\ State/com.LoganShire.VisorClient.macOS.savedState; "
-                     "defaults delete com.LoganShire.VisorClient.macOS 'NSWindow Frame main' 2>/dev/null; "
-                     f"open ~/Applications/Visor.app --args -visor.fixture snapshot -visor.fixture.screen {screen}", check=False)
+        guest("pkill -x Visor; sleep 1; rm -rf ~/Library/Saved\\ Application\\ State/com.LoganShire.VisorClient.macOS.savedState; "
+              "defaults delete com.LoganShire.VisorClient.macOS 'NSWindow Frame main' 2>/dev/null; "
+              + as_user(f"open ~/Applications/Visor.app --args -visor.fixture snapshot -visor.fixture.screen {screen}"), check=False)
         time.sleep(SETTLE)
-        windows = guest("windows").stdout.splitlines()
-        wid = next(l.split()[0] for l in windows if len(l.split()) > 1 and l.split()[1] == "Visor")
-        guest("shot", out, wid)
+        windows = guest(as_user("osascript -l JavaScript /tmp/windows.js")).stdout.splitlines()
+        rows = [line.split("\t") for line in windows]
+        # The app's largest window: its main one, with any sheet over it (a
+        # sheet is a window of its own, in front).
+        x, y, width, height = max((tuple(int(float(v)) for v in row[2:6]) for row in rows if row[:2] == ["Visor", "0"]),
+                                  key=lambda frame: frame[2] * frame[3])
+        # The menu bar spans the screen: its width in points against the
+        # screenshot's in pixels is the screen's scale.
+        points = next(int(float(row[4])) for row in rows if row[0] == "Window Server")
+        whole = out + ".screen.png"
+        sh(machine() + ["screenshot", mac_lease()["id"], whole])
+        pixels = int(sh(["sips", "-g", "pixelWidth", whole]).stdout.split()[-1])
+        scale = pixels // points
+        sh(["sips", "--cropToHeightWidth", str(height * scale), str(width * scale),
+            "--cropOffset", str(y * scale), str(x * scale), whole, "--out", out])
+        remove(whole)
     def finish(self):
-        guest("ssh", "pkill -x Visor", check=False)
+        guest("pkill -x Visor; true", check=False)
 
 KINDS = {"web-mobile": WebMobile, "ios": IOS, "ios-landscape": IOSLandscape, "red-ios": RedIOS, "android": Android, "android-lab": AndroidLab,
          "android-lab-landscape": AndroidLabLandscape, "web-desktop": WebDesktop, "macos": MacOS}

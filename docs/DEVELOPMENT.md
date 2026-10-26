@@ -532,7 +532,8 @@ Settings" last (edit or remove). Compose offers only
 `store.connectedHosts`.
 
 **Menu bar app** Settings: the connection code (QR + copy), the password
-(required), the network (whose the Mac is, the front's state).
+(required), the network (whose the Mac is, the front's state). Its menu
+never shows the password: Copy Password puts it on the pasteboard.
 `POST /api/restart {path, session}` installs a bundle over itself via
 a detached relauncher and resumes named sessions with a nudge
 ("[Visor] The Visor server restarted while you were working…"). The
@@ -649,11 +650,17 @@ on a Mac (`ServerPlatform.containers`, AppleContainers over the
 The container is made from Visor's image (tools/containers/visor-agent,
 built on each Mac: `container build --tag visor-agent --file
 tools/containers/visor-agent/Dockerfile tools/containers/visor-agent`;
-`visor-server containers image <name>` for another) with every processor
-and the agents' memory limit, and sees: the session's folder at the same
+`visor-server containers image <name>` for another) with the size the
+session asked for (ContainerSize: 6 cores, 16 GB of memory and 128 GB of
+disk unless asked otherwise, fitted to what the Mac has; the disk is a
+volume of that size at /var/cache/bazel, where the image keeps Bazel's
+output, since Apple's container sets no limit on a container's own disk),
+chosen before the container is made (New Session, Move into a Container).
+It sees: the session's folder at the same
 path (so its files, git and the agent's own log are the Mac's), the
 agent's log folder for that folder (Claude's
-`~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`), Xcode
+`~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
+`~/.openrouter/sessions`), Xcode
 read-only at `/Applications/Xcode.app`, and Visor's tools read-only at
 `/opt/visor` (ContainerTools: `visor_mcp.js`, and `visor`). The agents'
 sign-ins for containers are the server's own, never the image's
@@ -663,9 +670,16 @@ CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
 sessions folder in it, signed in once on its own — `container run -it --rm
 --mount type=bind,source=<that folder>,target=/root/.codex visor-agent codex
 login --device-auth` — never a copy of the computer's, since Codex rotates
-its refresh token and the first copy to refresh signs out the other; and
+its refresh token and the first copy to refresh signs out the other;
+openrouter's the same way, `<data>/containers/openrouter` at
+`/root/.openrouter`, its key set once with `openrouter auth login` in a
+container (or OPENROUTER_API_KEY in agent.env); and
 `<data>/containers/home/`, other files copied into each container's home);
-the container makes its own SSH key.
+the container makes its own SSH key. Where the server has an oss with a
+Bazel cache (`GET /v1/cache`), the container's home gets a `.bazelrc` naming
+it read-only (`--noremote_upload_local_results`) and a `.netrc` with the
+read token, as oss sets up its VMs: what CI built (its populate jobs) is
+fetched, not built again (VisorServer+BuildCache).
 The agent runs under its host like any other (HostedChild), as
 `container exec` (started again first if the container stopped), its
 variables in a file only this user reads (`hosts/<session>.env`, never on

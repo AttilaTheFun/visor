@@ -1,9 +1,11 @@
 import Foundation
+import VisorServer
 
 /// This Mac's addresses on its networks.
 public enum NetworkAddresses {
-    /// Its IPv4 addresses, loopback left out: a VPN's (the 100.64.0.0/10
-    /// range such networks use) first, then the LAN's.
+    /// Its IPv4 addresses, loopback and its bridges to its own containers
+    /// and VMs left out: a VPN's (the 100.64.0.0/10 range such networks
+    /// use) first, then the LAN's.
     public static func all() -> [(name: String, address: String)] {
         var result: [(String, String)] = []
         var list: UnsafeMutablePointer<ifaddrs>?
@@ -11,7 +13,8 @@ public enum NetworkAddresses {
         defer { freeifaddrs(list) }
         for pointer in sequence(first: first, next: { $0.pointee.ifa_next }) {
             let entry = pointer.pointee
-            guard let address = entry.ifa_addr, address.pointee.sa_family == UInt8(AF_INET) else { continue }
+            guard let address = entry.ifa_addr, address.pointee.sa_family == UInt8(AF_INET),
+                  !NetworkInterfaces.isBridge(String(cString: entry.ifa_name)) else { continue }
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             if getnameinfo(address, socklen_t(address.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
                 let text = String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)

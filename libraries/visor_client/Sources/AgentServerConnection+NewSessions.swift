@@ -39,8 +39,9 @@ public extension AgentServerConnection {
     /// made it, subscribed; what went wrong is thrown.
     @discardableResult
     func startInContainer(id: String = AgentServerRecord.newID(), agent: AgentKind, cwd: String, title: String,
-                          skipPermissions: Bool) async throws -> String {
-        let list = try await server.startSessionInContainer(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions)
+                          skipPermissions: Bool, size: ContainerSize? = nil) async throws -> String {
+        let list = try await server.startSessionInContainer(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions,
+                                                            size: size)
         transcript(for: id).loaded = true
         take(list, replacing: false)
         subscribe(id)

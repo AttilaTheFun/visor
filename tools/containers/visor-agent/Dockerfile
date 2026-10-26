@@ -1,6 +1,6 @@
 # Visor's agent image: the Linux a session's agent runs in when it runs in a
-# container on its Visor server's Mac (Apple's container). Claude Code and
-# Codex, with Node (which also runs Visor's MCP script and `visor`), Swift
+# container on its Visor server's Mac (Apple's container). Claude Code,
+# Codex and openrouter (OpenRouter's models), with Node (which also runs Visor's MCP script and `visor`), Swift
 # 6.4.0 (which Bazel's Swift package rules ask for on Linux; the same as
 # rules_applecross builds Apple apps with), git, ssh, tmux, Python, Bazel
 # (bazelisk), and what Isomer's Linux apps link (SDL, GL, GTK, WebKitGTK). The Visor server makes each session's
@@ -17,7 +17,21 @@
 #                                         sign-in, made once (never a copy of the Mac's):
 #     container run -it --rm --mount type=bind,source="<Visor's data>/containers/codex",target=/root/.codex \
 #       visor-agent codex login --device-auth
+#   <Visor's data>/containers/openrouter/ openrouter's home in every container, mounted: its key
+#                                         (or OPENROUTER_API_KEY in agent.env), set once:
+#     container run -it --rm --mount type=bind,source="<Visor's data>/containers/openrouter",target=/root/.openrouter \
+#       visor-agent openrouter auth login
 #   <Visor's data>/containers/home/       other files, copied into each container's home
+
+# openrouter (github.com/AttilaTheFun/open_router_cli), built from a tag (or
+# any commit: OPENROUTER_REF) in a stage of its own; only the binary comes
+# over.
+FROM docker.io/library/swift:6.4.0-noble AS openrouter
+ARG OPENROUTER_REF=v0.5.0
+RUN git init -q /src && cd /src \
+ && git fetch -q --depth 1 https://github.com/AttilaTheFun/open_router_cli "$OPENROUTER_REF" && git checkout -q FETCH_HEAD \
+ && swift build -c release --product openrouter \
+ && install -m 755 "$(swift build -c release --show-bin-path)/openrouter" /usr/local/bin/openrouter
 
 FROM docker.io/library/swift:6.4.0-noble
 ARG TARGETARCH
@@ -49,6 +63,7 @@ RUN case "${TARGETARCH:-arm64}" in \
 # own builds' links with ones to paths only the container has.
 RUN printf '%s\n' 'startup --output_user_root=/var/cache/bazel' 'build --experimental_convenience_symlinks=ignore' > /etc/bazel.bazelrc
 RUN npm install -g @anthropic-ai/claude-code @openai/codex && npm cache clean --force
+COPY --from=openrouter /usr/local/bin/openrouter /usr/local/bin/openrouter
 # The session's folder belongs to the Mac's user, not root: git works in it.
 RUN git config --system --add safe.directory '*'
 # Visor's tools (`visor`), which the server mounts here.

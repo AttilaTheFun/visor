@@ -28,7 +28,7 @@ xcrun simctl shutdown "$id" 2>/dev/null || true
 xcrun simctl erase "$id"
 xcrun simctl boot "$id" 2>/dev/null || true
 xcrun simctl bootstatus "$id" >/dev/null
-xcrun simctl status_bar "$id" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+xcrun simctl status_bar "$id" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --operatorName "" --batteryState charged --batteryLevel 100
 status=0
 for orientation in portrait landscape; do
   kept="$OUT/ios-$orientation"

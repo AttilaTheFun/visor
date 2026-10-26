@@ -71,10 +71,12 @@ public protocol AgentServer: AnyObject {
     /// Starts a session whose agent runs in a container on the server's
     /// computer, working in `cwd` there; answered once the container is
     /// made.
-    func startSessionInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool) async throws -> [SessionInfo]
-    /// Moves a session's agent into a container on its computer (`into`),
-    /// or out of it onto the computer; answered once it has moved.
-    func contain(session: String, into: Bool) async throws -> [SessionInfo]
+    func startSessionInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool,
+                                 size: ContainerSize?) async throws -> [SessionInfo]
+    /// Moves a session's agent into a container on its computer (`into`)
+    /// given `size`, or out of it onto the computer; answered once it has
+    /// moved.
+    func contain(session: String, into: Bool, size: ContainerSize?) async throws -> [SessionInfo]
     /// One command on a session; the sessions the answer names are taken
     /// into the list (after `.end`, they replace it).
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo]
@@ -205,10 +207,11 @@ public extension AgentServer {
     }
     var starting: SessionStarting { .inFolders }
 
-    func startSessionInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool) async throws -> [SessionInfo] {
+    func startSessionInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool,
+                                 size: ContainerSize?) async throws -> [SessionInfo] {
         throw AgentServerError.message("This server runs no agents in containers.")
     }
-    func contain(session: String, into: Bool) async throws -> [SessionInfo] {
+    func contain(session: String, into: Bool, size: ContainerSize?) async throws -> [SessionInfo] {
         throw AgentServerError.message("This server runs no agents in containers.")
     }
     func startChoices() async throws -> [StartChoice] { [] }

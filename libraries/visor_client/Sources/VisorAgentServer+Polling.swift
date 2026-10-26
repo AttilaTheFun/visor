@@ -65,7 +65,9 @@ extension VisorAgentServer {
                                          containers: answer.container == true))
                         onEvent(.transport(live: false))
                     } else if answer.revision != revision {
-                        onEvent(.sessions(answer.sessions ?? []))
+                        // The whole list as a welcome carries it: no
+                        // container flag is no containers.
+                        onEvent(.sessions(answer.sessions ?? [], containers: answer.container == true))
                         onEvent(.catalogs(answer.catalogs ?? []))
                     }
                     revision = answer.revision

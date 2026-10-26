@@ -7,7 +7,7 @@ set -eu
 xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$SIMULATOR_UDID" -b >/dev/null
 xcrun simctl ui "$SIMULATOR_UDID" appearance light
-xcrun simctl status_bar "$SIMULATOR_UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+xcrun simctl status_bar "$SIMULATOR_UDID" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --operatorName "" --batteryState charged --batteryLevel 100
 # Which simulator the runner gave the test, kept beside the pictures for
 # snapshots.py to report (a capture showing another app's alert was traced
 # this way).

@@ -12,6 +12,11 @@ import Foundation
 ///                                   of the computer's: Codex rotates its refresh
 ///                                   token, and the first of two copies to
 ///                                   refresh signs the other out
+///     <data>/containers/openrouter/ openrouter's home in every container (its
+///                                   sessions folder the computer's): its key and
+///                                   default model, set once in a container
+///                                   (`openrouter auth login`), or the key as
+///                                   OPENROUTER_API_KEY in agent.env
 ///     <data>/containers/home/       other files copied into each container's
 ///                                   home when it is made
 enum ContainerSignIns {
@@ -22,6 +27,14 @@ enum ContainerSignIns {
     /// for.
     static var codexHome: URL {
         let home = folder.appendingPathComponent("codex", isDirectory: true)
+        try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        return home
+    }
+
+    /// openrouter's home in every container, made (this user's alone) when
+    /// asked for.
+    static var openrouterHome: URL {
+        let home = folder.appendingPathComponent("openrouter", isDirectory: true)
         try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         return home
     }
