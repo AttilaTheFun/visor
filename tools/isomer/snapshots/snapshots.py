@@ -659,6 +659,16 @@ def run(targets, screens):
                     continue
                 diff = os.path.join(run_dir, target, f"{screen}.diff.png")
                 changed = pngdiff.compare(reference, capture, diff)
+                if changed:
+                    # A second look: a screen pictured before it settled (a
+                    # menu not yet up on a busy runner) differs once; a real
+                    # change differs again.
+                    log(target, screen, f"changed {changed} px; a second look")
+                    try:
+                        kind.capture(screen, capture)
+                        changed = pngdiff.compare(reference, capture, diff)
+                    except Exception as error:
+                        log(target, screen, "second look failed:", error)
                 status = "same" if changed == 0 else "changed"
                 failed |= changed > 0
                 results.append((target, screen, status, str(changed), reference, capture, diff if changed else ""))
