@@ -54,8 +54,9 @@ ws.onmessage = ev => {
     log('the agent failed:', e.message ?? e.error);
     return finish();
   }
+  // Rows come whole with the transcript, and one at a time as `entry`.
   if (['transcript', 'entry'].includes(e.type)) {
-    for (const row of e.entries ?? []) {
+    for (const row of e.entries ?? (e.entry ? [e.entry] : [])) {
       if (row.role !== 'assistant' || !row.text || answered) continue;
       log('the agent:', JSON.stringify(row.text.slice(0, 200)));
       answered = true;

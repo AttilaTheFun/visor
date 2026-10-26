@@ -13,7 +13,8 @@ run() {
   local name="$1"; shift
   local started=$SECONDS
   local result
-  result=$( { echo "$message"; sleep 45; } | timeout 40 claude "$@" 2>&1 | grep -o '"type":"result".*' | grep -o '"result":"[^"]*"' | head -1 )
+  # The result line (its "result" may come before or after its "type").
+  result=$( { echo "$message"; sleep 45; } | timeout 40 claude "$@" 2>&1 | grep '"type":"result"' | grep -o '"result":"[^"]*"' | head -1 )
   echo "$name: $((SECONDS - started)) s ${result:-NO RESULT}"
 }
 
