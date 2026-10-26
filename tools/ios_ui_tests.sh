@@ -18,7 +18,7 @@
 # testFixtureScreensLandscape) also in /private/tmp/visor_probe.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-CASES="${VISOR_UI_CASES:-VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testScrollingUpWhileARowPoursInIsNotFought,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning,VisorProbe/testFixtureSlashCommands,VisorProbe/testFixtureQuestion,VisorProbe/testABurstOfRowsAtTheEndIsFollowedToItsEnd,VisorProbe/testTypingThroughAnAutocorrectionKeepsTheCaret,VisorProbe/testASentMessageIsInTheThreadAtOnce,VisorProbe/testTappingAContainerMarkShowsResources}"
+CASES="${VISOR_UI_CASES:-VisorProbe/testLearningOfEarlierRowsMovesNothing,VisorProbe/testRowsArrivingWhileReadingAboveMoveNothing,VisorProbe/testScrollingUpWhileARowPoursInIsNotFought,VisorProbe/testRowsArrivingAtTheEndAreScrolledTo,VisorProbe/testRefusingDictationLeavesTheAppRunning,VisorProbe/testFixtureSlashCommands,VisorProbe/testFixtureQuestion,VisorProbe/testABurstOfRowsAtTheEndIsFollowedToItsEnd,VisorProbe/testTypingThroughAnAutocorrectionKeepsTheCaret,VisorProbe/testASentMessageIsInTheThreadAtOnce}"
 LOG="$(mktemp)"
 # On the simulator the tests run on, when it exists already (CI's is new):
 # the app taken off, since installing over a copy can leave its old binary,

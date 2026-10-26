@@ -36,10 +36,6 @@ final class FakeContainers: ContainerRunning {
 
     func remove(_ name: String, keepingDisk: Bool) async throws { removed.withLock { $0.append(name) } }
 
-    /// What `stats` says.
-    let reported = Mutex<[ContainerStats]>([])
-    func stats() async -> [ContainerStats] { reported.withLock { $0 } }
-
     func execute(_ name: String, _ command: [String], input: Data?) async throws -> (status: Int32, output: String) {
         executed.withLock { $0.append((name, command, input)) }
         return (0, "")
@@ -181,48 +177,6 @@ final class ContainerTests: ServerTestCase {
         await server.checkContainers()
         let list = try XCTUnwrap(stream.envelopes.last { $0.type == "sessions" })
         XCTAssertEqual(list.container, false, "the list says they no longer are")
-    }
-
-    /// What the computer is using and for whom: its processors between two
-    /// readings, its sessions' containers by session, the machines they
-    /// lease (with a word that oss does not say what each uses).
-    func testResourcesSayWhatIsUsedAndForWhom() async throws {
-        let containers = FakeContainers()
-        let server = await server(containers, port: 7972)
-        defer { server.stop() }
-        _ = try await start(server, .startInContainer(id: "r1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
-                                                      skipPermissions: true)).get()
-        let name = VisorServer.containerName(session: "r1")
-        ServerPlatform.current.load = SteppingLoad()
-        containers.reported.withLock { $0 = [ContainerStats(id: name, cpuMicroseconds: 1_000_000, cpus: 4, memoryUsedBytes: 1 << 30, memoryLimitBytes: 4 << 30)] }
-        server.leases = ["r1": [SessionLease(id: "l1", platform: "ios", config: "iphone", state: "ready")]]
-
-        let resources = await server.resources()
-        // A quarter of four cores' ticks: one core's worth.
-        XCTAssertEqual(resources.host?.cpuPercent, 100)
-        XCTAssertEqual(resources.host?.cpus, 4)
-        let container = try XCTUnwrap(resources.containers.first)
-        XCTAssertEqual(container.session, "r1")
-        XCTAssertEqual(container.cpuPercent, 0, "no processor time between its two readings")
-        XCTAssertEqual(container.memoryLimitBytes, 4 << 30)
-        XCTAssertEqual(resources.machines.map(\.session), ["r1"])
-        XCTAssertNil(resources.machines.first?.cpuPercent, "no oss here to say")
-
-        // oss's numbers, by lease: an emulator's and its allotment; a lease
-        // oss does not mention keeps none.
-        let measured = VisorServer.measured([LeaseUsage(id: "l1", platform: "android", session: "r1"), LeaseUsage(id: "l2", platform: "ios")],
-                                            by: [MachineUsage(id: "l1", platform: .android, config: "phone", holder: "visor:r1", cpus: 4,
-                                                              memoryLimitBytes: 4 << 30, cpuPercent: 120, memoryBytes: 3 << 30)])
-        XCTAssertEqual(measured.first?.cpuPercent, 120)
-        XCTAssertEqual(measured.first?.memoryLimitBytes, 4 << 30)
-        XCTAssertNil(measured.last?.cpuPercent)
-
-        // Its share of a core between readings: a second's time in two.
-        let start = ContinuousClock.now
-        let later = ContainerStats(id: name, cpuMicroseconds: 2_000_000)
-        XCTAssertEqual(VisorServer.cpuPercent(later, since: (cpuMicroseconds: 1_000_000, at: start), at: start + .seconds(2)), 50)
-        XCTAssertNil(VisorServer.cpuPercent(later, since: (cpuMicroseconds: 3_000_000, at: start), at: start + .seconds(2)),
-                     "a reading from before it started again")
     }
 
     /// A container is given what was asked, within what the computer has:
@@ -431,19 +385,5 @@ private final class EnvelopeStream: ByteStream {
             let start = length == 126 ? 4 : length == 127 ? 10 : 2
             return Envelope.decode(String(decoding: bytes[start...], as: UTF8.self))
         }
-    }
-}
-
-/// A computer whose every reading has done one core's worth of work of
-/// four since the last.
-private final class SteppingLoad: HostLoadReading {
-    private let readings = Mutex<UInt64>(0)
-
-    func sample() -> HostLoadSample? {
-        let step = readings.withLock { count in
-            count += 1
-            return count
-        }
-        return HostLoadSample(busyTicks: step * 100, totalTicks: step * 400, cpus: 4, memoryBytes: 16 << 30, memoryUsedBytes: 8 << 30)
     }
 }

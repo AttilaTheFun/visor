@@ -290,7 +290,7 @@ final class VisorProbe: XCTestCase {
     private func fixtureShots(_ orientation: UIDeviceOrientation) {
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         XCUIDevice.shared.orientation = orientation
-        for screen in ["sessions", "machines", "chat", "question", "goal", "inspector", "models", "search", "connect", "new-session", "commands", "resources"] {
+        for screen in ["sessions", "machines", "chat", "question", "goal", "inspector", "models", "search", "connect", "new-session", "commands"] {
             let app = XCUIApplication()
             app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", screen]
             app.launch()
@@ -339,23 +339,6 @@ final class VisorProbe: XCTestCase {
         // The thread held rows back for 0.6 s after typing stopped, and the
         // sent one with them.
         XCTAssertLessThan(waited, 0.5, "the sent message went in the thread \(waited) s after the send")
-        app.terminate()
-    }
-
-    /// A session's container mark, tapped, shows what its computer is using
-    /// (not the session), and so do its machines' pills.
-    func testTappingAContainerMarkShowsResources() throws {
-        XCUIDevice.shared.orientation = Self.runOrientation
-        let app = XCUIApplication()
-        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "machines"]
-        app.launch()
-        // By what it says: the row's own identifier covers its marks.
-        let mark = app.buttons["In a container"].firstMatch
-        XCTAssertTrue(mark.waitForExistence(timeout: 10), "no container mark on the widget session's row")
-        mark.tap()
-        XCTAssertTrue(app.staticTexts["Leased Machines"].waitForExistence(timeout: 10), "the mark did not open Resources")
-        XCTAssertTrue(app.staticTexts["85% of 10 cores"].waitForExistence(timeout: 10), "the container's use is not shown")
-        shot(app, "resources-from-mark")
         app.terminate()
     }
 

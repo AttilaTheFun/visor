@@ -216,9 +216,6 @@ public final class VisorServer {
     /// (`refreshLeases`): by session id.
     var leases: [String: [SessionLease]] = [:]
 
-    /// The last reading of the processors, for the next (`resources`).
-    var resourceReadings = ResourceReadings()
-
     /// The last write of the sessions failed; cleared by the next that works.
     var savingFailed = false
 

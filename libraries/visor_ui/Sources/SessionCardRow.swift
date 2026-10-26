@@ -16,9 +16,6 @@ struct SessionCardRow: View {
     /// The row is the selected one: its marks take its words' color, which
     /// the system's selection sets (white on the accent's fill).
     var selected = false
-    /// Opens what the computer is using (its containers, its machines):
-    /// what the row's container mark and its machines do when tapped.
-    var showResources: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -28,12 +25,10 @@ struct SessionCardRow: View {
                 // Only when it says (an empty mark would take the line's
                 // spacing on Isomer).
                 if SessionPlaceMark.shows(session) {
-                    resourcesButton {
-                        SessionPlaceMark(session: session)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityIdentifier("place-" + session.id)
+                    SessionPlaceMark(session: session)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("place-" + session.id)
                 }
                 Text(session.title.isEmpty ? session.agent.title : session.title)
                     .font(.headline)
@@ -69,27 +64,13 @@ struct SessionCardRow: View {
                     .accessibilityIdentifier("waiting-" + session.id)
             }
             if !session.leases.isEmpty {
-                resourcesButton { LeaseMarks(leases: session.leases) }
+                LeaseMarks(leases: session.leases)
                     .padding(.top, 2)
                     .accessibilityIdentifier("leases-" + session.id)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("session-" + session.id)
-    }
-
-    /// A mark that opens the computer's resources when tapped, without
-    /// selecting the row; only the mark where there is nowhere to open.
-    @ViewBuilder private func resourcesButton(@ViewBuilder _ label: () -> some View) -> some View {
-        if let showResources {
-            // Plain: the marks keep their own grey (a tinted button's
-            // secondary is the accent's), and the tap is the mark's alone.
-            Button(action: showResources, label: label)
-                .buttonStyle(.plain)
-                .accessibilityHint("Shows what the computer is using")
-        } else {
-            label()
-        }
     }
 
     /// What is happening: the agent works, waits to be allowed something,

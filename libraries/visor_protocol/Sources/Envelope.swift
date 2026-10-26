@@ -45,8 +45,6 @@ public struct Envelope: Codable, Sendable {
     /// account: how `agent` is paid for and how near its limits it is,
     /// changed since its catalog was sent.
     public var account: AgentAccount?
-    /// resources: what the server's computer is using, and for whom.
-    public var resources: ServerResources?
     /// start (in a container), contain: what the container is given.
     public var containerSize: ContainerSize?
     // settings: the session's model and effort (nil keeps the current one)

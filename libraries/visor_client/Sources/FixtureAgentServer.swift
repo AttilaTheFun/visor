@@ -75,12 +75,6 @@ final class FixtureAgentServer: AgentServer {
     }
 
     func sessions() async throws -> [SessionInfo] { Self.welcome.sessions ?? [] }
-
-    func resources() async throws -> ServerResources? {
-        var answer = Envelope(type: "resources")
-        answer.resources = VisorFixture.resources
-        return Self.wire(answer).resources
-    }
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] { [] }
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { [] }

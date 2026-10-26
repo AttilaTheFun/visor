@@ -95,10 +95,6 @@ public protocol AgentServer: AnyObject {
     /// can ask the agent, what it last heard where it cannot. Nil from a
     /// server that does not say.
     func account(of agent: AgentKind) async throws -> AgentAccount?
-    /// What the server's computer is using and for whom: its processors and
-    /// memory, its sessions' containers and the machines they lease. Nil
-    /// from a server that does not say.
-    func resources() async throws -> ServerResources?
     /// The agent's own sessions started in `cwd`, newest first.
     func resumable(agent: AgentKind, cwd: String) async throws -> [ResumableSession]
     /// The sessions that ran in a folder follow it to where it moved.
@@ -228,7 +224,6 @@ public extension AgentServer {
     }
     var managesSessions: Bool { true }
     func account(of agent: AgentKind) async throws -> AgentAccount? { nil }
-    func resources() async throws -> ServerResources? { nil }
     func verifyChannel() async -> Bool { true }
     func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool { false }
     func connectionCodes() async throws -> ConnectionCodes { throw AgentServerError.unsupported }

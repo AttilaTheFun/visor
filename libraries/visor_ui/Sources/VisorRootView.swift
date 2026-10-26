@@ -268,9 +268,6 @@ public struct VisorRootView: View {
                 search = VisorFixture.searchQuery
             case "new-session":
                 composing = true
-            case "resources":
-                selection = .resources(serverID: VisorFixture.serverID)
-                if compact { compactColumn = .detail }
             default:
                 break
             }
@@ -386,10 +383,7 @@ public struct VisorRootView: View {
         }
         ForEach(cards) { card in
             let which = SessionSelection(serverID: host.id, sessionID: card.session.id)
-            SessionCardRow(session: card.session, selected: selection == .session(which), showResources: {
-                selection = .resources(serverID: host.id)
-                if compact { compactColumn = .detail }
-            })
+            SessionCardRow(session: card.session, selected: selection == .session(which))
                 .tag(ContentSelection.session(which))
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
@@ -511,9 +505,6 @@ public struct VisorRootView: View {
             } else if case .hostArchive(let serverID) = selection, let host = store.server(for: serverID) {
                 ArchivedList(host: host, cwd: nil, openProject: { selection = .project(serverID: serverID, cwd: $0) })
                     .id(serverID + "|archive")
-            } else if case .resources(let serverID) = selection, let host = store.server(for: serverID) {
-                ResourcesScreen(host: host)
-                    .id(serverID + "|resources")
             } else if let which = selection?.session, let host = store.server(for: which.serverID) {
                 AgentScreen(host: host, sessionID: which.sessionID, ended: endSession)
                     .id(which)

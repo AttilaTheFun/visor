@@ -103,22 +103,6 @@ public enum VisorFixture {
         return sessions
     }
 
-    /// What the fixture's computer is using: itself, the widget session's
-    /// container, the simulator and emulator it leases, and oss's computer.
-    static var resources: ServerResources {
-        let gigabyte: Int64 = 1_073_741_824
-        return ServerResources(
-            sampledAt: now,
-            host: ComputerUsage(name: record.name, cpus: 10, cpuPercent: 230, memoryBytes: 32 * gigabyte, memoryUsedBytes: 18 * gigabyte + gigabyte / 2),
-            containers: [ContainerUsage(id: "visor-fixture-busy", session: "fixture-busy", cpus: 10, cpuPercent: 85,
-                                        memoryLimitBytes: 8 * gigabyte, memoryUsedBytes: 2 * gigabyte + gigabyte / 10)],
-            machines: [LeaseUsage(id: "lease-android", platform: "android", config: "phone", session: "fixture-busy", cpus: 4, cpuPercent: 120,
-                                    memoryLimitBytes: 4 * gigabyte, memoryBytes: 2 * gigabyte + gigabyte * 8 / 10),
-                       LeaseUsage(id: "lease-ios", platform: "ios", config: "iphone", session: "fixture-busy", cpuPercent: 40,
-                                    memoryBytes: gigabyte + gigabyte * 6 / 10)],
-            machinesHost: ComputerUsage(name: "Build Mac", cpus: 16, cpuPercent: 410, memoryBytes: 64 * gigabyte, memoryUsedBytes: 41 * gigabyte))
-    }
-
     static var catalogs: [AgentCatalog] {
         [AgentCatalog(agent: .claude, models: [
             AgentModel(id: "opus", title: "Opus 5.5", subtitle: "Most capable", efforts: ["low", "medium", "high"], defaultEffort: "high"),
