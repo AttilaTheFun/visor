@@ -115,10 +115,15 @@ extension VisorServer {
             mounts.append(ContainerMount(source: ContainerSignIns.openrouterHome.path, destination: "/root/.openrouter"))
             mounts.append(ContainerMount(source: sessions.path, destination: "/root/.openrouter/sessions"))
         case .claude:
+            // Where this computer's Claude keeps the folder's log (by its
+            // real path), at the name Claude in the container gives it (the
+            // path as mounted, no links in it: /tmp, say, is /private/tmp
+            // here and itself there).
             let name = ClaudeSessionFiles.projectDirectoryName(for: folder)
             let project = ClaudeSessionFiles.projectsRoot().appendingPathComponent(name, isDirectory: true)
             try? FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
-            mounts.append(ContainerMount(source: project.path, destination: "/root/.claude/projects/" + name))
+            let seen = ClaudeSessionFiles.projectDirectoryName(for: folder, followingLinks: false)
+            mounts.append(ContainerMount(source: project.path, destination: "/root/.claude/projects/" + seen))
         }
         let xcode = "/Applications/Xcode.app"
         if FileManager.default.fileExists(atPath: xcode) { mounts.append(ContainerMount(source: xcode, destination: xcode, readOnly: true)) }

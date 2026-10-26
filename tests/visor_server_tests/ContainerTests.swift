@@ -83,8 +83,12 @@ final class ContainerTests: ServerTestCase {
         XCTAssertTrue(spec.rosetta, "x86_64 Linux programs too (Android's build tools)")
         let resolved = HostFolders.resolve(folder)
         XCTAssertTrue(spec.mounts.contains(ContainerMount(source: resolved, destination: resolved)), "the folder, at the same path")
-        let project = ClaudeSessionFiles.projectDirectoryName(for: resolved)
-        XCTAssertTrue(spec.mounts.contains { $0.destination == "/root/.claude/projects/" + project && !$0.readOnly }, "where Claude keeps its log, seen here")
+        // This computer's log folder for it (by its real path: the temporary
+        // folder is under /private here), at the name Claude in the
+        // container gives the folder as mounted.
+        let here = ClaudeSessionFiles.projectsRoot().appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: resolved)).path
+        let there = "/root/.claude/projects/" + ClaudeSessionFiles.projectDirectoryName(for: resolved, followingLinks: false)
+        XCTAssertTrue(spec.mounts.contains { $0.source == here && $0.destination == there && !$0.readOnly }, "where Claude keeps its log, seen here")
         XCTAssertTrue(spec.mounts.contains { $0.destination == ContainerPlacement.toolsFolder && $0.readOnly }, "Visor's tools")
         let tools = try XCTUnwrap(spec.mounts.first { $0.destination == ContainerPlacement.toolsFolder }).source
         XCTAssertEqual(try String(contentsOfFile: tools + "/visor_mcp.js", encoding: .utf8), VisorMCPScript.source)
