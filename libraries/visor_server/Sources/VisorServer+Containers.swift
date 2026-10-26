@@ -1,15 +1,16 @@
 // Sessions whose agents run in Linux containers rather than on this computer
 // directly: each a lease from the oss server (OS Server) on this computer,
 // which runs it (a helper of its own per container, apart from oss), made
-// from Visor's agent image (tools/containers/visor-agent, published by CI
-// to ghcr.io) and held while the session lasts. The agent runs in it under
-// a host of its own, as any agent does, through OS Server's command line on
-// the container's own socket, so it outlives a restart of this server and
-// of OS Server. The container sees the session's folder at the same path,
-// the agent's log folder, Xcode read-only, and Visor's tools
-// (ContainerTools): the agent works on the same files and keeps the same
-// log whichever side it runs on, so a session moves into or out of its
-// container by starting its agent again on the other side.
+// from Visor's agent image (tools/containers/visor-agent, published by CI to
+// ghcr.io) and held while the session lasts. The agent runs in it under a
+// host of its own, as any agent does, through OS Server's command line on the
+// container's own socket, so it outlives a restart of this server and of OS
+// Server. The container sees the session's folder at the same path, the
+// agent's log folder, and Visor's tools (ContainerTools), and nothing else of
+// the Mac: Apple apps build there with rules_applecross from Xcode's SDKs an
+// OS Server serves, not the Mac's Xcode. The agent works on the same files
+// and keeps the same log whichever side it runs on, so a session moves into
+// or out of its container by starting its agent again on the other side.
 //
 //     visor-server containers image <ref> | -     the image containers are made from (Visor's)
 //     visor-server containers callback <ws-url> | -  how a container reaches this server
@@ -94,8 +95,7 @@ extension VisorServer {
 
     /// What a session's container sees of this computer: its folder, at
     /// the same path; the agent's log folder for it, where the agent there
-    /// keeps its log; Xcode, read-only (for building Apple apps on Linux);
-    /// and Visor's tools.
+    /// keeps its log; and Visor's tools.
     static func containerMounts(agent: AgentKind, folder: String, tools: URL) -> [ContainerMount] {
         var mounts = [ContainerMount(source: folder, destination: folder)]
         switch agent {
@@ -125,8 +125,6 @@ extension VisorServer {
             let seen = ClaudeSessionFiles.projectDirectoryName(for: folder, followingLinks: false)
             mounts.append(ContainerMount(source: project.path, destination: "/root/.claude/projects/" + seen))
         }
-        let xcode = "/Applications/Xcode.app"
-        if FileManager.default.fileExists(atPath: xcode) { mounts.append(ContainerMount(source: xcode, destination: xcode, readOnly: true)) }
         mounts.append(ContainerMount(source: tools.path, destination: ContainerPlacement.toolsFolder, readOnly: true))
         return mounts
     }

@@ -13,8 +13,9 @@ enum VisorCommandScript {
 // shows them with the session.
 //
 //   visor machine status                         what can be leased, and how much is
-//   visor machine lease <platform> [--config=NAME] [--minutes=N] [--wait]
-//                                                macos | linux | windows | ios | android
+//   visor machine lease <platform> [--config=NAME] [--minutes=N] [--wait] [--server=NAME]
+//                                                macos | linux | windows | ios | android; from the
+//                                                nearest oss with room, or the one NAME names
 //   visor machine list                           this session's machines
 //   visor machine show <id>
 //   visor machine renew <id> [--minutes=N]
@@ -156,6 +157,7 @@ async function main() {
       const lease = await call("POST", "", {
         platform: id, config: typeof options.config === "string" ? options.config : undefined,
         minutes: options.minutes ? Number(options.minutes) : undefined, wait: Boolean(options.wait), key: publicKey(),
+        server: typeof options.server === "string" ? options.server : undefined,
       });
       return say(lease, describe(lease));
     }

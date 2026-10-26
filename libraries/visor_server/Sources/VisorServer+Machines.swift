@@ -10,7 +10,7 @@
 //     POST   /oss                 {server, token?, remove?}   one added (or its token kept), or taken off
 //     GET    /machines?session=<id>                   the session's leases
 //     GET    /machines/status                          what each server has, and how much is leased
-//     POST   /machines            {session, platform, config?, minutes?, wait?, key?}
+//     POST   /machines            {session, platform, config?, minutes?, wait?, key?, server?}
 //     GET    /machines/<id>?session=<id>               one of them
 //     POST   /machines/<id>/renew {session, minutes?}
 //     DELETE /machines/<id>?session=<id>
@@ -194,6 +194,12 @@ extension VisorServer {
         }
     }
 
+    /// Whether the oss at `host` is the one `name` names: its host, or a
+    /// part of it ("macbook" for a MacBook's .local or MagicDNS name).
+    nonisolated static func ossServer(_ host: String, isNamed name: String) -> Bool {
+        host.lowercased().contains(name.lowercased())
+    }
+
     /// Where a session reaches the leases of the server `oss` answers for.
     private func leaseHost(_ oss: OSSClient, inContainer: Bool) async -> String {
         let name = oss.host
@@ -230,7 +236,22 @@ extension VisorServer {
             }
             let request = LeaseRequest(platform: platform, config: body["config"].string, minutes: body["minutes"].int, holder: holder,
                                        sshPublicKey: body["key"].string)
-            let (client, lease) = try await pool.lease(request, waitForCapacity: body["wait"].bool ?? false)
+            let wait = body["wait"].bool ?? false
+            let client: OSSClient
+            let lease: Lease
+            if let named = body["server"].string?.trimmingCharacters(in: .whitespaces), !named.isEmpty {
+                // The one it names, whatever is nearer.
+                let reached = await pool.reach()
+                let matching = reached.filter { Self.ossServer($0.client.host, isNamed: named) }
+                guard matching.count == 1, let server = matching.first else {
+                    let names = reached.map(\.client.host).joined(separator: ", ")
+                    return Self.machinesError(404, matching.isEmpty ? "No oss server here is named \(named) (they are: \(names))."
+                                                                    : "More than one oss server is named \(named): \(names).")
+                }
+                (client, lease) = (server.client, try await server.client.lease(request, waitForCapacity: wait))
+            } else {
+                (client, lease) = try await pool.lease(request, waitForCapacity: wait)
+            }
             leaseClients[lease.id] = client
             return .json(Self.leaseJSON(lease, host: await leaseHost(client, inContainer: inContainer)).encoded())
         default:
