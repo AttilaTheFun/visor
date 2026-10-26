@@ -2,9 +2,10 @@
 # Visor's agent image (tools/containers/visor-agent), which sessions'
 # containers are made from, built (Apple's container: arm64 Linux, layers
 # unchanged since the last build from the builder's cache) and pushed to
-# GitHub's registry as this build's version and as its MAJOR.MINOR: a Visor
-# server of that version asks OS Server for the one (a build CI did not
-# number, for the other). CI's agent-image job runs it on the release Mac.
+# GitHub's registry as this build's version, its MAJOR.MINOR and latest: a
+# Visor server of that version asks OS Server for the first (a build CI did
+# not number, for the second; one that says no version, the last). CI's
+# agent-image job runs it on the release Mac.
 #
 # It is pushed with crane (go-containerregistry, a pinned release), its
 # credentials in a file of its own for the run: Apple's container keeps a
@@ -43,4 +44,5 @@ printf '%s' "${GHCR_TOKEN:?a token that writes packages}" \
   | "$work/crane" auth login ghcr.io --username "${GHCR_USER:?the registry user}" --password-stdin
 "$work/crane" push --index "$work/layout" "$repository:$version"
 "$work/crane" tag "$repository:$version" "$minor"
-echo "pushed $repository:$version and :$minor"
+"$work/crane" tag "$repository:$version" latest
+echo "pushed $repository:$version, :$minor and :latest"

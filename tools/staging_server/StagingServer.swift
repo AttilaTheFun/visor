@@ -7,11 +7,12 @@
 //   VISOR_PORT=7533 VISOR_TOKEN=staging node tools/probes/order.mjs
 // Ended with Ctrl-C (or SIGTERM), which ends its agents first.
 //
-// To try sessions in containers (Apple's container, with the visor-agent
-// image built): VISOR_STAGING_LAN=1, so it is reached on the LAN too, as an
-// agent in a container reaches it for Visor's tools. To lease machines
-// from oss through it: VISOR_STAGING_OSS=<oss's address> and
-// VISOR_STAGING_OSS_TOKEN_FILE=<its token's file>.
+// To lease machines and containers from oss through it: VISOR_STAGING_OSS=
+// <oss's address> and VISOR_STAGING_OSS_TOKEN_FILE=<its token's file>
+// (containers from the OS Server on this Mac). For sessions in containers,
+// VISOR_STAGING_LAN=1 too, so it is reached on the LAN, as an agent in a
+// container reaches it for Visor's tools; VISOR_STAGING_IMAGE names the
+// image (Visor's latest unless given). tools/probes/container.mjs runs one.
 
 import Foundation
 import VisorServer
@@ -41,6 +42,7 @@ struct StagingServer {
         let server = VisorServer.staging(port: port, root: root, password: password)
         let environment = ProcessInfo.processInfo.environment
         if environment["VISOR_STAGING_LAN"] == "1" { server.settings.lan = true }
+        if let image = environment["VISOR_STAGING_IMAGE"], !image.isEmpty { server.settings.containerImage = image }
         if let oss = environment["VISOR_STAGING_OSS"], !oss.isEmpty {
             let file = environment["VISOR_STAGING_OSS_TOKEN_FILE"].map { ($0 as NSString).expandingTildeInPath } ?? ""
             server.setOSSServer(oss, token: try? String(contentsOfFile: file, encoding: .utf8))
