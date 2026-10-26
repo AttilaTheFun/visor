@@ -13,6 +13,8 @@ final class FakeOSS: OSSTransport {
     struct Server {
         var host: String
         var lendsContainers: Bool
+        /// How many containers it has room for.
+        var containerLimit = 4
         var leases: [Lease] = []
         var asked: [LeaseRequest] = []
         var released: [String] = []
@@ -31,6 +33,9 @@ final class FakeOSS: OSSTransport {
     /// What the server at `address` (its host) was asked, and holds.
     func server(_ address: String = "127.0.0.1") -> Server { servers.withLock { $0[address]! } }
 
+    /// Room for `limit` containers at the server at `address`.
+    func roomFor(_ limit: Int, at address: String = "127.0.0.1") { servers.withLock { $0[address]?.containerLimit = limit } }
+
     /// A lease the server at `address` holds already.
     func hold(_ lease: Lease, at address: String = "127.0.0.1") { servers.withLock { $0[address]?.leases.append(lease) } }
 
@@ -48,7 +53,8 @@ final class FakeOSS: OSSTransport {
             var capacity = [Capacity(platform: .ios, limit: 4, leased: server.leases.filter { $0.platform == .ios }.count)]
             if server.lendsContainers {
                 bases.append(Base(platform: .container, config: "default"))
-                capacity.append(Capacity(platform: .container, limit: 4, leased: server.leases.filter { $0.platform == .container }.count))
+                capacity.append(Capacity(platform: .container, limit: server.containerLimit,
+                                         leased: server.leases.filter { $0.platform == .container }.count))
             }
             return try answer(Status(server: address, bases: bases, capacity: capacity, leases: server.leases))
         case ("GET", "machines", nil):

@@ -279,6 +279,21 @@ final class ContainerTests: ServerTestCase {
         XCTAssertFalse(loopback.containersAvailable, "an agent in a container reaches the server over the network")
     }
 
+    /// An OS Server with no room says so in words New Session shows (the
+    /// mini's lends one at a time), and nothing is made.
+    func testAFullOSServerSaysSo() async {
+        let oss = FakeOSS()
+        oss.roomFor(0)
+        let server = await server(FakeContainerExec(), oss: oss, port: 7984)
+        defer { server.stop() }
+        let ended = await start(server, .startInContainer(id: "f1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
+                                                          skipPermissions: true))
+        guard case .failure(let failure) = ended else { return XCTFail("started all the same") }
+        XCTAssertEqual(failure.message, VisorServer.containerRefusal(OSSError(status: 409, message: "busy", code: "busy")))
+        XCTAssertTrue(failure.message.contains("no room"))
+        XCTAssertTrue(oss.server().asked.isEmpty)
+    }
+
     /// The agent's variables (and the sign-ins for containers) go to OS
     /// Server's command line in a file this user alone reads, never on a
     /// command line; this computer's own agents/<kind>.env is not among

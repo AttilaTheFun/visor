@@ -160,7 +160,7 @@ extension VisorServer {
         do {
             (client, lease) = try await pool.lease(LeaseRequest(platform: .container, minutes: 0, holder: holder, container: spec))
         } catch let error as OSSError {
-            throw ContainerFailure(message: "Could not make the container from \(image): \(error.message)")
+            throw ContainerFailure(message: Self.containerRefusal(error) ?? "Could not make the container from \(image): \(error.message)")
         } catch {
             throw ContainerFailure(message: "Could not make the container from \(image): \(error.localizedDescription)")
         }
@@ -181,6 +181,17 @@ extension VisorServer {
         } catch {
             await releaseContainer(lease.id, session: session, keepingDisk: false)
             throw error
+        }
+    }
+
+    /// What oss's refusal to lend a container means here, in words New
+    /// Session shows; nil for any other failure.
+    nonisolated static func containerRefusal(_ error: OSSError) -> String? {
+        switch error.code {
+        case "busy": "This Mac's OS Server has no room for another container: end a session in one, or move it out, first."
+        case "notLocal": "Containers come only from the OS Server on this Mac, and none answers here."
+        case "noContainers": "The OS Server on this Mac runs no containers (OS Server 0.9 or later does)."
+        default: nil
         }
     }
 
