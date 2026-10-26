@@ -18,3 +18,11 @@ mask. Icon Composer supplies the platform shape and material treatment.
 apps) and `Visor-1024.png` the 1024 × 1024 export (the web app's favicon
 and touch icon). Glass translucency is 0.35. `preview.png` matches the PNG.
 Regenerate both from `Visor.icon` when the geometry changes.
+
+The repository's icon (.github/icon.png, where Reviews and other tools look
+for it) is the same document rendered at 512 points:
+
+    ictool artwork/app-icon/Visor.icon --export-image --output-file .github/icon.png \
+        --platform iOS --rendition Default --width 512 --height 512 --scale 1
+
+(`ictool` is in Xcode's Icon Composer.app, Contents/Executables.)
