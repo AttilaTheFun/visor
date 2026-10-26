@@ -654,8 +654,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.66.0.bcr.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.70.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.1.1/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.38.15/MODULE.bazel": "733240baa5955609d92c121c29f8bbbacf2a7a5aa78e5e8d6626b2b04a19b4a7",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.38.15/source.json": "cf622c9215d77bd857767ecb912a634baff314082b048a6cdb7a0cec928791ff",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.1/MODULE.bazel": "4a28d73eb3d1ea0a47a292a4fcbd9f727fdba19e0e0ab5feb48e8dcd19096c46",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.1/source.json": "ce9438712128c6fef0b93530900f180c3305719cb3372b1656920dd38073b9ae",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.4.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jsoncpp/1.9.5/MODULE.bazel": "not found",
@@ -1040,7 +1040,7 @@
     "@@aspect_rules_ts+//ts:extensions.bzl%ext": {
       "general": {
         "bzlTransitiveDigest": "39Imx8fj/wmgCRC4TUG38yih5rg7z9GUkCWi0sDE+LA=",
-        "usagesDigest": "E6aX5JUoqPAzfFBoszciAtBsvsNGVcMRWnSstw+isrg=",
+        "usagesDigest": "TIhucFAhHGfA9qa6pylNpRA3RuynS22z8H9rJUbJAoU=",
         "recordedInputs": [
           "REPO_MAPPING:aspect_rules_ts+,aspect_rules_ts aspect_rules_ts+",
           "REPO_MAPPING:aspect_rules_ts+,bazel_tools bazel_tools"
