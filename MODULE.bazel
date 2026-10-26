@@ -67,10 +67,9 @@ single_version_override(
 bazel_dep(name = "rules_applecross", version = "0.0.3")
 git_override(
     module_name = "rules_applecross",
-    commit = "66bb309ba995bca8afba41b2a35b6fc87db161e0",
+    commit = "661bdf4f50b4b34eb40384b5e302abe3dc3cca4c",
     remote = "https://github.com/apple-cross-toolchain/rules_applecross.git",
 )
-bazel_dep(name = "llvm", version = "0.8.25")
 apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
 # The Swift that built Xcode 27.0's SDKs.
 apple_cross_toolchain.swift(
@@ -195,6 +194,14 @@ single_version_override(
 # isomer's Android cross-compile toolchains. The extension insists on a
 # root-level android.sdk tag even when only the NDK's cc toolchains are used.
 bazel_dep(name = "hermetic_android_toolchains", version = "0.1.1")
+# Any Linux takes Google's x86_64 SDK and NDK tools: an arm64 Linux (a
+# container on a Mac) runs them under Rosetta, with x86_64 glibc beside its
+# own (tools/containers/visor-agent).
+single_version_override(
+    module_name = "hermetic_android_toolchains",
+    patch_strip = 1,
+    patches = ["//third_party/patches:hermetic_android_toolchains_linux_any_cpu.patch"],
+)
 
 android = use_extension("@hermetic_android_toolchains//:extensions.bzl", "android")
 android.sdk(

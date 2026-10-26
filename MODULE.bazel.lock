@@ -1707,6 +1707,64 @@
         }
       }
     },
+    "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
+      "general": {
+        "bzlTransitiveDigest": "lwY507Md6M6ByounnBTh68jNlRoI6NIplXFsjMbO8YE=",
+        "usagesDigest": "nhHHjQSNUKBEyUqArrwQPohMJVVKcdBueD127x+ovvQ=",
+        "recordedInputs": [
+          "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
+          "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
+          "REPO_MAPPING:rules_swift+,bazel_skylib bazel_skylib+"
+        ],
+        "generatedRepoSpecs": {
+          "applecross_swift_ubuntu24.04": {
+            "repoRuleId": "@@rules_swift+//swift/internal/extensions:standalone_toolchain.bzl%standalone_toolchain",
+            "attributes": {
+              "platform": "ubuntu24.04",
+              "sha256": "69f7b2b4dbce6090b6c92194b71149a057e16269093b5a9dded38afc4a05094e",
+              "swift_version": "6.4.0"
+            }
+          },
+          "applecross_swift_ubuntu24.04-aarch64": {
+            "repoRuleId": "@@rules_swift+//swift/internal/extensions:standalone_toolchain.bzl%standalone_toolchain",
+            "attributes": {
+              "platform": "ubuntu24.04-aarch64",
+              "sha256": "21eacfe571194717d269cc1e0030533bbee6131dfde82cd4f9cfbc2512e354a9",
+              "swift_version": "6.4.0"
+            }
+          },
+          "applecross_swift_xcode": {
+            "repoRuleId": "@@rules_swift+//swift/internal/extensions:standalone_toolchain.bzl%standalone_toolchain",
+            "attributes": {
+              "platform": "xcode",
+              "sha256": "8fd03185b98fe27f54a54631c2449decf75d5b466ce8e34abbd414141063c6aa",
+              "swift_version": "6.4.0"
+            }
+          },
+          "apple_cross_toolchain": {
+            "repoRuleId": "@@rules_applecross+//toolchain:apple_cross_toolchain.bzl%apple_cross_toolchain",
+            "attributes": {
+              "apple_sdk_path": "",
+              "apple_sdk_urls": [
+                "https://apple-sdks.invalid/apple-sdks-27.0.tar.gz"
+              ],
+              "apple_sdk_sha256": "",
+              "apple_sdk_strip_prefix": "",
+              "apple_sdk_archive_type": "",
+              "xcode_version": "27.0",
+              "xcode_xip_urls": [],
+              "local_xcode": true,
+              "ported_tools_archives": {},
+              "swift_tools": {
+                "aarch64": "@applecross_swift_ubuntu24.04-aarch64//:tools",
+                "x86_64": "@applecross_swift_ubuntu24.04//:tools"
+              },
+              "swift_tools_macos": "@applecross_swift_xcode//:tools"
+            }
+          }
+        }
+      }
+    },
     "@@rules_python+//python/uv:uv.bzl%uv": {
       "general": {
         "bzlTransitiveDigest": "p1vwXuanU1rkdyReJ+J0fF6VB4NOAFAi4RY3CJ4eFKU=",
