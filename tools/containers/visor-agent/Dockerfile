@@ -1,13 +1,15 @@
 # Visor's agent image: the Linux a session's agent runs in when it runs in a
-# container on its Visor server's Mac (Apple's container). Claude Code,
-# Codex and openrouter (OpenRouter's models), with Node (which also runs Visor's MCP script and `visor`), Swift
+# container on its Visor server's Mac (leased from OS Server there). Claude
+# Code, Codex and openrouter (OpenRouter's models), with Node (which also
+# runs Visor's MCP script and `visor`), Swift
 # 6.4.0 (which Bazel's Swift package rules ask for on Linux; the same as
 # rules_applecross builds Apple apps with), git, ssh, tmux, Python, Bazel
-# (bazelisk), and what Isomer's Linux apps link (SDL, GL, GTK, WebKitGTK). The Visor server makes each session's
-# container from it (its `containers image` setting, visor-agent by
-# default). Build it on each Mac whose Visor server runs containers, again
-# to take newer agents:
-#   container build --tag visor-agent --file tools/containers/visor-agent/Dockerfile tools/containers/visor-agent
+# (bazelisk), and what Isomer's Linux apps link (SDL, GL, GTK, WebKitGTK).
+# CI publishes it for each build (tools/containers/publish_agent_image.sh)
+# as ghcr.io/attilathefun/visor-agent:<version> and :<MAJOR.MINOR>, and a
+# Visor server leases each session's container from the OS Server on its
+# Mac made from its own version's (its `containers image` setting names
+# another).
 # The container sees the session's folder at the same path, Xcode at
 # /Applications/Xcode.app (read-only), and Visor's tools at /opt/visor
 # (read-only, from the server). Its sign-ins live with the Visor server,
@@ -16,11 +18,11 @@
 #   <Visor's data>/containers/codex/      Codex's home in every container, mounted: its own
 #                                         sign-in, made once (never a copy of the Mac's):
 #     container run -it --rm --mount type=bind,source="<Visor's data>/containers/codex",target=/root/.codex \
-#       visor-agent codex login --device-auth
+#       ghcr.io/attilathefun/visor-agent:<version> codex login --device-auth
 #   <Visor's data>/containers/openrouter/ openrouter's home in every container, mounted: its key
 #                                         (or OPENROUTER_API_KEY in agent.env), set once:
 #     container run -it --rm --mount type=bind,source="<Visor's data>/containers/openrouter",target=/root/.openrouter \
-#       visor-agent openrouter auth login
+#       ghcr.io/attilathefun/visor-agent:<version> openrouter auth login
 #   <Visor's data>/containers/home/       other files, copied into each container's home
 
 # openrouter (github.com/AttilaTheFun/open_router_cli), built from a tag (or

@@ -6,6 +6,7 @@
 
 import ClaudeTranscript
 import Foundation
+import OSSClient
 import MessageCache
 import Observation
 import VisorProtocol
@@ -215,6 +216,10 @@ public final class VisorServer {
     /// The machines each session leases from oss, as last asked
     /// (`refreshLeases`): by session id.
     var leases: [String: [SessionLease]] = [:]
+
+    /// The server that lent each lease (machines and containers), as last
+    /// asked or as lent: a lease is renewed, used and released through it.
+    var leaseClients: [String: OSSClient] = [:]
 
     /// The last write of the sessions failed; cleared by the next that works.
     var savingFailed = false

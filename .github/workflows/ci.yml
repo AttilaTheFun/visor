@@ -200,6 +200,27 @@ jobs:
           PIPELINE_BRANCH: ${{ github.event.pull_request.head.ref }}
           PIPELINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
 
+  # Visor's agent image (tools/containers/visor-agent), which sessions'
+  # containers are made from: built on the release Mac (Apple's container)
+  # and pushed to GitHub's registry as this build's version and its
+  # MAJOR.MINOR (ghcr.io/attilathefun/visor-agent), which a Visor server of
+  # that version asks its OS Server for.
+  agent-image:
+    needs: number
+    runs-on: [self-hosted, release-mac]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: tools/containers/publish_agent_image.sh ${{ needs.number.outputs.version }}
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+
   # Blue Visor (the client on Isomer: docs/isomer.md), its web client: built
   # optimized, its tests run, then checked in headless Chrome: the end-to-end
   # test against the stand-in server on its three roads, the transcript's

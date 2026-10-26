@@ -57,7 +57,7 @@ enum AgentChildren {
         if let container {
             let file = try writeEnvironment(environment.merging(ContainerSignIns.environment()) { ours, _ in ours },
                                             for: session ?? container.name)
-            command = container.runtime.command(in: container.name, executable: executable, arguments: arguments, directory: directory,
+            command = container.exec.command(socket: container.socket, executable: executable, arguments: arguments, directory: directory,
                                                 environmentFile: file.path)
             environment = ToolPath.environment()
         }

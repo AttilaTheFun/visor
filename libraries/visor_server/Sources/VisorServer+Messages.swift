@@ -301,7 +301,7 @@ extension VisorServer {
         record.process.stop()
         record.markEnded()
         // Its container goes with it.
-        if let container = record.info.container { removeContainer(container) }
+        if let container = record.info.container { removeContainer(container, session: record.info.id) }
         sessions.removeAll { $0 === record }
         dropWaiters(for: record.info.id)
         Self.log("session ended: \(record.info.title)")

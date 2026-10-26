@@ -928,7 +928,7 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "9iMl/x5uGTLwIPJ+BF7duI1h0f5fqIeHsYNMuzqOZzQ=",
-        "usagesDigest": "kKWv9Sy80qJd8c4+caUkd8wunxZAMsyF8bn3m/Vd8WE=",
+        "usagesDigest": "pCIF0Ty74DN24av4qP0bVFXJfKHwVViYKrJUwyJlBUI=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
