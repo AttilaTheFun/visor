@@ -1,0 +1,4 @@
+# rules_applecross's patches to rules_apple and apple_support (its patches/),
+# copied here because Bazel applies a module's overrides only in the root
+# module: MODULE.bazel's single_version_override lists them.
+exports_files(glob(["*.patch"]))

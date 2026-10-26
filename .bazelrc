@@ -34,5 +34,27 @@ build --strategy=SwiftCompile=local
 # Isomer's Foundation, on the web and Android, with the dates and numbers the
 # client formats (FoundationInternationalization).
 build --@isomer//foundation:internationalization
+
+# The Apple apps built on Linux with rules_applecross (MODULE.bazel): its
+# toolchains (the clean-room Apple tools, LLD, the Swift that built the SDKs)
+# and a hermetic host C++ toolchain, registered for Linux alone; no host
+# toolchain looked for there; rules_apple's own actions find the staged tools
+# by DEVELOPER_DIR and PATH. A Mac builds as before, with its own Xcode.
+startup --host_jvm_args=-DBAZEL_TRACK_SOURCE_DIRECTORIES=1
+common --enable_platform_specific_config
+common --incompatible_repo_env_ignores_action_env
+common:linux --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+common:linux --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1
+common:linux --repo_env=BAZEL_DO_NOT_DETECT_SWIFT_TOOLCHAIN=1
+build:linux --extra_toolchains=@apple_cross_toolchain//:all
+build:linux --extra_toolchains=@llvm//toolchain:linux_aarch64_to_linux_aarch64,@llvm//toolchain:linux_x86_64_to_linux_x86_64
+build:linux --xcode_version_config=@apple_cross_toolchain//:host_xcodes
+build:linux --@rules_apple//apple:sdk_tool_files=@apple_cross_toolchain//:sdk_tool_files
+build:linux --action_env=DEVELOPER_DIR=external/rules_applecross++apple_cross_toolchain+apple_cross_toolchain/Xcode.app/Contents/Developer
+build:linux --action_env=PATH=external/rules_applecross++apple_cross_toolchain+apple_cross_toolchain/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/bin:/usr/bin:/usr/local/bin
+# Its clean-room tools make a near match to Xcode's output where they cannot
+# make it byte for byte (Visor's Icon Composer icon, drawn flat).
+build:linux --action_env=RULES_APPLECROSS_RESOURCE_OUTPUT_MODE=relaxed
+
 # Your own settings, such as the signing team (tools/signing).
 try-import %workspace%/.bazelrc.user
