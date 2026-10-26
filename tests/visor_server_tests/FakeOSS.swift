@@ -4,8 +4,7 @@ import Synchronization
 
 /// oss servers, as the server reaches them: each host its own, answering
 /// what OSSClient asks (hello, status, leases, volumes), and what each was
-/// asked kept. A host named as this computer's is the one on this
-/// computer, whatever address reaches it.
+/// asked kept. The one at the loopback is this computer's.
 final class FakeOSS: OSSTransport {
     /// This computer's oss, at its loopback.
     static let here = "http://127.0.0.1:7480"
@@ -25,9 +24,9 @@ final class FakeOSS: OSSTransport {
     private let made = Mutex(0)
 
     /// `servers`: by the address's host, the host the server says it is on
-    /// (nil for this computer's) and whether it lends containers.
-    init(_ servers: [String: (host: String?, containers: Bool)] = ["127.0.0.1": (nil, true)]) {
-        self.servers = Mutex(servers.mapValues { Server(host: $0.host ?? Self.thisHost, lendsContainers: $0.containers) })
+    /// and whether it lends containers.
+    init(_ servers: [String: (host: String, containers: Bool)] = ["127.0.0.1": ("this-mac", true)]) {
+        self.servers = Mutex(servers.mapValues { Server(host: $0.host, lendsContainers: $0.containers) })
     }
 
     /// What the server at `address` (its host) was asked, and holds.
@@ -99,11 +98,4 @@ final class FakeOSS: OSSTransport {
     private func missing(_ message: String) -> OSSHTTPResponse {
         OSSHTTPResponse(status: 404, headers: ["Content-Type": "application/json"], body: Data(#"{"error":"\#(message)"}"#.utf8))
     }
-
-    /// This computer's name, as an oss on it says its host is.
-    static let thisHost: String = {
-        var buffer = [CChar](repeating: 0, count: 256)
-        guard gethostname(&buffer, buffer.count) == 0 else { return ProcessInfo.processInfo.hostName.lowercased() }
-        return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self).lowercased()
-    }()
 }

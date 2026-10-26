@@ -36,6 +36,10 @@ RUN git init -q /src && cd /src \
  && install -m 755 "$(swift build -c release --show-bin-path)/openrouter" /usr/local/bin/openrouter
 
 FROM docker.io/library/swift:6.4.0-noble
+# The repository the image is published from: GitHub's registry links the
+# package to it, which lets the repository's own CI token push it.
+LABEL org.opencontainers.image.source="https://github.com/AttilaTheFun/visor"
+LABEL org.opencontainers.image.description="Visor's agent image: the Linux a session's agent runs in, in a container."
 ARG TARGETARCH
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client tmux python3 unzip zip less procps ripgrep bubblewrap \

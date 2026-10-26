@@ -15,6 +15,6 @@ cd "$(dirname "$0")/visor-agent"
 container build --tag "$repository:$version" --file Dockerfile .
 container image tag "$repository:$version" "$repository:$minor"
 printf '%s' "${GHCR_TOKEN:?a token that writes packages}" | container registry login --username "${GHCR_USER:?the registry user}" --password-stdin ghcr.io
-container image push "$repository:$version"
-container image push "$repository:$minor"
+container image push --progress plain "$repository:$version"
+container image push --progress plain "$repository:$minor"
 echo "pushed $repository:$version and :$minor"

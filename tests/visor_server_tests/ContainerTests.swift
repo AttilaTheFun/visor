@@ -258,7 +258,7 @@ final class ContainerTests: ServerTestCase {
         XCTAssertFalse(none.containersAvailable, "nothing runs commands in them here")
         XCTAssertEqual(none.sessionsEnvelope().container, false, "the clients are told so")
 
-        let old = await server(FakeContainerExec(), oss: FakeOSS(["127.0.0.1": (nil, false)]), port: 7989)
+        let old = await server(FakeContainerExec(), oss: FakeOSS(["127.0.0.1": ("this-mac", false)]), port: 7989)
         defer { old.stop() }
         XCTAssertFalse(old.containersAvailable, "an OS Server before 0.9 lends none")
 
@@ -356,7 +356,7 @@ final class ContainerTests: ServerTestCase {
     /// the server that lent it; what a server lends that is not this
     /// server's sessions' is none of theirs.
     func testMachinesComeFromEveryServer() async throws {
-        let oss = FakeOSS(["127.0.0.1": (nil, true), "mac.test": ("another-mac", false)])
+        let oss = FakeOSS(["127.0.0.1": ("this-mac", true), "mac.test": ("another-mac", false)])
         let server = await server(FakeContainerExec(), oss: oss, servers: [FakeOSS.here, "http://mac.test:7480"], port: 7986)
         defer { server.stop() }
         let info = SessionInfo(id: "m1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Claude", created: 0)

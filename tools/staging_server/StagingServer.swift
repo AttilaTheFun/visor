@@ -42,10 +42,9 @@ struct StagingServer {
         let environment = ProcessInfo.processInfo.environment
         if environment["VISOR_STAGING_LAN"] == "1" { server.settings.lan = true }
         if let oss = environment["VISOR_STAGING_OSS"], !oss.isEmpty {
-            server.settings.ossServer = oss
             let file = environment["VISOR_STAGING_OSS_TOKEN_FILE"].map { ($0 as NSString).expandingTildeInPath } ?? ""
-            server.setOSSToken(try? String(contentsOfFile: file, encoding: .utf8))
-            print("Sessions lease machines from oss at \(oss)\(server.ossTokenKept ? "" : ", once its token is kept")")
+            server.setOSSServer(oss, token: try? String(contentsOfFile: file, encoding: .utf8))
+            print("Sessions lease machines and containers from oss at \(oss)\(server.ossTokenKept(oss) ? "" : ", once its token is kept")")
         }
         setlinebuf(stdout)
         print("Visor staging server: http://127.0.0.1:\(port) (the socket at /, the API at /api), password \(password)")
