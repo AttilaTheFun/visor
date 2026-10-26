@@ -308,16 +308,21 @@ class Android:
     def setup(self):
         a = [self.adb, "-s", self.serial, "shell"]
         sh(a + ["cmd", "uimode", "night", "no"])
-        # A fixed status bar (System UI demo mode); Wi-Fi and mobile in broadcasts
-        # of their own, since an intent keeps one value per key and both use level.
+        # A fixed status bar (System UI demo mode): 9:41, Wi-Fi and a full battery.
+        # The cellular network is hidden, since the emulator draws a shown one
+        # differently from run to run, and the whole sequence goes twice, a few
+        # seconds apart, since SystemUI may still be settling just after boot.
         sh(a + ["settings", "put", "global", "sysui_demo_allowed", "1"])
-        for extras in (["-e", "command", "enter"], ["-e", "command", "clock", "-e", "hhmm", "0941"],
-                       ["-e", "command", "battery", "-e", "level", "100", "-e", "plugged", "false"],
-                       ["-e", "command", "network", "-e", "wifi", "show", "-e", "level", "4", "-e", "fully", "true"],
-                       ["-e", "command", "network", "-e", "mobile", "show", "-e", "level", "4", "-e", "datatype", "none",
-                        "-e", "fully", "true"],
-                       ["-e", "command", "notifications", "-e", "visible", "false"]):
-            sh(a + ["am", "broadcast", "-a", "com.android.systemui.demo"] + extras)
+        for attempt in range(2):
+            if attempt: time.sleep(4)
+            for extras in (["-e", "command", "exit"], ["-e", "command", "enter"],
+                           ["-e", "command", "clock", "-e", "hhmm", "0941"],
+                           ["-e", "command", "battery", "-e", "level", "100", "-e", "plugged", "false"],
+                           ["-e", "command", "network", "-e", "wifi", "show", "-e", "level", "4", "-e", "fully", "true"],
+                           ["-e", "command", "network", "-e", "mobile", "hide"],
+                           ["-e", "command", "network", "-e", "nosim", "hide"],
+                           ["-e", "command", "notifications", "-e", "visible", "false"]):
+                sh(a + ["am", "broadcast", "-a", "com.android.systemui.demo"] + extras)
         apk = bazel_output("//applications/visor_android:visor_android_apk", "-c", "opt", suffix=".apk")
         if apk.endswith("_unsigned.apk"):
             apk = apk.replace("_unsigned.apk", ".apk")
