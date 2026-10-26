@@ -29,8 +29,13 @@ const frames = [];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const finish = (code) => { proc.kill(); try { fs.rmSync(profile, { recursive: true, force: true }); } catch (_) {} process.exit(code); };
 (async () => {
+  // Chrome's first start on a fresh runner can take well over ten seconds.
   let targets = null;
-  for (let i = 0; i < 50 && !targets; i++) { await sleep(200); try { targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json(); } catch (_) {} }
+  for (let i = 0; i < 150 && !targets; i++) { await sleep(200); try { targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json(); } catch (_) {} }
+  if (!targets) {
+    process.stdout.write(JSON.stringify({ ok: false, problems: ["headless Chrome did not start within 30 s"] }) + "\n");
+    return finish(1);
+  }
   const page = targets.find((t) => t.type === "page");
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));
