@@ -1786,7 +1786,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved ff5ecf84c05e791fa4b190ac0778a4449450fcbcc27bbd2aa68714ee21134d5a"
+          "FILE:@@//third_party/swift_packages/Package.resolved 4e953d5dde3faed2359a7214a951e074c7c34469ada615c5215d3db539a8b379"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1891,9 +1891,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_oss",
-              "commit": "a80ee2f9a25378684f993badbaae499755a5eecc",
+              "commit": "a389e0a7935352df07e00b3b4fa87c645487764f",
               "remote": "https://github.com/AttilaTheFun/oss.git",
-              "version": "0.10.0",
+              "version": "0.10.1",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
