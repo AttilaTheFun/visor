@@ -25,10 +25,16 @@ swift_library(
     }),
 )
 
-# The implementations as sources, for a host that compiles the portable
-# ones for another Foundation (a host's own, on the web and Android, Linux,
-# Windows) into a module of its own.
+# The portable implementations as sources (the socket, HTTP and settings:
+# Foundation's alone), for a host that compiles them for another Foundation
+# (Linux's, Windows') into a module of its own; the Apple-only ones stay out.
 filegroup(
     name = "native_srcs",
-    srcs = glob(["native/*.swift"]),
+    srcs = [
+        "native/NativeVisorHTTPService.swift",
+        "native/NativeVisorSettingsService.swift",
+        "native/NativeVisorSocketService.swift",
+        "native/VisorHTTPFailure.swift",
+        "native/VisorSocketGone.swift",
+    ],
 )

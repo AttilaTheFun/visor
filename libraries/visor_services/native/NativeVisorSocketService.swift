@@ -27,7 +27,6 @@ public final class NativeVisorSocketService: VisorSocketService {
     public init(dropsInBackground: Bool = NativeVisorSocketService.suspendedInBackground) {
         self.dropsInBackground = dropsInBackground
         let configuration = URLSessionConfiguration.default
-        configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 15
         session = URLSession(configuration: configuration)
     }
