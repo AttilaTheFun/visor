@@ -1,13 +1,13 @@
 {
-  "originHash" : "442f15b51a4d78da626b0efb1a427e41ecb30136797d1a04b31f297d0c6c215e",
+  "originHash" : "ee707458040b972605b5e11d0ab1f0869f7f1c19e0d3f211954a6790c1e63265",
   "pins" : [
     {
       "identity" : "oss",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/oss.git",
       "state" : {
-        "revision" : "b86a540dd7df78f73d434bdd3ca6a651a811e3fb",
-        "version" : "0.9.0"
+        "revision" : "a80ee2f9a25378684f993badbaae499755a5eecc",
+        "version" : "0.10.0"
       }
     },
     {

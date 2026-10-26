@@ -28,7 +28,7 @@ let package = Package(
         // the server, and the containers' build cache.
         .package(
             url: "https://github.com/AttilaTheFun/oss.git",
-            exact: "0.9.0"
+            exact: "0.10.0"
         ),
     ]
 )
