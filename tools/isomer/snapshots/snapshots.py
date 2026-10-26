@@ -195,7 +195,9 @@ class WebMobile:
         recording = SimulatorRecording(self.udid, out[:-4] + ".mp4")
         sh(["xcrun", "simctl", "openurl", self.udid, web_url("http://localhost:8791", screen)])
         time.sleep(SETTLE)
-        sh(["xcrun", "simctl", "io", self.udid, "screenshot", out])
+        # The display's mask (its corners and the Dynamic Island) drawn black:
+        # unmasked, the island shows or not with whatever the system is doing.
+        sh(["xcrun", "simctl", "io", self.udid, "screenshot", "--mask=black", out])
         recording.stop()
         # The page only: Safari's toolbar (its tab count grows with every
         # capture, and a load-progress line comes and goes) is not the app.
@@ -227,7 +229,9 @@ class RedIOS:
         # The whole settle: a sheet's Liquid Glass buttons are still easing
         # in at half of it.
         time.sleep(SETTLE)
-        sh(["xcrun", "simctl", "io", self.udid, "screenshot", out])
+        # The display's mask (its corners and the Dynamic Island) drawn black:
+        # unmasked, the island shows or not with whatever the system is doing.
+        sh(["xcrun", "simctl", "io", self.udid, "screenshot", "--mask=black", out])
         recording.stop()
     def finish(self):
         sh(["xcrun", "simctl", "terminate", self.udid, IOS_BUNDLE], check=False)
