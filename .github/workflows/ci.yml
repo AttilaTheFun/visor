@@ -221,6 +221,25 @@ jobs:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}
 
+  # The apps built on Linux where a session's agent builds them: in a
+  # container of this build's own agent image, leased from the OS Server on
+  # the runner's Mac (self-hosted, oss-container), the Apple apps with
+  # rules_applecross from that server's files (tools/ci/container_build.sh).
+  # A fork's pull request never runs there.
+  container:
+    needs: [number, agent-image]
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, oss-container]
+    timeout-minutes: 90
+    # One build at a time: Bazel's tree is kept in one volume between them.
+    concurrency:
+      group: visor-oss-container
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: bazel run //tools/ci:container_build -- ghcr.io/attilathefun/visor-agent:${{ needs.number.outputs.version }}
+
   # Blue Visor (the client on Isomer: docs/isomer.md), its web client: built
   # optimized, its tests run, then checked in headless Chrome: the end-to-end
   # test against the stand-in server on its three roads, the transcript's

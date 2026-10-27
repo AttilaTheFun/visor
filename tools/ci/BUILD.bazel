@@ -1,0 +1,8 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+# CI's build of the apps in a Linux container leased from the runner's Mac's
+# OS Server (ci.yml's container job).
+sh_binary(
+    name = "container_build",
+    srcs = ["container_build.sh"],
+)
