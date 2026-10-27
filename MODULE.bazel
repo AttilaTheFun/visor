@@ -34,7 +34,8 @@ single_version_override(
 # graph at this version through rules_swift.
 bazel_dep(name = "rules_cc", version = "0.2.20")
 bazel_dep(name = "rules_apple", version = "5.3.1")
-# rules_applecross's patches (bundling and signing on Linux), then, on a phone
+# rules_applecross's patches (bundling and signing on Linux, Apple silicon by
+# default off a Mac), then, on a phone
 # (the lab's iPhone), a UI test's runner app named as Xcode names a device's
 # (<app>.xctrunner): a device finds no container for the simulator's
 # "com.apple.test." name.
@@ -48,6 +49,7 @@ single_version_override(
         "//third_party/patches/applecross:rules_apple_codesign_inputs_sdk_tools.patch",
         "//third_party/patches/applecross:rules_apple_alticonstool_missing_icons.patch",
         "//third_party/patches/applecross:rules_apple_xctoolrunner_sorted_listdir.patch",
+        "//third_party/patches/applecross:rules_apple_arm64_default.patch",
         "//third_party/patches:rules_apple_device_xctrunner.patch",
     ],
     version = "5.3.1",
@@ -72,7 +74,7 @@ single_version_override(
 bazel_dep(name = "rules_applecross", version = "0.0.3")
 git_override(
     module_name = "rules_applecross",
-    commit = "6ed6a721910fa5cf3d40e04234060aed2e07588a",
+    commit = "cc07dde07b6cceab663a4c0c2fee0c60a7172ec9",
     remote = "https://github.com/apple-cross-toolchain/rules_applecross.git",
 )
 apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
