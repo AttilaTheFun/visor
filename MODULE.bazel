@@ -71,11 +71,12 @@ single_version_override(
 # are registered for Linux alone, by the builder that has the SDKs
 # (.bazelrc's apple_on_linux, turned on in .bazelrc.user), so a Mac builds
 # as before and a Linux without them builds what runs on Linux.
-bazel_dep(name = "rules_applecross", version = "0.0.3")
-git_override(
+# From the project's registry: its main at cc07dde (with #216, #217, #219),
+# for every module (rules_apple asks for 0.0.3, which no registry holds).
+bazel_dep(name = "rules_applecross", version = "0.0.3.cc07dde")
+single_version_override(
     module_name = "rules_applecross",
-    commit = "cc07dde07b6cceab663a4c0c2fee0c60a7172ec9",
-    remote = "https://github.com/apple-cross-toolchain/rules_applecross.git",
+    version = "0.0.3.cc07dde",
 )
 apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
 # The Swift that built Xcode 27.0's SDKs.

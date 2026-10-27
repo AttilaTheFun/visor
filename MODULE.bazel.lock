@@ -704,6 +704,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_android/0.7.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_android_ndk/0.1.5/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_apple/5.3.1/MODULE.bazel": "not found",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.cc07dde/MODULE.bazel": "eb96af0d41e183a7bf8f26b19d40c62e810b45223bd040859df2d8fc734bd2a6",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.cc07dde/source.json": "2d71f053ec67323029592265bda8b3252dd8b254f6dcca4520829124108e1c97",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.10/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.13/MODULE.bazel": "not found",
