@@ -12,12 +12,17 @@
 #
 #   OSS_FILES_HOST   the name the container reaches this Mac's OS Server by
 #                    (default: this Mac's tailnet name, from Tailscale)
-#   VISOR_CI_VOLUME  Bazel's tree, kept between builds (default: visor-ci)
+#   VISOR_CI_VOLUME  Bazel's tree (default: one of the run's own, given back
+#                    with the lease: a run a newer push cancels is killed
+#                    before it releases its lease, which holds its volume for
+#                    up to an hour, so a volume shared between runs would
+#                    refuse the next one. Kept between runs, `:keep`, once
+#                    OS Server releases a cancelled run's lease at once.)
 set -euo pipefail
 ROOT="${BUILD_WORKSPACE_DIRECTORY:?run it with bazel run}"
 IMAGE="${1:?the agent image, ghcr.io/attilathefun/visor-agent:<version>}"
 shift
-VOLUME="${VISOR_CI_VOLUME:-visor-ci}"
+VOLUME="${VISOR_CI_VOLUME:-visor-ci-${GITHUB_RUN_ID:-$$}}"
 SDK_SHA256="251c252f7f41bcd3e08655e49e182686682d705945f4a2807049b9051c606ebb"
 
 # The command line inside OS Server, or on the path.

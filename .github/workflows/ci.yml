@@ -231,7 +231,7 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, oss-container]
     timeout-minutes: 90
-    # One build at a time: Bazel's tree is kept in one volume between them.
+    # One build at a time on the runner's Mac.
     concurrency:
       group: visor-oss-container
     steps:
