@@ -626,6 +626,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.66.0.bcr.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.70.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.1.1/MODULE.bazel": "not found",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.2/MODULE.bazel": "44aed7b54e03171299f912dd61c47b56597ecce88674917d01dab4c9edc49635",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.2/source.json": "8fa7cc566ec7d438b2b16011d148eebcf5bc7e23d51346fe304e48e99f74ffb4",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.4.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jsoncpp/1.9.5/MODULE.bazel": "not found",
