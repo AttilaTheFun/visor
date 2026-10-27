@@ -57,6 +57,11 @@ final class VisorProbe: XCTestCase {
             // No computer yet (an erased simulator): add the host by its
             // address and password, as testSelectSession does.
             let add = app.buttons["add-computer"].firstMatch
+            // The welcome's Add Computer is its third step, below the fold
+            // of a list that makes its rows as they come into view.
+            for _ in 0..<3 where !add.waitForExistence(timeout: 3) {
+                app.swipeUp()
+            }
             XCTAssertTrue(add.waitForExistence(timeout: 10), "no session row and no Add Computer row")
             add.tap()
             let host = app.textFields["host"].firstMatch
@@ -119,6 +124,20 @@ final class VisorProbe: XCTestCase {
         }
         NSLog("VISOR_FRAMES send")
         app.buttons["Send"].firstMatch.tap()
+        if let away = env["VISOR_FRAMES_AWAY_AFTER_SEND"].flatMap(Double.init), away > 0 {
+            // Sent, then away while the agent writes: back to a thread
+            // behind by all it wrote, which it catches up on in front of
+            // the person.
+            Thread.sleep(forTimeInterval: 2)
+            XCUIDevice.shared.press(.home)
+            NSLog("VISOR_FRAMES away")
+            Thread.sleep(forTimeInterval: away)
+            NSLog("VISOR_FRAMES back")
+            app.activate()
+            Thread.sleep(forTimeInterval: 15)
+            NSLog("VISOR_FRAMES end")
+            return
+        }
         if env["VISOR_FRAMES_SCROLL"] == "1" {
             // Away from the status row and back while the agent works.
             Thread.sleep(forTimeInterval: 4)

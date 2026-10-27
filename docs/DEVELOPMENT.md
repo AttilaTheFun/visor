@@ -1039,6 +1039,18 @@ now keeps such rows invisible until the scroll has landed. A pixel
 measure would be fooled by the push animation under way at the same
 moment, so this is a look, not a gate.
 
+### Return frames look
+
+`tools/probes/frames/return_frames.sh [calls] [seconds away]` records the
+simulator while the app comes back to a thread that moved on without it:
+the probe opens a throwaway session, sends a turn of many separate tool
+calls, leaves the app at once and comes back once the turn is done, and
+the ten seconds after the return are laid out as contact sheets. The
+thread must not step through what it caught up on (`SessionTranscript`
+tells a catch-up's pages together once the last is in, and at most once a
+frame until then). Against this Mac's own server the pages come too fast
+to step anyway; a phone away on another network is where it showed.
+
 ## 6. Gotchas that cost time
 
 - A Mac app that reaches LAN addresses needs NSLocalNetworkUsageDescription
