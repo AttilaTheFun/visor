@@ -1,6 +1,8 @@
 bazel-*
-# Your own signing values (tools/signing).
+# Your own signing values (tools/signing), and where Linux builds find
+# Xcode's SDKs (docs/DEVELOPMENT.md).
 .bazelrc.user
+.bazel_downloader.user
 .build/
 # Generated: bazel run //:xcodeproj
 *.xcodeproj

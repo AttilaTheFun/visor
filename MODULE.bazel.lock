@@ -1708,7 +1708,7 @@
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
         "bzlTransitiveDigest": "aouMTt140mmoiKKo+oJtqvW5hvgoiFkRbGpGOQSg428=",
-        "usagesDigest": "becdlhchd5spH4r1Osblc0VZvMAbL86KyksLpOYiHi8=",
+        "usagesDigest": "2mikSj2bntPuVnESZ9o5dapsHdkMODAGkJgBp0LFNHA=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
@@ -1748,7 +1748,7 @@
               ],
               "apple_sdk_sha256": "",
               "apple_sdk_strip_prefix": "",
-              "apple_sdk_archive_type": "",
+              "apple_sdk_archive_type": "tar.gz",
               "xcode_version": "27.0",
               "xcode_xip_urls": [],
               "local_xcode": true,

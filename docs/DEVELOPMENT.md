@@ -747,7 +747,8 @@ resolves no `.local` names), on the ports that server forwards.
   `.bazelrc.user` turns it on, `build:linux --config=apple_on_linux`, and
   says where they are: `common --distdir=<folder>` for each folder holding
   `apple-sdks-27.0.tar.gz` or the tools' archives (named by their hashes),
-  or `common --downloader_config=<file>` with the lines `rewrite
+  or `common --downloader_config=.bazel_downloader.user` (ignored by
+  git, like .bazelrc.user) with the lines `rewrite
   apple-sdks\.invalid/.* http://<oss host>:7490/files/sha256/<the SDK's sha256>`
   and `rewrite ported-tools\.invalid/sha256/(.*)
   http://<oss host>:7490/files/sha256/$1`, for an OS Server that serves
