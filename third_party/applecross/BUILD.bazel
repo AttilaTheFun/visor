@@ -1,0 +1,4 @@
+# rules_applecross's ported tools by their SHA-256 (MODULE.bazel): its
+# ported-tools workflow's archives from its main at 0785e7f, which a
+# builder's --distdir or an OS Server's /files serves.
+exports_files(["ported_tools.sha256"])

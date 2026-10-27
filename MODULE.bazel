@@ -61,14 +61,18 @@ single_version_override(
 # says where it is, with `--distdir=<folder holding apple-sdks-27.0.tar.gz>`
 # or a `--downloader_config` rewriting apple-sdks.invalid to where it is
 # served (an OS Server's /files/sha256/<hex>, with its read token in .netrc).
-# Without either, Linux fails to resolve apple-sdks.invalid. The toolchains
+# Without either, Linux fails to resolve apple-sdks.invalid. Its ported
+# tools (the clean-room ones, built for Linux) come the same way, by their
+# SHA-256 (third_party/applecross/ported_tools.sha256: newer than its last
+# release, whose codesign can't seal a Mac app's nested code), from the same
+# --distdir or a rewrite of ported-tools.invalid. The toolchains
 # are registered for Linux alone, by the builder that has the SDKs
 # (.bazelrc's apple_on_linux, turned on in .bazelrc.user), so a Mac builds
 # as before and a Linux without them builds what runs on Linux.
 bazel_dep(name = "rules_applecross", version = "0.0.3")
 git_override(
     module_name = "rules_applecross",
-    commit = "661bdf4f50b4b34eb40384b5e302abe3dc3cca4c",
+    commit = "64a70aca64a65de69645d5d699f594022e2365a4",
     remote = "https://github.com/apple-cross-toolchain/rules_applecross.git",
 )
 apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
@@ -86,6 +90,8 @@ apple_cross_toolchain.configure(
     name = "apple_cross_toolchain",
     apple_sdk_urls = ["https://apple-sdks.invalid/apple-sdks-27.0.tar.gz"],
     local_xcode = True,
+    ported_tools_manifest = "//third_party/applecross:ported_tools.sha256",
+    ported_tools_urls = ["https://ported-tools.invalid/sha256/{sha256}"],
     swift_tools = {
         "aarch64": "@applecross_swift_ubuntu24.04-aarch64//:tools",
         "x86_64": "@applecross_swift_ubuntu24.04//:tools",

@@ -1707,8 +1707,8 @@
     },
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
-        "bzlTransitiveDigest": "lwY507Md6M6ByounnBTh68jNlRoI6NIplXFsjMbO8YE=",
-        "usagesDigest": "nhHHjQSNUKBEyUqArrwQPohMJVVKcdBueD127x+ovvQ=",
+        "bzlTransitiveDigest": "aouMTt140mmoiKKo+oJtqvW5hvgoiFkRbGpGOQSg428=",
+        "usagesDigest": "becdlhchd5spH4r1Osblc0VZvMAbL86KyksLpOYiHi8=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
@@ -1753,6 +1753,10 @@
               "xcode_xip_urls": [],
               "local_xcode": true,
               "ported_tools_archives": {},
+              "ported_tools_manifest": "@@//third_party/applecross:ported_tools.sha256",
+              "ported_tools_urls": [
+                "https://ported-tools.invalid/sha256/{sha256}"
+              ],
               "swift_tools": {
                 "aarch64": "@applecross_swift_ubuntu24.04-aarch64//:tools",
                 "x86_64": "@applecross_swift_ubuntu24.04//:tools"
