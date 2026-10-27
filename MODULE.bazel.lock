@@ -997,7 +997,7 @@
     "@@aspect_rules_ts+//ts:extensions.bzl%ext": {
       "general": {
         "bzlTransitiveDigest": "39Imx8fj/wmgCRC4TUG38yih5rg7z9GUkCWi0sDE+LA=",
-        "usagesDigest": "TIhucFAhHGfA9qa6pylNpRA3RuynS22z8H9rJUbJAoU=",
+        "usagesDigest": "tbguOEPZnO+eBz2BaqDwtBr/tuRk5OKwbLi7YKeS/Sc=",
         "recordedInputs": [
           "REPO_MAPPING:aspect_rules_ts+,aspect_rules_ts aspect_rules_ts+",
           "REPO_MAPPING:aspect_rules_ts+,bazel_tools bazel_tools"

@@ -72,7 +72,7 @@ single_version_override(
 bazel_dep(name = "rules_applecross", version = "0.0.3")
 git_override(
     module_name = "rules_applecross",
-    commit = "64a70aca64a65de69645d5d699f594022e2365a4",
+    commit = "0c1833bc46ef8ea27129e44663a75bc2da1c1f70",
     remote = "https://github.com/apple-cross-toolchain/rules_applecross.git",
 )
 apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
