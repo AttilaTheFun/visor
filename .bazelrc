@@ -34,5 +34,43 @@ build --strategy=SwiftCompile=local
 # Isomer's Foundation, on the web and Android, with the dates and numbers the
 # client formats (FoundationInternationalization).
 build --@isomer//foundation:internationalization
+
+# The Apple apps built on Linux with rules_applecross (MODULE.bazel), on a
+# builder that has Xcode 27.0's SDK archive: its .bazelrc.user says where
+# (`--distdir`, or a `--downloader_config` to an OS Server) and turns this
+# on with `build:linux --config=apple_on_linux`. Without it (GitHub's
+# runners) Linux builds what runs on Linux alone, and nothing fetches the
+# SDKs. Its toolchains (the clean-room Apple tools, LLD, the Swift that
+# built the SDKs) take the Apple targets; the host's own C and Swift
+# toolchains still build what runs on Linux (Isomer's Linux pieces link its
+# system libraries); rules_apple's own actions find the staged tools by
+# DEVELOPER_DIR and PATH. A Mac builds as before, with its own Xcode.
+startup --host_jvm_args=-DBAZEL_TRACK_SOURCE_DIRECTORIES=1
+common --enable_platform_specific_config
+common --incompatible_repo_env_ignores_action_env
+common:linux --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1
+build:apple_on_linux --extra_toolchains=@apple_cross_toolchain//:all
+build:apple_on_linux --xcode_version_config=@apple_cross_toolchain//:host_xcodes
+build:apple_on_linux --@rules_apple//apple:sdk_tool_files=@apple_cross_toolchain//:sdk_tool_files
+build:apple_on_linux --action_env=DEVELOPER_DIR=external/rules_applecross++apple_cross_toolchain+apple_cross_toolchain/Xcode.app/Contents/Developer
+build:apple_on_linux --action_env=PATH=external/rules_applecross++apple_cross_toolchain+apple_cross_toolchain/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/bin:/usr/bin:/usr/local/bin
+# For the Macs that run what is built: Apple silicon's simulator and Macs
+# (Linux's own default is x86_64, which an Apple-silicon simulator refuses,
+# and which a Mac without Rosetta won't open). A device build says
+# --ios_multi_cpus=arm64, as on a Mac.
+build:apple_on_linux --ios_multi_cpus=sim_arm64
+build:apple_on_linux --macos_cpus=arm64
+# Its clean-room tools make a near match to Xcode's output where they cannot
+# make it byte for byte (Visor's Icon Composer icon, drawn flat).
+build:apple_on_linux --action_env=RULES_APPLECROSS_RESOURCE_OUTPUT_MODE=relaxed
+
+# Isomer's Linux WebView (WebKitGTK) includes glibconfig.h and
+# dbus-arch-deps.h from under /usr/lib, which Bazel accepts only as the cc
+# toolchain's own include directories: given to the compiler it detects, as
+# Isomer does, for Arch's layout and Debian's on x86_64 and arm64; missing
+# directories are skipped.
+common:linux --repo_env=C_INCLUDE_PATH=/usr/lib/glib-2.0/include:/usr/lib/dbus-1.0/include:/usr/lib/x86_64-linux-gnu/glib-2.0/include:/usr/lib/x86_64-linux-gnu/dbus-1.0/include:/usr/lib/aarch64-linux-gnu/glib-2.0/include:/usr/lib/aarch64-linux-gnu/dbus-1.0/include
+build:linux --action_env=C_INCLUDE_PATH=/usr/lib/glib-2.0/include:/usr/lib/dbus-1.0/include:/usr/lib/x86_64-linux-gnu/glib-2.0/include:/usr/lib/x86_64-linux-gnu/dbus-1.0/include:/usr/lib/aarch64-linux-gnu/glib-2.0/include:/usr/lib/aarch64-linux-gnu/dbus-1.0/include
+
 # Your own settings, such as the signing team (tools/signing).
 try-import %workspace%/.bazelrc.user

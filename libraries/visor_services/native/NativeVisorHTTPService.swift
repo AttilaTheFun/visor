@@ -24,7 +24,6 @@ public final class NativeVisorHTTPService: VisorHTTPService {
 
     private static func makeSession() -> URLSession {
         let http = URLSessionConfiguration.default
-        http.waitsForConnectivity = false
         http.httpMaximumConnectionsPerHost = 16
         // A transcript long poll is held on the computer for a while; the
         // per-request timeout in `request` leaves room, and the resource

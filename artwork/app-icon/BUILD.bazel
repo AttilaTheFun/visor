@@ -8,8 +8,9 @@ filegroup(
     srcs = glob(["Visor.icon/**"]),
 )
 
-# The compiled macOS .icns (bundled in the Mac apps for anything that wants
-# a flat icon file) and the 1024 px PNG (the web's favicon and touch icon).
+# The compiled macOS .icns (what actool writes beside Assets.car for the Mac
+# apps, kept for anything that wants a flat icon file) and the 1024 px PNG
+# (the web's favicon and touch icon).
 exports_files([
     "Visor.icns",
     "Visor-1024.png",

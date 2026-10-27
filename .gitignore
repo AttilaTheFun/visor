@@ -1,6 +1,8 @@
 bazel-*
-# Your own signing values (tools/signing).
+# Your own signing values (tools/signing), and where Linux builds find
+# Xcode's SDKs (docs/DEVELOPMENT.md).
 .bazelrc.user
+.bazel_downloader.user
 .build/
 # Generated: bazel run //:xcodeproj
 *.xcodeproj
@@ -8,5 +10,7 @@ bazel-*
 # Release disk images (tools/release_mac.sh).
 dist/
 .proof/
+# CI's downloader config, written for a run (tools/ci/container_build.sh).
+.ci/
 # Python caches of tools/isomer.
 __pycache__/

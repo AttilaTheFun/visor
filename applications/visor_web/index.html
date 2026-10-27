@@ -49,7 +49,7 @@
     // What the client tells the servers it reports to: this page's name,
     // build and system. The build is the iPhone app's Installer ships
     // (applications/visor_isomer_ios/Info.plist), bumped with it.
-    const host = { "host.deviceName": "Web", "host.appVersion": "0.40.0", "host.platform": "web" };
+    const host = { "host.deviceName": "Web", "host.appVersion": "0.41.0", "host.platform": "web" };
     const settings = {
       get(key) { return key in host ? host[key] : key in launchOverrides ? launchOverrides[key] : (localStorage.getItem(prefix + key) || ""); },
       set(key, value) { if (value) localStorage.setItem(prefix + key, value); else localStorage.removeItem(prefix + key); },

@@ -7,7 +7,10 @@ package(default_visibility = ["//visibility:public"])
 # for this platform's Foundation. Built on a linux host (unverifiable from a Mac).
 swift_library(
     name = "native_services",
-    srcs = ["//libraries/visor_services:native_srcs"],
+    srcs = [
+        "NativeServicesImports.swift",
+        "//libraries/visor_services:native_srcs",
+    ],
     module_name = "VisorServicesNative",
     target_compatible_with = ["@platforms//os:linux"],
     deps = ["//libraries/visor_services"],

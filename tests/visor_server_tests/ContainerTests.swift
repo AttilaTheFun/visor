@@ -1,7 +1,7 @@
 // Sessions whose agents run in containers on the server's own computer,
 // leased from the OS Server there: the server leases the container (the
-// session's folder, the agent's log folder, Xcode and Visor's tools
-// mounted; a disk of its own for builds), writes the sign-ins for
+// session's folder, the agent's log folder and Visor's tools mounted, and
+// not Xcode; a disk of its own for builds), writes the sign-ins for
 // containers into its home and makes it an SSH key over its socket, runs
 // the agent there under its host through OS Server's command line with its
 // variables in a file only this user reads, moves a session into and out of
@@ -90,6 +90,7 @@ final class ContainerTests: ServerTestCase {
         let there = "/root/.claude/projects/" + ClaudeSessionFiles.projectDirectoryName(for: resolved, followingLinks: false)
         XCTAssertTrue(spec.mounts.contains { $0.source == here && $0.destination == there && !$0.readOnly }, "where Claude keeps its log, seen here")
         XCTAssertTrue(spec.mounts.contains { $0.destination == ContainerPlacement.toolsFolder && $0.readOnly }, "Visor's tools")
+        XCTAssertFalse(spec.mounts.contains { $0.source.hasSuffix("Xcode.app") }, "Apple apps build from served SDKs, not the Mac's Xcode")
         let tools = try XCTUnwrap(spec.mounts.first { $0.destination == ContainerPlacement.toolsFolder }).source
         XCTAssertEqual(try String(contentsOfFile: tools + "/visor_mcp.js", encoding: .utf8), VisorMCPScript.source)
         XCTAssertTrue(FileManager.default.isExecutableFile(atPath: tools + "/visor"))
@@ -217,16 +218,29 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(told?.sessions?.first?.container?.size, VisorServer.fitted(asked))
     }
 
-    /// A container's Bazel reads oss's cache, read-only: the home's
-    /// .bazelrc names it and .netrc holds the read token for that host.
+    /// A container's Bazel reads the nearest oss's cache, read-only: the
+    /// home's .bazelrc names it, and .netrc holds every oss's read token
+    /// under each name it is reached by (the files an oss serves take the
+    /// same token: Xcode's SDK archive, through a downloader config).
     func testAContainerReadsOSSsBuildCache() throws {
-        let cache = CacheInfo(port: 7490, readToken: "read-token", bytes: 0, maxBytes: 1, freeBytes: 1, hits: 0, misses: 0, writes: 0, evicted: 0)
-        let files = Dictionary(uniqueKeysWithValues: VisorServer.buildCacheFiles(host: "192.168.4.51", cache: cache).map { ($0.path, $0.data) })
+        let near = CacheInfo(port: 7490, readToken: "read-token", bytes: 0, maxBytes: 1, freeBytes: 1, hits: 0, misses: 0, writes: 0, evicted: 0)
+        let far = CacheInfo(port: 7490, readToken: "far-token", bytes: 0, maxBytes: 1, freeBytes: 1, hits: 0, misses: 0, writes: 0, evicted: 0)
+        let files = Dictionary(uniqueKeysWithValues: VisorServer.buildCacheFiles([
+            (hosts: ["192.168.4.52", "mini.example.ts.net"], cache: near),
+            (hosts: ["192.168.4.51", "macbook.example.ts.net"], cache: far),
+        ]).map { ($0.path, $0.data) })
         let rc = String(decoding: try XCTUnwrap(files[".bazelrc"]), as: UTF8.self)
-        XCTAssertTrue(rc.contains("build --remote_cache=http://192.168.4.51:7490"))
+        XCTAssertTrue(rc.contains("build --remote_cache=http://192.168.4.52:7490"), "the nearest's")
         XCTAssertTrue(rc.contains("build --noremote_upload_local_results"), "read-only")
-        XCTAssertFalse(rc.contains("read-token"), "the token is not in the .bazelrc, which --announce_rc prints")
-        XCTAssertEqual(String(decoding: try XCTUnwrap(files[".netrc"]), as: UTF8.self), "machine 192.168.4.51 login bazel password read-token\n")
+        XCTAssertFalse(rc.contains("token"), "no token in the .bazelrc, which --announce_rc prints")
+        XCTAssertEqual(String(decoding: try XCTUnwrap(files[".netrc"]), as: UTF8.self), """
+            machine 192.168.4.52 login bazel password read-token
+            machine mini.example.ts.net login bazel password read-token
+            machine 192.168.4.51 login bazel password far-token
+            machine macbook.example.ts.net login bazel password far-token
+
+            """)
+        XCTAssertTrue(VisorServer.buildCacheFiles([]).isEmpty, "nothing without a cache")
     }
 
     /// A bridge to the computer's own containers or VMs is none of the
@@ -381,6 +395,33 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(released.status, 200)
         XCTAssertEqual(oss.server("mac.test").released, ["there1"], "released by the server that lent it")
         XCTAssertEqual(oss.server().released, [])
+    }
+
+    /// A machine comes from the server a session names, whatever is
+    /// nearer (a simulator from the MacBook, not the mini's own); a name
+    /// that is none of them says which there are.
+    func testAMachineComesFromTheServerNamed() async throws {
+        let oss = FakeOSS(["127.0.0.1": ("this-mac", true), "mac.test": ("another-mac", false)])
+        let server = await server(FakeContainerExec(), oss: oss, servers: [FakeOSS.here, "http://mac.test:7480"], port: 7983)
+        defer { server.stop() }
+        let info = SessionInfo(id: "n1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Claude", created: 0)
+        server.sessions.append(SessionRecord(info: info, process: server.makeProcess(info, resume: nil), entries: []))
+        func lease(_ body: String) async -> HTTPResponse {
+            await withCheckedContinuation { done in
+                server.answerMachines(HTTPRequest(method: "POST", path: "/api/machines", headers: [:], body: body), parts: ["machines"]) {
+                    done.resume(returning: $0)
+                }
+            }
+        }
+        let named = await lease(#"{"session":"n1","platform":"ios","server":"mac.test"}"#)
+        XCTAssertEqual(named.status, 200)
+        XCTAssertEqual(oss.server("mac.test").asked.map(\.platform), [.ios], "from the server named")
+        XCTAssertTrue(oss.server().asked.isEmpty, "not the nearer one")
+        let unknown = await lease(#"{"session":"n1","platform":"ios","server":"studio"}"#)
+        XCTAssertEqual(unknown.status, 404)
+        XCTAssertTrue(unknown.body.contains("mac.test"), "it says which there are")
+        XCTAssertTrue(VisorServer.ossServer("someones-macbook-pro.example.ts.net", isNamed: "MacBook"))
+        XCTAssertFalse(VisorServer.ossServer("someones-mac-mini.local", isNamed: "macbook"))
     }
 
     /// oss servers are set over the API as Settings sets them: each one's

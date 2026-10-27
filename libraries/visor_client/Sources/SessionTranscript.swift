@@ -13,7 +13,9 @@ import VisorServices
 /// The first change after a quiet frame is told at once; the rest of a
 /// frame's changes are told together at its end. What the user just did
 /// starts a frame over (`flush`): what the computer says back to a send
-/// waits until the thread has finished moving for it.
+/// waits until the thread has finished moving for it. Coming back to a
+/// thread that moved on, the pages it catches up on are told together
+/// once the last is in, and at most once a frame until then.
 ///
 /// Observed (Observation) through one counter, `tick`, advanced when views
 /// are told: every property a view reads touches it, and the state itself
@@ -37,10 +39,22 @@ public final class SessionTranscript {
     var inFrame: Bool { framing }
     /// What ends the frame running.
     @ObservationIgnored private var frameEnds: Task<Void, Never>?
+    /// A catch-up is under way (a client that was away is brought up a
+    /// page at a time, each page a request of its own): its pages are not
+    /// told as they come, which steps the thread through what it missed,
+    /// but at most once a frame, and the whole of it the moment its last
+    /// page is in.
+    @ObservationIgnored private var catchingUp = false
+    /// When views were last told.
+    @ObservationIgnored private var lastTold: ContinuousClock.Instant?
 
     /// Every change comes here.
     private func changed() {
-        if framing { dirty = true; return }
+        if framing || catchingUp {
+            dirty = true
+            if !framing { startFrame() }
+            return
+        }
         announce()
         startFrame()
     }
@@ -48,7 +62,17 @@ public final class SessionTranscript {
     private func announce() {
         dirty = false
         announced += 1
+        lastTold = .now
         tick &+= 1
+    }
+
+    /// The last page of a catch-up is in: views are told now, unless they
+    /// were told less than half a frame ago (then at the frame's end).
+    private func endCatchUp() {
+        guard dirty else { return }
+        if let lastTold, ContinuousClock.now - lastTold < .nanoseconds(Int64(Self.frame / 2)) { return }
+        announce()
+        startFrame()
     }
 
     private func startFrame() {
@@ -266,6 +290,10 @@ public final class SessionTranscript {
         // running.
         let first = !_loaded
         let rows = envelope.entries ?? []
+        // A page with more to follow is held from views; the last ends the
+        // catch-up (`catchingUp`).
+        let wasCatchingUp = catchingUp
+        catchingUp = envelope.later == true && !rows.isEmpty
         let write: CacheWrite
         // The rows replaced by the answer's, not merged with them.
         var replaced = false
@@ -358,7 +386,7 @@ public final class SessionTranscript {
         loaded = true
         keep?(write, SyncState(revision: revision, generation: generation))
         settleSending()
-        if first { flush() }
+        if first { flush() } else if wasCatchingUp && !catchingUp { endCatchUp() }
     }
 
     /// Lets go of the rows held, when the session is left: the cache keeps
@@ -372,6 +400,7 @@ public final class SessionTranscript {
         revision = 0
         generation = -1
         catchUp = nil
+        catchingUp = false
         loadingEarlier = false
         earlierAsked = nil
         reachedStart = false

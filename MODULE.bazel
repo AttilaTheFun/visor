@@ -4,30 +4,110 @@ iPhone, iPad and Mac that drives them."""
 
 module(
     name = "visor",
-    version = "0.40.0",
+    version = "0.41.0",
 )
 
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
-bazel_dep(name = "apple_support", version = "2.8.4")
+bazel_dep(name = "apple_support", version = "2.10.1")
+# Built on Linux with rules_applecross (below): its patches to apple_support
+# and rules_apple, which only a root module's overrides apply.
+single_version_override(
+    module_name = "apple_support",
+    patch_strip = 1,
+    patches = ["//third_party/patches/applecross:apple_support_bazel8_xcode_properties.patch"],
+    version = "2.10.1",
+)
 # rules_swift from the project's registry (AttilaTheFun/bazel_registry,
 # before the BCR in .bazelrc): 4.1.0.isomer.2 is upstream's 4.1.0 with
 # rules_swift#1860 (the wasi-threads SDK, not yet merged), isomer's two
 # patches, and the worker's incremental-copy fix (upstream #1905, from 4.2.0). It sorts above the releases the graph asks for, so every module
 # gets it; the Apple apps build on it as they did on 4.1.0.
 bazel_dep(name = "rules_swift", version = "4.1.0.isomer.2")
+# rules_applecross asks for 4.2.2, which sorts above it: the fork all the same.
+single_version_override(
+    module_name = "rules_swift",
+    version = "4.1.0.isomer.2",
+)
 
 # The server's one C file (libraries/visor_server_posix/c); already in the
 # graph at this version through rules_swift.
 bazel_dep(name = "rules_cc", version = "0.2.20")
-bazel_dep(name = "rules_apple", version = "5.1.0")
-# On a phone (the lab's iPhone), a UI test's runner app is named as Xcode
-# names a device's (<app>.xctrunner): a device finds no container for the
-# simulator's "com.apple.test." name.
+bazel_dep(name = "rules_apple", version = "5.3.1")
+# rules_applecross's patches (bundling and signing on Linux, Apple silicon by
+# default off a Mac), then, on a phone
+# (the lab's iPhone), a UI test's runner app named as Xcode names a device's
+# (<app>.xctrunner): a device finds no container for the simulator's
+# "com.apple.test." name.
 single_version_override(
     module_name = "rules_apple",
     patch_strip = 1,
-    patches = ["//third_party/patches:rules_apple_device_xctrunner.patch"],
+    patches = [
+        "//third_party/patches/applecross:rules_apple_execution_platform.patch",
+        "//third_party/patches/applecross:rules_apple_bundletool_path.patch",
+        "//third_party/patches/applecross:rules_apple_no_absolute_tool_paths.patch",
+        "//third_party/patches/applecross:rules_apple_codesign_inputs_sdk_tools.patch",
+        "//third_party/patches/applecross:rules_apple_alticonstool_missing_icons.patch",
+        "//third_party/patches/applecross:rules_apple_xctoolrunner_sorted_listdir.patch",
+        "//third_party/patches/applecross:rules_apple_arm64_default.patch",
+        "//third_party/patches:rules_apple_device_xctrunner.patch",
+    ],
+    version = "5.3.1",
+)
+
+# The Apple apps built on Linux (a container, a VM): rules_applecross (its
+# clean-room actool, ibtool, codesign and swift-stdlib-tool, LLD), the Swift
+# that built the Apple SDKs, and Xcode 27.0's SDKs, pinned by version and
+# SHA-256. A Mac reads its own Xcode (local_xcode); elsewhere the SDK archive
+# is fetched by its name below, a placeholder: each builder's .bazelrc.user
+# says where it is, with `--distdir=<folder holding apple-sdks-27.0.tar.gz>`
+# or a `--downloader_config` rewriting apple-sdks.invalid to where it is
+# served (an OS Server's /files/sha256/<hex>, with its read token in .netrc).
+# Without either, Linux fails to resolve apple-sdks.invalid. Its ported
+# tools (the clean-room ones, built for Linux) come the same way, by their
+# SHA-256 (third_party/applecross/ported_tools.sha256: newer than its last
+# release, whose codesign can't seal a Mac app's nested code), from the same
+# --distdir or a rewrite of ported-tools.invalid. The toolchains
+# are registered for Linux alone, by the builder that has the SDKs
+# (.bazelrc's apple_on_linux, turned on in .bazelrc.user), so a Mac builds
+# as before and a Linux without them builds what runs on Linux.
+# From the project's registry: its main at cc07dde (with #216, #217, #219),
+# for every module (rules_apple asks for 0.0.3, which no registry holds).
+bazel_dep(name = "rules_applecross", version = "0.0.3.cc07dde")
+single_version_override(
+    module_name = "rules_applecross",
+    version = "0.0.3.cc07dde",
+)
+apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
+# The Swift that built Xcode 27.0's SDKs.
+apple_cross_toolchain.swift(
+    name = "applecross_swift",
+    platform_sha256 = {
+        "ubuntu24.04": "69f7b2b4dbce6090b6c92194b71149a057e16269093b5a9dded38afc4a05094e",
+        "ubuntu24.04-aarch64": "21eacfe571194717d269cc1e0030533bbee6131dfde82cd4f9cfbc2512e354a9",
+        "xcode": "8fd03185b98fe27f54a54631c2449decf75d5b466ce8e34abbd414141063c6aa",
+    },
+    swift_version = "6.4.0",
+)
+apple_cross_toolchain.configure(
+    name = "apple_cross_toolchain",
+    apple_sdk_urls = ["https://apple-sdks.invalid/apple-sdks-27.0.tar.gz"],
+    local_xcode = True,
+    ported_tools_manifest = "//third_party/applecross:ported_tools.sha256",
+    ported_tools_urls = ["https://ported-tools.invalid/sha256/{sha256}"],
+    swift_tools = {
+        "aarch64": "@applecross_swift_ubuntu24.04-aarch64//:tools",
+        "x86_64": "@applecross_swift_ubuntu24.04//:tools",
+    },
+    swift_tools_macos = "@applecross_swift_xcode//:tools",
+    xcode_version = "27.0",
+)
+use_repo(apple_cross_toolchain, "apple_cross_toolchain")
+# Where Apple products are bundled: on Linux with the clean-room tools, on a
+# Mac with its Xcode.
+register_toolchains(
+    "@rules_applecross//toolchain:apple_bundling_on_linux",
+    "@rules_applecross//toolchain:apple_bundling_on_macos",
 )
 bazel_dep(name = "rules_xcodeproj", version = "4.1.0")
 bazel_dep(name = "rules_swift_package_manager", version = "1.24.1")
@@ -71,6 +151,17 @@ swift_deps.configure_package(
         "NavigationUI": ["@@isomer+//:swift_ui", "@@isomer+//:foundation"],
     },
 )
+# swift-nio's and swift-crypto's manifests add their privacy manifests only
+# where `canImport(Darwin)`, which is false on Linux, where the manifests run
+# when the Apple apps are built there: always, as on a Mac.
+swift_deps.configure_package(
+    name = "swift-nio",
+    patch_cmds = ["sed -i.orig 's/^#if canImport(Darwin)$/#if true/' Package.swift"],
+)
+swift_deps.configure_package(
+    name = "swift-crypto",
+    patch_cmds = ["sed -i.orig 's/^#if canImport(Darwin)$/#if true/' Package.swift"],
+)
 use_repo(
     swift_deps,
     "swift_package",
@@ -88,7 +179,7 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.39.1")
+bazel_dep(name = "isomer", version = "0.39.2")
 
 # flatbuffers' released Swift BUILD glob misses Sources/FlatBuffers/Vectors/,
 # and its Foundation use breaks under WASI: isomer's patches, which a root
@@ -113,6 +204,14 @@ single_version_override(
 # isomer's Android cross-compile toolchains. The extension insists on a
 # root-level android.sdk tag even when only the NDK's cc toolchains are used.
 bazel_dep(name = "hermetic_android_toolchains", version = "0.1.1")
+# Any Linux takes Google's x86_64 SDK and NDK tools: an arm64 Linux (a
+# container on a Mac) runs them under Rosetta, with x86_64 glibc beside its
+# own (tools/containers/visor-agent).
+single_version_override(
+    module_name = "hermetic_android_toolchains",
+    patch_strip = 1,
+    patches = ["//third_party/patches:hermetic_android_toolchains_linux_any_cpu.patch"],
+)
 
 android = use_extension("@hermetic_android_toolchains//:extensions.bzl", "android")
 android.sdk(

@@ -662,8 +662,7 @@ folder at the same
 path (so its files, git and the agent's own log are the Mac's), the
 agent's log folder for that folder (Claude's
 `~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
-`~/.openrouter/sessions`), Xcode
-read-only at `/Applications/Xcode.app`, and Visor's tools read-only at
+`~/.openrouter/sessions`), and Visor's tools read-only at
 `/opt/visor` (ContainerTools: `visor_mcp.js`, and `visor`). The agents'
 sign-ins for containers are the server's own, never the image's
 (ContainerSignIns: `<data>/containers/agent.env` with
@@ -680,11 +679,16 @@ agent.env); and `<data>/containers/home/`, other files copied into each
 container's home); the container makes its own SSH key. Those files are
 written over the container's own socket (the lease's `execSocket`, through
 OSSClient's exec: `ServerPlatform.containerExec`, OSSContainerExec on a
-Mac). Where an oss has a Bazel cache (`GET /v1/cache`, the nearest that
-answers), the container's home gets a `.bazelrc` naming it read-only
-(`--noremote_upload_local_results`) and a `.netrc` with the read token, as
-oss sets up its VMs: what CI built (its populate jobs) is fetched, not
-built again (VisorServer+BuildCache).
+Mac). Where an oss has a Bazel cache (`GET /v1/cache`), the container's home
+gets a `.bazelrc` naming the nearest's read-only
+(`--noremote_upload_local_results`) and a `.netrc` with every oss server's
+read token under each name it is reached by, as oss sets up its VMs: what
+CI built (its populate jobs) is fetched, not built again, and the same
+token reads the files an oss serves on that port (`/files/sha256/<hex>`),
+Xcode's SDK archive among them (VisorServer+BuildCache). No Xcode is
+mounted: the Apple apps build in a container with rules_applecross (§4),
+and the Android app's x86_64 SDK and NDK tools run under Rosetta (the
+image's x86_64 glibc; MODULE.bazel lets any Linux take them).
 The agent runs under its host like any other (HostedChild), as OS Server's
 command line on that socket (`oss machine exec --socket=… --workdir=…
 --env-file=… -- <agent>`), its variables in a file only this user reads
@@ -715,7 +719,9 @@ leases in the session's name (holder `visor:<session>`;
 VisorServer+Machines.swift, with OSSClient through the platform's HTTP
 client). A lease is used, renewed and released through the server that
 lent it. The session asks with `visor machine …` (VisorCommandScript, a
-Node script on the agents' path here and in each container); what each
+Node script on the agents' path here and in each container;
+`lease --server=NAME` takes it from the server NAME names rather than the
+nearest with room); what each
 session holds is asked of every server every 30 seconds and shown with it
 (`SessionInfo.leases`; a container is not among them). SSH, VNC and adb
 reach a lease at its server's address, resolved for the container (which
@@ -734,6 +740,25 @@ resolves no `.local` names), on the ports that server forwards.
 - Build: `bazel build //applications/visor_menubar //applications/visor_macos`
   (fastbuild). `bazel-bin` points at the LAST configuration built — always
   locate outputs with `bazel cquery [-c opt] --output=files <target>`.
+- Build on Linux (a container, say): the same targets, with no Xcode. The
+  Apple apps build with rules_applecross (MODULE.bazel, `apple_on_linux` in
+  .bazelrc) from Xcode 27.0's SDK archive and its ported tools, both pinned
+  by SHA-256 (the tools in third_party/applecross/ported_tools.sha256).
+  `.bazelrc.user` turns it on, `build:linux --config=apple_on_linux`, and
+  says where they are, on Linux alone (`common:linux`: CI's Mac runner
+  copies .bazelrc.user for its signing team, and none of these is there):
+  `common:linux --distdir=<folder>` for each folder holding
+  `apple-sdks-27.0.tar.gz` or the tools' archives (named by their hashes),
+  or `common:linux --downloader_config=.bazel_downloader.user` (ignored by
+  git, like .bazelrc.user) with the lines `rewrite
+  apple-sdks\.invalid/.* http://<oss host>:7490/files/sha256/<the SDK's sha256>`
+  and `rewrite ported-tools\.invalid/sha256/(.*)
+  http://<oss host>:7490/files/sha256/$1`, for an OS Server that serves
+  them (the container's .netrc has the token). Without it (CI's Linux
+  runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
+  the Linux client (`//applications/visor_client_linux`; the server is
+  `swift build --product visor-server`), the web site and the Android APK
+  build there as on a Mac.
 - Test: `bazel test //tests/visor_server_tests //tests/visor_client_tests
   //tests/message_cache_tests //tests/claude_transcript_tests`.
   Server tests set `VisorServer.storeRoot` and `ServerCache.shared` to
@@ -1013,6 +1038,18 @@ flicker seen on first opens (7 October); AgentUI's TranscriptView
 now keeps such rows invisible until the scroll has landed. A pixel
 measure would be fooled by the push animation under way at the same
 moment, so this is a look, not a gate.
+
+### Return frames look
+
+`tools/probes/frames/return_frames.sh [calls] [seconds away]` records the
+simulator while the app comes back to a thread that moved on without it:
+the probe opens a throwaway session, sends a turn of many separate tool
+calls, leaves the app at once and comes back once the turn is done, and
+the ten seconds after the return are laid out as contact sheets. The
+thread must not step through what it caught up on (`SessionTranscript`
+tells a catch-up's pages together once the last is in, and at most once a
+frame until then). Against this Mac's own server the pages come too fast
+to step anyway; a phone away on another network is where it showed.
 
 ## 6. Gotchas that cost time
 

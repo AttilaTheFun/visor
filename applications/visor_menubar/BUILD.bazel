@@ -33,9 +33,5 @@ macos_application(
     bundle_name = "Visor Server",
     infoplists = ["Info.plist"],
     minimum_os_version = "15.0",
-    resources = [
-        # The flat icon, beside the compiled app icon.
-        "//artwork/app-icon:Visor.icns",
-    ],
     deps = [":menubar_lib"],
 )

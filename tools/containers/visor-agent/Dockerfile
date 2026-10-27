@@ -10,9 +10,10 @@
 # Visor server leases each session's container from the OS Server on its
 # Mac made from its own version's (its `containers image` setting names
 # another).
-# The container sees the session's folder at the same path, Xcode at
-# /Applications/Xcode.app (read-only), and Visor's tools at /opt/visor
-# (read-only, from the server). Its sign-ins live with the Visor server,
+# The container sees the session's folder at the same path and Visor's
+# tools at /opt/visor (read-only, from the server); no Xcode: Apple apps
+# build with rules_applecross from the SDK archive an OS Server serves, and
+# Android's x86_64 build tools run under Rosetta on an arm64 Mac. Its sign-ins live with the Visor server,
 # never in the image (ContainerSignIns):
 #   <Visor's data>/containers/agent.env   CLAUDE_CODE_OAUTH_TOKEN=… (`claude setup-token`)
 #   <Visor's data>/containers/codex/      Codex's home in every container, mounted: its own
@@ -46,6 +47,18 @@ RUN apt-get update \
       libxml2 libgcc-13-dev lld clang pkg-config \
       libsdl2-dev libsdl2-ttf-dev libcurl4-openssl-dev libgl-dev libegl-dev libglvnd-dev libsqlite3-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
  && rm -rf /var/lib/apt/lists/*
+# On arm64, x86_64 glibc beside the system's own: Google's Linux Android SDK
+# and NDK tools are x86_64 programs, run under Rosetta (the container's
+# lease asks for it).
+RUN if [ "${TARGETARCH:-arm64}" = arm64 ]; then \
+      dpkg --add-architecture amd64 \
+   && sed -i 's/^Types: deb$/Types: deb\nArchitectures: arm64/' /etc/apt/sources.list.d/ubuntu.sources \
+   && printf '%s\n' 'Types: deb' 'URIs: http://archive.ubuntu.com/ubuntu/' 'Suites: noble noble-updates' 'Components: main' 'Architectures: amd64' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' '' \
+        'Types: deb' 'URIs: http://security.ubuntu.com/ubuntu/' 'Suites: noble-security' 'Components: main' 'Architectures: amd64' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' > /etc/apt/sources.list.d/ubuntu-amd64.sources \
+   && apt-get update \
+   && apt-get install -y --no-install-recommends libc6:amd64 libstdc++6:amd64 zlib1g:amd64 \
+   && rm -rf /var/lib/apt/lists/*; \
+    fi
 # Isomer's Linux builds compile their C with clang.
 ENV CC=clang CXX=clang++
 # Node 22, from Node's own image.
