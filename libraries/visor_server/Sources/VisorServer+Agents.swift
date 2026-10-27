@@ -16,7 +16,11 @@ extension VisorServer {
         // and a terminal can resume it from there.
         if let resume { harness.adoptHistory(id: resume, cwd: info.cwd) }
         let process = harness.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
-        process.model = info.model
+        // No model chosen is the default the session shows (this computer's
+        // agent's own), said explicitly: the same agent signed in another
+        // way (a container's long-lived token) may take another model for
+        // its default.
+        process.model = info.model ?? harness.catalog().defaultModel
         process.effort = info.effort
         // Visor's own, and this computer's agents/<kind>.env for an agent
         // here: its paths and git sign-in are this computer's, so an agent
