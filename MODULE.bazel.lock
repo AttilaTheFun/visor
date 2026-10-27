@@ -889,7 +889,7 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "9iMl/x5uGTLwIPJ+BF7duI1h0f5fqIeHsYNMuzqOZzQ=",
-        "usagesDigest": "sGzxH7Be6+W09HJwjrReArTGmbuau0gMFvlOu718P98=",
+        "usagesDigest": "N8rBT5KUqqqywNIwpz6C4mTDOLH1ryBX0VDymNliv3Q=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
@@ -1804,12 +1804,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "rGypP5nrTI9oaJIH2p4vvfzarcXFntsjmKbWV4stK2I=",
-        "usagesDigest": "w/PXueocMqfHapHwMaF+OJUt+ocqBf8sXpdKs5Zs5i4=",
+        "usagesDigest": "ORAhTxZt+thWDSlFvocXtsgxsTCWF4xHPH9iOFzqdLo=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 4e953d5dde3faed2359a7214a951e074c7c34469ada615c5215d3db539a8b379"
+          "FILE:@@//third_party/swift_packages/Package.resolved 2129f1a67d2f105abf8dcf06b60fa1b3483705a9ea9235cfa988783b4aefd5d7"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1823,9 +1823,8 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "7678f6282b76b626ea5ff1e0a22f925cd62cf2ce",
+              "commit": "f3f6ef20cd57e6a32c63edb09dbfeac8e1a64671",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
-              "version": "0.39.2",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
