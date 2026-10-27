@@ -19,6 +19,9 @@ struct TranscriptAssembler {
     /// writes the goal's state just before the user's `/goal`, and the
     /// card reads after it.
     private var pendingGoal: TranscriptEntry?
+    /// The file each Read call read, by the call's id: its result's
+    /// picture is kept under that file's name, which a preview shows.
+    private var readFiles: [String: String] = [:]
 
     /// The rows a record adds or changes. An assistant record returns every
     /// row of its message (the same ids as before, updated in place).
@@ -73,7 +76,8 @@ struct TranscriptAssembler {
                         segments.append((text: text, activities: []))
                     }
                     assembling?.segments = segments
-                case .toolUse(_, let name, let inputJSON):
+                case .toolUse(let id, let name, let inputJSON):
+                    if name == "Read", let path = JSON.object(inputJSON)?["file_path"] as? String { readFiles[id] = path }
                     let label = "\(name): \(JSON.summary(JSON.object(inputJSON)))"
                     if let last = assembling?.segments.indices.last { assembling?.segments[last].activities.append(label) }
                 case .thinking:
@@ -86,8 +90,9 @@ struct TranscriptAssembler {
                 return TranscriptEntry(id: index == 0 ? assembling.id : "\(assembling.id)#\(index)", role: .assistant,
                                        text: segment.text, activities: segment.activities)
             } + marks
-        case .toolResult(_, let text, let images, _):
-            let paths = images.compactMap { AgentImages.save(base64: $0.base64, mediaType: $0.mediaType) }
+        case .toolResult(let toolUseID, let text, let images, _):
+            let name = toolUseID.flatMap { readFiles[$0] }.map { ($0 as NSString).lastPathComponent }
+            let paths = images.compactMap { AgentImages.save(base64: $0.base64, mediaType: $0.mediaType, name: name) }
             return [TranscriptEntry(id: "tool-file-" + record.uuid, role: .tool, text: String(text.prefix(400)),
                                     toolName: "tool_result", images: paths, imageSizes: AgentImages.pixelSizes(paths: paths))]
         case .answers(let answers):
