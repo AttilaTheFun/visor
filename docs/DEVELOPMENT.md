@@ -745,9 +745,11 @@ resolves no `.local` names), on the ports that server forwards.
   .bazelrc) from Xcode 27.0's SDK archive and its ported tools, both pinned
   by SHA-256 (the tools in third_party/applecross/ported_tools.sha256).
   `.bazelrc.user` turns it on, `build:linux --config=apple_on_linux`, and
-  says where they are: `common --distdir=<folder>` for each folder holding
+  says where they are, on Linux alone (`common:linux`: CI's Mac runner
+  copies .bazelrc.user for its signing team, and none of these is there):
+  `common:linux --distdir=<folder>` for each folder holding
   `apple-sdks-27.0.tar.gz` or the tools' archives (named by their hashes),
-  or `common --downloader_config=.bazel_downloader.user` (ignored by
+  or `common:linux --downloader_config=.bazel_downloader.user` (ignored by
   git, like .bazelrc.user) with the lines `rewrite
   apple-sdks\.invalid/.* http://<oss host>:7490/files/sha256/<the SDK's sha256>`
   and `rewrite ported-tools\.invalid/sha256/(.*)
