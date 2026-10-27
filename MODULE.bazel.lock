@@ -1712,7 +1712,7 @@
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
         "bzlTransitiveDigest": "ze7Mbo01/ihRZDeotgkE/1hWXQQxKbZYSC+U2IKlc+E=",
-        "usagesDigest": "becdlhchd5spH4r1Osblc0VZvMAbL86KyksLpOYiHi8=",
+        "usagesDigest": "jZPC4wI3jnce4oaX6ROlQr7YBZQam2KHYet13R6f1MI=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
