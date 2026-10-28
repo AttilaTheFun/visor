@@ -121,10 +121,14 @@ the computer become rare, without giving a container the computer.
 
 ### oss
 
-The OS Server client, scoped to the session: plain OS Server API, which
-the server forwards as it does every other OS Server call, holding oss's
-token and making the session the holder. Streams are plain HTTP: a
-chunked body in, chunked lines out.
+The OS Server client, scoped to the session, on plain OS Server API. Small
+calls (lease, renew, release, list) the server forwards as it does every
+OS Server call, holding oss's token and making the session the holder.
+Bytes don't go through the server: for a stream (exec, xctest, an upload,
+a stored object, an install), the server asks OS Server for a grant
+(`/v1/grants`: one verb on one lease or object, signed, minutes long) and
+hands the tool its URL, and the tool streams to OS Server directly, a
+chunked body in and chunked lines out. A grant is all the tool holds.
 
 - `oss machine …`: lease, renew, release, exec (stdin streamed in, the
   output streamed back, the exit status), upload, download, screenshot,
@@ -137,12 +141,9 @@ chunked body in, chunked lines out.
   agent built, installed for testing without publishing it. Only CI
   publishes.
 
-OS Server's side (storage, xctest, install from storage, lease kinds) is
-OS Server's design, `/v1/storage/…` and `/v1/machines/{id}/…`. This side
-forwards it. Where a stream is better not relayed, OS Server also grants
-one operation (`/v1/grants`: one verb on one lease or object, signed,
-minutes long), which the server asks for and the tool uses directly; a
-grant is all such a tool holds.
+OS Server's side (storage, xctest, install from storage, grants, lease
+kinds) is OS Server's design, `/v1/storage/…`, `/v1/machines/{id}/…` and
+`/v1/grants`. This side forwards the small calls and asks for the grants.
 
 ### apple
 
@@ -204,7 +205,8 @@ what only the computer can do, by `visor request` where possible.
 2. `gh` and `git-credential-visor`, with the agent apps' keys in the
    server. `agent-token` retires.
 3. `visor ask`, `notify` and `request`.
-4. `oss` forwarded, then storage and xctest, as OS Server ships them.
+4. `oss`: small calls forwarded, streams by grant; storage and xctest as
+   OS Server ships them.
 5. `apple`.
 6. The container network allowlist, with OS Server.
 7. Linear and project secrets.
