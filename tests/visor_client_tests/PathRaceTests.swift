@@ -21,6 +21,7 @@ struct RacingHTTP: VisorHTTPService {
         return try answer.get()
     }
     func status(of error: Error) -> Int? { (error as? ScriptedFailure)?.status }
+    func body(of error: Error) -> String? { (error as? ScriptedFailure)?.body }
 }
 
 @MainActor
@@ -85,6 +86,42 @@ final class PathRaceTests: XCTestCase {
         locked.connect()
         await settle()
         XCTAssertEqual(locked.state, .needsAuthentication)
+    }
+
+    /// This computer's own paths are down a moment (its server starting
+    /// again), and a path it has by mistake reaches another computer, which
+    /// refuses: that is not this computer asking for a password. The path
+    /// goes, and this computer is tried again and got into.
+    func testAnotherComputersRefusalIsNotThisOnesPassword() async {
+        var mini = record
+        mini.serverID = "mini"
+        VisorHost.http = RacingHTTP(answers: ["http://a:7433": .failure(ScriptedFailure(status: 0)),
+                                              "http://b:7433": .failure(ScriptedFailure(status: 401, body: #"{"error":"wrong password","id":"macbook"}"#))])
+        let host = AgentServerConnection(record: mini)
+        host.connect()
+        await settle()
+        XCTAssertNotEqual(host.state, .needsAuthentication, "another computer's refusal taken for this one's")
+        XCTAssertFalse(host.record.paths.contains("http://b:7433"), "the other computer's path kept")
+
+        VisorHost.http = RacingHTTP(answers: ["http://a:7433": welcome])
+        for _ in 0..<4 where host.state != .connected {
+            socket.elapse(2000)
+            await settle()
+        }
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertEqual(host.path, "http://a:7433")
+    }
+
+    /// This computer's own refusal is still its own: it asks for a password.
+    func testThisComputersRefusalStillAsksForThePassword() async {
+        var mini = AgentServerRecord(name: "Mini", address: "http://a:7433", paths: ["http://b:7433"])
+        mini.serverID = "mini"
+        VisorHost.http = RacingHTTP(answers: ["http://a:7433": .failure(ScriptedFailure(status: 401, body: #"{"error":"wrong password","id":"mini"}"#)),
+                                              "http://b:7433": .failure(ScriptedFailure(status: 0))])
+        let host = AgentServerConnection(record: mini)
+        host.connect()
+        await settle()
+        XCTAssertEqual(host.state, .needsAuthentication)
     }
 
     /// A round overtaken by a sign-in begun since starts nothing more: only

@@ -60,6 +60,15 @@ final class AuthTests: ServerTestCase {
         XCTAssertNil(server.connectionCode)
     }
 
+    /// A refusal says whose computer this is, as hello does: a client that
+    /// reached it at another computer's path knows the path is wrong.
+    func testARefusalSaysWhoseComputerItIs() {
+        server.password = "pearl-grove"
+        let refused = server.route(request("/api/hello", bearer: "wrong"))
+        XCTAssertEqual(refused.status, 401)
+        XCTAssertEqual(Envelope.decode(refused.body, defaultType: "reply")?.id, server.id)
+    }
+
     func testPasswordAndTokenGetIn() async {
         server.password = "pearl-grove"
         XCTAssertEqual(server.route(request("/api/sessions")).status, 401)

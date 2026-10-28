@@ -58,8 +58,11 @@ extension VisorServer {
     }
 
     /// The answer to a request that is not let in: it wants the password.
+    /// It says whose computer this is (its id, as `hello` does), so a
+    /// client that reached it at another computer's path knows the path
+    /// is wrong rather than taking it for that computer asking.
     func refusal(_ request: HTTPRequest) -> HTTPResponse {
-        HTTPResponse(401, "{\"error\":\"wrong password\"}")
+        HTTPResponse(401, "{\"error\":\"wrong password\",\"id\":\"\(id)\"}")
     }
 
     /// A token for the socket's login, for a client that `hello` let in.
