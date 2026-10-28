@@ -118,7 +118,16 @@ function handle(line) {
       send({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: `No tool ${params?.name}` }] } });
       return;
     }
-    call({ mode, session: args.session, server: args.server, messageID: args.message_id, text: args.text,
+    // The names an agent reaches for when it has lost the schema
+    // (session_id, server_id) are taken too; a session left out is said
+    // plainly, not answered as one that does not exist.
+    const session = args.session ?? args.session_id;
+    const server = args.server ?? args.server_id;
+    if ((mode === "send" || mode === "read") && !session) {
+      send({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: `${params.name} needs \`session\` and \`server\`: a session id and its computer's server id, from list_sessions.` }] } });
+      return;
+    }
+    call({ mode, session, server, messageID: args.message_id ?? args.messageID, text: args.text ?? args.message,
            rows: args.count === undefined ? undefined : Math.round(Number(args.count)) })
       .then(({ ok, text }) => send({ jsonrpc: "2.0", id, result: { isError: !ok, content: [{ type: "text", text }] } }));
   } else if (method === "tools/call") {
