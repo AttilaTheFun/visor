@@ -139,7 +139,10 @@ chunked body in, chunked lines out.
 
 OS Server's side (storage, xctest, install from storage, lease kinds) is
 OS Server's design, `/v1/storage/…` and `/v1/machines/{id}/…`. This side
-forwards it.
+forwards it. Where a stream is better not relayed, OS Server also grants
+one operation (`/v1/grants`: one verb on one lease or object, signed,
+minutes long), which the server asks for and the tool uses directly; a
+grant is all such a tool holds.
 
 ### apple
 
@@ -174,8 +177,18 @@ A container reaches only what an allowlist names:
 
 With nothing else reachable, the tools are the only way to act. OS
 Server enforces the allowlist, as a lease option, since it runs the
-container; Visor gives the list for each session. The image keeps what
-builds need: Bazel, git, Swift, clang.
+container; Visor gives the list for each session:
+
+- the container is on an internal network, host-only, with no route out;
+- a proxy on the host's side of it (HTTP, and CONNECT for HTTPS) knows
+  the lease by its address, so the container holds nothing for it, and
+  lets through only that lease's list;
+- the container's `HTTP_PROXY`/`HTTPS_PROXY` name it. OS Server's cache
+  and files and the Visor server are reached at the host's address;
+- what ignores a proxy, or isn't HTTP (git over SSH, raw sockets), has no
+  way out, so git goes over HTTPS with `git-credential-visor`.
+
+The image keeps what builds need: Bazel, git, Swift, clang.
 
 ## Sessions on the computer
 
