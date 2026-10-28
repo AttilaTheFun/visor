@@ -121,12 +121,10 @@ the computer become rare, without giving a container the computer.
 
 ### oss
 
-The OS Server client, scoped to the session. Leasing goes through the
-server, as `visor machine` does. Bytes don't go through it: for exec, xctest,
-storage and file copies, the server asks OS Server for a URL scoped to
-that one lease or object, short-lived, and the tool streams to or from it
-directly. Visor holds oss's token, and the session holds only what one
-operation needs, for the few minutes it runs.
+The OS Server client, scoped to the session: plain OS Server API, which
+the server forwards as it does every other OS Server call, holding oss's
+token and making the session the holder. Streams are plain HTTP: a
+chunked body in, chunked lines out.
 
 - `oss machine …`: lease, renew, release, exec (stdin streamed in, the
   output streamed back, the exit status), upload, download, screenshot,
@@ -134,13 +132,14 @@ operation needs, for the few minutes it runs.
 - `oss machine xctest <ios lease> <bundle>`: tests on a leased simulator,
   their output streamed back.
 - `oss storage put <file> [--ttl …]`, `get`, `ls`, `renew`, `rm`: the
-  session's own file store, objects kept while a lease on them is
-  renewed. `oss machine install <lease> <object>`: what an agent built,
-  installed for testing without publishing it. Only CI publishes.
+  session's own file store (`/v1/storage/…`), objects kept while a lease
+  on them is renewed. `oss machine install <lease> <object>`: what an
+  agent built, installed for testing without publishing it. Only CI
+  publishes.
 
-OS Server's side (storage, xctest, install from storage, lease kinds,
-scoped URLs) is OS Server's design. This side asks for a scoped URL and
-streams.
+OS Server's side (storage, xctest, install from storage, lease kinds) is
+OS Server's design, `/v1/storage/…` and `/v1/machines/{id}/…`. This side
+forwards it.
 
 ### apple
 
@@ -192,8 +191,7 @@ what only the computer can do, by `visor request` where possible.
 2. `gh` and `git-credential-visor`, with the agent apps' keys in the
    server. `agent-token` retires.
 3. `visor ask`, `notify` and `request`.
-4. `oss` with scoped URLs, then storage and xctest, as OS Server ships
-   them.
+4. `oss` forwarded, then storage and xctest, as OS Server ships them.
 5. `apple`.
 6. The container network allowlist, with OS Server.
 7. Linear and project secrets.
