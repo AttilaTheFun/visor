@@ -57,6 +57,9 @@ extension Envelope {
         e.reset = value["reset"].bool
         e.later = value["later"].bool
         e.follows = value["follows"].string
+        e.parent = value["parent"].string
+        e.origin = value["origin"].string.flatMap(SessionOrigin.init(rawValue:))
+        e.at = value["at"].string
         e.signIn = value["signIn"].string
         e.questions = value["questions"].array?.compactMap(AgentQuestion.init(json:))
         if case .object(let map) = value["answers"] { e.answers = map.compactMapValues(\.string) }
@@ -129,6 +132,7 @@ extension Envelope {
         putBool("reset", reset)
         putBool("later", later)
         put("follows", follows)
+        put("parent", parent); put("origin", origin?.rawValue); put("at", at)
         put("signIn", signIn)
         if let questions { o["questions"] = .array(questions.map(\.json)) }
         if let answers { o["answers"] = .object(answers.mapValues(JSONValue.string)) }

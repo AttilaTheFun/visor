@@ -25,7 +25,9 @@ extension SessionRecord {
     /// row. Called once the agent has a session id, and again after a
     /// restart (the file is found and read again).
     func followFile() {
-        guard let id = process.resumeID else { return }
+        // A fork not yet made resumes its parent's id: that file is the
+        // parent's, and this session's is the copy's, once it says its id.
+        guard let id = process.resumeID, pendingFork == nil else { return }
         stopFollowing()
         followed = id
         let agent = info.agent, cwd = info.cwd, session = info.id

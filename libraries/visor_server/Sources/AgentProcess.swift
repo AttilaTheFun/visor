@@ -69,6 +69,15 @@ public protocol AgentProcess: AnyObject {
     /// The user's answers to a question the agent asked (`.question`), by
     /// question; nil when the user would not answer.
     func answer(_ request: String, with answers: [String: String]?)
+    /// Makes the agent's next spawn a copy of the conversation it resumes
+    /// (up to `message`, when given), with an id of its own, rather than
+    /// going on in that conversation: a fork or a branch. Whether the
+    /// agent can.
+    func fork(at message: String?) -> Bool
+    /// A side question about the conversation: answered from what the
+    /// agent knows, with no tools, and not added to the conversation.
+    /// `earlier` holds the side questions answered before it, in order.
+    func askSide(_ question: String, after earlier: [SideQuestion]) async throws -> String
 }
 
 public extension AgentProcess {
@@ -79,6 +88,12 @@ public extension AgentProcess {
     func resume(at message: String?) {}
 
     func answer(_ request: String, with answers: [String: String]?) {}
+
+    func fork(at message: String?) -> Bool { false }
+
+    func askSide(_ question: String, after earlier: [SideQuestion]) async throws -> String {
+        throw AgentProcessError.declined("This agent takes no side questions.")
+    }
 
     /// Without its own way to end a turn, an interrupt is a stop: the
     /// process goes, and the next message spawns another that resumes.

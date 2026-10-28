@@ -73,6 +73,9 @@ extension VisorServer {
         case "keepBranch": performKeepBranch(envelope)
         case "continueBranch": performContinueBranch(envelope)
         case "end": performEnd(envelope)
+        case "fork": performFork(envelope, from: client)
+        case "side": performSide(envelope)
+        case "endSide": performEndSide(envelope)
         case "contain": performContain(envelope, from: client)
         // A client's heartbeat: answered at once, to that client only.
         case "ping": client?.send(.pong())
@@ -300,8 +303,12 @@ extension VisorServer {
         guard let record = session(envelope.session) else { return }
         record.process.stop()
         record.markEnded()
-        // Its container goes with it.
-        if let container = record.info.container { removeContainer(container) }
+        // Its container goes with it, unless a fork or branch of it, or the
+        // session it was made from, still runs there.
+        if let container = record.info.container,
+           !sessions.contains(where: { $0 !== record && $0.info.container?.id == container.id }) {
+            removeContainer(container)
+        }
         sessions.removeAll { $0 === record }
         dropWaiters(for: record.info.id)
         Self.log("session ended: \(record.info.title)")

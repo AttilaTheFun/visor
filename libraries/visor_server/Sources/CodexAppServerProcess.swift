@@ -36,6 +36,11 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     private var child: (any AgentChild)?
     var threadID: String?
     private var turnID: String?
+    /// The next app server forks `threadID` (up to a turn, for a branch)
+    /// rather than resuming it (`fork(at:)`), until the fork has its id.
+    private var pendingFork: PendingFork?
+    /// The fork being made: the first turn waits for its thread.
+    private var forkMade: Task<String?, Never>?
     /// A turn asked for whose id has not come back: an interrupt asked for
     /// now is sent once it has (`turn/interrupt` names the turn).
     private var turnStarting = false
@@ -136,6 +141,11 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     /// set before any) starts it, and later ones ride on it. Nil, said as
     /// a failure, when it cannot be started.
     func thread(on child: any AgentChild) async -> String? {
+        if let forkMade {
+            let id = await forkMade.value
+            self.forkMade = nil
+            return id
+        }
         if let threadID { return threadID }
         let reply = await request("thread/start", threadParams(), of: child)
         guard self.child === child else { return nil }
@@ -211,6 +221,32 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
 
     /// Auto: no prompts, no sandbox. Manual: Codex's own workspace
     /// sandbox, no prompts — so nothing asks a question over this channel.
+    /// A fork or a branch: the app server's `thread/fork` of the thread it
+    /// would resume, through `message` (a turn's id) for a branch.
+    public func fork(at message: String?) -> Bool {
+        guard let threadID else { return false }
+        pendingFork = PendingFork(from: threadID, at: message)
+        return true
+    }
+
+    /// The thread forked on `child`: its id, said as the session's, or nil,
+    /// said as a failure.
+    private func makeFork(_ fork: PendingFork, on child: any AgentChild) async -> String? {
+        var params = threadParams()
+        params["threadId"] = fork.from
+        if let at = fork.at { params["lastTurnId"] = at }
+        let reply = await request("thread/fork", params, of: child)
+        guard self.child === child else { return nil }
+        guard let id = reply.thread else {
+            emit.yield(.failure("Codex could not fork the thread: \(reply.error ?? "no thread came back")"))
+            return nil
+        }
+        pendingFork = nil
+        threadID = id
+        emit.yield(.session(id))
+        return id
+    }
+
     private func threadParams() -> [String: Any] {
         var params: [String: Any] = [
             "cwd": HostFolders.resolve(cwd),
@@ -250,9 +286,12 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
             _ = await self.request("account/read", [:], of: child)
             _ = await self.request("account/rateLimits/read", ["excludeResetCreditDetails": true], of: child)
         }
-        // A thread being resumed is picked up now, so the first turn does
-        // not wait on it.
-        if let threadID {
+        // A fork is made now, and the first turn waits for it.
+        if let fork = pendingFork {
+            forkMade = Task { await self.makeFork(fork, on: child) }
+        } else if let threadID {
+            // A thread being resumed is picked up now, so the first turn
+            // does not wait on it.
             Task {
                 // Made in the task, so what is sent to the request is its
                 // own (Swift 6.2 will not send a captured variable).

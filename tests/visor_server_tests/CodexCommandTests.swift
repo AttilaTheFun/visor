@@ -192,6 +192,6 @@ final class CodexCommandTests: ServerTestCase {
         defer { server.stop() }
         let record = SessionRecord(info: SessionInfo(id: "C", agent: .codex, cwd: "/tmp", title: "Codex", created: 0),
                                    process: CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
-        XCTAssertEqual(server.commands(for: record).map(\.name), ["goal", "compact", "review"])
+        XCTAssertEqual(server.commands(for: record).map(\.name), ["goal", "compact", "review", "btw", "fork", "branch"])
     }
 }

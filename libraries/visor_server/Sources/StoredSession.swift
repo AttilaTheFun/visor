@@ -35,12 +35,15 @@ struct StoredSession: Codable {
     var leaf: String?
     var otherBranch: String?
     var branchKept: Bool?
+    /// A fork or branch not yet copied by its agent.
+    var fork: PendingFork?
     static let currentShape = 2
 
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
          interrupted: Bool? = nil, agentPID: Int32? = nil, shownPrompts: [String]? = nil, notice: String? = nil,
          queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil,
-         head: String? = nil, leaf: String? = nil, otherBranch: String? = nil, branchKept: Bool? = nil) {
+         head: String? = nil, leaf: String? = nil, otherBranch: String? = nil, branchKept: Bool? = nil,
+         fork: PendingFork? = nil) {
         self.info = info
         self.entries = entries
         self.resumeID = resumeID
@@ -56,6 +59,7 @@ struct StoredSession: Codable {
         self.leaf = leaf
         self.otherBranch = otherBranch
         self.branchKept = branchKept
+        self.fork = fork
     }
 
     /// Every field but the session itself is optional, so a file written
@@ -77,5 +81,6 @@ struct StoredSession: Codable {
         leaf = try c.decodeIfPresent(String.self, forKey: .leaf)
         otherBranch = try c.decodeIfPresent(String.self, forKey: .otherBranch)
         branchKept = try c.decodeIfPresent(Bool.self, forKey: .branchKept)
+        fork = try c.decodeIfPresent(PendingFork.self, forKey: .fork)
     }
 }

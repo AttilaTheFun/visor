@@ -90,6 +90,13 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// The system its agent runs on: "macos", "linux" or "windows" (in a
     /// container, "linux"); nil from a server of 0.37 or before.
     public var system: String?
+    /// The session it came from, when it is a fork or a branch of one: a
+    /// client lists it under that session, not as one of its own.
+    public var parent: String?
+    /// How it came from `parent`.
+    public var origin: SessionOrigin?
+    /// Its side questions (`/btw`), while the person keeps them.
+    public var side: [SideQuestion] = []
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -149,5 +156,8 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         container = try c.decodeIfPresent(SessionContainer.self, forKey: .container)
         leases = try c.decodeIfPresent([SessionLease].self, forKey: .leases) ?? []
         system = try c.decodeIfPresent(String.self, forKey: .system)
+        parent = try c.decodeIfPresent(String.self, forKey: .parent)
+        origin = (try? c.decodeIfPresent(SessionOrigin.self, forKey: .origin)) ?? nil
+        side = try c.decodeIfPresent([SideQuestion].self, forKey: .side) ?? []
     }
 }

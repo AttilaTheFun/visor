@@ -76,6 +76,7 @@ extension SessionRecord {
             // The sessions list carries it; the caller broadcasts that.
             return nil
         case .session(let id):
+            forkMade(as: id)
             refreshResume()
             // Said at each turn's start: the file is followed again only
             // for a conversation it is not following already.

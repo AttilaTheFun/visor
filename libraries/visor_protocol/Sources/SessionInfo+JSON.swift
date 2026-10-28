@@ -25,6 +25,9 @@ extension SessionInfo {
         if let container { o["container"] = container.json }
         if !leases.isEmpty { o["leases"] = .array(leases.map(\.json)) }
         if let system { o["system"] = .string(system) }
+        if let parent { o["parent"] = .string(parent) }
+        if let origin { o["origin"] = .string(origin.rawValue) }
+        if !side.isEmpty { o["side"] = .array(side.map(\.json)) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -54,6 +57,9 @@ extension SessionInfo {
         container = SessionContainer(json: json["container"])
         leases = json["leases"].array?.compactMap(SessionLease.init(json:)) ?? []
         system = json["system"].string
+        parent = json["parent"].string
+        origin = json["origin"].string.flatMap(SessionOrigin.init(rawValue:))
+        side = json["side"].array?.compactMap(SideQuestion.init(json:)) ?? []
         preview = json["preview"].string
         updated = json["updated"].double
     }

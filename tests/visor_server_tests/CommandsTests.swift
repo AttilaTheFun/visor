@@ -45,10 +45,11 @@ final class CommandsTests: ServerTestCase {
 
         let own = await commands("A")
         XCTAssertEqual(own?.type, "commands")
-        XCTAssertEqual(own?.commands, listed + [VisorServer.signInCommand], "through JSON and back, hint and all; and Visor's /login")
+        XCTAssertEqual(own?.commands, listed + SubSessionCommand.offered + [VisorServer.signInCommand],
+                       "through JSON and back, hint and all; and Visor's own: /btw, /fork, /branch and /login")
         // A session that has not run offers what its agent listed last.
         let other = await commands("B")
-        XCTAssertEqual(other?.commands?.map(\.name), ["compact", "goal", "login"])
+        XCTAssertEqual(other?.commands?.map(\.name), ["compact", "goal", "btw", "fork", "branch", "login"])
         // Kept on disk for the next launch: the agent's own.
         XCTAssertEqual(VisorServer.keptCommands()[.claude], listed)
     }
