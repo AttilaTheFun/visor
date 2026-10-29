@@ -517,6 +517,9 @@ public struct VisorRootView: View {
             } else if case .side(let which) = selection, let host = store.server(for: which.serverID) {
                 SideQuestionsScreen(host: host, sessionID: which.sessionID, open: openSelection)
                     .id(which.sessionID + "|side")
+            } else if case .subagent(let which, let agent) = selection, let host = store.server(for: which.serverID) {
+                SubagentScreen(host: host, sessionID: which.sessionID, agentID: agent, open: openSelection)
+                    .id(which.sessionID + "|subagent|" + agent)
             } else {
                 EmptyDetail(title: "Nothing selected",
                             subtitle: store.servers.isEmpty ? "Connect a computer first." : "Pick a computer, a project or a session, or tap compose to start one.")

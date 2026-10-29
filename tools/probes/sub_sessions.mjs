@@ -79,6 +79,18 @@ log('branch says', JSON.stringify(branchReply));
 check(/PELICAN/i.test(branchReply) && !/OTTER/i.test(branchReply), 'the branch knows only the first word');
 check((await rows(id)).length === before.length, 'the parent is as it was');
 
+// A subagent: listed once seen running, its conversation readable, closed.
+await send(id, 'Use your Agent tool once, with subagent_type general-purpose and the description "Add two numbers", to ask a subagent what 2 + 2 is (it should answer with just the number). Then reply with just DONE.');
+const seen = await until('a subagent listed', async () => (await info(id))?.subagents?.[0]);
+log('subagent', JSON.stringify(seen));
+check(seen?.description === 'Add two numbers', 'the subagent is listed with its description');
+const agentRows = JSON.parse(await rest('GET', `/sessions/${id}/subagents/${seen?.id}`)).entries ?? [];
+log('subagent rows', agentRows.map(r => `${r.role}:${JSON.stringify((r.text ?? '').slice(0, 30))}`).join(' | '));
+check(agentRows.some(r => r.role === 'assistant' && /4/.test(r.text ?? '')), 'its conversation has its answer');
+check(!(await rows(id)).some(r => /^\s*4\s*$/.test(r.text ?? '') && r.role === 'assistant'), "its answer is not the session's own row");
+await rest('POST', `/sessions/${id}/closeSubagent`, { id: seen?.id });
+check(((await info(id))?.subagents ?? []).length === 0, 'closed, it is listed no more');
+
 for (const sid of [branch, fork, id]) await rest('DELETE', `/sessions/${sid}`);
 log('failures', failures);
 process.exit(failures ? 1 : 0);

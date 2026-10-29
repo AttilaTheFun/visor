@@ -245,8 +245,15 @@ struct AgentScreen: View {
                 open(SubSessionList.selection(of: item, under: SessionSelection(serverID: host.id, sessionID: sessionID)))
             },
             endSubSession: { [host, sessionID] item in
-                // Side questions go at once; a fork or branch is asked about.
-                if item.id == SubSessionList.sideID { host.endSide(sessionID) } else { ending = item }
+                // Side questions and a subagent's row go at once; a fork or
+                // branch, a session of its own, is asked about.
+                if item.id == SubSessionList.sideID {
+                    host.endSide(sessionID)
+                } else if item.id.hasPrefix(SubSessionList.subagentPrefix) {
+                    host.closeSubagent(sessionID, agent: String(item.id.dropFirst(SubSessionList.subagentPrefix.count)))
+                } else {
+                    ending = item
+                }
             }
         ) {
             if let approval = transcript.pendingApproval {
