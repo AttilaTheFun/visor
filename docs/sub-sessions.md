@@ -3,7 +3,11 @@
 A session can open sub-sessions: a fork of it, a branch of it, a side
 question (`/btw`), or one of its agent's subagents. Each has a chat page
 of its own, opened from its parent.
-Status: proposed for 0.43. Nothing here is built yet.
+Status: 0.43. Built for Claude: forks, branches (`/branch`), side
+questions, and subagents (listed, read, messaged through the parent while
+they run, gone on with as sessions once finished); for Codex, forks and
+branches. Still to come: Codex's side questions and subagents, and Branch
+from Here on a message.
 
 ## What each one is
 
@@ -40,9 +44,8 @@ answers, on the server, until the person ends it.
 transcript, live.
 - Claude: `--forward-subagent-text` marks a subagent's messages with
   `parent_tool_use_id` while it runs. Afterwards they are in
-  `<session>/subagents/agent-*.jsonl`. Today Visor folds these messages
-  into the main transcript's activity and status, and its context count
-  too, which is wrong.
+  `<session>/subagents/agent-*.jsonl`. They are kept out of the
+  session's own status and context count.
 - Codex: the subagent's own thread (`parentThreadId`).
 
 ## How it looks
@@ -95,4 +98,10 @@ transcript, live.
   the parent, which forwards it with SendMessage. It costs the parent's
   context and a turn.
 - **Claude, once the subagent has finished:** it goes on as a session of
-  its own, made from its transcript.
+  its own, made from its transcript. The first message from its page
+  makes it (`fork` with the `subagent` origin): the server copies the
+  subagent's records into a session file of Claude Code's beside the
+  parent's, no longer marked a sidechain, and resumes that. The new
+  session is a child of the parent, titled with the subagent's
+  description; its row and capsule take the subagent's place, and its
+  chat takes the subagent page's.

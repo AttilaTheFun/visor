@@ -39,6 +39,9 @@ public protocol AgentHarness: AnyObject, Sendable {
     func subagents(id: String, cwd: String) -> [SubagentInfo]
     /// One subagent's conversation, as rows.
     func subagentTranscript(id: String, cwd: String, subagent: String) -> [TranscriptEntry]
+    /// A finished subagent's conversation made one of the agent's own:
+    /// the id it resumes by, or nil where the agent cannot.
+    func continueSubagent(id: String, cwd: String, subagent: String) -> String?
 }
 
 public extension AgentHarness {
@@ -49,6 +52,7 @@ public extension AgentHarness {
     func forkPoint(row: String, id: String, cwd: String) -> String? { nil }
     func subagents(id: String, cwd: String) -> [SubagentInfo] { [] }
     func subagentTranscript(id: String, cwd: String, subagent: String) -> [TranscriptEntry] { [] }
+    func continueSubagent(id: String, cwd: String, subagent: String) -> String? { nil }
     func adoptHistory(id: String, cwd: String) { _ = SessionCatalog.adoptHistory(agent: kind, id: id, cwd: cwd) }
     func resumable(cwd: String) -> [ResumableSession] { SessionCatalog.resumable(agent: kind, cwd: cwd) }
     func transcript(id: String, cwd: String, limit: Int) -> [TranscriptEntry] {

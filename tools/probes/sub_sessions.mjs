@@ -2,7 +2,9 @@
 // throwaway Claude session told two words, then asked on the side which
 // (answered beside the conversation, which does not grow), forked (the
 // fork knows both, under an id of its own) and branched at its first reply
-// (the branch knows only the first). Ends all three.
+// (the branch knows only the first), then sends a subagent off (listed, its
+// conversation readable) and, once it has finished, goes on with it as a
+// session of its own (which knows its conversation). Ends them all.
 //   VISOR_PORT=7633 VISOR_TOKEN=<password> node tools/probes/sub_sessions.mjs
 import http from 'node:http';
 const PORT = Number(process.env.VISOR_PORT ?? 7633);
@@ -79,7 +81,8 @@ log('branch says', JSON.stringify(branchReply));
 check(/PELICAN/i.test(branchReply) && !/OTTER/i.test(branchReply), 'the branch knows only the first word');
 check((await rows(id)).length === before.length, 'the parent is as it was');
 
-// A subagent: listed once seen running, its conversation readable, closed.
+// A subagent: listed once seen running, its conversation readable, then
+// gone on with as a session of its own.
 await send(id, 'Use your Agent tool once, with subagent_type general-purpose and the description "Add two numbers", to ask a subagent what 2 + 2 is (it should answer with just the number). Then reply with just DONE.');
 const seen = await until('a subagent listed', async () => (await info(id))?.subagents?.[0]);
 log('subagent', JSON.stringify(seen));
@@ -88,9 +91,21 @@ const agentRows = JSON.parse(await rest('GET', `/sessions/${id}/subagents/${seen
 log('subagent rows', agentRows.map(r => `${r.role}:${JSON.stringify((r.text ?? '').slice(0, 30))}`).join(' | '));
 check(agentRows.some(r => r.role === 'assistant' && /4/.test(r.text ?? '')), 'its conversation has its answer');
 check(!(await rows(id)).some(r => /^\s*4\s*$/.test(r.text ?? '') && r.role === 'assistant'), "its answer is not the session's own row");
-await rest('POST', `/sessions/${id}/closeSubagent`, { id: seen?.id });
-check(((await info(id))?.subagents ?? []).length === 0, 'closed, it is listed no more');
+const parentRows = (await rows(id)).length;
+const onward = crypto.randomUUID().toUpperCase();
+await rest('POST', `/sessions/${id}/fork`, { id: onward, origin: 'subagent', subagent: seen?.id,
+  text: 'What exactly were you asked, and what did you answer? One line.' });
+await sleep(1500); await idle(onward);
+const onwardInfo = await info(onward);
+log('onward', onwardInfo?.title, onwardInfo?.resumeCommand);
+check(onwardInfo?.parent === id && onwardInfo?.origin === 'subagent', 'the session names the session that sent the subagent off');
+check(onwardInfo?.title === 'Add two numbers', 'it is titled with what the subagent was sent to do');
+const onwardReply = await lastReply(onward);
+log('onward says', JSON.stringify(onwardReply));
+check(/2\s*\+\s*2/.test(onwardReply) && /4/.test(onwardReply), "it goes on with the subagent's conversation");
+check(((await info(id))?.subagents ?? []).length === 0, "its row takes the subagent's place");
+check((await rows(id)).length === parentRows, 'the parent is as it was');
 
-for (const sid of [branch, fork, id]) await rest('DELETE', `/sessions/${sid}`);
+for (const sid of [onward, branch, fork, id]) await rest('DELETE', `/sessions/${sid}`);
 log('failures', failures);
 process.exit(failures ? 1 : 0);

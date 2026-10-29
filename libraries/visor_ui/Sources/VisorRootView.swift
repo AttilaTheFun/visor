@@ -546,7 +546,7 @@ public struct VisorRootView: View {
         switch route {
         case .session(let id): AgentScreen(host: host, sessionID: id, ended: popSubPage, open: openSelection)
         case .side(let id): SideQuestionsScreen(host: host, sessionID: id)
-        case .subagent(let id, let agent): SubagentScreen(host: host, sessionID: id, agentID: agent)
+        case .subagent(let id, let agent): SubagentScreen(host: host, sessionID: id, agentID: agent, open: openSelection)
         }
     }
 

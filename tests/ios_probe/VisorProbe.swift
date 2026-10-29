@@ -393,16 +393,28 @@ final class VisorProbe: XCTestCase {
         subagentRow.tap()
         XCTAssertTrue(app.staticTexts["4"].firstMatch.waitForExistence(timeout: 60), "the subagent's conversation did not show")
         shot(app, "sub-7-subagent")
-        // Back from its page is the session's chat.
+        // Finished, it goes on as a session of its own, whose chat takes
+        // the page's place.
+        let onward = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Go on with it'")).firstMatch
+        XCTAssertTrue(onward.waitForExistence(timeout: 60), "the finished subagent's page offers no way on")
+        onward.tap()
+        onward.typeText("What exactly were you asked, and what did you answer? One line.")
+        app.buttons["Send"].firstMatch.tap()
+        let message = NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")
+        XCTAssertTrue(app.descendants(matching: .any).matching(message).firstMatch.waitForExistence(timeout: 20),
+                      "the session's chat did not take the page's place")
+        XCTAssertTrue(said("answered").waitForExistence(timeout: 90), "the session did not answer from the subagent's conversation")
+        shot(app, "sub-8-onward")
+        // Back from it is the session's chat, its row in the subagent's place.
         back(from: "Add two numbers")
-        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
-                          .waitForExistence(timeout: 10), "Back did not return to the session's chat")
+        XCTAssertTrue(app.staticTexts["DONE"].firstMatch.waitForExistence(timeout: 10), "Back did not return to the session's chat")
+        XCTAssertTrue(subagentRow.waitForExistence(timeout: 10), "no row for the subagent's session")
         // Settled, with the composer in sight: a page opened over a focused
         // field gave the keyboard back on Back, over the composer.
         Thread.sleep(forTimeInterval: 2)
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(!keyboard.exists || composer().frame.maxY <= keyboard.frame.minY, "the composer is under the keyboard")
-        shot(app, "sub-8-back")
+        shot(app, "sub-9-back")
     }
 
     /// Every fixture screen (VisorFixture), each from a fresh launch with

@@ -44,6 +44,28 @@ extension AgentServerConnection {
         act(.toSubagent(id: agent, text: text), on: sessionID)
     }
 
+    /// A finished subagent's conversation gone on with as a session of its
+    /// own, under the session, starting with `text`: its id once the
+    /// server has it, subscribed, for the page to open; what went wrong is
+    /// thrown, and kept for the UI.
+    @discardableResult
+    public func continueSubagent(_ sessionID: String, agent: String, text: String) async throws -> String {
+        let id = AgentServerRecord.newID()
+        do {
+            let list = try await server.act(.fork(id: id, origin: .subagent, at: nil, prompt: Self.trimmed(text), title: nil, subagent: agent),
+                                            on: sessionID)
+            take(list, replacing: false)
+            guard list.contains(where: { $0.id == id }) else {
+                throw AgentServerError.message("The computer couldn't go on with the subagent as a session of its own.")
+            }
+        } catch {
+            commandError = "\(error)"
+            throw error
+        }
+        subscribe(id)
+        return id
+    }
+
     /// The person is done with one of a session's subagents.
     public func closeSubagent(_ sessionID: String, agent: String) { act(.closeSubagent(id: agent), on: sessionID) }
 

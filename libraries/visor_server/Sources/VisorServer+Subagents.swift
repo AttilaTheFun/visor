@@ -2,7 +2,8 @@
 // with its Agent tool, read from the agent's own files (ClaudeSubagent), a
 // row and a capsule each until the person closes it, its conversation on a
 // page of its own; the person's words for one passed on by the session's
-// agent while it runs.
+// agent while it runs, and once it has finished, its conversation gone on
+// with as a session of its own.
 
 import Foundation
 import VisorProtocol
@@ -77,6 +78,51 @@ extension VisorServer {
     static func wordsForSubagent(_ words: String, to subagent: SubagentInfo) -> String {
         let named = subagent.description.isEmpty ? "your subagent" : "your subagent \u{201C}\(subagent.description)\u{201D}"
         return "For \(named) (agent id \(subagent.id)), from me: pass this on to it with SendMessage, as it is, and go on with what you were doing.\n\n\(words)"
+    }
+
+    /// `fork` with the `subagent` origin: a finished subagent's
+    /// conversation gone on with as a session of its own, under the
+    /// session that sent it off and in place of the subagent's row; with
+    /// `text`, said to it at once.
+    func continueSubagent(_ envelope: Envelope, of parent: SessionRecord, from client: ClientConnection?) {
+        guard let from = parent.process.resumeID, let agent = envelope.subagent,
+              let harness = harnesses.harness(for: parent.info.agent),
+              let subagent = harness.subagents(id: from, cwd: parent.info.cwd).first(where: { $0.id == agent }) else {
+            client?.send(.error("There is no such subagent to go on with."))
+            return
+        }
+        let name = subagent.description.isEmpty ? "That subagent" : subagent.description
+        guard !subagent.running else {
+            client?.send(.error("\(name) is still working: message it through \(parent.info.agent.title)."))
+            return
+        }
+        guard let resume = harness.continueSubagent(id: from, cwd: parent.info.cwd, subagent: agent) else {
+            client?.send(.error("\(parent.info.agent.title) can't go on with \(name) as a session of its own."))
+            return
+        }
+        let id = envelope.id ?? UUID().uuidString
+        let given = (envelope.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = given.isEmpty ? subagent.description : given
+        var info = SessionInfo(id: id, agent: parent.info.agent, cwd: parent.info.cwd,
+                               title: title.isEmpty ? Self.subSessionTitle(.subagent, of: parent.displayName) : String(title.prefix(60)),
+                               skipPermissions: parent.info.skipPermissions, model: parent.info.model, effort: parent.info.effort,
+                               created: Date().timeIntervalSince1970)
+        info.parent = parent.info.id
+        info.origin = .subagent
+        info.container = parent.info.container
+        let past = harness.subagentTranscript(id: from, cwd: parent.info.cwd, subagent: agent)
+        let record = SessionRecord(info: info, process: makeProcess(info, resume: resume), entries: past)
+        record.refreshResume()
+        sessions.append(record)
+        if let client { record.subscribers.insert(ObjectIdentifier(client)) }
+        // The session's row stands for it from now on.
+        parent.closedSubagents.insert(agent)
+        parent.info.subagents.removeAll { $0.id == agent }
+        Self.log("session from a subagent: \(info.title) of \(parent.displayName)")
+        saveArchive()
+        broadcastSessions()
+        let words = (envelope.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !words.isEmpty { deliver(words, to: record) }
     }
 
     /// `closeSubagent`: the person is done with a subagent's row.

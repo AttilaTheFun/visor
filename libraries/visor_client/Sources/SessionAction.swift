@@ -30,8 +30,9 @@ public enum SessionAction: Equatable, Sendable {
     case end
     /// A fork or branch of the session (docs/sub-sessions.md), by the
     /// client's id for it: up to `at` (a row's id) for a branch, started
-    /// on `prompt` when there is one, named `title` when it is given.
-    case fork(id: String, origin: SessionOrigin, at: String?, prompt: String?, title: String?)
+    /// on `prompt` when there is one, named `title` when it is given; with
+    /// the `subagent` origin, `subagent`'s conversation gone on with.
+    case fork(id: String, origin: SessionOrigin, at: String?, prompt: String?, title: String?, subagent: String? = nil)
     /// A side question about the session's conversation (`/btw`), by the
     /// client's id for it.
     case side(id: String, question: String)
