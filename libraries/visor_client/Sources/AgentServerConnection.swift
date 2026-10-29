@@ -68,7 +68,11 @@ public final class AgentServerConnection: Identifiable {
             }
             // Each open session's own, for its chat (`SessionTranscript.info`).
             let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            for (id, transcript) in transcripts { transcript.info = byID[id] }
+            let byParent = Dictionary(grouping: sessions.filter { $0.parent != nil && !$0.archived }) { $0.parent ?? "" }
+            for (id, transcript) in transcripts {
+                transcript.info = byID[id]
+                transcript.children = byParent[id] ?? []
+            }
         }
     }
     /// The renames, archiving and removals kept on this device, for a
@@ -271,7 +275,7 @@ public final class AgentServerConnection: Identifiable {
     /// One command on a session; the sessions the answer names refresh
     /// the list at once (the channel's broadcast follows for everyone
     /// else). After `.end` they replace it.
-    private func act(_ action: SessionAction, on sessionID: String) {
+    func act(_ action: SessionAction, on sessionID: String) {
         perform { [weak self] in
             let list = try await self?.server.act(action, on: sessionID) ?? []
             self?.take(list, replacing: action == .end)
@@ -919,6 +923,7 @@ public final class AgentServerConnection: Identifiable {
             }
         }
         transcript.info = sessions.first { $0.id == sessionID }
+        transcript.children = children(of: sessionID)
         transcripts[sessionID] = transcript
         startSyncing(sessionID, transcript)
         return transcript
@@ -1135,7 +1140,9 @@ public final class AgentServerConnection: Identifiable {
         for session in sessions where !order.contains(session.cwd) { order.append(session.cwd) }
         return order.map { cwd in
             Project(cwd: cwd,
-                    sessions: activeSessions.filter { $0.cwd == cwd },
+                    // A fork or branch is listed under the session it was
+                    // made from, while that one is here to list it.
+                    sessions: activeSessions.filter { $0.cwd == cwd && !isUnderParent($0) },
                     archived: archivedSessions.filter { $0.cwd == cwd },
                     alias: projectAliases[cwd] ?? startChoices.first { $0.id == cwd }?.title,
                     missing: missingProjects.contains(cwd))

@@ -16,6 +16,11 @@ struct SessionCardRow: View {
     /// The row is the selected one: its marks take its words' color, which
     /// the system's selection sets (white on the accent's fill).
     var selected = false
+    /// Its forks, branches and side questions, a capsule each at its foot,
+    /// and what opening one does; none on the computer's other rows.
+    var subSessions: [SubSession] = []
+    var open: SelectionAction?
+    var serverID = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -67,6 +72,13 @@ struct SessionCardRow: View {
                 LeaseMarks(leases: session.leases)
                     .padding(.top, 2)
                     .accessibilityIdentifier("leases-" + session.id)
+            }
+            if !subSessions.isEmpty {
+                SubSessionCapsules(subSessions) { [open, serverID, session] item in
+                    open?(SubSessionList.selection(of: item, under: SessionSelection(serverID: serverID, sessionID: session.id)))
+                }
+                .padding(.top, 2)
+                .accessibilityIdentifier("sub-sessions-" + session.id)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
