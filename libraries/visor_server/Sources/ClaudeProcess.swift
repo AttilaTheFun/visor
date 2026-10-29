@@ -37,6 +37,11 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     }
     /// The message a resume picks the conversation up at (`resume(at:)`).
     private var resumeAt: String?
+    /// The next spawn copies the conversation it resumes, with an id of its
+    /// own (`fork(at:)`), until that copy has begun.
+    private var forking = false
+    /// Side questions asked and not yet answered, by their request's id.
+    private var sideAnswers: [String: CheckedContinuation<String, any Error>] = [:]
     private var counter = 0
     /// Set by `interrupt()`: the error result that follows is the turn
     /// ending on request, not a failure to show.
@@ -117,7 +122,48 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
 
     public var processID: Int32? { running()?.pid }
 
-    public func resume(at message: String?) { resumeAt = message }
+    public func resume(at message: String?) {
+        // A fork not yet made keeps the point it copies the conversation
+        // to: it is no branch the file went on to elsewhere.
+        guard !forking else { return }
+        resumeAt = message
+    }
+
+    /// Claude Code's own `--fork-session`, with `--resume-session-at` for a
+    /// branch: the OpenRouter CLI takes neither.
+    public func fork(at message: String?) -> Bool {
+        guard tool == "claude" else { return false }
+        forking = true
+        resumeAt = message
+        return true
+    }
+
+    /// Claude Code's `/btw`: a `side_question` control request, which the
+    /// running agent answers beside its turn, even mid-turn, from the
+    /// conversation and the earlier side questions, using no tools. An
+    /// agent not running is started for it (it answers from the
+    /// conversation it resumed before any turn).
+    public func askSide(_ question: String, after earlier: [SideQuestion]) async throws -> String {
+        guard tool == "claude" else { throw AgentProcessError.declined("\(tool) takes no side questions.") }
+        let child = try running() ?? spawn()
+        counter += 1
+        let id = "side-\(counter)"
+        let history = earlier.compactMap { item in item.answer.map { ["question": item.question, "response": $0] } }
+        child.write([
+            "type": "control_request",
+            "request_id": id,
+            "request": ["subtype": "side_question", "question": question, "history": history],
+        ])
+        return try await withCheckedThrowingContinuation { sideAnswers[id] = $0 }
+    }
+
+    /// The side questions waiting on an agent that is gone: none will be
+    /// answered.
+    private func abandonSideQuestions() {
+        let waiting = sideAnswers.values
+        sideAnswers = [:]
+        for answer in waiting { answer.resume(throwing: AgentProcessError.declined("Claude stopped before it answered.")) }
+    }
 
     var hostedChild: HostedChild? { running() as? HostedChild }
     var carried: [String: String] { [:] }
@@ -169,6 +215,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     private func release() -> (any AgentChild)? {
         guard let child else { return nil }
         self.child = nil
+        abandonSideQuestions()
         working = false
         emit.yield(.activity(nil))
         emit.yield(.memory(nil))
@@ -208,6 +255,9 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             // Claude Code's own option, which the Agent SDK's resumeSessionAt
             // passes; the OpenRouter CLI does not take it.
             if let resumeAt, tool == "claude" { args += ["--resume-session-at", resumeAt] }
+            // A fork or a branch: the conversation copied, under an id of
+            // its own, which the copy says when it begins.
+            if forking { args += ["--fork-session"] }
         }
         // The agent is told which session it is, so it can name itself
         // when it asks the server to restart (VISOR_SESSION).
@@ -238,6 +288,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             let exit = await child.exit.value
             guard let self, self.child === child else { return }
             self.child = nil
+            self.abandonSideQuestions()
             self.working = false
             self.emit.yield(.activity(nil))
             self.emit.yield(.memory(nil))
@@ -285,6 +336,12 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
                 emit.yield(.activity("Thinking…"))
             }
             if let session {
+                // A copy that has begun is a conversation of its own: it
+                // resumes by its own id from here on, from its own end.
+                if forking, session != resumeID {
+                    forking = false
+                    resumeAt = nil
+                }
                 resumeID = session
                 emit.yield(.session(session))
             }
@@ -321,6 +378,13 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             emit.yield(.limits(limits))
         case .background(let items):
             emit.yield(.background(items))
+        case .controlResponse(let id, let answer, let error):
+            guard let waiting = sideAnswers.removeValue(forKey: id) else { return }
+            if let answer {
+                waiting.resume(returning: answer)
+            } else {
+                waiting.resume(throwing: AgentProcessError.declined(error ?? "Claude had no answer."))
+            }
         case .result(let failure, let spent):
             turnStarting = false
             stopWhenBegun = false

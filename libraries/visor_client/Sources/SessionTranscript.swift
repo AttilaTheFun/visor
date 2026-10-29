@@ -142,6 +142,18 @@ public final class SessionTranscript {
         }
     }
 
+    /// Its forks and branches still going, as the list has them, told the
+    /// same way: the chat's rows for them change with them alone.
+    @ObservationIgnored private var _children: [SessionInfo] = []
+    public var children: [SessionInfo] {
+        get { _ = tick; return _children }
+        set {
+            guard newValue != _children else { return }
+            _children = newValue
+            changed()
+        }
+    }
+
     @ObservationIgnored private var _entries: [TranscriptEntry] = []
     public var entries: [TranscriptEntry] {
         get { _ = tick; return _entries }

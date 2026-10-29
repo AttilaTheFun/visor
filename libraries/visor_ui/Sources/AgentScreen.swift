@@ -32,6 +32,8 @@ struct AgentScreen: View {
     /// The attach source open (files, the photo library, the camera).
     @State private var attachSource: AttachSource?
     @State private var showInspector = false
+    /// A fork or branch whose ✕ was tapped, while the person confirms.
+    @State private var ending: SubSession?
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The session was ended from here: the screen has nothing left to show.
@@ -40,14 +42,18 @@ struct AgentScreen: View {
     /// closure, the whole chat was evaluated again on every pass of the
     /// root (each change to the sidebar's sessions, from any session).
     let ended: ViewAction
+    /// Opens another page in the window: a fork, a branch, the side
+    /// questions, or the session this one was made from.
+    let open: SelectionAction
 
     /// `ended` nil: nothing to do when the session is ended here. (Made in
     /// the body, not as a default argument: compiled in the Swift 5 mode, a
     /// default argument is not on the main actor, and the action is.)
-    init(host: AgentServerConnection, sessionID: String, ended: ViewAction? = nil) {
+    init(host: AgentServerConnection, sessionID: String, ended: ViewAction? = nil, open: SelectionAction? = nil) {
         self.host = host
         self.sessionID = sessionID
         self.ended = ended ?? ViewAction()
+        self.open = open ?? SelectionAction()
         self.transcript = host.transcript(for: sessionID)
     }
 
@@ -95,6 +101,16 @@ struct AgentScreen: View {
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
         .toolbar {
+            // A fork or branch leads back to the session it was made from:
+            // a mark of its own, not Back's chevron, which goes to the list.
+            if let parent = info?.parent {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { open(.session(SessionSelection(serverID: host.id, sessionID: parent))) } label: {
+                        Label(parentTitle(parent), systemImage: "arrow.uturn.left")
+                    }
+                    .accessibilityLabel("Back to \(parentTitle(parent))")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button { showInspector.toggle() } label: {
                     Image(systemName: "info.circle")
@@ -102,6 +118,16 @@ struct AgentScreen: View {
                 .accessibilityLabel("Session details")
                 .accessibilityIdentifier("session-title")
             }
+        }
+        .confirmationDialog("End \(ending?.title ?? "it")?", isPresented: Binding(get: { ending != nil }, set: { if !$0 { ending = nil } }),
+                            titleVisibility: .visible) {
+            Button("End \(ending?.kind.label ?? "Session")", role: .destructive) {
+                if let ending { host.end(ending.id) }
+                ending = nil
+            }
+            Button("Cancel", role: .cancel) { ending = nil }
+        } message: {
+            Text("Its agent stops, and it leaves Visor. The agent keeps its conversation on the computer, to resume there.")
         }
         .adaptiveInspector(isPresented: $showInspector, compact: sizeClass == .compact) {
             if let info {
@@ -213,7 +239,15 @@ struct AgentScreen: View {
             // coming (after the screen opened) was a pass of the whole chat.
             suggestions: { [host, sessionID] draft in Self.suggestions(for: draft, from: host.sessionCommands[sessionID] ?? []) },
             pick: { draft = $0.text },
-            dictation: DictationBridge.installed
+            dictation: DictationBridge.installed,
+            subSessions: SubSessionList.items(of: info, children: transcript.children),
+            openSubSession: { [open, host, sessionID] item in
+                open(SubSessionList.selection(of: item, under: SessionSelection(serverID: host.id, sessionID: sessionID)))
+            },
+            endSubSession: { [host, sessionID] item in
+                // Side questions go at once; a fork or branch is asked about.
+                if item.id == SubSessionList.sideID { host.endSide(sessionID) } else { ending = item }
+            }
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval, host: host, sessionID: sessionID, answering: $answering)
@@ -437,16 +471,45 @@ struct AgentScreen: View {
         }
     }
 
+    /// The title of the session this one was made from.
+    private func parentTitle(_ id: String) -> String {
+        host.sessions.first { $0.id == id }.map { $0.title.isEmpty ? $0.agent.title : $0.title } ?? "Session"
+    }
+
     private func send() {
         let text = draft.trimmed
         let paths = attachments.compactMap(\.path)
         guard !text.isEmpty || !paths.isEmpty else { return }
+        // `/btw`, `/fork` and `/branch` open what they make.
+        if paths.isEmpty, let command = SubSessionCommand(text) {
+            draft = ""
+            SavedDrafts.clear(server: host.record.id, session: sessionID)
+            perform(command)
+            return
+        }
         draft = ""
         SavedDrafts.clear(server: host.record.id, session: sessionID)
         attachments = []
         // The pictures travel beside the words: the transcript shows them,
         // and the host names their paths to the agent.
         host.sendMessage(sessionID, text: text, images: paths)
+    }
+}
+
+extension AgentScreen {
+    /// A side question is asked and its page opened; a fork or branch is
+    /// made and opened once the computer has it.
+    func perform(_ command: SubSessionCommand) {
+        let here = SessionSelection(serverID: host.id, sessionID: sessionID)
+        switch command {
+        case .side(let question):
+            if let question { host.askSide(sessionID, question: question) }
+            open(.side(here))
+        case .fork(let prompt):
+            Task { if let id = try? await host.fork(sessionID, origin: .fork, prompt: prompt) { open(.session(SessionSelection(serverID: here.serverID, sessionID: id))) } }
+        case .branch(let name):
+            Task { if let id = try? await host.fork(sessionID, origin: .branch, title: name) { open(.session(SessionSelection(serverID: here.serverID, sessionID: id))) } }
+        }
     }
 }
 

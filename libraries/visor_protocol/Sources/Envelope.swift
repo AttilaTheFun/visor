@@ -118,6 +118,11 @@ public struct Envelope: Codable, Sendable {
     /// ("" when it is the thread's first; nil when not known): a client
     /// that keeps that row keeps the rows before it too.
     public var follows: String?
+    /// `fork`: the session a fork or branch is made from, how, and the
+    /// message of its conversation a branch goes on from (nil: its end).
+    public var parent: String?
+    public var origin: SessionOrigin?
+    public var at: String?
     /// In a session's state, a sign-in waiting for its code (`/login`):
     /// the page to sign in at. What the user sends next goes to it.
     public var signIn: String?
@@ -230,6 +235,25 @@ extension Envelope {
         e.container = true
         e.containerSize = size
         return e
+    }
+    /// A fork or a branch of `parent`, a session on the same server: the
+    /// same folder, computer or container, agent, model and permissions,
+    /// and its conversation so far (up to `at`, a message's id, for a
+    /// branch). `text`, when given, is said to it first (a fork's prompt).
+    public static func fork(id: String, parent: String, origin: SessionOrigin, at: String? = nil, text: String? = nil,
+                            title: String = "") -> Envelope {
+        var e = Envelope(type: "fork"); e.id = id; e.parent = parent; e.origin = origin; e.at = at; e.text = text
+        e.title = title; return e
+    }
+    /// A side question about `session`'s conversation (`/btw`), by the
+    /// client's id for it: answered on the session's `side`, not added to
+    /// its conversation.
+    public static func side(session: String, id: String, question: String) -> Envelope {
+        var e = Envelope(type: "side"); e.session = session; e.id = id; e.text = question; return e
+    }
+    /// The person is done with `session`'s side questions: they go.
+    public static func endSide(session: String) -> Envelope {
+        var e = Envelope(type: "endSide"); e.session = session; return e
     }
     /// Moves a session's agent into a container on its computer (`true`) or
     /// out of it onto the computer itself (`false`): the same folder and

@@ -24,6 +24,9 @@ public struct VisorRootView: View {
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     /// What the open session's screen calls when its session is ended.
     @State private var endSession = ViewAction()
+    /// What a session's page or row opens: its fork, its branch, its side
+    /// questions, or the session it was made from.
+    @State private var openSelection = SelectionAction()
     @State private var composing = false
     @State private var renamingSession: SessionTarget?
     /// The session moving into a container, its size being chosen.
@@ -61,6 +64,7 @@ public struct VisorRootView: View {
         // What the open session's screen calls when the session is ended
         // there: held across passes, so the screen compares equal.
         endSession.run = { selection = nil }
+        openSelection.run = { selection = $0 }
         return root
             // Screenshots: one look, whatever the device's.
             .preferredColorScheme(VisorFixture.appearance == "dark" ? .dark : VisorFixture.appearance == "light" ? .light : nil)
@@ -383,7 +387,9 @@ public struct VisorRootView: View {
         }
         ForEach(cards) { card in
             let which = SessionSelection(serverID: host.id, sessionID: card.session.id)
-            SessionCardRow(session: card.session, selected: selection == .session(which))
+            SessionCardRow(session: card.session, selected: selection == .session(which),
+                           subSessions: SubSessionList.items(of: card.session, children: host.children(of: card.session.id)),
+                           open: openSelection, serverID: host.id)
                 .tag(ContentSelection.session(which))
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
@@ -506,8 +512,11 @@ public struct VisorRootView: View {
                 ArchivedList(host: host, cwd: nil, openProject: { selection = .project(serverID: serverID, cwd: $0) })
                     .id(serverID + "|archive")
             } else if let which = selection?.session, let host = store.server(for: which.serverID) {
-                AgentScreen(host: host, sessionID: which.sessionID, ended: endSession)
+                AgentScreen(host: host, sessionID: which.sessionID, ended: endSession, open: openSelection)
                     .id(which)
+            } else if case .side(let which) = selection, let host = store.server(for: which.serverID) {
+                SideQuestionsScreen(host: host, sessionID: which.sessionID, open: openSelection)
+                    .id(which.sessionID + "|side")
             } else {
                 EmptyDetail(title: "Nothing selected",
                             subtitle: store.servers.isEmpty ? "Connect a computer first." : "Pick a computer, a project or a session, or tap compose to start one.")

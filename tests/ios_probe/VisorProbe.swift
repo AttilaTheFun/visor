@@ -295,6 +295,90 @@ final class VisorProbe: XCTestCase {
         shot(app, "send-3-settled")
     }
 
+    /// A session's sub-sessions on a staging server (docs/sub-sessions.md):
+    /// `/btw` opens the side questions with the answer; back on the
+    /// session, its row is above the composer; `/fork` opens the fork,
+    /// which leads back to its parent; the parent's card in the list has a
+    /// capsule for each. The session is a throwaway named by
+    /// VISOR_LOOK_SESSION, which has been told PELICAN and OTTER.
+    func testSubSessions() throws {
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        // A fresh install asks to send notifications.
+        addUIInterruptionMonitor(withDescription: "alerts") { alert in
+            for name in ["Allow", "Open"] where alert.buttons[name].exists {
+                alert.buttons[name].tap()
+                return true
+            }
+            return false
+        }
+        app.launch()
+        // An interaction, for the monitor to answer the question.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
+        let env = ProcessInfo.processInfo.environment
+        let wanted = env["VISOR_LOOK_SESSION"] ?? "sub-look"
+        let row = app.cells.containing(NSPredicate(format: "label CONTAINS %@", wanted)).firstMatch
+        if !row.waitForExistence(timeout: 8) {
+            // The computer by its connection code's link (VISOR_PROBE_CODE):
+            // typed, the URL keyboard takes "//" as "/".
+            let code = env["VISOR_PROBE_CODE"] ?? ""
+            XCTAssertFalse(code.isEmpty, "VISOR_PROBE_CODE is required")
+            app.open(URL(string: "visor://connect?code=" + code)!)
+            Thread.sleep(forTimeInterval: 6)
+            let done = app.buttons["Done"].firstMatch
+            if done.exists { done.tap() }
+        }
+        let title = app.staticTexts[wanted].firstMatch
+        if !row.waitForExistence(timeout: 30), !title.exists { shot(app, "sub-0-no-row") }
+        XCTAssertTrue(row.exists || title.exists, "no session row to open")
+        (row.exists ? row : title).tap()
+        func composer() -> XCUIElement { app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch }
+        func say(_ words: String) {
+            let field = composer()
+            XCTAssertTrue(field.waitForExistence(timeout: 10), "no composer")
+            field.tap()
+            field.typeText(words)
+            app.buttons["Send"].firstMatch.tap()
+        }
+        let said = { (words: String) in app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", words)).firstMatch }
+
+        // A side question: its page, and its answer there.
+        say("/btw Which words did I ask you to remember? Just the words.")
+        XCTAssertTrue(app.navigationBars["Side Questions"].waitForExistence(timeout: 15), "the side questions did not open")
+        XCTAssertTrue(said("OTTER").waitForExistence(timeout: 60), "no answer on the side")
+        shot(app, "sub-1-side")
+
+        // Back on the session: the side question's row above the composer.
+        app.buttons["Back to \(wanted)"].firstMatch.tap()
+        let sideRow = app.buttons.containing(NSPredicate(format: "label BEGINSWITH 'Side question'")).firstMatch
+        XCTAssertTrue(sideRow.waitForExistence(timeout: 15), "no row for the side questions")
+        shot(app, "sub-2-row")
+
+        // A fork, on its prompt: its page, its answer, and a way back.
+        say("/fork Reply with exactly: FORKED")
+        XCTAssertTrue(app.navigationBars.containing(NSPredicate(format: "identifier CONTAINS 'Fork of'")).firstMatch.waitForExistence(timeout: 20)
+                      || said("Fork of").waitForExistence(timeout: 5), "the fork did not open")
+        // The reply alone, not the prompt that holds the same word.
+        XCTAssertTrue(app.staticTexts["FORKED"].firstMatch.waitForExistence(timeout: 90), "the fork did not answer")
+        shot(app, "sub-3-fork")
+        app.buttons["Back to \(wanted)"].firstMatch.tap()
+        let forkRow = app.buttons.containing(NSPredicate(format: "label BEGINSWITH 'Fork'")).firstMatch
+        XCTAssertTrue(forkRow.waitForExistence(timeout: 15), "no row for the fork")
+        shot(app, "sub-4-rows")
+
+        // The list: the session's card with a capsule each, and the fork
+        // under it rather than a card of its own.
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        if back.exists { back.tap() }
+        let capsules = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Fork: ' OR label BEGINSWITH 'Side question: '"))
+        XCTAssertTrue(capsules.firstMatch.waitForExistence(timeout: 15), "no capsules under the session's card")
+        let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'session-'"))
+        // The card's identifier is on each of its parts too: its sessions, once each.
+        XCTAssertEqual(Set(cards.allElementsBoundByIndex.map(\.identifier)).count, 1, "a card for the session alone: its forks are its capsules")
+        shot(app, "sub-5-capsules")
+    }
+
     /// Every fixture screen (VisorFixture), each from a fresh launch with
     /// the canned computer: the same pixels every run is the point.
     func testFixtureScreens() throws {

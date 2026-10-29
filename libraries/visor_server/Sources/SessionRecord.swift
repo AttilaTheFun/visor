@@ -94,6 +94,9 @@ public final class SessionRecord {
     /// The user chose to keep this branch over `otherBranch`: it is not
     /// offered again until the other branch goes on further.
     var branchKept = false
+    /// A fork or branch whose agent has not made its copy yet: every agent
+    /// made for it makes it, until one has.
+    private(set) var pendingFork: PendingFork?
     /// Being read again on the newest branch, at the user's word: the next
     /// reading starts the clients over, and is no fork to tell of.
     var switchingBranch = false
@@ -202,7 +205,7 @@ public final class SessionRecord {
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
         StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
-                             otherBranch: otherBranch, branchKept: branchKept ? true : nil)
+                             otherBranch: otherBranch, branchKept: branchKept ? true : nil, fork: pendingFork)
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or
@@ -242,6 +245,20 @@ public final class SessionRecord {
     /// The folder the session runs in, after the project moved.
     func setCWD(_ cwd: String) { info.cwd = cwd }
 
+    /// Makes this session a copy of `fork.from` once its agent starts:
+    /// whether its agent can make one.
+    func startFork(_ fork: PendingFork) -> Bool {
+        guard process.fork(at: fork.at) else { return false }
+        pendingFork = fork
+        return true
+    }
+
+    /// The copy began, under `id`: the session is a conversation of its own.
+    func forkMade(as id: String) {
+        guard let pendingFork, id != pendingFork.from else { return }
+        self.pendingFork = nil
+    }
+
     /// What its agent runs on, for its row: this computer's system, or
     /// Linux in a container.
     func placed() { info.system = Self.system(of: info) }
@@ -255,6 +272,7 @@ public final class SessionRecord {
     func replaceProcess(_ replacement: AgentProcess) {
         stopListening()
         process = replacement
+        if let pendingFork { _ = replacement.fork(at: pendingFork.at) }
         // A new process starts with nothing in the background.
         info.background = []
     }

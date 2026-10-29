@@ -36,6 +36,9 @@ enum ClaudeOutput: Sendable, Equatable {
     /// run in the background, a monitor, an agent — each by its id, kind
     /// and description — until the list is empty again.
     case background([StatusItem])
+    /// The answer to a control request of ours, by its id: what it said
+    /// (a side question's answer), or why it would not.
+    case controlResponse(id: String, answer: String?, error: String?)
 
     static func parse(_ line: String) -> [ClaudeOutput] {
         guard let object = JSON.object(line), let type = object["type"] as? String else { return [] }
@@ -96,6 +99,13 @@ enum ClaudeOutput: Sendable, Equatable {
             // A tool result: the tool finished. (Its row comes from the log.)
             guard let message = object["message"] as? [String: Any], let content = message["content"] as? [[String: Any]] else { return [] }
             return [.toolResults(content.filter { $0["type"] as? String == "tool_result" }.compactMap { $0["tool_use_id"] as? String })]
+        case "control_response":
+            guard let response = object["response"] as? [String: Any], let id = response["request_id"] as? String else { return [] }
+            guard response["subtype"] as? String == "success" else {
+                return [.controlResponse(id: id, answer: nil, error: response["error"] as? String ?? "Claude would not answer")]
+            }
+            let answer = (response["response"] as? [String: Any])?["response"] as? String
+            return [.controlResponse(id: id, answer: answer, error: answer == nil ? "Claude had no answer" : nil)]
         case "result":
             let failed = object["is_error"] as? Bool == true
             return [.result(failure: failed ? (object["result"] as? String) ?? "The turn failed" : nil, spent: Self.spent(object))]

@@ -254,6 +254,9 @@ extension VisorServer {
     }
 
     func deliver(_ text: String, to record: SessionRecord, images: [String] = []) {
+        // `/btw`, `/fork` and `/branch` are Visor's: a side question goes
+        // at once, working or not, and a fork or branch is a new session.
+        if images.isEmpty, performSubSessionCommand(text, on: record) { return }
         // `/login` signs Claude Code in again, beside the agent: no turn,
         // and nothing for the agent, working or not.
         if record.info.agent == .claude, images.isEmpty, let arguments = Self.signInArguments(text) {

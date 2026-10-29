@@ -1,3 +1,5 @@
+import VisorProtocol
+
 /// One command on a session, for `AgentServer.act`.
 public enum SessionAction: Equatable, Sendable {
     /// Interrupts the turn.
@@ -26,4 +28,13 @@ public enum SessionAction: Equatable, Sendable {
     case continueBranch
     /// Ends the session and its agent.
     case end
+    /// A fork or branch of the session (docs/sub-sessions.md), by the
+    /// client's id for it: up to `at` (a row's id) for a branch, started
+    /// on `prompt` when there is one, named `title` when it is given.
+    case fork(id: String, origin: SessionOrigin, at: String?, prompt: String?, title: String?)
+    /// A side question about the session's conversation (`/btw`), by the
+    /// client's id for it.
+    case side(id: String, question: String)
+    /// The session's side questions go.
+    case endSide
 }

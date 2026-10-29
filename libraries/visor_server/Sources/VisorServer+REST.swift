@@ -355,7 +355,7 @@ extension VisorServer {
     private func restSessionAction(_ call: RESTCall) -> HTTPResponse {
         let action = call.parts[2]
         guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "stopAgent", "startAgent", "keepBranch", "continueBranch", "permissions", "settings",
-               "approve", "rename", "acknowledge", "signIn"].contains(action) else {
+               "approve", "rename", "acknowledge", "signIn", "fork", "side", "endSide"].contains(action) else {
             return HTTPResponse(404, "{\"error\":\"unknown action\"}")
         }
         guard let record = session(call.parts[1]) else { return HTTPResponse(404, "{\"error\":\"no such session\"}") }
@@ -363,6 +363,8 @@ extension VisorServer {
         e.type = action
         e.session = record.info.id
         perform(e, from: nil)
+        // A fork answers with the sessions, its new one among them.
+        if action == "fork" { return .json(sessionsJSON()) }
         return .json(Envelope.sessions([record.info]).encoded())
     }
 
