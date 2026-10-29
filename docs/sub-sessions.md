@@ -84,16 +84,15 @@ transcript, live.
    pages.
 5. Talking to a subagent (below).
 
-## Open
+## Talking to a subagent
 
-**Talking to a running subagent.**
-- Codex's subagents are threads, so a turn can be started on one
+- **Codex:** its subagents are threads, so a turn is started on one
   directly.
-- Claude's `-p` mode drops a person's message aimed at a subagent (a
-  user message with `parent_tool_use_id`). Only the parent agent reaches
-  a running subagent, with its SendMessage tool.
-
-So a message from a Claude subagent's page would either:
-- go through the parent, which costs the parent's context and turn; or
-- wait until the subagent finishes, then continue it as a session of its
-  own, made from its transcript.
+- **Claude, while the subagent runs:** Claude's `-p` mode drops a person's
+  message aimed at a subagent (a user message with `parent_tool_use_id`),
+  and only the parent agent reaches a running subagent, with its
+  SendMessage tool. So a message from the subagent's page goes through
+  the parent, which forwards it with SendMessage. It costs the parent's
+  context and a turn.
+- **Claude, once the subagent has finished:** it goes on as a session of
+  its own, made from its transcript.
