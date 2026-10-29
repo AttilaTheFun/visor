@@ -997,12 +997,13 @@ fixture's screens in each orientation there (the probe's
 `testFixtureScreens` and `testFixtureScreensLandscape` through
 `tools/ios_ui_tests.sh`, on an iPhone 17 simulator made new, its status bar
 held still, keyboard suggestions off), and on main the UI cases too. Each
-screen is compared with its kept picture (`tests/snapshots/ios`,
-`tests/snapshots/ios-landscape`), and the run's `proof` artifact holds
-`proof.json`, `screens/`, `diffs/` and the probe's logs. Reviews reads it
+screen is compared with its kept picture (`tests/proof/ios`,
+`tests/proof/ios-landscape`: red's own, as `tests/snapshots` holds blue's),
+and the run's `proof` artifact holds `proof.json`, `screens/`, `diffs/` and
+the probe's logs. Reviews reads it
 from GitHub by commit: a pull request's quick proof, and a release's full
 proof from main's run of the commit its draft targets. A change meant to
-look different takes its new screens into `tests/snapshots` in the same
+look different takes its new screens into `tests/proof` in the same
 pull request, from its run's artifact. The lab's phones are for what needs
 real hardware (a sensor, or a benchmark on a device).
 

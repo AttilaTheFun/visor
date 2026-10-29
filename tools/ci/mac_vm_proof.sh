@@ -10,7 +10,7 @@
 #   screens/<name>.png  each fixture screen at this commit ("chat",
 #                       "chat-landscape", …)
 #   diffs/<name>.png    each that differs from its kept picture
-#                       (tests/snapshots/ios, tests/snapshots/ios-landscape),
+#                       (tests/proof/ios, tests/proof/ios-landscape),
 #                       its changed pixels red (tools/ci/snapshot_diff.swift,
 #                       built here)
 #   proof.json          {"commit", "ref", "kind", "run",
@@ -188,9 +188,9 @@ mkdir -p "$proof/screens" "$proof/diffs"
 screens=""
 summary=""
 for orientation in portrait landscape; do
-    kept="$ROOT/tests/snapshots/ios"
+    kept="$ROOT/tests/proof/ios"
     suffix=""
-    [ "$orientation" = portrait ] || { kept="$ROOT/tests/snapshots/ios-landscape"; suffix="-landscape"; }
+    [ "$orientation" = portrait ] || { kept="$ROOT/tests/proof/ios-landscape"; suffix="-landscape"; }
     for picture in "$work/out/$orientation"/fixture-*.png; do
         [ -e "$picture" ] || continue
         screen="$(basename "$picture" .png)"

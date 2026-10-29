@@ -152,10 +152,11 @@ jobs:
   # The proof: the phone app's fixture screens at this commit, in portrait
   # and on its side, and on main its UI cases too, made in a macOS VM leased
   # from OS Server (tools/ci/mac_vm_proof.sh), each screen compared with its
-  # kept picture (tests/snapshots/ios, ios-landscape). Reviews reads the
-  # `proof` artifact from GitHub: a pull request's quick proof, and a
-  # release's full proof from main's run of its commit. On the repository's
-  # own runner, which a fork's pull request never reaches.
+  # kept picture (tests/proof/ios, ios-landscape: red's own; tests/snapshots
+  # holds blue's). Reviews reads the `proof` artifact from GitHub: a pull
+  # request's quick proof, and a release's full proof from main's run of its
+  # commit. On the repository's own runner, which a fork's pull request
+  # never reaches.
   proof:
     if: >
       github.event_name == 'push' ||
