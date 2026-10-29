@@ -42,6 +42,9 @@ public protocol AgentHarness: AnyObject, Sendable {
     /// A finished subagent's conversation made one of the agent's own:
     /// the id it resumes by, or nil where the agent cannot.
     func continueSubagent(id: String, cwd: String, subagent: String) -> String?
+    /// What the session's agent is handed to pass on to one of its
+    /// subagents while it runs: the person's `words`, and how.
+    func wordsForSubagent(_ words: String, to subagent: SubagentInfo) -> String
 }
 
 public extension AgentHarness {
@@ -53,6 +56,11 @@ public extension AgentHarness {
     func subagents(id: String, cwd: String) -> [SubagentInfo] { [] }
     func subagentTranscript(id: String, cwd: String, subagent: String) -> [TranscriptEntry] { [] }
     func continueSubagent(id: String, cwd: String, subagent: String) -> String? { nil }
+    /// Claude Code's way: its SendMessage, by the subagent's id.
+    func wordsForSubagent(_ words: String, to subagent: SubagentInfo) -> String {
+        let named = subagent.description.isEmpty ? "your subagent" : "your subagent \u{201C}\(subagent.description)\u{201D}"
+        return "For \(named) (agent id \(subagent.id)), from me: pass this on to it with SendMessage, as it is, and go on with what you were doing.\n\n\(words)"
+    }
     func adoptHistory(id: String, cwd: String) { _ = SessionCatalog.adoptHistory(agent: kind, id: id, cwd: cwd) }
     func resumable(cwd: String) -> [ResumableSession] { SessionCatalog.resumable(agent: kind, cwd: cwd) }
     func transcript(id: String, cwd: String, limit: Int) -> [TranscriptEntry] {
