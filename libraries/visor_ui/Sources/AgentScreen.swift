@@ -34,6 +34,9 @@ struct AgentScreen: View {
     @State private var showInspector = false
     /// A fork or branch whose ✕ was tapped, while the person confirms.
     @State private var ending: SubSession?
+    /// The composer has the keyboard: taken down before a command opens a
+    /// page over the chat, which would give it back under the keyboard.
+    @FocusState private var composerFocused: Bool
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The session was ended from here: the screen has nothing left to show.
@@ -244,7 +247,8 @@ struct AgentScreen: View {
                 } else {
                     ending = item
                 }
-            }
+            },
+            focus: $composerFocused
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval, host: host, sessionID: sessionID, answering: $answering)
@@ -493,6 +497,7 @@ extension AgentScreen {
     /// made and opened once the computer has it.
     func perform(_ command: SubSessionCommand) {
         let here = SessionSelection(serverID: host.id, sessionID: sessionID)
+        composerFocused = false
         switch command {
         case .side(let question):
             if let question { host.askSide(sessionID, question: question) }

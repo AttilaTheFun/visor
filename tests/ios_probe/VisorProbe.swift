@@ -397,9 +397,11 @@ final class VisorProbe: XCTestCase {
         back(from: "Add two numbers")
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
                           .waitForExistence(timeout: 10), "Back did not return to the session's chat")
-        // Settled: the keyboard, if its field takes focus again, and the
-        // composer above it.
+        // Settled, with the composer in sight: a page opened over a focused
+        // field gave the keyboard back on Back, over the composer.
         Thread.sleep(forTimeInterval: 2)
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(!keyboard.exists || composer().frame.maxY <= keyboard.frame.minY, "the composer is under the keyboard")
         shot(app, "sub-8-back")
     }
 
