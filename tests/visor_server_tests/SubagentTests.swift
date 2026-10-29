@@ -81,6 +81,13 @@ final class SubagentTests: ServerTestCase {
         XCTAssertNotEqual(ClaudeOutput.parse(own), [.subagentWork(toolUseID: "")])
     }
 
+    func testTheSessionWaitingOnASubagentSaysSo() {
+        let line = #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Agent","input":{"description":"Add two numbers","prompt":"What is 2 + 2?","subagent_type":"general-purpose"}}]}}"#
+        guard case .assistant(_, _, let tools)? = ClaudeOutput.parse(line).first else { return XCTFail("no assistant message") }
+        XCTAssertEqual(tools.map(\.label), ["Waiting: Add two numbers"])
+        XCTAssertEqual(ClaudeOutput.label(name: "Read", input: ["file_path": "/tmp/a"]).hasPrefix("Read: "), true)
+    }
+
     func testSubagentsSeenRunningAreListedUntilClosed() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-list-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

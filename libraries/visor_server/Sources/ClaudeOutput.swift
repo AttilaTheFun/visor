@@ -99,7 +99,7 @@ enum ClaudeOutput: Sendable, Equatable {
                 + (usage["cache_read_input_tokens"] as? Int ?? 0)
             let tools = content.filter { $0["type"] as? String == "tool_use" }.map { block in
                 let name = block["name"] as? String ?? "tool"
-                return Tool(id: block["id"] as? String, name: name, label: "\(name): \(JSON.summary(block["input"]))",
+                return Tool(id: block["id"] as? String, name: name, label: Self.label(name: name, input: block["input"]),
                             tasks: TurnStatus.tasks(named: name, input: block["input"] as? [String: Any]))
             }
             return [.assistant(model: message["model"] as? String, tokens: tokens, tools: tools)]
@@ -124,6 +124,17 @@ enum ClaudeOutput: Sendable, Equatable {
 }
 
 extension ClaudeOutput {
+    /// What a tool call's status line says: the agent waiting on a
+    /// subagent it sent off says so, by what the subagent is doing
+    /// ("Waiting: Add two numbers"); any other call is its name and input.
+    static func label(name: String, input: Any?) -> String {
+        if TurnStatus.kind(of: name) == .subagent,
+           let description = (input as? [String: Any])?["description"] as? String, !description.isEmpty {
+            return "Waiting: " + description
+        }
+        return "\(name): \(JSON.summary(input))"
+    }
+
     /// The run's usage so far, from a result: every model's tokens (a
     /// subagent's too) and the cost Claude Code reckons. Its running total
     /// is the process's, and carries on across a resume only when Claude
