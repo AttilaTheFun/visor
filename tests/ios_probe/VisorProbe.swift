@@ -415,6 +415,23 @@ final class VisorProbe: XCTestCase {
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(!keyboard.exists || composer().frame.maxY <= keyboard.frame.minY, "the composer is under the keyboard")
         shot(app, "sub-9-back")
+
+        // Branch from Here on the first reply: a branch through its turn,
+        // which knows the first word alone.
+        for _ in 0..<3 { app.swipeDown() }
+        let branchHere = app.buttons["branch-message"].firstMatch
+        XCTAssertTrue(branchHere.waitForExistence(timeout: 10), "no Branch from Here under the replies")
+        branchHere.tap()
+        XCTAssertTrue(app.navigationBars["Branch of \(wanted)"].waitForExistence(timeout: 20), "the branch did not open")
+        say("Which words did I ask you to remember? Just the words.")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'PELICAN'")).firstMatch.waitForExistence(timeout: 90),
+                      "the branch did not answer")
+        XCTAssertFalse(said("OTTER").exists, "the branch knows the second word, from after its point")
+        shot(app, "sub-10-branch")
+        back(from: "Branch of \(wanted)")
+        let branchRow = app.buttons.containing(NSPredicate(format: "label BEGINSWITH 'Branch'")).firstMatch
+        XCTAssertTrue(branchRow.waitForExistence(timeout: 15), "no row for the branch")
+        shot(app, "sub-11-branch-row")
     }
 
     /// Every fixture screen (VisorFixture), each from a fresh launch with

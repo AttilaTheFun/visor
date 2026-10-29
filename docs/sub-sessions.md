@@ -3,11 +3,11 @@
 A session can open sub-sessions: a fork of it, a branch of it, a side
 question (`/btw`), or one of its agent's subagents. Each has a chat page
 of its own, opened from its parent.
-Status: 0.43. Built for Claude: forks, branches (`/branch`), side
-questions, and subagents (listed, read, messaged through the parent while
-they run, gone on with as sessions once finished); for Codex, forks and
-branches. Still to come: Codex's side questions and subagents, and Branch
-from Here on a message.
+Status: 0.43. Built for Claude: forks, branches (`/branch`, and Branch
+from Here under a reply), side questions, and subagents (listed, read,
+messaged through the parent while they run, gone on with as sessions
+once finished); for Codex, forks and branches. Still to come: Codex's
+side questions and subagents, and Branch from Here on Codex.
 
 ## What each one is
 
@@ -20,9 +20,10 @@ starts on the prompt while the parent goes on with its own work.
 It is a session of its own: same folder, same computer or container,
 same model and permissions. It carries `parent` and `origin: fork`.
 
-**Branch**: `/branch [name]`, or Branch from Here on an earlier message
-of the person's. A copy of the conversation up to that point, idle, for
-the person to go on from.
+**Branch**: `/branch [name]`, or Branch from Here under one of the
+agent's replies, beside Copy and Share. A copy of the conversation up to
+that point (through the reply's turn), idle, for the person to go on
+from.
 - Claude adds `--resume-session-at <uuid>` to the fork.
 - Codex: `thread/fork` with `lastTurnId`.
 
