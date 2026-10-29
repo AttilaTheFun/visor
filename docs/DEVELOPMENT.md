@@ -989,25 +989,27 @@ nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
 rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 
-CI runs the unit tests and builds; the snapshot and UI tests, the proof,
-run on an agent's Mac or a test VM, never on the lab's phones (the lab is
-for what needs real hardware, a sensor or a benchmark on a device), and
-the agent publishes them to the review server tagged with the commit they
-ran on (GitHub's hosted Mac minutes are billed). For each commit
-pushed to a pull request, and each merged to main:
+CI makes the proof: its `proof` job, on the repository's own runner
+(`visor-ci`, which a fork's pull request never reaches), runs
+`tools/ci/mac_vm_proof.sh`. That leases a macOS VM from OS Server
+(`xcode-27.0`), copies the committed tree and Bazel in, and takes the
+fixture's screens in each orientation there (the probe's
+`testFixtureScreens` and `testFixtureScreensLandscape` through
+`tools/ios_ui_tests.sh`, on an iPhone 17 simulator made new, its status bar
+held still, keyboard suggestions off), and on main the UI cases too. Each
+screen is compared with its kept picture (`tests/snapshots/ios`,
+`tests/snapshots/ios-landscape`), and the run's `proof` artifact holds
+`proof.json`, `screens/`, `diffs/` and the probe's logs. Reviews reads it
+from GitHub by commit: a pull request's quick proof, and a release's full
+proof from main's run of the commit its draft targets. A change meant to
+look different takes its new screens into `tests/snapshots` in the same
+pull request, from its run's artifact. The lab's phones are for what needs
+real hardware (a sensor, or a benchmark on a device).
 
-    tools/proof.sh            # .proof/: ios-portrait, ios-landscape (+ mac-screenshots with PROOF_MAC=1, on a test VM)
-    cd ~/Developer/reviews && bazel run //reviews/harnesses:publish_proof -- \
-      visor ~/Developer/visor ~/Developer/visor/.proof --pull-request <n>   # main's: no --pull-request
-
-`tools/proof.sh` runs, in each orientation, the fixture's screens and
-then the UI cases, each recorded, on the iPhone 17 simulator (iOS 27,
-keyboard suggestions off: their words are noise in a picture), and the
-Mac's screens only with `PROOF_MAC=1`: the tool draws a window and makes
-it key, so only in a test VM, never on a Mac someone uses. publish_proof
-files it with the review server under the commit and its build (the
-number CI's `number` job gave the commit), where Reviews shows it as the
-pull request's or the release's runs.
+`tools/proof.sh` still makes the same screens and UI cases on your own
+Mac, to look at before pushing, and the Mac's screens with `PROOF_MAC=1`
+(the tool draws a window and makes it key, so only in a test VM, never on
+a Mac someone uses).
 
 The same cases can run on a phone, for what needs one: a test phone
 leased from a device lab (one agent at a time), for example
