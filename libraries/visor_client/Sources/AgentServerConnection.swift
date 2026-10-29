@@ -418,6 +418,14 @@ public final class AgentServerConnection: Identifiable {
                     self.wantsConnection = false
                     self.quiet = false
                     self.state = .needsAuthentication
+                } else if case .anotherComputer(let others)? = error as? AgentServerError {
+                    // Another computer refused at paths this one wrongly has:
+                    // they go, and this one is tried again, not given up on.
+                    self.note("refused by another computer at \(others.joined(separator: ", ")): those paths go")
+                    let address = self.record.address
+                    self.update { record in for path in others where path != address { record.forgetPath(path) } }
+                    if racing { self.pathIndex = self.paths.count - 1 }
+                    self.dropped("another computer at \(others.joined(separator: ", "))")
                 } else {
                     self.note("sign-in failed after \(self.log.since(started)) ms")
                     // Raced, the round is over: no path is left to step to.

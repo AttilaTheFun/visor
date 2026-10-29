@@ -25,6 +25,20 @@ const token = process.env.VISOR_TOKEN || "";
 const session = process.env.VISOR_SESSION || "";
 const approvals = process.env.VISOR_APPROVALS === "1";
 
+// What the agent is told of where it runs: `initialize`'s instructions,
+// which Claude Code puts in its system prompt. A container (VISOR_URL set)
+// is told what is its own and what is the computer's.
+const contained = !!process.env.VISOR_URL;
+const instructions = [
+  "You run under Visor: the person follows this session in Visor on a phone or a Mac, not in a terminal.",
+  "An image you read with the Read tool (a screenshot, say) is shown in the chat: to show the person an image, read it.",
+  "`visor` (on your path) leases machines from the OS Servers this computer knows: macOS, Linux and Windows VMs, iOS simulators, Android emulators. `visor machine status`, `visor machine lease <platform>`, and `visor` alone for the rest.",
+  ...(contained ? [
+    "You run in a Linux container on the computer, and see of it only the session's folder, at the same path: files meant for the person go there, not in this container's /tmp, which they cannot open.",
+    "Bazel's output in this container is its own: a checkout's bazel-bin links are the computer's builds, not yours. Find what you built with `bazel cquery --output=files <target>`.",
+  ] : []),
+].join("\n");
+
 const tools = [
   {
     name: "list_sessions",
@@ -94,7 +108,7 @@ function handle(line) {
   try { request = JSON.parse(line); } catch { return; }
   const { id, method, params } = request;
   if (method === "initialize") {
-    send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion || "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "visor", version: "1.0" } } });
+    send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion || "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "visor", version: "1.0" }, instructions } });
   } else if (method === "tools/list") {
     send({ jsonrpc: "2.0", id, result: { tools: approvals ? [approveTool, ...tools] : tools } });
   } else if (method === "tools/call" && params?.name !== "approve") {
@@ -104,7 +118,16 @@ function handle(line) {
       send({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: `No tool ${params?.name}` }] } });
       return;
     }
-    call({ mode, session: args.session, server: args.server, messageID: args.message_id, text: args.text,
+    // The names an agent reaches for when it has lost the schema
+    // (session_id, server_id) are taken too; a session left out is said
+    // plainly, not answered as one that does not exist.
+    const session = args.session ?? args.session_id;
+    const server = args.server ?? args.server_id;
+    if ((mode === "send" || mode === "read") && !session) {
+      send({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: `${params.name} needs \`session\` and \`server\`: a session id and its computer's server id, from list_sessions.` }] } });
+      return;
+    }
+    call({ mode, session, server, messageID: args.message_id ?? args.messageID, text: args.text ?? args.message,
            rows: args.count === undefined ? undefined : Math.round(Number(args.count)) })
       .then(({ ok, text }) => send({ jsonrpc: "2.0", id, result: { isError: !ok, content: [{ type: "text", text }] } }));
   } else if (method === "tools/call") {

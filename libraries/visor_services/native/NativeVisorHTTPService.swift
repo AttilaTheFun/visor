@@ -36,6 +36,7 @@ public final class NativeVisorHTTPService: VisorHTTPService {
     public init() {}
 
     public func status(of error: Error) -> Int? { (error as? VisorHTTPFailure)?.status }
+    public func body(of error: Error) -> String? { (error as? VisorHTTPFailure)?.body }
 
     public func request(method: String, url: String, body: String, authorization: String) async throws -> String {
         try await request(method: method, url: url, body: body, headers: ["Authorization": "Bearer " + authorization])

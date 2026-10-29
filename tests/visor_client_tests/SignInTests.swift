@@ -20,7 +20,11 @@ struct ScriptedHTTP: VisorHTTPService {
     func status(of error: Error) -> Int? { (error as? ScriptedFailure)?.status }
 }
 
-struct ScriptedFailure: Error { let status: Int }
+struct ScriptedFailure: Error {
+    let status: Int
+    /// What came with the status (a refusal says whose computer it is).
+    var body = ""
+}
 
 /// One socket that opens at once and answers a login it accepts with welcome.
 @MainActor

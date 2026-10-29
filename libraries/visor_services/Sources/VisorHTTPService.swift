@@ -9,6 +9,9 @@ public protocol VisorHTTPService: Sendable {
     /// The HTTP status behind an error `request` threw, when it was one
     /// (a 401 is how a computer asks for a password).
     func status(of error: Error) -> Int?
+    /// The body that came with that status, when there was one (a 401
+    /// says whose computer it is).
+    func body(of error: Error) -> String?
     /// Lets go of every connection it holds, and whatever is in flight on
     /// them, so the next request makes its own: asked when the app comes
     /// back from the background, where the connections it left are dead
@@ -22,6 +25,18 @@ public extension VisorHTTPService {
         let bearer = headers.first { $0.key.lowercased() == "authorization" }?.value ?? ""
         let token = bearer.lowercased().hasPrefix("bearer ") ? String(bearer.dropFirst(7)) : bearer
         return try await request(method: method, url: url, body: body, authorization: token)
+    }
+    /// A host whose errors read "HTTP <status>: <body>" needs nothing more.
+    func body(of error: Error) -> String? {
+        let text = Array("\(error)")
+        let marker = Array("HTTP ")
+        guard text.count >= marker.count else { return nil }
+        for start in 0...(text.count - marker.count) where Array(text[start..<start + marker.count]) == marker {
+            let rest = text[(start + marker.count)...].drop { $0.isNumber }
+            guard rest.first == ":" else { return nil }
+            return String(rest.dropFirst().drop { $0 == " " })
+        }
+        return nil
     }
     /// A host whose errors read "HTTP <status>: …" needs nothing more.
     func status(of error: Error) -> Int? {

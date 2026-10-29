@@ -172,6 +172,23 @@ final class AttachedPictureTests: ServerTestCase {
         XCTAssertEqual(rows.first?.text, "See")
         XCTAssertEqual(rows.first?.images, ["/tmp/a.png"])
     }
+
+    /// A picture the agent read keeps the name of the file it read, in a
+    /// folder named by its bytes: a preview shows it as the title.
+    func testAPictureReadKeepsItsFilesName() throws {
+        let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]).base64EncodedString()
+        func read(_ id: String, _ file: String) -> [ClaudeRecord] {
+            [ClaudeRecord(uuid: "a" + id, kind: .assistant(messageID: "m" + id, blocks: [.toolUse(id: id, name: "Read", inputJSON: #"{"file_path":"\#(file)"}"#)],
+                                                           stopReason: nil, model: nil, usage: nil), timestamp: nil),
+             ClaudeRecord(uuid: "r" + id, kind: .toolResult(toolUseID: id, text: "", images: [ClaudeImage(base64: png, mediaType: "image/png")], isError: false),
+                          timestamp: nil)]
+        }
+        let rows = TranscriptAssembler.rows(in: read("t1", "/tmp/visor_ios.png") + read("t2", "/tmp/visor_ios.png"))
+        let paths = rows.flatMap(\.images)
+        XCTAssertEqual(paths.map { ($0 as NSString).lastPathComponent }, ["visor_ios.png", "visor_ios.png"])
+        XCTAssertEqual(paths[0], paths[1], "the same picture read again is the same file")
+        XCTAssertEqual(((paths[0] as NSString).deletingLastPathComponent as NSString).lastPathComponent.count, 16, "in a folder named by its bytes")
+    }
 }
 
 /// A goal and a loop the agent keeps: one card for the goal as it is set

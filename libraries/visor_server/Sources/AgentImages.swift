@@ -24,18 +24,19 @@ enum AgentImages {
         // session file is the same file, not a second copy.
         let digest = SHA256.hash(data).prefix(8).map { String(format: "%02x", $0) }.joined()
         let suffix = fileExtension(for: mediaType)
-        // A given name keeps its stem but takes the digest too: a phone
-        // names every pick "image-0", and two pictures are two files.
-        let filename: String
+        // A given name is kept whole, in a folder named by the digest: a
+        // phone names every pick "image-0", and two pictures are two files;
+        // and a preview shows the file's name as the picture's title.
+        let file: URL
         if let name {
             let clean = sanitised(name)
-            let stem = (clean as NSString).deletingPathExtension
-            let ext = (clean as NSString).pathExtension
-            filename = "\(stem.isEmpty ? "image" : stem)-\(digest).\(ext.isEmpty ? suffix : ext)"
+            let folder = directory.appendingPathComponent(digest, isDirectory: true)
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            file = folder.appendingPathComponent((clean as NSString).pathExtension.isEmpty ? clean + "." + suffix : clean,
+                                                 isDirectory: false)
         } else {
-            filename = "\(digest).\(suffix)"
+            file = directory.appendingPathComponent("\(digest).\(suffix)", isDirectory: false)
         }
-        let file = directory.appendingPathComponent(filename, isDirectory: false)
         if FileManager.default.fileExists(atPath: file.path) { return file.path }
         guard (try? data.write(to: file, options: .atomic)) != nil else { return nil }
         return file.path

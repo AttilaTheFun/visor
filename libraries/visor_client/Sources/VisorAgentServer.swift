@@ -137,7 +137,9 @@ public final class VisorAgentServer: AgentServer {
     }
 
     /// `hello`: the server's name, and the token for the channel's login.
-    /// A 401 is the server asking for a password.
+    /// A 401 is the server asking for a password: this computer, unless the
+    /// id it gives is another's (an address two share, or one learned by
+    /// mistake), which is that path failing.
     private func hello(_ record: AgentServerRecord, at address: ServerAddress, through session: (any VisorSSHSession)?) async throws -> SignIn {
         guard let http = VisorHost.http else { throw AgentServerError.message("No HTTP service on this host") }
         do {
@@ -151,7 +153,13 @@ public final class VisorAgentServer: AgentServer {
             return SignIn(record: record, session: session, tunnel: session == nil ? nil : address, headers: headers, token: hello.token,
                           identity: identity, name: hello.host.flatMap { $0.isEmpty ? nil : $0 })
         } catch {
-            if VisorHost.http?.status(of: error) == 401 { throw AgentServerError.needsAuthentication }
+            if VisorHost.http?.status(of: error) == 401 {
+                if let other = VisorHost.http?.body(of: error).flatMap({ Envelope.decode($0, defaultType: "reply")?.id }), !other.isEmpty,
+                   !record.serverID.isEmpty, other != record.serverID {
+                    throw AgentServerError.anotherComputer([record.address])
+                }
+                throw AgentServerError.needsAuthentication
+            }
             throw error
         }
     }

@@ -25,9 +25,16 @@ extension VisorAgentServer {
         init(paths: [String]) { self.paths = paths }
 
         /// What the round says when nothing got in: the server asking for
-        /// credentials if any path heard so, else what the first path met.
+        /// credentials if any path heard so from it; else the paths that
+        /// answered for another computer, which go; else what the first
+        /// path met.
         var failure: Error {
             if failed.values.contains(where: { $0 as? AgentServerError == .needsAuthentication }) { return AgentServerError.needsAuthentication }
+            let others = failed.keys.sorted().flatMap { index -> [String] in
+                if case .anotherComputer(let paths)? = failed[index] as? AgentServerError { return paths }
+                return []
+            }
+            if !others.isEmpty { return AgentServerError.anotherComputer(others) }
             return failed[0] ?? failed.values.first ?? AgentServerError.message("No path answered")
         }
     }
