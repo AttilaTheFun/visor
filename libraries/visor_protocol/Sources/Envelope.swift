@@ -123,6 +123,9 @@ public struct Envelope: Codable, Sendable {
     public var parent: String?
     public var origin: SessionOrigin?
     public var at: String?
+    /// `fork` with the `subagent` origin: the parent's subagent whose
+    /// conversation the session goes on with.
+    public var subagent: String?
     /// In a session's state, a sign-in waiting for its code (`/login`):
     /// the page to sign in at. What the user sends next goes to it.
     public var signIn: String?
@@ -240,10 +243,12 @@ extension Envelope {
     /// same folder, computer or container, agent, model and permissions,
     /// and its conversation so far (up to `at`, a message's id, for a
     /// branch). `text`, when given, is said to it first (a fork's prompt).
+    /// With the `subagent` origin, its conversation is that of `subagent`,
+    /// one of the parent's that has finished.
     public static func fork(id: String, parent: String, origin: SessionOrigin, at: String? = nil, text: String? = nil,
-                            title: String = "") -> Envelope {
+                            title: String = "", subagent: String? = nil) -> Envelope {
         var e = Envelope(type: "fork"); e.id = id; e.parent = parent; e.origin = origin; e.at = at; e.text = text
-        e.title = title; return e
+        e.title = title; e.subagent = subagent; return e
     }
     /// A side question about `session`'s conversation (`/btw`), by the
     /// client's id for it: answered on the session's `side`, not added to

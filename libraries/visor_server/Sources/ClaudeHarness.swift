@@ -27,6 +27,15 @@ public final class ClaudeHarness: AgentHarness {
               let agent = ClaudeSubagent.all(of: file).first(where: { $0.id == subagent }) else { return [] }
         return TranscriptAssembler.rows(in: ClaudeBranch.current(of: ClaudeTranscriptParser.lines(contentsOf: agent.transcript, sidechain: true)).records)
     }
+
+    /// A copy of its conversation beside the session's file, as a session
+    /// of Claude Code's own (ClaudeSubagent.session).
+    public func continueSubagent(id: String, cwd: String, subagent: String) -> String? {
+        guard tool == "claude", let file = ClaudeSessionFiles.locate(sessionID: id, cwd: cwd),
+              let agent = ClaudeSubagent.all(of: file).first(where: { $0.id == subagent }), agent.finished else { return nil }
+        let session = UUID().uuidString.lowercased()
+        return agent.session(session, beside: file) == nil ? nil : session
+    }
     private let models: [AgentModel]
 
     public init(kind: AgentKind, tool: String, models: [AgentModel]) {

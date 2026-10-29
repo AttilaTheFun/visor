@@ -248,7 +248,8 @@ struct AgentScreen: View {
                     ending = item
                 }
             },
-            focus: $composerFocused
+            focus: $composerFocused,
+            branchFromHere: branchFromHere
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval, host: host, sessionID: sessionID, answering: $answering)
@@ -506,6 +507,26 @@ extension AgentScreen {
             Task { if let id = try? await host.fork(sessionID, origin: .fork, prompt: prompt) { open(.session(SessionSelection(serverID: here.serverID, sessionID: id))) } }
         case .branch(let name):
             Task { if let id = try? await host.fork(sessionID, origin: .branch, title: name) { open(.session(SessionSelection(serverID: here.serverID, sessionID: id))) } }
+        }
+    }
+
+    /// Branch from Here, where the agent branches at a row: Claude Code's
+    /// alone (`--resume-session-at`).
+    var branchFromHere: ((String) -> Void)? {
+        guard info?.agent == .claude, info?.archived != true else { return nil }
+        return { row in branch(from: row) }
+    }
+
+    /// Branch from Here on a reply: a branch through the end of its turn,
+    /// opened once the computer has it. The row goes by the id it is shown
+    /// under, which the computer's may have replaced.
+    func branch(from row: String) {
+        composerFocused = false
+        let at = transcript.entries.first { transcript.displayID(of: $0) == row }?.id ?? row
+        Task {
+            if let id = try? await host.fork(sessionID, origin: .branch, at: at) {
+                open(.session(SessionSelection(serverID: host.id, sessionID: id)))
+            }
         }
     }
 }

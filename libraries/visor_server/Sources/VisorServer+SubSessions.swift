@@ -17,6 +17,10 @@ extension VisorServer {
             client?.send(.error("There is no such session to fork."))
             return
         }
+        if envelope.origin == .subagent {
+            continueSubagent(envelope, of: parent, from: client)
+            return
+        }
         guard let from = parent.process.resumeID else {
             client?.send(.error("Nothing to fork yet: \(parent.displayName) has not begun its conversation."))
             return
@@ -64,6 +68,7 @@ extension VisorServer {
         switch origin {
         case .fork: "Fork of \(parent)"
         case .branch: "Branch of \(parent)"
+        case .subagent: "Subagent of \(parent)"
         }
     }
 

@@ -1,7 +1,7 @@
 // A session's subagents (docs/sub-sessions.md): read from the agent's own
 // files, listed while they run and after, if seen running here, until the
 // person closes each; the person's words for one go to the session's agent
-// to pass on.
+// to pass on, and a finished one goes on as a session of its own.
 
 import ClaudeTranscript
 import Foundation
@@ -18,12 +18,15 @@ private final class ListeningAgent: AgentProcess {
     var model: String?
     var effort: String?
     var approvalEnvironment: [String: String] = [:]
-    var resumeID: String? { "claude-p" }
+    let resumeID: String?
     var resumeCommand: String? { nil }
     var processID: Int32? { nil }
     var said: [String] = []
 
-    init() { (events, _) = AsyncStream.makeStream() }
+    init(resume: String? = "claude-p") {
+        resumeID = resume
+        (events, _) = AsyncStream.makeStream()
+    }
 
     func send(_ text: String) throws { said.append(text) }
     func start() throws {}
@@ -45,8 +48,9 @@ private final class SubagentHarness: AgentHarness {
     func subagentTranscript(id: String, cwd: String, subagent: String) -> [TranscriptEntry] {
         [TranscriptEntry(id: "s1", role: .assistant, text: "Looked at \(subagent).")]
     }
+    func continueSubagent(id: String, cwd: String, subagent: String) -> String? { "claude-\(subagent)" }
 
-    @MainActor func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess { ListeningAgent() }
+    @MainActor func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess { ListeningAgent(resume: resume) }
 }
 
 @MainActor
@@ -72,6 +76,76 @@ final class SubagentTests: ServerTestCase {
         let records = ClaudeTranscriptParser.lines(contentsOf: try XCTUnwrap(agents.first).transcript, sidechain: true).compactMap(\.record)
         XCTAssertEqual(records.count, 2)
         XCTAssertTrue(ClaudeTranscriptParser.lines(contentsOf: try XCTUnwrap(agents.first).transcript).isEmpty, "a session's file skips them")
+    }
+
+    func testAFinishedSubagentsConversationIsWrittenAsASessionOfItsOwn() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-session-" + UUID().uuidString)
+        let folder = root.appendingPathComponent("S/subagents", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data(#"{"agentType":"Explore","description":"Map the plumbing","finished":true}"#.utf8)
+            .write(to: folder.appendingPathComponent("agent-a1.meta.json"))
+        let lines = [
+            #"{"type":"user","uuid":"u1","parentUuid":null,"isSidechain":true,"agentId":"a1","sessionId":"S","cwd":"/tmp/a/b","message":{"role":"user","content":"Map it"}}"#,
+            #"{"type":"api-request","sessionId":"S","agentId":"a1"}"#,
+            #"{"type":"assistant","uuid":"m1","parentUuid":"u1","isSidechain":true,"agentId":"a1","sessionId":"S","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"Mapped."}]}}"#,
+        ]
+        try Data(lines.joined(separator: "\n").utf8).write(to: folder.appendingPathComponent("agent-a1.jsonl"))
+        let agent = try XCTUnwrap(ClaudeSubagent.all(of: root.appendingPathComponent("S.jsonl")).first)
+
+        let file = try XCTUnwrap(agent.session("N", beside: root.appendingPathComponent("S.jsonl")))
+        XCTAssertEqual(file, root.appendingPathComponent("N.jsonl"), "beside the session that sent it off")
+        let written = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map { line in
+            try XCTUnwrap(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        }
+        XCTAssertEqual(written.map { $0["uuid"] as? String }, ["u1", "m1"], "its conversation, without what was sent for it")
+        for record in written {
+            XCTAssertEqual(record["sessionId"] as? String, "N")
+            XCTAssertEqual(record["isSidechain"] as? Bool, false)
+            XCTAssertNil(record["agentId"])
+        }
+        XCTAssertEqual(written.first?["cwd"] as? String, "/tmp/a/b", "paths kept as they were")
+        // A session's file now, read as one rather than skipped.
+        XCTAssertEqual(ClaudeTranscriptParser.lines(contentsOf: file).compactMap(\.record).count, 2)
+    }
+
+    func testAFinishedSubagentGoesOnAsASessionOfItsOwn() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-continue-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7993)
+        defer { server.stop() }
+        let harness = SubagentHarness()
+        server.harnesses = AgentHarnesses([harness])
+        var info = SessionInfo(id: "P", agent: .claude, cwd: "/tmp", title: "Parser", created: 0)
+        info.model = "sonnet"
+        let parent = SessionRecord(info: info, process: ListeningAgent())
+        server.sessions = [parent]
+        harness.listed.withLock { $0 = [SubagentInfo(id: "a1", description: "Map the plumbing", type: "Explore", running: true)] }
+        server.refreshSubagents(of: parent)
+
+        // While it works, it is reached through the session's agent only.
+        server.perform(.fork(id: "C", parent: "P", origin: .subagent, text: "Go on", subagent: "a1"), from: nil)
+        XCTAssertNil(server.session("C"))
+
+        harness.listed.withLock { $0[0].running = false }
+        server.refreshSubagents(of: parent)
+        server.perform(.fork(id: "C", parent: "P", origin: .subagent, text: "Now the tests", subagent: "a1"), from: nil)
+        let session = try XCTUnwrap(server.session("C"))
+        XCTAssertEqual(session.info.parent, "P")
+        XCTAssertEqual(session.info.origin, .subagent)
+        XCTAssertEqual(session.info.title, "Map the plumbing")
+        XCTAssertEqual([session.info.cwd, session.info.model], ["/tmp", "sonnet"])
+        XCTAssertEqual(session.entries.map(\.text), ["Looked at a1."], "the subagent's conversation")
+        let agent = try XCTUnwrap(session.process as? ListeningAgent)
+        XCTAssertEqual(agent.resumeID, "claude-a1", "resumed from the copy of the subagent's conversation")
+        XCTAssertEqual(agent.said, ["Now the tests"])
+        XCTAssertNil(session.pendingFork, "its own conversation already")
+        // Its row under the session stands for the subagent's now.
+        XCTAssertTrue(parent.info.subagents.isEmpty)
+        XCTAssertEqual(parent.stored.closedSubagents, ["a1"])
+        XCTAssertEqual((parent.process as? ListeningAgent)?.said, [], "the parent is not told")
     }
 
     func testASubagentsMessagesAreNotTheThreads() {

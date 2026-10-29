@@ -393,16 +393,45 @@ final class VisorProbe: XCTestCase {
         subagentRow.tap()
         XCTAssertTrue(app.staticTexts["4"].firstMatch.waitForExistence(timeout: 60), "the subagent's conversation did not show")
         shot(app, "sub-7-subagent")
-        // Back from its page is the session's chat.
+        // Finished, it goes on as a session of its own, whose chat takes
+        // the page's place.
+        let onward = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Go on with it'")).firstMatch
+        XCTAssertTrue(onward.waitForExistence(timeout: 60), "the finished subagent's page offers no way on")
+        onward.tap()
+        onward.typeText("What exactly were you asked, and what did you answer? One line.")
+        app.buttons["Send"].firstMatch.tap()
+        let message = NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")
+        XCTAssertTrue(app.descendants(matching: .any).matching(message).firstMatch.waitForExistence(timeout: 20),
+                      "the session's chat did not take the page's place")
+        XCTAssertTrue(said("answered").waitForExistence(timeout: 90), "the session did not answer from the subagent's conversation")
+        shot(app, "sub-8-onward")
+        // Back from it is the session's chat, its row in the subagent's place.
         back(from: "Add two numbers")
-        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
-                          .waitForExistence(timeout: 10), "Back did not return to the session's chat")
+        XCTAssertTrue(app.staticTexts["DONE"].firstMatch.waitForExistence(timeout: 10), "Back did not return to the session's chat")
+        XCTAssertTrue(subagentRow.waitForExistence(timeout: 10), "no row for the subagent's session")
         // Settled, with the composer in sight: a page opened over a focused
         // field gave the keyboard back on Back, over the composer.
         Thread.sleep(forTimeInterval: 2)
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(!keyboard.exists || composer().frame.maxY <= keyboard.frame.minY, "the composer is under the keyboard")
-        shot(app, "sub-8-back")
+        shot(app, "sub-9-back")
+
+        // Branch from Here on the first reply: a branch through its turn,
+        // which knows the first word alone.
+        for _ in 0..<3 { app.swipeDown() }
+        let branchHere = app.buttons["branch-message"].firstMatch
+        XCTAssertTrue(branchHere.waitForExistence(timeout: 10), "no Branch from Here under the replies")
+        branchHere.tap()
+        XCTAssertTrue(app.navigationBars["Branch of \(wanted)"].waitForExistence(timeout: 20), "the branch did not open")
+        say("Which words did I ask you to remember? Just the words.")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'PELICAN'")).firstMatch.waitForExistence(timeout: 90),
+                      "the branch did not answer")
+        XCTAssertFalse(said("OTTER").exists, "the branch knows the second word, from after its point")
+        shot(app, "sub-10-branch")
+        back(from: "Branch of \(wanted)")
+        let branchRow = app.buttons.containing(NSPredicate(format: "label BEGINSWITH 'Branch'")).firstMatch
+        XCTAssertTrue(branchRow.waitForExistence(timeout: 15), "no row for the branch")
+        shot(app, "sub-11-branch-row")
     }
 
     /// Every fixture screen (VisorFixture), each from a fresh launch with

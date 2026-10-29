@@ -12,7 +12,7 @@ enum SubSessionList {
 
     static func items(of info: SessionInfo?, children: [SessionInfo]) -> [SubSession] {
         var items = children.sorted { $0.created < $1.created }.map { child in
-            SubSession(id: child.id, kind: child.origin == .branch ? .branch : .fork, title: child.title.isEmpty ? child.agent.title : child.title,
+            SubSession(id: child.id, kind: kind(of: child), title: child.title.isEmpty ? child.agent.title : child.title,
                        detail: child.preview, working: child.busy)
         }
         items += (info?.subagents ?? []).map { agent in
@@ -31,6 +31,16 @@ enum SubSessionList {
         if item.id == sideID { return .side(session) }
         if item.id.hasPrefix(subagentPrefix) { return .subagent(session, String(item.id.dropFirst(subagentPrefix.count))) }
         return .session(SessionSelection(serverID: session.serverID, sessionID: item.id))
+    }
+
+    /// How a session made from another shows: a subagent's, gone on with,
+    /// as the subagent it was.
+    static func kind(of child: SessionInfo) -> SubSession.Kind {
+        switch child.origin {
+        case .branch: .branch
+        case .subagent: .subagent
+        case .fork, nil: .fork
+        }
     }
 
     /// The first line of an answer, for a row of one line.

@@ -70,8 +70,9 @@ extension VisorAgentServer {
         case .keepBranch: reply = try await call("POST", base + "/keepBranch")
         case .continueBranch: reply = try await call("POST", base + "/continueBranch")
         case .end: reply = try await call("DELETE", base)
-        case .fork(let id, let origin, let at, let prompt, let title):
-            reply = try await call("POST", base + "/fork", .fork(id: id, parent: session, origin: origin, at: at, text: prompt, title: title ?? ""))
+        case .fork(let id, let origin, let at, let prompt, let title, let subagent):
+            reply = try await call("POST", base + "/fork", .fork(id: id, parent: session, origin: origin, at: at, text: prompt, title: title ?? "",
+                                                                  subagent: subagent))
         case .side(let id, let question): reply = try await call("POST", base + "/side", .side(session: session, id: id, question: question))
         case .endSide: reply = try await call("POST", base + "/endSide")
         case .toSubagent(let id, let text): reply = try await call("POST", base + "/toSubagent", .toSubagent(session: session, id: id, text: text))
