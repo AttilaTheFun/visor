@@ -118,6 +118,9 @@ extension SessionRecord {
         case .plan, .limits:
             // The account's, not the session's: the server keeps them.
             return nil
+        case .subagents:
+            // Read from the agent's files by the server (VisorServer+Subagents).
+            return nil
         case .model(let model):
             // What actually ran, for display only. The user's choice
             // (info.model) is never changed here — a turn that fell back

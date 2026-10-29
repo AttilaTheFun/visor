@@ -39,9 +39,17 @@ enum ClaudeOutput: Sendable, Equatable {
     /// The answer to a control request of ours, by its id: what it said
     /// (a side question's answer), or why it would not.
     case controlResponse(id: String, answer: String?, error: String?)
+    /// A subagent said something (a message of its own, by the Agent call
+    /// it works for): not the session's thread, its status or its context.
+    case subagentWork(toolUseID: String)
 
     static func parse(_ line: String) -> [ClaudeOutput] {
         guard let object = JSON.object(line), let type = object["type"] as? String else { return [] }
+        // A subagent's messages carry the Agent call they belong to; its
+        // conversation is its own file (ClaudeSubagent).
+        if ["assistant", "user", "stream_event"].contains(type), let parent = object["parent_tool_use_id"] as? String, !parent.isEmpty {
+            return [.subagentWork(toolUseID: parent)]
+        }
         switch type {
         case "system":
             var outputs: [ClaudeOutput] = []
@@ -91,7 +99,7 @@ enum ClaudeOutput: Sendable, Equatable {
                 + (usage["cache_read_input_tokens"] as? Int ?? 0)
             let tools = content.filter { $0["type"] as? String == "tool_use" }.map { block in
                 let name = block["name"] as? String ?? "tool"
-                return Tool(id: block["id"] as? String, name: name, label: "\(name): \(JSON.summary(block["input"]))",
+                return Tool(id: block["id"] as? String, name: name, label: Self.label(name: name, input: block["input"]),
                             tasks: TurnStatus.tasks(named: name, input: block["input"] as? [String: Any]))
             }
             return [.assistant(model: message["model"] as? String, tokens: tokens, tools: tools)]
@@ -116,6 +124,17 @@ enum ClaudeOutput: Sendable, Equatable {
 }
 
 extension ClaudeOutput {
+    /// What a tool call's status line says: the agent waiting on a
+    /// subagent it sent off says so, by what the subagent is doing
+    /// ("Waiting: Add two numbers"); any other call is its name and input.
+    static func label(name: String, input: Any?) -> String {
+        if TurnStatus.kind(of: name) == .subagent,
+           let description = (input as? [String: Any])?["description"] as? String, !description.isEmpty {
+            return "Waiting: " + description
+        }
+        return "\(name): \(JSON.summary(input))"
+    }
+
     /// The run's usage so far, from a result: every model's tokens (a
     /// subagent's too) and the cost Claude Code reckons. Its running total
     /// is the process's, and carries on across a resume only when Claude

@@ -16,6 +16,8 @@ public enum ContentSelection: Hashable {
     case hostArchive(serverID: String)
     /// A session's side questions (`/btw`), a page of their own.
     case side(SessionSelection)
+    /// One of a session's subagents, by its id: its conversation.
+    case subagent(SessionSelection, String)
 
     var session: SessionSelection? { if case .session(let value) = self { value } else { nil } }
     var serverID: String? {
@@ -26,6 +28,7 @@ public enum ContentSelection: Hashable {
         case .archived(let serverID, _): serverID
         case .hostArchive(let serverID): serverID
         case .side(let value): value.serverID
+        case .subagent(let value, _): value.serverID
         }
     }
 }

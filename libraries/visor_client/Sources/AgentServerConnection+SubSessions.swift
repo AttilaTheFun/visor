@@ -36,6 +36,22 @@ extension AgentServerConnection {
     /// The person is done with a session's side questions.
     public func endSide(_ sessionID: String) { act(.endSide, on: sessionID) }
 
+    /// The person's words for one of a session's subagents, passed on by
+    /// the session's agent while the subagent runs.
+    public func messageSubagent(_ sessionID: String, agent: String, text: String) {
+        let text = Self.trimmed(text)
+        guard !text.isEmpty else { return }
+        act(.toSubagent(id: agent, text: text), on: sessionID)
+    }
+
+    /// The person is done with one of a session's subagents.
+    public func closeSubagent(_ sessionID: String, agent: String) { act(.closeSubagent(id: agent), on: sessionID) }
+
+    /// One of a session's subagents' conversation, as it stands now.
+    public func subagentTranscript(_ sessionID: String, agent: String) async -> [TranscriptEntry]? {
+        try? await server.subagentTranscript(of: sessionID, agent: agent)
+    }
+
     /// The forks and branches of a session that are still going.
     public func children(of sessionID: String) -> [SessionInfo] {
         activeSessions.filter { $0.parent == sessionID }

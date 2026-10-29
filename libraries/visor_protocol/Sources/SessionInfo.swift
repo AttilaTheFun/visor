@@ -97,6 +97,9 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     public var origin: SessionOrigin?
     /// Its side questions (`/btw`), while the person keeps them.
     public var side: [SideQuestion] = []
+    /// The subagents its agent sent off, running or finished, until the
+    /// person closes each.
+    public var subagents: [SubagentInfo] = []
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -159,5 +162,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         parent = try c.decodeIfPresent(String.self, forKey: .parent)
         origin = (try? c.decodeIfPresent(SessionOrigin.self, forKey: .origin)) ?? nil
         side = try c.decodeIfPresent([SideQuestion].self, forKey: .side) ?? []
+        subagents = try c.decodeIfPresent([SubagentInfo].self, forKey: .subagents) ?? []
     }
 }

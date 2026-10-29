@@ -12,9 +12,9 @@ public enum ClaudeTranscriptParser {
 
     /// Every line of a file with its place in the tree, conversation or
     /// not.
-    public static func lines(contentsOf url: URL) -> [ClaudeLine] {
+    public static func lines(contentsOf url: URL, sidechain: Bool = false) -> [ClaudeLine] {
         guard let data = try? Data(contentsOf: url) else { return [] }
-        return lines(in: data)
+        return lines(in: data, sidechain: sidechain)
     }
 
     /// The conversation records at the end of a file — the last `bytes`
@@ -34,20 +34,23 @@ public enum ClaudeTranscriptParser {
         return records(in: data)
     }
 
-    public static func lines(in data: Data) -> [ClaudeLine] {
+    /// With `sidechain`, a subagent's own file: its records are all on its
+    /// sidechain, and are its conversation.
+    public static func lines(in data: Data, sidechain: Bool = false) -> [ClaudeLine] {
         var out: [ClaudeLine] = []
         for line in data.split(separator: 0x0A) where !line.isEmpty {
-            if let parsed = self.line(from: Data(line)) { out.append(parsed) }
+            if let parsed = self.line(from: Data(line), sidechain: sidechain) { out.append(parsed) }
         }
         return out
     }
 
     /// A line as a node of the tree: nil only for a line that is not a
-    /// record at all, or belongs to a sidechain.
-    public static func line(from line: Data) -> ClaudeLine? {
+    /// record at all, or belongs to a sidechain (unless a subagent's file is
+    /// being read, where every record does).
+    public static func line(from line: Data, sidechain: Bool = false) -> ClaudeLine? {
         guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
               let type = object["type"] as? String else { return nil }
-        if object["isSidechain"] as? Bool == true { return nil }
+        if !sidechain, object["isSidechain"] as? Bool == true { return nil }
         let uuid = object["uuid"] as? String
         let parent = object["parentUuid"] as? String
         let record = record(type: type, object: object, uuid: uuid ?? UUID().uuidString)

@@ -74,6 +74,8 @@ extension VisorAgentServer {
             reply = try await call("POST", base + "/fork", .fork(id: id, parent: session, origin: origin, at: at, text: prompt, title: title ?? ""))
         case .side(let id, let question): reply = try await call("POST", base + "/side", .side(session: session, id: id, question: question))
         case .endSide: reply = try await call("POST", base + "/endSide")
+        case .toSubagent(let id, let text): reply = try await call("POST", base + "/toSubagent", .toSubagent(session: session, id: id, text: text))
+        case .closeSubagent(let id): reply = try await call("POST", base + "/closeSubagent", .closeSubagent(session: session, id: id))
         }
         return reply.sessions ?? []
     }
@@ -95,6 +97,10 @@ extension VisorAgentServer {
 
     public func commands(for session: String) async throws -> [SlashCommand] {
         try await call("GET", "/sessions/\(session)/commands").commands ?? []
+    }
+
+    public func subagentTranscript(of session: String, agent: String) async throws -> [TranscriptEntry] {
+        try await call("GET", "/sessions/\(session)/subagents/\(Self.escape(agent))").entries ?? []
     }
 
     public func resumable(agent: AgentKind, cwd: String) async throws -> [ResumableSession] {

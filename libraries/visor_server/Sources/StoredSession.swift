@@ -37,13 +37,16 @@ struct StoredSession: Codable {
     var branchKept: Bool?
     /// A fork or branch not yet copied by its agent.
     var fork: PendingFork?
+    /// The subagents seen running, and those the person closed.
+    var watchedSubagents: [String]?
+    var closedSubagents: [String]?
     static let currentShape = 2
 
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
          interrupted: Bool? = nil, agentPID: Int32? = nil, shownPrompts: [String]? = nil, notice: String? = nil,
          queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil,
          head: String? = nil, leaf: String? = nil, otherBranch: String? = nil, branchKept: Bool? = nil,
-         fork: PendingFork? = nil) {
+         fork: PendingFork? = nil, watchedSubagents: [String]? = nil, closedSubagents: [String]? = nil) {
         self.info = info
         self.entries = entries
         self.resumeID = resumeID
@@ -60,6 +63,8 @@ struct StoredSession: Codable {
         self.otherBranch = otherBranch
         self.branchKept = branchKept
         self.fork = fork
+        self.watchedSubagents = watchedSubagents
+        self.closedSubagents = closedSubagents
     }
 
     /// Every field but the session itself is optional, so a file written
@@ -82,5 +87,7 @@ struct StoredSession: Codable {
         otherBranch = try c.decodeIfPresent(String.self, forKey: .otherBranch)
         branchKept = try c.decodeIfPresent(Bool.self, forKey: .branchKept)
         fork = try c.decodeIfPresent(PendingFork.self, forKey: .fork)
+        watchedSubagents = try c.decodeIfPresent([String].self, forKey: .watchedSubagents)
+        closedSubagents = try c.decodeIfPresent([String].self, forKey: .closedSubagents)
     }
 }

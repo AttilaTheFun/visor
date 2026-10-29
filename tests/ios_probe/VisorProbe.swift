@@ -342,6 +342,13 @@ final class VisorProbe: XCTestCase {
             app.buttons["Send"].firstMatch.tap()
         }
         let said = { (words: String) in app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", words)).firstMatch }
+        // The Back of the bar titled with the page it is on: from a page over
+        // the chat, to the chat; from the chat, to the list. (The split
+        // view's own bar, whose Back goes to the list, can come first.)
+        func back(from title: String) {
+            let bar = app.navigationBars[title]
+            (bar.exists ? bar : app.navigationBars.firstMatch).buttons.element(boundBy: 0).tap()
+        }
 
         // A side question: its page, and its answer there.
         say("/btw Which words did I ask you to remember? Just the words.")
@@ -350,7 +357,7 @@ final class VisorProbe: XCTestCase {
         shot(app, "sub-1-side")
 
         // Back on the session: the side question's row above the composer.
-        app.buttons["Back to \(wanted)"].firstMatch.tap()
+        back(from: "Side Questions")
         let sideRow = app.buttons.containing(NSPredicate(format: "label BEGINSWITH 'Side question'")).firstMatch
         XCTAssertTrue(sideRow.waitForExistence(timeout: 15), "no row for the side questions")
         shot(app, "sub-2-row")
@@ -362,21 +369,40 @@ final class VisorProbe: XCTestCase {
         // The reply alone, not the prompt that holds the same word.
         XCTAssertTrue(app.staticTexts["FORKED"].firstMatch.waitForExistence(timeout: 90), "the fork did not answer")
         shot(app, "sub-3-fork")
-        app.buttons["Back to \(wanted)"].firstMatch.tap()
+        back(from: "Fork of \(wanted)")
         let forkRow = app.buttons.containing(NSPredicate(format: "label BEGINSWITH 'Fork'")).firstMatch
         XCTAssertTrue(forkRow.waitForExistence(timeout: 15), "no row for the fork")
         shot(app, "sub-4-rows")
 
         // The list: the session's card with a capsule each, and the fork
         // under it rather than a card of its own.
-        let back = app.navigationBars.buttons.element(boundBy: 0)
-        if back.exists { back.tap() }
+        back(from: "\(wanted)")
         let capsules = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Fork: ' OR label BEGINSWITH 'Side question: '"))
         XCTAssertTrue(capsules.firstMatch.waitForExistence(timeout: 15), "no capsules under the session's card")
         let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'session-'"))
         // The card's identifier is on each of its parts too: its sessions, once each.
         XCTAssertEqual(Set(cards.allElementsBoundByIndex.map(\.identifier)).count, 1, "a card for the session alone: its forks are its capsules")
         shot(app, "sub-5-capsules")
+
+        // A subagent: its row above the composer, and its conversation.
+        app.cells.containing(NSPredicate(format: "label CONTAINS %@", wanted)).firstMatch.tap()
+        say("Use your Agent tool once, with subagent_type general-purpose and the description \"Add two numbers\", to ask a subagent what 2 + 2 is (it should answer with just the number). Then reply with just DONE.")
+        let subagentRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Subagent: Add two numbers'")).firstMatch
+        XCTAssertTrue(subagentRow.waitForExistence(timeout: 120), "no row for the subagent")
+        shot(app, "sub-6-subagent-row")
+        subagentRow.tap()
+        XCTAssertTrue(app.staticTexts["4"].firstMatch.waitForExistence(timeout: 60), "the subagent's conversation did not show")
+        shot(app, "sub-7-subagent")
+        // Back from its page is the session's chat.
+        back(from: "Add two numbers")
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")).firstMatch
+                          .waitForExistence(timeout: 10), "Back did not return to the session's chat")
+        // Settled, with the composer in sight: a page opened over a focused
+        // field gave the keyboard back on Back, over the composer.
+        Thread.sleep(forTimeInterval: 2)
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(!keyboard.exists || composer().frame.maxY <= keyboard.frame.minY, "the composer is under the keyboard")
+        shot(app, "sub-8-back")
     }
 
     /// Every fixture screen (VisorFixture), each from a fresh launch with

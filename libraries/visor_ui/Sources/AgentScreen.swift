@@ -34,6 +34,9 @@ struct AgentScreen: View {
     @State private var showInspector = false
     /// A fork or branch whose ✕ was tapped, while the person confirms.
     @State private var ending: SubSession?
+    /// The composer has the keyboard: taken down before a command opens a
+    /// page over the chat, which would give it back under the keyboard.
+    @FocusState private var composerFocused: Bool
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The session was ended from here: the screen has nothing left to show.
@@ -101,16 +104,6 @@ struct AgentScreen: View {
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
         .toolbar {
-            // A fork or branch leads back to the session it was made from:
-            // a mark of its own, not Back's chevron, which goes to the list.
-            if let parent = info?.parent {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { open(.session(SessionSelection(serverID: host.id, sessionID: parent))) } label: {
-                        Label(parentTitle(parent), systemImage: "arrow.uturn.left")
-                    }
-                    .accessibilityLabel("Back to \(parentTitle(parent))")
-                }
-            }
             ToolbarItem(placement: .primaryAction) {
                 Button { showInspector.toggle() } label: {
                     Image(systemName: "info.circle")
@@ -245,9 +238,17 @@ struct AgentScreen: View {
                 open(SubSessionList.selection(of: item, under: SessionSelection(serverID: host.id, sessionID: sessionID)))
             },
             endSubSession: { [host, sessionID] item in
-                // Side questions go at once; a fork or branch is asked about.
-                if item.id == SubSessionList.sideID { host.endSide(sessionID) } else { ending = item }
-            }
+                // Side questions and a subagent's row go at once; a fork or
+                // branch, a session of its own, is asked about.
+                if item.id == SubSessionList.sideID {
+                    host.endSide(sessionID)
+                } else if item.id.hasPrefix(SubSessionList.subagentPrefix) {
+                    host.closeSubagent(sessionID, agent: String(item.id.dropFirst(SubSessionList.subagentPrefix.count)))
+                } else {
+                    ending = item
+                }
+            },
+            focus: $composerFocused
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval, host: host, sessionID: sessionID, answering: $answering)
@@ -471,11 +472,6 @@ struct AgentScreen: View {
         }
     }
 
-    /// The title of the session this one was made from.
-    private func parentTitle(_ id: String) -> String {
-        host.sessions.first { $0.id == id }.map { $0.title.isEmpty ? $0.agent.title : $0.title } ?? "Session"
-    }
-
     private func send() {
         let text = draft.trimmed
         let paths = attachments.compactMap(\.path)
@@ -501,6 +497,7 @@ extension AgentScreen {
     /// made and opened once the computer has it.
     func perform(_ command: SubSessionCommand) {
         let here = SessionSelection(serverID: host.id, sessionID: sessionID)
+        composerFocused = false
         switch command {
         case .side(let question):
             if let question { host.askSide(sessionID, question: question) }

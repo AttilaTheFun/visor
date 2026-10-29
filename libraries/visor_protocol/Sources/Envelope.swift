@@ -255,6 +255,15 @@ extension Envelope {
     public static func endSide(session: String) -> Envelope {
         var e = Envelope(type: "endSide"); e.session = session; return e
     }
+    /// The person's words to one of `session`'s subagents (`id`): handed
+    /// to the session's agent to pass on, while the subagent runs.
+    public static func toSubagent(session: String, id: String, text: String) -> Envelope {
+        var e = Envelope(type: "toSubagent"); e.session = session; e.id = id; e.text = text; return e
+    }
+    /// The person closes one of `session`'s subagents: its row and capsule go.
+    public static func closeSubagent(session: String, id: String) -> Envelope {
+        var e = Envelope(type: "closeSubagent"); e.session = session; e.id = id; return e
+    }
     /// Moves a session's agent into a container on its computer (`true`) or
     /// out of it onto the computer itself (`false`): the same folder and
     /// conversation, its agent started again on the other side.

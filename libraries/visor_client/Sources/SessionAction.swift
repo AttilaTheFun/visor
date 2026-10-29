@@ -37,4 +37,9 @@ public enum SessionAction: Equatable, Sendable {
     case side(id: String, question: String)
     /// The session's side questions go.
     case endSide
+    /// The person's words for one of the session's subagents, by its id,
+    /// passed on by the session's agent.
+    case toSubagent(id: String, text: String)
+    /// The person is done with one of the session's subagents.
+    case closeSubagent(id: String)
 }
