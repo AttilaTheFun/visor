@@ -30,6 +30,10 @@ public protocol AgentHarness: AnyObject, Sendable {
     /// The account as the agent says it now, asked outright rather than
     /// heard from a session's turns; nil where it cannot be asked.
     func readAccount() async -> AgentAccount?
+    /// Where a branch made at a row of the agent's conversation `id` goes
+    /// on from, as the agent's process takes it (`AgentProcess.fork(at:)`);
+    /// nil where the agent cannot branch from a row.
+    func forkPoint(row: String, id: String, cwd: String) -> String?
 }
 
 public extension AgentHarness {
@@ -37,6 +41,7 @@ public extension AgentHarness {
     var available: Bool { ToolPath.resolve(tool) != nil }
     var commands: [SlashCommand] { [] }
     func readAccount() async -> AgentAccount? { nil }
+    func forkPoint(row: String, id: String, cwd: String) -> String? { nil }
     func adoptHistory(id: String, cwd: String) { _ = SessionCatalog.adoptHistory(agent: kind, id: id, cwd: cwd) }
     func resumable(cwd: String) -> [ResumableSession] { SessionCatalog.resumable(agent: kind, cwd: cwd) }
     func transcript(id: String, cwd: String, limit: Int) -> [TranscriptEntry] {

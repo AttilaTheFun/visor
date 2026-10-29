@@ -363,6 +363,8 @@ extension VisorServer {
         e.type = action
         e.session = record.info.id
         perform(e, from: nil)
+        // A fork answers with the sessions, its new one among them.
+        if action == "fork" { return .json(sessionsJSON()) }
         return .json(Envelope.sessions([record.info]).encoded())
     }
 

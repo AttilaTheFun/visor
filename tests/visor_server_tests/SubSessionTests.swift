@@ -3,6 +3,7 @@
 // own id, and copied by its agent as it starts; a side question is
 // answered on the parent's `side` without going into its conversation.
 
+import ClaudeTranscript
 import Foundation
 import VisorProtocol
 @testable import VisorServer
@@ -53,6 +54,7 @@ private final class SubHarness: AgentHarness {
     func catalog() -> AgentCatalog { AgentCatalog(agent: kind, models: [], defaultModel: "opus") }
     func transcript(id: String, cwd: String, limit: Int) -> [TranscriptEntry] { [] }
     func adoptHistory(id: String, cwd: String) {}
+    func forkPoint(row: String, id: String, cwd: String) -> String? { row == "nowhere" ? nil : "end-of-" + row }
 
     @MainActor func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess { SubAgent(resume: resume) }
 }
@@ -143,9 +145,9 @@ final class SubSessionTests: ServerTestCase {
         server.perform(.fork(id: "B", parent: "P", origin: .branch, at: "a1"), from: nil)
         let branch = try XCTUnwrap(server.session("B"))
         XCTAssertEqual(branch.info.title, "Branch of Parser")
-        XCTAssertEqual(branch.entries.map(\.id), ["u1", "a1"], "up to the point it goes on from")
+        XCTAssertEqual(branch.entries.map(\.id), ["u1", "a1"], "through the turn it goes on from")
         let agent = try XCTUnwrap(branch.process as? SubAgent)
-        XCTAssertEqual(agent.forkedAt, .some("a1"))
+        XCTAssertEqual(agent.forkedAt, .some("end-of-a1"), "at the end of that turn, in the agent's own terms")
         XCTAssertEqual(agent.said, [], "idle until the person says something")
     }
 
@@ -164,9 +166,31 @@ final class SubSessionTests: ServerTestCase {
         // An agent made again for a fork not yet copied makes the copy.
         server.perform(.fork(id: "G", parent: "P", origin: .branch, at: "u1"), from: nil)
         let branch = try XCTUnwrap(server.session("G"))
-        XCTAssertEqual(branch.stored.fork, PendingFork(from: "claude-p", at: "u1"), "kept across a restart")
+        XCTAssertEqual(branch.stored.fork, PendingFork(from: "claude-p", at: "end-of-u1"), "kept across a restart")
+        XCTAssertEqual(branch.entries.map(\.id), ["u1", "a1"], "a prompt's turn is its answer too")
         server.rebuild(branch)
-        XCTAssertEqual((branch.process as? SubAgent)?.forkedAt, .some("u1"))
+        XCTAssertEqual((branch.process as? SubAgent)?.forkedAt, .some("end-of-u1"))
+
+        // A row the agent cannot place is no branch.
+        server.perform(.fork(id: "H", parent: "P", origin: .branch, at: "nowhere"), from: nil)
+        XCTAssertNil(server.session("H"))
+    }
+
+    func testABranchAtARowGoesOnFromTheEndOfItsTurn() {
+        let records = [
+            ClaudeRecord(uuid: "r1", kind: .user(text: "Fix it", images: []), timestamp: nil),
+            ClaudeRecord(uuid: "r2", kind: .assistant(messageID: "msg_a", blocks: [], stopReason: nil, model: nil, usage: nil), timestamp: nil),
+            ClaudeRecord(uuid: "r3", kind: .assistant(messageID: "msg_a", blocks: [], stopReason: "tool_use", model: nil, usage: nil), timestamp: nil),
+            ClaudeRecord(uuid: "r4", kind: .toolResult(toolUseID: "t1", text: "ok", images: [], isError: false), timestamp: nil),
+            ClaudeRecord(uuid: "r5", kind: .assistant(messageID: "msg_b", blocks: [], stopReason: "end_turn", model: nil, usage: nil), timestamp: nil),
+            ClaudeRecord(uuid: "r6", kind: .user(text: "Now the lexer", images: []), timestamp: nil),
+            ClaudeRecord(uuid: "r7", kind: .assistant(messageID: "msg_c", blocks: [], stopReason: "end_turn", model: nil, usage: nil), timestamp: nil),
+        ]
+        XCTAssertEqual(ClaudeForkPoint.point(row: "msg_a", in: records), "r5", "a reply with tool calls: through their results, to the turn's end")
+        XCTAssertEqual(ClaudeForkPoint.point(row: "msg_a#1", in: records), "r5")
+        XCTAssertEqual(ClaudeForkPoint.point(row: "user-file-r1", in: records), "r5", "a prompt: through its answer")
+        XCTAssertEqual(ClaudeForkPoint.point(row: "msg_c", in: records), "r7")
+        XCTAssertNil(ClaudeForkPoint.point(row: "sending-abc", in: records), "a row not in the file yet")
     }
 
     func testNothingToForkBeforeTheConversationBegins() {

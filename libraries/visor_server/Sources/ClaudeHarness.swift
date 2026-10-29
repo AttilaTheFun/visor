@@ -9,6 +9,12 @@ public final class ClaudeHarness: AgentHarness {
     public static let efforts = ["low", "medium", "high", "xhigh", "max"]
     public let kind: AgentKind
     public let tool: String
+
+    /// Claude Code's own: the last record of the row's turn, which
+    /// `--resume-session-at` takes (the OpenRouter CLI takes none).
+    public func forkPoint(row: String, id: String, cwd: String) -> String? {
+        tool == "claude" ? ClaudeForkPoint.point(row: row, id: id, cwd: cwd) : nil
+    }
     private let models: [AgentModel]
 
     public init(kind: AgentKind, tool: String, models: [AgentModel]) {

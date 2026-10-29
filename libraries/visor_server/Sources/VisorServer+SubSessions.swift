@@ -22,6 +22,16 @@ extension VisorServer {
             return
         }
         let origin = envelope.origin ?? .fork
+        // A branch at a row goes on from the end of that row's turn.
+        var point: String?
+        if let at = envelope.at {
+            let harness = harnesses.harness(for: parent.info.agent)
+            guard let found = harness?.forkPoint(row: at, id: from, cwd: parent.info.cwd) else {
+                client?.send(.error("\(parent.info.agent.title)'s conversation can't be branched from that message."))
+                return
+            }
+            point = found
+        }
         let id = envelope.id ?? UUID().uuidString
         let given = (envelope.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         var info = SessionInfo(id: id, agent: parent.info.agent, cwd: parent.info.cwd,
@@ -33,9 +43,9 @@ extension VisorServer {
         // Its agent runs where the parent's does: in a container, the same
         // one, which holds the parent's conversation.
         info.container = parent.info.container
-        let past = Self.rows(parent.entries, through: envelope.at)
+        let past = Self.rows(parent.entries, throughTurnOf: envelope.at)
         let record = SessionRecord(info: info, process: makeProcess(info, resume: from), entries: past)
-        guard record.startFork(PendingFork(from: from, at: envelope.at)) else {
+        guard record.startFork(PendingFork(from: from, at: point)) else {
             client?.send(.error("\(parent.info.agent.title) cannot fork a conversation."))
             return
         }
@@ -57,11 +67,13 @@ extension VisorServer {
         }
     }
 
-    /// A conversation's rows up to and including `id` (all of them when
-    /// it is nil, or not among them).
-    static func rows(_ rows: [TranscriptEntry], through id: String?) -> [TranscriptEntry] {
+    /// A conversation's rows through the end of the turn holding `id`, up
+    /// to the next of the person's (all of them when it is nil, or not
+    /// among them).
+    static func rows(_ rows: [TranscriptEntry], throughTurnOf id: String?) -> [TranscriptEntry] {
         guard let id, let index = rows.firstIndex(where: { $0.id == id }) else { return rows }
-        return Array(rows[...index])
+        let end = rows[(index + 1)...].firstIndex { $0.role == .user } ?? rows.endIndex
+        return Array(rows[..<end])
     }
 
     /// `side`: a side question about a session's conversation, asked of

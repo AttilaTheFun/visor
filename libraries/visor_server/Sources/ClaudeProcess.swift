@@ -122,7 +122,12 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
 
     public var processID: Int32? { running()?.pid }
 
-    public func resume(at message: String?) { resumeAt = message }
+    public func resume(at message: String?) {
+        // A fork not yet made keeps the point it copies the conversation
+        // to: it is no branch the file went on to elsewhere.
+        guard !forking else { return }
+        resumeAt = message
+    }
 
     /// Claude Code's own `--fork-session`, with `--resume-session-at` for a
     /// branch: the OpenRouter CLI takes neither.
