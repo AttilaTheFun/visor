@@ -377,6 +377,16 @@ final class VisorProbe: XCTestCase {
         // The card's identifier is on each of its parts too: its sessions, once each.
         XCTAssertEqual(Set(cards.allElementsBoundByIndex.map(\.identifier)).count, 1, "a card for the session alone: its forks are its capsules")
         shot(app, "sub-5-capsules")
+
+        // A subagent: its row above the composer, and its conversation.
+        app.cells.containing(NSPredicate(format: "label CONTAINS %@", wanted)).firstMatch.tap()
+        say("Use your Agent tool once, with subagent_type general-purpose and the description \"Add two numbers\", to ask a subagent what 2 + 2 is (it should answer with just the number). Then reply with just DONE.")
+        let subagentRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Subagent: Add two numbers'")).firstMatch
+        XCTAssertTrue(subagentRow.waitForExistence(timeout: 120), "no row for the subagent")
+        shot(app, "sub-6-subagent-row")
+        subagentRow.tap()
+        XCTAssertTrue(app.staticTexts["4"].firstMatch.waitForExistence(timeout: 60), "the subagent's conversation did not show")
+        shot(app, "sub-7-subagent")
     }
 
     /// Every fixture screen (VisorFixture), each from a fresh launch with
