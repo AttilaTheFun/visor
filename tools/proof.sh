@@ -1,9 +1,7 @@
 #!/bin/bash
-# The proof of a commit, made on this Mac or a test VM instead of in CI
-# (CI runs the fast tests and builds; the snapshots and UI tests, slow,
-# run here): what CI's ios-ui and mac-screens
-# jobs made, in the same folders, for an agent to publish to the review
-# server tagged with the commit (releases: //reviews/harnesses:publish_proof).
+# The proof's screens and UI cases, made on this Mac or a test VM: CI makes
+# the proof itself (tools/ci/mac_vm_proof.sh, in a leased VM), and this is a
+# look before pushing.
 #
 #   tools/proof.sh                 -> .proof/ (or $PROOF_DIR)
 #     ios-portrait/, ios-landscape/  the fixture's screens (screens/fixture-*.png) and the UI cases, each
