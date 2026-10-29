@@ -101,11 +101,12 @@ struct AgentScreen: View {
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
         .toolbar {
-            // A fork or branch leads back to the session it was made from.
+            // A fork or branch leads back to the session it was made from:
+            // a mark of its own, not Back's chevron, which goes to the list.
             if let parent = info?.parent {
-                ToolbarItem(placement: .navigation) {
+                ToolbarItem(placement: .primaryAction) {
                     Button { open(.session(SessionSelection(serverID: host.id, sessionID: parent))) } label: {
-                        Label(parentTitle(parent), systemImage: "chevron.backward")
+                        Label(parentTitle(parent), systemImage: "arrow.uturn.left")
                     }
                     .accessibilityLabel("Back to \(parentTitle(parent))")
                 }

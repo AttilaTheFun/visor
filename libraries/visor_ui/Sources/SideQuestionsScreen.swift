@@ -35,9 +35,11 @@ struct SideQuestionsScreen: View {
         .navigationTitle("Side Questions")
         .toolbarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
+            // Back to the session: a mark of its own, not Back's chevron,
+            // which goes to the list.
+            ToolbarItem(placement: .primaryAction) {
                 Button { open(parent) } label: {
-                    Label(info?.title ?? "Session", systemImage: "chevron.backward")
+                    Label(info?.title ?? "Session", systemImage: "arrow.uturn.left")
                 }
                 .accessibilityLabel("Back to \(info?.title ?? "the session")")
             }
