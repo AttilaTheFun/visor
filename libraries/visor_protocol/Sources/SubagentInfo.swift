@@ -10,11 +10,14 @@ public struct SubagentInfo: Codable, Hashable, Sendable, Identifiable {
     public var type: String
     /// Still working.
     public var running: Bool
+    /// The agent's call that sent it off (Claude's Agent tool use).
+    public var call: String?
 
-    public init(id: String, description: String, type: String, running: Bool) {
+    public init(id: String, description: String, type: String, running: Bool, call: String? = nil) {
         self.id = id
         self.description = description
         self.type = type
         self.running = running
+        self.call = call
     }
 }

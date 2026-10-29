@@ -14,7 +14,8 @@ extension VisorServer {
     /// while they work, and once more at the end of each turn.
     func noteSubagents(after event: AgentEvent, of record: SessionRecord) {
         switch event {
-        case .toolStarted(_, let name, _, _) where TurnStatus.kind(of: name) == .subagent:
+        case .toolStarted(let call, let name, _, _) where TurnStatus.kind(of: name) == .subagent:
+            record.subagentCalls.insert(call)
             // Its files are written a moment after the call.
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(1))
@@ -41,7 +42,9 @@ extension VisorServer {
         guard record.pendingFork == nil, let id = record.process.resumeID,
               let harness = harnesses.harness(for: record.info.agent) else { return }
         let all = harness.subagents(id: id, cwd: record.info.cwd)
-        for agent in all where agent.running { record.watchedSubagents.insert(agent.id) }
+        for agent in all where agent.running || agent.call.map(record.subagentCalls.contains) == true {
+            record.watchedSubagents.insert(agent.id)
+        }
         let shown = all.filter { !record.closedSubagents.contains($0.id) && record.watchedSubagents.contains($0.id) }
         guard shown != record.info.subagents else { return }
         record.info.subagents = shown

@@ -101,6 +101,10 @@ public final class SessionRecord {
     /// or not, until the person closes each. Ones from before (a long
     /// session's history) are not.
     var watchedSubagents: Set<String> = []
+    /// The agent's calls that sent a subagent off while this server
+    /// watched: one that finished before it was first read is seen all the
+    /// same.
+    var subagentCalls: Set<String> = []
     var closedSubagents: Set<String> = []
     /// When the agent's subagents were last read: at most every two
     /// seconds while they work.

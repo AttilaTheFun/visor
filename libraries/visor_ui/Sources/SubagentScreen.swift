@@ -14,7 +14,6 @@ struct SubagentScreen: View {
     var host: AgentServerConnection
     let sessionID: String
     let agentID: String
-    let open: SelectionAction
     @State private var draft = ""
     @State private var rows: [TranscriptEntry] = []
     @State private var loaded = false
@@ -27,7 +26,6 @@ struct SubagentScreen: View {
         guard let subagent else { return "Subagent" }
         return subagent.description.isEmpty ? subagent.type : subagent.description
     }
-    private var parent: ContentSelection { .session(SessionSelection(serverID: host.id, sessionID: sessionID)) }
     private var agentName: String { session?.agent.title ?? "the agent" }
 
     var body: some View {
@@ -43,22 +41,6 @@ struct SubagentScreen: View {
         }
         .navigationTitle(title)
         .toolbarTitleDisplayMode(.inline)
-        .toolbar {
-            // Back to the session: a mark of its own, not Back's chevron,
-            // which goes to the list.
-            ToolbarItem(placement: .primaryAction) {
-                Button { open(parent) } label: {
-                    Label(session?.title ?? "Session", systemImage: "arrow.uturn.left")
-                }
-                .accessibilityLabel("Back to \(session?.title ?? "the session")")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("Close") {
-                    host.closeSubagent(sessionID, agent: agentID)
-                    open(parent)
-                }
-            }
-        }
         // Read again every two seconds while it works, and once after.
         .task(id: running) {
             repeat {

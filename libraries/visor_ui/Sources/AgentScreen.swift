@@ -101,16 +101,6 @@ struct AgentScreen: View {
         // button, a pane beside the chat where there is room, a sheet on a
         // phone.
         .toolbar {
-            // A fork or branch leads back to the session it was made from:
-            // a mark of its own, not Back's chevron, which goes to the list.
-            if let parent = info?.parent {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { open(.session(SessionSelection(serverID: host.id, sessionID: parent))) } label: {
-                        Label(parentTitle(parent), systemImage: "arrow.uturn.left")
-                    }
-                    .accessibilityLabel("Back to \(parentTitle(parent))")
-                }
-            }
             ToolbarItem(placement: .primaryAction) {
                 Button { showInspector.toggle() } label: {
                     Image(systemName: "info.circle")
@@ -476,11 +466,6 @@ struct AgentScreen: View {
                 if file.path != nil { attachments.append(file) }
             }
         }
-    }
-
-    /// The title of the session this one was made from.
-    private func parentTitle(_ id: String) -> String {
-        host.sessions.first { $0.id == id }.map { $0.title.isEmpty ? $0.agent.title : $0.title } ?? "Session"
     }
 
     private func send() {

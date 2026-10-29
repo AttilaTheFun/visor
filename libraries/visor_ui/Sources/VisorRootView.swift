@@ -21,12 +21,17 @@ public struct VisorRootView: View {
     /// The app has been in the background since it was last in front.
     @State private var wasInBackground = false
     @State private var columns: NavigationSplitViewVisibility = .all
-    @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     /// What the open session's screen calls when its session is ended.
     @State private var endSession = ViewAction()
     /// What a session's page or row opens: its fork, its branch, its side
-    /// questions, or the session it was made from.
+    /// questions, a subagent, or another session.
     @State private var openSelection = SelectionAction()
+    /// The pages pushed over the open session's chat (SubSessionRoute), and
+    /// those to push once a session opened from the list is on screen.
+    @State private var subPath: [SubSessionRoute] = []
+    @State private var pendingPath: [SubSessionRoute]?
+    /// What a fork's or branch's page calls when it is ended there.
+    @State private var popSubPage = ViewAction()
     @State private var composing = false
     @State private var renamingSession: SessionTarget?
     /// The session moving into a container, its size being chosen.
@@ -64,7 +69,8 @@ public struct VisorRootView: View {
         // What the open session's screen calls when the session is ended
         // there: held across passes, so the screen compares equal.
         endSession.run = { selection = nil }
-        openSelection.run = { selection = $0 }
+        openSelection.run = { open($0) }
+        popSubPage.run = { if !subPath.isEmpty { subPath.removeLast() } }
         return root
             // Screenshots: one look, whatever the device's.
             .preferredColorScheme(VisorFixture.appearance == "dark" ? .dark : VisorFixture.appearance == "light" ? .light : nil)
@@ -89,15 +95,18 @@ public struct VisorRootView: View {
     }
 
     private var computers: some View {
-        SplitView(columns: $columns, compactColumn: $compactColumn) {
+        // No preferred compact column: on a phone the list's selection says
+        // what shows, as in Reviews. Bound, SwiftUI set it to the sidebar as
+        // a page over the chat was popped, and Back went past the chat.
+        NavigationSplitView(columnVisibility: $columns) {
             sidebar
         } detail: {
             detailView
         }
+        .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $composing) {
             ComposeSessionSheet(store: store) { serverID, id in
                 selection = .session(SessionSelection(serverID: serverID, sessionID: id))
-                if compact { compactColumn = .detail }
             }
         }
         .itemSheet($sizingContainer) { target in
@@ -106,7 +115,6 @@ public struct VisorRootView: View {
         .itemSheet($migrating) { migration in
             MigrationSheet(migration: migration) { id in
                 selection = .session(SessionSelection(serverID: migration.to.id, sessionID: id))
-                if compact { compactColumn = .detail }
             }
         }
         .itemSheet($locating) { target in
@@ -194,7 +202,10 @@ public struct VisorRootView: View {
             #endif
         }
         .onChange(of: selection) { _, value in
-            if compact, compactColumn != (value == nil ? .sidebar : .detail) { compactColumn = value == nil ? .sidebar : .detail }
+            // Another session's chat starts with nothing over it, or with
+            // the page it was opened for (a capsule in the list).
+            subPath = pendingPath ?? []
+            pendingPath = nil
             // Which session is on screen, so a notification about it, with
             // the app in front, is not shown over it.
             store.noteViewing(serverID: value?.session?.serverID, sessionID: value?.session?.sessionID)
@@ -219,20 +230,15 @@ public struct VisorRootView: View {
             guard let target, let host = store.server(named: target.computer) else { return }
             store.opening = nil
             selection = .session(SessionSelection(serverID: host.id, sessionID: target.session))
-            if compact { compactColumn = .detail }
         }
         // A sign-in link: its computer's settings, where it is signed in to.
         .onChange(of: store.openingSettings) { _, address in
             guard let address, let host = store.server(named: address) else { return }
             store.openingSettings = nil
             selection = .computer(serverID: host.id)
-            if compact { compactColumn = .detail }
         }
         // Backing out on a phone is deselecting: the row is no longer
         // open, so it is no longer lit, and tapping it opens it again.
-        .onChange(of: compactColumn) { _, column in
-            if compact, column == .sidebar, selection != nil { selection = nil }
-        }
     }
 
     /// Screenshot tests: straight to the screen asked for, without the
@@ -249,7 +255,6 @@ public struct VisorRootView: View {
             if let host = store.servers.first(where: { $0.sessions.contains { $0.id == id } }) {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 selection = .session(SessionSelection(serverID: host.id, sessionID: id))
-                if compact { compactColumn = .detail }
                 return
             }
         }
@@ -264,10 +269,8 @@ public struct VisorRootView: View {
             switch screen {
             case "chat", "inspector", "models", "learns-earlier", "arrivals", "burst", "torrent", "question", "commands":
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
-                if compact { compactColumn = .detail }
             case "goal", "earlier":
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))
-                if compact { compactColumn = .detail }
             case "search":
                 search = VisorFixture.searchQuery
             case "new-session":
@@ -312,12 +315,9 @@ public struct VisorRootView: View {
     /// removed. The last section adds a computer. Search narrows the rows
     /// in every section at once.
     private var outline: some View {
-        // The selection and, on a phone, the column it shows, in one write:
-        // set one after the other (the column in onChange), each was a pass.
-        List(selection: Binding(get: { selection }, set: { value in
-            selection = value
-            if compact, compactColumn != (value == nil ? .sidebar : .detail) { compactColumn = value == nil ? .sidebar : .detail }
-        })) {
+        // On a phone the selection is what shows: a session's chat, or the
+        // list again once Back clears it.
+        List(selection: $selection) {
             ForEach(store.servers) { host in
                 HostSection(host: host) { host in hostRows(host) }
             }
@@ -490,6 +490,24 @@ public struct VisorRootView: View {
     // MARK: Detail — the agent
 
     @ViewBuilder private var detailView: some View {
+        // One stack, always there, whatever is selected (as Reviews has it):
+        // a stack made only for a session, and made again for each, took
+        // Back from a page over the chat past the chat to the list on a
+        // collapsed phone.
+        NavigationStack(path: $subPath) {
+            detailRoot
+                // The detail takes the window's slack, so the sidebar opens at
+                // its own width instead of stretching to its maximum.
+                .navigationSplitViewColumnWidth(min: 320, ideal: 720)
+                .navigationDestination(for: SubSessionRoute.self) { route in
+                    if let which = selection?.session, let host = store.server(for: which.serverID) { subPage(route, host: host) }
+                }
+        }
+    }
+
+    /// What is selected: a computer's or a project's settings, an archive,
+    /// a session's chat, or nothing.
+    @ViewBuilder private var detailRoot: some View {
         Group {
             if case .computer(let serverID) = selection, let host = store.server(for: serverID) {
                 ComputerSettingsView(host: host, forget: {
@@ -512,22 +530,59 @@ public struct VisorRootView: View {
                 ArchivedList(host: host, cwd: nil, openProject: { selection = .project(serverID: serverID, cwd: $0) })
                     .id(serverID + "|archive")
             } else if let which = selection?.session, let host = store.server(for: which.serverID) {
+                // The session's chat, with its forks, side questions and
+                // subagents pushed over it: Back returns to the chat.
                 AgentScreen(host: host, sessionID: which.sessionID, ended: endSession, open: openSelection)
                     .id(which)
-            } else if case .side(let which) = selection, let host = store.server(for: which.serverID) {
-                SideQuestionsScreen(host: host, sessionID: which.sessionID, open: openSelection)
-                    .id(which.sessionID + "|side")
-            } else if case .subagent(let which, let agent) = selection, let host = store.server(for: which.serverID) {
-                SubagentScreen(host: host, sessionID: which.sessionID, agentID: agent, open: openSelection)
-                    .id(which.sessionID + "|subagent|" + agent)
             } else {
                 EmptyDetail(title: "Nothing selected",
                             subtitle: store.servers.isEmpty ? "Connect a computer first." : "Pick a computer, a project or a session, or tap compose to start one.")
             }
         }
-        // The detail takes the window's slack, so the sidebar opens at its
-        // own width instead of stretching to its maximum.
-        .navigationSplitViewColumnWidth(min: 320, ideal: 720)
+    }
+
+    /// A page pushed over a session's chat.
+    @ViewBuilder private func subPage(_ route: SubSessionRoute, host: AgentServerConnection) -> some View {
+        switch route {
+        case .session(let id): AgentScreen(host: host, sessionID: id, ended: popSubPage, open: openSelection)
+        case .side(let id): SideQuestionsScreen(host: host, sessionID: id)
+        case .subagent(let id, let agent): SubagentScreen(host: host, sessionID: id, agentID: agent)
+        }
+    }
+
+    /// What a page or a row opens. A session's side questions, a subagent,
+    /// or a fork or branch are pages over the chat of the session they came
+    /// from; anything else is selected.
+    private func open(_ target: ContentSelection) {
+        switch target {
+        case .side(let session):
+            push(.side(session.sessionID), over: session)
+        case .subagent(let session, let agent):
+            push(.subagent(session: session.sessionID, agent: agent), over: session)
+        case .session(let which):
+            if let host = store.server(for: which.serverID), let parent = host.sessions.first(where: { $0.id == which.sessionID })?.parent {
+                push(.session(which.sessionID), over: SessionSelection(serverID: which.serverID, sessionID: parent))
+            } else if selection?.session == which {
+                subPath = []
+            } else {
+                selection = target
+            }
+        default:
+            selection = target
+        }
+    }
+
+    /// `route` over `parent`'s chat: on the stack when that chat is open,
+    /// or a page over it is; else that chat is opened with it.
+    private func push(_ route: SubSessionRoute, over parent: SessionSelection) {
+        if selection?.session == parent {
+            subPath = [route]
+        } else if selection?.session?.serverID == parent.serverID, let index = subPath.firstIndex(of: .session(parent.sessionID)) {
+            subPath = Array(subPath[...index]) + [route]
+        } else {
+            pendingPath = [route]
+            selection = .session(parent)
+        }
     }
 
     /// Removing a session drops Visor's handle, not the agent's own copy.

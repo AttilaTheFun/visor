@@ -19,7 +19,7 @@ public final class ClaudeHarness: AgentHarness {
     /// Claude Code's, kept beside the session's file (ClaudeSubagent).
     public func subagents(id: String, cwd: String) -> [SubagentInfo] {
         guard tool == "claude", let file = ClaudeSessionFiles.locate(sessionID: id, cwd: cwd) else { return [] }
-        return ClaudeSubagent.all(of: file).map { SubagentInfo(id: $0.id, description: $0.description, type: $0.type, running: !$0.finished) }
+        return ClaudeSubagent.all(of: file).map { SubagentInfo(id: $0.id, description: $0.description, type: $0.type, running: !$0.finished, call: $0.toolUseID) }
     }
 
     public func subagentTranscript(id: String, cwd: String, subagent: String) -> [TranscriptEntry] {

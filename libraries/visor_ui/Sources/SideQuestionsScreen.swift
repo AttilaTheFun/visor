@@ -1,7 +1,7 @@
 // A session's side questions (`/btw`): asked of its agent beside the
 // conversation, and answered without going into it, even while the agent
-// works. A page of their own, opened from the session's row above its
-// composer; ending them takes them away.
+// works. A page of their own, pushed over the session's chat from its row
+// above the composer; the row's ✕ ends them.
 
 import AgentUI
 import SwiftUI
@@ -12,14 +12,12 @@ import VisorProtocol
 struct SideQuestionsScreen: View {
     var host: AgentServerConnection
     let sessionID: String
-    let open: SelectionAction
     @State private var draft = ""
 
     /// Read from the list, which says each question and its answer.
     private var info: SessionInfo? { host.sessions.first { $0.id == sessionID } }
     private var questions: [SideQuestion] { info?.side ?? [] }
     private var agent: String { info?.agent.title ?? "The agent" }
-    private var parent: ContentSelection { .session(SessionSelection(serverID: host.id, sessionID: sessionID)) }
 
     var body: some View {
         AgentView(messages: Self.rows(questions),
@@ -34,23 +32,6 @@ struct SideQuestionsScreen: View {
         }
         .navigationTitle("Side Questions")
         .toolbarTitleDisplayMode(.inline)
-        .toolbar {
-            // Back to the session: a mark of its own, not Back's chevron,
-            // which goes to the list.
-            ToolbarItem(placement: .primaryAction) {
-                Button { open(parent) } label: {
-                    Label(info?.title ?? "Session", systemImage: "arrow.uturn.left")
-                }
-                .accessibilityLabel("Back to \(info?.title ?? "the session")")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("End") {
-                    host.endSide(sessionID)
-                    open(parent)
-                }
-                .disabled(questions.isEmpty)
-            }
-        }
     }
 
     /// Each question as the person's row, and its answer, or why there is

@@ -123,10 +123,17 @@ final class SubagentTests: ServerTestCase {
         server.perform(.toSubagent(session: "P", id: "a1", text: "Anything else?"), from: nil)
         XCTAssertEqual(agent.said.count, 1, "a finished subagent is no longer reached through the session's agent")
 
-        server.perform(.closeSubagent(session: "P", id: "a1"), from: nil)
-        XCTAssertTrue(record.info.subagents.isEmpty)
+        // One that finished before it was first read, but whose call was
+        // seen starting, is listed all the same.
+        server.handle(.toolStarted(id: "toolu_quick", name: "Agent", label: "Waiting: Quick", tasks: nil), from: record)
+        harness.listed.withLock { $0.append(SubagentInfo(id: "q1", description: "Quick", type: "Explore", running: false, call: "toolu_quick")) }
         server.refreshSubagents(of: record)
-        XCTAssertTrue(record.info.subagents.isEmpty, "closed stays closed")
+        XCTAssertEqual(record.info.subagents.map(\.id), ["a1", "q1"])
+
+        server.perform(.closeSubagent(session: "P", id: "a1"), from: nil)
+        XCTAssertEqual(record.info.subagents.map(\.id), ["q1"])
+        server.refreshSubagents(of: record)
+        XCTAssertEqual(record.info.subagents.map(\.id), ["q1"], "closed stays closed")
         XCTAssertEqual(record.stored.closedSubagents, ["a1"])
     }
 }
