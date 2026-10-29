@@ -15,6 +15,18 @@ public final class ClaudeHarness: AgentHarness {
     public func forkPoint(row: String, id: String, cwd: String) -> String? {
         tool == "claude" ? ClaudeForkPoint.point(row: row, id: id, cwd: cwd) : nil
     }
+
+    /// Claude Code's, kept beside the session's file (ClaudeSubagent).
+    public func subagents(id: String, cwd: String) -> [SubagentInfo] {
+        guard tool == "claude", let file = ClaudeSessionFiles.locate(sessionID: id, cwd: cwd) else { return [] }
+        return ClaudeSubagent.all(of: file).map { SubagentInfo(id: $0.id, description: $0.description, type: $0.type, running: !$0.finished) }
+    }
+
+    public func subagentTranscript(id: String, cwd: String, subagent: String) -> [TranscriptEntry] {
+        guard tool == "claude", let file = ClaudeSessionFiles.locate(sessionID: id, cwd: cwd),
+              let agent = ClaudeSubagent.all(of: file).first(where: { $0.id == subagent }) else { return [] }
+        return TranscriptAssembler.rows(in: ClaudeBranch.current(of: ClaudeTranscriptParser.lines(contentsOf: agent.transcript, sidechain: true)).records)
+    }
     private let models: [AgentModel]
 
     public init(kind: AgentKind, tool: String, models: [AgentModel]) {

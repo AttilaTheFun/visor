@@ -97,6 +97,14 @@ public final class SessionRecord {
     /// A fork or branch whose agent has not made its copy yet: every agent
     /// made for it makes it, until one has.
     private(set) var pendingFork: PendingFork?
+    /// Subagents seen running while this server watched: listed, finished
+    /// or not, until the person closes each. Ones from before (a long
+    /// session's history) are not.
+    var watchedSubagents: Set<String> = []
+    var closedSubagents: Set<String> = []
+    /// When the agent's subagents were last read: at most every two
+    /// seconds while they work.
+    var subagentsRead: ContinuousClock.Instant?
     /// Being read again on the newest branch, at the user's word: the next
     /// reading starts the clients over, and is no fork to tell of.
     var switchingBranch = false
@@ -205,7 +213,9 @@ public final class SessionRecord {
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
         StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
-                             otherBranch: otherBranch, branchKept: branchKept ? true : nil, fork: pendingFork)
+                             otherBranch: otherBranch, branchKept: branchKept ? true : nil, fork: pendingFork,
+                             watchedSubagents: watchedSubagents.isEmpty ? nil : watchedSubagents.sorted(),
+                             closedSubagents: closedSubagents.isEmpty ? nil : closedSubagents.sorted())
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or

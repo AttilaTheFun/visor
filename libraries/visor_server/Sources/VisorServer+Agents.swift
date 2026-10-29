@@ -346,6 +346,7 @@ extension VisorServer {
         let reported = record.info.reportedModel
         // Nothing to say is nothing sent.
         broadcast(record.apply(event), session: record)
+        noteSubagents(after: event, of: record)
         switch event {
         case .context, .session, .background, .goal, .question, .manual:
             // These land in the session list, not an envelope (a question

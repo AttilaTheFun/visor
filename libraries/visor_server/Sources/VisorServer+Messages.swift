@@ -76,6 +76,8 @@ extension VisorServer {
         case "fork": performFork(envelope, from: client)
         case "side": performSide(envelope)
         case "endSide": performEndSide(envelope)
+        case "toSubagent": performToSubagent(envelope, from: client)
+        case "closeSubagent": performCloseSubagent(envelope)
         case "contain": performContain(envelope, from: client)
         // A client's heartbeat: answered at once, to that client only.
         case "ping": client?.send(.pong())

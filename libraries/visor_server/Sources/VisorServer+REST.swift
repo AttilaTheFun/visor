@@ -62,6 +62,14 @@ extension VisorServer {
             }
             return answerAccount(of: agent, respond: respond)
         }
+        // A subagent's conversation (VisorServer+Subagents.swift).
+        if request.method == "GET", parts.count == 4, parts[0] == "sessions", parts[2] == "subagents", authorized(request) {
+            guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
+            var e = Envelope.transcript(session: record.info.id, entries: subagentTranscript(of: record, agent: parts[3]), streaming: "",
+                                        activity: nil, busy: record.info.subagents.first { $0.id == parts[3] }?.running ?? false, error: nil)
+            e.id = parts[3]
+            return respond(.json(e.encoded()))
+        }
         if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "commands", authorized(request) {
             guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
             var e = Envelope(type: "commands")
@@ -355,7 +363,7 @@ extension VisorServer {
     private func restSessionAction(_ call: RESTCall) -> HTTPResponse {
         let action = call.parts[2]
         guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "stopAgent", "startAgent", "keepBranch", "continueBranch", "permissions", "settings",
-               "approve", "rename", "acknowledge", "signIn", "fork", "side", "endSide"].contains(action) else {
+               "approve", "rename", "acknowledge", "signIn", "fork", "side", "endSide", "toSubagent", "closeSubagent"].contains(action) else {
             return HTTPResponse(404, "{\"error\":\"unknown action\"}")
         }
         guard let record = session(call.parts[1]) else { return HTTPResponse(404, "{\"error\":\"no such session\"}") }

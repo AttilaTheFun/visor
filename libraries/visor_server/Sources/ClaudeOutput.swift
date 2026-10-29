@@ -39,9 +39,17 @@ enum ClaudeOutput: Sendable, Equatable {
     /// The answer to a control request of ours, by its id: what it said
     /// (a side question's answer), or why it would not.
     case controlResponse(id: String, answer: String?, error: String?)
+    /// A subagent said something (a message of its own, by the Agent call
+    /// it works for): not the session's thread, its status or its context.
+    case subagentWork(toolUseID: String)
 
     static func parse(_ line: String) -> [ClaudeOutput] {
         guard let object = JSON.object(line), let type = object["type"] as? String else { return [] }
+        // A subagent's messages carry the Agent call they belong to; its
+        // conversation is its own file (ClaudeSubagent).
+        if ["assistant", "user", "stream_event"].contains(type), let parent = object["parent_tool_use_id"] as? String, !parent.isEmpty {
+            return [.subagentWork(toolUseID: parent)]
+        }
         switch type {
         case "system":
             var outputs: [ClaudeOutput] = []

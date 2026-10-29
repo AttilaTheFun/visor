@@ -38,6 +38,8 @@ public enum AgentEvent: Sendable {
     /// What the agent has running in the background, whole, whenever it
     /// changes; empty when it waits on nothing.
     case background([StatusItem])
+    /// A subagent did something: the session's subagents may have changed.
+    case subagents
     /// The goal the agent itself says it works toward (Codex's), or none:
     /// met (`met`), or cleared.
     case goal(String?, met: Bool)

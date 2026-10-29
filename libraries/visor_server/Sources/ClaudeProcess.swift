@@ -378,6 +378,8 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             emit.yield(.limits(limits))
         case .background(let items):
             emit.yield(.background(items))
+        case .subagentWork:
+            emit.yield(.subagents)
         case .controlResponse(let id, let answer, let error):
             guard let waiting = sideAnswers.removeValue(forKey: id) else { return }
             if let answer {
