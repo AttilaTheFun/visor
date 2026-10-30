@@ -40,7 +40,9 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     /// rather than resuming it (`fork(at:)`), until the fork has its id.
     private var pendingFork: PendingFork?
     /// The fork being made: the first turn waits for its thread.
-    private var forkMade: Task<String?, Never>?
+    var forkMade: Task<String?, Never>?
+    /// Side questions being answered, by the thread each is asked on.
+    var sides: [String: Side] = [:]
     /// A turn asked for whose id has not come back: an interrupt asked for
     /// now is sent once it has (`turn/interrupt` names the turn).
     private var turnStarting = false
@@ -199,6 +201,9 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         let waiting = replies
         replies = [:]
         for continuation in waiting.values { continuation.resume(returning: Reply(error: "Codex's app server is gone")) }
+        let asked = sides
+        sides = [:]
+        for side in asked.values { side.done.resume(throwing: AgentProcessError.declined("Codex's app server is gone")) }
     }
 
     /// Codex's questions to the user (request_user_input), which it offers
@@ -247,7 +252,7 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         return id
     }
 
-    private func threadParams() -> [String: Any] {
+    func threadParams() -> [String: Any] {
         var params: [String: Any] = [
             "cwd": HostFolders.resolve(cwd),
             "approvalPolicy": "never",
@@ -313,9 +318,9 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     /// it is gone.
     private func follow(_ child: any AgentChild) {
         Task { [weak self] in
-            for await output in child.output.lines({ CodexOutput.parse($0) }) {
+            for await heard in child.output.lines({ CodexOutput.heard($0) }) {
                 guard let self else { return }
-                if self.child === child { self.take(output, from: child) }
+                if self.child === child { self.hear(heard, from: child) }
             }
             let exit = await child.exit.value
             guard let self, self.child === child else { return }
@@ -365,6 +370,22 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         emit.yield(.delta(message: item, text: text))
     }
 
+    /// What the app server says, by the thread it is of. The session's own
+    /// (or one not said) is the session's; a side question's goes to its
+    /// question; a subagent's is its own (its page reads its words from
+    /// its rollout), and the session hears only that it worked.
+    func hear(_ heard: CodexOutput.Heard, from child: any AgentChild) {
+        guard let thread = heard.thread, let threadID, thread != threadID else {
+            take(heard.output, from: child)
+            return
+        }
+        if sides[thread] != nil {
+            hearSide(heard.output, on: thread)
+        } else if case .turnCompleted = heard.output {
+            emit.yield(.subagents)
+        }
+    }
+
     private func take(_ output: CodexOutput, from child: any AgentChild) {
         switch output {
         case .reply(let id, let thread, let turn, let error, let goal):
@@ -399,6 +420,8 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         case .toolStarted(let id, let name, let label):
             emit.yield(.activity(label))
             emit.yield(.toolStarted(id: id, name: name, label: label, tasks: nil))
+        case .subagentActivity:
+            emit.yield(.subagents)
         case .reasoningStarted:
             emit.yield(.activity("Thinking…"))
             emit.yield(.thinking(true))

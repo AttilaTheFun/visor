@@ -3,11 +3,10 @@
 A session can open sub-sessions: a fork of it, a branch of it, a side
 question (`/btw`), or one of its agent's subagents. Each has a chat page
 of its own, opened from its parent.
-Status: 0.43. Built for Claude: forks, branches (`/branch`, and Branch
-from Here under a reply), side questions, and subagents (listed, read,
-messaged through the parent while they run, gone on with as sessions
-once finished); for Codex, forks and branches. Still to come: Codex's
-side questions and subagents, and Branch from Here on Codex.
+Status: 0.43. Built: forks, branches (`/branch`), side questions, and
+subagents (listed, read, messaged through the parent while they run, gone
+on with as sessions once finished), for Claude and Codex; Branch from Here
+under a reply, for Claude. Codex has no branch at a reply yet.
 
 ## What each one is
 
@@ -36,7 +35,10 @@ working.
   It takes `{question, history}`, where history is the earlier questions
   and answers, and answers `{response}`. It uses no tools. Tried against
   Claude Code 2.1.306 in `-p` stream-json mode, mid-session.
-- Codex: an ephemeral `thread/fork`, with a turn on it.
+- Codex: an ephemeral `thread/fork` (read-only, told to answer without
+  tools), with a turn on it carrying the earlier side questions and
+  answers; its answer is the turn's last message, and the copy is let go
+  (`thread/unsubscribe`). Tried against Codex 0.162.1.
 
 It is not a session of its own: the parent keeps its questions and
 answers, on the server, until the person ends it.
@@ -90,8 +92,16 @@ transcript, live.
 
 ## Talking to a subagent
 
-- **Codex:** its subagents are threads, so a turn is started on one
-  directly.
+- **Codex:** its subagents are threads of its app server, whose
+  notifications come on the session's connection, each under its own
+  thread: they are kept off the session's (its words are its page's, read
+  from its rollout after the copy of the conversation it began with; its
+  turn ending is not the session's). The session's rollout lists them
+  (`SubAgentActivity`, started and completed). While one runs, the
+  person's words go through the parent, which passes them on with
+  `send_message` to its path; once it has finished, its thread is resumed
+  as a session of its own. Its task reaches it encrypted, so its page
+  shows its work and answers, not what it was asked.
 - **Claude, while the subagent runs:** Claude's `-p` mode drops a person's
   message aimed at a subagent (a user message with `parent_tool_use_id`),
   and only the parent agent reaches a running subagent, with its

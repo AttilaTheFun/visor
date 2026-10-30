@@ -17,6 +17,9 @@ enum CodexOutput: Sendable {
     /// of it was streamed (Codex may send a message only whole).
     case messageCompleted(item: String, text: String)
     case toolStarted(id: String, name: String, label: String)
+    /// A subagent was sent off, or finished (`subAgentActivity`): the
+    /// session's subagents are read again.
+    case subagentActivity
     case reasoningStarted
     /// A turn began: one asked for, or one Codex started itself (working
     /// toward its goal, a review).
@@ -48,7 +51,19 @@ enum CodexOutput: Sendable {
     }
 
     static func parse(_ line: String) -> [CodexOutput] {
+        JSON.object(line).map(parse(object:)) ?? []
+    }
+
+    /// A line's outputs, each with the thread it is of where the line says
+    /// (a notification's `threadId`): the session's own, a subagent's, or
+    /// a side question's.
+    static func heard(_ line: String) -> [Heard] {
         guard let object = JSON.object(line) else { return [] }
+        let thread = (object["params"] as? [String: Any])?["threadId"] as? String
+        return parse(object: object).map { Heard(thread: thread, output: $0) }
+    }
+
+    private static func parse(object: [String: Any]) -> [CodexOutput] {
         if let id = object["id"] as? Int, object["method"] == nil {
             let result = object["result"] as? [String: Any]
             // A goal's answers carry the goal (null when there is none).
@@ -92,6 +107,13 @@ enum CodexOutput: Sendable {
                 return [.toolStarted(id: id, name: name, label: "\(name): \(short(JSON.summary(item["arguments"])))")]
             case "reasoning":
                 return [.reasoningStarted]
+            case "subAgentActivity":
+                guard item["kind"] as? String == "started" else { return [.subagentActivity] }
+                // The call that sent it off, as Claude's Agent call is.
+                let name = (item["agentPath"] as? String).map(subagentName) ?? "a subagent"
+                return [.toolStarted(id: id, name: "Agent", label: "Agent: \(name)"), .subagentActivity]
+            case "collabAgentToolCall" where item["tool"] as? String == "wait":
+                return [.toolStarted(id: id, name: "Wait", label: "Waiting: its subagents")]
             default:
                 return []
             }
@@ -140,6 +162,11 @@ enum CodexOutput: Sendable {
         default:
             return []
         }
+    }
+
+    /// A subagent by the last part of its path ("/root/arithmetic").
+    static func subagentName(_ path: String) -> String {
+        path.split(separator: "/").last.map(String.init) ?? path
     }
 
     private static func short(_ text: String, limit: Int = 80) -> String {

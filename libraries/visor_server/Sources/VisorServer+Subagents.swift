@@ -71,13 +71,8 @@ extension VisorServer {
             client?.send(.error("\(subagent.description.isEmpty ? "That subagent" : subagent.description) has finished."))
             return
         }
-        deliver(Self.wordsForSubagent(words, to: subagent), to: record)
-    }
-
-    /// What the session's agent is handed for one of its subagents.
-    static func wordsForSubagent(_ words: String, to subagent: SubagentInfo) -> String {
-        let named = subagent.description.isEmpty ? "your subagent" : "your subagent \u{201C}\(subagent.description)\u{201D}"
-        return "For \(named) (agent id \(subagent.id)), from me: pass this on to it with SendMessage, as it is, and go on with what you were doing.\n\n\(words)"
+        guard let harness = harnesses.harness(for: record.info.agent) else { return }
+        deliver(harness.wordsForSubagent(words, to: subagent), to: record)
     }
 
     /// `fork` with the `subagent` origin: a finished subagent's

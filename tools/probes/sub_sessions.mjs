@@ -5,12 +5,14 @@
 // (the branch knows only the first), then sends a subagent off (listed, its
 // conversation readable) and, once it has finished, goes on with it as a
 // session of its own (which knows its conversation). Ends them all.
-//   VISOR_PORT=7633 VISOR_TOKEN=<password> node tools/probes/sub_sessions.mjs
+//   VISOR_PORT=7633 VISOR_TOKEN=<password> [AGENT=codex] node tools/probes/sub_sessions.mjs
+// (Codex: no branch at a reply, which it can't make.)
 import http from 'node:http';
 const PORT = Number(process.env.VISOR_PORT ?? 7633);
 const PW = process.env.VISOR_TOKEN;
 if (!PW) { console.error('VISOR_TOKEN: the staging server\'s password'); process.exit(2); }
-const MODEL = process.env.MODEL ?? 'haiku';
+const AGENT = process.env.AGENT ?? 'claude';
+const MODEL = process.env.MODEL ?? (AGENT === 'claude' ? 'haiku' : '');
 const id = crypto.randomUUID().toUpperCase();
 const t0 = Date.now();
 const log = (...a) => console.log(((Date.now() - t0) / 1000).toFixed(2).padStart(6), ...a);
@@ -41,8 +43,8 @@ const lastReply = async sid => (await rows(sid)).filter(r => r.role === 'assista
 const send = async (sid, text) => { await rest('POST', `/sessions/${sid}/send`, { text }); await sleep(1500); await idle(sid); };
 
 log('start', id.slice(0, 8));
-await rest('POST', '/sessions', { id, agent: 'claude', cwd: '/tmp/visor-probe-sub', title: 'probe-sub', skipPermissions: true });
-await rest('POST', `/sessions/${id}/settings`, { model: MODEL });
+await rest('POST', '/sessions', { id, agent: AGENT, cwd: '/tmp/visor-probe-sub', title: 'probe-sub', skipPermissions: true });
+if (MODEL) await rest('POST', `/sessions/${id}/settings`, { model: MODEL });
 await send(id, 'Remember the word PELICAN. Reply with just OK.');
 await send(id, 'Also remember the word OTTER. Reply with just OK.');
 const before = await rows(id);
@@ -70,23 +72,29 @@ const forkReply = await lastReply(fork);
 log('fork says', JSON.stringify(forkReply));
 check(/PELICAN/i.test(forkReply) && /OTTER/i.test(forkReply), 'the fork knows both words');
 
-// A branch at the first reply.
+// A branch at the first reply (Claude Code's alone).
 const branch = crypto.randomUUID().toUpperCase();
-await rest('POST', `/sessions/${id}/fork`, { id: branch, origin: 'branch', at: firstReply });
-const branchRows = await rows(branch);
-check(branchRows.length === 2, `the branch shows the conversation through its first turn (${branchRows.length} rows)`);
-await send(branch, 'Which words did I ask you to remember? Just the words.');
-const branchReply = await lastReply(branch);
-log('branch says', JSON.stringify(branchReply));
-check(/PELICAN/i.test(branchReply) && !/OTTER/i.test(branchReply), 'the branch knows only the first word');
-check((await rows(id)).length === before.length, 'the parent is as it was');
+if (AGENT === 'claude') {
+  await rest('POST', `/sessions/${id}/fork`, { id: branch, origin: 'branch', at: firstReply });
+  const branchRows = await rows(branch);
+  check(branchRows.length === 2, `the branch shows the conversation through its first turn (${branchRows.length} rows)`);
+  await send(branch, 'Which words did I ask you to remember? Just the words.');
+  const branchReply = await lastReply(branch);
+  log('branch says', JSON.stringify(branchReply));
+  check(/PELICAN/i.test(branchReply) && !/OTTER/i.test(branchReply), 'the branch knows only the first word');
+  check((await rows(id)).length === before.length, 'the parent is as it was');
+}
 
 // A subagent: listed once seen running, its conversation readable, then
 // gone on with as a session of its own.
-await send(id, 'Use your Agent tool once, with subagent_type general-purpose and the description "Add two numbers", to ask a subagent what 2 + 2 is (it should answer with just the number). Then reply with just DONE.');
+const [sendOff, described] = AGENT === 'claude'
+  ? ['Use your Agent tool once, with subagent_type general-purpose and the description "Add two numbers", to ask a subagent what 2 + 2 is (it should answer with just the number). Then reply with just DONE.', 'Add two numbers']
+  : ['Spawn one subagent with your spawn_agent tool, with the task name "arithmetic", and ask it what 2 + 2 is (it should answer with just the number). Wait for it, then reply with just DONE.', 'arithmetic'];
+await send(id, sendOff);
 const seen = await until('a subagent listed', async () => (await info(id))?.subagents?.[0]);
 log('subagent', JSON.stringify(seen));
-check(seen?.description === 'Add two numbers', 'the subagent is listed with its description');
+check(seen?.description === described, 'the subagent is listed with its description');
+check(/DONE/.test(await lastReply(id)), "the session's turn ran to its end, past its subagent's");
 const agentRows = JSON.parse(await rest('GET', `/sessions/${id}/subagents/${seen?.id}`)).entries ?? [];
 log('subagent rows', agentRows.map(r => `${r.role}:${JSON.stringify((r.text ?? '').slice(0, 30))}`).join(' | '));
 check(agentRows.some(r => r.role === 'assistant' && /4/.test(r.text ?? '')), 'its conversation has its answer');
@@ -99,13 +107,13 @@ await sleep(1500); await idle(onward);
 const onwardInfo = await info(onward);
 log('onward', onwardInfo?.title, onwardInfo?.resumeCommand);
 check(onwardInfo?.parent === id && onwardInfo?.origin === 'subagent', 'the session names the session that sent the subagent off');
-check(onwardInfo?.title === 'Add two numbers', 'it is titled with what the subagent was sent to do');
+check(onwardInfo?.title === described, 'it is titled with what the subagent was sent to do');
 const onwardReply = await lastReply(onward);
 log('onward says', JSON.stringify(onwardReply));
-check(/2\s*\+\s*2/.test(onwardReply) && /4/.test(onwardReply), "it goes on with the subagent's conversation");
+check(/4/.test(onwardReply), "it goes on with the subagent's conversation");
 check(((await info(id))?.subagents ?? []).length === 0, "its row takes the subagent's place");
 check((await rows(id)).length === parentRows, 'the parent is as it was');
 
-for (const sid of [onward, branch, fork, id]) await rest('DELETE', `/sessions/${sid}`);
+for (const sid of [onward, branch, fork, id]) if (await info(sid)) await rest('DELETE', `/sessions/${sid}`);
 log('failures', failures);
 process.exit(failures ? 1 : 0);
