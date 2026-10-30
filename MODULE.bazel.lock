@@ -1809,7 +1809,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 9be64adfaf7901f78317e766662385fb0e86cc80d7d798348b6c4e17ac8bf53b"
+          "FILE:@@//third_party/swift_packages/Package.resolved c7eb1381ac793b052f0fb3b0a4e09f1220a0608e0f0d4f32943412658032912a"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1899,24 +1899,6 @@
               "commit": "feb21a6e9fe3aeac72c055c4092c34106a4f19df",
               "remote": "https://github.com/AttilaTheFun/swift_sql.git",
               "version": "0.35.0",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": ""
-            }
-          },
-          "swiftpkg_oss": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_oss",
-              "commit": "a389e0a7935352df07e00b3b4fa87c645487764f",
-              "remote": "https://github.com/AttilaTheFun/oss.git",
-              "version": "0.10.1",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -2066,7 +2048,6 @@
             "swiftpkg_agent_ui",
             "swiftpkg_swift_nio_ssh",
             "swiftpkg_swift_sql",
-            "swiftpkg_oss",
             "swift_package"
           ],
           "explicitRootModuleDirectDevDeps": [],

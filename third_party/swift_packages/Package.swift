@@ -24,11 +24,5 @@ let package = Package(
             url: "https://github.com/AttilaTheFun/swift_sql.git",
             exact: "0.35.0"
         ),
-        // oss's client (OSSClient): the machines sessions lease through
-        // the server, and the containers' build cache.
-        .package(
-            url: "https://github.com/AttilaTheFun/oss.git",
-            exact: "0.10.1"
-        ),
     ]
 )

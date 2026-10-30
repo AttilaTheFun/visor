@@ -26,8 +26,13 @@ swift_library(
 macos_application(
     name = "visor_menubar",
     # The agents' host, beside the app's own program: each session's agent
-    # runs under one, so a restart of the server leaves it working.
-    additional_contents = {"//applications/visor_agent_host:visor-agent-host": "Helpers"},
+    # runs under one, so a restart of the server leaves it working. And
+    # Visor's container host, used once it is linked onto the PATH or set
+    # (docs/container-host.md).
+    additional_contents = {
+        "//applications/visor_agent_host:visor-agent-host": "Helpers",
+        "//applications/visor_container_host:visor-container-host": "Helpers",
+    },
     app_icons = ["//artwork/app-icon:app_icon"],
     bundle_id = BUNDLE_ID,
     bundle_name = "Visor Server",

@@ -1,5 +1,7 @@
 # Agent tools (design)
 
+> Superseded (0.44): agents reach GitHub and OS Server through MCP servers Visor Server proxies (docs/protocol.md, Proxied MCP servers), and containers come from a container host (docs/container-host.md). Visor no longer has `visor machine` or OSSClient. Kept for the reasoning.
+
 What Visor puts in a session's hands, and how it keeps them narrow.
 Status: proposed. Nothing here is built beyond what "Today" says.
 

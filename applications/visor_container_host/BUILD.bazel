@@ -1,0 +1,30 @@
+load("@rules_apple//apple:macos.bzl", "macos_command_line_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# visor-container-host, Visor's container host over Apple's container
+# (docs/container-host.md, libraries/visor_container_host). On the PATH, or
+# set as the server's container host, it gives sessions their containers.
+#
+#   bazel build -c opt //applications/visor_container_host:visor-container-host
+swift_library(
+    name = "visor_container_host_lib",
+    copts = STRICT_SWIFT,
+    srcs = ["main.swift"],
+    module_name = "VisorContainerHostMain",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_container_host",
+    ],
+)
+
+macos_command_line_application(
+    name = "visor-container-host",
+    bundle_id = "com.LoganShire.VisorServer.containerHost",
+    # Its version, which `health` says (stamped by CI with the apps').
+    infoplists = ["Info.plist"],
+    minimum_os_version = "15.0",
+    deps = [":visor_container_host_lib"],
+)

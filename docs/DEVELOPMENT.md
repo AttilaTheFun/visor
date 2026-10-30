@@ -637,35 +637,37 @@ on|off` serves the socket file for SSH clients (Linux; not Windows),
 standalone on` keeps it to itself (see the protocol's network of
 computers); `run` and `start` take the same as options (`--password`,
 `--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`,
-`--oss`, `--oss-token-file`, `--oss-image`), for a
+`--container-host`, `--container-image`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server
 is built and tried in CI (a throwaway session over its WebSocket); it has
 not been run against real agents.
 
 **Containers.** A session's agent may run in a Linux container on its
-Visor server's own computer rather than on it directly: a lease from the
-OS Server on that computer (platform `container`, OS Server 0.9 and
-later), which runs it in a helper of its own, apart from OS Server, in
-VisorServer+Containers.swift. The container is made from Visor's image
-(tools/containers/visor-agent, published by CI's agent-image job as
-`ghcr.io/attilathefun/visor-agent:<version>` and `:<MAJOR.MINOR>`; a
-server asks for its own version's, `visor-server containers image <ref>`
-for another) with the size the session asked for (ContainerSize: 6 cores,
-16 GB of memory and 128 GB of disk unless asked otherwise, fitted to what
-the Mac has; the disk is a volume, `visor-<session>-build` at
-/var/cache/bazel, where the image keeps Bazel's output, which goes with the
-container's lease), chosen before the container is
-made (New Session, Move into a Container), held until released (`minutes:
-0`) and run with Rosetta for x86_64 programs. It sees: the session's
-folder at the same
-path (so its files, git and the agent's own log are the Mac's), the
-agent's log folder for that folder (Claude's
+Visor server's own computer rather than on it directly, made by the
+server's **container host** (docs/container-host.md): the program set
+(`visor-server containers host <command…>`, the menu bar app's Containers,
+settings' `containerHost`), else `visor-container-host` on the PATH (Visor's
+own, applications/visor_container_host, over Apple's `container`, carried
+in Visor Server's Contents/Helpers to be linked there); with neither,
+sessions run on the computer only and New Session offers no containers
+(`containersAvailable`, from the
+host's `health`). VisorServer+Containers.swift asks the host to `create`
+one from Visor's image (tools/containers/visor-agent, published by CI's
+agent-image job as `ghcr.io/attilathefun/visor-agent:<version>` and
+`:<MAJOR.MINOR>`; a server asks for its own version's, `visor-server
+containers image <ref>` for another) with the size the session asked for
+(ContainerSize: 6 cores, 16 GB of memory and 128 GB of disk unless asked
+otherwise, fitted to the host's `limits`, else what the computer has; the disk is a volume,
+`visor-<session>-build` at /var/cache/bazel, where the image keeps Bazel's
+output), with Rosetta for x86_64 programs, labelled with the session and
+this server (`visor.session`, `visor.server`). It sees: the session's folder
+at the same path (so its files, git and the agent's own log are the
+computer's), the agent's log folder for that folder (Claude's
 `~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
-`~/.openrouter/sessions`), and Visor's tools read-only at
-`/opt/visor` (ContainerTools: `visor_mcp.js`, and `visor`). The agents'
-sign-ins for containers are the server's own, never the image's
-(ContainerSignIns: `<data>/containers/agent.env` with
+`~/.openrouter/sessions`), and Visor's MCP script read-only at `/opt/visor`
+(ContainerTools). The agents' sign-ins for containers are the server's own,
+never the image's (ContainerSignIns: `<data>/containers/agent.env` with
 CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
 `<data>/containers/codex`, mounted at `/root/.codex` with the computer's
 sessions folder in it, signed in once on its own — `container run -it --rm
@@ -673,59 +675,48 @@ sessions folder in it, signed in once on its own — `container run -it --rm
 ghcr.io/attilathefun/visor-agent:<version> codex login --device-auth` —
 never a copy of the computer's, since Codex rotates its refresh token and
 the first copy to refresh signs out the other; openrouter's the same way,
-`<data>/containers/openrouter` at `/root/.openrouter`, its key set once
-with `openrouter auth login` in a container (or OPENROUTER_API_KEY in
-agent.env); and `<data>/containers/home/`, other files copied into each
-container's home); the container makes its own SSH key. Those files are
-written over the container's own socket (the lease's `execSocket`, through
-OSSClient's exec: `ServerPlatform.containerExec`, OSSContainerExec on a
-Mac). Where an oss has a Bazel cache (`GET /v1/cache`), the container's home
-gets a `.bazelrc` naming the nearest's read-only
-(`--noremote_upload_local_results`) and a `.netrc` with every oss server's
-read token under each name it is reached by, as oss sets up its VMs: what
-CI built (its populate jobs) is fetched, not built again, and the same
-token reads the files an oss serves on that port (`/files/sha256/<hex>`),
-Xcode's SDK archive among them (VisorServer+BuildCache). No Xcode is
-mounted: the Apple apps build in a container with rules_applecross (§4),
-and the Android app's x86_64 SDK and NDK tools run under Rosetta (the
-image's x86_64 glibc; MODULE.bazel lets any Linux take them).
-The agent runs under its host like any other (HostedChild), as OS Server's
-command line on that socket (`oss machine exec --socket=… --workdir=…
---env-file=… -- <agent>`), its variables in a file only this user reads
-(`hosts/<session>.env`, never on a command line): a restart of this server
-or of OS Server leaves it working, and this server picks it up the native
-way. The socket is kept with the session (`SessionContainer.socket`, never
-sent to a client). A session starts in a container with `container: true`
-and a folder, and moves into or out of one with `contain` (its agent made
-again on the other side, the container it leaves released; not while it
-works). Ending the session releases its container. A session saved in one
-of Apple's containers, from before OS Server ran them (no socket), runs on
-the computer from then on; `container delete --force <name>` removes the
-old container. An agent in a container
-reaches this server over the network (VISOR_URL: this computer's LAN
-address unless `visor-server containers callback <ws-url>` says
-otherwise), so containers need “Reachable from the network”. Bazel in the
-image keeps its output on the container's disk for builds and makes no
-convenience links in the mounted repository (/etc/bazel.bazelrc).
+`<data>/containers/openrouter` at `/root/.openrouter`; and
+`<data>/containers/home/`, other files put into each container's home with
+the host's `put`, dotfiles too); the container makes its own SSH key (the
+host's `exec`). A container's builds reach a Bazel cache and a file server
+(an OS Server's cache, read-only, and its /files, for the SDK archive and
+the ported tools) only through what is in that folder: a `.bazelrc`
+(`build --remote_cache=http://<host>:7490 --noremote_upload_local_results`)
+and a `.netrc` with each server's read token, put there by whoever runs
+the computer (`oss cache use` writes both into a home of its own). Visor
+itself knows no cache: until 0.43 it wrote them from the OS Servers it
+knew (VisorServer+BuildCache).
+No Xcode is mounted: the Apple apps build in a container with
+rules_applecross (§4), and the Android app's x86_64 SDK and NDK tools run
+under Rosetta. The agent runs under its host like any other (HostedChild),
+as the container host's `exec <id> --interactive --workdir=… --env-file=…
+-- <agent>`, which becomes the agent, its variables in a file only this
+user reads (`hosts/<session>.env`, never on a command line): a restart of
+this server leaves it working, and this server picks it up the native way.
+A session starts in a container with `container: true` and a folder, and
+moves into or out of one with `contain` (its agent made again on the other
+side, the container it leaves removed with its disk; not while it works).
+Ending the session removes its container. When a turn of an agent in a
+container fails on the network (EAI_AGAIN and the like;
+VisorServer+ContainerNetwork.swift), the host is asked the container's
+`network`; with none, the container is made again with its disk kept, the
+agent started again there, and the session says so — not twice in five
+minutes. At start the server removes the host's containers of sessions it
+no longer has, and a session still in a container OS Server lent (0.43 and
+before, `SessionContainer.socket`) runs on the computer from then on. An
+agent in a container reaches this server over the network (VISOR_URL:
+this computer's LAN address unless `visor-server containers callback
+<ws-url>` says otherwise), so containers need “Reachable from the network”.
+Bazel in the image keeps its output on the container's disk for builds and
+makes no convenience links in the mounted repository (/etc/bazel.bazelrc).
 
-**Machines (oss).** Sessions — in containers or not — lease machines
-(macOS, Linux and Windows VMs, iOS simulators, Android emulators) from the
-oss servers (OS Server, AttilaTheFun/oss) their Visor server knows, each
-from the nearest with room for it (OSSPool: this computer, then its LAN,
-then the tailnet), through that server, which holds each one's token
-(`visor-server oss <url> <token file>` adds one, `oss - <url>` takes one
-off; the menu bar app's Machines and Containers; `POST /api/oss`) and
-leases in the session's name (holder `visor:<session>`;
-VisorServer+Machines.swift, with OSSClient through the platform's HTTP
-client). A lease is used, renewed and released through the server that
-lent it. The session asks with `visor machine …` (VisorCommandScript, a
-Node script on the agents' path here and in each container;
-`lease --server=NAME` takes it from the server NAME names rather than the
-nearest with room); what each
-session holds is asked of every server every 30 seconds and shown with it
-(`SessionInfo.leases`; a container is not among them). SSH, VNC and adb
-reach a lease at its server's address, resolved for the container (which
-resolves no `.local` names), on the ports that server forwards.
+**Machines.** Sessions — in containers or not — lease machines (macOS,
+Linux and Windows VMs, iOS simulators, Android emulators) through the MCP
+servers their Visor server passes on to them (docs/protocol.md, Proxied MCP
+servers): an OS Server's own MCP port, set as an endpoint with a key of the
+server's (`<session>@<application>` is each lease's holder), whose tools
+the agent calls as `<endpoint>__oss_lease` and so on. Visor itself knows
+nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
 
 ## 4. The working loop
 
@@ -754,7 +745,8 @@ resolves no `.local` names), on the ports that server forwards.
   apple-sdks\.invalid/.* http://<oss host>:7490/files/sha256/<the SDK's sha256>`
   and `rewrite ported-tools\.invalid/sha256/(.*)
   http://<oss host>:7490/files/sha256/$1`, for an OS Server that serves
-  them (the container's .netrc has the token). Without it (CI's Linux
+  them (a container's `.netrc`, from `<data>/containers/home/`, has the
+  token). Without it (CI's Linux
   runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
   the Linux client (`//applications/visor_client_linux`; the server is
   `swift build --product visor-server`), the web site and the Android APK

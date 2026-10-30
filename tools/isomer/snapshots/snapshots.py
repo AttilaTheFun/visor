@@ -26,8 +26,8 @@ Targets:
                held in portrait, however the phone lies
   android-lab-landscape  the same, held in landscape (references of its own)
   web-desktop  the web client in desktop Safari, on a Mac leased from oss
-               (`visor machine` in a Visor session, `oss machine` outside
-               one), driven by safaridriver there
+               (`oss machine`, with the computer's key or token), driven
+               by safaridriver there
   macos        the macOS app, on the same lease, its window cropped from the
                machine's screenshot
 
@@ -59,6 +59,11 @@ WEB_DESKTOP_PORT = int(os.environ.get("VISOR_SNAPSHOT_WEB_PORT", "8791"))
 WEB_DRIVER_PORT = int(os.environ.get("VISOR_SNAPSHOT_DRIVER_PORT", "4444"))
 # Safari's bottom toolbar on the iPhone simulator, in screenshot pixels.
 SAFARI_TOOLBAR = int(os.environ.get("VISOR_SNAPSHOT_SAFARI_TOOLBAR", "300"))
+# The iPhone simulator's status bar in portrait (54pt at 3x), in screenshot
+# pixels: left out of the comparison, being the system's and not the app's,
+# and drawn anew by each simulator runtime (Xcode 27.2's moved its icons).
+# The pictures keep it, the same size as red's.
+IOS_STATUS_BAR = int(os.environ.get("VISOR_SNAPSHOT_IOS_STATUS_BAR", "162"))
 # The emulator's status bar (24dp at 2.625x), in screenshot pixels.
 ANDROID_STATUS_BAR = int(os.environ.get("VISOR_SNAPSHOT_ANDROID_STATUS_BAR", "80"))
 SETTLE = float(os.environ.get("VISOR_SNAPSHOT_SETTLE", "8"))
@@ -182,6 +187,7 @@ def simulator():
 
 class WebMobile:
     describe = {"app": "Visor Isomer", "device": "Mobile Safari, iOS simulator (iPhone 17 Pro)", "orientation": "portrait"}
+    status_bar = IOS_STATUS_BAR
 
     def prepare(self):
         self.udid = simulator()
@@ -208,6 +214,7 @@ class WebMobile:
 class RedIOS:
     # Red Visor, the reference blue is held to.
     describe = {"app": "Visor", "device": "iOS simulator (iPhone 17 Pro)", "orientation": "portrait"}
+    status_bar = IOS_STATUS_BAR
 
     def prepare(self):
         self.udid = simulator()
@@ -244,6 +251,7 @@ class IOS:
     held against red's same-named one. One test run pictures every screen;
     `capture` hands each picture over."""
     describe = {"app": "Visor Isomer", "device": "iOS simulator (iPhone 17, iOS 27)", "orientation": "portrait"}
+    status_bar = IOS_STATUS_BAR
     # What the review store files it as: red's iPhone runs are target ios
     # in each orientation.
     manifest_target = "ios"
@@ -283,6 +291,8 @@ class IOS:
 class IOSLandscape(IOS):
     describe = {**IOS.describe, "orientation": "landscape"}
     case = "BlueFixtureShots/testFixtureScreensLandscape"
+    # On its side an iPhone shows no status bar.
+    status_bar = 0
 
 # --- the Android emulator
 
@@ -441,23 +451,20 @@ class AndroidLabLandscape(AndroidLab):
         # landscape the picture is the check.
         return []
 
-# --- a Mac leased from oss (desktop Safari and the Mac app): through `visor
-# machine` in a Visor session, `oss machine` outside one; one lease for the
-# run, released when it ends
+# --- a Mac leased from oss (desktop Safari and the Mac app): through `oss
+# machine`, with this computer's key or token; one lease for the run,
+# released when it ends
 
 def machine():
-    return ["visor", "machine"] if os.environ.get("VISOR_SESSION") else ["oss", "machine"]
+    return ["oss", "machine"]
 
 @functools.lru_cache(None)
 def mac_lease():
-    if machine()[0] == "visor":
-        lease = json.loads(sh(machine() + ["lease", "macos", "--json"]).stdout)
-    else:
-        # oss's own lease JSON leaves the host to its client: its exports say it.
-        exports = sh(machine() + ["lease", "macos", "--exports"]).stdout
-        values = dict(line[len("export "):].split("=", 1) for line in exports.splitlines() if line.startswith("export "))
-        values = {key: (shlex.split(value) or [""])[0] for key, value in values.items()}
-        lease = {"id": values["OSS_ID"], "host": values["OSS_HOST"], "sshPort": values["OSS_SSH_PORT"], "sshUser": values["OSS_SSH_USER"]}
+    # oss's own lease JSON leaves the host to its client: its exports say it.
+    exports = sh(machine() + ["lease", "macos", "--exports"]).stdout
+    values = dict(line[len("export "):].split("=", 1) for line in exports.splitlines() if line.startswith("export "))
+    values = {key: (shlex.split(value) or [""])[0] for key, value in values.items()}
+    lease = {"id": values["OSS_ID"], "host": values["OSS_HOST"], "sshPort": values["OSS_SSH_PORT"], "sshUser": values["OSS_SSH_USER"]}
     atexit.register(lambda: sh(machine() + ["release", lease["id"]], check=False))
     log("leased a Mac:", lease["id"])
     mac = {"id": lease["id"], "target": f"{lease['sshUser']}@{lease['host']}", "port": str(lease["sshPort"])}
@@ -658,7 +665,8 @@ def run(targets, screens):
                     log(target, screen, "new (no reference yet)")
                     continue
                 diff = os.path.join(run_dir, target, f"{screen}.diff.png")
-                changed = pngdiff.compare(reference, capture, diff)
+                ignore = getattr(kind, "status_bar", 0)
+                changed = pngdiff.compare(reference, capture, diff, ignore_top=ignore)
                 if changed:
                     # A second look: a screen pictured before it settled (a
                     # menu not yet up on a busy runner) differs once; a real
@@ -666,7 +674,7 @@ def run(targets, screens):
                     log(target, screen, f"changed {changed} px; a second look")
                     try:
                         kind.capture(screen, capture)
-                        changed = pngdiff.compare(reference, capture, diff)
+                        changed = pngdiff.compare(reference, capture, diff, ignore_top=ignore)
                     except Exception as error:
                         log(target, screen, "second look failed:", error)
                 status = "same" if changed == 0 else "changed"

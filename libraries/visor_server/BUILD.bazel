@@ -21,6 +21,5 @@ swift_library(
         "//libraries/claude_transcript",
         "//libraries/message_cache",
         "//libraries/visor_protocol",
-        "@swiftpkg_oss//:OSSClient",
     ],
 )

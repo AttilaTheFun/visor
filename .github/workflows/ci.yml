@@ -41,6 +41,7 @@ jobs:
           bazel build
           //libraries/...
           //tools/staging_server
+          //applications/visor_container_host:visor-container-host
           //applications/visor_macos:macos_lib
           //applications/visor_menubar:menubar_lib
       - name: Build (iOS)
@@ -53,6 +54,7 @@ jobs:
         run: >
           bazel test --test_output=errors
           //tests/visor_server_tests
+          //tests/visor_container_host_tests
           //tests/visor_client_tests
           //tests/visor_ui_tests
           //tests/visor_ssh_tests
@@ -77,6 +79,7 @@ jobs:
           bazel build
           //libraries/...
           //tools/staging_server
+          //applications/visor_container_host:visor-container-host
           //applications/visor_macos:macos_lib
           //applications/visor_menubar:menubar_lib
       - name: Build (iOS)
@@ -89,6 +92,7 @@ jobs:
         run: >
           bazel test --test_output=errors
           //tests/visor_server_tests
+          //tests/visor_container_host_tests
           //tests/visor_client_tests
           //tests/visor_ui_tests
           //tests/visor_ssh_tests
@@ -226,7 +230,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: $PIPELINE_CI prepare
-      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.version }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist
+      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.version }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist applications/visor_container_host/Info.plist
       - run: tools/build_packages.sh
       - run: $PIPELINE_CI publish Visor dist/packages/*
         env:

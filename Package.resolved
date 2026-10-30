@@ -1,15 +1,6 @@
 {
-  "originHash" : "a429d7c6b1294a5c334fa173d57da4fcc1c267272e308f82a0281d642e450416",
+  "originHash" : "70b948bbb330e755fbc6b45ca4311b5cfdfe12c0cbc327323d225cb4b765aa87",
   "pins" : [
-    {
-      "identity" : "oss",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AttilaTheFun/oss.git",
-      "state" : {
-        "revision" : "a389e0a7935352df07e00b3b4fa87c645487764f",
-        "version" : "0.10.1"
-      }
-    },
     {
       "identity" : "swift_sql",
       "kind" : "remoteSourceControl",

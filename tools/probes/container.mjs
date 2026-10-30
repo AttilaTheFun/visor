@@ -1,10 +1,9 @@
 // Throwaway-session probe for a session in a container, end to end: started
-// in a container on a folder (leased from this computer's OS Server), told
-// to answer a word, then ended (its container released). Run it against a
-// staging server beside the installed one, with OS Server 0.9 or later on
-// the same Mac:
-//   VISOR_STAGING_LAN=1 VISOR_STAGING_OSS=http://127.0.0.1:7480 \
-//     VISOR_STAGING_OSS_TOKEN_FILE=<oss's token file> bazel run //tools/staging_server -- 7534
+// in a container on a folder (made by the container host,
+// docs/container-host.md), told to answer a word, then ended (its container
+// removed). Run it against a staging server beside the installed one:
+//   VISOR_STAGING_LAN=1 VISOR_STAGING_CONTAINER_HOST=<its command, or none for
+//     visor-container-host on the PATH> bazel run //tools/staging_server -- 7534
 //   VISOR_PORT=7534 VISOR_TOKEN=staging node tools/probes/container.mjs <folder> [claude|codex|openrouter]
 // It prints each step with its time, and exits 0 once the agent in the
 // container has answered and the session has ended.

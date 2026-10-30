@@ -1,28 +1,81 @@
-// Sessions whose agents run in containers on the server's own computer,
-// leased from the OS Server there: the server leases the container (the
-// session's folder, the agent's log folder and Visor's tools mounted, and
-// not Xcode; a disk of its own for builds), writes the sign-ins for
-// containers into its home and makes it an SSH key over its socket, runs
-// the agent there under its host through OS Server's command line with its
-// variables in a file only this user reads, moves a session into and out of
-// its container, and says so on the wire. oss and the container's socket
-// are fakes here.
+// Sessions whose agents run in containers, made by a container host
+// (docs/container-host.md): the server asks the host for the container (the
+// session's folder, the agent's log folder and Visor's tools mounted; a disk
+// of its own for builds), puts the sign-ins for containers into its home and
+// makes it an SSH key, runs the agent there under its host through the
+// host's `exec` with its variables in a file only this user reads, moves a
+// session into and out of its container, makes a container again when its
+// network is lost, and says so on the wire. The host is a script here.
 
 import ClaudeTranscript
 import Foundation
-import OSSClient
-import Synchronization
 import VisorProtocol
 @testable import VisorServer
 import XCTest
 
+/// A container host played by a script: each call written down, answers as
+/// the test sets them (files beside it: `busy`, `unhealthy`, `nonetwork`,
+/// `listed.json`, `limits.json`).
+private struct FakeHost {
+    let folder: URL
+
+    var path: String { folder.appendingPathComponent("host").path }
+
+    init(in root: URL) throws {
+        folder = root.appendingPathComponent("host-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let script = #"""
+            #!/bin/bash
+            dir="$(dirname "$0")"
+            op="$1"; shift
+            echo "$op $*" >> "$dir/calls"
+            case "$op" in
+              health)
+                if [ -f "$dir/unhealthy" ]; then echo '{"ok":false,"error":"no runtime"}'
+                elif [ -f "$dir/limits.json" ]; then echo "{\"ok\":true,\"name\":\"fake\",\"version\":\"1\",\"api\":1,\"limits\":$(cat "$dir/limits.json")}"
+                else echo '{"ok":true,"name":"fake","version":"1","api":1}'; fi ;;
+              create)
+                n=$(( $(cat "$dir/count" 2>/dev/null || echo 0) + 1 )); echo $n > "$dir/count"
+                cat > "$dir/request-$n.json"
+                if [ -f "$dir/busy" ]; then echo '{"error":"no room","code":"busy"}'; exit 1; fi
+                echo "{\"id\":\"c$n\",\"name\":\"made\"}" ;;
+              put)
+                cat > "$dir/put-$(echo "$2" | tr '/' '_')"
+                echo "{\"path\":\"$2\",\"size\":1}" ;;
+              exec)
+                echo "ran" ;;
+              rm)
+                echo "{\"removed\":\"$1\"}" ;;
+              ls)
+                if [ -f "$dir/listed.json" ]; then cat "$dir/listed.json"; else echo '{"containers":[]}'; fi ;;
+              network)
+                if [ -f "$dir/nonetwork" ]; then echo '{"ok":false,"dns":false,"detail":"EAI_AGAIN"}'; else echo '{"ok":true,"detail":"fine"}'; fi ;;
+            esac
+            """#
+        try script.write(to: folder.appendingPathComponent("host"), atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+    }
+
+    /// The calls made, one a line: the operation and its arguments.
+    var calls: [String] {
+        ((try? String(contentsOf: folder.appendingPathComponent("calls"), encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+    }
+
+    /// The `create` request asked for, the `n`th (from 1).
+    func request(_ n: Int) throws -> ContainerHostRequest {
+        try JSONDecoder().decode(ContainerHostRequest.self, from: Data(contentsOf: folder.appendingPathComponent("request-\(n).json")))
+    }
+
+    func set(_ name: String, _ contents: String = "") throws {
+        try contents.write(to: folder.appendingPathComponent(name), atomically: true, encoding: .utf8)
+    }
+}
+
 @MainActor
 final class ContainerTests: ServerTestCase {
-    private var platform: ServerPlatform!
     private var root: URL!
 
     override func setUp() async throws {
-        platform = ServerPlatform.current
         root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-tests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("work"), withIntermediateDirectories: true)
         ServerPlatform.current.host.dataDirectory = root
@@ -32,24 +85,16 @@ final class ContainerTests: ServerTestCase {
     }
 
     override func tearDown() async throws {
-        ServerPlatform.current = platform
-        OSSAccess.transport = PlatformOSSTransport()
         ClaudeSessionFiles.home = FileManager.default.homeDirectoryForCurrentUser
         try? FileManager.default.removeItem(at: root)
     }
 
-    /// A server whose computer runs commands in containers through `exec`
-    /// and leases them from `oss` (this computer's, set with its token),
-    /// reachable from the network (as an agent in a container reaches it),
-    /// its check made.
-    private func server(_ exec: FakeContainerExec?, oss: FakeOSS = FakeOSS(), servers: [String] = [FakeOSS.here],
-                        port: UInt16) async -> VisorServer {
-        ServerPlatform.current.containerExec = exec
-        OSSAccess.transport = oss
+    /// A server whose containers come from `host`, reachable from the
+    /// network (as an agent in a container reaches it), its check made.
+    private func server(_ host: FakeHost?, port: UInt16) async -> VisorServer {
         let server = VisorServer(port: port)
         server.settings.lan = true
-        server.settings.ossServers = servers
-        for each in servers { VisorServer.secrets.set(VisorServer.ossTokenKey(each), "token") }
+        server.settings.containerHost = host.map { [$0.path] } ?? ["/no/such/container-host"]
         await server.checkContainers()
         return server
     }
@@ -62,9 +107,12 @@ final class ContainerTests: ServerTestCase {
         let signIns = root.appendingPathComponent("containers/home/.codex", isDirectory: true)
         try FileManager.default.createDirectory(at: signIns, withIntermediateDirectories: true)
         try Data("{\"auth\":1}".utf8).write(to: signIns.appendingPathComponent("auth.json"))
-        let exec = FakeContainerExec()
-        let oss = FakeOSS()
-        let server = await server(exec, oss: oss, port: 7997)
+        // A build cache's and a file server's credentials, dotfiles at the top.
+        let home = root.appendingPathComponent("containers/home", isDirectory: true)
+        try Data("machine cache login visor password read\n".utf8).write(to: home.appendingPathComponent(".netrc"))
+        try Data("build --remote_cache=http://cache:7490\n".utf8).write(to: home.appendingPathComponent(".bazelrc"))
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7997)
         defer { server.stop() }
         XCTAssertTrue(server.containersAvailable)
         XCTAssertEqual(server.sessionsEnvelope().container, true, "clients are told a session can start in a container")
@@ -72,36 +120,34 @@ final class ContainerTests: ServerTestCase {
         let folder = root.appendingPathComponent("work").path
         let made = try await start(server, .startInContainer(id: "S1", agent: .claude, cwd: folder, title: "", skipPermissions: true)).get()
         XCTAssertEqual(made.info.cwd, folder)
-        XCTAssertEqual(made.info.container, SessionContainer(id: "c1", image: server.defaultContainerImage, size: VisorServer.fitted(.standard),
-                                                             socket: "/tmp/fake-oss-c1.sock"))
-        let asked = try XCTUnwrap(oss.server().asked.first)
-        XCTAssertEqual(asked.platform, .container)
-        XCTAssertEqual(asked.holder, "visor:S1")
-        XCTAssertEqual(asked.minutes, 0, "held until released")
-        let spec = try XCTUnwrap(asked.container)
-        XCTAssertEqual(spec.image, server.defaultContainerImage, "Visor's own image, with the agents in it")
-        XCTAssertTrue(spec.rosetta, "x86_64 Linux programs too (Android's build tools)")
+        XCTAssertEqual(made.info.container, SessionContainer(id: "c1", image: server.defaultContainerImage, size: VisorServer.fitted(.standard)))
+        let asked = try host.request(1)
+        XCTAssertEqual(asked.image, server.defaultContainerImage, "Visor's own image, with the agents in it")
+        XCTAssertTrue(asked.rosetta, "x86_64 Linux programs too (Android's build tools)")
+        XCTAssertEqual(asked.labels, ["visor.session": "S1", "visor.server": server.id], "so the host's leftovers are known")
         let resolved = HostFolders.resolve(folder)
-        XCTAssertTrue(spec.mounts.contains(ContainerMount(source: resolved, destination: resolved)), "the folder, at the same path")
+        XCTAssertTrue(asked.mounts.contains(.init(source: resolved, destination: resolved)), "the folder, at the same path")
         // This computer's log folder for it (by its real path: the temporary
-        // folder is under /private here), at the name Claude in the
+        // folder is under /private on a Mac), at the name Claude in the
         // container gives the folder as mounted.
         let here = ClaudeSessionFiles.projectsRoot().appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: resolved)).path
         let there = "/root/.claude/projects/" + ClaudeSessionFiles.projectDirectoryName(for: resolved, followingLinks: false)
-        XCTAssertTrue(spec.mounts.contains { $0.source == here && $0.destination == there && !$0.readOnly }, "where Claude keeps its log, seen here")
-        XCTAssertTrue(spec.mounts.contains { $0.destination == ContainerPlacement.toolsFolder && $0.readOnly }, "Visor's tools")
-        XCTAssertFalse(spec.mounts.contains { $0.source.hasSuffix("Xcode.app") }, "Apple apps build from served SDKs, not the Mac's Xcode")
-        let tools = try XCTUnwrap(spec.mounts.first { $0.destination == ContainerPlacement.toolsFolder }).source
+        XCTAssertTrue(asked.mounts.contains { $0.source == here && $0.destination == there && !$0.readOnly }, "where Claude keeps its log, seen here")
+        XCTAssertTrue(asked.mounts.contains { $0.destination == ContainerPlacement.toolsFolder && $0.readOnly }, "Visor's tools")
+        let tools = try XCTUnwrap(asked.mounts.first { $0.destination == ContainerPlacement.toolsFolder }).source
         XCTAssertEqual(try String(contentsOfFile: tools + "/visor_mcp.js", encoding: .utf8), VisorMCPScript.source)
-        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: tools + "/visor"))
-        let executed = exec.executed.withLock { $0 }
-        XCTAssertEqual(Set(executed.map(\.socket)), ["/tmp/fake-oss-c1.sock"], "over the container's own socket")
-        XCTAssertEqual(executed.first?.command.last, "/root/.codex/auth.json", "the sign-ins copied into its home")
-        XCTAssertEqual(executed.first?.input, Data("{\"auth\":1}".utf8))
-        XCTAssertTrue(executed.last?.command.last?.contains("ssh-keygen") == true, "its own SSH key, for the machines it leases")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tools + "/visor"), "machines are the proxied MCP servers' now")
+        // The sign-ins put into its home, then its own SSH key.
+        let calls = host.calls.filter { !$0.hasPrefix("health") && !$0.hasPrefix("ls") }
+        XCTAssertEqual(calls.first, "create ")
+        XCTAssertTrue(calls.contains("put c1 /root/.codex/auth.json --mode=600"))
+        XCTAssertEqual(try Data(contentsOf: host.folder.appendingPathComponent("put-_root_.codex_auth.json")), Data("{\"auth\":1}".utf8))
+        XCTAssertTrue(calls.contains("put c1 /root/.netrc --mode=600"))
+        XCTAssertTrue(calls.contains("put c1 /root/.bazelrc --mode=600"))
+        XCTAssertEqual(try String(contentsOf: host.folder.appendingPathComponent("put-_root_.netrc"), encoding: .utf8),
+                       "machine cache login visor password read\n")
+        XCTAssertTrue(calls.last?.hasPrefix("exec c1 -- sh -c") == true && calls.last?.contains("ssh-keygen") == true)
         XCTAssertNotNil((made.process as? HostableProcess)?.container)
-        await server.refreshLeases()
-        XCTAssertEqual(made.info.leases, [], "its container is not one of its machines")
     }
 
     /// Visor's image is this build's, published by CI; a build CI did not
@@ -115,16 +161,31 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(VisorServer.containerImage(version: ""), repository + ":latest")
     }
 
+    /// The host is the one set, else visor-container-host on the PATH, else
+    /// none: sessions run on this computer only.
+    func testTheHostIsTheOneSetOrTheOneOnThePath() {
+        XCTAssertEqual(ContainerHost.found(setting: ShellCommand("/opt/oss", ["container-host"]), onPath: { _ in "/usr/local/bin/visor-container-host" }),
+                       ContainerHost(command: ShellCommand("/opt/oss", ["container-host"])))
+        XCTAssertEqual(ContainerHost.found(setting: nil, onPath: { $0 == "visor-container-host" ? "/usr/local/bin/visor-container-host" : nil }),
+                       ContainerHost(command: ShellCommand("/usr/local/bin/visor-container-host")))
+        XCTAssertNil(ContainerHost.found(setting: nil, onPath: { _ in nil }))
+        // The agent's command line: the host's exec, which becomes it.
+        let host = ContainerHost(command: ShellCommand("/opt/oss", ["container-host"]))
+        XCTAssertEqual(host.command(container: "c1", executable: "claude", arguments: ["-p"], directory: "/work", environmentFile: "/tmp/s.env"),
+                       ShellCommand("/opt/oss", ["container-host", "exec", "c1", "--interactive", "--workdir=/work", "--env-file=/tmp/s.env",
+                                                 "--", "claude", "-p"]))
+    }
+
     /// Codex in a container: the containers' own Codex home (one sign-in for
     /// all, never a copy of the computer's), the computer's sessions folder
     /// in it.
     func testCodexInAContainerHasTheContainersOwnHome() async throws {
-        let oss = FakeOSS()
-        let server = await server(FakeContainerExec(), oss: oss, port: 7990)
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7990)
         defer { server.stop() }
         _ = try await start(server, .startInContainer(id: "c1", agent: .codex, cwd: root.appendingPathComponent("work").path, title: "",
                                                       skipPermissions: true)).get()
-        let mounts = try XCTUnwrap(oss.server().asked.first?.container).mounts
+        let mounts = try host.request(1).mounts
         let home = try XCTUnwrap(mounts.firstIndex { $0.destination == "/root/.codex" })
         let sessions = try XCTUnwrap(mounts.firstIndex { $0.destination == "/root/.codex/sessions" })
         XCTAssertEqual(mounts[home].source, root.appendingPathComponent("containers/codex").path)
@@ -134,31 +195,27 @@ final class ContainerTests: ServerTestCase {
     }
 
     /// openrouter in a container: the containers' own openrouter home (their
-    /// key), the computer's sessions folder in it, where the server reads
-    /// the session's log.
+    /// key), the computer's sessions folder in it.
     func testOpenRouterInAContainerHasTheContainersOwnHome() async throws {
-        let oss = FakeOSS()
-        let server = await server(FakeContainerExec(), oss: oss, port: 7970)
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7970)
         defer { server.stop() }
         _ = try await start(server, .startInContainer(id: "o1", agent: .openrouter, cwd: root.appendingPathComponent("work").path, title: "",
                                                       skipPermissions: true)).get()
-        let mounts = try XCTUnwrap(oss.server().asked.first?.container).mounts
+        let mounts = try host.request(1).mounts
         let home = try XCTUnwrap(mounts.firstIndex { $0.destination == "/root/.openrouter" })
         let sessions = try XCTUnwrap(mounts.firstIndex { $0.destination == "/root/.openrouter/sessions" })
         XCTAssertEqual(mounts[home].source, root.appendingPathComponent("containers/openrouter").path)
         XCTAssertEqual(mounts[sessions].source, root.appendingPathComponent(".openrouter/sessions").path)
         XCTAssertLessThan(home, sessions, "the home first, the sessions folder in it after")
         XCTAssertFalse(mounts.contains { $0.destination.hasPrefix("/root/.claude") }, "none of Claude's folders")
-        let mode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: mounts[home].source)[.posixPermissions] as? Int)
-        XCTAssertEqual(mode & 0o077, 0, "this user's alone")
     }
 
     /// A client signed in over the WebSocket hears that a session can start
     /// in a container (its welcome), and hears again with the list when
-    /// that changes: New Session offered no Runs to a phone on the live
-    /// channel, whose welcome never said.
+    /// that changes.
     func testTheLiveChannelSaysWhetherContainersAreOnOffer() async throws {
-        let server = await server(FakeContainerExec(), port: 7971)
+        let server = await server(try FakeHost(in: root), port: 7971)
         defer { server.stop() }
         server.password = "pw"
         let stream = EnvelopeStream()
@@ -180,67 +237,50 @@ final class ContainerTests: ServerTestCase {
     }
 
     /// A container is given what was asked, within what the computer has:
-    /// 6 cores, 16 GB and 128 GB unless asked otherwise, chosen before it is
-    /// made (New Session, Move into a Container); its disk for builds is a
-    /// volume at Bazel's output folder that goes with the lease.
+    /// 6 cores, 16 GB and 128 GB unless asked otherwise; its disk for builds
+    /// is a volume at Bazel's output folder.
     func testAContainerIsGivenTheSizeAskedFor() async throws {
-        let oss = FakeOSS()
-        let server = await server(FakeContainerExec(), oss: oss, port: 7973)
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7973)
         defer { server.stop() }
         let gigabyte = ContainerSize.gigabyte
         let work = root.appendingPathComponent("work").path
         let standard = try await start(server, .startInContainer(id: "z1", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
         XCTAssertEqual(standard.info.container?.size, VisorServer.fitted(.standard))
-        let first = try XCTUnwrap(oss.server().asked.last?.container)
+        let first = try host.request(1)
         XCTAssertEqual(first.cpus, VisorServer.fitted(.standard).cpus)
-        XCTAssertEqual(first.volumes, [ContainerVolume(name: "visor-z1-build", destination: "/var/cache/bazel", sizeBytes: 128 * gigabyte)],
-                       "where Visor's image keeps Bazel's output, gone with the lease")
+        XCTAssertEqual(first.volumes, [.init(name: "visor-z1-build", destination: "/var/cache/bazel", sizeBytes: 128 * gigabyte)])
 
         let asked = ContainerSize(cpus: 2, memoryBytes: 4 * gigabyte, diskBytes: 64 * gigabyte)
         let sized = try await start(server, .startInContainer(id: "z2", agent: .claude, cwd: work, title: "", skipPermissions: true,
                                                               size: asked)).get()
         XCTAssertEqual(sized.info.container?.size, VisorServer.fitted(asked))
-        let second = try XCTUnwrap(oss.server().asked.last?.container)
-        // As asked, where this computer has that much (a CI runner may
-        // have less memory than 4 GB beside its own 4).
+        let second = try host.request(2)
         XCTAssertEqual(second.cpus, VisorServer.fitted(asked).cpus)
         XCTAssertEqual(second.memoryBytes, VisorServer.fitted(asked).memoryBytes)
         XCTAssertEqual(second.volumes.first?.sizeBytes, 64 * gigabyte)
 
-        // Within what the computer has.
         let fitted = VisorServer.fitted(ContainerSize(cpus: 64, memoryBytes: 200 * gigabyte, diskBytes: 1), cores: 12,
                                         memory: UInt64(32 * gigabyte))
         XCTAssertEqual(fitted, ContainerSize(cpus: 12, memoryBytes: 28 * gigabyte, diskBytes: 16 * gigabyte))
-        // And over the wire, both ways.
         let moved = Envelope.decode(Envelope.contain(session: "z1", true, size: asked).encoded())
         XCTAssertEqual(moved?.containerSize, asked)
-        let told = Envelope.decode(Envelope.sessions([sized.info]).encoded())
-        XCTAssertEqual(told?.sessions?.first?.container?.size, VisorServer.fitted(asked))
     }
 
-    /// A container's Bazel reads the nearest oss's cache, read-only: the
-    /// home's .bazelrc names it, and .netrc holds every oss's read token
-    /// under each name it is reached by (the files an oss serves take the
-    /// same token: Xcode's SDK archive, through a downloader config).
-    func testAContainerReadsOSSsBuildCache() throws {
-        let near = CacheInfo(port: 7490, readToken: "read-token", bytes: 0, maxBytes: 1, freeBytes: 1, hits: 0, misses: 0, writes: 0, evicted: 0)
-        let far = CacheInfo(port: 7490, readToken: "far-token", bytes: 0, maxBytes: 1, freeBytes: 1, hits: 0, misses: 0, writes: 0, evicted: 0)
-        let files = Dictionary(uniqueKeysWithValues: VisorServer.buildCacheFiles([
-            (hosts: ["192.168.4.52", "mini.example.ts.net"], cache: near),
-            (hosts: ["192.168.4.51", "macbook.example.ts.net"], cache: far),
-        ]).map { ($0.path, $0.data) })
-        let rc = String(decoding: try XCTUnwrap(files[".bazelrc"]), as: UTF8.self)
-        XCTAssertTrue(rc.contains("build --remote_cache=http://192.168.4.52:7490"), "the nearest's")
-        XCTAssertTrue(rc.contains("build --noremote_upload_local_results"), "read-only")
-        XCTAssertFalse(rc.contains("token"), "no token in the .bazelrc, which --announce_rc prints")
-        XCTAssertEqual(String(decoding: try XCTUnwrap(files[".netrc"]), as: UTF8.self), """
-            machine 192.168.4.52 login bazel password read-token
-            machine mini.example.ts.net login bazel password read-token
-            machine 192.168.4.51 login bazel password far-token
-            machine macbook.example.ts.net login bazel password far-token
-
-            """)
-        XCTAssertTrue(VisorServer.buildCacheFiles([]).isEmpty, "nothing without a cache")
+    /// What the host says a container may have bounds what it is given.
+    func testTheHostsLimitsBoundTheSize() async throws {
+        let host = try FakeHost(in: root)
+        let gigabyte = ContainerSize.gigabyte
+        try host.set("limits.json", #"{"cpus": 2, "memoryBytes": \#(8 * gigabyte)}"#)
+        let server = await server(host, port: 7974)
+        defer { server.stop() }
+        XCTAssertEqual(server.containerLimits, .init(cpus: 2, memoryBytes: 8 * gigabyte))
+        let work = root.appendingPathComponent("work").path
+        let started = try await start(server, .startInContainer(id: "l1", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        XCTAssertEqual(started.info.container?.size?.cpus, 2)
+        let request = try host.request(1)
+        XCTAssertEqual(request.cpus, 2)
+        XCTAssertEqual(request.memoryBytes, 4 * gigabyte, "its limit, less what the computer keeps for itself")
     }
 
     /// A bridge to the computer's own containers or VMs is none of the
@@ -255,103 +295,96 @@ final class ContainerTests: ServerTestCase {
     }
 
     /// A folder that is not on the computer says so, and no container is made.
-    func testAMissingFolderSaysSoAndMakesNoContainer() async {
-        let oss = FakeOSS()
-        let server = await server(FakeContainerExec(), oss: oss, port: 7994)
+    func testAMissingFolderSaysSoAndMakesNoContainer() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7994)
         defer { server.stop() }
         let ended = await start(server, .startInContainer(id: "s2", agent: .codex, cwd: "/no/such/folder", title: "", skipPermissions: true))
         guard case .failure(let failure) = ended else { return XCTFail("started all the same") }
         XCTAssertEqual(failure.message, "There is no folder /no/such/folder on this computer.")
-        XCTAssertTrue(oss.server().asked.isEmpty)
+        XCTAssertFalse(host.calls.contains { $0.hasPrefix("create") })
         XCTAssertFalse(server.sessions.contains { $0.info.id == "s2" })
     }
 
-    /// Containers come from an OS Server on this computer that lends them,
-    /// with a way to run commands in them, to a server on the network:
-    /// without any of that none can start, and the clients are not offered
-    /// it. Another computer's oss lends no containers here.
-    func testContainersNeedThisComputersOSServerAndTheNetwork() async {
+    /// Containers need a container host that says it can make them, and a
+    /// server on the network: without either none can start, and the
+    /// clients are not offered it.
+    func testContainersNeedAHostAndTheNetwork() async throws {
         let none = await server(nil, port: 7993)
         defer { none.stop() }
-        XCTAssertFalse(none.containersAvailable, "nothing runs commands in them here")
+        XCTAssertFalse(none.containersAvailable, "no host")
         XCTAssertEqual(none.sessionsEnvelope().container, false, "the clients are told so")
 
-        let old = await server(FakeContainerExec(), oss: FakeOSS(["127.0.0.1": ("this-mac", false)]), port: 7989)
-        defer { old.stop() }
-        XCTAssertFalse(old.containersAvailable, "an OS Server before 0.9 lends none")
+        let sick = try FakeHost(in: root)
+        try sick.set("unhealthy")
+        let unhealthy = await server(sick, port: 7989)
+        defer { unhealthy.stop() }
+        XCTAssertFalse(unhealthy.containersAvailable, "a host that says it can't")
 
-        let elsewhere = await server(FakeContainerExec(), oss: FakeOSS(["mac.test": ("another-mac", true)]), servers: ["http://mac.test:7480"],
-                                     port: 7988)
-        defer { elsewhere.stop() }
-        XCTAssertFalse(elsewhere.containersAvailable, "another computer's oss lends no containers here")
-
-        let unset = await server(FakeContainerExec(), servers: [], port: 7987)
-        defer { unset.stop() }
-        XCTAssertFalse(unset.containersAvailable)
-
-        let loopback = await server(FakeContainerExec(), port: 7992)
+        let loopback = await server(try FakeHost(in: root), port: 7992)
         defer { loopback.stop() }
+        XCTAssertTrue(loopback.containersAvailable)
         loopback.settings.lan = false
         loopback.settings.vpn = false
         await loopback.checkContainers()
         XCTAssertFalse(loopback.containersAvailable, "an agent in a container reaches the server over the network")
     }
 
-    /// An OS Server with no room says so in words New Session shows (the
-    /// mini's lends one at a time), and nothing is made.
-    func testAFullOSServerSaysSo() async {
-        let oss = FakeOSS()
-        oss.roomFor(0)
-        let server = await server(FakeContainerExec(), oss: oss, port: 7984)
+    /// A host with no room says so in words New Session shows, and nothing
+    /// is left behind.
+    func testABusyHostSaysSo() async throws {
+        let host = try FakeHost(in: root)
+        try host.set("busy")
+        let server = await server(host, port: 7984)
         defer { server.stop() }
         let ended = await start(server, .startInContainer(id: "f1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
                                                           skipPermissions: true))
         guard case .failure(let failure) = ended else { return XCTFail("started all the same") }
-        XCTAssertEqual(failure.message, VisorServer.containerRefusal(OSSError(status: 409, message: "busy", code: "busy")))
+        XCTAssertEqual(failure.message, VisorServer.containerRefusal(ContainerHostError(message: "no room", code: "busy")))
         XCTAssertTrue(failure.message.contains("no room"))
-        XCTAssertTrue(oss.server().asked.isEmpty)
+        XCTAssertFalse(server.sessions.contains { $0.info.id == "f1" })
     }
 
-    /// The agent's variables (and the sign-ins for containers) go to OS
-    /// Server's command line in a file this user alone reads, never on a
-    /// command line; this computer's own agents/<kind>.env is not among
-    /// them. A container from before OS Server (no socket) runs nothing.
+    /// The agent's variables (and the sign-ins for containers) go to the
+    /// host's exec in a file this user alone reads, never on a command line;
+    /// this computer's own agents/<kind>.env is not among them.
     func testAnAgentInAContainerHasItsVariablesInAFileOfItsOwn() async throws {
         try FileManager.default.createDirectory(at: root.appendingPathComponent("agents"), withIntermediateDirectories: true)
         try "GIT_AUTHOR_NAME=Here\n".write(to: root.appendingPathComponent("agents/claude.env"), atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("containers"), withIntermediateDirectories: true)
         try "CLAUDE_CODE_OAUTH_TOKEN=sign-in\n".write(to: root.appendingPathComponent("containers/agent.env"), atomically: true, encoding: .utf8)
-        let exec = FakeContainerExec()
-        let server = await server(exec, port: 7995)
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7995)
         defer { server.stop() }
         AgentChildren.detach = false
         defer { AgentChildren.detach = true }
         var info = SessionInfo(id: "h", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Here", created: 0)
         XCTAssertEqual(server.makeProcess(info, resume: nil).approvalEnvironment["GIT_AUTHOR_NAME"], "Here")
-        info.container = SessionContainer(id: "visor-h")
-        XCTAssertNil(server.placement(for: info), "Apple's container, from before: nothing to run it through")
         info.container = SessionContainer(id: "c9", socket: "/tmp/fake-oss-c9.sock")
+        XCTAssertNil(server.placement(for: info), "OS Server's, from before container hosts: nothing to run it through")
+        info.container = SessionContainer(id: "c9")
         let placement = try XCTUnwrap(server.placement(for: info))
         let child = try AgentChildren.start(executable: "claude", arguments: ["-p"], directory: info.cwd,
                                             environment: ["VISOR_SESSION": "h"], session: "h", container: placement)
         child.closeInput()
         _ = await child.exit.value
-        let command = try XCTUnwrap(exec.commands.withLock { $0.first })
-        XCTAssertEqual(command.socket, "/tmp/fake-oss-c9.sock")
-        let text = try String(contentsOfFile: command.environmentFile, encoding: .utf8)
+        let call = try XCTUnwrap(host.calls.first { $0.hasPrefix("exec c9 --interactive") })
+        XCTAssertTrue(call.hasSuffix("-- claude -p"), call)
+        let file = try XCTUnwrap(call.split(separator: " ").first { $0.hasPrefix("--env-file=") }).dropFirst("--env-file=".count)
+        let text = try String(contentsOfFile: String(file), encoding: .utf8)
         XCTAssertTrue(text.contains("VISOR_SESSION=h\n"))
         XCTAssertTrue(text.contains("CLAUDE_CODE_OAUTH_TOKEN=sign-in\n"))
         XCTAssertFalse(text.contains("GIT_AUTHOR_NAME"))
-        let mode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: command.environmentFile)[.posixPermissions] as? Int)
+        let mode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: String(file))[.posixPermissions] as? Int)
         XCTAssertEqual(mode & 0o077, 0, "readable by this user alone")
     }
 
     /// A session moves into a container and out again: the same folder,
     /// its agent made again for the other side, the container it leaves
-    /// released (its disk with it).
+    /// removed (its disk with it).
     func testASessionMovesIntoItsContainerAndOutAgain() async throws {
-        let oss = FakeOSS()
-        let server = await server(FakeContainerExec(), oss: oss, port: 7996)
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7996)
         defer { server.stop() }
         let info = SessionInfo(id: "s3", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Claude", created: 0)
         let record = SessionRecord(info: info, process: server.makeProcess(info, resume: nil), entries: [])
@@ -359,140 +392,80 @@ final class ContainerTests: ServerTestCase {
         let into: Result<Void, ContainerFailure> = await withCheckedContinuation { done in server.contain(record, into: true) { done.resume(returning: $0) } }
         XCTAssertNoThrow(try into.get())
         XCTAssertEqual(record.info.container?.id, "c1")
-        XCTAssertEqual(record.info.cwd, info.cwd)
         XCTAssertNotNil((record.process as? HostableProcess)?.container, "its agent made again for the container")
         let out: Result<Void, ContainerFailure> = await withCheckedContinuation { done in server.contain(record, into: false) { done.resume(returning: $0) } }
         XCTAssertNoThrow(try out.get())
         XCTAssertNil(record.info.container)
         XCTAssertNil((record.process as? HostableProcess)?.container)
-        try await Task.sleep(for: .milliseconds(200))
-        XCTAssertEqual(oss.server().released, ["c1"])
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(host.calls.contains("rm c1 --volumes"))
     }
 
-    /// A session's machines come from every server set, each used through
-    /// the server that lent it; what a server lends that is not this
-    /// server's sessions' is none of theirs.
-    func testMachinesComeFromEveryServer() async throws {
-        let oss = FakeOSS(["127.0.0.1": ("this-mac", true), "mac.test": ("another-mac", false)])
-        let server = await server(FakeContainerExec(), oss: oss, servers: [FakeOSS.here, "http://mac.test:7480"], port: 7986)
+    /// A turn that fails on the network has the container's network asked
+    /// of its host; with none, the container is made again (its disk kept),
+    /// the agent made again there, and the session says so. Not again for a
+    /// while.
+    func testAContainerThatLostItsNetworkIsMadeAgain() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7983)
         defer { server.stop() }
-        let info = SessionInfo(id: "m1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Claude", created: 0)
-        server.sessions.append(SessionRecord(info: info, process: server.makeProcess(info, resume: nil), entries: []))
-        let now = Date()
-        oss.hold(Lease(id: "here1", platform: .ios, config: "iphone", name: "a", holder: "visor:m1", state: .ready, created: now,
-                       expires: now.addingTimeInterval(600)))
-        oss.hold(Lease(id: "there1", platform: .ios, config: "iphone", name: "b", holder: "visor:m1", state: .ready, created: now,
-                       expires: now.addingTimeInterval(600)), at: "mac.test")
-        oss.hold(Lease(id: "theirs", platform: .ios, config: "iphone", name: "c", holder: "someone", state: .ready, created: now,
-                       expires: now.addingTimeInterval(600)), at: "mac.test")
-        await server.refreshLeases()
-        XCTAssertEqual(server.session("m1")?.info.leases.map(\.id), ["here1", "there1"])
+        let record = try await start(server, .startInContainer(id: "n1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
+                                                               skipPermissions: true)).get()
+        try host.set("listed.json", #"{"containers":[{"id":"c1","name":"made","labels":{"visor.session":"n1"}}]}"#)
+        // A failure that isn't the network's asks nothing.
+        server.handle(.failure("Something else went wrong"), from: record)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(host.calls.contains { $0.hasPrefix("network") })
 
-        let released: HTTPResponse = await withCheckedContinuation { done in
-            let request = HTTPRequest(method: "DELETE", path: "/api/machines/there1?session=m1", headers: [:], body: "")
-            server.answerMachines(request, parts: ["machines", "there1"]) { done.resume(returning: $0) }
-        }
-        XCTAssertEqual(released.status, 200)
-        XCTAssertEqual(oss.server("mac.test").released, ["there1"], "released by the server that lent it")
-        XCTAssertEqual(oss.server().released, [])
+        try host.set("nonetwork")
+        server.handle(.failure("API Error: Can't reach the API server — check your internet or DNS (EAI_AGAIN)"), from: record)
+        for _ in 0..<50 where record.info.container?.id != "c2" { try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertEqual(record.info.container?.id, "c2", "made again")
+        XCTAssertTrue(host.calls.contains("network c1"))
+        XCTAssertTrue(host.calls.contains("rm c1"), "its disk kept")
+        XCTAssertTrue(record.notice?.contains("lost its network") == true)
+        XCTAssertNotNil((record.process as? HostableProcess)?.container)
+
+        // Not again so soon.
+        let asked = host.calls.filter { $0.hasPrefix("network") }.count
+        server.handle(.failure("EAI_AGAIN"), from: record)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(host.calls.filter { $0.hasPrefix("network") }.count, asked)
     }
 
-    /// A machine comes from the server a session names, whatever is
-    /// nearer (a simulator from the MacBook, not the mini's own); a name
-    /// that is none of them says which there are.
-    func testAMachineComesFromTheServerNamed() async throws {
-        let oss = FakeOSS(["127.0.0.1": ("this-mac", true), "mac.test": ("another-mac", false)])
-        let server = await server(FakeContainerExec(), oss: oss, servers: [FakeOSS.here, "http://mac.test:7480"], port: 7983)
+    /// The host's containers for sessions this server no longer has go,
+    /// with their disks; a session in a container OS Server lent (before
+    /// container hosts) moves onto this computer.
+    func testLeftoversGoAndOSServersContainersAreLeft() async throws {
+        let host = try FakeHost(in: root)
+        let server = VisorServer(port: 7982)
         defer { server.stop() }
-        let info = SessionInfo(id: "n1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Claude", created: 0)
-        server.sessions.append(SessionRecord(info: info, process: server.makeProcess(info, resume: nil), entries: []))
-        func lease(_ body: String) async -> HTTPResponse {
-            await withCheckedContinuation { done in
-                server.answerMachines(HTTPRequest(method: "POST", path: "/api/machines", headers: [:], body: body), parts: ["machines"]) {
-                    done.resume(returning: $0)
-                }
-            }
-        }
-        let named = await lease(#"{"session":"n1","platform":"ios","server":"mac.test"}"#)
-        XCTAssertEqual(named.status, 200)
-        XCTAssertEqual(oss.server("mac.test").asked.map(\.platform), [.ios], "from the server named")
-        XCTAssertTrue(oss.server().asked.isEmpty, "not the nearer one")
-        let unknown = await lease(#"{"session":"n1","platform":"ios","server":"studio"}"#)
-        XCTAssertEqual(unknown.status, 404)
-        XCTAssertTrue(unknown.body.contains("mac.test"), "it says which there are")
-        XCTAssertTrue(VisorServer.ossServer("someones-macbook-pro.example.ts.net", isNamed: "MacBook"))
-        XCTAssertFalse(VisorServer.ossServer("someones-mac-mini.local", isNamed: "macbook"))
+        server.settings.lan = true
+        server.settings.containerHost = [host.path]
+        try host.set("listed.json", #"{"containers":[{"id":"gone","name":"x","labels":{"visor.server":"\#(server.id)","visor.session":"old"}},"#
+                     + #"{"id":"other","name":"y","labels":{"visor.server":"another"}}]}"#)
+        var info = SessionInfo(id: "o", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Old", created: 0)
+        info.container = SessionContainer(id: "lease1", socket: "/tmp/oss-lease1.sock")
+        let record = SessionRecord(info: info, process: server.makeProcess(info, resume: nil), entries: [])
+        server.sessions = [record]
+        await server.checkContainers()
+        XCTAssertTrue(host.calls.contains("rm gone --volumes"), "its session is gone")
+        XCTAssertFalse(host.calls.contains { $0.hasPrefix("rm other") }, "another server's")
+        XCTAssertNil(record.info.container, "OS Server's container left; the session runs here")
+        XCTAssertTrue(record.notice?.contains("OS Server's") == true)
     }
 
-    /// oss servers are set over the API as Settings sets them: each one's
-    /// token kept with the server's own secrets, and never said back; one
-    /// taken off goes with its token.
-    func testOSSServersAreSetOverTheAPI() async {
-        let server = await server(FakeContainerExec(), servers: [], port: 7991)
-        defer { server.stop() }
-        func post(_ body: String) -> HTTPResponse {
-            var request = HTTPRequest(method: "POST", path: "/api/oss", headers: [:], body: body)
-            request.trusted = true
-            return server.route(request)
-        }
-        let answer = post(#"{"server":"http://oss.test:7480/","token":"secret"}"#)
-        _ = post(#"{"server":"http://mini.test:7480","token":"other"}"#)
-        XCTAssertEqual(server.settings.ossServers, ["http://oss.test:7480", "http://mini.test:7480"])
-        XCTAssertTrue(server.ossTokenKept("http://oss.test:7480"))
-        XCTAssertEqual(VisorServer.secrets.get(VisorServer.ossTokenKey("http://mini.test:7480")), "other")
-        XCTAssertFalse(answer.body.contains("secret"), "a token is never said back")
-        XCTAssertTrue(answer.body.contains(#""tokenKept":true"#))
-
-        _ = post(#"{"server":"http://oss.test:7480","remove":true}"#)
-        XCTAssertEqual(server.settings.ossServers, ["http://mini.test:7480"])
-        XCTAssertNil(VisorServer.secrets.get(VisorServer.ossTokenKey("http://oss.test:7480")))
-    }
-
-    /// A settings file from before several servers reads its one, and the
-    /// token kept for it becomes that server's.
-    func testOneOSSServerFromBeforeIsKept() async throws {
-        let settings = try JSONDecoder().decode(ServerSettings.self, from: Data(#"{"ossServer":"http://oss.test:7480"}"#.utf8))
-        XCTAssertEqual(settings.ossServers, ["http://oss.test:7480"])
-        let server = await server(FakeContainerExec(), servers: [], port: 7985)
-        defer { server.stop() }
-        server.settings.ossServers = settings.ossServers
-        VisorServer.secrets.set("ossToken", "kept")
-        server.adoptOSSToken()
-        XCTAssertTrue(server.ossTokenKept("http://oss.test:7480"))
-        XCTAssertNil(VisorServer.secrets.get("ossToken"))
-    }
-
-    /// A lease's ports are reached at oss's address: an address, not a
-    /// `.local` name, and in a container this computer's LAN address where
-    /// oss is on this computer's loopback (the container's loopback is its
-    /// own).
-    func testALeaseIsReachedWhereTheSessionCanReachIt() {
-        let resolve: (String) -> String? = { $0 == "oss-mac.local" ? "192.168.4.40" : nil }
-        XCTAssertEqual(VisorServer.leaseHost(oss: "127.0.0.1", inContainer: true, lan: "192.168.4.52", resolve: resolve), "192.168.4.52")
-        XCTAssertEqual(VisorServer.leaseHost(oss: "localhost", inContainer: true, lan: "192.168.4.52", resolve: resolve), "192.168.4.52")
-        XCTAssertEqual(VisorServer.leaseHost(oss: "127.0.0.1", inContainer: false, lan: "192.168.4.52", resolve: resolve), "127.0.0.1")
-        XCTAssertEqual(VisorServer.leaseHost(oss: "oss-mac.local", inContainer: true, lan: "192.168.4.52", resolve: resolve), "192.168.4.40")
-        XCTAssertEqual(VisorServer.leaseHost(oss: "oss.example", inContainer: false, lan: nil, resolve: resolve), "oss.example")
-    }
-
-    func testAContainerAndLeasesOnTheWire() throws {
+    func testAContainerOnTheWire() throws {
         var info = SessionInfo(id: "s", agent: .codex, cwd: "/Users/someone/repo", title: "Codex", created: 0)
         info.container = SessionContainer(id: "c1", image: "visor-agent", socket: "/tmp/c1.sock")
-        info.leases = [SessionLease(id: "l1", platform: "ios", config: "vanilla", state: "ready", expires: 1_800_000_000)]
         XCTAssertEqual(SessionInfo(json: info.json)?.container, SessionContainer(id: "c1", image: "visor-agent"),
                        "the socket is the server's: never sent to a client")
-        XCTAssertEqual(SessionInfo(json: info.json)?.leases, info.leases)
         XCTAssertEqual(try JSONDecoder().decode(SessionInfo.self, from: JSONEncoder().encode(info)).container, info.container)
         let start = Envelope.decode(Envelope.startInContainer(id: "s", agent: .codex, cwd: "/Users/someone/repo", title: "", skipPermissions: true).encoded())
         XCTAssertEqual(start?.container, true)
-        XCTAssertEqual(start?.cwd, "/Users/someone/repo")
         let contain = Envelope.decode(Envelope.contain(session: "s", false).encoded())
         XCTAssertEqual(contain?.type, "contain")
         XCTAssertEqual(contain?.container, false)
-        // A container of the oss days (its server, its repository) reads as
-        // the container it names.
-        let old = Data(#"{"server":"http://oss.test:7480","id":"c1","repository":"o/r"}"#.utf8)
-        XCTAssertEqual(try JSONDecoder().decode(SessionContainer.self, from: old), SessionContainer(id: "c1"))
     }
 }
 

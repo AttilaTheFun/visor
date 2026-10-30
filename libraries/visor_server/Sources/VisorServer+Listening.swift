@@ -43,8 +43,6 @@ extension VisorServer {
         keepModelsFresh()
         resumePending()
         Task { await checkContainers() }
-        adoptOSSToken()
-        watchLeases()
     }
 
     /// The socket file: `~/.visor/server.sock`, short enough for a socket

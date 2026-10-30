@@ -33,9 +33,6 @@ public struct ServerPlatform: Sendable {
     /// Hosts the agents run under, apart from the server; nil where they
     /// are the server's own children.
     public var agentHosts: (any AgentHosting)?
-    /// Commands run in the containers sessions lease from oss; nil where
-    /// none can be.
-    public var containerExec: (any ContainerExecuting)?
     /// What the server says it is doing, a line at a time.
     public var log: @Sendable (String) -> Void
 
@@ -43,7 +40,7 @@ public struct ServerPlatform: Sendable {
                 secrets: any SecretStore, fetching: any HTTPFetching, pushSigning: (any PushSigning)?,
                 images: any ImageMeasuring, files: any FileWatching, tools: any ToolLocating, host: HostDetails,
                 lifecycle: any ServerLifecycle, agentHosts: (any AgentHosting)? = nil,
-                containerExec: (any ContainerExecuting)? = nil, log: @escaping @Sendable (String) -> Void) {
+                log: @escaping @Sendable (String) -> Void) {
         self.listening = listening
         self.processes = processes
         self.secrets = secrets
@@ -55,7 +52,6 @@ public struct ServerPlatform: Sendable {
         self.host = host
         self.lifecycle = lifecycle
         self.agentHosts = agentHosts
-        self.containerExec = containerExec
         self.log = log
     }
 

@@ -4,7 +4,6 @@
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import OSSClient
 import VisorProtocol
 
 extension VisorServer {

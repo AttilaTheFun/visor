@@ -76,6 +76,10 @@ progress.
   **applications/visor_server_linux**, **…_windows** — `visor-server`,
   the command-line server, and each system's platform for it (Linux:
   POSIX; Windows: Winsock and the Win32 process calls).
+- **libraries/visor_container_host**, **applications/visor_container_host**
+  — `visor-container-host`, a container host over Apple's `container`
+  (docs/container-host.md): on the PATH, it gives sessions Linux containers
+  on the Mac.
 
 ## Building
 

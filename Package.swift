@@ -43,9 +43,7 @@ let shared: [Target] = [
     ),
     .target(name: "AgentHostWire", path: "libraries/agent_host_wire/Sources", swiftSettings: strict),
     .target(name: "VisorServer",
-            dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire",
-                           // oss's client: the machines sessions lease.
-                           .product(name: "OSSClient", package: "oss")],
+            dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire"],
             path: "libraries/visor_server/Sources", swiftSettings: strict),
     .target(name: "VisorServerCLI", dependencies: ["VisorServer", "VisorProtocol"],
             path: "libraries/visor_server_cli/Sources", swiftSettings: strict),
@@ -76,13 +74,17 @@ let system: [Target] = [
             path: "libraries/visor_server_linux/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerLinux"],
                       path: "applications/visor_server_linux", swiftSettings: strict),
+    // Visor's container host over Apple's container: a Mac's, Bazel's
+    // there; built and tested here too, with a script for the tool.
+    .target(name: "VisorContainerHost", path: "libraries/visor_container_host/Sources", swiftSettings: strict),
 ]
 /// The server's tests, on Linux's platform (tests/visor_server_tests/linux).
 let tests: [Target] = [
     .testTarget(name: "VisorServerTests",
-                dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux",
-                               .product(name: "OSSClient", package: "oss")],
+                dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux"],
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
+    .testTarget(name: "VisorContainerHostTests", dependencies: ["VisorContainerHost"],
+                path: "tests/visor_container_host_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The agents' host, built with the server: `swift build -c release` puts
 /// both in the same folder, where the server looks for it.
@@ -93,8 +95,7 @@ let package = Package(
     name: "visor",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
-    // swift_sql and oss at their releases, as third_party/swift_packages pins them.
-    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0"),
-                   .package(url: "https://github.com/AttilaTheFun/oss.git", exact: "0.10.1")],
+    // swift_sql at its release, as third_party/swift_packages pins it.
+    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0")],
     targets: clientServices + shared + system + tests
 )
