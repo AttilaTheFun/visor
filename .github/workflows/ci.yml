@@ -3,9 +3,12 @@ name: CI
 # squash is a commit of its own): the fast checks, the tests and every
 # platform's build; then, on the release Mac's runner (self-hosted,
 # release-mac), the commit's packages built, signed and published to
-# Releases. The proof (the phone app's fixture screens and, on main, its UI
-# cases) is made on the repository's own runner in a macOS VM leased from OS
-# Server, and Reviews reads it from the run's `proof` artifact. A newer push
+# Releases. Each commit merged to main has its proof made too (the phone
+# app's fixture screens and its UI cases, compared with the pictures kept
+# at the commit before), on the repository's own runner in a macOS VM
+# leased from OS Server; Reviews reads it from the run's `proof` artifact,
+# and a release is proposed on a commit whose proof is in. A pull request
+# runs no proof: its builds and tests only. A newer push
 # to the pull request cancels this run if it hasn't finished. main requires every job green on a pull request's head
 # commit before it merges. A fork's pull request never runs on the release
 # Mac.
@@ -157,31 +160,25 @@ jobs:
   # (tools/released_pins.sh). Run on main's commits, which releases are of;
   # a pull request may still pin a revision. Reviews holds a release until
   # it passes.
-  # The proof: the phone app's fixture screens at this commit, in portrait
-  # and on its side, and on main its UI cases too, made in a macOS VM leased
-  # from OS Server (tools/ci/mac_vm_proof.sh), each screen compared with its
-  # kept picture (tests/proof/ios, ios-landscape: red's own; tests/snapshots
-  # holds blue's). Reviews reads the `proof` artifact from GitHub: a pull
-  # request's quick proof, and a release's full proof from main's run of its
-  # commit. On the repository's own runner, which a fork's pull request
-  # never reaches.
+  # The proof of each commit merged to main: the phone app's fixture
+  # screens, in portrait and on its side, and its UI cases, made in a macOS
+  # VM leased from OS Server (tools/ci/mac_vm_proof.sh), each screen
+  # compared with its picture kept at the commit before (tests/proof/ios,
+  # ios-landscape: red's own; tests/snapshots holds blue's). Reviews reads
+  # the `proof` artifact from GitHub: a release is proposed on a commit
+  # whose proof is in, and that is the proof reviewed. Within the hour.
   proof:
-    if: >
-      github.event_name == 'push' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name == 'push'
     runs-on: [self-hosted, visor-ci]
-    timeout-minutes: 150
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # The commit before too: its kept pictures are what the screens are compared with.
+          fetch-depth: 2
       - name: The phone app in a macOS VM, and the proof
-        env:
-          # The branch, for a pull request's head (its run's ref is GitHub's merge).
-          PROOF_REF: ${{ github.event.pull_request && format('refs/heads/{0}', github.head_ref) || github.ref }}
-          PROOF_KIND: ${{ github.event_name == 'pull_request' && 'quick' || 'full' }}
         # exec: the runner's cancel reaches the script's trap, which releases the VM.
-        run: exec tools/ci/mac_vm_proof.sh --kind "$PROOF_KIND" --proof "$RUNNER_TEMP/proof"
+        run: exec tools/ci/mac_vm_proof.sh --kind full --base HEAD^ --proof "$RUNNER_TEMP/proof"
       # The proof whether the screens came up or not: a broken screen is what it's for.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
