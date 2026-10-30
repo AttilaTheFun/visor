@@ -15,7 +15,7 @@ import XCTest
 
 /// A container host played by a script: each call written down, answers as
 /// the test sets them (files beside it: `busy`, `unhealthy`, `nonetwork`,
-/// `listed.json`).
+/// `listed.json`, `limits.json`).
 private struct FakeHost {
     let folder: URL
 
@@ -31,7 +31,9 @@ private struct FakeHost {
             echo "$op $*" >> "$dir/calls"
             case "$op" in
               health)
-                if [ -f "$dir/unhealthy" ]; then echo '{"ok":false,"error":"no runtime"}'; else echo '{"ok":true,"name":"fake","version":"1","api":1}'; fi ;;
+                if [ -f "$dir/unhealthy" ]; then echo '{"ok":false,"error":"no runtime"}'
+                elif [ -f "$dir/limits.json" ]; then echo "{\"ok\":true,\"name\":\"fake\",\"version\":\"1\",\"api\":1,\"limits\":$(cat "$dir/limits.json")}"
+                else echo '{"ok":true,"name":"fake","version":"1","api":1}'; fi ;;
               create)
                 n=$(( $(cat "$dir/count" 2>/dev/null || echo 0) + 1 )); echo $n > "$dir/count"
                 cat > "$dir/request-$n.json"
@@ -255,6 +257,22 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(fitted, ContainerSize(cpus: 12, memoryBytes: 28 * gigabyte, diskBytes: 16 * gigabyte))
         let moved = Envelope.decode(Envelope.contain(session: "z1", true, size: asked).encoded())
         XCTAssertEqual(moved?.containerSize, asked)
+    }
+
+    /// What the host says a container may have bounds what it is given.
+    func testTheHostsLimitsBoundTheSize() async throws {
+        let host = try FakeHost(in: root)
+        let gigabyte = ContainerSize.gigabyte
+        try host.set("limits.json", #"{"cpus": 2, "memoryBytes": \#(8 * gigabyte)}"#)
+        let server = await server(host, port: 7974)
+        defer { server.stop() }
+        XCTAssertEqual(server.containerLimits, .init(cpus: 2, memoryBytes: 8 * gigabyte))
+        let work = root.appendingPathComponent("work").path
+        let started = try await start(server, .startInContainer(id: "l1", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        XCTAssertEqual(started.info.container?.size?.cpus, 2)
+        let request = try host.request(1)
+        XCTAssertEqual(request.cpus, 2)
+        XCTAssertEqual(request.memoryBytes, 4 * gigabyte, "its limit, less what the computer keeps for itself")
     }
 
     /// A bridge to the computer's own containers or VMs is none of the

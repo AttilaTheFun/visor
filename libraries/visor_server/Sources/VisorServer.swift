@@ -218,6 +218,9 @@ public final class VisorServer {
     /// Why sessions cannot run in containers here, as last found
     /// (`checkContainers`); nil when they can.
     var containerProblem: String? = "not looked for yet"
+    /// The most the container host says a container may have (its
+    /// `health`), as last found.
+    var containerLimits: ContainerHost.Limits?
     /// Whether the container host's leftovers were looked for this run.
     var containersSwept = false
     /// When each session's container's network was last made again: not

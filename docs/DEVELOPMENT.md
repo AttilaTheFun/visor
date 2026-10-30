@@ -648,15 +648,17 @@ Visor server's own computer rather than on it directly, made by the
 server's **container host** (docs/container-host.md): the program set
 (`visor-server containers host <command…>`, the menu bar app's Containers,
 settings' `containerHost`), else `visor-container-host` on the PATH (Visor's
-own, applications/visor_container_host, over Apple's `container`); with neither, sessions run on the computer
-only and New Session offers no containers (`containersAvailable`, from the
+own, applications/visor_container_host, over Apple's `container`, carried
+in Visor Server's Contents/Helpers to be linked there); with neither,
+sessions run on the computer only and New Session offers no containers
+(`containersAvailable`, from the
 host's `health`). VisorServer+Containers.swift asks the host to `create`
 one from Visor's image (tools/containers/visor-agent, published by CI's
 agent-image job as `ghcr.io/attilathefun/visor-agent:<version>` and
 `:<MAJOR.MINOR>`; a server asks for its own version's, `visor-server
 containers image <ref>` for another) with the size the session asked for
 (ContainerSize: 6 cores, 16 GB of memory and 128 GB of disk unless asked
-otherwise, fitted to what the computer has; the disk is a volume,
+otherwise, fitted to the host's `limits`, else what the computer has; the disk is a volume,
 `visor-<session>-build` at /var/cache/bazel, where the image keeps Bazel's
 output), with Rosetta for x86_64 programs, labelled with the session and
 this server (`visor.session`, `visor.server`). It sees: the session's folder

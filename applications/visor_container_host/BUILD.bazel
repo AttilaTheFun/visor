@@ -23,6 +23,8 @@ swift_library(
 macos_command_line_application(
     name = "visor-container-host",
     bundle_id = "com.LoganShire.VisorServer.containerHost",
+    # Its version, which `health` says (stamped by CI with the apps').
+    infoplists = ["Info.plist"],
     minimum_os_version = "15.0",
     deps = [":visor_container_host_lib"],
 )

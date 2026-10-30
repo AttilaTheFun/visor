@@ -56,19 +56,22 @@ public enum ContainerHostCommand {
         guard let status = container.run(["system", "status"]), status.status == 0 else {
             return Answer(status: 0, json: base.merging(["ok": false, "error": "Apple's container is not started (container system start)"]) { $1 })
         }
-        return Answer(status: 0, json: base.merging(["ok": true]) { $1 })
+        // No limits of its own: the most a container can have is this Mac.
+        let limits: [String: Any] = ["cpus": ProcessInfo.processInfo.activeProcessorCount,
+                                     "memoryBytes": ProcessInfo.processInfo.physicalMemory]
+        return Answer(status: 0, json: base.merging(["ok": true, "limits": limits]) { $1 })
     }
 
     /// `container run`'s arguments for a request: its disks, this
     /// computer's folders, its labels, size and variables, Rosetta where
     /// asked and here, kept running.
     static func runArguments(_ request: HostRequest, rosetta: Bool) -> [String] {
+        let labels = request.labels.merging(["visor.host": name, specLabel: spec(of: request)]) { $1 }
         var arguments = ["run", "--detach", "--name", request.name]
         for volume in request.volumes { arguments += ["--volume", "\(volume.name):\(volume.destination)"] }
         for mount in request.mounts {
             arguments += ["--mount", "type=bind,source=\(mount.source),target=\(mount.destination)" + (mount.readOnly == true ? ",readonly" : "")]
         }
-        let labels = request.labels.merging(["visor.host": name]) { $1 }
         for (key, value) in labels.sorted(by: { $0.key < $1.key }) { arguments += ["--label", "\(key)=\(value)"] }
         if let cpus = request.cpus { arguments += ["--cpus", String(cpus)] }
         if let memory = request.memoryBytes { arguments += ["--memory", "\(max(memory / 1_048_576, 512))M"] }
@@ -83,14 +86,24 @@ public enum ContainerHostCommand {
         guard !request.name.isEmpty, request.name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }) else {
             return failure("\(request.name) can't name a container")
         }
-        for volume in request.volumes {
-            if let problem = ensure(volume, container: container) { return failure(problem) }
-        }
-        guard let made = container.run(runArguments(request, rosetta: rosetta)) else { return failure("Apple's container couldn't be started") }
-        guard made.status == 0 else {
-            let said = made.said
-            let missing = said.localizedCaseInsensitiveContains("not found") || said.localizedCaseInsensitiveContains("pull")
-            return failure("Could not make \(request.name) from \(request.image): \(said)", code: missing ? "noImage" : nil)
+        // Asked again for one it made: that one, started if it had stopped.
+        if let had = inspected(request.name, container: container) {
+            guard had.labels[specLabel] == spec(of: request) else {
+                return failure("There is already a container \(request.name), made otherwise", code: "exists")
+            }
+            if had.status != "running", container.run(["start", request.name])?.status != 0 {
+                return failure("\(request.name) is there but doesn't start")
+            }
+        } else {
+            for volume in request.volumes {
+                if let problem = ensure(volume, container: container) { return failure(problem) }
+            }
+            guard let made = container.run(runArguments(request, rosetta: rosetta)) else { return failure("Apple's container couldn't be started") }
+            guard made.status == 0 else {
+                let said = made.said
+                let missing = said.localizedCaseInsensitiveContains("not found") || said.localizedCaseInsensitiveContains("pull")
+                return failure("Could not make \(request.name) from \(request.image): \(said)", code: missing ? "noImage" : nil)
+            }
         }
         // Handed over only once it resolves names: one that can't is no use
         // to an agent.
@@ -182,25 +195,48 @@ public enum ContainerHostCommand {
         return Answer(status: 0, json: ["ok": dns && reach, "dns": dns, "reach": reach, "detail": detail])
     }
 
+    /// The label a container carries its request's digest in: `create`
+    /// asked again for the same one answers it rather than make another.
+    static let specLabel = "visor.host.spec"
+
+    /// A request's digest: FNV-1a over its JSON, keys sorted. Told apart
+    /// from another request, not kept secret.
+    static func spec(of request: HostRequest) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = (try? encoder.encode(request)) ?? Data()
+        let hash = data.reduce(UInt64(0xcbf2_9ce4_8422_2325)) { ($0 ^ UInt64($1)) &* 0x100_0000_01b3 }
+        return String(hash, radix: 16)
+    }
+
+    /// A container's state and labels; nil when there is no such container.
+    static func inspected(_ id: String, container: AppleContainer) -> (status: String, labels: [String: String])? {
+        guard let read = container.run(["inspect", id]), read.status == 0,
+              let items = (try? JSONSerialization.jsonObject(with: Data(read.output.utf8))) as? [[String: Any]],
+              let item = items.first else { return nil }
+        let labels = (item["configuration"] as? [String: Any])?["labels"] as? [String: String] ?? [:]
+        return (item["status"] as? String ?? "", labels)
+    }
+
     /// The container running, started again if it has stopped (this Mac
     /// restarted, say): `exec` runs in it next. False when there is no such
     /// container.
     public static func started(_ id: String, container: AppleContainer) -> Bool {
-        guard let read = container.run(["inspect", id]), read.status == 0,
-              let items = (try? JSONSerialization.jsonObject(with: Data(read.output.utf8))) as? [[String: Any]],
-              let item = items.first else { return false }
-        if item["status"] as? String == "running" { return true }
+        guard let had = inspected(id, container: container) else { return false }
+        if had.status == "running" { return true }
         return container.run(["start", id])?.status == 0
     }
 
-    /// `container exec`'s arguments for `exec <id> [--interactive]
+    /// `container exec`'s arguments for `exec <id> [--interactive] [--tty]
     /// [--workdir=DIR] [--env-file=FILE] -- program…`: standard input
-    /// always attached (read to its end, or kept open). Nil for arguments
-    /// it can't read.
+    /// always attached (read to its end, or kept open); with `--tty`, a
+    /// terminal, sized as the one this runs on and resized with it. Nil for
+    /// arguments it can't read.
     public static func execArguments(_ arguments: [String]) -> (id: String, arguments: [String])? {
         guard let id = arguments.first, let split = arguments.firstIndex(of: "--"), split > 0, split + 1 < arguments.count else { return nil }
         var options = ["exec", "--interactive"]
         for option in arguments[1..<split] {
+            if option == "--tty" { options += ["--tty"] }
             if option.hasPrefix("--workdir=") { options += ["--workdir", String(option.dropFirst("--workdir=".count))] }
             if option.hasPrefix("--env-file=") { options += ["--env-file", String(option.dropFirst("--env-file=".count))] }
         }

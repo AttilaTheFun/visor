@@ -56,6 +56,7 @@ extension VisorServer {
         var problem: String?
         if let host = containerHost {
             let health = await host.health()
+            containerLimits = health.limits
             if !health.ok { problem = "the container host \(health.name) can't make containers (\(health.error ?? "it says it isn't ready"))" }
         } else {
             problem = "no container host (set one in Visor Server's settings, or put \(ContainerHost.defaultName) on the PATH)"
@@ -181,8 +182,10 @@ extension VisorServer {
         for left in (try? await host.list()) ?? [] where left.labels["visor.session"] == session {
             try? await host.remove(left.id, volumes: !keepingDisk)
         }
-        // What it is given, within what this computer has.
-        let given = Self.fitted(size)
+        // What it is given, within what the host says a container may have
+        // (else this computer has).
+        let given = Self.fitted(size, cores: containerLimits?.cpus ?? ProcessInfo.processInfo.activeProcessorCount,
+                                memory: containerLimits?.memoryBytes.map { UInt64(clamping: $0) } ?? ProcessInfo.processInfo.physicalMemory)
         let request = ContainerHostRequest(name: name, image: image, cpus: given.cpus, memoryBytes: given.memoryBytes,
                                            mounts: Self.containerMounts(agent: agent, folder: resolved, tools: tools),
                                            volumes: [.init(name: name + "-build", destination: ContainerPlacement.buildOutput, sizeBytes: given.diskBytes)],

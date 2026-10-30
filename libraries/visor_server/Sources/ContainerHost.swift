@@ -28,6 +28,14 @@ struct ContainerHost: ContainerExecuting, Equatable {
         var name: String
         var version: String
         var error: String?
+        var limits: Limits?
+    }
+
+    /// The most a container of the host's may have: the computer's own,
+    /// for a host with no limits of its own; nil for what it doesn't say.
+    struct Limits: Equatable, Sendable {
+        var cpus: Int?
+        var memoryBytes: Int64?
     }
 
     /// A container `create` made.
@@ -52,8 +60,9 @@ struct ContainerHost: ContainerExecuting, Equatable {
     func health() async -> Health {
         do {
             let answer = try await json(["health"])
+            let limits = answer["limits"].object.map { _ in Limits(cpus: answer["limits"]["cpus"].int, memoryBytes: answer["limits"]["memoryBytes"].int64) }
             return Health(ok: answer["ok"].bool ?? false, name: answer["name"].string ?? command.executable,
-                          version: answer["version"].string ?? "", error: answer["error"].string)
+                          version: answer["version"].string ?? "", error: answer["error"].string, limits: limits)
         } catch {
             return Health(ok: false, name: command.executable, version: "", error: "\(error)")
         }

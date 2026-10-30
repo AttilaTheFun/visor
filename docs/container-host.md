@@ -21,13 +21,15 @@ In order, the first that is there:
 
 Visor ships one: `visor-container-host`, in this repository
 (applications/visor_container_host), over Apple's `container` on macOS 26.
-It has no leasing and no limits: every container asked for is made. Put it
-on the PATH to use it:
+It has no leasing and no limits: every container asked for is made. Visor
+Server carries it, in `Contents/Helpers`; link it onto the PATH to use it:
 
 ```sh
-bazel build -c opt //applications/visor_container_host:visor-container-host
-cp "$(bazel cquery -c opt --output=files //applications/visor_container_host:visor-container-host)" /usr/local/bin/
+ln -sf "/Applications/Visor Server.app/Contents/Helpers/visor-container-host" ~/.local/bin/
 ```
+
+(or build it: `bazel build -c opt
+//applications/visor_container_host:visor-container-host`).
  Hosts of other kinds are other programs that speak
 the same contract: OS Server's, which leases from a server and keeps every
 Mac's resources in one place, or a cloud's.
@@ -44,17 +46,22 @@ A host is a command line. Visor runs it as
   `{"error": "<words a person can read>", "code"?: "<code>"}` on standard
   output.
   - Codes Visor understands: `busy` (no room now), `noImage`, `notFound`
-    (no such container), `unsupported` (this host can't do that), and
-    `network` (the container's network is lost; see Network).
+    (no such container), `exists` (a container of that name, made
+    otherwise), `unsupported` (this host can't do that), and `network`
+    (the container's network is lost; see Network).
 - **Version:** every answer may say `"api"`, the contract's version this
   host speaks. This document is version 1.
 
 ### `health`
 
 Whether the host can make containers now: `{"ok": true, "name",
-"version", "api": 1}`, or `ok: false` with `"error"` saying why (no
-container runtime, too old a system). Visor asks at start and when New
-Session opens. A host that isn't healthy is as good as none.
+"version", "api": 1, "limits"?}`, or `ok: false` with `"error"` saying
+why (no container runtime, too old a system). Visor asks at start and when
+New Session opens. A host that isn't healthy is as good as none.
+
+`limits`, `{"cpus"?, "memoryBytes"?}`, is the most one container may have:
+a host with no limits of its own says what its computer has. Visor asks
+for no more (and leaves the computer some memory of its own).
 
 ### `create`
 
@@ -88,9 +95,13 @@ container's own `id` being what every other operation takes. It answers
 once the container runs and its network works (see Network): a
 container that can't resolve a name is not made, it is `code: "network"`.
 
+By `name`, it is safe to ask again: a container of that name that the
+same request made is answered as it is (started again if it had
+stopped), and one of that name made otherwise is `code: "exists"`.
+
 ### `exec`
 
-`<host> exec <id> [--workdir=DIR] [--env-file=FILE] [--interactive] -- <program> [arguments…]`
+`<host> exec <id> [--workdir=DIR] [--env-file=FILE] [--interactive] [--tty] -- <program> [arguments…]`
 
 Runs `program` in the container and **becomes it**:
 - its standard input, output and error are the host's own;
@@ -100,7 +111,10 @@ Runs `program` in the container and **becomes it**:
 
 `--env-file` is a file on this computer, `KEY=value` a line, given to the
 program. `--interactive` keeps standard input open (the agent's
-stream-json); without it, standard input is read to its end.
+stream-json); without it, standard input is read to its end. `--tty`
+gives the program a terminal: the host is run on one (a pty its caller
+made), and the program's is sized as that one and resized with it
+(SIGWINCH). A host without terminals answers `unsupported`.
 
 Visor runs an agent this way, as its agent host's child, so the agent
 lives as long as the host process does, across restarts of Visor Server.

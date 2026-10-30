@@ -8,7 +8,8 @@ import XCTest
 
 /// Apple's `container` played by a script: each call written down, its
 /// containers and volumes files beside it (`running-<id>`, `stopped-<id>`,
-/// `volume-<name>` holding its size), and answers as the test sets them
+/// `volume-<name>` holding its size, `spec-<id>` the request's digest it
+/// was labelled with), and answers as the test sets them
 /// (`stopped`, `noimage`, `nodns`, `noreach`, `list.json`).
 private struct FakeTool {
     let folder: URL
@@ -35,8 +36,13 @@ private struct FakeTool {
               *)
                 case "$1" in
                   run) [ -f "$dir/noimage" ] && { echo "Error: image not found" >&2; exit 1; }
-                    name=""; prev=""; for a in "$@"; do [ "$prev" = "--name" ] && name="$a"; prev="$a"; done
-                    touch "$dir/running-$name"; echo "$name" ;;
+                    name=""; spec=""; prev=""
+                    for a in "$@"; do
+                      [ "$prev" = "--name" ] && name="$a"
+                      [ "$prev" = "--label" ] && case "$a" in visor.host.spec=*) spec="${a#visor.host.spec=}" ;; esac
+                      prev="$a"
+                    done
+                    echo "$spec" > "$dir/spec-$name"; touch "$dir/running-$name"; echo "$name" ;;
                   exec)
                     if [ "$2" = "--interactive" ]; then path="${@: -2:1}"; cat > "$dir/put-$(echo "$path" | tr '/' '_')"; exit 0; fi
                     case "$*" in
@@ -45,9 +51,9 @@ private struct FakeTool {
                     esac ;;
                   delete) rm -f "$dir/running-$3" "$dir/stopped-$3" ;;
                   list) if [ -f "$dir/list.json" ]; then cat "$dir/list.json"; else echo '[]'; fi ;;
-                  inspect) [ -f "$dir/running-$2" ] && { echo '[{"status":"running"}]'; exit 0; }
-                    [ -f "$dir/stopped-$2" ] && { echo '[{"status":"stopped"}]'; exit 0; }
-                    exit 1 ;;
+                  inspect) status=""; [ -f "$dir/running-$2" ] && status=running; [ -f "$dir/stopped-$2" ] && status=stopped
+                    [ -n "$status" ] || exit 1
+                    echo "[{\"status\":\"$status\",\"configuration\":{\"labels\":{\"visor.host.spec\":\"$(cat "$dir/spec-$2" 2>/dev/null)\"}}}]" ;;
                   start) [ -f "$dir/stopped-$2" ] || exit 1; mv "$dir/stopped-$2" "$dir/running-$2" ;;
                 esac ;;
             esac
@@ -95,6 +101,8 @@ final class ContainerHostCommandTests: XCTestCase {
         XCTAssertEqual(healthy.json["api"] as? Int, 1)
         XCTAssertEqual(healthy.json["name"] as? String, "visor-container-host")
         XCTAssertEqual(healthy.json["version"] as? String, "0.44.0")
+        let limits = try XCTUnwrap(healthy.json["limits"] as? [String: Any])
+        XCTAssertEqual(limits["cpus"] as? Int, ProcessInfo.processInfo.activeProcessorCount)
 
         try fake.set("stopped")
         let stopped = ContainerHostCommand.answer(["health"], input: Data(), container: fake.tool, version: "")
@@ -113,10 +121,11 @@ final class ContainerHostCommandTests: XCTestCase {
         XCTAssertEqual(made.json["cpus"] as? Int, 6)
         XCTAssertEqual(fake.read("volume-visor-s1-build")?.trimmingCharacters(in: .whitespacesAndNewlines), "137438953472")
         let run = try XCTUnwrap(fake.calls.first { $0.hasPrefix("run ") })
+        let spec = ContainerHostCommand.spec(of: try JSONDecoder().decode(HostRequest.self, from: request))
         XCTAssertEqual(run, "run --detach --name visor-s1 --volume visor-s1-build:/var/cache/bazel"
             + " --mount type=bind,source=/Users/me/project,target=/Users/me/project"
             + " --mount type=bind,source=/Users/me/.tools,target=/opt/tools,readonly"
-            + " --label visor.host=visor-container-host --label visor.server=server --label visor.session=s1"
+            + " --label visor.host=visor-container-host --label visor.host.spec=\(spec) --label visor.server=server --label visor.session=s1"
             + " --cpus 6 --memory 16384M --env VISOR_URL=ws://host:7633 --rosetta ghcr.io/example/agent:1 sleep infinity")
         // Handed over once it resolves names.
         XCTAssertTrue(fake.calls.contains { $0.hasPrefix("exec visor-s1 sh -c getent hosts") })
@@ -125,8 +134,10 @@ final class ContainerHostCommandTests: XCTestCase {
     func testRosettaOnlyWhereAskedAndHere() throws {
         _ = ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0)
         XCTAssertFalse(try XCTUnwrap(fake.calls.first { $0.hasPrefix("run ") }).contains("--rosetta"))
-        let arguments = ContainerHostCommand.runArguments(HostRequest(name: "n", image: "i"), rosetta: true)
-        XCTAssertEqual(arguments, ["run", "--detach", "--name", "n", "--label", "visor.host=visor-container-host", "i", "sleep", "infinity"])
+        let plain = HostRequest(name: "n", image: "i")
+        XCTAssertEqual(ContainerHostCommand.runArguments(plain, rosetta: true),
+                       ["run", "--detach", "--name", "n", "--label", "visor.host=visor-container-host",
+                        "--label", "visor.host.spec=" + ContainerHostCommand.spec(of: plain), "i", "sleep", "infinity"])
     }
 
     func testAVolumeAtItsSizeIsKeptAndOneAtAnotherMadeAgain() throws {
@@ -134,10 +145,36 @@ final class ContainerHostCommandTests: XCTestCase {
         _ = ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0)
         XCTAssertFalse(fake.calls.contains { $0.hasPrefix("volume delete") || $0.hasPrefix("volume create") })
 
+        // Made again (the container gone, its disk kept) with the disk at another size.
+        _ = ContainerHostCommand.answer(["rm", "visor-s1"], input: Data(), container: fake.tool, version: "")
         try fake.set("volume-visor-s1-build", "68719476736")
         _ = ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0)
         XCTAssertTrue(fake.calls.contains("volume delete visor-s1-build"))
         XCTAssertTrue(fake.calls.contains("volume create -s 131072M visor-s1-build"))
+    }
+
+    func testCreateAskedAgainAnswersTheOneItMade() throws {
+        XCTAssertEqual(ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0).status, 0)
+        let again = ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0)
+        XCTAssertEqual(again.status, 0, again.text)
+        XCTAssertEqual(again.json["id"] as? String, "visor-s1")
+        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run ") }.count, 1)
+
+        // Stopped meanwhile (the Mac restarted): started again.
+        try FileManager.default.moveItem(at: fake.folder.appendingPathComponent("running-visor-s1"),
+                                         to: fake.folder.appendingPathComponent("stopped-visor-s1"))
+        XCTAssertEqual(ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0).status, 0)
+        XCTAssertTrue(fake.calls.contains("start visor-s1"))
+        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run ") }.count, 1)
+    }
+
+    func testCreateRefusesANameMadeOtherwise() throws {
+        XCTAssertEqual(ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0).status, 0)
+        let other = Data(String(decoding: request, as: UTF8.self).replacingOccurrences(of: "agent:1", with: "agent:2").utf8)
+        let refused = ContainerHostCommand.create(other, container: fake.tool, rosetta: false, tries: 1, pause: 0)
+        XCTAssertEqual(refused.status, 1)
+        XCTAssertEqual(refused.json["code"] as? String, "exists")
+        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run ") }.count, 1)
     }
 
     func testAMissingImageIsNoImage() throws {
@@ -225,6 +262,8 @@ final class ContainerHostCommandTests: XCTestCase {
         XCTAssertEqual(run.arguments, ["exec", "--interactive", "--workdir", "/Users/me/project", "--env-file", "/tmp/vars",
                                        "visor-s1", "claude", "-p", "--"])
         XCTAssertEqual(ContainerHostCommand.execArguments(["visor-s1", "--", "true"])?.arguments, ["exec", "--interactive", "visor-s1", "true"])
+        XCTAssertEqual(ContainerHostCommand.execArguments(["visor-s1", "--tty", "--", "bash"])?.arguments,
+                       ["exec", "--interactive", "--tty", "visor-s1", "bash"])
         XCTAssertNil(ContainerHostCommand.execArguments(["visor-s1", "true"]))
         XCTAssertNil(ContainerHostCommand.execArguments(["visor-s1", "--"]))
     }
