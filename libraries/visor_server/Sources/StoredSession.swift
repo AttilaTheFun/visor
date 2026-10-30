@@ -40,13 +40,15 @@ struct StoredSession: Codable {
     /// The subagents seen running, and those the person closed.
     var watchedSubagents: [String]?
     var closedSubagents: [String]?
+    /// The MCP servers it switched from their default (on or off).
+    var mcpSwitched: [String: Bool]?
     static let currentShape = 2
 
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
          interrupted: Bool? = nil, agentPID: Int32? = nil, shownPrompts: [String]? = nil, notice: String? = nil,
          queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil,
          head: String? = nil, leaf: String? = nil, otherBranch: String? = nil, branchKept: Bool? = nil,
-         fork: PendingFork? = nil, watchedSubagents: [String]? = nil, closedSubagents: [String]? = nil) {
+         fork: PendingFork? = nil, watchedSubagents: [String]? = nil, closedSubagents: [String]? = nil, mcpSwitched: [String: Bool]? = nil) {
         self.info = info
         self.entries = entries
         self.resumeID = resumeID
@@ -65,6 +67,7 @@ struct StoredSession: Codable {
         self.fork = fork
         self.watchedSubagents = watchedSubagents
         self.closedSubagents = closedSubagents
+        self.mcpSwitched = mcpSwitched
     }
 
     /// Every field but the session itself is optional, so a file written
@@ -89,5 +92,6 @@ struct StoredSession: Codable {
         fork = try c.decodeIfPresent(PendingFork.self, forKey: .fork)
         watchedSubagents = try c.decodeIfPresent([String].self, forKey: .watchedSubagents)
         closedSubagents = try c.decodeIfPresent([String].self, forKey: .closedSubagents)
+        mcpSwitched = try c.decodeIfPresent([String: Bool].self, forKey: .mcpSwitched)
     }
 }

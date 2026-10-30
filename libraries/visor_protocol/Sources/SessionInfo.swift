@@ -100,6 +100,9 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// The subagents its agent sent off, running or finished, until the
     /// person closes each.
     public var subagents: [SubagentInfo] = []
+    /// The MCP servers its computer passes on to agents, and whether this
+    /// session has each (on unless switched off; `mcp`).
+    public var mcp: [MCPSwitch] = []
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -163,5 +166,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         origin = (try? c.decodeIfPresent(SessionOrigin.self, forKey: .origin)) ?? nil
         side = try c.decodeIfPresent([SideQuestion].self, forKey: .side) ?? []
         subagents = try c.decodeIfPresent([SubagentInfo].self, forKey: .subagents) ?? []
+        mcp = try c.decodeIfPresent([MCPSwitch].self, forKey: .mcp) ?? []
     }
 }

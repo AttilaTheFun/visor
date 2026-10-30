@@ -154,6 +154,8 @@ extension VisorServer {
         case ("POST", 1, "restart"): restRestart(call)
         case ("GET", 1, "oss"): restOSS(call)
         case ("POST", 1, "oss"): restSetOSS(call)
+        case ("GET", 1, "mcp"): restMCP(call)
+        case ("PUT", 1, "mcp"): restSetMCP(call)
         case ("POST", 1, "quit"): restQuit(call)
         case ("POST", 1, "sessions"): restStartSession(call)
         case ("DELETE", 2, "sessions"): restEndSession(call)
@@ -363,7 +365,7 @@ extension VisorServer {
     private func restSessionAction(_ call: RESTCall) -> HTTPResponse {
         let action = call.parts[2]
         guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "stopAgent", "startAgent", "keepBranch", "continueBranch", "permissions", "settings",
-               "approve", "rename", "acknowledge", "signIn", "fork", "side", "endSide", "toSubagent", "closeSubagent"].contains(action) else {
+               "approve", "rename", "acknowledge", "signIn", "fork", "side", "endSide", "toSubagent", "closeSubagent", "mcp"].contains(action) else {
             return HTTPResponse(404, "{\"error\":\"unknown action\"}")
         }
         guard let record = session(call.parts[1]) else { return HTTPResponse(404, "{\"error\":\"no such session\"}") }

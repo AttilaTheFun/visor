@@ -104,6 +104,11 @@ enum CodexOutput: Sendable {
                 return [.toolStarted(id: id, name: "Edit", label: "Edit: \(changeSummary(item))")]
             case "mcpToolCall":
                 let name = item["tool"] as? String ?? "tool"
+                // A proxied MCP server's tool, by its server and its own name.
+                if item["server"] as? String == "visor", let shown = MCPProxy.shownName(name) {
+                    let summary = short(JSON.summary(item["arguments"]))
+                    return [.toolStarted(id: id, name: name, label: summary.isEmpty ? shown : shown + " — " + summary)]
+                }
                 return [.toolStarted(id: id, name: name, label: "\(name): \(short(JSON.summary(item["arguments"])))")]
             case "reasoning":
                 return [.reasoningStarted]

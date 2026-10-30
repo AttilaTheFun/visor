@@ -66,12 +66,16 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// it): a ws:// address; empty for this computer's LAN address, at the
     /// server's port.
     public var containerCallback = ""
+    /// The MCP servers passed on to the sessions' agents (MCPProxy): each a
+    /// name, an address and headers, a secret one's value kept with the
+    /// server's secrets (MCPEndpoint.secretKey).
+    public var mcpEndpoints: [MCPEndpoint] = []
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             detachAgents, ossServer, ossServers, containerImage, containerCallback
+             detachAgents, ossServer, ossServers, containerImage, containerCallback, mcpEndpoints
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -89,6 +93,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         if !ossServers.isEmpty { try c.encode(ossServers, forKey: .ossServers) }
         if !containerImage.isEmpty { try c.encode(containerImage, forKey: .containerImage) }
         if !containerCallback.isEmpty { try c.encode(containerCallback, forKey: .containerCallback) }
+        if !mcpEndpoints.isEmpty { try c.encode(mcpEndpoints, forKey: .mcpEndpoints) }
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -118,6 +123,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         ossServers = try c.decodeIfPresent([String].self, forKey: .ossServers) ?? (one.isEmpty ? [] : [one])
         containerImage = try c.decodeIfPresent(String.self, forKey: .containerImage) ?? ""
         containerCallback = try c.decodeIfPresent(String.self, forKey: .containerCallback) ?? ""
+        mcpEndpoints = try c.decodeIfPresent([MCPEndpoint].self, forKey: .mcpEndpoints) ?? []
     }
 
     public func keep(at url: URL) {

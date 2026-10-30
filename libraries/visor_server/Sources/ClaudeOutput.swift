@@ -132,6 +132,11 @@ extension ClaudeOutput {
            let description = (input as? [String: Any])?["description"] as? String, !description.isEmpty {
             return "Waiting: " + description
         }
+        // A proxied MCP server's tool, by its server and its own name.
+        if name.hasPrefix("mcp__visor__"), let shown = MCPProxy.shownName(name) {
+            let summary = JSON.summary(input)
+            return summary.isEmpty ? shown : shown + " — " + summary
+        }
         return "\(name): \(JSON.summary(input))"
     }
 

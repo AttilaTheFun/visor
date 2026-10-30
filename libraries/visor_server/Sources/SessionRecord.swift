@@ -106,6 +106,8 @@ public final class SessionRecord {
     /// same.
     var subagentCalls: Set<String> = []
     var closedSubagents: Set<String> = []
+    /// The MCP servers it switched from their default: on or off.
+    var mcpSwitched: [String: Bool] = [:]
     /// When the agent's subagents were last read: at most every two
     /// seconds while they work.
     var subagentsRead: ContinuousClock.Instant?
@@ -219,7 +221,8 @@ public final class SessionRecord {
         StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
                              otherBranch: otherBranch, branchKept: branchKept ? true : nil, fork: pendingFork,
                              watchedSubagents: watchedSubagents.isEmpty ? nil : watchedSubagents.sorted(),
-                             closedSubagents: closedSubagents.isEmpty ? nil : closedSubagents.sorted())
+                             closedSubagents: closedSubagents.isEmpty ? nil : closedSubagents.sorted(),
+                             mcpSwitched: mcpSwitched.isEmpty ? nil : mcpSwitched)
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or
