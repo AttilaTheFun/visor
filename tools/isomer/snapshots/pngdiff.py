@@ -67,11 +67,12 @@ def crop_top(path, pixels):
     width, height, rows = read_png(path)
     write_png(path, width, height - pixels, rows[pixels:])
 
-def compare(ref_path, cap_path, diff_path, tolerance=16):
+def compare(ref_path, cap_path, diff_path, tolerance=16, ignore_top=0):
     """Changed pixels (any channel off by more than `tolerance`: Liquid Glass
-    edges shade a few levels differently run to run); writes the
-    diff image: the reference faded, changed pixels red. A size change
-    counts every pixel and the diff is the capture tinted red."""
+    edges shade a few levels differently run to run), below the top
+    `ignore_top` rows (a phone's status bar, the system's and not the app's);
+    writes the diff image: the reference faded, changed pixels red. A size
+    change counts every pixel and the diff is the capture tinted red."""
     rw, rh, ref = read_png(ref_path)
     cw, ch, cap = read_png(cap_path)
     if (rw, rh) != (cw, ch):
@@ -82,7 +83,8 @@ def compare(ref_path, cap_path, diff_path, tolerance=16):
         a, b = ref[y], cap[y]
         line = bytearray(len(a))
         for i in range(0, len(a), 3):
-            if abs(a[i] - b[i]) > tolerance or abs(a[i + 1] - b[i + 1]) > tolerance or abs(a[i + 2] - b[i + 2]) > tolerance:
+            if y >= ignore_top and (abs(a[i] - b[i]) > tolerance or abs(a[i + 1] - b[i + 1]) > tolerance
+                                    or abs(a[i + 2] - b[i + 2]) > tolerance):
                 changed += 1
                 line[i:i + 3] = b"\xff\x00\x00"
             else:

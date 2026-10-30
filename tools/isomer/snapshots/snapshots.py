@@ -59,6 +59,11 @@ WEB_DESKTOP_PORT = int(os.environ.get("VISOR_SNAPSHOT_WEB_PORT", "8791"))
 WEB_DRIVER_PORT = int(os.environ.get("VISOR_SNAPSHOT_DRIVER_PORT", "4444"))
 # Safari's bottom toolbar on the iPhone simulator, in screenshot pixels.
 SAFARI_TOOLBAR = int(os.environ.get("VISOR_SNAPSHOT_SAFARI_TOOLBAR", "300"))
+# The iPhone simulator's status bar in portrait (54pt at 3x), in screenshot
+# pixels: left out of the comparison, being the system's and not the app's,
+# and drawn anew by each simulator runtime (Xcode 27.2's moved its icons).
+# The pictures keep it, the same size as red's.
+IOS_STATUS_BAR = int(os.environ.get("VISOR_SNAPSHOT_IOS_STATUS_BAR", "162"))
 # The emulator's status bar (24dp at 2.625x), in screenshot pixels.
 ANDROID_STATUS_BAR = int(os.environ.get("VISOR_SNAPSHOT_ANDROID_STATUS_BAR", "80"))
 SETTLE = float(os.environ.get("VISOR_SNAPSHOT_SETTLE", "8"))
@@ -182,6 +187,7 @@ def simulator():
 
 class WebMobile:
     describe = {"app": "Visor Isomer", "device": "Mobile Safari, iOS simulator (iPhone 17 Pro)", "orientation": "portrait"}
+    status_bar = IOS_STATUS_BAR
 
     def prepare(self):
         self.udid = simulator()
@@ -208,6 +214,7 @@ class WebMobile:
 class RedIOS:
     # Red Visor, the reference blue is held to.
     describe = {"app": "Visor", "device": "iOS simulator (iPhone 17 Pro)", "orientation": "portrait"}
+    status_bar = IOS_STATUS_BAR
 
     def prepare(self):
         self.udid = simulator()
@@ -244,6 +251,7 @@ class IOS:
     held against red's same-named one. One test run pictures every screen;
     `capture` hands each picture over."""
     describe = {"app": "Visor Isomer", "device": "iOS simulator (iPhone 17, iOS 27)", "orientation": "portrait"}
+    status_bar = IOS_STATUS_BAR
     # What the review store files it as: red's iPhone runs are target ios
     # in each orientation.
     manifest_target = "ios"
@@ -283,6 +291,8 @@ class IOS:
 class IOSLandscape(IOS):
     describe = {**IOS.describe, "orientation": "landscape"}
     case = "BlueFixtureShots/testFixtureScreensLandscape"
+    # On its side an iPhone shows no status bar.
+    status_bar = 0
 
 # --- the Android emulator
 
@@ -655,7 +665,8 @@ def run(targets, screens):
                     log(target, screen, "new (no reference yet)")
                     continue
                 diff = os.path.join(run_dir, target, f"{screen}.diff.png")
-                changed = pngdiff.compare(reference, capture, diff)
+                ignore = getattr(kind, "status_bar", 0)
+                changed = pngdiff.compare(reference, capture, diff, ignore_top=ignore)
                 if changed:
                     # A second look: a screen pictured before it settled (a
                     # menu not yet up on a busy runner) differs once; a real
@@ -663,7 +674,7 @@ def run(targets, screens):
                     log(target, screen, f"changed {changed} px; a second look")
                     try:
                         kind.capture(screen, capture)
-                        changed = pngdiff.compare(reference, capture, diff)
+                        changed = pngdiff.compare(reference, capture, diff, ignore_top=ignore)
                     except Exception as error:
                         log(target, screen, "second look failed:", error)
                 status = "same" if changed == 0 else "changed"
