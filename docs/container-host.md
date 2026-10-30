@@ -192,5 +192,12 @@ of its own that speaks this contract and talks to its server:
 - `ls` lists its leases with Visor's labels.
 
 Its configuration (the server, its key) is its own, never Visor's. OS
-Server's is `oss container-host`, run with OS Server's client settings
-and the Visor's key.
+Server's is `oss container-host` (OS Server 0.14): its containers are
+container leases held until released, found again by labels kept with
+them; it uses this computer's oss client settings, or the server and key
+its own arguments name. A session's folder is a mount, which needs the
+server's own Mac:
+
+```sh
+visor-server containers host /usr/local/bin/oss container-host --server=http://127.0.0.1:7480 --key-file=~/.config/oss/visor.key
+```
