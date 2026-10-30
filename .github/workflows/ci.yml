@@ -21,6 +21,10 @@ permissions:
   contents: read
   pull-requests: read
   actions: read
+# Whom the jobs' OS Server leases are for (OS Server's API 12): with the
+# runner's `ci` key (~/.config/oss/key), each lease is `<job>-<run>@ci`.
+env:
+  OSS_CLIENT_ID: ${{ github.job }}-${{ github.run_id }}
 jobs:
   test:
     # Xcode 27, the toolchain the code is written against.
