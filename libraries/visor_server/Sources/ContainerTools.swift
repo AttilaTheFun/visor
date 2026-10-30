@@ -3,9 +3,9 @@ import Synchronization
 
 /// What every container sees of this server, read-only at
 /// `ContainerPlacement.toolsFolder`: Visor's MCP script, which the agent
-/// there runs with the container's Node, and the `visor` command it leases
-/// machines with. Written into the data directory the first time a
-/// container is made in a run (again when it differs from what is there).
+/// there runs with the container's Node. Written into the data directory
+/// the first time a container is made in a run (again when it differs from
+/// what is there).
 enum ContainerTools {
     private static let written = Mutex<URL?>(nil)
 
@@ -13,7 +13,7 @@ enum ContainerTools {
     static var folder: URL? {
         written.withLock { folder in
             let directory = ServerPlatform.current.host.dataDirectory.appendingPathComponent("container-tools", isDirectory: true)
-            if let folder, folder == directory, FileManager.default.fileExists(atPath: directory.appendingPathComponent("visor").path) {
+            if let folder, folder == directory, FileManager.default.fileExists(atPath: directory.appendingPathComponent("visor_mcp.js").path) {
                 return folder
             }
             for (name, source, executable) in files {
@@ -32,6 +32,6 @@ enum ContainerTools {
 
     /// Each file: its name, what it holds, and whether it runs.
     private static var files: [(String, String, Bool)] {
-        [("visor_mcp.js", VisorMCPScript.source, false), ("visor", VisorCommandScript.source, true)]
+        [("visor_mcp.js", VisorMCPScript.source, false)]
     }
 }

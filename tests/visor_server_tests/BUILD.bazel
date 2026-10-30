@@ -16,6 +16,5 @@ swift_test(
         "//libraries/visor_server_apple",
         "//libraries/visor_server_cli",
         "//libraries/visor_server_posix",
-        "@swiftpkg_oss//:OSSClient",
     ],
 )

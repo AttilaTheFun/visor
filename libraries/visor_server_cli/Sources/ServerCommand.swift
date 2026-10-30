@@ -53,15 +53,12 @@ public struct ServerCommand {
                    between computers; `standalone off` (the default)
                    shares them. Also
                    VISOR_STANDALONE=1.
-          oss      Shows the oss servers (OS Server) sessions lease through
-                   this server: machines (VMs, simulators, emulators;
-                   `visor machine …` in a session) from the nearest with
-                   room, containers from this computer's. `oss <url> <token
-                   file>` adds one and keeps its token, `oss - <url>` takes
-                   one off, `oss -` takes them all off.
           containers
                    Shows how sessions' containers are made on this computer
-                   (Apple's container on a Mac). `containers image <name>|-`
+                   (docs/container-host.md). `containers host <command…>|-`
+                   is the container host that makes them (else
+                   visor-container-host on the PATH; with neither, sessions
+                   run on this computer only); `containers image <name>|-`
                    is the image (Visor's visor-agent by default, built from
                    tools/containers/visor-agent); `containers callback
                    <ws://host:port>|-` is how they reach this server (this
@@ -75,7 +72,7 @@ public struct ServerCommand {
           --password <word>          --auth password|none
           --lan on|off  --vpn on|off  --ssh on|off
           --address <url>|-          --standalone on|off
-          --oss <url>|-  --oss-token-file <path>  --container-image <name>|-
+          --container-host <command>|-  --container-image <name>|-
         In its environment:
           VISOR_DETACH_AGENT_HOST=0|1
                        1 (the default): each session's agent runs under
@@ -111,7 +108,6 @@ public struct ServerCommand {
             case "auth": try auth(rest.first)
             case "address": address(rest.first)
             case "standalone": try standalone(rest.first)
-            case "oss": try oss(rest)
             case "containers": try containers(rest)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")

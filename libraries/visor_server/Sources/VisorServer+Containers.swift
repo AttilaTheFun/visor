@@ -1,26 +1,28 @@
 // Sessions whose agents run in Linux containers rather than on this computer
-// directly: each a lease from the oss server (OS Server) on this computer,
-// which runs it (a helper of its own per container, apart from oss), made
-// from Visor's agent image (tools/containers/visor-agent, published by CI to
-// ghcr.io) and held while the session lasts. The agent runs in it under a
-// host of its own, as any agent does, through OS Server's command line on the
-// container's own socket, so it outlives a restart of this server and of OS
-// Server. The container sees the session's folder at the same path, the
-// agent's log folder, and Visor's tools (ContainerTools), and nothing else of
-// the Mac: Apple apps build there with rules_applecross from Xcode's SDKs an
-// OS Server serves, not the Mac's Xcode. The agent works on the same files
-// and keeps the same log whichever side it runs on, so a session moves into
-// or out of its container by starting its agent again on the other side.
+// directly: each made by this server's container host (docs/container-host.md
+// — the program set in its settings, or `visor-container-host` on the PATH;
+// with neither, sessions run here only), from Visor's agent image
+// (tools/containers/visor-agent, published by CI to ghcr.io), and kept while
+// the session lasts. The agent runs in it under a host of its own, as any
+// agent does, through the container host's `exec`, so it outlives a restart
+// of this server. The container sees the session's folder at the same path,
+// the agent's log folder, and Visor's tools (ContainerTools), and nothing
+// else of the computer. The agent works on the same files and keeps the same
+// log whichever side it runs on, so a session moves into or out of its
+// container by starting its agent again on the other side.
 //
 //     visor-server containers image <ref> | -     the image containers are made from (Visor's)
 //     visor-server containers callback <ws-url> | -  how a container reaches this server
+//     visor-server containers host <command…> | -  the container host (else visor-container-host on the PATH)
 
 import ClaudeTranscript
 import Foundation
-import OSSClient
 import VisorProtocol
 
 extension VisorServer {
+    /// The name a container host on the PATH goes by (visor-container-host).
+    public nonisolated static let containerHostName = ContainerHost.defaultName
+
     /// Where Visor's own agent image is published (by CI, for each build
     /// as its version, and as its MAJOR.MINOR for the latest of those).
     public nonisolated static let containerImageRepository = "ghcr.io/attilathefun/visor-agent"
@@ -42,25 +44,29 @@ extension VisorServer {
     /// Whether a session can run in a container here (as last found).
     public var containersAvailable: Bool { containerProblem == nil }
 
+    /// The container host containers come from: the one set, else
+    /// `visor-container-host` on the PATH; nil for none.
+    var containerHost: ContainerHost? {
+        ContainerHost.found(setting: settings.containerHost.first.map { ShellCommand($0, Array(settings.containerHost.dropFirst())) })
+    }
+
     /// Finds again whether containers can run here, and tells the clients
-    /// when that changed: an OS Server on this computer that lends them.
+    /// when that changed: a container host that says it can make them.
     public func checkContainers() async {
         var problem: String?
-        if ServerPlatform.current.containerExec == nil {
-            problem = "this system runs no containers"
-        } else if let pool = ossPool {
-            let here = await pool.reach().filter { $0.distance == .thisComputer }
-            if here.isEmpty {
-                problem = "no OS Server on this computer answers (install OS Server, and add it in Visor Server's settings with its token)"
-            } else if !here.contains(where: { $0.lends(.container, config: nil) }) {
-                problem = "the OS Server on this computer lends no containers (OS Server 0.9 or later)"
-            }
+        if let host = containerHost {
+            let health = await host.health()
+            if !health.ok { problem = "the container host \(health.name) can't make containers (\(health.error ?? "it says it isn't ready"))" }
         } else {
-            problem = "no oss server is set (this computer's OS Server, in Visor Server's settings)"
+            problem = "no container host (set one in Visor Server's settings, or put \(ContainerHost.defaultName) on the PATH)"
         }
         // An agent in a container reaches this server over the network.
         if problem == nil, !settings.reachableFromNetwork, settings.containerCallback.trimmingCharacters(in: .whitespaces).isEmpty {
             problem = "an agent in a container reaches this server over the network: turn on “Reachable from the network”"
+        }
+        if problem == nil, !containersSwept, let host = containerHost {
+            containersSwept = true
+            await sweepContainers(host)
         }
         guard problem != containerProblem else { return }
         let was = containersAvailable
@@ -83,8 +89,30 @@ extension VisorServer {
 
     /// Where a session's agent runs, when that is a container.
     func placement(for info: SessionInfo) -> ContainerPlacement? {
-        guard let container = info.container, let socket = container.socket, let exec = ServerPlatform.current.containerExec else { return nil }
-        return ContainerPlacement(name: container.id, socket: socket, serverURL: containerServerURL, exec: exec)
+        guard let container = info.container, container.socket == nil, let host = containerHost else { return nil }
+        return ContainerPlacement(id: container.id, serverURL: containerServerURL, exec: host)
+    }
+
+    /// The containers this server's host keeps for sessions it no longer
+    /// has, removed with their disks; and a session still in a container
+    /// OS Server lent before container hosts (0.43 and before) moved onto
+    /// this computer, its agent started again here.
+    private func sweepContainers(_ host: ContainerHost) async {
+        let kept = Set(sessions.compactMap(\.info.container?.id))
+        for container in (try? await host.list()) ?? [] where container.labels["visor.server"] == id && !kept.contains(container.id) {
+            try? await host.remove(container.id, volumes: true)
+            Self.log("removed the container \(container.id): its session is gone")
+        }
+        for record in sessions where record.info.container?.socket != nil {
+            record.info.container = nil
+            broadcast(record.apply(.notice("Its container was OS Server's, from before container hosts: it runs on this computer now "
+                                           + "(Move into a Container makes it a new one).")), session: record)
+            record.placed()
+            rebuild(record) {}
+            Self.log("session moved out of its OS Server container: \(record.info.title) (\(record.info.id))")
+        }
+        saveArchive()
+        broadcastSessions()
     }
 
     /// The name of a session's container, and of its disk's volume with
@@ -96,8 +124,9 @@ extension VisorServer {
     /// What a session's container sees of this computer: its folder, at
     /// the same path; the agent's log folder for it, where the agent there
     /// keeps its log; and Visor's tools.
-    static func containerMounts(agent: AgentKind, folder: String, tools: URL) -> [ContainerMount] {
-        var mounts = [ContainerMount(source: folder, destination: folder)]
+    static func containerMounts(agent: AgentKind, folder: String, tools: URL) -> [ContainerHostRequest.Mount] {
+        typealias Mount = ContainerHostRequest.Mount
+        var mounts = [Mount(source: folder, destination: folder)]
         switch agent {
         case .codex:
             // Codex's home in the containers (their own sign-in, one for
@@ -105,15 +134,15 @@ extension VisorServer {
             // sessions folder in it, where the session's log is kept.
             let sessions = SessionCatalog.codexRoot().appendingPathComponent("sessions", isDirectory: true)
             try? FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
-            mounts.append(ContainerMount(source: ContainerSignIns.codexHome.path, destination: "/root/.codex"))
-            mounts.append(ContainerMount(source: sessions.path, destination: "/root/.codex/sessions"))
+            mounts.append(Mount(source: ContainerSignIns.codexHome.path, destination: "/root/.codex"))
+            mounts.append(Mount(source: sessions.path, destination: "/root/.codex/sessions"))
         case .openrouter:
             // The same for openrouter: its home in the containers (their
             // key), the computer's sessions folder in it.
             let sessions = SessionCatalog.openrouterRoot.appendingPathComponent("sessions", isDirectory: true)
             try? FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
-            mounts.append(ContainerMount(source: ContainerSignIns.openrouterHome.path, destination: "/root/.openrouter"))
-            mounts.append(ContainerMount(source: sessions.path, destination: "/root/.openrouter/sessions"))
+            mounts.append(Mount(source: ContainerSignIns.openrouterHome.path, destination: "/root/.openrouter"))
+            mounts.append(Mount(source: sessions.path, destination: "/root/.openrouter/sessions"))
         case .claude:
             // Where this computer's Claude keeps the folder's log (by its
             // real path), at the name Claude in the container gives it (the
@@ -123,21 +152,23 @@ extension VisorServer {
             let project = ClaudeSessionFiles.projectsRoot().appendingPathComponent(name, isDirectory: true)
             try? FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
             let seen = ClaudeSessionFiles.projectDirectoryName(for: folder, followingLinks: false)
-            mounts.append(ContainerMount(source: project.path, destination: "/root/.claude/projects/" + seen))
+            mounts.append(Mount(source: project.path, destination: "/root/.claude/projects/" + seen))
         }
-        mounts.append(ContainerMount(source: tools.path, destination: ContainerPlacement.toolsFolder, readOnly: true))
+        mounts.append(Mount(source: tools.path, destination: ContainerPlacement.toolsFolder, readOnly: true))
         return mounts
     }
 
-    /// Makes the container a session's agent runs in: leased from the OS
-    /// Server on this computer (held until released), from the image, with
-    /// its mounts and a disk of its own for builds, the sign-ins for
-    /// containers copied into its home, and an SSH key of its own (for the
-    /// machines it leases). Released again when any of that fails.
-    func makeContainer(session: String, agent: AgentKind, folder: String, size: ContainerSize = .standard) async throws -> SessionContainer {
+    /// Makes the container a session's agent runs in, by the container
+    /// host: from the image, with its mounts and a disk of its own for
+    /// builds, the sign-ins for containers written into its home, and an SSH
+    /// key of its own. Removed again when any of that fails. One an earlier
+    /// attempt left goes first, with its disk unless `keepingDisk` (a
+    /// container made again, its network lost).
+    func makeContainer(session: String, agent: AgentKind, folder: String, size: ContainerSize = .standard,
+                       keepingDisk: Bool = false) async throws -> SessionContainer {
         if containerProblem != nil { await checkContainers() }
         if let containerProblem { throw ContainerFailure(message: "This computer cannot run containers: \(containerProblem).") }
-        guard let exec = ServerPlatform.current.containerExec, let pool = ossPool, let tools = ContainerTools.folder else {
+        guard let host = containerHost, let tools = ContainerTools.folder else {
             throw ContainerFailure(message: "This computer cannot run containers.")
         }
         let resolved = HostFolders.resolve(folder)
@@ -147,74 +178,48 @@ extension VisorServer {
         }
         let name = Self.containerName(session: session)
         let image = settings.containerImage.trimmingCharacters(in: .whitespaces).isEmpty ? defaultContainerImage : settings.containerImage
-        let holder = Self.leaseHolder(session: session)
-        // One left by an earlier attempt goes first.
-        await releaseContainers(held: holder)
+        for left in (try? await host.list()) ?? [] where left.labels["visor.session"] == session {
+            try? await host.remove(left.id, volumes: !keepingDisk)
+        }
         // What it is given, within what this computer has.
         let given = Self.fitted(size)
-        let spec = ContainerSpec(image: image, cpus: given.cpus, memoryBytes: given.memoryBytes,
-                                 mounts: Self.containerMounts(agent: agent, folder: resolved, tools: tools),
-                                 // Its disk for builds goes with the lease.
-                                 volumes: [ContainerVolume(name: name + "-build", destination: ContainerPlacement.buildOutput,
-                                                           sizeBytes: given.diskBytes)],
-                                 rosetta: true)
-        let client: OSSClient
-        let lease: Lease
+        let request = ContainerHostRequest(name: name, image: image, cpus: given.cpus, memoryBytes: given.memoryBytes,
+                                           mounts: Self.containerMounts(agent: agent, folder: resolved, tools: tools),
+                                           volumes: [.init(name: name + "-build", destination: ContainerPlacement.buildOutput, sizeBytes: given.diskBytes)],
+                                           labels: ["visor.session": session, "visor.server": id])
+        let made: ContainerHost.Made
         do {
-            (client, lease) = try await pool.lease(LeaseRequest(platform: .container, minutes: 0, holder: holder, container: spec))
-        } catch let error as OSSError {
+            made = try await host.create(request)
+        } catch let error as ContainerHostError {
             throw ContainerFailure(message: Self.containerRefusal(error) ?? "Could not make the container from \(image): \(error.message)")
         } catch {
             throw ContainerFailure(message: "Could not make the container from \(image): \(error.localizedDescription)")
         }
-        leaseClients[lease.id] = client
         do {
-            guard let socket = lease.execSocket else { throw ContainerFailure(message: "OS Server gave the container no socket to run commands in.") }
-            // The sign-ins for containers, then oss's Bazel cache.
-            for file in ContainerSignIns.homeFiles() + (await buildCacheFiles()) {
-                let path = "/root/" + file.path
-                let wrote = try await exec.execute(socket: socket, ["sh", "-c", "mkdir -p \"$(dirname \"$1\")\" && cat > \"$1\" && chmod 600 \"$1\"", "sh", path],
-                                                   input: file.data)
-                guard wrote.status == 0 else { throw ContainerFailure(message: "Could not write \(path) in the container: \(wrote.output)") }
+            // The sign-ins for containers, in its home.
+            for file in ContainerSignIns.homeFiles() {
+                try await host.put(file.data, at: "/root/" + file.path, in: made.id)
             }
-            let key = try await exec.execute(socket: socket, ["sh", "-c", "test -f /root/.ssh/id_ed25519 || ssh-keygen -q -t ed25519 -N '' -C visor-container -f /root/.ssh/id_ed25519"],
+            let key = try await host.execute(container: made.id,
+                                             ["sh", "-c", "test -f /root/.ssh/id_ed25519 || ssh-keygen -q -t ed25519 -N '' -C visor-container -f /root/.ssh/id_ed25519"],
                                              input: nil)
             guard key.status == 0 else { throw ContainerFailure(message: "Could not make the container's SSH key: \(key.output)") }
-            return SessionContainer(id: lease.id, image: image, size: given, socket: socket)
+            return SessionContainer(id: made.id, image: image, size: given)
         } catch {
-            await releaseContainer(lease.id)
+            try? await host.remove(made.id, volumes: !keepingDisk)
             throw error
         }
     }
 
-    /// What oss's refusal to lend a container means here, in words New
-    /// Session shows; nil for any other failure.
-    nonisolated static func containerRefusal(_ error: OSSError) -> String? {
+    /// What a container host's refusal means here, in words New Session
+    /// shows; nil for any other failure.
+    nonisolated static func containerRefusal(_ error: ContainerHostError) -> String? {
         switch error.code {
-        case "busy": "This Mac's OS Server has no room for another container: end a session in one, or move it out, first."
-        case "notLocal": "Containers come only from the OS Server on this Mac, and none answers here."
-        case "noContainers": "The OS Server on this Mac runs no containers (OS Server 0.9 or later does)."
+        case "busy": "The container host has no room for another container now: end a session in one, or move it out, first."
+        case "noImage": "The container host can't get the image: \(error.message)"
+        case "network": "The container host made a container with no network: \(error.message)"
         default: nil
         }
-    }
-
-    /// Releases the containers `holder` holds (an earlier attempt's, left
-    /// behind).
-    private func releaseContainers(held holder: String) async {
-        for client in ossClients {
-            guard let held = try? await client.leases() else { continue }
-            for lease in held where lease.holder == holder && lease.platform == .container {
-                try? await client.release(lease.id)
-                leaseClients[lease.id] = nil
-            }
-        }
-    }
-
-    /// Releases a session's container, and its disk with it.
-    private func releaseContainer(_ id: String) async {
-        guard let client = await lender(of: id) else { return }
-        try? await client.release(id)
-        leaseClients[id] = nil
     }
 
     /// A size asked for, within what this computer has: no more cores than
@@ -298,12 +303,13 @@ extension VisorServer {
     /// A session's container gone, with its disk (its session ended here,
     /// or left it).
     func removeContainer(_ container: SessionContainer) {
-        guard container.socket != nil else {
-            return Self.log("the container \(container.id) is Apple's, from before OS Server ran them: `container delete --force \(container.id)` removes it")
+        guard container.socket == nil else {
+            return Self.log("the container \(container.id) was OS Server's: `oss machine release \(container.id)` gives it back")
         }
+        guard let host = containerHost else { return }
         Task {
-            await releaseContainer(container.id)
-            Self.log("released the container \(container.id)")
+            try? await host.remove(container.id, volumes: true)
+            Self.log("removed the container \(container.id)")
         }
     }
 }

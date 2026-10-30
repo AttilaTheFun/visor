@@ -1,0 +1,14 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# Visor's container host (docs/container-host.md): each operation of the
+# contract made of runs of Apple's `container`; no leasing, no limits.
+swift_library(
+    name = "visor_container_host",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorContainerHost",
+    deps = ["//:foundation"],
+)

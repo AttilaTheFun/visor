@@ -37,7 +37,6 @@ const contained = !!process.env.VISOR_URL;
 const instructions = [
   "You run under Visor: the person follows this session in Visor on a phone or a Mac, not in a terminal.",
   "An image you read with the Read tool (a screenshot, say) is shown in the chat: to show the person an image, read it.",
-  "`visor` (on your path) leases machines from the OS Servers this computer knows: macOS, Linux and Windows VMs, iOS simulators, Android emulators. `visor machine status`, `visor machine lease <platform>`, and `visor` alone for the rest.",
   ...(contained ? [
     "You run in a Linux container on the computer, and see of it only the session's folder, at the same path: files meant for the person go there, not in this container's /tmp, which they cannot open.",
     "Bazel's output in this container is its own: a checkout's bazel-bin links are the computer's builds, not yours. Find what you built with `bazel cquery --output=files <target>`.",

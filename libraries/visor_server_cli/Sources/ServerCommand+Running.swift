@@ -62,8 +62,7 @@ extension ServerCommand {
         case "ssh": try ssh(value)
         case "address": address(value)
         case "standalone": try standalone(value)
-        case "oss", "container-image": ossOption(name, value)
-        case "oss-token-file": try ossToken(value)
+        case "container-host", "container-image": containerOption(name, value)
         default: throw CommandLineError.usage("unknown option --\(name)")
         }
     }

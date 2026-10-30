@@ -5,10 +5,10 @@ import Foundation
 enum Command {
     /// The exit status and everything written to standard output (and to
     /// standard error, with `errors`); nil when the command could not be
-    /// started.
+    /// started. `input`, when given, is its standard input, then closed.
     @concurrent
     static func output(_ executable: String, _ arguments: [String], environment: [String: String]? = nil,
-                       errors: Bool = false) async -> (status: Int32, text: String)? {
+                       errors: Bool = false, input: Data? = nil) async -> (status: Int32, text: String)? {
         let process = Process()
         let command = ServerPlatform.current.tools.command(executable, arguments)
         process.executableURL = URL(fileURLWithPath: command.executable)
@@ -20,7 +20,17 @@ enum Command {
         let (statuses, exited) = AsyncStream.makeStream(of: Int32.self)
         process.terminationHandler = { exited.yield($0.terminationStatus); exited.finish() }
         let chunks = out.fileHandleForReading.chunks
+        let stdin = input.map { _ in Pipe() }
+        if let stdin { process.standardInput = stdin }
         do { try process.run() } catch { return nil }
+        // Written apart from the reading, so neither waits on the other.
+        if let stdin, let input {
+            let writer = stdin.fileHandleForWriting
+            Task.detached {
+                try? writer.write(contentsOf: input)
+                try? writer.close()
+            }
+        }
         var data = Data()
         for await chunk in chunks { data.append(chunk) }
         var status: Int32 = -1

@@ -49,16 +49,11 @@ enum AgentChildren {
                       session: String?, container: ContainerPlacement? = nil) throws -> any AgentChild {
         var command = ServerPlatform.current.tools.command(executable, arguments)
         var environment = environment
-        // Visor's tools on the agent's path here (the `visor` command); a
-        // container's image has them on its own.
-        if container == nil, let tools = ContainerTools.folder {
-            environment["PATH"] = tools.path + (environment["PATH"].map { ":" + $0 } ?? "")
-        }
         if let container {
             let file = try writeEnvironment(environment.merging(ContainerSignIns.environment()) { ours, _ in ours },
-                                            for: session ?? container.name)
-            command = container.exec.command(socket: container.socket, executable: executable, arguments: arguments, directory: directory,
-                                                environmentFile: file.path)
+                                            for: session ?? container.id)
+            command = container.exec.command(container: container.id, executable: executable, arguments: arguments, directory: directory,
+                                             environmentFile: file.path)
             environment = ToolPath.environment()
         }
         if detach, let session {

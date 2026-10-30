@@ -26,8 +26,8 @@ Targets:
                held in portrait, however the phone lies
   android-lab-landscape  the same, held in landscape (references of its own)
   web-desktop  the web client in desktop Safari, on a Mac leased from oss
-               (`visor machine` in a Visor session, `oss machine` outside
-               one), driven by safaridriver there
+               (`oss machine`, with the computer's key or token), driven
+               by safaridriver there
   macos        the macOS app, on the same lease, its window cropped from the
                machine's screenshot
 
@@ -441,23 +441,20 @@ class AndroidLabLandscape(AndroidLab):
         # landscape the picture is the check.
         return []
 
-# --- a Mac leased from oss (desktop Safari and the Mac app): through `visor
-# machine` in a Visor session, `oss machine` outside one; one lease for the
-# run, released when it ends
+# --- a Mac leased from oss (desktop Safari and the Mac app): through `oss
+# machine`, with this computer's key or token; one lease for the run,
+# released when it ends
 
 def machine():
-    return ["visor", "machine"] if os.environ.get("VISOR_SESSION") else ["oss", "machine"]
+    return ["oss", "machine"]
 
 @functools.lru_cache(None)
 def mac_lease():
-    if machine()[0] == "visor":
-        lease = json.loads(sh(machine() + ["lease", "macos", "--json"]).stdout)
-    else:
-        # oss's own lease JSON leaves the host to its client: its exports say it.
-        exports = sh(machine() + ["lease", "macos", "--exports"]).stdout
-        values = dict(line[len("export "):].split("=", 1) for line in exports.splitlines() if line.startswith("export "))
-        values = {key: (shlex.split(value) or [""])[0] for key, value in values.items()}
-        lease = {"id": values["OSS_ID"], "host": values["OSS_HOST"], "sshPort": values["OSS_SSH_PORT"], "sshUser": values["OSS_SSH_USER"]}
+    # oss's own lease JSON leaves the host to its client: its exports say it.
+    exports = sh(machine() + ["lease", "macos", "--exports"]).stdout
+    values = dict(line[len("export "):].split("=", 1) for line in exports.splitlines() if line.startswith("export "))
+    values = {key: (shlex.split(value) or [""])[0] for key, value in values.items()}
+    lease = {"id": values["OSS_ID"], "host": values["OSS_HOST"], "sshPort": values["OSS_SSH_PORT"], "sshUser": values["OSS_SSH_USER"]}
     atexit.register(lambda: sh(machine() + ["release", lease["id"]], check=False))
     log("leased a Mac:", lease["id"])
     mac = {"id": lease["id"], "target": f"{lease['sshUser']}@{lease['host']}", "port": str(lease["sshPort"])}

@@ -4,7 +4,6 @@
 import ClaudeTranscript
 import MessageCache
 import Foundation
-import OSSClient
 import VisorProtocol
 
 extension VisorServer {
@@ -51,10 +50,6 @@ extension VisorServer {
                 case .failure(let failure): respond(HTTPResponse(409, Envelope.error(failure.message).encoded()))
                 }
             }
-        }
-        // The machines a session leases from oss, through this server.
-        if parts.first == "machines", authorized(request) {
-            return answerMachines(request, parts: parts, respond: respond)
         }
         if request.method == "GET", parts.count == 1, parts[0] == "account", authorized(request) {
             guard let agent = Self.query(request.path)["agent"].flatMap(AgentKind.init(wire:)) else {
@@ -152,8 +147,6 @@ extension VisorServer {
         case ("POST", 1, "push"): restRegisterPushDevice(call)
         case ("POST", 2, "ssh") where parts[1] == "keys": restAuthorizeSSHKey(call)
         case ("POST", 1, "restart"): restRestart(call)
-        case ("GET", 1, "oss"): restOSS(call)
-        case ("POST", 1, "oss"): restSetOSS(call)
         case ("GET", 1, "mcp"): restMCP(call)
         case ("PUT", 1, "mcp"): restSetMCP(call)
         case ("POST", 1, "quit"): restQuit(call)

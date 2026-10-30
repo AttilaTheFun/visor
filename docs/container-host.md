@@ -6,21 +6,29 @@ on the computer itself. It does not make containers on its own: it asks a
 likes. With none, Visor runs sessions on the computer only, and New
 Session offers no "In a Container".
 
-Status: proposed for 0.44. Today (0.43) Visor leases its containers from
-the OS Server on its computer through OSSClient; this replaces that.
+From 0.44. Up to 0.43 Visor leased its containers from the OS Server on
+its computer through OSSClient; this replaced that.
 
 ## Which host
 
 In order, the first that is there:
 
-1. **Settings**: `containerHost` in `settings.json`, a command and its
-   arguments (`{"command": "/usr/local/bin/oss", "arguments": ["container-host"]}`).
+1. **Settings**: `containerHost` in `settings.json`, a command and the
+   arguments before each operation (`["/usr/local/bin/oss",
+   "container-host"]`), set with `visor-server containers host
+   <command…>` or the menu bar app's Containers.
 2. **`visor-container-host` on the PATH.**
 
 Visor ships one: `visor-container-host`, in this repository
 (applications/visor_container_host), over Apple's `container` on macOS 26.
 It has no leasing and no limits: every container asked for is made. Put it
-on the PATH to use it. Hosts of other kinds are other programs that speak
+on the PATH to use it:
+
+```sh
+bazel build -c opt //applications/visor_container_host:visor-container-host
+cp "$(bazel cquery -c opt --output=files //applications/visor_container_host:visor-container-host)" /usr/local/bin/
+```
+ Hosts of other kinds are other programs that speak
 the same contract: OS Server's, which leases from a server and keeps every
 Mac's resources in one place, or a cloud's.
 
@@ -117,26 +125,29 @@ error.
 ### `ls`
 
 The host's containers made for Visor (by their labels):
-`{"containers": [{"id", "name", "image", "state", "labels", "created"}]}`.
+`{"containers": [{"id", "name", "image", "state", "labels"}]}`.
 Visor removes those of sessions it no longer has.
 
 ### `network`
 
 `<host> network <id>`: whether the container's network works now.
 - It must resolve a public name, through the host's DNS (see below).
-- It must reach this computer's Visor Server.
+- It must reach the internet beyond it (visor-container-host: github.com
+  over HTTPS).
 - Answers `{"ok", "dns", "reach", "detail"}`.
 
 ## DNS and the network
 
 A container's network is the host's to keep working, which Visor checks.
 
-- **DNS through the computer.** A host answers its containers' DNS
-  itself, on the containers' side of their network, by resolving through
-  this computer's own resolver (getaddrinfo, the system's DNS). Each
-  container's `resolv.conf` names it. So whatever this computer resolves
-  resolves in its containers: a tailnet's MagicDNS names among them, and
-  a VPN's.
+- **DNS through the computer.** A container's names resolve through
+  this computer's own resolver (the system's DNS), so whatever this
+  computer resolves resolves in its containers: a tailnet's names among
+  them, and a VPN's. A host may answer its containers' DNS itself, on the
+  containers' side of their network, or leave it to its runtime where the
+  runtime does this. visor-container-host leaves it to Apple's
+  `container`: each container's resolver is its network's gateway, whose
+  DNS resolves through the Mac's.
 - **Checked when made.** `create` checks the container's network before
   it answers, and fails with `code: "network"` rather than hand over a
   container that can't reach anything.

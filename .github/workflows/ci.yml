@@ -41,6 +41,7 @@ jobs:
           bazel build
           //libraries/...
           //tools/staging_server
+          //applications/visor_container_host:visor-container-host
           //applications/visor_macos:macos_lib
           //applications/visor_menubar:menubar_lib
       - name: Build (iOS)
@@ -53,6 +54,7 @@ jobs:
         run: >
           bazel test --test_output=errors
           //tests/visor_server_tests
+          //tests/visor_container_host_tests
           //tests/visor_client_tests
           //tests/visor_ui_tests
           //tests/visor_ssh_tests
@@ -77,6 +79,7 @@ jobs:
           bazel build
           //libraries/...
           //tools/staging_server
+          //applications/visor_container_host:visor-container-host
           //applications/visor_macos:macos_lib
           //applications/visor_menubar:menubar_lib
       - name: Build (iOS)
@@ -89,6 +92,7 @@ jobs:
         run: >
           bazel test --test_output=errors
           //tests/visor_server_tests
+          //tests/visor_container_host_tests
           //tests/visor_client_tests
           //tests/visor_ui_tests
           //tests/visor_ssh_tests

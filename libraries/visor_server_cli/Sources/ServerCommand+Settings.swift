@@ -27,7 +27,7 @@ extension ServerCommand {
               : "Clients through this computer's SSH reach the port, with the password (`ssh on` lets them in without).")
         print("Reverse proxy: " + (settings.proxyEnabled && !settings.publicAddress.isEmpty ? "on, at \(settings.publicAddress)." : "off (`address <url>` sets one)."))
         print("Clients are told " + (Self.reachableAddress(platform, settings).map { "\($0)." } ?? "no address: only this computer and SSH reach the server."))
-        print(Self.ossWords(settings, platform.secrets))
+        print(Self.containerWords(settings))
     }
 
     /// The address clients are told, as the server would make it.
