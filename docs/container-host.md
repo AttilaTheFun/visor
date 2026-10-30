@@ -128,6 +128,12 @@ into the container's home, making its SSH key.
 Writes standard input to `path` in the container, making its folders.
 Answers `{"path", "size"}`.
 
+Visor puts into each container it makes the agents' sign-ins and every
+file in its `containers/home/` folder, at the same path under the
+container's home, dotfiles too: a build cache's `.bazelrc`, the `.netrc`
+with a cache's or a file server's read token. That is how a container's
+builds reach a cache; a host needn't know of one.
+
 ### `rm`
 
 `<host> rm <id> [--volumes]`

@@ -107,6 +107,10 @@ final class ContainerTests: ServerTestCase {
         let signIns = root.appendingPathComponent("containers/home/.codex", isDirectory: true)
         try FileManager.default.createDirectory(at: signIns, withIntermediateDirectories: true)
         try Data("{\"auth\":1}".utf8).write(to: signIns.appendingPathComponent("auth.json"))
+        // A build cache's and a file server's credentials, dotfiles at the top.
+        let home = root.appendingPathComponent("containers/home", isDirectory: true)
+        try Data("machine cache login visor password read\n".utf8).write(to: home.appendingPathComponent(".netrc"))
+        try Data("build --remote_cache=http://cache:7490\n".utf8).write(to: home.appendingPathComponent(".bazelrc"))
         let host = try FakeHost(in: root)
         let server = await server(host, port: 7997)
         defer { server.stop() }
@@ -138,6 +142,10 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(calls.first, "create ")
         XCTAssertTrue(calls.contains("put c1 /root/.codex/auth.json --mode=600"))
         XCTAssertEqual(try Data(contentsOf: host.folder.appendingPathComponent("put-_root_.codex_auth.json")), Data("{\"auth\":1}".utf8))
+        XCTAssertTrue(calls.contains("put c1 /root/.netrc --mode=600"))
+        XCTAssertTrue(calls.contains("put c1 /root/.bazelrc --mode=600"))
+        XCTAssertEqual(try String(contentsOf: host.folder.appendingPathComponent("put-_root_.netrc"), encoding: .utf8),
+                       "machine cache login visor password read\n")
         XCTAssertTrue(calls.last?.hasPrefix("exec c1 -- sh -c") == true && calls.last?.contains("ssh-keygen") == true)
         XCTAssertNotNil((made.process as? HostableProcess)?.container)
     }

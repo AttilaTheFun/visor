@@ -51,7 +51,9 @@ enum ContainerSignIns {
         return variables
     }
 
-    /// The files copied into a container's home: each by its path there.
+    /// The files copied into a container's home: each by its path there,
+    /// dotfiles too (a build cache's `.bazelrc`, the `.netrc` its reads and
+    /// a file server's downloads take their tokens from).
     static func homeFiles() -> [(path: String, data: Data)] {
         let home = folder.appendingPathComponent("home", isDirectory: true)
         guard let walker = FileManager.default.enumerator(at: home, includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }

@@ -677,7 +677,15 @@ never a copy of the computer's, since Codex rotates its refresh token and
 the first copy to refresh signs out the other; openrouter's the same way,
 `<data>/containers/openrouter` at `/root/.openrouter`; and
 `<data>/containers/home/`, other files put into each container's home with
-the host's `put`); the container makes its own SSH key (the host's `exec`).
+the host's `put`, dotfiles too); the container makes its own SSH key (the
+host's `exec`). A container's builds reach a Bazel cache and a file server
+(an OS Server's cache, read-only, and its /files, for the SDK archive and
+the ported tools) only through what is in that folder: a `.bazelrc`
+(`build --remote_cache=http://<host>:7490 --noremote_upload_local_results`)
+and a `.netrc` with each server's read token, put there by whoever runs
+the computer (`oss cache use` writes both into a home of its own). Visor
+itself knows no cache: until 0.43 it wrote them from the OS Servers it
+knew (VisorServer+BuildCache).
 No Xcode is mounted: the Apple apps build in a container with
 rules_applecross (§4), and the Android app's x86_64 SDK and NDK tools run
 under Rosetta. The agent runs under its host like any other (HostedChild),
@@ -737,7 +745,8 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
   apple-sdks\.invalid/.* http://<oss host>:7490/files/sha256/<the SDK's sha256>`
   and `rewrite ported-tools\.invalid/sha256/(.*)
   http://<oss host>:7490/files/sha256/$1`, for an OS Server that serves
-  them (the container's .netrc has the token). Without it (CI's Linux
+  them (a container's `.netrc`, from `<data>/containers/home/`, has the
+  token). Without it (CI's Linux
   runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
   the Linux client (`//applications/visor_client_linux`; the server is
   `swift build --product visor-server`), the web site and the Android APK
