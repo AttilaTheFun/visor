@@ -2,18 +2,20 @@
 # Visor's proof, in a macOS VM leased from OS Server (xcode-27.0: Xcode 27.0
 # and its iOS simulator): the phone app's fixture screens (the iOS probe's
 # testFixtureScreens, in portrait and on its side) and, for a full proof, its
-# UI cases; each screen compared with the picture kept for it.
+# UI cases; each screen compared with the picture kept for it at the base
+# (CI: the commit before, so a change that takes new pictures shows as a
+# change; else this commit).
 #
-#   tools/ci/mac_vm_proof.sh --proof <dir> [--kind quick|full]
+#   tools/ci/mac_vm_proof.sh --proof <dir> [--kind quick|full] [--base <revision>]
 #
 # The proof, in <dir>, as Reviews reads it from the run's `proof` artifact:
 #   screens/<name>.png  each fixture screen at this commit ("chat",
 #                       "chat-landscape", …)
-#   diffs/<name>.png    each that differs from its kept picture
+#   diffs/<name>.png    each that differs from its kept picture at the base
 #                       (tests/proof/ios, tests/proof/ios-landscape),
 #                       its changed pixels red (tools/ci/snapshot_diff.swift,
 #                       built here)
-#   proof.json          {"commit", "ref", "kind", "run",
+#   proof.json          {"commit", "ref", "kind", "run", "base": {"commit"},
 #                        "screens": [{"name", "changed", "changedPixels"}]}
 #   logs/               what the probe said, each run
 # The script fails as the probe does (a full proof's UI cases too), or when
@@ -29,13 +31,15 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
-usage() { echo "usage: tools/ci/mac_vm_proof.sh --proof <dir> [--kind quick|full]" >&2; exit 2; }
+usage() { echo "usage: tools/ci/mac_vm_proof.sh --proof <dir> [--kind quick|full] [--base <revision>]" >&2; exit 2; }
 proof=""
 kind="quick"
+base="HEAD"
 while [ $# -gt 0 ]; do
     case "$1" in
         --proof) proof="${2:?--proof takes a folder}"; shift 2 ;;
         --kind) kind="${2:?--kind takes quick or full}"; shift 2 ;;
+        --base) base="${2:?--base takes a revision}"; shift 2 ;;
         *) usage ;;
     esac
 done
@@ -43,6 +47,7 @@ done
 case "$kind" in quick | full) ;; *) usage ;; esac
 
 commit="$(git -C "$ROOT" rev-parse HEAD)"
+base_commit="$(git -C "$ROOT" rev-parse --verify "$base^{commit}")" || { echo "mac_vm_proof.sh: no revision $base to compare with" >&2; exit 1; }
 ref="${PROOF_REF:-${GITHUB_REF:-refs/heads/$(git -C "$ROOT" branch --show-current)}}"
 OSS="/Applications/OS Server.app/Contents/Helpers/oss"
 [ -x "$OSS" ] || OSS="$(command -v oss)"
@@ -96,8 +101,11 @@ run() {
 }
 vm() { "$OSS" machine ssh "$lease" --identity="$work/key" -- "$@"; }
 
-# The diff tool first: nothing leased if it doesn't build.
+# The diff tool first: nothing leased if it doesn't build. And the pictures
+# kept at the base, what the screens are compared with.
 xcrun swiftc -O -o "$work/snapshot_diff" "$ROOT/tools/ci/snapshot_diff.swift"
+mkdir "$work/base"
+git -C "$ROOT" archive "$base_commit" tests/proof | tar -x -C "$work/base"
 
 echo "::group::A macOS VM (xcode-27.0)"
 # A key of the run's own for the VM's SSH, gone with the run.
@@ -182,15 +190,15 @@ mkdir -p "$proof"
 run "$OSS" machine download "$lease" --identity="$work/key" ci/logs "$proof/logs" || true
 release
 
-# The proof, from the pictures and the kept ones of the same commit.
+# The proof, from the pictures and the ones kept at the base.
 json() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 mkdir -p "$proof/screens" "$proof/diffs"
 screens=""
 summary=""
 for orientation in portrait landscape; do
-    kept="$ROOT/tests/proof/ios"
+    kept="$work/base/tests/proof/ios"
     suffix=""
-    [ "$orientation" = portrait ] || { kept="$ROOT/tests/proof/ios-landscape"; suffix="-landscape"; }
+    [ "$orientation" = portrait ] || { kept="$work/base/tests/proof/ios-landscape"; suffix="-landscape"; }
     for picture in "$work/out/$orientation"/fixture-*.png; do
         [ -e "$picture" ] || continue
         screen="$(basename "$picture" .png)"
@@ -212,13 +220,14 @@ cat > "$proof/proof.json" << EOF
   "ref": "$(json "$ref")",
   "kind": "$kind",
   "run": ${GITHUB_RUN_ID:-null},
+  "base": {"commit": "$base_commit"},
   "screens": [$screens
   ]
 }
 EOF
 cat "$proof/proof.json"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    printf '### Proof (%s) of %s\n\n| Screen | Against its kept picture |\n| --- | --- |\n%s' "$kind" "${commit:0:7}" "$summary" >> "$GITHUB_STEP_SUMMARY"
+    printf '### Proof (%s) of %s\n\n| Screen | Against its picture kept at %s |\n| --- | --- |\n%s' "$kind" "${commit:0:7}" "${base_commit:0:7}" "$summary" >> "$GITHUB_STEP_SUMMARY"
 fi
 
 if [ -z "$screens" ]; then

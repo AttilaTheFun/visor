@@ -996,15 +996,17 @@ CI makes the proof: its `proof` job, on the repository's own runner
 fixture's screens in each orientation there (the probe's
 `testFixtureScreens` and `testFixtureScreensLandscape` through
 `tools/ios_ui_tests.sh`, on an iPhone 17 simulator made new, its status bar
-held still, keyboard suggestions off), and on main the UI cases too. Each
-screen is compared with its kept picture (`tests/proof/ios`,
-`tests/proof/ios-landscape`: red's own, as `tests/snapshots` holds blue's),
-and the run's `proof` artifact holds `proof.json`, `screens/`, `diffs/` and
-the probe's logs. Reviews reads it
-from GitHub by commit: a pull request's quick proof, and a release's full
-proof from main's run of the commit its draft targets. A change meant to
-look different takes its new screens into `tests/proof` in the same
-pull request, from its run's artifact. The lab's phones are for what needs
+held still, keyboard suggestions off), and the UI cases, for each commit
+merged to main (a pull request runs its builds and tests only), within the
+hour. Each screen is compared with its picture kept at the commit before
+(`tests/proof/ios`, `tests/proof/ios-landscape`: red's own, as
+`tests/snapshots` holds blue's), so a commit that takes new pictures shows
+the change, and the run's `proof` artifact holds `proof.json`, `screens/`,
+`diffs/` and the probe's logs. Reviews reads it from GitHub by commit: a
+release is proposed on a main commit whose proof is in, and that proof is
+the one reviewed. A change meant to look different takes its new screens
+into `tests/proof` in its pull request (`tools/proof.sh` makes them), or
+right after from main's proof artifact. The lab's phones are for what needs
 real hardware (a sensor, or a benchmark on a device).
 
 `tools/proof.sh` still makes the same screens and UI cases on your own
