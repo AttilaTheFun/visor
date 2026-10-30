@@ -19,6 +19,11 @@ enum VisorMCPScript {
 // questions (AskUserQuestion) come to the user, and in manual mode every
 // tool call too), and VISOR_URL where the server is not this computer's
 // own (an agent in a container on oss: ws://host:port).
+//
+// It also lists, beside its own, the tools of the MCP servers the computer
+// passes on to this session (`<endpoint>__<tool>`), each call passed on by
+// the server with the session's headers; it looks again every 30 s and
+// tells the agent when they changed (tools/list_changed).
 const port = process.env.VISOR_PORT || "7433";
 const serverURL = process.env.VISOR_URL || `ws://127.0.0.1:${port}`;
 const token = process.env.VISOR_TOKEN || "";
@@ -89,6 +94,35 @@ const approveTool = {
   inputSchema: { type: "object", properties: { tool_name: { type: "string" }, input: { type: "object" }, tool_use_id: { type: "string" } } },
 };
 
+// The proxied tools, as last listed to the agent: what a later look is
+// held against.
+let listedProxied = null;
+let watching = false;
+const proxiedSignature = (list) => JSON.stringify(list.map((tool) => [tool.name, tool.description || "", tool.inputSchema || null]));
+
+// The session's proxied tools, from the server; none when it can't say.
+function proxiedTools() {
+  return call({ mode: "mcp_tools" }).then(({ ok, text }) => {
+    if (!ok) return [];
+    try { const list = JSON.parse(text); return Array.isArray(list) ? list : []; } catch { return []; }
+  });
+}
+
+// Every 30 s: the proxied tools as they are now, and a word to the agent
+// when they differ from what it was last given.
+function watchProxied() {
+  if (watching) return;
+  watching = true;
+  setInterval(() => {
+    proxiedTools().then((list) => {
+      if (listedProxied !== null && proxiedSignature(list) !== listedProxied) {
+        listedProxied = proxiedSignature(list);
+        send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+      }
+    });
+  }, 30000).unref();
+}
+
 let buffer = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
@@ -108,9 +142,23 @@ function handle(line) {
   try { request = JSON.parse(line); } catch { return; }
   const { id, method, params } = request;
   if (method === "initialize") {
-    send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion || "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "visor", version: "1.0" }, instructions } });
+    send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion || "2024-11-05", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "visor", version: "1.0" }, instructions } });
+  } else if (method === "notifications/initialized") {
+    watchProxied();
   } else if (method === "tools/list") {
-    send({ jsonrpc: "2.0", id, result: { tools: approvals ? [approveTool, ...tools] : tools } });
+    proxiedTools().then((proxied) => {
+      listedProxied = proxiedSignature(proxied);
+      send({ jsonrpc: "2.0", id, result: { tools: [...(approvals ? [approveTool] : []), ...tools, ...proxied] } });
+    });
+  } else if (method === "tools/call" && params?.name?.includes("__")) {
+    // A proxied tool: the server passes it on, and its result comes back
+    // as the endpoint gave it.
+    call({ mode: "mcp_call", text: JSON.stringify({ tool: params.name, arguments: params?.arguments || {} }) }).then(({ ok, text }) => {
+      if (!ok) { send({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text }] } }); return; }
+      let result;
+      try { result = JSON.parse(text); } catch { result = { content: [{ type: "text", text }] }; }
+      send({ jsonrpc: "2.0", id, result });
+    });
   } else if (method === "tools/call" && params?.name !== "approve") {
     const args = params?.arguments || {};
     const mode = { list_sessions: "sessions", send_message: "send", read_messages: "read", message_status: "status" }[params?.name];

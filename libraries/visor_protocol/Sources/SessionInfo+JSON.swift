@@ -29,6 +29,7 @@ extension SessionInfo {
         if let origin { o["origin"] = .string(origin.rawValue) }
         if !side.isEmpty { o["side"] = .array(side.map(\.json)) }
         if !subagents.isEmpty { o["subagents"] = .array(subagents.map(\.json)) }
+        if !mcp.isEmpty { o["mcp"] = .array(mcp.map(\.json)) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -62,6 +63,7 @@ extension SessionInfo {
         origin = json["origin"].string.flatMap(SessionOrigin.init(rawValue:))
         side = json["side"].array?.compactMap(SideQuestion.init(json:)) ?? []
         subagents = json["subagents"].array?.compactMap(SubagentInfo.init(json:)) ?? []
+        mcp = json["mcp"].array?.compactMap(MCPSwitch.init(json:)) ?? []
         preview = json["preview"].string
         updated = json["updated"].double
     }

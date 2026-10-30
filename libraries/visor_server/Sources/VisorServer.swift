@@ -17,7 +17,10 @@ public final class VisorServer {
     /// The one server of the menu bar app.
     public static let shared = VisorServer()
 
-    public internal(set) var sessions: [SessionRecord] = []
+    public internal(set) var sessions: [SessionRecord] = [] {
+        // A session added has the MCP servers passed on to it.
+        didSet { fillMCPSwitches() }
+    }
 
     public internal(set) var clientCount = 0
 
@@ -59,6 +62,10 @@ public final class VisorServer {
             if settings.detachAgents != oldValue.detachAgents { applyAgentDetaching() }
             // Asking nothing: a server with no password yet starts now.
             if settings.asksNothing, !oldValue.asksNothing, listener == nil { start() }
+            if settings.mcpEndpoints != oldValue.mcpEndpoints {
+                fillMCPSwitches()
+                broadcastSessions()
+            }
         }
     }
     /// What each client connected here last said it is connected to, by
@@ -226,6 +233,9 @@ public final class VisorServer {
 
     /// The agents the server serves; a host assigns its own before start.
     public var harnesses: AgentHarnesses = .standard
+    /// The MCP servers passed on to the sessions' agents, and each
+    /// session's conversation with them.
+    let mcpProxy = MCPProxy()
 
     public var hostName: String { ServerPlatform.current.host.name }
 

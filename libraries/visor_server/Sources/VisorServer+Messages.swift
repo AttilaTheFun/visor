@@ -78,6 +78,7 @@ extension VisorServer {
         case "endSide": performEndSide(envelope)
         case "toSubagent": performToSubagent(envelope, from: client)
         case "closeSubagent": performCloseSubagent(envelope)
+        case "mcp": performMCPSwitch(envelope, from: client)
         case "contain": performContain(envelope, from: client)
         // A client's heartbeat: answered at once, to that client only.
         case "ping": client?.send(.pong())
@@ -312,6 +313,7 @@ extension VisorServer {
             removeContainer(container)
         }
         sessions.removeAll { $0 === record }
+        mcpProxy.forget(session: record.info.id)
         dropWaiters(for: record.info.id)
         Self.log("session ended: \(record.info.title)")
         saveArchive()

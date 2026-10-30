@@ -265,6 +265,12 @@ extension Envelope {
     public static func toSubagent(session: String, id: String, text: String) -> Envelope {
         var e = Envelope(type: "toSubagent"); e.session = session; e.id = id; e.text = text; return e
     }
+    /// One of the MCP servers this computer passes on to its agents
+    /// switched on or off for `session` (by the endpoint's name, `allow`
+    /// on), taking effect at its agent's next look at its tools.
+    public static func mcp(session: String, endpoint: String, on: Bool) -> Envelope {
+        var e = Envelope(type: "mcp"); e.session = session; e.id = endpoint; e.allow = on; return e
+    }
     /// The person closes one of `session`'s subagents: its row and capsule go.
     public static func closeSubagent(session: String, id: String) -> Envelope {
         var e = Envelope(type: "closeSubagent"); e.session = session; e.id = id; return e

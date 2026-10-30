@@ -34,6 +34,7 @@ extension VisorServer {
         case "sessions": reply(listSessions(for: envelope, caller: caller))
         case "send", "read": route(envelope, from: caller, reply: reply)
         case "status": reply(relayStatus(envelope))
+        case "mcp_tools", "mcp_call": Task { reply(await answerProxied(envelope, caller: caller)) }
         default: reply(agentReply(envelope))
         }
     }

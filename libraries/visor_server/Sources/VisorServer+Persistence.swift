@@ -112,6 +112,7 @@ extension VisorServer {
             if let fork = item.fork { _ = record.startFork(fork) }
             record.watchedSubagents = Set(item.watchedSubagents ?? [])
             record.closedSubagents = Set(item.closedSubagents ?? [])
+            record.mcpSwitched = item.mcpSwitched ?? [:]
             // The outbox, lined up with its words (a file from before it was
             // kept has words and no files).
             let files = item.queuedImages ?? []
