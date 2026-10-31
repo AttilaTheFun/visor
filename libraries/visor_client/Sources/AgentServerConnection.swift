@@ -901,7 +901,11 @@ public final class AgentServerConnection: Identifiable {
     /// How many rows a thread opens with (from this device's cache, at once;
     /// from the server, the first time), and how many go in each page after.
     static let initialRows = 100
-    static let pageRows = 50
+    static let pageRows = 100
+    /// How many rows are kept in memory above the first one on screen, once
+    /// the reader stops (four pages): rows further up are let go of, and
+    /// read again from the cache (or the server) if the reader scrolls back.
+    static let keptAboveScreen = 400
 
     public func transcript(for sessionID: String) -> SessionTranscript {
         if let existing = transcripts[sessionID] {

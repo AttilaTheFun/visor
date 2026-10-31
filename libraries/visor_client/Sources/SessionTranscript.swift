@@ -419,6 +419,22 @@ public final class SessionTranscript {
         hasEarlier = false
     }
 
+    /// The rows more than `keeping` above the one on screen at the top
+    /// (`top`, by the id the thread shows it under) let go of, the cache
+    /// keeping them: the thread says it has earlier rows, which are read
+    /// again a page at a time if the reader goes back to them. Not while a
+    /// page is on its way. How many went.
+    @discardableResult
+    func letGo(above top: String, keeping: Int) -> Int {
+        guard !loadingEarlier, let index = entries.firstIndex(where: { displayID(of: $0) == top }), index > keeping else { return 0 }
+        let gone = entries.prefix(index - keeping)
+        for entry in gone { displayIDs.removeValue(forKey: entry.id) }
+        entries = Array(entries.dropFirst(gone.count))
+        hasEarlier = true
+        reachedStart = false
+        return gone.count
+    }
+
     /// Rows from before the first shown, put in front of it; `more`, whether
     /// there are rows before these. How many were new.
     @discardableResult

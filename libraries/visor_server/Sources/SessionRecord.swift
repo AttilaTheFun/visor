@@ -330,7 +330,7 @@ public final class SessionRecord {
     static let servedRows = 100
     /// How many rows go in each page after that: earlier ones, and the
     /// changes a client that is behind catches up on.
-    static let pageRows = 50
+    static let pageRows = 100
 
     var transcriptEnvelope: Envelope { transcriptEnvelope(since: nil) }
 
