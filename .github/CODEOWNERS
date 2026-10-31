@@ -1,3 +1,26 @@
-# Every change to main is approved by the code owner: an agent's pull
-# request (opened by its GitHub App) merges only with that review.
-* @AttilaTheFun
+# Pull requests that touch these paths need the code owner's review: CI,
+# what publishes, stamps, signs or notarizes builds, the agents' rules and
+# the license. Anything else may be merged by an agent once CI is green and
+# the branch is up to date with main.
+
+# CI: its workflows, and this file.
+/.github/ @AttilaTheFun
+
+# Publishing, versions and signing.
+/tools/build_packages.sh @AttilaTheFun
+/tools/containers/publish_agent_image.sh @AttilaTheFun
+/tools/deploy_clients.sh @AttilaTheFun
+/tools/deploy_server.sh @AttilaTheFun
+/tools/isomer/ci/publish_proof.py @AttilaTheFun
+/tools/isomer/package_site.sh @AttilaTheFun
+/tools/isomer/snapshots/publish_review.py @AttilaTheFun
+/tools/mint_profile/ @AttilaTheFun
+/tools/release_mac.sh @AttilaTheFun
+/tools/sign_mac_app.sh @AttilaTheFun
+/tools/signing/ @AttilaTheFun
+/tools/store_notary_credentials.sh @AttilaTheFun
+
+# The agents' rules, anywhere in the tree, and the license.
+AGENTS.md @AttilaTheFun
+CLAUDE.md @AttilaTheFun
+LICENSE @AttilaTheFun
