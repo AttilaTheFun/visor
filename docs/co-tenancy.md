@@ -213,9 +213,13 @@ exiting 0, or 1 with `{"error", "code"?}`, as 0.44's do.
   - Codex: the Mac's `auth.json`, at `~/.codex/auth.json`.
 - **Its MCP servers** are set by the host (the server's `PUT /api/mcp`) to the
   host's own proxy:
-  - The proxy listens at `listen.port + 1`, reached from the container at
-    its default route's gateway (this computer on the containers' network):
-    `http://<gateway>:<port + 1>/mcp/<name>`.
+  - Where the proxy is, and how the container reaches it, is the host's
+    choice: the host writes each endpoint's address into the server's
+    `PUT /api/mcp` itself, `…/mcp/<name>`. Visor's own host listens at
+    `listen.port + 1` and is reached at the container's default gateway
+    (this computer on the containers' network). OS Server's adapter, which
+    may run on another Mac than its OS Server, may use a forward OS Server
+    sets up, or a tailnet address.
   - Each call carries the container's own token in `X-Visor-Proxy` (a
     secret header of the server's), which only this container's proxy
     takes.
