@@ -37,6 +37,7 @@ mac_vm_steps << 'STEPS'
         cd visor && bazel test --test_output=errors \
             //tests/visor_server_tests \
             //tests/visor_container_host_tests \
+            //tests/visor_runner_tests \
             //tests/visor_client_tests \
             //tests/visor_ui_tests \
             //tests/visor_ssh_tests \
