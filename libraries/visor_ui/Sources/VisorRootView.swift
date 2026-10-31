@@ -494,7 +494,7 @@ public struct VisorRootView: View {
         // a stack made only for a session, and made again for each, took
         // Back from a page over the chat past the chat to the list on a
         // collapsed phone.
-        NavigationStack(path: $subPath) {
+        NavigationStack(path: boundSubPath) {
             detailRoot
                 // The detail takes the window's slack, so the sidebar opens at
                 // its own width instead of stretching to its maximum.
@@ -503,6 +503,16 @@ public struct VisorRootView: View {
                     if let which = selection?.session, let host = store.server(for: which.serverID) { subPage(route, host: host) }
                 }
         }
+    }
+
+    /// The pages as SwiftUI's own NavigationPath, not the typed array: on
+    /// the Mac, the typed array bound to the split view's detail column
+    /// brought the app down at the first push (SwiftUI's `try!` on
+    /// AnyNavigationPath.Error.comparisonTypeMismatch); a NavigationPath
+    /// doesn't. SwiftUI only pops them (Back); they are pushed here.
+    private var boundSubPath: Binding<NavigationPath> {
+        Binding(get: { NavigationPath(subPath) },
+                set: { path in if path.count < subPath.count { subPath = Array(subPath.prefix(path.count)) } })
     }
 
     /// What is selected: a computer's or a project's settings, an archive,
