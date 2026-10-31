@@ -1,5 +1,7 @@
 # Visor's agent image: the Linux a session's agent runs in when it runs in a
-# container on its Visor server's Mac (leased from OS Server there). Claude
+# container on its Visor server's Mac (leased from OS Server there), or that
+# a container's own Visor server runs in (visor-server, visor-agent-host,
+# this image's commit's). Claude
 # Code, Codex and openrouter (OpenRouter's models), with Node (which also
 # runs Visor's MCP script and `visor`), Swift
 # 6.4.0 (which Bazel's Swift package rules ask for on Linux; the same as
@@ -35,6 +37,18 @@ RUN git init -q /src && cd /src \
  && git fetch -q --depth 1 https://github.com/AttilaTheFun/open_router_cli "$OPENROUTER_REF" && git checkout -q FETCH_HEAD \
  && swift build -c release --product openrouter \
  && install -m 755 "$(swift build -c release --show-bin-path)/openrouter" /usr/local/bin/openrouter
+
+# Visor's own server and the agents' host (visor-server, visor-agent-host),
+# for a container that runs a Visor server of its own (docs/co-tenancy.md),
+# built from the commit the image is published for (VISOR_REF: CI's, else
+# main) in a stage of their own; only the two programs come over.
+FROM docker.io/library/swift:6.4.0-noble AS visor
+ARG VISOR_REF=main
+RUN git init -q /src && cd /src \
+ && git fetch -q --depth 1 https://github.com/AttilaTheFun/visor "$VISOR_REF" && git checkout -q FETCH_HEAD \
+ && swift build -c release --product visor-server \
+ && swift build -c release --product visor-agent-host \
+ && install -m 755 "$(swift build -c release --show-bin-path)/visor-server" "$(swift build -c release --show-bin-path)/visor-agent-host" /usr/local/bin/
 
 FROM docker.io/library/swift:6.4.0-noble
 # The repository the image is published from: GitHub's registry links the
@@ -83,6 +97,8 @@ RUN case "${TARGETARCH:-arm64}" in \
 RUN printf '%s\n' 'startup --output_user_root=/var/cache/bazel' 'build --experimental_convenience_symlinks=ignore' > /etc/bazel.bazelrc
 RUN npm install -g @anthropic-ai/claude-code @openai/codex && npm cache clean --force
 COPY --from=openrouter /usr/local/bin/openrouter /usr/local/bin/openrouter
+# The server finds the agents' host beside it.
+COPY --from=visor /usr/local/bin/visor-server /usr/local/bin/visor-agent-host /usr/local/bin/
 # The session's folder belongs to the Mac's user, not root: git works in it.
 RUN git config --system --add safe.directory '*'
 # Visor's tools (`visor`), which the server mounts here.
