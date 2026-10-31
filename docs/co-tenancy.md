@@ -204,11 +204,14 @@ exiting 0, or 1 with `{"error", "code"?}`, as 0.44's do.
   - Codex: the Mac's `auth.json`, at `~/.codex/auth.json`.
 - **Its MCP servers** are set by the host (the server's `PUT /api/mcp`) to the
   host's own proxy:
-  - The proxy is reached at an address this computer has on the container's
-    network.
-  - Each call carries a token that only this container's proxy takes.
+  - The proxy listens at `listen.port + 1`, reached from the container at
+    its default route's gateway (this computer on the containers' network):
+    `http://<gateway>:<port + 1>/mcp/<name>`.
+  - Each call carries the container's own token in `X-Visor-Proxy` (a
+    secret header of the server's), which only this container's proxy
+    takes.
   - The host adds the secret headers as it passes the call on, so no
-    secret header enters the container.
+    secret header enters the container. Endpoints are plain HTTP for now.
 
 ### Clients
 
