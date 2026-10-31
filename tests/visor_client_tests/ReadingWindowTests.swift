@@ -34,6 +34,17 @@ final class ReadingWindowTests: XCTestCase {
         XCTAssertFalse(t.hasEarlier)
     }
 
+    /// A page at a time: a reader a few rows further down lets go of
+    /// nothing until a page's worth is past the four kept.
+    func testRowsGoAPageAtATime() {
+        let t = thread(1000)
+        XCTAssertEqual(t.letGo(above: "r450", keeping: 400, atLeast: 100), 0, "50 past the window: not yet")
+        XCTAssertEqual(t.letGo(above: "r499", keeping: 400, atLeast: 100), 0)
+        XCTAssertEqual(t.letGo(above: "r500", keeping: 400, atLeast: 100), 100)
+        XCTAssertEqual(t.entries.first?.id, "r100")
+        XCTAssertEqual(t.letGo(above: "r560", keeping: 400, atLeast: 100), 0, "60 more: not yet")
+    }
+
     func testNothingGoesWhileAPageIsOnItsWay() {
         let t = thread(1000)
         t.loadingEarlier = true

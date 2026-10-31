@@ -87,11 +87,12 @@ extension AgentServerConnection {
 extension AgentServerConnection {
     /// Where the reader is in a session's thread, once they stop scrolling:
     /// `top`, the row on screen at the top (by the id the thread shows it
-    /// under). Rows more than four pages above it are let go of; the cache
+    /// under). Rows more than four pages above it are let go of, a page or
+    /// more at a time; the cache
     /// has them, and they come back a page at a time if the reader does.
     public func reading(_ sessionID: String, top: String?) {
         guard let top, let transcript = transcripts[sessionID] else { return }
-        let gone = transcript.letGo(above: top, keeping: Self.keptAboveScreen)
+        let gone = transcript.letGo(above: top, keeping: Self.keptAboveScreen, atLeast: Self.pageRows)
         if gone > 0 { note("thread \(sessionID.prefix(8)): \(gone) rows far above the screen let go of") }
     }
 }

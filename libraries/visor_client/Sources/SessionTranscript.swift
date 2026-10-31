@@ -423,10 +423,13 @@ public final class SessionTranscript {
     /// (`top`, by the id the thread shows it under) let go of, the cache
     /// keeping them: the thread says it has earlier rows, which are read
     /// again a page at a time if the reader goes back to them. Not while a
-    /// page is on its way. How many went.
+    /// page is on its way, and only `atLeast` at once: a reader going slowly
+    /// down a long thread lets go of a page now and then, not a few rows at
+    /// every stop (each a change to the list). How many went.
     @discardableResult
-    func letGo(above top: String, keeping: Int) -> Int {
-        guard !loadingEarlier, let index = entries.firstIndex(where: { displayID(of: $0) == top }), index > keeping else { return 0 }
+    func letGo(above top: String, keeping: Int, atLeast: Int = 1) -> Int {
+        guard !loadingEarlier, let index = entries.firstIndex(where: { displayID(of: $0) == top }),
+              index - keeping >= max(1, atLeast) else { return 0 }
         let gone = entries.prefix(index - keeping)
         for entry in gone { displayIDs.removeValue(forKey: entry.id) }
         entries = Array(entries.dropFirst(gone.count))
