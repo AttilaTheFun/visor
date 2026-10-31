@@ -137,6 +137,7 @@ Each has a folder of the Runner's, `<Runner data>/container-servers/<id>/`:
   "diskBytes": 137438953472,
   "mounts": [{"source": "/Users/me/Developer", "destination": "/Users/me/Developer"}],
   "listen": {"port": 7440, "lan": true, "vpn": true},
+  "setup": "",
   "stopped": false
 }
 ```
@@ -154,6 +155,8 @@ What the Runner does with its container backend:
 - **Fronts it:** listens at the clients' port (`listen`) and passes each
   connection on to the server at the container's address, for as long as
   the server runs.
+- **Sets it up:** runs the setup script in it (below), before the server
+  first starts and again after an upgrade or a change to the script.
 - **Starts the server in it:** sets its password (`visor-server password`,
   on standard input), writes the agents' sign-ins, then starts
   `visor-server start` detached (an exec not tied to the exec's stream),
@@ -182,7 +185,28 @@ What the Runner does with its container backend:
   `OPENROUTER_API_KEY` in `agents/openrouter.env`, Codex's `auth.json` at
   `~/.codex/auth.json`.
 
+### Its setup
+
+What the agents find in a container beyond the image is prepared by a
+setup script, run in it as root by the Runner:
+
+- **The default:** the Runner's own script, versioned with it: the agent
+  environment Visor's agents expect (their tools' settings, git's identity
+  for the agents, the folders they write to).
+- **A custom one:** Settings can name a script of the person's own, for
+  one container server or all of them (`setup`, a path on the Mac; empty
+  for the default), to make the agents' environment their own. It runs
+  after the default.
+- **When:** after the container is made, before its server first starts;
+  again when it is made anew (an upgrade, a lost network) or the script
+  changes (its hash is kept in `state.json`). What it printed, and
+  whether it failed, are in `state.json` for Settings; a failed setup
+  leaves the server unstarted, saying why.
+
 ### Health
+
+These checks are the Runner's, not OS Server's: OS Server's own leased
+containers are short leases and need nothing special.
 
 - While it runs, the Runner asks each container server every 30 seconds
   (`GET /api/hello`) and writes what it found to `state.json`, which
