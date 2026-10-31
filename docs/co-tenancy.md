@@ -1,9 +1,10 @@
 # One Runner, several Visor Servers (design)
 
 Status: planned for 0.45. Decided on 31 October 2026, and revised the same
-day: the Runner makes each container itself with Apple's `container`, with no
-process of its own per container; it is the only thing clients talk to,
-passing each on to its server, and every server's MCP proxy.
+day: Visor embeds Apple's Containerization framework and is one
+self-contained Mac app (a dmg, and one day the Mac App Store); the Runner is
+the only thing clients talk to, passing each on to its server, and every
+server's MCP proxy.
 
 Today one Mac runs one Visor Server, inside the menu bar app. A session can
 run its agent in a Linux container (0.44's container hosts,
@@ -28,12 +29,14 @@ another's, all driven by one menu bar app.
   - In a container it runs that container's sessions. Its agents, their
     transcripts and attachments, and the agents' hosts are all inside the
     container, so an attached picture is where the agent reads it.
-- **Visor Runner**: the Mac menu bar app. It runs Visor Servers, natively
-  and in containers, and proxies their MCP requests:
+- **Visor Runner**: the Mac menu bar app and the processes it keeps, every
+  one inside `Visor.app` and registered from the bundle (SMAppService),
+  nothing installed outside it. It runs Visor Servers, natively and in
+  containers, and proxies their MCP requests:
   - starts, updates and stops the Mac's Visor Server (a launchd job of its
     own, so updating either leaves the other running);
   - makes, starts, stops and removes each container server's container
-    with Apple's `container` command line, and starts the server in it;
+    with Apple's Containerization, and starts the server in it;
   - is the only thing clients talk to: it listens for each server's
     clients (on loopback, the LAN and VPNs as set) and passes their
     connections on to the server;
@@ -42,9 +45,26 @@ another's, all driven by one menu bar app.
   - moves sessions between servers;
   - holds the credentials and gives each server what it needs.
 
-  No process stands between the Runner and a container: a container and the
-  server in it run on their own, and the Runner, started again, finds them
-  and picks them up.
+  Its processes, each a helper in `Contents/Helpers`:
+  - **the menu bar app**, the Runner's face: Settings, the menu, the codes;
+  - **the Runner's agent**, a LaunchAgent: it keeps the container servers
+    (picks them up, asks after them, makes again one whose network is
+    lost), runs the reverse proxies and the MCP proxy, so that quitting or
+    updating the menu bar app leaves clients and agents served. The app
+    writes what should be (a server's folder, stopped or not) and the agent
+    makes it so;
+  - **a helper per container**, a launchd job that runs that container's
+    VM (Containerization runs a VM in the process that starts it): booted,
+    taking commands on a socket, stopped on TERM. A container outlives the
+    agent and the app;
+  - **the network's owner**, one long-lived process for the network all of
+    Visor's containers are on (192.168.131.0/24, apart from OS Server's and
+    `container`'s), so that no container's going takes its neighbours'
+    network with it.
+
+  What runs the containers (the helper, the network, an image pulled and
+  unpacked, the kernel and init filesystem) is a Swift package of its own,
+  shared with OS Server, behind the Runner's `ContainerBackend`.
 
 ## Credentials
 
@@ -69,8 +89,8 @@ another's, all driven by one menu bar app.
   set, and passes each connection on to the server, the bytes both ways
   as they come (HTTP, the WebSocket).
 - The servers listen in plain HTTP where only the Runner reaches them:
-  the Mac's on loopback; a container's on its own port, which `container`
-  publishes to a port of the Mac's loopback (`--publish 127.0.0.1:…`).
+  the Mac's on loopback; a container's at its address on Visor's network
+  for containers, which only the Mac reaches.
 - To a client, each server is a computer of its own, at the Runner's
   address and that server's port: clients are as they are now. The Runner
   shows each server's connection code, which leads with that address.
@@ -96,11 +116,10 @@ another's, all driven by one menu bar app.
     Runner's from inside, where `container` can).
 - So no secret header enters a server, and a server works the same
   natively and in a container.
-- While the Runner is not running (quit, or updating), servers and agents
-  run on; clients can't reach them, and their MCP calls fail, until it is
-  back. Whether the proxies run in a background agent of the Runner's (a
-  LaunchAgent the menu bar app installs and talks to), so that they outlive
-  the app, is open; the Runner's logic is a library either way.
+- The proxies run in the Runner's agent, so quitting or updating the menu
+  bar app leaves them serving. While the agent itself is down (updating),
+  servers and agents run on; clients can't reach them, and MCP calls fail,
+  until it is back.
 
 ## A container server
 
@@ -118,7 +137,6 @@ Each has a folder of the Runner's, `<Runner data>/container-servers/<id>/`:
   "diskBytes": 137438953472,
   "mounts": [{"source": "/Users/me/Developer", "destination": "/Users/me/Developer"}],
   "listen": {"port": 7440, "lan": true, "vpn": true},
-  "loopbackPort": 17440,
   "stopped": false
 }
 ```
@@ -127,16 +145,15 @@ Each has a folder of the Runner's, `<Runner data>/container-servers/<id>/`:
 - **Its secrets** (the server's password, its MCP token, the sign-ins): the
   Runner's, kept as all its secrets are.
 
-What the Runner does with Apple's `container`:
+What the Runner does with its container backend:
 
 - **Makes it:** two volumes, its home (`/root`) and Bazel's output
   (`/var/cache/bazel`), then the container from the image with the mounts,
-  the volumes, its limits, its server's port published to the Mac's
-  loopback at `loopbackPort` (by default the clients' port plus 10000), and
-  a label naming the container server. The container's main process only
-  waits.
+  the volumes, its limits and a label naming the container server. The
+  container's main process only waits.
 - **Fronts it:** listens at the clients' port (`listen`) and passes each
-  connection on to `loopbackPort`, for as long as the server runs.
+  connection on to the server at the container's address, for as long as
+  the server runs.
 - **Starts the server in it:** sets its password (`visor-server password`,
   on standard input), writes the agents' sign-ins, then starts
   `visor-server start` detached (an exec not tied to the exec's stream),
@@ -149,7 +166,7 @@ What the Runner does with Apple's `container`:
 - **Upgrades it:** the container made again from the image `server.json`
   now names, its volumes kept, so its sessions are as they were and their
   agents resume.
-- **Stops it:** `container stop`; its volumes are kept, and Start starts it
+- **Stops it:** its VM stopped; its volumes are kept, and Start starts it
   again.
 - **Removes it:** the container, and its volumes with it, and with them its
   sessions; its folder and secrets go too.
@@ -181,8 +198,19 @@ What the Runner does with Apple's `container`:
 ## OS Server
 
 The Runner calls nothing of OS Server's for its containers. OS Server, on
-the same Mac, watches the Mac's containers (`container list`, `stats`) and
-counts their memory against its budget for what it lends.
+the same Mac, sees their VMs among the Mac's processes and counts their
+memory against its budget for what it lends.
+
+## The App Sandbox
+
+The Mac App Store asks for it, so the Runner is made with it in mind, and
+these are checked early rather than assumed:
+
+- the network for containers from a sandboxed process (vmnet may need an
+  entitlement Apple grants on request; Virtualization's own NAT doesn't);
+- a project folder seen in a container through a security-scoped bookmark;
+- native sessions run the user's own `claude` and `codex`, which a sandbox
+  forbids: a build for the store may be containers only.
 
 ## Moving sessions
 
