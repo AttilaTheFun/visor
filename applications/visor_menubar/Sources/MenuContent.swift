@@ -7,6 +7,7 @@ import VisorServer
 
 struct MenuContent: View {
     var server: VisorServer
+    var containerServers: RunnerContainerServers
 
     var body: some View {
         Group {
@@ -52,6 +53,17 @@ struct MenuContent: View {
             }
             Button("Copy session table") { copy(server.sessionTable()) }
             Divider()
+            // Each a computer of its own to a client, added from its code.
+            if !containerServers.rows.isEmpty {
+                ForEach(containerServers.rows) { row in
+                    if let code = row.state?.code, !row.stopped {
+                        Button("Copy \(row.spec.name)'s Connection Code") { copy(code) }
+                    } else {
+                        Text("\(row.spec.name): \(ContainerServersSection.status(row))")
+                    }
+                }
+                Divider()
+            }
             // Not SettingsLink: it opens the window behind other apps'.
             Button("Settings…") { AppDelegate.openSettings() }
                 .keyboardShortcut(",")

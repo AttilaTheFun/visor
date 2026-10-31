@@ -16,6 +16,7 @@ import VisorServerApple
 @main
 struct VisorMenuBarApp: App {
     private let server: VisorServer
+    private let containerServers: RunnerContainerServers
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     init() {
@@ -23,16 +24,18 @@ struct VisorMenuBarApp: App {
         // asks the server for them.
         ServerPlatform.current = .apple()
         server = VisorServer.shared
+        containerServers = RunnerContainerServers(server: server)
+        containerServers.watch()
     }
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(server: server)
+            MenuContent(server: server, containerServers: containerServers)
         } label: {
             Image(systemName: server.listening ? "eye" : "eye.slash")
         }
         Settings {
-            SettingsPane(server: server)
+            SettingsPane(server: server, containerServers: containerServers)
         }
     }
 }

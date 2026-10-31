@@ -163,15 +163,17 @@ public struct ContainerServerJobs: Sendable {
     }
 
     /// A new container server: its folder (this user's alone), its
-    /// `server.json` and the Runner's record written, and its job loaded.
-    /// Nil, or what went wrong in loading it.
-    public func make(_ spec: ServerSpec, host: [String]? = nil) throws -> String? {
+    /// `server.json` and the Runner's record written, its `credentials`
+    /// given to its host (so its server starts with them), and its job
+    /// loaded. Nil, or what went wrong in giving or loading.
+    public func make(_ spec: ServerSpec, host: [String]? = nil, credentials: Data? = nil) throws -> String? {
         let folder = folder(spec.id)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(spec).write(to: folder.appendingPathComponent("server.json"), options: .atomic)
         try write(Record(host: host), spec.id)
+        if let credentials, case .failure(let error) = self.credentials(spec.id, credentials) { return error.description }
         return load(spec.id)
     }
 
