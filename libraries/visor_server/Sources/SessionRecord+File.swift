@@ -132,6 +132,8 @@ extension SessionRecord {
             for row in line.rows where take(fileRow: row) { changed.append(row) }
         }
         if !changed.isEmpty { onFileRows?(changed) }
+        // A long session holds only its end here; the store, all of it.
+        letGoOfOldRows()
     }
 
     /// The file's newest message is on another branch (its latest prompt),
