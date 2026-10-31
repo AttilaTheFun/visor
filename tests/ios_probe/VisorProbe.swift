@@ -561,21 +561,23 @@ final class VisorProbe: XCTestCase {
 
     /// A long thread holds only so much of itself: read back five pages
     /// and down to its end again, the reader stops, and the rows more than
-    /// four pages above the screen are let go of (the connection log says
-    /// how many: `defaults read com.LoganShire.VisorClient.iOS
-    /// fixture.connectionLog` on the simulator) with nothing on screen
-    /// moving; read back again, they come back.
+    /// four pages above the screen are let go of, a page at a time (the
+    /// connection log says how many: `visor.fixture.connectionLog` in the
+    /// app's preferences on the simulator) with nothing on screen moving;
+    /// read back again, they come back.
     func testLettingGoOfRowsFarAboveMovesNothing() throws {
         XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "long"]
         app.launch()
         let rows = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Long row '"))
-        // The number of the first row in view: what tells how far back the
-        // thread has been read, whichever rows a fling stopped on.
+        // The number of the first row the list has drawn: how far back the
+        // thread has been read, whichever rows a fling stopped on. (One
+        // query a swipe: asking each row whether it is in view took the
+        // run past its time.)
         func topRow() -> Int? {
-            rows.allElementsBoundByIndex.lazy.filter(\.isHittable)
-                .compactMap { Int($0.label.dropFirst("Long row ".count).prefix { $0.isNumber }) }.min()
+            let first = rows.firstMatch
+            return first.exists ? Int(first.label.dropFirst("Long row ".count).prefix { $0.isNumber }) : nil
         }
         let last = rows.matching(NSPredicate(format: "label BEGINSWITH 'Long row 999:'")).firstMatch
         XCTAssertTrue(last.waitForExistence(timeout: 5), "the long chat's last row did not appear")
