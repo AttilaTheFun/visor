@@ -65,11 +65,13 @@ public final class ConnectionLog {
         keep()
     }
 
-    /// Saves the log where the next run finds it.
+    /// Saves the log where the next run finds it; the canned computer's
+    /// apart from a real run's, under its own key, for a probe to read
+    /// (and never read back here).
     public func keep() {
-        guard !VisorFixture.active else { return }
-        VisorHost.settings?.set(key: Self.key, value: lines.joined(separator: "\n"))
+        VisorHost.settings?.set(key: VisorFixture.active ? Self.fixtureKey : Self.key, value: lines.joined(separator: "\n"))
     }
+    private static let fixtureKey = "fixture.connectionLog"
 
     /// The lines of the run before, once, ahead of this run's.
     private func load() {

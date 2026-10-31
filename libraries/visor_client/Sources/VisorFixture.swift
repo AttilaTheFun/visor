@@ -49,10 +49,11 @@ public enum VisorFixture {
     /// The `long` screen's chat: row `n` of a thousand, a question and its
     /// answer in turn, answers of one to three paragraphs.
     static func longRow(_ n: Int) -> TranscriptEntry {
-        let answer = "Long row \(n): the sync queue drained another batch of offline rows and checked each against the server's copy."
+        let more = "The next batch is smaller, and the banner counts what is still waiting."
         return TranscriptEntry(id: "fixture-long-\(n)", role: n % 2 == 0 ? .user : .assistant,
                                text: n % 2 == 0 ? "Long row \(n): and the next batch?"
-                                   : Array(repeating: answer, count: 1 + n % 3).joined(separator: "\n\n"))
+                                   : (["Long row \(n): the sync queue drained another batch of offline rows and checked each against the server's copy."]
+                                      + Array(repeating: more, count: n % 3)).joined(separator: "\n\n"))
     }
     static let longRows = 1000
 

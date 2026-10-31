@@ -562,23 +562,32 @@ final class VisorProbe: XCTestCase {
     /// A long thread holds only so much of itself: read back five pages
     /// and down to its end again, the reader stops, and the rows more than
     /// four pages above the screen are let go of (the connection log says
-    /// how many) with nothing on screen moving; read back again, they come
-    /// back.
+    /// how many: `defaults read com.LoganShire.VisorClient.iOS
+    /// fixture.connectionLog` on the simulator) with nothing on screen
+    /// moving; read back again, they come back.
     func testLettingGoOfRowsFarAboveMovesNothing() throws {
         XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "long"]
         app.launch()
-        func row(_ n: Int) -> XCUIElement {
-            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Long row \(n):")).firstMatch
+        let rows = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Long row '"))
+        // The number of the first row in view: what tells how far back the
+        // thread has been read, whichever rows a fling stopped on.
+        func topRow() -> Int? {
+            rows.allElementsBoundByIndex.lazy.filter(\.isHittable)
+                .compactMap { Int($0.label.dropFirst("Long row ".count).prefix { $0.isNumber }) }.min()
         }
-        let last = row(999)
+        let last = rows.matching(NSPredicate(format: "label BEGINSWITH 'Long row 999:'")).firstMatch
         XCTAssertTrue(last.waitForExistence(timeout: 5), "the long chat's last row did not appear")
-        let far = row(350)
-        for _ in 0..<150 where !far.exists { app.swipeDown(velocity: .fast) }
-        XCTAssertTrue(far.exists, "five pages of earlier rows did not come in")
-        NSLog("VISOR_LONG read back")
-        for _ in 0..<150 where !last.isHittable { app.swipeUp(velocity: .fast) }
+        // Back past row 450: five pages in, as they are read up to.
+        var top = topRow() ?? 999
+        for _ in 0..<200 where top > 450 {
+            app.swipeDown(velocity: .fast)
+            top = min(top, topRow() ?? top)
+        }
+        XCTAssertLessThanOrEqual(top, 450, "five pages of earlier rows did not come in")
+        NSLog("VISOR_LONG read back to %d", top)
+        for _ in 0..<200 where !last.isHittable { app.swipeUp(velocity: .fast) }
         XCTAssertTrue(last.isHittable, "the thread did not go back down to its end")
         Thread.sleep(forTimeInterval: 0.5)
         let before = last.frame
@@ -589,12 +598,17 @@ final class VisorProbe: XCTestCase {
         XCTAssertEqual(last.frame.minY, before.minY, accuracy: 0.5, "the thread moved when rows far above were let go of")
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         shot(app, "long-thread-let-go")
-        for _ in 0..<150 where !far.exists { app.swipeDown(velocity: .fast) }
-        XCTAssertTrue(far.exists, "the rows let go of did not come back")
-        NSLog("VISOR_LONG back")
+        // Read back again: the rows let go of come in again.
+        top = topRow() ?? 999
+        for _ in 0..<200 where top > 450 {
+            app.swipeDown(velocity: .fast)
+            top = min(top, topRow() ?? top)
+        }
+        XCTAssertLessThanOrEqual(top, 450, "the rows let go of did not come back")
+        NSLog("VISOR_LONG back to %d", top)
         // To the background, where the app keeps its connection log.
         XCUIDevice.shared.press(.home)
-        Thread.sleep(forTimeInterval: 1)
+        Thread.sleep(forTimeInterval: 6)
         app.terminate()
     }
 
