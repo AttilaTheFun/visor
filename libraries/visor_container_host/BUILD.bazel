@@ -10,5 +10,8 @@ swift_library(
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorContainerHost",
-    deps = ["//:foundation"],
+    deps = [
+        "//:foundation",
+        "//libraries/visor_server_posix:visor_posix_c",
+    ],
 )

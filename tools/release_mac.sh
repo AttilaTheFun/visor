@@ -47,8 +47,8 @@ notarize() {
 
 release_app() {
   local target="$1" name="$2"
-  bazel build -c opt "//applications/$target" >/dev/null
-  local zip; zip="$(bazel cquery -c opt --output=files "//applications/$target" 2>/dev/null | grep '\.zip$' | head -1)"
+  bazel build -c opt --config=notarized "//applications/$target" >/dev/null
+  local zip; zip="$(bazel cquery -c opt --config=notarized --output=files "//applications/$target" 2>/dev/null | grep '\.zip$' | head -1)"
   mkdir -p "$WORK/$target"
   ditto -x -k "$zip" "$WORK/$target/"
   local app="$WORK/$target/$name.app"

@@ -72,5 +72,9 @@ build:apple_on_linux --action_env=RULES_APPLECROSS_RESOURCE_OUTPUT_MODE=relaxed
 common:linux --repo_env=C_INCLUDE_PATH=/usr/lib/glib-2.0/include:/usr/lib/dbus-1.0/include:/usr/lib/x86_64-linux-gnu/glib-2.0/include:/usr/lib/x86_64-linux-gnu/dbus-1.0/include:/usr/lib/aarch64-linux-gnu/glib-2.0/include:/usr/lib/aarch64-linux-gnu/dbus-1.0/include
 build:linux --action_env=C_INCLUDE_PATH=/usr/lib/glib-2.0/include:/usr/lib/dbus-1.0/include:/usr/lib/x86_64-linux-gnu/glib-2.0/include:/usr/lib/x86_64-linux-gnu/dbus-1.0/include:/usr/lib/aarch64-linux-gnu/glib-2.0/include:/usr/lib/aarch64-linux-gnu/dbus-1.0/include
 
+# Notarized builds (alpha, production: tools/release_mac.sh) keep the Mac's
+# secrets in the keychain; debug builds, in the data folder (tools/secrets).
+build:notarized --//tools/secrets:keychain
+
 # Your own settings, such as the signing team (tools/signing).
 try-import %workspace%/.bazelrc.user

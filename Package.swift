@@ -76,14 +76,14 @@ let system: [Target] = [
                       path: "applications/visor_server_linux", swiftSettings: strict),
     // Visor's container host over Apple's container: a Mac's, Bazel's
     // there; built and tested here too, with a script for the tool.
-    .target(name: "VisorContainerHost", path: "libraries/visor_container_host/Sources", swiftSettings: strict),
+    .target(name: "VisorContainerHost", dependencies: ["CVisorPOSIX"], path: "libraries/visor_container_host/Sources", swiftSettings: strict),
 ]
 /// The server's tests, on Linux's platform (tests/visor_server_tests/linux).
 let tests: [Target] = [
     .testTarget(name: "VisorServerTests",
                 dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux"],
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
-    .testTarget(name: "VisorContainerHostTests", dependencies: ["VisorContainerHost"],
+    .testTarget(name: "VisorContainerHostTests", dependencies: ["VisorContainerHost", "CVisorPOSIX"],
                 path: "tests/visor_container_host_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The agents' host, built with the server: `swift build -c release` puts
