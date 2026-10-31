@@ -63,33 +63,18 @@ jobs:
       - run: exec tools/ci/linux_tests.sh
 
   # The command-line server on Windows: built, and tried — run, a throwaway
-  # session over its WebSocket, stopped through its REST side.
+  # session over its WebSocket, stopped through its REST side — in a Windows
+  # VM leased from OS Server (tools/ci/windows_vm_tests.sh).
   windows:
-    runs-on: windows-latest
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, visor-ci]
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: compnerd/gha-setup-swift@main
         with:
-          branch: swift-6.4.0-release
-          tag: 6.4.0-RELEASE
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Build
-        run: swift build --product visor-server
-      - name: Try the server
-        shell: pwsh
-        run: |
-          $server = ".build\debug\visor-server.exe"
-          $password = & $server password
-          Start-Process -FilePath $server -ArgumentList "run","--port","7633" -NoNewWindow `
-            -RedirectStandardOutput server.log -RedirectStandardError server-errors.log
-          Start-Sleep 3
-          $env:VISOR_PORT = "7633"; $env:VISOR_TOKEN = $password; $env:QUIT = "1"
-          node tools/probes/server.mjs
-          $status = $LASTEXITCODE
-          Get-Content server.log, server-errors.log
-          exit $status
+          ref: ${{ github.event.pull_request.head.sha }}
+      # exec: the runner's cancel reaches the script's trap, which releases the VM.
+      - run: exec tools/ci/windows_vm_tests.sh
 
   # Ready to release: every dependency pinned to a released version
   # (tools/released_pins.sh). Run on main's commits, which releases are of;
