@@ -2,7 +2,8 @@
 
 Status: planned for 0.45. Decided on 31 October 2026, and revised the same
 day: the Runner makes each container itself with Apple's `container`, with no
-process of its own per container, and it is every server's MCP proxy.
+process of its own per container; it is the only thing clients talk to,
+passing each on to its server, and every server's MCP proxy.
 
 Today one Mac runs one Visor Server, inside the menu bar app. A session can
 run its agent in a Linux container (0.44's container hosts,
@@ -18,8 +19,10 @@ another's, all driven by one menu bar app.
 
 - **Visor Server**: `visor-server`, one Swift binary for macOS and Linux
   with no window of its own (the server library, as now). It runs the
-  agents as processes it starts and stops, and is configured with the MCP
-  servers its agents may use: their URLs, ports included.
+  agents as processes it starts and stops, listens on one port in plain
+  HTTP, and is configured with the MCP servers its agents may use: their
+  URLs, ports included. HTTPS, the LAN, the tailnet and loopback are the
+  Runner's concern, not its.
   - On the Mac it runs the native sessions: agents as the user, signed in
     as they are on the Mac.
   - In a container it runs that container's sessions. Its agents, their
@@ -31,6 +34,9 @@ another's, all driven by one menu bar app.
     own, so updating either leaves the other running);
   - makes, starts, stops and removes each container server's container
     with Apple's `container` command line, and starts the server in it;
+  - is the only thing clients talk to: it listens for each server's
+    clients (on loopback, the LAN and VPNs as set) and passes their
+    connections on to the server;
   - is every server's MCP proxy: the servers' MCP URLs point at it, and it
     adds the secret headers;
   - moves sessions between servers;
@@ -58,14 +64,22 @@ another's, all driven by one menu bar app.
 
 ## Reaching the servers
 
-- The Mac's server is reached as today.
-- A container's server is reached at a port of the Mac's that Apple's
-  `container` publishes to the server's port inside (`--publish`), on the
-  network paths set for it (loopback always; the LAN and VPNs as set).
-- The Runner shows each server's connection code, which leads with that
-  address.
+- The Runner is the only thing clients talk to. For each server it listens
+  at that server's port, on loopback always and on the LAN and VPNs as
+  set, and passes each connection on to the server, the bytes both ways
+  as they come (HTTP, the WebSocket).
+- The servers listen in plain HTTP where only the Runner reaches them:
+  the Mac's on loopback; a container's on its own port, which `container`
+  publishes to a port of the Mac's loopback (`--publish 127.0.0.1:…`).
+- To a client, each server is a computer of its own, at the Runner's
+  address and that server's port: clients are as they are now. The Runner
+  shows each server's connection code, which leads with that address.
 - Clients already keep several computers, so a Mac with three servers is
   three computers in the sidebar.
+- Later, the Runner takes on what the servers do for clients themselves
+  now: HTTPS (its identity), pairing and passwords, passing the signed-in
+  client on to the server in a header, and a token per server so that
+  nothing else on the Mac can talk to a server directly.
 
 ## MCP servers
 
@@ -83,7 +97,10 @@ another's, all driven by one menu bar app.
 - So no secret header enters a server, and a server works the same
   natively and in a container.
 - While the Runner is not running (quit, or updating), servers and agents
-  run on; their MCP calls fail until it is back.
+  run on; clients can't reach them, and their MCP calls fail, until it is
+  back. Whether the proxies run in a background agent of the Runner's (a
+  LaunchAgent the menu bar app installs and talks to), so that they outlive
+  the app, is open; the Runner's logic is a library either way.
 
 ## A container server
 
@@ -101,6 +118,7 @@ Each has a folder of the Runner's, `<Runner data>/container-servers/<id>/`:
   "diskBytes": 137438953472,
   "mounts": [{"source": "/Users/me/Developer", "destination": "/Users/me/Developer"}],
   "listen": {"port": 7440, "lan": true, "vpn": true},
+  "loopbackPort": 17440,
   "stopped": false
 }
 ```
@@ -113,8 +131,12 @@ What the Runner does with Apple's `container`:
 
 - **Makes it:** two volumes, its home (`/root`) and Bazel's output
   (`/var/cache/bazel`), then the container from the image with the mounts,
-  the volumes, its limits, `--publish` for the server's port, and a label
-  naming the container server. The container's main process only waits.
+  the volumes, its limits, its server's port published to the Mac's
+  loopback at `loopbackPort` (by default the clients' port plus 10000), and
+  a label naming the container server. The container's main process only
+  waits.
+- **Fronts it:** listens at the clients' port (`listen`) and passes each
+  connection on to `loopbackPort`, for as long as the server runs.
 - **Starts the server in it:** sets its password (`visor-server password`,
   on standard input), writes the agents' sign-ins, then starts
   `visor-server start` detached (an exec not tied to the exec's stream),
