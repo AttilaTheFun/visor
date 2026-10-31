@@ -37,6 +37,7 @@ public enum ContainerHostCommand {
     /// The answer to every operation but `exec`.
     public static func answer(_ arguments: [String], input: Data, container: AppleContainer, version: String) -> Answer {
         let rest = Array(arguments.dropFirst())
+        if let first = arguments.first, serverCommands.contains(first) { return serverAnswer(arguments, input: input, container: container) }
         switch arguments.first {
         case "health": return health(container, version: version)
         case "create": return create(input, container: container)
@@ -44,7 +45,8 @@ public enum ContainerHostCommand {
         case "rm": return remove(rest, container: container)
         case "ls": return list(container)
         case "network": return network(rest, container: container)
-        default: return failure("\(name) health | create | exec | put | rm | ls | network", code: "unsupported")
+        default: return failure("\(name) health | serve | status | credentials | stop | upgrade | remove (version 2), "
+                                + "create | exec | put | rm | ls | network (version 1)", code: "unsupported")
         }
     }
 

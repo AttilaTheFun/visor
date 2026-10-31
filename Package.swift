@@ -76,7 +76,7 @@ let system: [Target] = [
                       path: "applications/visor_server_linux", swiftSettings: strict),
     // Visor's container host over Apple's container: a Mac's, Bazel's
     // there; built and tested here too, with a script for the tool.
-    .target(name: "VisorContainerHost", path: "libraries/visor_container_host/Sources", swiftSettings: strict),
+    .target(name: "VisorContainerHost", dependencies: ["CVisorPOSIX"], path: "libraries/visor_container_host/Sources", swiftSettings: strict),
 ]
 /// The server's tests, on Linux's platform (tests/visor_server_tests/linux).
 let tests: [Target] = [
