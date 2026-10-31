@@ -28,6 +28,11 @@ fi
 grep -q 'brew shellenv' ~/.zprofile 2>/dev/null || echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
 eval "$(/opt/homebrew/bin/brew shellenv)"
 brew install bazelisk git
+# Homebrew's install selects the Command Line Tools it brings: Xcode again,
+# for what follows (the simulator's download needs it) and for the VM's
+# users after.
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 
 # The iOS simulator runtime, from Apple (no Apple Account needed).
 xcodebuild -downloadPlatform iOS
@@ -39,7 +44,9 @@ if [ -n "${OSS_XCODE_VERSION:-}" ] && ! printf '%s\n' "$ios" | grep -q "^iOS ${O
 fi
 
 bazelisk="$(bazelisk version 2>/dev/null || true)"
-echo "xcode: $version"
+selected="$(xcode-select -p)"
+[ "$selected" = /Applications/Xcode.app/Contents/Developer ] || { echo "xcode-select is $selected, not Xcode" >&2; exit 1; }
+echo "xcode: $version ($selected)"
 echo "ios: $(first "$ios")"
 echo "git: $(git --version)"
 echo "bazelisk: $(first "$bazelisk")"
