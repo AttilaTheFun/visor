@@ -174,15 +174,22 @@ exiting 0, or 1 with `{"error", "code"?}`, as 0.44's do.
 
 ### The server inside
 
-- **Its disks:** its data at `/var/lib/visor` (VISOR_DATA_DIR: sessions,
-  transcripts, attachments) and Bazel's output at `/var/cache/bazel`. Both
-  are kept until `remove --data`.
-- **Started detached** by the host (`visor-server run`, from the image), so
-  a host that restarts leaves it, and the agents under it, running.
+- **Its disks:** its home, `/root`, and Bazel's output at
+  `/var/cache/bazel`. Both are kept until `remove --data`. The home holds:
+  - the server's data (`~/.local/share/visor`: sessions, attachments);
+  - the agents' own transcripts (`~/.claude`, `~/.codex`, `~/.openrouter`),
+    which a resumed session reads;
+  - their sign-ins.
+
+  So a container made again finds all of it as it was.
+- **Started detached** by the host (`visor-server start`, from the image,
+  with its password, the LAN on and its `--address` the host's), so a host
+  that restarts leaves it, and the agents under it, running.
 - **Its password:** made by the host when the container is made, and kept in
   the host's secrets. Its settings point its codes at the host's `address`.
 - **Its agents' sign-ins**, from `credentials`:
-  - Claude: `CLAUDE_CODE_OAUTH_TOKEN` in its `agents/claude.env`;
+  - Claude: `CLAUDE_CODE_OAUTH_TOKEN` in its `agents/claude.env` (in the
+    server's data);
   - OpenRouter: `OPENROUTER_API_KEY` in `agents/openrouter.env`;
   - Codex: the Mac's `auth.json`, at `~/.codex/auth.json`.
 - **Its MCP servers** are set by the host (the server's `PUT /api/mcp`) to the
