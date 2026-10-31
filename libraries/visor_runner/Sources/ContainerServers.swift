@@ -3,10 +3,10 @@ import Synchronization
 
 /// The Runner's container servers (docs/co-tenancy.md): each a folder of
 /// `folders` holding its `server.json`, and a container the Runner makes
-/// and keeps itself with Apple's `container`, no process of its own between
-/// them; its server's port published on loopback alone, and the Runner's
-/// reverse proxy in front of it at the port clients reach it at (on the LAN
-/// and VPNs as set). A container and the server in it run on their own: the Runner,
+/// and keeps through its container backend; its server reached only from
+/// this computer, and the Runner's reverse proxy in front of it at the port
+/// clients reach it at (on the LAN and VPNs as set). A container and the
+/// server in it run on their own: the Runner,
 /// started again, picks them up (`pickUp`), and while it runs asks after
 /// each (`round`), makes again one whose network is lost (its volumes kept),
 /// and gives each server the agents' sign-ins and the Runner's MCP servers
@@ -14,7 +14,7 @@ import Synchronization
 /// off the main thread. One at a time.
 public final class ContainerServers: Sendable {
     public let folders: URL
-    public let cli: ContainerCLI
+    public let backend: any ContainerBackend
     let secrets: any RunnerSecrets
     /// The Runner's MCP proxy's port, which containers reach at their
     /// gateway.
@@ -50,12 +50,12 @@ public final class ContainerServers: Sendable {
         var endpoints: [MCPProxy.Endpoint]
     }
 
-    public init(folders: URL, cli: ContainerCLI = ContainerCLI(), secrets: any RunnerSecrets, mcpPort: Int,
+    public init(folders: URL, backend: any ContainerBackend, secrets: any RunnerSecrets, mcpPort: Int,
                 endpoints: @escaping @Sendable () -> [MCPProxy.Endpoint], signIns: @escaping @Sendable () -> ContainerServer.SignIns,
                 clientHost: @escaping @Sendable (ContainerServerSpec.Listen) -> String = { HostAddresses.clientHost(lan: $0.lan, vpn: $0.vpn) },
                 patience: Duration = .seconds(60), serverPort: Int = 7433, log: @escaping @Sendable (String) -> Void = { _ in }) {
         self.folders = folders
-        self.cli = cli
+        self.backend = backend
         self.secrets = secrets
         self.mcpPort = mcpPort
         self.endpoints = endpoints
@@ -78,7 +78,7 @@ public final class ContainerServers: Sendable {
     public func state(_ id: String) -> ContainerServerState? { ContainerServerState.read(folder(id)) }
 
     func server(_ spec: ContainerServerSpec) -> ContainerServer {
-        var server = ContainerServer(spec: spec, cli: cli)
+        var server = ContainerServer(spec: spec, backend: backend)
         server.serverPort = serverPort
         return server
     }
@@ -139,7 +139,7 @@ public final class ContainerServers: Sendable {
             spec.stopped = true
             do { try spec.write(folder(id)) } catch { return "\(error)" }
             unfront(id)
-            if server(spec).container()?.status == "running", !server(spec).stop() { return "\(spec.containerName) didn't stop" }
+            if server(spec).container()?.running == true, !server(spec).stop() { return "\(spec.containerName) didn't stop" }
             ContainerServerState(state: "stopped").write(folder(id))
             return nil
         }
@@ -198,7 +198,7 @@ public final class ContainerServers: Sendable {
             for spec in servers() where !spec.stopped {
                 let server = server(spec)
                 var network: ContainerServerState.Network?
-                if server.container()?.status == "running", !server.answering() {
+                if server.container()?.running == true, !server.answering() {
                     let checked = server.networkCheck()
                     network = checked
                     if !checked.ok {
@@ -235,8 +235,9 @@ public final class ContainerServers: Sendable {
         let everywhere = spec.listen.lan || spec.listen.vpn
         if let had = fronts.withLock({ $0[spec.id] }), had.port == spec.listen.port, had.everywhere == everywhere { return nil }
         unfront(spec.id)
-        let upstream = UInt16(spec.publishedPort)
-        guard let proxy = TCPProxy(port: UInt16(spec.listen.port), everywhere: everywhere, upstream: { ("127.0.0.1", upstream) }) else {
+        // Asked for each connection: a container made again may have another address.
+        let server = server(spec)
+        guard let proxy = TCPProxy(port: UInt16(spec.listen.port), everywhere: everywhere, upstream: { server.upstream() }) else {
             return "Port \(spec.listen.port) is taken"
         }
         proxy.start()

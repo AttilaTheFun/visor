@@ -2,21 +2,23 @@ import CVisorPOSIX
 import Foundation
 
 /// A container server's container and the Visor server in it
-/// (docs/co-tenancy.md), made and kept by the Runner with Apple's
-/// `container`. Its home (`/root`: the server's data, the agents'
-/// transcripts and sign-ins) and Bazel's output are volumes of their own,
-/// kept when the container is made again, so its sessions are as they were.
+/// (docs/co-tenancy.md), made and kept by the Runner through its container
+/// backend. Its home (`/root`: the server's data, the agents' transcripts
+/// and sign-ins) and Bazel's output are volumes of their own, kept when the
+/// container is made again, so its sessions are as they were. Its server
+/// listens in plain HTTP on the container's address, which only this
+/// computer reaches: clients reach it through the Runner's proxy.
 public struct ContainerServer: Sendable {
     public let spec: ContainerServerSpec
-    public let cli: ContainerCLI
+    public let backend: any ContainerBackend
     /// The port the server listens on in the container.
     public var serverPort = 7433
     /// The label the Runner's containers carry their server's id in.
     public static let label = "visor.container-server"
 
-    public init(spec: ContainerServerSpec, cli: ContainerCLI) {
+    public init(spec: ContainerServerSpec, backend: any ContainerBackend) {
         self.spec = spec
-        self.cli = cli
+        self.backend = backend
     }
 
     public var name: String { spec.containerName }
@@ -24,24 +26,20 @@ public struct ContainerServer: Sendable {
     var buildVolume: String { name + "-build" }
 
     /// The container as it is now; nil when there is none.
-    public func container() -> ContainerCLI.Container? { cli.inspect(name) }
+    public func container() -> ContainerInfo? { backend.container(name) }
 
-    /// `container run`'s arguments: its volumes, this computer's folders,
-    /// its label, its size, its server's port published on loopback alone
-    /// (clients reach it through the Runner), Rosetta where the Mac has it;
-    /// the main process only waits.
-    func runArguments(rosetta: Bool) -> [String] {
-        var arguments = ["run", "--detach", "--name", name,
-                         "--volume", "\(homeVolume):/root", "--volume", "\(buildVolume):/var/cache/bazel"]
-        for mount in spec.mounts {
-            arguments += ["--mount", "type=bind,source=\(mount.source),target=\(mount.destination)" + (mount.readOnly == true ? ",readonly" : "")]
-        }
-        arguments += ["--label", "\(Self.label)=\(spec.id)"]
-        if let cpus = spec.cpus { arguments += ["--cpus", String(cpus)] }
-        if let memory = spec.memoryBytes { arguments += ["--memory", "\(max(memory / 1_048_576, 512))M"] }
-        arguments += ["--publish", "127.0.0.1:\(spec.publishedPort):\(serverPort)"]
-        if rosetta { arguments += ["--rosetta"] }
-        return arguments + [spec.image, "sleep", "infinity"]
+    /// What it is made from: its image, its volumes, this computer's
+    /// folders, its label, its size, Rosetta where the Mac has it.
+    func request(rosetta: Bool) -> ContainerRequest {
+        var request = ContainerRequest(name: name, image: spec.image)
+        request.cpus = spec.cpus
+        request.memoryBytes = spec.memoryBytes
+        request.volumes = [.init(name: homeVolume, destination: "/root", sizeBytes: Int64(64) << 30),
+                           .init(name: buildVolume, destination: "/var/cache/bazel", sizeBytes: spec.diskBytes ?? (Int64(128) << 30))]
+        request.mounts = spec.mounts.map { .init(source: $0.source, destination: $0.destination, readOnly: $0.readOnly ?? false) }
+        request.labels = [Self.label: spec.id]
+        request.rosetta = rosetta
+        return request
     }
 
     /// The container running: made where there is none (its volumes kept
@@ -49,50 +47,52 @@ public struct ContainerServer: Sendable {
     /// went wrong.
     public func ensureRunning(rosetta: Bool = FileManager.default.fileExists(atPath: "/Library/Apple/usr/libexec/oah/libRosettaRuntime")) -> String? {
         if let had = container() {
-            if had.status == "running" { return nil }
-            return cli.run(["start", name])?.status == 0 ? nil : "\(name) is there but doesn't start"
+            return had.running ? nil : backend.start(name).map { "\(name) is there but doesn't start: \($0)" }
         }
-        guard cli.installed else { return "Apple's container is not installed (github.com/apple/container)" }
-        guard cli.run(["system", "status"])?.status == 0 else { return "Apple's container is not started (container system start)" }
-        for (volume, bytes) in [(homeVolume, Int64(64) << 30), (buildVolume, spec.diskBytes ?? (Int64(128) << 30))] {
-            if cli.run(["volume", "inspect", volume])?.status == 0 { continue }
-            guard cli.run(["volume", "create", "-s", "\(bytes / 1_048_576)M", volume])?.status == 0 else {
-                return "Could not make the volume \(volume)"
-            }
-        }
-        guard let made = cli.run(runArguments(rosetta: rosetta)) else { return "Apple's container couldn't be started" }
-        return made.status == 0 ? nil : "Could not make \(name) from \(spec.image): \(made.said)"
+        if let unavailable = backend.unavailable() { return unavailable }
+        return backend.create(request(rosetta: rosetta)).map { "Could not make \(name) from \(spec.image): \($0)" }
     }
 
-    /// Whether the server takes connections at its published port now.
+    /// Where the server is reached from this computer: the container's
+    /// address and the server's port.
+    public func upstream() -> (host: String, port: UInt16)? {
+        container()?.address.map { ($0, UInt16(serverPort)) }
+    }
+
+    /// Whether the server takes connections now.
     public func answering() -> Bool {
-        let connection = visor_connect_tcp("127.0.0.1", UInt16(spec.publishedPort))
+        guard let upstream = upstream() else { return false }
+        let connection = visor_connect_tcp(upstream.host, upstream.port)
         guard connection >= 0 else { return false }
         close(connection)
         return true
     }
 
+    /// A shell script run in the container with `arguments` ($1…).
+    func shell(_ script: String, _ arguments: [String] = [], input: Data? = nil) -> ContainerExec? {
+        backend.exec(name, ["sh", "-c", script, "sh"] + arguments, input: input)
+    }
+
     /// The server started in the container, detached there (the Runner's
     /// quitting leaves it, and its agents, running): its password given on
     /// standard input, never on a command line; its codes leading with
-    /// `clientAddress`. Nil, or what went wrong.
+    /// `clientAddress`. It listens on the container's own address, where
+    /// only this computer reaches it. Nil, or what went wrong.
     public func startServer(password: String, clientAddress: String) -> String? {
         let script = """
             read -r password
             visor-server password "$password" > /dev/null || exit 1
             exec visor-server start --port \(serverPort) --lan on --vpn on --ssh off --address "$1"
             """
-        guard let started = cli.run(["exec", "--interactive", name, "sh", "-c", script, "sh", clientAddress],
-                                    input: Data((password + "\n").utf8)) else {
-            return "Apple's container couldn't be started"
+        guard let started = shell(script, [clientAddress], input: Data((password + "\n").utf8)) else {
+            return "Nothing could be run in \(name)"
         }
         return started.status == 0 ? nil : "The server in \(name) didn't start: \(started.said)"
     }
 
     /// A file written in the container, its folders made, its mode set.
     func put(_ data: Data, at path: String, mode: String = "600") -> Bool {
-        let script = "mkdir -p \"$(dirname \"$1\")\" && cat > \"$1\" && chmod \"$2\" \"$1\""
-        return cli.run(["exec", "--interactive", name, "sh", "-c", script, "sh", path, mode], input: data)?.status == 0
+        shell("mkdir -p \"$(dirname \"$1\")\" && cat > \"$1\" && chmod \"$2\" \"$1\"", [path, mode], input: data)?.status == 0
     }
 
     /// The agents' sign-ins written into the container: Claude's token and
@@ -109,7 +109,7 @@ public struct ContainerServer: Sendable {
             if let contents = file.contents {
                 guard put(Data(contents.utf8), at: file.path) else { return "Could not write \(file.path) in \(name)" }
             } else {
-                _ = cli.run(["exec", name, "rm", "-f", file.path])
+                _ = backend.exec(name, ["rm", "-f", file.path], input: nil)
             }
         }
         return nil
@@ -133,16 +133,15 @@ public struct ContainerServer: Sendable {
     /// route's gateway (from /proc/net/route, the address in hex, its bytes
     /// in the kernel's order).
     public func gateway() -> String? {
-        let script = "awk '$2 == \"00000000\" { print $3; exit }' /proc/net/route"
-        guard let read = cli.run(["exec", name, "sh", "-c", script]), read.status == 0,
+        guard let read = shell("awk '$2 == \"00000000\" { print $3; exit }' /proc/net/route"), read.status == 0,
               let value = UInt32(read.output.trimmingCharacters(in: .whitespacesAndNewlines), radix: 16) else { return nil }
         return [value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, value >> 24].map(String.init).joined(separator: ".")
     }
 
     /// A REST call to the server, made in the container with its password
     /// (in a file of the container's for the call, never on a command
-    /// line): its answer's body, or nil.
-    func call(_ method: String, _ path: String, password: String, body: Data? = nil) -> Answer? {
+    /// line): curl's status and the answer's body, or nil.
+    func call(_ method: String, _ path: String, password: String, body: Data? = nil) -> ContainerExec? {
         let folder = "/root/.visor-runner/"
         guard put(Data("Authorization: Bearer \(password)\n".utf8), at: folder + "auth") else { return nil }
         var script = "curl -s -m 10 -X \(method) -H @\(folder)auth"
@@ -151,15 +150,13 @@ public struct ContainerServer: Sendable {
             script += " -H 'Content-Type: application/json' --data-binary @\(folder)body.json"
         }
         script += " http://127.0.0.1:\(serverPort)/api/\(path); rm -f \(folder)auth \(folder)body.json"
-        return cli.run(["exec", name, "sh", "-c", script]).map { Answer(status: $0.status, output: $0.output) }
+        return shell(script)
     }
 
-    /// A REST call's answer: curl's status, and the body.
-    struct Answer {
-        var status: Int32
-        var output: String
-
-        var json: [String: Any]? { (try? JSONSerialization.jsonObject(with: Data(output.utf8))) as? [String: Any] }
+    /// A REST answer's JSON object.
+    static func json(_ answer: ContainerExec?) -> [String: Any]? {
+        guard let answer, answer.status == 0 else { return nil }
+        return (try? JSONSerialization.jsonObject(with: Data(answer.output.utf8))) as? [String: Any]
     }
 
     /// The server's MCP servers set to the Runner's proxy (its `PUT
@@ -173,7 +170,7 @@ public struct ContainerServer: Sendable {
                     "headers": headers + [["name": MCPProxy.tokenHeader, "value": token, "secret": true]]]
         }
         guard let body = try? JSONSerialization.data(withJSONObject: ["endpoints": listed]) else { return "The MCP servers couldn't be written" }
-        guard let answer = call("PUT", "mcp", password: password, body: body), answer.status == 0, answer.json != nil else {
+        guard Self.json(call("PUT", "mcp", password: password, body: body)) != nil else {
             return "The server in \(name) didn't take its MCP servers"
         }
         return nil
@@ -182,14 +179,14 @@ public struct ContainerServer: Sendable {
     /// What the server says of itself (`/api/hello`'s version) and its
     /// connection code, asked in the container.
     public func hello(password: String) -> (version: String?, code: String?)? {
-        guard let hello = call("GET", "hello", password: password)?.json else { return nil }
-        return (hello["version"] as? String, call("GET", "code", password: password)?.json?["text"] as? String)
+        guard let hello = Self.json(call("GET", "hello", password: password)) else { return nil }
+        return (hello["version"] as? String, Self.json(call("GET", "code", password: password))?["text"] as? String)
     }
 
     /// Whether the container's network works: its address on a network
-    /// this computer still has (the containers' network made again under a
-    /// running container leaves it on one that is gone, where nothing
-    /// reaches it), and from in it, names resolved and HTTPS reached.
+    /// this computer still has (a network made again under a running
+    /// container leaves it on one that is gone, where nothing reaches it),
+    /// and from in it, names resolved and HTTPS reached.
     public func networkCheck(local: [HostAddresses.Address] = HostAddresses.all()) -> ContainerServerState.Network {
         guard let address = container()?.address else { return .init(ok: false, detail: "it has no address") }
         let subnet = address.split(separator: ".").prefix(3).joined(separator: ".") + "."
@@ -197,24 +194,24 @@ public struct ContainerServer: Sendable {
             return .init(ok: false, detail: "its address \(address) is on no network this computer has")
         }
         let probe = "github.com"
-        let script = "getent hosts \(probe) > /dev/null && echo dns; curl -s -o /dev/null --max-time 8 https://\(probe) && echo reach"
-        guard let checked = cli.run(["exec", name, "sh", "-c", script]) else { return .init(ok: false, detail: "it couldn't be asked") }
+        guard let checked = shell("getent hosts \(probe) > /dev/null && echo dns; curl -s -o /dev/null --max-time 8 https://\(probe) && echo reach") else {
+            return .init(ok: false, detail: "it couldn't be asked")
+        }
         let dns = checked.output.contains("dns"), reach = checked.output.contains("reach")
         if dns && reach { return .init(ok: true, detail: "resolves and reaches \(probe)") }
         return .init(ok: false, detail: dns ? "resolves, but reaches nothing (\(probe))" : "resolves no names (\(probe))")
     }
 
-    public func stop() -> Bool { cli.run(["stop", name])?.status == 0 }
+    public func stop() -> Bool { backend.stop(name) == nil }
 
     /// The container gone, its volumes kept: made again, it is as it was.
     public func removeContainer() {
-        _ = cli.run(["delete", "--force", name])
+        backend.remove(name, volumes: [])
     }
 
     /// The container gone, and its volumes with it, and with them its
     /// sessions.
     public func removeWithVolumes() {
-        removeContainer()
-        for volume in [homeVolume, buildVolume] { _ = cli.run(["volume", "delete", volume]) }
+        backend.remove(name, volumes: [homeVolume, buildVolume])
     }
 }

@@ -4,8 +4,8 @@ import VisorRunner
 import VisorServer
 
 /// The Runner's container servers (docs/co-tenancy.md) as the menu bar app
-/// keeps and shows them: made and kept with Apple's `container` on a thread
-/// of their own, picked up when the app starts, asked after every 30
+/// keeps and shows them: made and kept through the container backend on a
+/// thread of their own, picked up when the app starts, asked after every 30
 /// seconds; the app's MCP proxy, which their servers' MCP servers are set
 /// to; and what their agents sign in with: the Claude token and OpenRouter
 /// key set here, and the Mac's Codex sign-in.
@@ -43,7 +43,7 @@ final class RunnerContainerServers {
         let secrets = ServerPlatform.current.secrets
         servers = ContainerServers(
             folders: ServerPlatform.current.host.dataDirectory.appendingPathComponent("container-servers", isDirectory: true),
-            secrets: RunnerSecretStore(store: secrets), mcpPort: Self.mcpPort,
+            backend: PendingContainerBackend(), secrets: RunnerSecretStore(store: secrets), mcpPort: Self.mcpPort,
             endpoints: { endpoints.value },
             signIns: { Self.signIns(secrets) },
             log: { ServerPlatform.current.log("container servers: \($0)") })
