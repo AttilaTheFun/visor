@@ -23,16 +23,13 @@ public struct ContainerServer: Sendable {
     var homeVolume: String { name + "-home" }
     var buildVolume: String { name + "-build" }
 
-    /// Where the server's port is published on this computer: every
-    /// interface when the LAN or a VPN reaches it, else loopback alone.
-    var publishedHost: String { spec.listen.lan || spec.listen.vpn ? "0.0.0.0" : "127.0.0.1" }
-
     /// The container as it is now; nil when there is none.
     public func container() -> ContainerCLI.Container? { cli.inspect(name) }
 
     /// `container run`'s arguments: its volumes, this computer's folders,
-    /// its label, its size, its server's port published, Rosetta where the
-    /// Mac has it; the main process only waits.
+    /// its label, its size, its server's port published on loopback alone
+    /// (clients reach it through the Runner), Rosetta where the Mac has it;
+    /// the main process only waits.
     func runArguments(rosetta: Bool) -> [String] {
         var arguments = ["run", "--detach", "--name", name,
                          "--volume", "\(homeVolume):/root", "--volume", "\(buildVolume):/var/cache/bazel"]
@@ -42,7 +39,7 @@ public struct ContainerServer: Sendable {
         arguments += ["--label", "\(Self.label)=\(spec.id)"]
         if let cpus = spec.cpus { arguments += ["--cpus", String(cpus)] }
         if let memory = spec.memoryBytes { arguments += ["--memory", "\(max(memory / 1_048_576, 512))M"] }
-        arguments += ["--publish", "\(publishedHost):\(spec.listen.port):\(serverPort)"]
+        arguments += ["--publish", "127.0.0.1:\(spec.publishedPort):\(serverPort)"]
         if rosetta { arguments += ["--rosetta"] }
         return arguments + [spec.image, "sleep", "infinity"]
     }
@@ -69,7 +66,7 @@ public struct ContainerServer: Sendable {
 
     /// Whether the server takes connections at its published port now.
     public func answering() -> Bool {
-        let connection = visor_connect_tcp("127.0.0.1", UInt16(spec.listen.port))
+        let connection = visor_connect_tcp("127.0.0.1", UInt16(spec.publishedPort))
         guard connection >= 0 else { return false }
         close(connection)
         return true

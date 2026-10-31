@@ -7,7 +7,9 @@ import VisorRunner
 //
 // One container server made with Apple's `container` in a folder of its own
 // (not the menu bar app's), then checked: its server ready and its code
-// leading with the published address; that port reached here; an MCP call
+// leading with the Runner's address for it; its port published on loopback
+// alone, and reached through the probe's reverse proxy at --port (on the
+// LAN too, with --lan); an MCP call
 // made from inside the container through the probe's proxy at its gateway,
 // the secret header added on the way; picked up by a second set of
 // container servers, as after the Runner restarts, without being made
@@ -30,6 +32,21 @@ private final class ProbeSecrets: RunnerSecrets {
     private let values = Mutex<[String: String]>([:])
     func value(_ name: String) -> String? { values.withLock { $0[name] } }
     func set(_ name: String, _ value: String?) { values.withLock { $0[name] = value } }
+}
+
+extension Process {
+    /// A program's standard output, run to its end.
+    static func run(_ path: String, _ arguments: [String]) -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        let out = Pipe()
+        process.standardOutput = out
+        guard (try? process.run()) != nil else { return "" }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
+    }
 }
 
 func check(_ ok: Bool, _ what: String) {
@@ -70,6 +87,7 @@ func servers() -> ContainerServers {
                      patience: .seconds(120), log: { print("      \($0)") })
 }
 let first = servers()
+let cli = ContainerCLI()
 let proxy = MCPProxy(port: UInt16(mcpPort), endpoints: { endpoints }, admits: { first.admits($0) }) { _, header in
     header == "Authorization" ? "Bearer probe-secret" : nil
 }
@@ -78,15 +96,21 @@ proxy?.start()
 
 var spec = ContainerServerSpec(id: "probe-\(getpid())", name: "Probe", image: image)
 spec.listen = .init(port: port, lan: lan, vpn: false)
-print("      making \(spec.containerName) from \(image) (published at \(lan ? "0.0.0.0" : "127.0.0.1"):\(port))")
+print("      making \(spec.containerName) from \(image) (published at 127.0.0.1:\(spec.publishedPort), fronted at \(port))")
 let problem = first.make(spec)
 check(problem == nil, "made and its server started\(problem.map { ": \($0)" } ?? "")")
 let state = first.state(spec.id)
 check(state?.state == "ready", "ready (\(state?.server?.version ?? "no version"))")
 check(state?.code?.isEmpty == false, "its connection code: \(state?.address ?? "no address")")
+let published = visor_connect_tcp("127.0.0.1", UInt16(spec.publishedPort))
+check(published >= 0, "its published port takes a connection at 127.0.0.1:\(spec.publishedPort)")
+close(published)
 let connection = visor_connect_tcp("127.0.0.1", UInt16(port))
-check(connection >= 0, "its published port takes a connection at 127.0.0.1:\(port)")
+check(connection >= 0, "the probe's proxy in front of it takes a connection at 127.0.0.1:\(port)")
 close(connection)
+let hello = Process.run("/usr/bin/curl", ["-s", "-m", "10", "-H", "Authorization: Bearer \(secrets.value("container-server \(spec.id) password") ?? "")",
+                                          "http://127.0.0.1:\(port)/api/hello"])
+check(hello.contains("\"version\""), "and its server answers through it (\(hello.prefix(80)))")
 if lan, let address = HostAddresses.all().first(where: { HostAddresses.isLAN($0.address) && !$0.interface.hasPrefix("bridge") }) {
     let reached = visor_connect_tcp(address.address, UInt16(port))
     check(reached >= 0, "and at this Mac's LAN address \(address.address):\(port)")
@@ -94,7 +118,6 @@ if lan, let address = HostAddresses.all().first(where: { HostAddresses.isLAN($0.
 }
 
 // From inside the container: the MCP server as its server was given it.
-let cli = ContainerCLI()
 let token = secrets.value("container-server \(spec.id) mcpToken") ?? ""
 let script = "gw=$(awk '$2 == \"00000000\" { print $3; exit }' /proc/net/route); "
     + "ip=$(printf '%d.%d.%d.%d' 0x${gw:6:2} 0x${gw:4:2} 0x${gw:2:2} 0x${gw:0:2}); "
@@ -103,15 +126,19 @@ let called = cli.run(["exec", spec.containerName, "bash", "-c", script, "bash", 
 check(called?.output.contains("Bearer probe-secret") == true,
       "an MCP call from inside goes through the proxy at its gateway, the secret added (\(called?.said ?? "no answer"))")
 
-// A second set, as after the Runner restarts: picked up, not made again.
-let again = servers().pickUp()
+// A second set, as after the Runner restarts (the first's proxies gone):
+// picked up, not made again.
+first.stopFronting()
+let second = servers()
+let again = second.pickUp()
 check(again.isEmpty, "picked up again\(again.values.first.map { ": \($0)" } ?? "")")
-check(servers().state(spec.id)?.state == "ready", "still ready, the same container")
+check(second.state(spec.id)?.state == "ready", "still ready, the same container")
+second.stopFronting()
 
 if keep {
     print("      kept: \(spec.containerName), folder \(folders.path)")
 } else {
-    first.remove(spec.id)
+    second.remove(spec.id)
     check(cli.inspect(spec.containerName) == nil, "removed, with its volumes")
 }
 proxy?.stop()

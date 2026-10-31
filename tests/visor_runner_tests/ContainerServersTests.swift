@@ -4,8 +4,9 @@
 // with its password on standard input; the agents' sign-ins and the
 // Runner's MCP servers given, and given again when they change; stopping,
 // starting, picking up, a lost network made again with its volumes kept,
-// and removing. The "server" is the test's own on this computer's loopback,
-// at the port it is published to.
+// and removing; its port published on loopback alone, and clients reaching
+// it only through the Runner's proxy. The "server" is the test's own on this
+// computer's loopback, at the port it is published to.
 
 import Foundation
 import VisorRunner
@@ -17,7 +18,11 @@ final class ContainerServersTests: XCTestCase {
     private var secrets: MemorySecrets!
     private var signIns: Setting<ContainerServer.SignIns>!
     private var endpoints: Setting<[MCPProxy.Endpoint]>!
+    /// The server's port, where it is published on loopback.
     private var port = 0
+    /// The Runner's port for the server's clients.
+    private var clientPort = 0
+    private var servers: ContainerServers!
 
     override func setUp() async throws {
         fake = try FakeContainer()
@@ -26,14 +31,17 @@ final class ContainerServersTests: XCTestCase {
         signIns = Setting(ContainerServer.SignIns(claudeToken: "claude-1", openrouterKey: nil, codexAuth: Data("{\"codex\":1}".utf8)))
         endpoints = Setting([])
         port = freePort()
+        clientPort = port + 1
+        servers = makeServers()
     }
 
     override func tearDown() async throws {
+        servers.stopFronting()
         visor.stop()
         try? FileManager.default.removeItem(at: fake.folder)
     }
 
-    private var servers: ContainerServers {
+    private func makeServers() -> ContainerServers {
         let signIns = signIns!, endpoints = endpoints!
         // The server listens at the port it is published to: here, both are loopback's.
         return ContainerServers(folders: fake.folder.appendingPathComponent("container-servers"), cli: fake.cli, secrets: secrets,
@@ -46,7 +54,8 @@ final class ContainerServersTests: XCTestCase {
         spec.cpus = 2
         spec.diskBytes = 16 << 30
         spec.mounts = [.init(source: "/Users/me/Developer")]
-        spec.listen = .init(port: port, lan: lan, vpn: false)
+        spec.listen = .init(port: clientPort, lan: lan, vpn: false)
+        spec.loopbackPort = port
         return spec
     }
 
@@ -58,13 +67,13 @@ final class ContainerServersTests: XCTestCase {
         XCTAssertTrue(run.contains("--volume visor-server-s1-build:/var/cache/bazel"))
         XCTAssertTrue(run.contains("--mount type=bind,source=/Users/me/Developer,target=/Users/me/Developer"))
         XCTAssertTrue(run.contains("--label visor.container-server=S1"))
-        XCTAssertTrue(run.contains("--publish 127.0.0.1:\(port):\(port)"), "loopback alone: no LAN, no VPN")
+        XCTAssertTrue(run.contains("--publish 127.0.0.1:\(port):\(port)"), "on loopback alone")
         XCTAssertTrue(run.hasSuffix("ghcr.io/example/agent:1 sleep infinity"))
         XCTAssertTrue(fake.has("volume-visor-server-s1-build"))
         // Its password given on standard input, never on `container`'s command line.
         let password = try XCTUnwrap(secrets.value("container-server S1 password"))
         XCTAssertFalse(fake.calls.contains { !$0.hasPrefix("visor-server ") && $0.contains(password) })
-        XCTAssertTrue(fake.calls.contains { $0.hasPrefix("visor-server start --port \(port)") && $0.hasSuffix("--address http://192.0.2.7:\(port)") })
+        XCTAssertTrue(fake.calls.contains { $0.hasPrefix("visor-server start --port \(port)") && $0.hasSuffix("--address http://192.0.2.7:\(clientPort)") })
         XCTAssertEqual(fake.written("/root/.local/share/visor/agents/claude.env"), "CLAUDE_CODE_OAUTH_TOKEN=claude-1\n")
         XCTAssertNil(fake.written("/root/.local/share/visor/agents/openrouter.env"))
         XCTAssertEqual(fake.written("/root/.codex/auth.json"), "{\"codex\":1}")
@@ -72,19 +81,39 @@ final class ContainerServersTests: XCTestCase {
         XCTAssertEqual(state.state, "ready")
         XCTAssertEqual(state.server?.version, "0.45.0")
         XCTAssertEqual(state.code, "visor-code")
-        XCTAssertEqual(state.address, "http://192.0.2.7:\(port)")
+        XCTAssertEqual(state.address, "http://192.0.2.7:\(clientPort)")
         XCTAssertEqual(servers.servers().map(\.name), ["Builds"])
         let mode = try FileManager.default.attributesOfItem(atPath: servers.folder("S1").path)[.posixPermissions] as? NSNumber
         XCTAssertEqual(mode?.intValue, 0o700, "its folder is this user's alone")
     }
 
-    func testOneTheLANReachesIsPublishedOnEveryInterface() throws {
+    func testClientsReachTheServerOnlyThroughTheRunnersProxy() throws {
         XCTAssertNil(servers.make(spec(lan: true)))
-        XCTAssertTrue(try XCTUnwrap(fake.calls.first { $0.hasPrefix("run ") }).contains("--publish 0.0.0.0:\(port):\(port)"))
+        let run = try XCTUnwrap(fake.calls.first { $0.hasPrefix("run ") })
+        XCTAssertTrue(run.contains("--publish 127.0.0.1:\(port):\(port)"), "on loopback alone, though the LAN reaches it")
+        let password = try XCTUnwrap(secrets.value("container-server S1 password"))
+        let hello = try curl("http://127.0.0.1:\(clientPort)/api/hello", token: password)
+        XCTAssertTrue(hello.contains("0.45.0"), "through the Runner's proxy: \(hello)")
+        XCTAssertNil(servers.stop("S1"))
+        XCTAssertEqual(try curl("http://127.0.0.1:\(clientPort)/api/hello", token: password), "", "a stopped server's port is let go")
+        XCTAssertNil(servers.start("S1"))
+        XCTAssertTrue(try curl("http://127.0.0.1:\(clientPort)/api/hello", token: password).contains("0.45.0"))
+    }
+
+    /// What `curl` gets of `url` with the bearer `token` (empty when nothing answers).
+    private func curl(_ url: String, token: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+        process.arguments = ["-s", "-m", "5", "-H", "Authorization: Bearer \(token)", url]
+        let out = Pipe()
+        process.standardOutput = out
+        try process.run()
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
     }
 
     func testSignInsAndMCPServersAreGivenAgainWhenTheyChange() throws {
-        let servers = servers
         XCTAssertNil(servers.make(spec()))
         XCTAssertFalse(fake.has("mcp-put.json"), "no MCP servers, none set")
         signIns.value.claudeToken = "claude-2"
@@ -111,7 +140,6 @@ final class ContainerServersTests: XCTestCase {
     }
 
     func testAStoppedServerStaysStoppedUntilStarted() throws {
-        let servers = servers
         XCTAssertNil(servers.make(spec()))
         XCTAssertNil(servers.stop("S1"))
         XCTAssertTrue(fake.has("stopped-visor-server-s1"))
@@ -130,6 +158,8 @@ final class ContainerServersTests: XCTestCase {
         // A new Runner (its memory of what it gave gone): the same container,
         // its server still answering, given its sign-ins again.
         try FileManager.default.removeItem(at: fake.folder.appendingPathComponent("fs/_root_.local_share_visor_agents_claude.env"))
+        servers.stopFronting()
+        servers = makeServers()
         XCTAssertEqual(servers.pickUp(), [:])
         XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run ") }.count, runs, "not made again")
         XCTAssertEqual(fake.calls.filter { $0.hasPrefix("visor-server start") }.count, 1, "its server not started again")
@@ -137,7 +167,6 @@ final class ContainerServersTests: XCTestCase {
     }
 
     func testAServerThatDoesntAnswerOnALostNetworkIsMadeAgainWithItsVolumes() throws {
-        let servers = servers
         XCTAssertNil(servers.make(spec()))
         // Its server gone quiet, and nothing resolves in its container.
         visor.stop()
@@ -154,7 +183,6 @@ final class ContainerServersTests: XCTestCase {
     }
 
     func testUpgradingMakesItAgainWithItsVolumesAndRemovingTakesEverything() throws {
-        let servers = servers
         XCTAssertNil(servers.make(spec()))
         XCTAssertNil(servers.upgrade("S1"))
         XCTAssertTrue(fake.calls.contains("delete --force visor-server-s1"))

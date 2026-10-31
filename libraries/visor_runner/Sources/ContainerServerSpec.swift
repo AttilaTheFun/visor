@@ -12,6 +12,10 @@ public struct ContainerServerSpec: Codable, Equatable, Sendable {
     public var diskBytes: Int64?
     public var mounts: [Mount] = []
     public var listen = Listen()
+    /// The port of this computer's loopback the container's server port is
+    /// published to, which only the Runner's proxy reaches (by default the
+    /// clients' port plus 10000).
+    public var loopbackPort: Int?
     /// Stopped from the Runner: its container stopped, and left so until
     /// it is started again.
     public var stopped = false
@@ -30,9 +34,8 @@ public struct ContainerServerSpec: Codable, Equatable, Sendable {
         }
     }
 
-    /// Where clients reach the server: the port of this computer's that
-    /// `container` publishes its server's port to, on loopback alone or, with
-    /// the LAN or a VPN, on every interface.
+    /// Where clients reach the server: the Runner's port for it, on loopback
+    /// alone or, with the LAN or a VPN, on every interface.
     public struct Listen: Codable, Equatable, Sendable {
         public var port = 7440
         public var lan = false
@@ -68,6 +71,7 @@ public struct ContainerServerSpec: Codable, Equatable, Sendable {
         diskBytes = try c.decodeIfPresent(Int64.self, forKey: .diskBytes)
         mounts = try c.decodeIfPresent([Mount].self, forKey: .mounts) ?? []
         listen = try c.decodeIfPresent(Listen.self, forKey: .listen) ?? Listen()
+        loopbackPort = try c.decodeIfPresent(Int.self, forKey: .loopbackPort)
         stopped = try c.decodeIfPresent(Bool.self, forKey: .stopped) ?? false
     }
 
@@ -82,6 +86,9 @@ public struct ContainerServerSpec: Codable, Equatable, Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(self).write(to: Self.file(folder), options: .atomic)
     }
+
+    /// Where the container's server port is published on loopback.
+    public var publishedPort: Int { loopbackPort ?? listen.port + 10000 }
 
     /// The container's name, made of the server's id: a letter first, and
     /// nothing but letters, digits and `-`.

@@ -4,7 +4,9 @@ import Synchronization
 /// The Runner's container servers (docs/co-tenancy.md): each a folder of
 /// `folders` holding its `server.json`, and a container the Runner makes
 /// and keeps itself with Apple's `container`, no process of its own between
-/// them. A container and the server in it run on their own: the Runner,
+/// them; its server's port published on loopback alone, and the Runner's
+/// reverse proxy in front of it at the port clients reach it at (on the LAN
+/// and VPNs as set). A container and the server in it run on their own: the Runner,
 /// started again, picks them up (`pickUp`), and while it runs asks after
 /// each (`round`), makes again one whose network is lost (its volumes kept),
 /// and gives each server the agents' sign-ins and the Runner's MCP servers
@@ -33,6 +35,15 @@ public final class ContainerServers: Sendable {
     private let given = Mutex<[String: Given]>([:])
     /// One operation at a time.
     private let working = Mutex(())
+    /// The Runner's reverse proxy in front of each server that runs, by its
+    /// id: clients reach the server only through it.
+    private let fronts = Mutex<[String: Front]>([:])
+
+    struct Front: Sendable {
+        var proxy: TCPProxy
+        var port: Int
+        var everywhere: Bool
+    }
 
     struct Given: Equatable {
         var signIns: ContainerServer.SignIns
@@ -127,6 +138,7 @@ public final class ContainerServers: Sendable {
             guard var spec = try? ContainerServerSpec.read(folder(id)) else { return "No container server \(id)" }
             spec.stopped = true
             do { try spec.write(folder(id)) } catch { return "\(error)" }
+            unfront(id)
             if server(spec).container()?.status == "running", !server(spec).stop() { return "\(spec.containerName) didn't stop" }
             ContainerServerState(state: "stopped").write(folder(id))
             return nil
@@ -148,6 +160,7 @@ public final class ContainerServers: Sendable {
     /// sessions), its secrets and its folder.
     public func remove(_ id: String) {
         working.withLock { _ in
+            unfront(id)
             if let spec = try? ContainerServerSpec.read(folder(id)) { server(spec).removeWithVolumes() }
             for name in ["password", "mcpToken"] { secrets.set("container-server \(id) \(name)", nil) }
             given.withLock { _ = $0.removeValue(forKey: id) }
@@ -206,6 +219,34 @@ public final class ContainerServers: Sendable {
             while clock.now - start < every && !stopped() { Thread.sleep(forTimeInterval: 0.2) }
             if !stopped() { round() }
         }
+        stopFronting()
+    }
+
+    /// Every server's proxy stopped (the Runner quitting): the servers run
+    /// on, unreached until it is back.
+    public func stopFronting() {
+        for id in fronts.withLock({ Array($0.keys) }) { unfront(id) }
+    }
+
+    /// The Runner's proxy listening at the server's clients' port, as it is
+    /// set now (left as it is when it already listens so). Nil, or what went
+    /// wrong.
+    func front(_ spec: ContainerServerSpec) -> String? {
+        let everywhere = spec.listen.lan || spec.listen.vpn
+        if let had = fronts.withLock({ $0[spec.id] }), had.port == spec.listen.port, had.everywhere == everywhere { return nil }
+        unfront(spec.id)
+        let upstream = UInt16(spec.publishedPort)
+        guard let proxy = TCPProxy(port: UInt16(spec.listen.port), everywhere: everywhere, upstream: { ("127.0.0.1", upstream) }) else {
+            return "Port \(spec.listen.port) is taken"
+        }
+        proxy.start()
+        fronts.withLock { $0[spec.id] = Front(proxy: proxy, port: spec.listen.port, everywhere: everywhere) }
+        return nil
+    }
+
+    /// The server's proxy stopped: its clients reach it no more.
+    func unfront(_ id: String) {
+        fronts.withLock { $0.removeValue(forKey: id) }?.proxy.stop()
     }
 
     /// The container running, the agents' sign-ins in it, its server
@@ -219,7 +260,8 @@ public final class ContainerServers: Sendable {
         state.container = spec.containerName
         state.address = address
         state.network = network
-        let problem = bringUp(server, address: address)
+        var problem = bringUp(server, address: address)
+        if problem == nil { problem = front(spec) }
         if let problem {
             state.state = "failed"
             state.error = problem
