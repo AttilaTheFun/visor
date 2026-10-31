@@ -19,7 +19,8 @@
 #                    One build at a time uses it (ci.yml's concurrency).
 #
 # With no build arguments (CI's run) it builds every app (the iPhone's for
-# the simulator, the Mac's, the Linux client, blue Visor's Android APK),
+# the simulator, the Mac's, the Linux client, blue Visor's Android APK) and
+# the Mac's test bundles (run on a Mac: the test job),
 # then, for the Mac, the libraries, the staging server and the command-line
 # server: every target compiles in the Swift 6 mode with warnings as errors
 # (tools/swift), so building is a check of its own.
@@ -83,7 +84,11 @@ if [ $# -eq 0 ]; then
         //applications/visor_macos \
         //applications/visor_menubar \
         //applications/visor_client_linux \
-        //applications/visor_android:visor_android_apk
+        //applications/visor_android:visor_android_apk \
+        //tests/visor_server_tests \
+        //tests/visor_client_tests \
+        //tests/visor_ui_tests \
+        //tests/visor_ssh_tests
 fi
 
 cd "$ROOT"
