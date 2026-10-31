@@ -221,9 +221,17 @@ exiting 0, or 1 with `{"error", "code"?}`, as 0.44's do.
 ### Health
 
 - `serve` asks the server every 30 seconds (`GET /api/hello`).
-- When that fails, it checks the container's network (DNS and HTTPS, as
-  0.44's `network`) and makes the container again, with its disks, when the
-  network is lost.
+- When that fails, it checks the container's network. The network is lost
+  when either:
+  - the container's address is on no network this computer has (its
+    network was made again under a running container, as when the
+    containers' builder restarts; nothing reaches it, not even by address);
+  - from in it, nothing resolves or HTTPS reaches nothing (as 0.44's
+    `network`).
+
+  Then it makes the container again with its home and Bazel's disks kept
+  (unlike moving a session out and back in), so its sessions are as they
+  were. A server that has merely stopped is started again.
 - `state.json` and `status` say what it found.
 
 ### Moving a session in or out
