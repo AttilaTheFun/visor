@@ -56,7 +56,7 @@ public struct MCPEndpoint: Codable, Equatable, Sendable {
     }
 
     /// Where a secret header's value is kept with the server's secrets.
-    static func secretKey(endpoint: String, header: String) -> String { "mcpHeader \(endpoint) \(header.lowercased())" }
+    public static func secretKey(endpoint: String, header: String) -> String { "mcpHeader \(endpoint) \(header.lowercased())" }
 
     /// The headers a session's requests carry: each value with the session
     /// filled in, a secret one as kept.

@@ -18,9 +18,39 @@ swift_library(
     deps = [
         "//:foundation",
         "//libraries/visor_protocol",
+        "//libraries/visor_runner",
         "//libraries/visor_server",
         "//libraries/visor_server_apple",
     ],
+)
+
+# The Runner's agent's launchd plist (docs/co-tenancy.md), named and labelled
+# after the app's bundle id: the app registers it with SMAppService from its
+# own bundle, its program the agent in Contents/Helpers.
+genrule(
+    name = "runner_agent_plist",
+    outs = [BUNDLE_ID + ".runner-agent.plist"],
+    cmd = """cat > $@ <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{label}</string>
+    <key>BundleProgram</key>
+    <string>Contents/Helpers/visor-runner-agent</string>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>{bundle}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+""".format(bundle = BUNDLE_ID, label = BUNDLE_ID + ".runner-agent"),
 )
 
 macos_application(
@@ -32,6 +62,8 @@ macos_application(
     additional_contents = {
         "//applications/visor_agent_host:visor-agent-host": "Helpers",
         "//applications/visor_container_host:visor-container-host": "Helpers",
+        "//applications/visor_runner_agent:visor-runner-agent": "Helpers",
+        ":runner_agent_plist": "Library/LaunchAgents",
     },
     app_icons = ["//artwork/app-icon:app_icon"],
     bundle_id = BUNDLE_ID,
