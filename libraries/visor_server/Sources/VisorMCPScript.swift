@@ -12,7 +12,11 @@ enum VisorMCPScript {
 // there by a client connected to both). In manual mode Claude also calls
 // `approve` (--permission-prompt-tool mcp__visor__approve) whenever a tool
 // needs permission, which the phone shows until the user taps Allow or
-// Deny. Every call goes to the menu bar app over its WebSocket.
+// Deny. Every call goes to the menu bar app over its WebSocket. The person
+// may take a while: an `approve` call says it is still waiting every 20 s
+// (progress, for an agent that times out a quiet call), is answered "not
+// yet" after 25 minutes by an agent that takes no progress, and is let go
+// of, the prompt with it, if the agent gives up on it.
 //
 // Env: VISOR_PORT, VISOR_TOKEN (the app's agent-side secret), VISOR_SESSION,
 // VISOR_APPROVALS ("1": offer `approve`; for Claude always, so that its
@@ -122,6 +126,13 @@ function watchProxied() {
   }, 30000).unref();
 }
 
+// The `approve` calls waiting on the person, by the agent's request id:
+// each let go of if the agent gives up on it (notifications/cancelled).
+const asking = new Map();
+// How long a call waits with no progress to keep it going: under the 30
+// minutes Claude Code gives a quiet call.
+const unansweredAfter = 25 * 60 * 1000;
+
 let buffer = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
@@ -144,6 +155,8 @@ function handle(line) {
     send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion || "2024-11-05", capabilities: { tools: { listChanged: true } }, serverInfo: { name: "visor", version: "1.0" }, instructions } });
   } else if (method === "notifications/initialized") {
     watchProxied();
+  } else if (method === "notifications/cancelled") {
+    asking.get(params?.requestId)?.("cancelled");
   } else if (method === "tools/list") {
     proxiedTools().then((proxied) => {
       listedProxied = proxiedSignature(proxied);
@@ -179,13 +192,30 @@ function handle(line) {
       .then(({ ok, text }) => send({ jsonrpc: "2.0", id, result: { isError: !ok, content: [{ type: "text", text }] } }));
   } else if (method === "tools/call") {
     const args = params?.arguments || {};
-    ask(args).then(({ allow, answers }) => {
+    const asked = ask(args);
+    asking.set(id, asked.cancel);
+    // Still waiting, said every 20 s where the agent takes progress; where
+    // it doesn't, "not yet" before it gives up on the call itself.
+    const progressToken = params?._meta?.progressToken;
+    let beats = 0;
+    const heartbeat = progressToken === undefined ? null : setInterval(() => {
+      beats += 1;
+      send({ jsonrpc: "2.0", method: "notifications/progress", params: { progressToken, progress: beats, message: "Waiting for the person to answer in Visor" } });
+    }, 20000);
+    const deadline = progressToken === undefined ? setTimeout(() => asked.cancel("unanswered"), unansweredAfter) : null;
+    asked.then(({ allow, answers, reason }) => {
+      clearInterval(heartbeat);
+      clearTimeout(deadline);
+      asking.delete(id);
+      // Given up on by the agent: nothing to answer.
+      if (reason === "cancelled") return;
       // A question's answers go back in the tool's own input, as Claude
       // Code takes them: { answers: { <question>: <answer> } }.
       const input = args.input || {};
       const decision = allow
         ? { behavior: "allow", updatedInput: answers ? { ...input, answers } : input }
-        : { behavior: "deny", message: args.tool_name === "AskUserQuestion" ? "The user did not answer from Visor." : "The user denied this from Visor." };
+        : { behavior: "deny", message: reason === "unanswered" ? "The person has not answered in Visor for 25 minutes: go on without this, or ask again later."
+            : args.tool_name === "AskUserQuestion" ? "The user did not answer from Visor." : "The user denied this from Visor." };
       send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(decision) }] } });
     });
   } else if (method === "ping") {
@@ -213,13 +243,18 @@ function call(fields) {
   });
 }
 
+// The person's answer to a tool call; `cancel(reason)` gives up on it,
+// closing the socket, which withdraws the prompt.
 function ask(args) {
-  return new Promise((resolve) => {
+  let cancel = () => {};
+  const asked = new Promise((resolve) => {
     const requestID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let ws;
     const no = { allow: false };
     try { ws = new WebSocket(serverURL); } catch { resolve(no); return; }
-    const done = (result) => { try { ws.close(); } catch {} resolve(result); };
+    let settled = false;
+    const done = (result) => { if (settled) return; settled = true; try { ws.close(); } catch {} resolve(result); };
+    cancel = (reason) => done({ allow: false, reason });
     const questions = args.tool_name === "AskUserQuestion" ? args.input?.questions : undefined;
     ws.onopen = () => ws.send(JSON.stringify({
       type: "approval_request", token, session, id: requestID,
@@ -232,8 +267,10 @@ function ask(args) {
       if (e.type === "error") done(no);
     };
     ws.onerror = () => done(no);
-    ws.onclose = () => resolve(no);
+    ws.onclose = () => done(no);
   });
+  asked.cancel = (reason) => cancel(reason);
+  return asked;
 }
 
 function summary(input) {
