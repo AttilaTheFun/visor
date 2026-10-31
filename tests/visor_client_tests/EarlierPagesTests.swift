@@ -72,12 +72,10 @@ final class EarlierPagesTests: XCTestCase {
         host.loadEarlier("S")
         host.loadEarlier("S")
         await settle { !transcript.loadingEarlier }
-        XCTAssertEqual(transcript.entries.first?.id, "r60", "one page of 50, asked for twice")
-        XCTAssertEqual(transcript.entries.count, 150)
+        XCTAssertEqual(transcript.entries.first?.id, "r10", "one page of 100, asked for twice")
+        XCTAssertEqual(transcript.entries.count, 200)
         XCTAssertTrue(server.earlierAsked.isEmpty, "the server is not asked while the cache has rows")
 
-        host.loadEarlier("S")
-        await settle { !transcript.loadingEarlier }
         host.loadEarlier("S")
         await settle { !transcript.loadingEarlier }
         XCTAssertEqual(transcript.entries.first?.id, "r0")
@@ -114,19 +112,17 @@ final class EarlierPagesTests: XCTestCase {
 
         server.deliver(earlier(rows("e", 120), more: true))
         await settle()
-        XCTAssertEqual(transcript.entries.first?.id, "e70", "the last 50 of the server's page")
-        XCTAssertEqual(transcript.entries.count, 60)
+        XCTAssertEqual(transcript.entries.first?.id, "e20", "the last 100 of the server's page")
+        XCTAssertEqual(transcript.entries.count, 110)
         XCTAssertTrue(transcript.hasEarlier)
         XCTAssertEqual(AgentServerConnection.cache.count(in: key), 130, "all of it kept")
 
         host.loadEarlier("S")
         await settle()
-        XCTAssertEqual(transcript.entries.first?.id, "e20", "the next page from the cache")
+        XCTAssertEqual(transcript.entries.first?.id, "e0", "the rest from the cache")
         XCTAssertEqual(server.earlierAsked.count, 1)
 
         // A delta after the start was reached does not bring the row back.
-        host.loadEarlier("S")
-        await settle()
         host.loadEarlier("S")
         await settle()
         XCTAssertEqual(server.earlierAsked.map(\.before), ["s0", "e0"])
@@ -151,10 +147,10 @@ final class EarlierPagesTests: XCTestCase {
         transcript.sync(delta)
         host.loadEarlier("S")
         await settle()
-        server.deliver(earlier(rows("e", 75), more: false))
+        server.deliver(earlier(rows("e", 150), more: false))
         await settle()
-        XCTAssertEqual(transcript.entries.first?.id, "e25")
-        XCTAssertTrue(transcript.hasEarlier, "25 rows still before these")
+        XCTAssertEqual(transcript.entries.first?.id, "e50")
+        XCTAssertTrue(transcript.hasEarlier, "50 rows still before these")
         host.loadEarlier("S")
         await settle()
         XCTAssertEqual(transcript.entries.first?.id, "e0")
