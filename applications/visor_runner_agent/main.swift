@@ -1,5 +1,4 @@
 import Foundation
-import Synchronization
 import VisorRunner
 
 // visor-runner-agent [--data <folder>] [command]: Visor Runner's agent
@@ -35,16 +34,17 @@ guard let proxy = MCPProxy(port: UInt16(config.mcpPort), endpoints: { RunnerConf
 proxy.start()
 log("the MCP proxy listens on port \(config.mcpPort)")
 
-let stopped = Mutex(false)
+// Ended by a signal (TERM, an update): heard on the main queue, which
+// dispatchMain runs. (A handler on another queue would be the main actor's
+// all the same, made here, and trap when called.)
 let sources = [SIGTERM, SIGINT, SIGHUP].map { number in
     signal(number, SIG_IGN)
-    let source = DispatchSource.makeSignalSource(signal: number, queue: .global())
-    source.setEventHandler { stopped.withLock { $0 = true } }
+    let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+    source.setEventHandler {
+        proxy.stop()
+        exit(0)
+    }
     source.resume()
     return source
 }
-withExtendedLifetime(sources) {
-    while !stopped.withLock({ $0 }) { Thread.sleep(forTimeInterval: 0.5) }
-}
-proxy.stop()
-exit(0)
+withExtendedLifetime(sources) { dispatchMain() }
