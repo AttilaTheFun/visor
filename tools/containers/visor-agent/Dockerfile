@@ -37,6 +37,7 @@ RUN git init -q /src && cd /src \
  && install -m 755 "$(swift build -c release --show-bin-path)/openrouter" /usr/local/bin/openrouter
 
 FROM docker.io/library/swift:6.4.0-noble
+# libnss3: headless Chromium's (blue's web checks, tools/ci/container_blue_web.sh).
 # The repository the image is published from: GitHub's registry links the
 # package to it, which lets the repository's own CI token push it.
 LABEL org.opencontainers.image.source="https://github.com/AttilaTheFun/visor"
@@ -46,6 +47,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client tmux python3 unzip zip less procps ripgrep bubblewrap \
       libxml2 libgcc-13-dev lld clang pkg-config \
       libsdl2-dev libsdl2-ttf-dev libcurl4-openssl-dev libgl-dev libegl-dev libglvnd-dev libsqlite3-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
+      libnss3 \
  && rm -rf /var/lib/apt/lists/*
 # On arm64, x86_64 glibc beside the system's own: Google's Linux Android SDK
 # and NDK tools are x86_64 programs, run under Rosetta (the container's
