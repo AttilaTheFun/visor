@@ -60,6 +60,12 @@ extension VisorServer {
         return reply
     }
 
+    /// A secret header's value as kept, for the Runner to give a container
+    /// server's host, which adds it as it proxies (docs/co-tenancy.md).
+    public func mcpSecret(endpoint: String, header: String) -> String? {
+        Self.secrets.get(MCPEndpoint.secretKey(endpoint: endpoint, header: header)).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     /// `GET /api/mcp`: the endpoints, a secret header's value left out
     /// (`kept` says whether one is).
     func restMCP(_ call: RESTCall) -> HTTPResponse {

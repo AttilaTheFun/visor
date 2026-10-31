@@ -161,6 +161,13 @@ final class ContainerServerJobsTests: XCTestCase {
         XCTAssertTrue(calls.contains("host credentials \(jobs.folder("s1").path) {\"claudeToken\": \"t\"}"))
     }
 
+    func testAServerMadeWithCredentialsHasThemBeforeItsJobStarts() throws {
+        XCTAssertNil(try jobs.make(ServerSpec(id: "s1", name: "Builds", image: "i"), credentials: Data(#"{"openrouterKey": "k"}"#.utf8)))
+        let order = calls.filter { $0.hasPrefix("host credentials") || $0.contains("bootstrap") }
+        XCTAssertEqual(order.count, 2)
+        XCTAssertTrue(order[0].hasPrefix("host credentials"), "given first: \(order)")
+    }
+
     func testAHostNamedWithoutAPathIsFoundOnThePath() throws {
         XCTAssertNil(try jobs.make(ServerSpec(id: "s1", name: "Builds", image: "i"), host: ["host", "container-host"]))
         let job = try XCTUnwrap(LaunchJob.read(plist("s1")))
