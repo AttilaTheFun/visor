@@ -124,8 +124,17 @@ Each container server has a folder of the Runner's,
     never here: see `credentials`.
 - **`state.json`:** what the host last found (see `status`), written by
   `serve`.
-- **The host's own files:** its log, and in a debug build its secrets
-  (mode 600). A notarized build keeps them in the keychain.
+- **`runner.json`:** the Runner's own, which a host leaves alone: the
+  server's host (none for Visor's own) and whether it is stopped.
+- **The host's own files:** its log (`host.log`, the job's output), and in
+  a debug build its secrets (mode 600). A notarized build keeps them in the
+  keychain.
+
+The Runner's launchd job for each server (a LaunchAgent,
+`<the Runner's bundle id>.container-server.<id>`) runs `<host> serve
+<folder>`, kept alive. The Runner loads the jobs when it starts, and loads a
+job again when its host is a new build, which restarts `serve` and leaves
+the container running.
 
 ### The commands
 
