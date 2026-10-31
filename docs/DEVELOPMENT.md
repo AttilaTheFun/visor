@@ -665,7 +665,9 @@ this server (`visor.session`, `visor.server`). It sees: the session's folder
 at the same path (so its files, git and the agent's own log are the
 computer's), the agent's log folder for that folder (Claude's
 `~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
-`~/.openrouter/sessions`), and Visor's MCP script read-only at `/opt/visor`
+`~/.openrouter/sessions`), the pictures attached to sessions
+(`<data>/images`, AgentImages) read-only at the same path, since the agent
+is given that path, and Visor's MCP script read-only at `/opt/visor`
 (ContainerTools). The agents' sign-ins for containers are the server's own,
 never the image's (ContainerSignIns: `<data>/containers/agent.env` with
 CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
