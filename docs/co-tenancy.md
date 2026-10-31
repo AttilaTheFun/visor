@@ -115,7 +115,9 @@ Each container server has a folder of the Runner's,
 }
 ```
 
-  - `mounts`: this computer's folders, each at its own path.
+  - `mounts`: this computer's folders, each at its own path. A host that
+    can't share them (see `health`'s `capabilities`) answers `serve` and
+    `status` with `code: "mountsUnavailable"` rather than leave them out.
   - `listen`: where clients reach the container's server on this computer
     (loopback always; the LAN and VPNs as set).
   - `mcp`: the MCP servers its agents may use. A secret header's value is
@@ -130,8 +132,13 @@ Each container server has a folder of the Runner's,
 Every command but `serve` answers one JSON object on standard output,
 exiting 0, or 1 with `{"error", "code"?}`, as 0.44's do.
 
-- **`<host> health`:** `{"ok", "name", "version", "api": 2, "limits"}`.
-  Whether this host can make container servers now (as 0.44's).
+- **`<host> health`:** `{"ok", "name", "version", "api": 2, "limits",
+  "capabilities"}`. Whether this host can make container servers now (as
+  0.44's), and what it can do for them:
+  - `mounts`: it can share this computer's folders into a container.
+    Visor's own always can. OS Server's adapter can only when its OS Server
+    runs on this computer. Without it, a session moved into the container
+    has its project copied rather than seen in place.
 - **`<host> serve <folder>`:** the long-running process, the Runner's launchd
   job for this server (kept alive). It:
   - makes the container if there is none, or starts it if it has stopped;
@@ -185,6 +192,9 @@ exiting 0, or 1 with `{"error", "code"?}`, as 0.44's do.
 - **Started detached** by the host (`visor-server start`, from the image,
   with its password, the LAN on and its `--address` the host's), so a host
   that restarts leaves it, and the agents under it, running.
+  - The image's own entrypoint isn't the server. The container's main
+    process only waits, and the host starts the server through an exec
+    that doesn't tie it to the exec's stream.
 - **Its password:** made by the host when the container is made, and kept in
   the host's secrets. Its settings point its codes at the host's `address`.
 - **Its agents' sign-ins**, from `credentials`:
@@ -232,7 +242,8 @@ exiting 0, or 1 with `{"error", "code"?}`, as 0.44's do.
 The same commands, through OS Server:
 - The container is a container lease held until released, its labels
   naming the container server.
-- `address` is the adapter's own proxy, or the lease's forwarded port.
+- `address` is always the adapter's own listener, at `listen`. It proxies to
+  the lease's forwarded port on OS Server's Mac, which clients never see.
 - The MCP proxy is the adapter's, with the secrets it keeps.
 - `remove` releases the lease, and with `--data` deletes its volumes.
 
