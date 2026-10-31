@@ -1,0 +1,26 @@
+load("@rules_apple//apple:macos.bzl", "macos_command_line_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# visor-runner-agent: Visor Runner's agent (docs/co-tenancy.md), every Visor
+# server's MCP proxy, the secret headers kept by it alone; and its commands,
+# which set what it proxies and whom. Run as a LaunchAgent of this user's.
+swift_library(
+    name = "visor_runner_agent_lib",
+    copts = STRICT_SWIFT,
+    srcs = ["main.swift"],
+    module_name = "VisorRunnerAgentMain",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_runner",
+    ],
+)
+
+macos_command_line_application(
+    name = "visor-runner-agent",
+    bundle_id = "com.LoganShire.VisorServer.runnerAgent",
+    minimum_os_version = "15.0",
+    deps = [":visor_runner_agent_lib"],
+)
