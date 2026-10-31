@@ -36,8 +36,11 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
+  # On the repository's own runner (a Mac): the release's asset fetched with
+  # curl, and the site packed with the Mac's tar into the `github-pages`
+  # artifact deploy-pages takes (upload-pages-artifact wants GNU tar there).
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, visor-ci]
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -48,8 +51,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          if [ -n "$TAG" ]; then set -- "$TAG"; else set --; fi
-          if gh release download "$@" --repo "$GITHUB_REPOSITORY" --pattern visor-isomer-site.tar.gz; then
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY/releases"
+          release="$api/latest"
+          [ -z "$TAG" ] || release="$api/tags/$TAG"
+          asset="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$release" |
+            python3 -c 'import json, sys; print(next((a["url"] for a in json.load(sys.stdin).get("assets", []) if a["name"] == "visor-isomer-site.tar.gz"), ""))' || true)"
+          rm -f visor-isomer-site.tar.gz
+          if [ -n "$asset" ] && curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" -o visor-isomer-site.tar.gz "$asset"; then
             mkdir -p site/app
             tar -xzf visor-isomer-site.tar.gz -C site/app
             # AppleDouble files a macOS tar may have added (._*).
@@ -59,8 +67,13 @@ jobs:
             echo "No visor-isomer-site.tar.gz on ${TAG:-the latest release}: the site goes up without the web client."
           fi
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: The site, packed
+        run: tar -cLf "$RUNNER_TEMP/artifact.tar" -C site --exclude .git --exclude .github .
+      - uses: actions/upload-artifact@v4
         with:
-          path: site
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
       - id: deployment
         uses: actions/deploy-pages@v4

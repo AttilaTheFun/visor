@@ -1,5 +1,6 @@
 #!/bin/bash
-# CI's build of the apps in a Linux container, on a self-hosted runner's
+# CI's build of the apps in a Linux container (the Apple apps, the Linux
+# client and blue Visor's Android APK, arm64), on a self-hosted runner's
 # Mac: a container leased from that Mac's OS Server (`oss machine run
 # container --inside`), made from this build's own agent image, so CI builds
 # where a session's agent works. The Apple apps take Xcode 27.0's SDK
@@ -55,7 +56,8 @@ if [ $# -eq 0 ]; then
         //applications/visor_ios \
         //applications/visor_macos \
         //applications/visor_menubar \
-        //applications/visor_client_linux
+        //applications/visor_client_linux \
+        //applications/visor_android:visor_android_apk
 fi
 
 cd "$ROOT"

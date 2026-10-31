@@ -3,15 +3,18 @@ name: CI
 # squash is a commit of its own): the fast checks, the tests and every
 # platform's build; then, on the release Mac's runner (self-hosted,
 # release-mac), the commit's packages built, signed and published to
-# Releases. Each commit merged to main has its proof made too (the phone
+# Releases. Everything runs on self-hosted runners: the repository's own
+# (visor-ci) leases what each job runs in from OS Server — a macOS VM
+# (tools/ci/mac_vm.sh) or a Linux container — and the release Mac's builds
+# the packages. Each commit merged to main has its proof made too (the phone
 # app's fixture screens and its UI cases, compared with the pictures kept
 # at the commit before), on the repository's own runner in a macOS VM
 # leased from OS Server; Reviews reads it from the run's `proof` artifact,
 # and a release is proposed on a commit whose proof is in. A pull request
 # runs no proof: its builds and tests only. A newer push
 # to the pull request cancels this run if it hasn't finished. main requires every job green on a pull request's head
-# commit before it merges. A fork's pull request never runs on the release
-# Mac.
+# commit before it merges. A fork's pull request never runs on a
+# self-hosted runner.
 on:
   pull_request:
   push:
@@ -29,40 +32,20 @@ permissions:
 env:
   OSS_CLIENT_ID: ${{ github.job }}-${{ github.run_id }}
 jobs:
+  # The build for the Mac and the iPhone and the libraries' tests, in a
+  # macOS VM leased from OS Server (tools/ci/mac_vm_tests.sh): every target
+  # compiles in the Swift 6 mode with warnings as errors (tools/swift), so
+  # building is a check of its own.
   test:
-    # Xcode 27, the toolchain the code is written against.
-    runs-on: xcode-27
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, visor-ci]
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      # Every target compiles in the Swift 6 mode with warnings as errors
-      # (tools/swift), so building is a check of its own: the libraries,
-      # the staging server and the apps' own code for the Mac, then the
-      # views and the phone app's code for iOS. The app bundles themselves
-      # need a signing team and are not built here.
-      - name: Build (macOS)
-        run: >
-          bazel build
-          //libraries/...
-          //tools/staging_server
-          //applications/visor_container_host:visor-container-host
-          //applications/visor_macos:macos_lib
-          //applications/visor_menubar:menubar_lib
-      - name: Build (iOS)
-        run: >
-          bazel build --platforms=@apple_support//platforms:ios_sim_arm64
-          //libraries/visor_ui
-          //applications/visor_ios:ios_lib
-          //applications/visor_ios:widget_lib
-      - name: Test
-        run: >
-          bazel test --test_output=errors
-          //tests/visor_server_tests
-          //tests/visor_container_host_tests
-          //tests/visor_client_tests
-          //tests/visor_ui_tests
-          //tests/visor_ssh_tests
-          //tests/message_cache_tests
-          //tests/claude_transcript_tests
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      # exec: the runner's cancel reaches the script's trap, which releases the VM.
+      - run: exec tools/ci/mac_vm_tests.sh
 
   # The phone app itself, in the simulator: the probe's cases that need no
   # computer, on the snapshot fixture. The thread must not move when it
@@ -106,26 +89,16 @@ jobs:
   # itself tried — run, a throwaway session over its WebSocket, restarted,
   # stopped (tools/probes/command_line_server.sh). No agent CLI needed.
   linux:
-    runs-on: ubuntu-24.04
-    container: swift:6.4-noble
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, visor-ci]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Packages
-        run: apt-get update && apt-get install -y --no-install-recommends procps curl netcat-openbsd
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - name: Build
-        run: swift build --product visor-server
-      # The client's host services on their own: a file that uses
-      # Foundation without importing it fails here, as in Visor on Isomer
-      # (Package.swift's clientServices).
-      - name: Build the client's services
-        run: swift build --target VisorServices
-      - name: Test
-        run: swift test
-      - name: Try the server
-        run: tools/probes/command_line_server.sh
+          ref: ${{ github.event.pull_request.head.sha }}
+      # In a container of Visor's agent image leased from OS Server
+      # (tools/ci/linux_tests.sh), which it releases however it ends.
+      - run: exec tools/ci/linux_tests.sh
 
   # The command-line server on Windows: built, and tried — run, a throwaway
   # session over its WebSocket, stopped through its REST side.
@@ -189,7 +162,7 @@ jobs:
 
   pins:
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, visor-ci]
     steps:
       - uses: actions/checkout@v4
       - run: tools/released_pins.sh
@@ -260,7 +233,8 @@ jobs:
   # The apps built on Linux where a session's agent builds them: in a
   # container of this build's own agent image, leased from the OS Server on
   # the runner's Mac (self-hosted, oss-container), the Apple apps with
-  # rules_applecross from that server's files (tools/ci/container_build.sh).
+  # rules_applecross from that server's files, the Linux client and blue
+  # Visor's Android APK (tools/ci/container_build.sh).
   # A fork's pull request never runs there.
   container:
     needs: [number, agent-image]
@@ -279,93 +253,25 @@ jobs:
   # Blue Visor (the client on Isomer: docs/isomer.md), its web client: built
   # optimized, its tests run, then checked in headless Chrome: the end-to-end
   # test against the stand-in server on its three roads, the transcript's
-  # layout and the composer typed into. Hosted Linux; Bazel's downloads (the
-  # Swift toolchain and its wasm SDKs) kept between runs.
+  # layout and the composer typed into. In a macOS VM leased from OS Server
+  # (tools/ci/mac_vm_blue_web.sh), whose image has Chrome. Its Android APK
+  # is built in the container job's build (tools/ci/container_build.sh).
   blue-web:
-    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, visor-ci]
     timeout-minutes: 120
-    env:
-      # rules_swift wants Bazel's C toolchain to be clang (the runner's
-      # default is gcc), as isomer's Linux container sets it.
-      CC: clang
-      CXX: clang++
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
         with:
-          path: ~/.cache/bazel-repo
-          key: bazel-repo-blue-web-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'third_party/swift_packages/Package.resolved') }}
-          restore-keys: bazel-repo-blue-web-
-      # What swift.org's Ubuntu 24.04 toolchain builds and links against
-      # (its Dockerfile's packages, as in isomer's Linux container): the
-      # host tools Bazel builds with it (swift_ffi's generator, the macro
-      # plugins) link Foundation's libcurl and libxml2.
-      - name: The Swift toolchain's system packages
-        run: >
-          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends
-          clang lld binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev
-          libncurses-dev libsqlite3-dev libstdc++-13-dev libxml2-dev libz3-dev
-          pkg-config tzdata zlib1g-dev
-      # The repository cache kept between runs.
-      - name: Bazel's repository cache
-        run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
-      - name: Build
-        run: bazel build -c opt //applications/visor_web:visor_web_site
-      - name: Test
-        run: bazel test -c opt --test_output=errors //applications/visor_web/...
-      # ffmpeg makes the end-to-end test's recordings (its review's videos).
-      - name: ffmpeg
-        run: sudo apt-get install -y -qq --no-install-recommends ffmpeg
-      - name: End to end
-        run: python3 tools/isomer/e2e/run.py --review review
-      - name: Transcript layout
-        run: node tools/isomer/e2e/transcript_layout_check.js "$(bazel cquery -c opt --output=files //applications/visor_web:visor_web_site)"
-      - name: Composer
-        run: node tools/isomer/e2e/composer_check.js "$(bazel cquery -c opt --output=files //applications/visor_web:visor_web_site)"
+          ref: ${{ github.event.pull_request.head.sha }}
+      # exec: the runner's cancel reaches the script's trap, which releases the VM.
+      - run: exec tools/ci/mac_vm_blue_web.sh review
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: blue-web-review
           path: review
           if-no-files-found: ignore
-
-  # Blue Visor on Android: the APK as it ships (arm64, its Swift and its
-  # Kotlin) built on hosted Linux. The emulator flow and the transcript and
-  # composer checks stay in the local proof (tools/isomer/ci/local_ci.sh)
-  # for now: the runner's emulator is x86_64, and isomer 0.36's
-  # kt_swift_library builds the Swift library for aarch64 whatever ABI the
-  # APK is for. They come here, on an x86_64 build, with isomer 0.38, whose
-  # library follows the APK's ABI.
-  blue-android:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    env:
-      # rules_swift wants Bazel's C toolchain to be clang (the runner's
-      # default is gcc), as isomer's Linux container sets it.
-      CC: clang
-      CXX: clang++
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/bazel-repo
-          key: bazel-repo-blue-android-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'third_party/swift_packages/Package.resolved') }}
-          restore-keys: bazel-repo-blue-android-
-      # What swift.org's Ubuntu 24.04 toolchain builds and links against
-      # (its Dockerfile's packages, as in isomer's Linux container): the
-      # host tools Bazel builds with it (swift_ffi's generator, the macro
-      # plugins) link Foundation's libcurl and libxml2.
-      - name: The Swift toolchain's system packages
-        run: >
-          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends
-          clang lld binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev
-          libncurses-dev libsqlite3-dev libstdc++-13-dev libxml2-dev libz3-dev
-          pkg-config tzdata zlib1g-dev
-      # The repository cache kept between runs.
-      - name: Bazel's repository cache
-        run: echo "common --repository_cache=$HOME/.cache/bazel-repo" >> ~/.bazelrc
-      - name: Build
-        run: bazel build -c opt //applications/visor_android:visor_android_apk
 
   # Blue Visor on the iPhone: the WasmKit app and the one compiled against
   # Isomer's frameworks, for the simulator (no signing team needed), then
