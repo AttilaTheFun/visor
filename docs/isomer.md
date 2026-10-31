@@ -90,13 +90,12 @@ builds with the default; the tools below pass `-c opt` themselves.
 
 visor's CI (.github/workflows/ci.yml) builds and checks blue on every pull
 request and every commit to main:
-- `blue-web` (hosted Linux): the web client built and its tests run, then
-  the end-to-end test, the transcript layout and the composer checks in
-  headless Chrome.
-- `blue-android` (hosted Linux): the APK as it ships (arm64), built. The
-  emulator flow and the Android transcript and composer checks are in the
-  local CI for now; they join `blue-android`, on the runner's x86_64
-  emulator, with isomer 0.38, whose Swift library follows the APK's ABI.
+- `blue-web` (a macOS VM leased from OS Server, tools/ci/mac_vm_blue_web.sh):
+  the web client built and its tests run, then the end-to-end test, the
+  transcript layout and the composer checks in headless Chrome.
+- The APK (arm64) is built in the `container` job's build, in a container
+  of Visor's agent image (tools/ci/container_build.sh). The emulator flow and
+  the Android transcript and composer checks are in the local CI for now.
 - `blue-ios` (the release Mac): the WasmKit and compiled iPhone apps built
   for the simulator, and the snapshots of the iPhone in both orientations
   and of Mobile Safari, against tests/snapshots.
