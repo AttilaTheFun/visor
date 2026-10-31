@@ -65,6 +65,11 @@ enum MacScreenshots {
         // VM's screen, through its lease: tools/ci/mac_vm_screenshots.sh),
         // where nothing in the VM may capture the screen.
         if hold {
+            // At the top of the screen, clear of the Dock, which a picture
+            // of the whole screen would have over it.
+            if let visible = NSScreen.main?.visibleFrame {
+                window.setFrameTopLeftPoint(NSPoint(x: visible.minX, y: visible.maxY))
+            }
             DispatchQueue.global().asyncAfter(deadline: .now() + 60) { exit(0) }
             app.run()
             return

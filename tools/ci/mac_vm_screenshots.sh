@@ -21,7 +21,24 @@ mac_vm_start visor-ci
 mac_vm_steps << 'STEPS'
     mac)
         cd visor && bazel build //tools/mac_screenshots || exit
-        echo "$PWD/$(bazel cquery --output=files //tools/mac_screenshots 2> /dev/null | head -1)" > ~/ci/tool
+        # In an app of its own, opened as apps are, so it comes to the front
+        # with its window key (a program started from SSH stays behind).
+        app=~/ci/MacScreenshots.app
+        rm -rf "$app" && mkdir -p "$app/Contents/MacOS" || exit
+        cp "$(bazel cquery --output=files //tools/mac_screenshots 2> /dev/null | head -1)" "$app/Contents/MacOS/mac_screenshots" || exit
+        cat > "$app/Contents/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key><string>mac_screenshots</string>
+	<key>CFBundleIdentifier</key><string>com.LoganShire.Visor.macScreenshots</string>
+	<key>CFBundleName</key><string>mac_screenshots</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+</dict>
+</plist>
+PLIST
+        codesign --force --sign - "$app" || exit
         # The windows on the screen, from CGWindowList (no permission needed
         # for owners and frames): "owner layer x y width height", one a line.
         cat > ~/ci/windows.js << 'JS'
@@ -41,7 +58,7 @@ JS
         # an SSH session has no window server of its own), held up, then
         # the windows on the screen once it has settled.
         pkill -x mac_screenshots; sleep 1
-        sudo launchctl asuser "$(id -u)" "$(cat ~/ci/tool)" "$1" /dev/null dark hold > /dev/null 2>&1 < /dev/null &
+        sudo launchctl asuser "$(id -u)" open -n ~/ci/MacScreenshots.app --args "$1" /dev/null dark hold || exit
         sleep 8
         sudo launchctl asuser "$(id -u)" osascript -l JavaScript ~/ci/windows.js
         ;;
@@ -82,8 +99,8 @@ mac_screen() {
     pixels="$(sips -g pixelWidth "$whole" | awk '/pixelWidth/ { print $2 }')"
     scale=$(( pixels / points ))
     read -r x y w h <<< "$frame"
-    sips --cropToHeightWidth $(( h * scale )) $(( w * scale )) --cropOffset $(( y * scale )) $(( x * scale )) \
-        "$whole" --out "$work/shots/mac-$screen.png" > /dev/null
+    python3 "$ROOT/tools/isomer/snapshots/pngdiff.py" crop "$whole" $(( x * scale )) $(( y * scale )) $(( w * scale )) $(( h * scale )) \
+        "$work/shots/mac-$screen.png" || return 1
     in_vm mac-hide
 }
 mkdir -p "$work/shots"
