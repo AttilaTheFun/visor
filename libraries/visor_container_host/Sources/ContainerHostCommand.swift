@@ -51,7 +51,9 @@ public enum ContainerHostCommand {
     }
 
     static func health(_ container: AppleContainer, version: String) -> Answer {
-        let base: [String: Any] = ["name": name, "version": version, "api": api]
+        // Version 2's capabilities (docs/co-tenancy.md): this Mac's folders
+        // can always be shared into its containers.
+        let base: [String: Any] = ["name": name, "version": version, "api": api, "capabilities": ["mounts"]]
         guard FileManager.default.isExecutableFile(atPath: container.tool) else {
             return Answer(status: 0, json: base.merging(["ok": false, "error": "Apple's container is not installed (github.com/apple/container)"]) { $1 })
         }

@@ -101,6 +101,7 @@ final class ContainerHostCommandTests: XCTestCase {
         XCTAssertEqual(healthy.json["api"] as? Int, 1)
         XCTAssertEqual(healthy.json["name"] as? String, "visor-container-host")
         XCTAssertEqual(healthy.json["version"] as? String, "0.44.0")
+        XCTAssertEqual(healthy.json["capabilities"] as? [String], ["mounts"])
         let limits = try XCTUnwrap(healthy.json["limits"] as? [String: Any])
         XCTAssertEqual(limits["cpus"] as? Int, ProcessInfo.processInfo.activeProcessorCount)
 
