@@ -20,8 +20,10 @@ public enum VisorFixture {
     /// first screen); also earlier
     /// (a page of earlier rows goes in), learns-earlier (the chat, told
     /// ten seconds on that there are rows before it), arrivals (the
-    /// chat, with rows coming in twelve and twenty-six seconds on) and
-    /// burst (eight long rows at once, eight seconds on).
+    /// chat, with rows coming in twelve and twenty-six seconds on),
+    /// burst (eight long rows at once, eight seconds on) and long (the
+    /// chat a thousand rows long, its last hundred first and the rest a
+    /// page at a time as it is read back).
     /// A session to open a few seconds after launch, for a recording of
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }
@@ -44,6 +46,16 @@ public enum VisorFixture {
     /// looping, with nothing waiting for approval, so the composer shows
     /// both pills.
     public static let goalSession = "fixture-docs"
+    /// The `long` screen's chat: row `n` of a thousand, a question and its
+    /// answer in turn, answers of one to three paragraphs.
+    static func longRow(_ n: Int) -> TranscriptEntry {
+        let answer = "Long row \(n): the sync queue drained another batch of offline rows and checked each against the server's copy."
+        return TranscriptEntry(id: "fixture-long-\(n)", role: n % 2 == 0 ? .user : .assistant,
+                               text: n % 2 == 0 ? "Long row \(n): and the next batch?"
+                                   : Array(repeating: answer, count: 1 + n % 3).joined(separator: "\n\n"))
+    }
+    static let longRows = 1000
+
     /// The words the search screen searches for.
     public static let searchQuery = "sync"
 

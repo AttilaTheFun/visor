@@ -48,7 +48,7 @@ final class FixtureAgentServer: AgentServer {
     func subscribe(_ session: String) {
         guard let onEvent else { return }
         // The chat waits on a tool call; on the question screen, on a question.
-        let approval: ApprovalRequest? = session != VisorFixture.chatSession ? nil
+        let approval: ApprovalRequest? = session != VisorFixture.chatSession || VisorFixture.screen == "long" ? nil
             : VisorFixture.screen == "question" ? VisorFixture.question
             : ApprovalRequest(id: "fixture-approval", tool: "Bash", summary: "swift test --filter SyncTests")
         let reply = Self.wire(.ephemeral(session: session, streams: [], status: [], activity: nil, busy: false,
@@ -61,6 +61,7 @@ final class FixtureAgentServer: AgentServer {
     /// a page of 200 rows comes half a second after it is asked for, as
     /// from a server, and there is nothing before those.
     func loadEarlier(_ session: String, before: String) {
+        if VisorFixture.screen == "long", session == VisorFixture.chatSession { return loadEarlierLong(before: before) }
         guard let onEvent, VisorFixture.screen == "earlier", session == VisorFixture.goalSession else { return }
         Task {
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -70,6 +71,20 @@ final class FixtureAgentServer: AgentServer {
                 TranscriptEntry(id: "\(session)-earlier-\(index)", role: index % 2 == 0 ? .user : .assistant, text: "Earlier row \(index)")
             }
             page.more = false
+            onEvent(.session(Self.wire(page)))
+        }
+    }
+
+    /// On the `long` screen, the chat's rows before one, a page of 100 a
+    /// moment after they are asked for, as from a server.
+    private func loadEarlierLong(before: String) {
+        guard let onEvent, let end = Int(before.dropFirst("fixture-long-".count)) else { return }
+        Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            var page = Envelope(type: "earlier")
+            page.session = VisorFixture.chatSession
+            page.entries = (max(0, end - 100)..<end).map(VisorFixture.longRow)
+            page.more = end > 100
             onEvent(.session(Self.wire(page)))
         }
     }
@@ -143,14 +158,16 @@ final class FixtureAgentServer: AgentServer {
             while !Task.isCancelled { try await Task.sleep(nanoseconds: 60_000_000_000) }
             throw CancellationError()
         }
-        let rows = session == VisorFixture.chatSession ? VisorFixture.transcript
+        let long = VisorFixture.screen == "long" && session == VisorFixture.chatSession
+        let rows = long ? (VisorFixture.longRows - 100..<VisorFixture.longRows).map(VisorFixture.longRow)
+            : session == VisorFixture.chatSession ? VisorFixture.transcript
             : [TranscriptEntry(id: session + "-1", role: .user, text: "Start on this."),
                TranscriptEntry(id: session + "-2", role: .assistant, text: VisorFixture.sessions.first { $0.id == session }?.preview ?? "")]
         var e = Envelope.transcript(session: session, entries: rows, streaming: "", activity: nil, busy: false, error: nil)
         e.revision = 1
         e.generation = 1
         e.reset = true
-        e.more = VisorFixture.screen == "earlier" && session == VisorFixture.goalSession
+        e.more = long || (VisorFixture.screen == "earlier" && session == VisorFixture.goalSession)
         return Self.wire(e)
     }
 

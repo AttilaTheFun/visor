@@ -559,6 +559,45 @@ final class VisorProbe: XCTestCase {
         app.terminate()
     }
 
+    /// A long thread holds only so much of itself: read back five pages
+    /// and down to its end again, the reader stops, and the rows more than
+    /// four pages above the screen are let go of (the connection log says
+    /// how many) with nothing on screen moving; read back again, they come
+    /// back.
+    func testLettingGoOfRowsFarAboveMovesNothing() throws {
+        XCUIDevice.shared.orientation = Self.runOrientation
+        let app = XCUIApplication()
+        app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "long"]
+        app.launch()
+        func row(_ n: Int) -> XCUIElement {
+            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Long row \(n):")).firstMatch
+        }
+        let last = row(999)
+        XCTAssertTrue(last.waitForExistence(timeout: 5), "the long chat's last row did not appear")
+        let far = row(350)
+        for _ in 0..<150 where !far.exists { app.swipeDown(velocity: .fast) }
+        XCTAssertTrue(far.exists, "five pages of earlier rows did not come in")
+        NSLog("VISOR_LONG read back")
+        for _ in 0..<150 where !last.isHittable { app.swipeUp(velocity: .fast) }
+        XCTAssertTrue(last.isHittable, "the thread did not go back down to its end")
+        Thread.sleep(forTimeInterval: 0.5)
+        let before = last.frame
+        // The reader still: told after a second, and the far rows let go of.
+        Thread.sleep(forTimeInterval: 4)
+        NSLog("VISOR_LONG still")
+        XCTAssertTrue(last.isHittable, "the last row went out of view when rows far above were let go of")
+        XCTAssertEqual(last.frame.minY, before.minY, accuracy: 0.5, "the thread moved when rows far above were let go of")
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        shot(app, "long-thread-let-go")
+        for _ in 0..<150 where !far.exists { app.swipeDown(velocity: .fast) }
+        XCTAssertTrue(far.exists, "the rows let go of did not come back")
+        NSLog("VISOR_LONG back")
+        // To the background, where the app keeps its connection log.
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1)
+        app.terminate()
+    }
+
     /// A reply pouring in does not fight the user scrolling up through it:
     /// the fixture's chat gets a row every quarter second, the thread is
     /// dragged up while they come, and it stays where it was left, a pill
