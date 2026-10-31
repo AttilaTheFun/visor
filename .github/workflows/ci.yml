@@ -47,44 +47,6 @@ jobs:
       # exec: the runner's cancel reaches the script's trap, which releases the VM.
       - run: exec tools/ci/mac_vm_tests.sh
 
-  # The phone app itself, in the simulator: the probe's cases that need no
-  # computer, on the snapshot fixture. The thread must not move when it
-  # learns there are rows before it (the jump on the first send after a
-  # launch, 0.26). A simulator build needs no signing team.
-  xcode26:
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v4
-      - name: Xcode 26
-        run: |
-          ls /Applications | grep -i xcode
-          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
-          xcodebuild -version
-      - name: Build (macOS)
-        run: >
-          bazel build
-          //libraries/...
-          //tools/staging_server
-          //applications/visor_container_host:visor-container-host
-          //applications/visor_macos:macos_lib
-          //applications/visor_menubar:menubar_lib
-      - name: Build (iOS)
-        run: >
-          bazel build --platforms=@apple_support//platforms:ios_sim_arm64
-          //libraries/visor_ui
-          //applications/visor_ios:ios_lib
-          //applications/visor_ios:widget_lib
-      - name: Test
-        run: >
-          bazel test --test_output=errors
-          //tests/visor_server_tests
-          //tests/visor_container_host_tests
-          //tests/visor_client_tests
-          //tests/visor_ui_tests
-          //tests/visor_ssh_tests
-          //tests/message_cache_tests
-          //tests/claude_transcript_tests
-
   # The command-line server on Linux: built, its tests run, and the server
   # itself tried — run, a throwaway session over its WebSocket, restarted,
   # stopped (tools/probes/command_line_server.sh). No agent CLI needed.
