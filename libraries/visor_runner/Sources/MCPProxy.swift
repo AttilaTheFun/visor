@@ -15,7 +15,7 @@ public final class MCPProxy: Sendable {
     /// its headers (a value may name the session, `$SESSION_ID`, which the
     /// calling server fills in) and the names of those whose values are
     /// secrets, kept by the Runner.
-    public struct Endpoint: Equatable, Sendable {
+    public struct Endpoint: Codable, Equatable, Sendable {
         public var name: String
         public var url: String
         public var headers: [String: String]

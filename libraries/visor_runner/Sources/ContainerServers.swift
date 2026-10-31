@@ -5,15 +5,17 @@ import Synchronization
 /// `folders` holding its `server.json`, and a container the Runner makes
 /// and keeps through its container backend; its server reached only from
 /// this computer, and the Runner's reverse proxy in front of it at the port
-/// clients reach it at (on the LAN and VPNs as set). A container and the
-/// server in it run on their own: the Runner,
-/// started again, picks them up (`pickUp`), and while it runs asks after
-/// each (`round`), makes again one whose network is lost (its volumes kept),
-/// and gives each server the agents' sign-ins and the Runner's MCP servers
-/// when they change. Its operations take time (`container` runs): call them
-/// off the main thread. One at a time.
+/// clients reach it at (on the LAN and VPNs as set). The menu bar app writes
+/// what should be (ContainerServerFolders); the Runner's agent
+/// makes it so (`reconcile`: the first time, picking up the containers that
+/// ran on while it was gone), asks after each server (`round`), makes again
+/// one whose network is lost (its volumes kept), and gives each server the
+/// agents' sign-ins and the Runner's MCP servers when they change. Its work
+/// takes time (containers made, commands run in them): call it off the main
+/// thread. One operation at a time.
 public final class ContainerServers: Sendable {
-    public let folders: URL
+    /// What the folders say.
+    public let place: ContainerServerFolders
     public let backend: any ContainerBackend
     let secrets: any RunnerSecrets
     /// The Runner's MCP proxy's port, which containers reach at their
@@ -35,6 +37,9 @@ public final class ContainerServers: Sendable {
     private let given = Mutex<[String: Given]>([:])
     /// One operation at a time.
     private let working = Mutex(())
+    /// Each server as it was last made so, by its id: one whose folder says
+    /// otherwise now is made so again.
+    private let applied = Mutex<[String: ContainerServerSpec]>([:])
     /// The Runner's reverse proxy in front of each server that runs, by its
     /// id: clients reach the server only through it.
     private let fronts = Mutex<[String: Front]>([:])
@@ -54,7 +59,7 @@ public final class ContainerServers: Sendable {
                 endpoints: @escaping @Sendable () -> [MCPProxy.Endpoint], signIns: @escaping @Sendable () -> ContainerServer.SignIns,
                 clientHost: @escaping @Sendable (ContainerServerSpec.Listen) -> String = { HostAddresses.clientHost(lan: $0.lan, vpn: $0.vpn) },
                 patience: Duration = .seconds(60), serverPort: Int = 7433, log: @escaping @Sendable (String) -> Void = { _ in }) {
-        self.folders = folders
+        place = ContainerServerFolders(folders: folders)
         self.backend = backend
         self.secrets = secrets
         self.mcpPort = mcpPort
@@ -66,16 +71,13 @@ public final class ContainerServers: Sendable {
         self.log = log
     }
 
-    public func folder(_ id: String) -> URL { folders.appendingPathComponent(id, isDirectory: true) }
+    public func folder(_ id: String) -> URL { place.folder(id) }
 
-    /// The container servers there are: the folders with a `server.json`.
-    public func servers() -> [ContainerServerSpec] {
-        let entries = (try? FileManager.default.contentsOfDirectory(at: folders, includingPropertiesForKeys: nil)) ?? []
-        return entries.compactMap { try? ContainerServerSpec.read($0) }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
-    }
+    /// The container servers there are.
+    public func servers() -> [ContainerServerSpec] { place.servers() }
 
     /// What the Runner last found of a server.
-    public func state(_ id: String) -> ContainerServerState? { ContainerServerState.read(folder(id)) }
+    public func state(_ id: String) -> ContainerServerState? { place.state(id) }
 
     func server(_ spec: ContainerServerSpec) -> ContainerServer {
         var server = ContainerServer(spec: spec, backend: backend)
@@ -103,69 +105,58 @@ public final class ContainerServers: Sendable {
         servers().contains { secrets.value("container-server \($0.id) mcpToken") == token }
     }
 
-    // MARK: Changes
+    // MARK: Making it so (the Runner's agent)
 
-    /// A new container server: its folder (this user's alone) and
-    /// `server.json` written, then brought up. Nil, or what went wrong (said
-    /// in its state too).
-    public func make(_ spec: ContainerServerSpec) -> String? {
+    /// Every server made as its folder says, where that has changed since
+    /// it was last made so (and every one, the first time: picked up when
+    /// the agent starts): one marked to be removed, removed; one marked to
+    /// be upgraded, made again; a stopped one, stopped; any other, brought
+    /// up. A server whose folder is gone is no longer fronted. What went
+    /// wrong, by server.
+    @discardableResult
+    public func reconcile() -> [String: String] {
         working.withLock { _ in
-            do {
-                try FileManager.default.createDirectory(at: folder(spec.id), withIntermediateDirectories: true,
-                                                        attributes: [.posixPermissions: 0o700])
-                try spec.write(folder(spec.id))
-            } catch {
-                return "\(error)"
+            var problems: [String: String] = [:]
+            let specs = servers()
+            for spec in specs {
+                if let problem = reconcile(spec) { problems[spec.id] = problem }
             }
-            return bringUp(spec)
+            let ids = Set(specs.map(\.id))
+            for id in applied.withLock({ $0.keys.filter { !ids.contains($0) } }) {
+                unfront(id)
+                applied.withLock { _ = $0.removeValue(forKey: id) }
+            }
+            return problems
         }
     }
 
-    /// A stopped server started again. Nil, or what went wrong.
-    public func start(_ id: String) -> String? {
-        working.withLock { _ in
-            guard var spec = try? ContainerServerSpec.read(folder(id)) else { return "No container server \(id)" }
-            spec.stopped = false
-            do { try spec.write(folder(id)) } catch { return "\(error)" }
-            return bringUp(spec)
-        }
-    }
-
-    /// The server stopped, and left so until started again: its container
-    /// stopped, its volumes kept. Nil, or what went wrong.
-    public func stop(_ id: String) -> String? {
-        working.withLock { _ in
-            guard var spec = try? ContainerServerSpec.read(folder(id)) else { return "No container server \(id)" }
-            spec.stopped = true
-            do { try spec.write(folder(id)) } catch { return "\(error)" }
+    private func reconcile(_ spec: ContainerServerSpec) -> String? {
+        let id = spec.id
+        if place.marked(id, ContainerServerFolders.removeMark) {
             unfront(id)
-            if server(spec).container()?.running == true, !server(spec).stop() { return "\(spec.containerName) didn't stop" }
-            ContainerServerState(state: "stopped").write(folder(id))
-            return nil
-        }
-    }
-
-    /// The server's container made again from the image `server.json` names
-    /// now, its volumes kept, so its sessions are as they were. Nil, or what
-    /// went wrong.
-    public func upgrade(_ id: String) -> String? {
-        working.withLock { _ in
-            guard let spec = try? ContainerServerSpec.read(folder(id)) else { return "No container server \(id)" }
-            remake(spec)
-            return spec.stopped ? nil : bringUp(spec)
-        }
-    }
-
-    /// The server gone: its container, its volumes (and with them its
-    /// sessions), its secrets and its folder.
-    public func remove(_ id: String) {
-        working.withLock { _ in
-            unfront(id)
-            if let spec = try? ContainerServerSpec.read(folder(id)) { server(spec).removeWithVolumes() }
+            server(spec).removeWithVolumes()
             for name in ["password", "mcpToken"] { secrets.set("container-server \(id) \(name)", nil) }
             given.withLock { _ = $0.removeValue(forKey: id) }
+            applied.withLock { _ = $0.removeValue(forKey: id) }
             try? FileManager.default.removeItem(at: folder(id))
+            return nil
         }
+        if place.marked(id, ContainerServerFolders.upgradeMark) {
+            remake(spec)
+            place.unmark(id, ContainerServerFolders.upgradeMark)
+            applied.withLock { _ = $0.removeValue(forKey: id) }
+        }
+        guard applied.withLock({ $0[id] }) != spec else { return nil }
+        let problem: String?
+        if spec.stopped {
+            unfront(id)
+            problem = server(spec).container()?.running == true && !server(spec).stop() ? "\(spec.containerName) didn't stop" : nil
+            ContainerServerState(state: "stopped").write(folder(id))
+        } else {
+            problem = bringUp(spec)
+        }
+        applied.withLock { $0[id] = spec }
+        return problem
     }
 
     /// The container gone, its volumes kept; what it was given forgotten.
@@ -174,28 +165,13 @@ public final class ContainerServers: Sendable {
         given.withLock { _ = $0.removeValue(forKey: spec.id) }
     }
 
-    // MARK: Keeping them up
-
-    /// Each server not stopped brought up: its container running, its
-    /// server answering, given what it should have. What went wrong, by
-    /// server.
-    @discardableResult
-    public func pickUp() -> [String: String] {
-        working.withLock { _ in
-            var problems: [String: String] = [:]
-            for spec in servers() where !spec.stopped {
-                if let problem = bringUp(spec) { problems[spec.id] = problem }
-            }
-            return problems
-        }
-    }
-
-    /// Each server not stopped asked after: one that doesn't answer has its
+    /// Each server running asked after: one that doesn't answer has its
     /// network checked, and is made again (its volumes kept) where that is
-    /// lost; then brought up as it should be, and what was found written.
+    /// lost; then brought up as it should be (given again what changed), and
+    /// what was found written.
     public func round() {
         working.withLock { _ in
-            for spec in servers() where !spec.stopped {
+            for spec in servers() where !spec.stopped && !place.marked(spec.id, ContainerServerFolders.removeMark) {
                 let server = server(spec)
                 var network: ContainerServerState.Network?
                 if server.container()?.running == true, !server.answering() {
@@ -207,19 +183,61 @@ public final class ContainerServers: Sendable {
                     }
                 }
                 if let problem = bringUp(spec, network: network) { log("\(spec.name): \(problem)") }
+                applied.withLock { $0[spec.id] = spec }
             }
         }
     }
 
-    /// Picked up, then asked after every `every`, until `stopped`.
-    public func run(every: Duration = .seconds(30), stopped: @escaping @Sendable () -> Bool) {
-        for (id, problem) in pickUp() { log("container server \(id): \(problem)") }
+    /// The Runner's agent's work until `stopped`: what the folders say made
+    /// so every `poll`, every server asked after every `every`; then its
+    /// proxies stopped, the servers left running.
+    public func run(poll: Duration = .seconds(2), every: Duration = .seconds(30), stopped: @escaping @Sendable () -> Bool) {
+        let clock = ContinuousClock()
+        var asked = clock.now
         while !stopped() {
-            let clock = ContinuousClock(), start = clock.now
-            while clock.now - start < every && !stopped() { Thread.sleep(forTimeInterval: 0.2) }
-            if !stopped() { round() }
+            for (id, problem) in reconcile() { log("container server \(id): \(problem)") }
+            if clock.now - asked >= every {
+                round()
+                asked = clock.now
+            }
+            let start = clock.now
+            while clock.now - start < poll && !stopped() { Thread.sleep(forTimeInterval: 0.1) }
         }
         stopFronting()
+    }
+
+    // MARK: Changes, made so at once (one process: the tests, a probe)
+
+    /// A new container server, made so. Nil, or what went wrong.
+    public func make(_ spec: ContainerServerSpec) -> String? {
+        if let problem = place.want(spec) { return problem }
+        return reconcile()[spec.id]
+    }
+
+    /// A stopped server started again. Nil, or what went wrong.
+    public func start(_ id: String) -> String? { setStopped(id, false) }
+
+    /// The server stopped, its volumes kept. Nil, or what went wrong.
+    public func stop(_ id: String) -> String? { setStopped(id, true) }
+
+    private func setStopped(_ id: String, _ stopped: Bool) -> String? {
+        guard var spec = try? ContainerServerSpec.read(folder(id)) else { return "No container server \(id)" }
+        spec.stopped = stopped
+        if let problem = place.want(spec) { return problem }
+        return reconcile()[id]
+    }
+
+    /// The server made again from its image, its volumes kept. Nil, or what
+    /// went wrong.
+    public func upgrade(_ id: String) -> String? {
+        if let problem = place.wantUpgrade(id) { return problem }
+        return reconcile()[id]
+    }
+
+    /// The server gone, and everything of it.
+    public func remove(_ id: String) {
+        guard place.wantRemoved(id) == nil else { return }
+        reconcile()
     }
 
     /// Every server's proxy stopped (the Runner quitting): the servers run

@@ -20,6 +20,9 @@ struct ContainerServersSection: View {
                 Text("A container server is a Visor server in a Linux container of its own, on this Mac: its sessions' agents, their files and the pictures you attach are all inside it. A client adds it from its code, as another computer.")
                     .font(.caption).foregroundColor(.secondary)
             }
+            if let problem = servers.agentProblem {
+                Text(problem).font(.caption).foregroundColor(.orange)
+            }
             ForEach(servers.rows) { row in rowView(row) }
             Button("New Container Server…") { making = true }
             if let message = servers.message { Text(message).font(.caption).foregroundColor(.red) }
@@ -44,7 +47,7 @@ struct ContainerServersSection: View {
                     saved = true
                 }
                 .disabled(claudeToken == servers.claudeToken && openrouterKey == servers.openrouterKey)
-                if saved { Text("Given to every container server.").font(.caption).foregroundColor(.secondary) }
+                if saved { Text("Given to every container server in a moment.").font(.caption).foregroundColor(.secondary) }
             }
             Text("Each container server's agents sign in with these (`claude setup-token` makes a Claude token). Codex signs in with this Mac's own sign-in, copied in. Sessions on this Mac's server sign in as they always do.")
                 .font(.caption).foregroundColor(.secondary)

@@ -138,7 +138,7 @@ final class ContainerServersTests: XCTestCase {
         XCTAssertNil(servers.stop("S1"))
         XCTAssertEqual(fake.container("visor-server-s1")?.running, false)
         XCTAssertEqual(servers.state("S1")?.state, "stopped")
-        XCTAssertEqual(servers.pickUp(), [:])
+        XCTAssertEqual(servers.reconcile(), [:])
         servers.round()
         XCTAssertEqual(fake.container("visor-server-s1")?.running, false, "neither picking up nor asking after starts a stopped server")
         XCTAssertNil(servers.start("S1"))
@@ -153,7 +153,7 @@ final class ContainerServersTests: XCTestCase {
         try FileManager.default.removeItem(at: fake.fsFile("/root/.local/share/visor/agents/claude.env"))
         servers.stopFronting()
         servers = makeServers()
-        XCTAssertEqual(servers.pickUp(), [:])
+        XCTAssertEqual(servers.reconcile(), [:])
         XCTAssertEqual(fake.requests.count, 1, "not made again")
         XCTAssertEqual(fake.serverCalls.filter { $0.hasPrefix("visor-server start") }.count, 1, "its server not started again")
         XCTAssertEqual(fake.written("/root/.local/share/visor/agents/claude.env"), "CLAUDE_CODE_OAUTH_TOKEN=claude-1\n")
@@ -186,6 +186,30 @@ final class ContainerServersTests: XCTestCase {
         XCTAssertTrue(fake.volumes.isEmpty)
         XCTAssertTrue(secrets.all.isEmpty, "its password and token forgotten")
         XCTAssertFalse(FileManager.default.fileExists(atPath: servers.folder("S1").path))
+    }
+
+    func testTheAppWritesWhatShouldBeAndTheAgentMakesItSo() throws {
+        let app = ContainerServerFolders(folders: fake.folder.appendingPathComponent("container-servers"))
+        XCTAssertNil(app.want(spec()))
+        XCTAssertTrue(fake.requests.isEmpty, "writing makes nothing")
+        XCTAssertEqual(servers.reconcile(), [:])
+        XCTAssertEqual(servers.state("S1")?.state, "ready")
+        let calls = fake.calls.count
+        XCTAssertEqual(servers.reconcile(), [:])
+        XCTAssertEqual(fake.calls.count, calls, "nothing changed, nothing done")
+        var stopped = spec()
+        stopped.stopped = true
+        XCTAssertNil(app.want(stopped))
+        servers.reconcile()
+        XCTAssertEqual(fake.container("visor-server-s1")?.running, false)
+        XCTAssertNil(app.wantUpgrade("S1"))
+        servers.reconcile()
+        XCTAssertTrue(fake.calls.contains("remove visor-server-s1"), "made again from its image")
+        XCTAssertNil(app.wantRemoved("S1"))
+        servers.reconcile()
+        XCTAssertNil(fake.container("visor-server-s1"))
+        XCTAssertTrue(fake.volumes.isEmpty)
+        XCTAssertTrue(servers.servers().isEmpty)
     }
 
     func testWhereContainersCantBeMadeItSaysWhy() {

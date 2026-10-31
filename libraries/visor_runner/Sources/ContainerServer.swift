@@ -127,6 +127,17 @@ public struct ContainerServer: Sendable {
             self.openrouterKey = openrouterKey
             self.codexAuth = codexAuth
         }
+
+        /// The names the Runner keeps the token and key under.
+        public static let claudeKey = "runner claudeToken", openrouterKey = "runner openrouterKey"
+
+        /// The sign-ins as the Runner keeps them now: the token and key in its
+        /// secrets, Codex's file in this user's home.
+        public static func kept(in secrets: any RunnerSecrets,
+                                home: URL = FileManager.default.homeDirectoryForCurrentUser) -> SignIns {
+            SignIns(claudeToken: secrets.value(claudeKey), openrouterKey: secrets.value(openrouterKey),
+                    codexAuth: try? Data(contentsOf: home.appendingPathComponent(".codex/auth.json")))
+        }
     }
 
     /// This computer's address as the container sees it: its default

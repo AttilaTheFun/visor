@@ -1,14 +1,15 @@
 import Foundation
 import Observation
+import ServiceManagement
 import VisorRunner
 import VisorServer
 
 /// The Runner's container servers (docs/co-tenancy.md) as the menu bar app
-/// keeps and shows them: made and kept through the container backend on a
-/// thread of their own, picked up when the app starts, asked after every 30
-/// seconds; the app's MCP proxy, which their servers' MCP servers are set
-/// to; and what their agents sign in with: the Claude token and OpenRouter
-/// key set here, and the Mac's Codex sign-in.
+/// shows and changes them. The app writes what should be (each server's
+/// folder, `runner.json`, the Runner's secrets) and the Runner's agent, a
+/// LaunchAgent in the app's bundle registered here, makes it so: it makes
+/// and keeps the containers, fronts their servers, and is their MCP proxy,
+/// whether or not the app runs. The rows are what the agent last found.
 @MainActor
 @Observable
 final class RunnerContainerServers {
@@ -22,44 +23,30 @@ final class RunnerContainerServers {
     private(set) var rows: [Row] = []
     /// What the last change said, if it went wrong.
     var message: String?
-    /// A change under way, by server.
-    private(set) var busy: Set<String> = []
-
-    /// The MCP proxy's port, which containers reach at their gateway.
-    static let mcpPort = 7439
+    /// Where the Runner's agent stands, when it isn't running as it should
+    /// (to be allowed in System Settings, say).
+    private(set) var agentProblem: String?
+    /// A change waiting for the agent, by server.
+    var busy: Set<String> { Set(rows.filter { $0.state?.state == "starting" || $0.state == nil }.map(\.id)) }
 
     private let server: VisorServer
-    private let servers: ContainerServers
-    /// The Mac server's MCP servers, as the container servers are given
-    /// them.
-    private let endpoints: MCPEndpointList
-    private var proxy: MCPProxy?
+    private let data: URL
+    private let folders: ContainerServerFolders
+    private let secrets: FileRunnerSecrets
+    /// What was last written for the agent: written again when it changes.
+    private var written: (config: RunnerConfig, mcpSecrets: [String: String])?
 
     init(server: VisorServer) {
         self.server = server
-        let endpoints = MCPEndpointList()
-        endpoints.value = Self.endpoints(of: server)
-        self.endpoints = endpoints
-        let secrets = ServerPlatform.current.secrets
-        servers = ContainerServers(
-            folders: ServerPlatform.current.host.dataDirectory.appendingPathComponent("container-servers", isDirectory: true),
-            backend: PendingContainerBackend(), secrets: RunnerSecretStore(store: secrets), mcpPort: Self.mcpPort,
-            endpoints: { endpoints.value },
-            signIns: { Self.signIns(secrets) },
-            log: { ServerPlatform.current.log("container servers: \($0)") })
+        data = ServerPlatform.current.host.dataDirectory
+        folders = ContainerServerFolders(folders: data.appendingPathComponent("container-servers", isDirectory: true))
+        secrets = FileRunnerSecrets(file: data.appendingPathComponent("runner-secrets.json"))
     }
 
-    /// The servers picked up and asked after on a thread of their own, the
-    /// proxy listening, and the rows read again every few seconds (each
-    /// server's state is written as it is found), for as long as the app
-    /// runs.
+    /// The Runner's agent registered (once; macOS keeps it), and the rows and
+    /// what the agent is given read and written again every few seconds.
     func start() {
-        let servers = servers, endpoints = endpoints
-        proxy = MCPProxy(port: UInt16(Self.mcpPort), endpoints: { endpoints.value }, admits: { servers.admits($0) }) { endpoint, header in
-            ServerPlatform.current.secrets.get(MCPEndpoint.secretKey(endpoint: endpoint, header: header))
-        }
-        if let proxy { proxy.start() } else { ServerPlatform.current.log("container servers: port \(Self.mcpPort) can't be had for the MCP proxy") }
-        Thread.detachNewThread { servers.run { false } }
+        registerAgent()
         Task {
             while true {
                 reload()
@@ -68,11 +55,52 @@ final class RunnerContainerServers {
         }
     }
 
-    /// The rows as the folders have them now, and the Mac server's MCP
-    /// servers as they are set now.
+    /// The agent's plist in this bundle (Contents/Library/LaunchAgents),
+    /// named after the app's bundle id.
+    private var agent: SMAppService {
+        SMAppService.agent(plistName: (Bundle.main.bundleIdentifier ?? "VisorServer") + ".runner-agent.plist")
+    }
+
+    private func registerAgent() {
+        let agent = agent
+        if agent.status != .enabled {
+            do { try agent.register() } catch { ServerPlatform.current.log("the Runner's agent: \(error)") }
+        }
+        agentProblem = Self.problem(agent.status)
+    }
+
+    static func problem(_ status: SMAppService.Status) -> String? {
+        switch status {
+        case .enabled: return nil
+        case .requiresApproval: return "Container servers need Visor's background agent: allow it in System Settings › General › Login Items."
+        case .notRegistered: return "Visor's background agent isn't registered."
+        case .notFound: return "Visor's background agent isn't in this app's bundle."
+        @unknown default: return "Visor's background agent isn't running."
+        }
+    }
+
+    /// The rows as the folders have them now; the Mac server's MCP servers
+    /// and their secret headers written for the agent where they changed.
     func reload() {
-        rows = servers.servers().map { Row(spec: $0, state: servers.state($0.id)) }
-        endpoints.value = Self.endpoints(of: server)
+        rows = folders.servers().map { Row(spec: $0, state: folders.state($0.id)) }
+        agentProblem = Self.problem(agent.status)
+        let config = RunnerConfig(endpoints: Self.endpoints(of: server))
+        var mcpSecrets: [String: String] = [:]
+        for endpoint in config.endpoints {
+            for header in endpoint.secretHeaders {
+                mcpSecrets["mcp \(endpoint.name) \(header)"] = ServerPlatform.current.secrets.get(MCPEndpoint.secretKey(endpoint: endpoint.name, header: header))
+            }
+        }
+        guard written?.config != config || written?.mcpSecrets != mcpSecrets else { return }
+        do {
+            try config.write(data)
+            let gone = Set(written?.mcpSecrets.keys.map { $0 } ?? []).subtracting(mcpSecrets.keys)
+            for name in gone { secrets.set(name, nil) }
+            for (name, value) in mcpSecrets { secrets.set(name, value) }
+            written = (config, mcpSecrets)
+        } catch {
+            message = "The Runner's settings couldn't be written: \(error)"
+        }
     }
 
     /// The Mac server's MCP servers, as the Runner's proxy passes calls on to
@@ -87,36 +115,17 @@ final class RunnerContainerServers {
 
     // MARK: Sign-ins
 
-    nonisolated private static let claudeKey = "runner claudeToken"
-    nonisolated private static let openrouterKey = "runner openrouterKey"
+    var claudeToken: String { secrets.value(ContainerServer.SignIns.claudeKey) ?? "" }
+    var openrouterKey: String { secrets.value(ContainerServer.SignIns.openrouterKey) ?? "" }
 
-    var claudeToken: String { ServerPlatform.current.secrets.get(Self.claudeKey) ?? "" }
-    var openrouterKey: String { ServerPlatform.current.secrets.get(Self.openrouterKey) ?? "" }
-
-    /// What container servers' agents sign in with: the token and key set
-    /// here, and the Mac's Codex sign-in.
-    nonisolated static func signIns(_ secrets: any SecretStore) -> ContainerServer.SignIns {
-        let codex = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/auth.json")
-        return ContainerServer.SignIns(claudeToken: secrets.get(claudeKey).flatMap { $0.isEmpty ? nil : $0 },
-                                       openrouterKey: secrets.get(openrouterKey).flatMap { $0.isEmpty ? nil : $0 },
-                                       codexAuth: try? Data(contentsOf: codex))
-    }
-
-    /// The token and key kept (empty: none), and given to every container
-    /// server at once.
+    /// The token and key kept (empty: none): the agent gives them to every
+    /// container server.
     func setSignIns(claudeToken: String, openrouterKey: String) {
-        for (key, value) in [(Self.claudeKey, claudeToken), (Self.openrouterKey, openrouterKey)] {
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            ServerPlatform.current.secrets.set(key, trimmed.isEmpty ? nil : trimmed)
-        }
-        let servers = servers
-        perform(nil) {
-            servers.round()
-            return nil
-        }
+        secrets.set(ContainerServer.SignIns.claudeKey, claudeToken.trimmingCharacters(in: .whitespacesAndNewlines))
+        secrets.set(ContainerServer.SignIns.openrouterKey, openrouterKey.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    // MARK: Changes
+    // MARK: Changes, which the agent makes so
 
     /// The next free port from 7440, by the servers there are.
     var nextPort: Int {
@@ -131,43 +140,25 @@ final class RunnerContainerServers {
         var spec = ContainerServerSpec(id: UUID().uuidString.lowercased(), name: name, image: image)
         spec.listen = .init(port: port, lan: lan, vpn: vpn)
         if !folder.isEmpty { spec.mounts = [.init(source: folder)] }
-        let servers = servers, made = spec
-        perform(made.id) { servers.make(made) }
+        change(folders.want(spec))
     }
 
-    func start(_ id: String) {
-        let servers = servers
-        perform(id) { servers.start(id) }
+    func start(_ id: String) { setStopped(id, false) }
+
+    func stop(_ id: String) { setStopped(id, true) }
+
+    private func setStopped(_ id: String, _ stopped: Bool) {
+        guard var spec = rows.first(where: { $0.id == id })?.spec else { return }
+        spec.stopped = stopped
+        change(folders.want(spec))
     }
 
-    func stop(_ id: String) {
-        let servers = servers
-        perform(id) { servers.stop(id) }
-    }
+    func upgrade(_ id: String) { change(folders.wantUpgrade(id)) }
 
-    func upgrade(_ id: String) {
-        let servers = servers
-        perform(id) { servers.upgrade(id) }
-    }
+    func remove(_ id: String) { change(folders.wantRemoved(id)) }
 
-    func remove(_ id: String) {
-        let servers = servers
-        perform(id) {
-            servers.remove(id)
-            return nil
-        }
-    }
-
-    /// A change made off the main actor (`container` takes a while), then
-    /// the rows read again and what went wrong said.
-    private func perform(_ id: String?, _ change: @escaping @Sendable () -> String?) {
-        if let id { busy.insert(id) }
-        message = nil
-        Task {
-            let problem = await Task.detached { change() }.value
-            if let id { busy.remove(id) }
-            if let problem { message = problem }
-            reload()
-        }
+    private func change(_ problem: String?) {
+        message = problem
+        reload()
     }
 }
