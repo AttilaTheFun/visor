@@ -786,27 +786,29 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
 - agent_ui changes: commit+push there, put the revision in
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
-- Builds and runs of a pull request, before it merges: every
-  commit pushed to it runs ci.yml whole, and a newer push cancels the run
-  before it if it hasn't finished. Beside the tests and every platform's
-  build (self-hosted: the repository's runner leases a macOS VM or a Linux
-  container from OS Server for each; tools/ci/mac_vm.sh), its `build` job
-  builds the iPhone app and the
-  Mac's disk images, signed, on the release Mac's self-hosted runner
-  (tools/build_packages.sh); not for a fork's pull request. What the runner
-  does with them is its own (`$PIPELINE_CI`: the builds to the release
-  server, under their commit, branch and pull request). The proof (the
-  screens and UI tests) is not CI's: see below. Each run's build number is one past the version's highest on
-  the release server (its `number` job: `$PIPELINE_CI number`), stamped
-  into the four Info.plists before building and used for the runs, so
-  every build published is one more without a commit to bump it. main
-  requires every job green on the head commit to merge, so a pull request
-  that can merge has its builds in Releases and its runs in Reviews. CI runs
-  again on each commit merged to main (a squash is a commit of its own), and
-  its builds and runs are the version's. A release is of one of those
-  commits: an agent proposes it as a draft GitHub release
+- CI (ci.yml), self-hosted: the repository's runners lease a macOS VM,
+  a Windows VM or a Linux container from OS Server for each job
+  (tools/ci). A pull request gets the fast checks, all at once, in under
+  ten minutes each: every app and the Mac's libraries built on Linux
+  (`container`, tools/ci/container_build.sh, Bazel's tree in a kept
+  volume), the tests with nothing of Apple's in them on Linux (`linux`),
+  the command-line server on Windows, the tests that need a Mac in a macOS
+  VM (`test`), and blue's web client in headless Chromium in a Linux
+  container (`blue-web`). A diff of documentation alone skips them (the
+  `changes` job), and a newer push cancels a run that hasn't finished.
+  Each commit merged to main (a squash is a commit of its own) gets them
+  too, then what a release is made of: its build number (one past the
+  version's highest on the release server, `$PIPELINE_CI number`, stamped
+  into the Info.plists), the iPhone app and the Mac's disk images built,
+  signed and notarized on the release Mac (`build`,
+  tools/build_packages.sh; what the runner does with them is
+  `$PIPELINE_CI`'s), the agent image, blue's iPhone snapshots and the
+  proof (`proof`, within the hour, against the commit before). main
+  requires every job green (or skipped) on a pull request's head, up to
+  date with main; an agent merges its own pull request then. A release is
+  of a commit on main: an agent proposes it as a draft GitHub release
   (`agent-token gh claude release create v<version> --draft --target <sha>`),
-  the owner reviews it in Reviews (its CI, builds, screens, and the pull
+  the owner reviews it in Reviews (its CI, builds, proof, and the pull
   requests since the last release) and approves it there, which makes the
   tag and promotes that commit's builds in Releases; nothing is built from
   the tag (releases: docs/RELEASE_PROCESS.md).
