@@ -640,8 +640,10 @@ on|off` serves the socket file for SSH clients (Linux; not Windows),
 standalone on` keeps it to itself (see the protocol's network of
 computers), `visor-server front <url>…` gives a server in a container its
 front's paths (Visor Runner's on the computer: its loopback, LAN and VPN)
-for clients in place of the container's own; `run` and `start` take the same as options (`--password`,
-`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`, `--front`,
+for clients in place of the container's own; `visor-server keep-messages
+off` asks clients to keep its sessions' messages in memory only; `run` and
+`start` take the same as options (`--password`, `--auth`, `--lan`, `--vpn`,
+`--ssh`, `--address`, `--standalone`, `--front`, `--keep-messages`,
 `--container-host`, `--container-image`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server

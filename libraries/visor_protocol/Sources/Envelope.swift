@@ -169,6 +169,11 @@ public struct Envelope: Codable, Sendable {
     /// client added it at (a front of its own: an authenticating proxy),
     /// its own addresses not shared, and kept out of the relay.
     public var standalone: Bool?
+    /// `hello`: false when the server asks clients not to keep its
+    /// sessions' messages on their disk — each holds only the pages it
+    /// shows, in memory, and asks again for those it let go of. Absent:
+    /// they may.
+    public var keepMessages: Bool?
     /// `start`: the session's agent runs in a container on the server's
     /// computer rather than on the computer itself, its folder mounted
     /// there. `contain`: the session moves into its container (true) or out

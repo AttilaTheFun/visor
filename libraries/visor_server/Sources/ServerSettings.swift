@@ -53,6 +53,11 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// own addresses, its SSH key and the computers it knows told to no
     /// one, introductions refused. Also on with VISOR_STANDALONE=1.
     public var standalone = false
+    /// Let clients keep the sessions' messages on their disk, so a thread
+    /// opens as last seen, syncs only what changed and reads back offline.
+    /// Off, they keep only the pages they show, in memory, and ask this
+    /// server again for any they let go of (`Envelope.keepMessages`).
+    public var clientsKeepMessages = true
     /// Each session's agent runs under a host of its own (visor-agent-host),
     /// apart from the server: a restart or an update leaves it working, and
     /// one that runs away cannot take the server down. Off, agents are the
@@ -84,7 +89,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             frontPaths, detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost, pushProxy
+             frontPaths, clientsKeepMessages, detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost,
+             pushProxy
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -99,6 +105,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         try c.encode(authentication, forKey: .authentication)
         try c.encode(standalone, forKey: .standalone)
         if !frontPaths.isEmpty { try c.encode(frontPaths, forKey: .frontPaths) }
+        try c.encode(clientsKeepMessages, forKey: .clientsKeepMessages)
         try c.encode(detachAgents, forKey: .detachAgents)
         if !containerImage.isEmpty { try c.encode(containerImage, forKey: .containerImage) }
         if !containerCallback.isEmpty { try c.encode(containerCallback, forKey: .containerCallback) }
@@ -127,6 +134,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         proxyEnabled = try c.decodeIfPresent(Bool.self, forKey: .proxyEnabled) ?? !publicAddress.isEmpty
         standalone = try c.decodeIfPresent(Bool.self, forKey: .standalone) ?? false
         frontPaths = try c.decodeIfPresent([String].self, forKey: .frontPaths) ?? []
+        clientsKeepMessages = try c.decodeIfPresent(Bool.self, forKey: .clientsKeepMessages) ?? true
         serverID = try c.decodeIfPresent(String.self, forKey: .serverID) ?? ""
         authentication = try c.decodeIfPresent(String.self, forKey: .authentication) ?? "password"
         detachAgents = try c.decodeIfPresent(Bool.self, forKey: .detachAgents) ?? true

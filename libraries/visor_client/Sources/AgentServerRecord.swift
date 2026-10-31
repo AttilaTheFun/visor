@@ -40,6 +40,10 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     /// The server said it stands alone: reached only at `address`, its
     /// other paths not learned or tried, and kept out of the relay.
     public var standalone: Bool
+    /// Whether the server lets this device keep its sessions' messages on
+    /// disk, as it last said (`ServerIdentity.keepMessages`): false, they
+    /// are held in memory only, and asked for again once let go of.
+    public var keepMessages: Bool
     /// Whether this device takes part in the relay with this server
     /// (RelayCourier): tells it the other computers it is connected to and
     /// their sessions, and carries its agents' messages to them. Nil: as
@@ -51,9 +55,10 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
                 provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", paths: [String] = [],
-                authentication: String = PasswordAuthenticator.name, standalone: Bool = false, relay: Bool? = nil,
-                fromAccount: Bool = false, lastPath: String = "") {
+                authentication: String = PasswordAuthenticator.name, standalone: Bool = false, keepMessages: Bool = true,
+                relay: Bool? = nil, fromAccount: Bool = false, lastPath: String = "") {
         self.standalone = standalone
+        self.keepMessages = keepMessages
         self.relay = relay
         self.fromAccount = fromAccount
         self.id = id
@@ -160,7 +165,8 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
             "id": .string(id), "name": .string(name), "address": .string(address), "secret": .string(secret),
             "everConnected": .bool(everConnected), "provider": .string(provider), "renamed": .bool(renamed),
             "serverID": .string(serverID), "paths": .array(paths.map(JSONValue.string)), "authentication": .string(authentication),
-            "standalone": .bool(standalone), "fromAccount": .bool(fromAccount), "lastPath": .string(lastPath)]
+            "standalone": .bool(standalone), "keepMessages": .bool(keepMessages), "fromAccount": .bool(fromAccount),
+            "lastPath": .string(lastPath)]
         if let relay { fields["relay"] = .bool(relay) }
         return .object(fields)
     }
@@ -176,7 +182,8 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
                   renamed: json["renamed"].bool ?? false, serverID: json["serverID"].string ?? "",
                   paths: (json["paths"].array ?? json["roads"].array)?.compactMap(\.string) ?? [],
                   authentication: json["authentication"].string ?? PasswordAuthenticator.name,
-                  standalone: json["standalone"].bool ?? false, relay: json["relay"].bool, fromAccount: json["fromAccount"].bool ?? false,
+                  standalone: json["standalone"].bool ?? false, keepMessages: json["keepMessages"].bool ?? true,
+                  relay: json["relay"].bool, fromAccount: json["fromAccount"].bool ?? false,
                   lastPath: json["lastPath"].string ?? "")
     }
 }

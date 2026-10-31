@@ -159,6 +159,16 @@ struct SettingsPane: View {
                 Text("Agents")
             }
             Section {
+                Toggle("Let devices keep messages on disk", isOn: Binding(get: { server.settings.clientsKeepMessages },
+                                                                          set: { server.settings.clientsKeepMessages = $0 }))
+                Text(server.settings.clientsKeepMessages
+                     ? "A device keeps the sessions' messages it has seen, so a session opens as last seen and reads back offline."
+                     : "A device holds only the pages it shows, in memory, and asks again for those it let go of; what it kept on disk goes the next time it signs in.")
+                    .font(.caption).foregroundColor(.secondary)
+            } header: {
+                Text("Devices")
+            }
+            Section {
                 TextField("Container host (empty: \(VisorServer.containerHostName) on the PATH)", text: $containerHost)
                     .focused($editing, equals: .containerHost)
                     .onSubmit { apply(.containerHost) }

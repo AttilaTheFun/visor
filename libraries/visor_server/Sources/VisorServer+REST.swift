@@ -179,6 +179,7 @@ extension VisorServer {
         e.id = id
         e.version = Self.version
         if containersAvailable { e.container = true }
+        if !settings.clientsKeepMessages { e.keepMessages = false }
         if isStandalone {
             // Reached only where the client found it: nothing more to learn.
             e.standalone = true
