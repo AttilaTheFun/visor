@@ -12,12 +12,20 @@ package(default_visibility = ["//visibility:public"])
 swift_library(
     name = "visor_container_host_lib",
     copts = STRICT_SWIFT,
-    srcs = ["main.swift"],
+    # Its secrets in the keychain in a notarized build, in each container
+    # server's folder in a debug one (tools/secrets).
+    srcs = ["main.swift"] + select({
+        "//tools/secrets:in_keychain": ["secrets_keychain.swift"],
+        "//conditions:default": ["secrets_files.swift"],
+    }),
     module_name = "VisorContainerHostMain",
     deps = [
         "//:foundation",
         "//libraries/visor_container_host",
-    ],
+    ] + select({
+        "//tools/secrets:in_keychain": ["//libraries/visor_container_host_apple"],
+        "//conditions:default": [],
+    }),
 )
 
 macos_command_line_application(

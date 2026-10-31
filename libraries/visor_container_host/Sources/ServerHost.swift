@@ -142,6 +142,15 @@ public struct ServerHost: Sendable {
         return kept
     }
 
+    /// Every secret the host keeps for the server forgotten: its password,
+    /// its proxy's token, the sign-ins and the secret headers.
+    public func forgetSecrets() {
+        let mcp = server.spec.mcp.flatMap { endpoint in endpoint.secretHeaders.map { "mcp \(endpoint.name) \($0)" } }
+        for name in ["password", "mcpToken"] + Self.credentialNames + mcp {
+            try? server.secrets.set(name, nil)
+        }
+    }
+
     /// The mark `credentials` leaves when it changes them.
     var credentialsStamp: String {
         (try? String(contentsOf: server.folder.appendingPathComponent("credentials.stamp"), encoding: .utf8)) ?? ""

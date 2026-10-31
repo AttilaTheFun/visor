@@ -395,4 +395,20 @@ final class ServerHostTests: XCTestCase {
         let missing = ContainerHostCommand.answer(["status", "/no/such/folder"], input: Data(), container: fake.tool, version: "")
         XCTAssertEqual(missing.json["code"] as? String, "notFound")
     }
+
+    func testRemovingItsDisksForgetsItsSecretsInTheStoreTheBuildChose() throws {
+        let host = try host()
+        let store = FileHostSecrets(folder: folder.appendingPathComponent("elsewhere"))
+        try FileManager.default.createDirectory(at: store.file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let secrets: ContainerHostCommand.Secrets = { _, _ in store }
+        _ = ContainerHostCommand.answer(["credentials", folder.path], input: Data(#"{"claudeToken": "t", "openrouterKey": "k"}"#.utf8),
+                                        container: fake.tool, version: "", secrets: secrets)
+        try store.set("password", "p")
+        XCTAssertEqual(store.value("claudeToken"), "t", "kept where the build keeps them")
+        XCTAssertNil(host.server.secrets.value("claudeToken"))
+        _ = ContainerHostCommand.answer(["remove", folder.path], input: Data(), container: fake.tool, version: "", secrets: secrets)
+        XCTAssertEqual(store.value("password"), "p", "kept while its disks are")
+        _ = ContainerHostCommand.answer(["remove", folder.path, "--data"], input: Data(), container: fake.tool, version: "", secrets: secrets)
+        for name in ["password", "claudeToken", "openrouterKey"] { XCTAssertNil(store.value(name), name) }
+    }
 }

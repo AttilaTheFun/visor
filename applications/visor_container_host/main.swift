@@ -35,7 +35,7 @@ if arguments.first == "serve" {
     guard let path = arguments.dropFirst().first else { answer(.init(status: 2, json: ["error": "serve <the container server's folder>"])) }
     let host: ServerHost
     do {
-        host = try ContainerHostCommand.host(URL(fileURLWithPath: path, isDirectory: true), container: container)
+        host = try ContainerHostCommand.host(URL(fileURLWithPath: path, isDirectory: true), container: container, secrets: hostSecrets)
     } catch {
         answer(.init(status: 1, json: ["error": "No container server in \(path): \(error)", "code": "notFound"]))
     }
@@ -53,4 +53,4 @@ if arguments.first == "serve" {
 // Only these are given anything on standard input.
 let input = ["create", "put", "credentials"].contains(arguments.first ?? "") ? FileHandle.standardInput.readDataToEndOfFile() : Data()
 let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-answer(ContainerHostCommand.answer(arguments, input: input, container: container, version: version))
+answer(ContainerHostCommand.answer(arguments, input: input, container: container, version: version, secrets: hostSecrets))

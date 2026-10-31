@@ -35,9 +35,12 @@ public enum ContainerHostCommand {
     }
 
     /// The answer to every operation but `exec`.
-    public static func answer(_ arguments: [String], input: Data, container: AppleContainer, version: String) -> Answer {
+    public static func answer(_ arguments: [String], input: Data, container: AppleContainer, version: String,
+                              secrets: Secrets = fileSecrets) -> Answer {
         let rest = Array(arguments.dropFirst())
-        if let first = arguments.first, serverCommands.contains(first) { return serverAnswer(arguments, input: input, container: container) }
+        if let first = arguments.first, serverCommands.contains(first) {
+            return serverAnswer(arguments, input: input, container: container, secrets: secrets)
+        }
         switch arguments.first {
         case "health": return health(container, version: version)
         case "create": return create(input, container: container)
