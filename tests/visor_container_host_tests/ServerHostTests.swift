@@ -54,6 +54,10 @@ private struct FakeServerTool {
                 case "$3" in
                   *'cat > "$1"'*) cat > "$dir/fs/$(echo "$5" | tr '/' '_')"; exit 0 ;;
                   *'getent hosts'*) [ -f "$dir/nonetwork" ] || printf 'dns\nreach\n'; exit 0 ;;
+                  *'/proc/net/route'*) echo 0140A8C0; exit 0 ;;
+                  # Files the host wrote in the container, where it reads them.
+                  */root/.visor-host/*) script="${3//\/root\/.visor-host\//$dir/fs/_root_.visor-host_}"
+                    set -- "$1" "$2" "$script" "${@:4}" ;;
                 esac
                 PATH="$dir/bin:$PATH" exec "$@" ;;
             esac
@@ -135,12 +139,25 @@ private final class FakeVisorServer: Sendable {
             if count <= 0 { break }
             request.append(contentsOf: buffer[0..<count])
         }
-        let lines = String(decoding: request, as: UTF8.self).components(separatedBy: "\r\n")
+        let text = String(decoding: request, as: UTF8.self)
+        let lines = text.components(separatedBy: "\r\n")
         let path = lines.first?.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+        // A body, by its length: what PUT /api/mcp was given, kept.
+        if let length = lines.first(where: { $0.lowercased().hasPrefix("content-length:") }).flatMap({ Int($0.dropFirst(15).trimmingCharacters(in: .whitespaces)) }),
+           let end = request.range(of: Data("\r\n\r\n".utf8)) {
+            var body = Data(request[end.upperBound...])
+            while body.count < length {
+                let count = buffer.withUnsafeMutableBytes { read(connection, $0.baseAddress, $0.count) }
+                if count <= 0 { break }
+                body.append(contentsOf: buffer[0..<count])
+            }
+            if path == "/api/mcp" { try? body.write(to: folder.appendingPathComponent("mcp-put.json")) }
+        }
         let password = (try? String(contentsOf: folder.appendingPathComponent("password"), encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let authorized = lines.contains { $0.lowercased() == "authorization: bearer \(password)".lowercased() }
-        let bodies = ["/api/hello": #"{"type":"hello","version":"0.45.0"}"#, "/api/code": #"{"type":"code","text":"visor-code"}"#]
+        let bodies = ["/api/hello": #"{"type":"hello","version":"0.45.0"}"#, "/api/code": #"{"type":"code","text":"visor-code"}"#,
+                      "/api/mcp": #"{"endpoints":[]}"#]
         let body = authorized ? bodies[path] ?? #"{"type":"error"}"# : ""
         let response = "HTTP/1.1 \(authorized ? "200 OK" : "401 Unauthorized")\r\nContent-Length: \(body.utf8.count)\r\n"
             + "Connection: close\r\n\r\n" + body
@@ -331,6 +348,32 @@ final class ServerHostTests: XCTestCase {
         XCTAssertFalse(fake.calls.contains { $0.hasPrefix("volume delete") })
         XCTAssertTrue(fake.has("volume-visor-server-s1-home"))
         XCTAssertEqual(host.server.state(), .missing)
+    }
+
+    func testTheServersMCPServersAreTheHostsProxyWithItsToken() throws {
+        let host = try host()
+        var spec = host.server.spec
+        spec.mcp = [.init(name: "gh", url: "http://127.0.0.1:7470/mcp", headers: ["X-Visor-Session": "$SESSION_ID"], secretHeaders: ["Authorization"])]
+        let withMCP = ServerHost(server: ContainerServer(spec: spec, folder: folder, container: fake.tool, secrets: host.server.secrets),
+                                 clientHost: "127.0.0.1")
+        var server = withMCP.server
+        server.serverPort = host.server.serverPort
+        let configured = ServerHost(server: server, clientHost: "127.0.0.1")
+        XCTAssertNil(configured.bringUp(patience: .seconds(20)))
+        XCTAssertEqual(configured.gateway(), "192.168.64.1")
+        XCTAssertNil(configured.configureMCP())
+        let put = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: fake.folder.appendingPathComponent("mcp-put.json"))) as? [String: Any])
+        let endpoint = try XCTUnwrap((put["endpoints"] as? [[String: Any]])?.first)
+        XCTAssertEqual(endpoint["url"] as? String, "http://192.168.64.1:7441/mcp/gh")
+        let headers = try XCTUnwrap(endpoint["headers"] as? [[String: Any]])
+        XCTAssertTrue(headers.contains { $0["name"] as? String == "X-Visor-Session" && $0["value"] as? String == "$SESSION_ID" })
+        let token = try XCTUnwrap(headers.first { $0["name"] as? String == MCPProxy.tokenHeader })
+        XCTAssertEqual(token["secret"] as? Bool, true)
+        XCTAssertEqual(token["value"] as? String, try configured.mcpToken())
+        XCTAssertFalse(headers.contains { $0["name"] as? String == "Authorization" }, "the secret header stays with the host")
+        // The password went in a file, never on the container's command line.
+        let password = try configured.server.password()
+        XCTAssertFalse(fake.calls.contains { $0.hasPrefix("exec") && $0.contains(password) })
     }
 
     func testTheClientHostIsTheLANsOrAVPNsElseLoopback() {

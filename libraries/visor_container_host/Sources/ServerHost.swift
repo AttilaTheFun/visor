@@ -17,6 +17,57 @@ public struct ServerHost: Sendable {
 
     public var clientAddress: String { "http://\(clientHost):\(server.spec.listen.port)" }
 
+    /// The port of the host's MCP proxy for the container's agents: the
+    /// one after the clients'.
+    public var mcpPort: Int { server.spec.listen.port + 1 }
+
+    /// The container's token for the host's MCP proxy: the one kept, else
+    /// a new one, kept.
+    func mcpToken() throws -> String {
+        if let kept = server.secrets.value("mcpToken"), !kept.isEmpty { return kept }
+        let made = (0..<4).map { _ in String(UInt32.random(in: 0...UInt32.max), radix: 36) }.joined()
+        try server.secrets.set("mcpToken", made)
+        return made
+    }
+
+    /// This computer's address as the container sees it: its default
+    /// route's gateway (from /proc/net/route, the address in hex, its bytes
+    /// in the kernel's order).
+    func gateway() -> String? {
+        let script = "awk '$2 == \"00000000\" { print $3; exit }' /proc/net/route"
+        guard let read = server.container.run(["exec", server.spec.containerName, "sh", "-c", script]), read.status == 0,
+              let value = UInt32(read.output.trimmingCharacters(in: .whitespacesAndNewlines), radix: 16) else { return nil }
+        return [value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, value >> 24].map(String.init).joined(separator: ".")
+    }
+
+    /// The server's MCP servers set to the host's proxy (its `PUT
+    /// /api/mcp`), each with this container's token as a secret header;
+    /// the request and the password in files of the container's for the
+    /// call, never on a command line. Nil, or what went wrong.
+    func configureMCP() -> String? {
+        guard !server.spec.mcp.isEmpty else { return nil }
+        guard let gateway = gateway() else { return "The container has no route to this computer" }
+        do {
+            let token = try mcpToken(), password = try server.password()
+            let endpoints: [[String: Any]] = server.spec.mcp.map { endpoint in
+                let headers = endpoint.headers.sorted { $0.key < $1.key }.map { ["name": $0.key, "value": $0.value, "secret": false] as [String: Any] }
+                return ["name": endpoint.name, "url": "http://\(gateway):\(mcpPort)/mcp/\(endpoint.name)",
+                        "headers": headers + [["name": MCPProxy.tokenHeader, "value": token, "secret": true]]]
+            }
+            let body = try JSONSerialization.data(withJSONObject: ["endpoints": endpoints])
+            let folder = "/root/.visor-host/"
+            guard server.put(body, at: folder + "mcp.json"), server.put(Data("Authorization: Bearer \(password)\n".utf8), at: folder + "auth") else {
+                return "Could not write the MCP servers into the container"
+            }
+            let script = "curl -s -o /dev/null -w '%{http_code}' -X PUT -H @\(folder)auth -H 'Content-Type: application/json' "
+                + "--data-binary @\(folder)mcp.json http://127.0.0.1:\(server.serverPort)/api/mcp; rm -f \(folder)auth \(folder)mcp.json"
+            let answer = server.container.run(["exec", server.spec.containerName, "sh", "-c", script])
+            return answer?.output.hasPrefix("200") == true ? nil : "The server didn't take its MCP servers (\(answer?.said ?? "no answer"))"
+        } catch {
+            return "\(error)"
+        }
+    }
+
     /// Whether the server in the container takes connections now, from here.
     public func answering() -> Bool {
         guard let address = server.address() else { return false }
@@ -129,11 +180,14 @@ public struct ServerHost: Sendable {
     /// container and its server running.
     public func serve(every: Duration = .seconds(30), stopped: @escaping @Sendable () -> Bool) {
         var proxy: TCPProxy?
+        var mcp: MCPProxy?
+        var configured = false
         var applied = credentialsStamp
         let server = server
         while !stopped() {
             var state: ServerState
             let network = remakeIfNetworkLost()
+            if network?.ok == false { configured = false }
             if let problem = bringUp() {
                 state = status()
                 state.state = "failed"
@@ -150,6 +204,15 @@ public struct ServerHost: Sendable {
                     proxy?.start()
                     if proxy == nil { log("port \(server.spec.listen.port) can't be had") }
                 }
+                if mcp == nil, !server.spec.mcp.isEmpty, let token = try? mcpToken() {
+                    let secrets = server.secrets
+                    mcp = MCPProxy(port: UInt16(mcpPort), token: token, endpoints: server.spec.mcp) { secrets.value("mcp \($0) \($1)") }
+                    mcp?.start()
+                    if mcp == nil { log("port \(mcpPort) can't be had") }
+                }
+                if !configured {
+                    if let problem = configureMCP() { log("MCP servers: \(problem)") } else { configured = true }
+                }
                 state = status()
                 if proxy == nil {
                     state.state = "failed"
@@ -162,6 +225,7 @@ public struct ServerHost: Sendable {
             while clock.now - start < every && !stopped() { Thread.sleep(forTimeInterval: 0.2) }
         }
         proxy?.stop()
+        mcp?.stop()
     }
 
     /// A running container whose server doesn't answer, asked after its
