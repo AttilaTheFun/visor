@@ -789,7 +789,9 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
 - Builds and runs of a pull request, before it merges: every
   commit pushed to it runs ci.yml whole, and a newer push cancels the run
   before it if it hasn't finished. Beside the tests and every platform's
-  build (GitHub's runners), its `build` job builds the iPhone app and the
+  build (self-hosted: the repository's runner leases a macOS VM or a Linux
+  container from OS Server for each; tools/ci/mac_vm.sh), its `build` job
+  builds the iPhone app and the
   Mac's disk images, signed, on the release Mac's self-hosted runner
   (tools/build_packages.sh); not for a fork's pull request. What the runner
   does with them is its own (`$PIPELINE_CI`: the builds to the release

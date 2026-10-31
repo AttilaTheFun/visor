@@ -5,6 +5,7 @@ pixels red over a faded copy of the reference, and an HTML report.
 
   pngdiff.py compare <reference.png> <capture.png> <diff.png>   -> prints changed-pixel count
   pngdiff.py report <run dir>                                   -> writes <run dir>/report.html
+  pngdiff.py crop <in.png> <x> <y> <width> <height> <out.png>   -> the rectangle, in pixels
 """
 import html, os, struct, sys, zlib
 
@@ -54,6 +55,14 @@ def write_png(path, width, height, rows):
     def chunk(kind, body): return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xffffffff)
     open(path, "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
                            + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
+
+def crop(path, x, y, width, height, out):
+    """The rectangle at (x, y), `width` by `height` pixels, of `path`, to
+    `out` (a window, from a screenshot of the whole screen)."""
+    full_width, full_height, rows = read_png(path)
+    x, y = max(0, x), max(0, y)
+    width, height = min(width, full_width - x), min(height, full_height - y)
+    write_png(out, width, height, [row[x * 3:(x + width) * 3] for row in rows[y:y + height]])
 
 def crop_bottom(path, pixels):
     """Drops the bottom `pixels` rows (a browser's own toolbar, which is not
@@ -114,3 +123,5 @@ if __name__ == "__main__":
         print(compare(sys.argv[2], sys.argv[3], sys.argv[4]))
     elif sys.argv[1] == "report":
         report(sys.argv[2])
+    elif sys.argv[1] == "crop":
+        crop(sys.argv[2], *(int(v) for v in sys.argv[3:7]), sys.argv[7])

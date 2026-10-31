@@ -20,6 +20,7 @@ enum MacScreenshots {
         let screen = arguments.first ?? "chat"
         let out = arguments.count > 1 ? arguments[1] : "/tmp/visor-mac-\(screen).png"
         let appearance = arguments.count > 2 ? arguments[2] : "dark"
+        let hold = arguments.count > 3 && arguments[3] == "hold"
         // The fixture, by the settings the app reads it from: registered,
         // so nothing is written down.
         UserDefaults.standard.register(defaults: ["visor.fixture": "snapshot", "visor.fixture.screen": screen,
@@ -60,6 +61,19 @@ enum MacScreenshots {
         // Off the main thread, so a screen that keeps it busy (a menu's
         // tracking) is captured all the same, and the tool always ends.
         let number = window.windowNumber
+        // `hold`: the window kept up for a minute, pictured from outside (a
+        // VM's screen, through its lease: tools/ci/mac_vm_screenshots.sh),
+        // where nothing in the VM may capture the screen.
+        if hold {
+            // At the top of the screen, clear of the Dock, which a picture
+            // of the whole screen would have over it.
+            if let visible = NSScreen.main?.visibleFrame {
+                window.setFrameTopLeftPoint(NSPoint(x: visible.minX, y: visible.maxY))
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 60) { exit(0) }
+            app.run()
+            return
+        }
         DispatchQueue.global().asyncAfter(deadline: .now() + 6) {
             FileHandle.standardError.write(Data("window key when pictured: \(keyed.withLock { $0 })\n".utf8))
             capture(["-l\(number)", "-o", "-x", out])
