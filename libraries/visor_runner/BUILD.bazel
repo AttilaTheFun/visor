@@ -1,0 +1,18 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# Visor Runner's side of co-tenancy (docs/co-tenancy.md): the container
+# servers' folders, and each one's container host kept running as a launchd
+# job of its own. Nothing of the Mac's but launchctl, which the tests fake.
+swift_library(
+    name = "visor_runner",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorRunner",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_container_host",
+    ],
+)

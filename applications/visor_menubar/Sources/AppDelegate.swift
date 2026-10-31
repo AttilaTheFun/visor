@@ -3,6 +3,7 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import SwiftUI
 import VisorProtocol
+import VisorRunner
 import VisorServer
 
 @MainActor
@@ -12,6 +13,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         VisorServer.shared.start()
         if VisorServer.shared.password.isEmpty { Self.openSettings() }
+        // The container servers' hosts, each a launchd job of its own, as
+        // they should be: this build's host loads their jobs again, and
+        // their containers and sessions run on.
+        let jobs = ContainerServerJobs.runner
+        Task.detached {
+            for (id, problem) in jobs.refresh() { ServerPlatform.current.log("container server \(id): \(problem)") }
+        }
     }
 
     /// The agents go before the app does: quitting waits for them. The
