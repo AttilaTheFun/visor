@@ -3,11 +3,12 @@
 // container made with its home and Bazel disks kept, the Visor server in
 // it started with its password on standard input, the agents' sign-ins
 // written there and taken away, its status and code, and its clients'
-// connections passed on from the host's port. The "server" is a small
-// Python one on this computer's loopback, started by a fake
-// `visor-server start`; files the host writes in the container land in the
-// fake's own folder.
+// connections passed on from the host's port. The "server" is the test's
+// own on this computer's loopback, started when a fake `visor-server start`
+// is run; files the host writes in the container land in the fake's own
+// folder.
 
+import CVisorPOSIX
 import Foundation
 import Synchronization
 @testable import VisorContainerHost
@@ -52,6 +53,7 @@ private struct FakeServerTool {
                 if [ "$1" = rm ]; then rm -f "$dir/fs/$(echo "$3" | tr '/' '_')"; exit 0; fi
                 case "$3" in
                   *'cat > "$1"'*) cat > "$dir/fs/$(echo "$5" | tr '/' '_')"; exit 0 ;;
+                  *'getent hosts'*) [ -f "$dir/nonetwork" ] || printf 'dns\nreach\n'; exit 0 ;;
                 esac
                 PATH="$dir/bin:$PATH" exec "$@" ;;
             esac
@@ -63,31 +65,12 @@ private struct FakeServerTool {
             case "$1" in
               password) echo "$2" > "$dir/password" ;;
               start) port=""; prev=""; for a in "$@"; do [ "$prev" = "--port" ] && port="$a"; prev="$a"; done
-                # Detached, as the real one is in its container: none of this
-                # process's descriptors (the host's pipes, here on Linux) kept.
-                for fd in $(ls /proc/$$/fd 2> /dev/null); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done
-                nohup python3 "$dir/server.py" "$port" "$(cat "$dir/password")" < /dev/null > /dev/null 2>&1 &
-                echo $! > "$dir/server.pid" ;;
+                # The test's own server (FakeVisorServer) takes it from here.
+                echo "$port" > "$dir/started" ;;
             esac
-            """#
-        let python = #"""
-            import http.server, json, sys
-            port, password = int(sys.argv[1]), sys.argv[2]
-            class Handler(http.server.BaseHTTPRequestHandler):
-                def do_GET(self):
-                    if self.headers.get("Authorization") != "Bearer " + password:
-                        self.send_response(401); self.end_headers(); return
-                    body = {"/api/hello": {"type": "hello", "version": "0.45.0"},
-                            "/api/code": {"type": "code", "text": "visor-code"}}.get(self.path, {"type": "error"})
-                    data = json.dumps(body).encode()
-                    self.send_response(200); self.send_header("Content-Length", str(len(data))); self.end_headers()
-                    self.wfile.write(data)
-                def log_message(self, *args): pass
-            http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
             """#
         try container.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
         try server.write(to: folder.appendingPathComponent("bin/visor-server"), atomically: true, encoding: .utf8)
-        try python.write(to: folder.appendingPathComponent("server.py"), atomically: true, encoding: .utf8)
         for file in [path, folder.appendingPathComponent("bin/visor-server").path] {
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file)
         }
@@ -106,11 +89,72 @@ private struct FakeServerTool {
     func has(_ name: String) -> Bool { FileManager.default.fileExists(atPath: folder.appendingPathComponent(name).path) }
 
     func remove() {
-        if let pid = try? String(contentsOf: folder.appendingPathComponent("server.pid"), encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines), let number = Int32(pid) {
-            kill(number, SIGTERM)
-        }
         try? FileManager.default.removeItem(at: folder)
+    }
+}
+
+/// The Visor server in the container, played here: once the fake
+/// `visor-server start` has run (its port in `started`), a listener on
+/// loopback that answers `/api/hello` and `/api/code` to the password the
+/// fake `visor-server password` kept, and 401 to anyone else.
+private final class FakeVisorServer: Sendable {
+    let folder: URL
+    private let listener = Mutex<Int32>(-1)
+    private let ended = Mutex(false)
+
+    init(folder: URL) {
+        self.folder = folder
+        Thread.detachNewThread { [self] in
+            while !ended.withLock({ $0 }) {
+                if let text = try? String(contentsOf: folder.appendingPathComponent("started"), encoding: .utf8),
+                   let port = UInt16(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    serve(port)
+                    return
+                }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        }
+    }
+
+    private func serve(_ port: UInt16) {
+        let socket = visor_listen(port, 0)
+        guard socket >= 0 else { return }
+        listener.withLock { $0 = socket }
+        while true {
+            let connection = visor_accept(socket)
+            if connection < 0 { return }
+            Thread.detachNewThread { [self] in answer(connection) }
+        }
+    }
+
+    private func answer(_ connection: Int32) {
+        var request = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while request.range(of: Data("\r\n\r\n".utf8)) == nil {
+            let count = buffer.withUnsafeMutableBytes { read(connection, $0.baseAddress, $0.count) }
+            if count <= 0 { break }
+            request.append(contentsOf: buffer[0..<count])
+        }
+        let lines = String(decoding: request, as: UTF8.self).components(separatedBy: "\r\n")
+        let path = lines.first?.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+        let password = (try? String(contentsOf: folder.appendingPathComponent("password"), encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let authorized = lines.contains { $0.lowercased() == "authorization: bearer \(password)".lowercased() }
+        let bodies = ["/api/hello": #"{"type":"hello","version":"0.45.0"}"#, "/api/code": #"{"type":"code","text":"visor-code"}"#]
+        let body = authorized ? bodies[path] ?? #"{"type":"error"}"# : ""
+        let response = "HTTP/1.1 \(authorized ? "200 OK" : "401 Unauthorized")\r\nContent-Length: \(body.utf8.count)\r\n"
+            + "Connection: close\r\n\r\n" + body
+        _ = Array(response.utf8).withUnsafeBytes { write(connection, $0.baseAddress, $0.count) }
+        close(connection)
+    }
+
+    func stop() {
+        ended.withLock { $0 = true }
+        let socket = listener.withLock { $0 }
+        if socket >= 0 {
+            visor_shutdown(socket)
+            close(socket)
+        }
     }
 }
 
@@ -132,15 +176,20 @@ private func fetch(_ url: String, token: String) throws -> Data {
 
 final class ServerHostTests: XCTestCase {
     private var fake: FakeServerTool!
+    private var visor: FakeVisorServer!
     private var folder: URL!
 
     override func setUp() async throws {
         fake = try FakeServerTool()
+        visor = FakeVisorServer(folder: fake.folder)
         folder = fake.folder.appendingPathComponent("server", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     }
 
-    override func tearDown() async throws { fake.remove() }
+    override func tearDown() async throws {
+        visor.stop()
+        fake.remove()
+    }
 
     private func host(listenPort: Int = 7440) throws -> ServerHost {
         var spec = ServerSpec(id: "S1", name: "Builds", image: "ghcr.io/example/agent:1")
@@ -253,6 +302,35 @@ final class ServerHostTests: XCTestCase {
         host.server.remove(data: true)
         XCTAssertFalse(fake.has("volume-visor-server-s1-home"))
         XCTAssertFalse(fake.has("volume-visor-server-s1-build"))
+    }
+
+    func testANetworkThatIsGoneIsLost() throws {
+        let host = try host()
+        XCTAssertNil(host.bringUp(patience: .seconds(20)))
+        let loopback = [HostAddresses.Address(interface: "lo", address: "127.0.0.1")]
+        XCTAssertTrue(host.server.networkCheck(local: loopback).ok)
+        // The containers' network made again under it: its address on none of this computer's.
+        let elsewhere = host.server.networkCheck(local: [.init(interface: "bridge100", address: "192.168.65.1")])
+        XCTAssertFalse(elsewhere.ok)
+        XCTAssertTrue(elsewhere.detail.contains("on no network this computer has"))
+        // Or nothing resolved from in it.
+        _ = FileManager.default.createFile(atPath: fake.folder.appendingPathComponent("nonetwork").path, contents: nil)
+        XCTAssertFalse(host.server.networkCheck(local: loopback).ok)
+    }
+
+    func testAServerThatDoesntAnswerOnALostNetworkIsMadeAgainWithItsDisks() throws {
+        let host = try host()
+        XCTAssertNil(host.bringUp(patience: .seconds(20)))
+        // Answering: nothing to do.
+        XCTAssertNil(host.remakeIfNetworkLost(local: [.init(interface: "lo", address: "127.0.0.1")]))
+        // Not answering, its network gone: made again, its disks kept.
+        visor.stop()
+        let found = try XCTUnwrap(host.remakeIfNetworkLost(local: [.init(interface: "bridge100", address: "192.168.65.1")]))
+        XCTAssertFalse(found.ok)
+        XCTAssertTrue(fake.calls.contains("delete --force visor-server-s1"))
+        XCTAssertFalse(fake.calls.contains { $0.hasPrefix("volume delete") })
+        XCTAssertTrue(fake.has("volume-visor-server-s1-home"))
+        XCTAssertEqual(host.server.state(), .missing)
     }
 
     func testTheClientHostIsTheLANsOrAVPNsElseLoopback() {

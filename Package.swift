@@ -83,7 +83,7 @@ let tests: [Target] = [
     .testTarget(name: "VisorServerTests",
                 dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux"],
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
-    .testTarget(name: "VisorContainerHostTests", dependencies: ["VisorContainerHost"],
+    .testTarget(name: "VisorContainerHostTests", dependencies: ["VisorContainerHost", "CVisorPOSIX"],
                 path: "tests/visor_container_host_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The agents' host, built with the server: `swift build -c release` puts

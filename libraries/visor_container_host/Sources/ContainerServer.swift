@@ -127,6 +127,20 @@ public struct ContainerServer: Sendable {
         return nil
     }
 
+    /// Whether the container's network works: its address on a network
+    /// this computer still has (the containers' network made again under a
+    /// running container leaves it on one that is gone, where nothing
+    /// reaches it), and from in it, names resolved and HTTPS reached.
+    public func networkCheck(local: [HostAddresses.Address] = HostAddresses.all()) -> ServerState.Network {
+        guard let address = address() else { return .init(ok: false, detail: "it has no address") }
+        let subnet = address.split(separator: ".").prefix(3).joined(separator: ".") + "."
+        guard local.contains(where: { $0.address.hasPrefix(subnet) }) else {
+            return .init(ok: false, detail: "its address \(address) is on no network this computer has")
+        }
+        let checked = ContainerHostCommand.network([name], container: container)
+        return .init(ok: checked.json["ok"] as? Bool ?? false, detail: checked.json["detail"] as? String ?? "it couldn't be asked")
+    }
+
     public func stop() -> Bool { container.run(["stop", name])?.status == 0 }
 
     /// The container gone; with `data`, its disks too, and with them its

@@ -133,6 +133,7 @@ public struct ServerHost: Sendable {
         let server = server
         while !stopped() {
             var state: ServerState
+            let network = remakeIfNetworkLost()
             if let problem = bringUp() {
                 state = status()
                 state.state = "failed"
@@ -155,11 +156,26 @@ public struct ServerHost: Sendable {
                     state.error = "Port \(server.spec.listen.port) is taken"
                 }
             }
+            if let network { state.network = network }
             state.write(server.folder)
             let clock = ContinuousClock(), start = clock.now
             while clock.now - start < every && !stopped() { Thread.sleep(forTimeInterval: 0.2) }
         }
         proxy?.stop()
+    }
+
+    /// A running container whose server doesn't answer, asked after its
+    /// network; one whose network is lost is made again (`bringUp` next),
+    /// its home and Bazel's disks kept, so its sessions are as they were.
+    /// What the check found, when it was made.
+    func remakeIfNetworkLost(local: [HostAddresses.Address] = HostAddresses.all()) -> ServerState.Network? {
+        guard server.state() == .running, !answering() else { return nil }
+        let network = server.networkCheck(local: local)
+        if !network.ok {
+            log("its network is lost (\(network.detail)): made again, its disks kept")
+            server.remove(data: false)
+        }
+        return network
     }
 
     func log(_ line: String) {

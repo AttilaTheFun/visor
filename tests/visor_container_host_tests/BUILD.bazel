@@ -5,5 +5,8 @@ swift_test(
     name = "visor_container_host_tests",
     copts = STRICT_SWIFT,
     srcs = glob(["*.swift"]),
-    deps = ["//libraries/visor_container_host"],
+    deps = [
+        "//libraries/visor_container_host",
+        "//libraries/visor_server_posix:visor_posix_c",
+    ],
 )
