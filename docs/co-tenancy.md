@@ -1,6 +1,8 @@
 # One Runner, several Visor Servers (design)
 
-Status: planned for 0.45. The decisions below were taken on 31 October 2026.
+Status: planned for 0.45. Decided on 31 October 2026, and revised the same
+day: the Runner makes each container itself with Apple's `container`, with no
+process of its own per container, and it is every server's MCP proxy.
 
 Today one Mac runs one Visor Server, inside the menu bar app. A session can
 run its agent in a Linux container (0.44's container hosts,
@@ -14,35 +16,29 @@ another's, all driven by one menu bar app.
 
 ## The parts
 
-- **Visor Runner**: the Mac menu bar app. It controls, and serves nothing
-  itself:
-  - starts, updates and stops the Mac's Visor Server and each container's
-    host, every one a launchd job of its own, so that updating any of them
-    — the Runner too — leaves the others' sessions running;
-  - makes and removes container servers;
-  - moves sessions between servers;
-  - holds the credentials and gives each server and host what it needs.
 - **Visor Server**: `visor-server`, one Swift binary for macOS and Linux
-  (the server library, as now).
+  with no window of its own (the server library, as now). It runs the
+  agents as processes it starts and stops, and is configured with the MCP
+  servers its agents may use: their URLs, ports included.
   - On the Mac it runs the native sessions: agents as the user, signed in
     as they are on the Mac.
   - In a container it runs that container's sessions. Its agents, their
     transcripts and attachments, and the agents' hosts are all inside the
     container, so an attached picture is where the agent reads it.
-- **Container host**: one per container, a program on the Mac (a launchd job
-  of the Runner's). The Runner is set up with one kind (see The container
-  host's interface): Visor's own, which runs the container itself with
-  Apple's `container`, or OS Server's adapter, which runs it on an OS Server
-  lease. It replaces 0.44's container host, which stays as it is until this
-  lands.
-  - Makes its container and keeps it.
-  - Starts the Visor Server in it.
-  - Reverse-proxies that server for the clients, on a port of its own. To a
-    client, each container server is a computer of its own, with its own
-    id, address and code.
-  - Proxies the MCP servers for the container's agents (GitHub's, OS
-    Server's), adding the credentials the Runner gave it. Nothing secret
-    enters the container but the agents' own sign-ins.
+- **Visor Runner**: the Mac menu bar app. It runs Visor Servers, natively
+  and in containers, and proxies their MCP requests:
+  - starts, updates and stops the Mac's Visor Server (a launchd job of its
+    own, so updating either leaves the other running);
+  - makes, starts, stops and removes each container server's container
+    with Apple's `container` command line, and starts the server in it;
+  - is every server's MCP proxy: the servers' MCP URLs point at it, and it
+    adds the secret headers;
+  - moves sessions between servers;
+  - holds the credentials and gives each server what it needs.
+
+  No process stands between the Runner and a container: a container and the
+  server in it run on their own, and the Runner, started again, finds them
+  and picks them up.
 
 ## Credentials
 
@@ -51,26 +47,120 @@ another's, all driven by one menu bar app.
 - **In containers:**
   - Codex: the Mac's sign-in file, copied in. Codex has no token to pass
     instead. If it gets one, it is passed as Claude's is.
-  - Claude: an OAuth token set in the Runner. The Runner gives it to each
-    container host, and the host to its server's sessions.
+  - Claude: an OAuth token set in the Runner, written into each container
+    server's agents' environment.
   - OpenRouter: an API key set in the Runner, given the same way.
-- **MCP endpoints' secret headers:** the Runner gives them to the Mac's
-  server and to each container host. Each adds them as it proxies.
-- **How a container host gets them:** its `credentials` command (see The
-  container host's interface).
-- **Where secrets are kept:** in the keychain for notarized builds (alpha,
-  production), and in the data folder for debug builds, chosen by a Bazel
-  config.
+- **MCP servers' secret headers:** kept by the Runner, added by its proxy.
+  No server, native or in a container, holds them.
+- **Where the Runner keeps secrets:** in the keychain for notarized builds
+  (alpha, production), and in its data folder for debug builds, chosen by a
+  Bazel config (`--config=notarized`, tools/secrets).
 
 ## Reaching the servers
 
 - The Mac's server is reached as today.
-- A container's server is reached at its container host's port on the Mac,
-  on the network paths the Runner sets for it (the LAN, a VPN, SSH, a
-  reverse proxy of your own).
-- The Runner shows each server's connection code.
+- A container's server is reached at a port of the Mac's that Apple's
+  `container` publishes to the server's port inside (`--publish`), on the
+  network paths set for it (loopback always; the LAN and VPNs as set).
+- The Runner shows each server's connection code, which leads with that
+  address.
 - Clients already keep several computers, so a Mac with three servers is
   three computers in the sidebar.
+
+## MCP servers
+
+- The MCP servers (GitHub's, OS Server's, …) are set in the Runner: each a
+  name, a URL and headers, a secret one's value kept by the Runner.
+- The Runner listens for its servers' MCP requests and passes each on to
+  the endpoint, adding the secret headers, and the answer back as it comes
+  (JSON or SSE).
+- Each server is configured with the Runner's URLs (its `PUT /api/mcp`),
+  `…/mcp/<name>`, with a token of its own that the Runner checks:
+  - the Mac's server: the Runner on loopback;
+  - a container's server: the Runner as the container reaches the Mac,
+    through the container network's gateway (or a port mapped to the
+    Runner's from inside, where `container` can).
+- So no secret header enters a server, and a server works the same
+  natively and in a container.
+- While the Runner is not running (quit, or updating), servers and agents
+  run on; their MCP calls fail until it is back.
+
+## A container server
+
+Each has a folder of the Runner's, `<Runner data>/container-servers/<id>/`:
+
+- **`server.json`:** what it is, written by the Runner and never secret:
+
+```json
+{
+  "id": "<uuid>",
+  "name": "Builds",
+  "image": "ghcr.io/attilathefun/visor-agent:0.45.3",
+  "cpus": 6,
+  "memoryBytes": 17179869184,
+  "diskBytes": 137438953472,
+  "mounts": [{"source": "/Users/me/Developer", "destination": "/Users/me/Developer"}],
+  "listen": {"port": 7440, "lan": true, "vpn": true},
+  "stopped": false
+}
+```
+
+- **`state.json`:** what the Runner last found (below).
+- **Its secrets** (the server's password, its MCP token, the sign-ins): the
+  Runner's, kept as all its secrets are.
+
+What the Runner does with Apple's `container`:
+
+- **Makes it:** two volumes, its home (`/root`) and Bazel's output
+  (`/var/cache/bazel`), then the container from the image with the mounts,
+  the volumes, its limits, `--publish` for the server's port, and a label
+  naming the container server. The container's main process only waits.
+- **Starts the server in it:** sets its password (`visor-server password`,
+  on standard input), writes the agents' sign-ins, then starts
+  `visor-server start` detached (an exec not tied to the exec's stream),
+  its `--address` the Mac's address for it, so its codes lead with that.
+  Then sets its MCP servers to the Runner's.
+- **Picks it up:** when the Runner starts, it lists the containers it made
+  (by label), starts any stopped one that isn't marked stopped, starts the
+  server in any that isn't answering, and gives credentials and MCP
+  settings again where they changed.
+- **Upgrades it:** the container made again from the image `server.json`
+  now names, its volumes kept, so its sessions are as they were and their
+  agents resume.
+- **Stops it:** `container stop`; its volumes are kept, and Start starts it
+  again.
+- **Removes it:** the container, and its volumes with it, and with them its
+  sessions; its folder and secrets go too.
+
+### The server inside
+
+- **Its disks:** its home holds the server's data
+  (`~/.local/share/visor`: sessions, attachments), the agents' own
+  transcripts (`~/.claude`, `~/.codex`, `~/.openrouter`), which a resumed
+  session reads, and their sign-ins. Kept until it is removed.
+- **Its agents' sign-ins:** Claude's `CLAUDE_CODE_OAUTH_TOKEN` in its
+  `agents/claude.env` (in the server's data), OpenRouter's
+  `OPENROUTER_API_KEY` in `agents/openrouter.env`, Codex's `auth.json` at
+  `~/.codex/auth.json`.
+
+### Health
+
+- While it runs, the Runner asks each container server every 30 seconds
+  (`GET /api/hello`) and writes what it found to `state.json`, which
+  Settings shows.
+- When a server doesn't answer, the Runner checks the container's network.
+  The network is lost when the container's address is on no network the
+  Mac has (its network was made again under a running container, as when
+  the builder restarts), or when nothing resolves or HTTPS reaches nothing
+  from inside it. Then the container is made again with its volumes kept,
+  so its sessions are as they were. A server that has merely stopped is
+  started again.
+
+## OS Server
+
+The Runner calls nothing of OS Server's for its containers. OS Server, on
+the same Mac, watches the Mac's containers (`container list`, `stats`) and
+counts their memory against its budget for what it lends.
 
 ## Moving sessions
 
@@ -78,228 +168,35 @@ another's, all driven by one menu bar app.
 - Visor's Migrate… already moves a session between servers. The client
   carries the conversation's files and the projects across, and the other
   server resumes the session; the original is left until the new one works.
-- The Runner adds a move of its own for servers that see the same folder
-  (a container mounts the Mac's folders at their own paths). It carries the
+- The Runner adds a move of its own for servers that see the same folder (a
+  container mounts the Mac's folders at their own paths). It carries the
   conversation and leaves the project where it is.
-
-## The container host's interface (version 2)
-
-A container host is a program the Runner is set up with, spoken to on its
-command line, with JSON in and out (as 0.44's, docs/container-host.md, which
-this replaces):
-
-- **Visor's own:** `visor-container-host`, in Visor Server's bundle. It runs
-  the container with Apple's `container`.
-- **OS Server's:** `oss container-host`. It runs the container on a lease
-  held until released, so OS Server counts it with everything else it lends.
-
-### A container server's folder
-
-Each container server has a folder of the Runner's,
-`<Runner data>/container-servers/<id>/`, that holds:
-
-- **`server.json`:** what it is, written by the Runner and never secret:
-
-```json
-{
-  "api": 2,
-  "id": "<uuid>",
-  "name": "Builds",
-  "image": "ghcr.io/attilathefun/visor-agent:0.45.3",
-  "cpus": 6,
-  "memoryBytes": 17179869184,
-  "diskBytes": 137438953472,
-  "mounts": [{"source": "/Users/me/Developer", "destination": "/Users/me/Developer", "readOnly": false}],
-  "listen": {"port": 7440, "lan": true, "vpn": true},
-  "mcp": [{"name": "gh", "url": "http://127.0.0.1:7450/mcp", "headers": {"X-Visor-Session": "$SESSION_ID"}, "secretHeaders": ["Authorization"]}]
-}
-```
-
-  - `mounts`: this computer's folders, each at its own path. A host that
-    can't share them (see `health`'s `capabilities`) answers `serve` and
-    `status` with `code: "mountsUnavailable"` rather than leave them out.
-  - `listen`: where clients reach the container's server on this computer
-    (loopback always; the LAN and VPNs as set).
-  - `mcp`: the MCP servers its agents may use. A secret header's value is
-    never here: see `credentials`.
-- **`state.json`:** what the host last found (see `status`), written by
-  `serve`.
-- **`runner.json`:** the Runner's own, which a host leaves alone: the
-  server's host (none for Visor's own) and whether it is stopped.
-- **The host's own files:** its log (`host.log`, the job's output), and in
-  a debug build its secrets (mode 600). A notarized build keeps them in the
-  keychain.
-
-The Runner's launchd job for each server (a LaunchAgent,
-`<the Runner's bundle id>.container-server.<id>`) runs `<host> serve
-<folder>`, kept alive. The Runner loads the jobs when it starts, and loads a
-job again when its host is a new build, which restarts `serve` and leaves
-the container running.
-
-### The commands
-
-Every command but `serve` answers one JSON object on standard output,
-exiting 0, or 1 with `{"error", "code"?}`, as 0.44's do.
-
-- **`<host> health`:** `{"ok", "name", "version", "api": 2, "limits",
-  "capabilities"}`. Whether this host can make container servers now (as
-  0.44's), and what it can do for them:
-  - `mounts`: it can share this computer's folders into a container.
-    Visor's own always can. OS Server's adapter can only when its OS Server
-    runs on this computer. Without it, a session moved into the container
-    has its project copied rather than seen in place.
-- **`<host> serve <folder>`:** the long-running process, the Runner's launchd
-  job for this server (kept alive). It:
-  - makes the container if there is none, or starts it if it has stopped;
-  - starts the Visor Server in it if it isn't running (below);
-  - proxies the clients' connections and the agents' MCP calls;
-  - gives the server its credentials, and again whenever they change;
-  - writes `state.json` as it goes.
-
-  Ended (SIGTERM, an update of the host), it stops proxying and leaves the
-  container and its server running. Started again, it picks them up.
-- **`<host> status <folder>`:**
-
-```json
-{"state": "starting|ready|stopped|failed",
- "container": "<the host's id for it>",
- "server": {"version": "0.45.3", "answering": true, "sessions": 5},
- "address": "http://<this computer>:7440",
- "code": "<the server's connection code>",
- "network": {"ok": true, "detail": "…"},
- "error": "…"}
-```
-
-  `code` is the server's own (its `GET /api/code`), leading with `address`,
-  for the Runner to show.
-- **`<host> credentials <folder>`:** reads `{"claudeToken"?,
-  "openrouterKey"?, "codexAuth"?, "mcpSecrets"?: {"<name> <header>":
-  "<value>"}}` from standard input and keeps them in the host's secrets. A
-  running `serve` takes them up.
-  - `codexAuth` is the Mac's `~/.codex/auth.json`, base64.
-  - A field left out stays as it was; `null` takes it away.
-  - Answers `{"kept": [<the fields kept>]}`. Values are never echoed.
-- **`<host> stop <folder>`:** stops the container, and with it the server and
-  its agents. Its disks are kept, and `serve` starts it again.
-- **`<host> upgrade <folder>`:** makes the container again from the image
-  `server.json` now names. Its disks are kept, so its sessions are as they
-  were and their agents resume.
-- **`<host> remove <folder> [--data]`:** removes the container. With
-  `--data` its disks go too, and with them its sessions. Without it, a
-  later `serve` starts the same server again.
-
-### The server inside
-
-- **Its disks:** its home, `/root`, and Bazel's output at
-  `/var/cache/bazel`. Both are kept until `remove --data`. The home holds:
-  - the server's data (`~/.local/share/visor`: sessions, attachments);
-  - the agents' own transcripts (`~/.claude`, `~/.codex`, `~/.openrouter`),
-    which a resumed session reads;
-  - their sign-ins.
-
-  So a container made again finds all of it as it was.
-- **Started detached** by the host (`visor-server start`, from the image,
-  with its password, the LAN on and its `--address` the host's), so a host
-  that restarts leaves it, and the agents under it, running.
-  - The image's own entrypoint isn't the server. The container's main
-    process only waits, and the host starts the server through an exec
-    that doesn't tie it to the exec's stream.
-- **Its password:** made by the host when the container is made, and kept in
-  the host's secrets. Its settings point its codes at the host's `address`.
-- **Its agents' sign-ins**, from `credentials`:
-  - Claude: `CLAUDE_CODE_OAUTH_TOKEN` in its `agents/claude.env` (in the
-    server's data);
-  - OpenRouter: `OPENROUTER_API_KEY` in `agents/openrouter.env`;
-  - Codex: the Mac's `auth.json`, at `~/.codex/auth.json`.
-- **Its MCP servers** are set by the host (the server's `PUT /api/mcp`) to the
-  host's own proxy:
-  - Where the proxy is, and how the container reaches it, is the host's
-    choice: the host writes each endpoint's address into the server's
-    `PUT /api/mcp` itself, `…/mcp/<name>`. Visor's own host listens at
-    `listen.port + 1` and is reached at the container's default gateway
-    (this computer on the containers' network). OS Server's adapter, which
-    may run on another Mac than its OS Server, may use a forward OS Server
-    sets up, or a tailnet address.
-  - Each call carries the container's own token in `X-Visor-Proxy` (a
-    secret header of the server's), which only this container's proxy
-    takes.
-  - The host adds the secret headers as it passes the call on, so no
-    secret header enters the container. Endpoints are plain HTTP for now.
-
-### Clients
-
-- A client reaches the server at `address`. The host passes the bytes both
-  ways (HTTP, the WebSocket), and serves TLS there when the Runner gives it
-  an identity.
-- The server is a computer of its own to the client: it is added from its
-  code, which the Runner shows.
-
-### Health
-
-- `serve` asks the server every 30 seconds (`GET /api/hello`).
-- When that fails, it checks the container's network. The network is lost
-  when either:
-  - the container's address is on no network this computer has (its
-    network was made again under a running container, as when the
-    containers' builder restarts; nothing reaches it, not even by address);
-  - from in it, nothing resolves or HTTPS reaches nothing (as 0.44's
-    `network`).
-
-  Then it makes the container again with its home and Bazel's disks kept
-  (unlike moving a session out and back in), so its sessions are as they
-  were. A server that has merely stopped is started again.
-- `state.json` and `status` say what it found.
-
-### Moving a session in or out
-
-- No command of the host's: sessions move through the servers' own API
-  (Migrate…, and the Runner's move).
-  - The session's server offers its conversation's files.
-  - The other server says what it will do with them and with the projects.
-  - The files are carried across, a piece at a time, through each server's
-    address.
-- A container mounts the Mac's folders at their own paths, so a project
-  moves between the Mac's server and a container's without being copied.
-
-### OS Server's adapter
-
-The same commands, through OS Server:
-- The container is a container lease held until released, its labels
-  naming the container server.
-- `address` is always the adapter's own listener, at `listen`. It proxies to
-  the lease's forwarded port on OS Server's Mac, which clients never see.
-- The MCP proxy is the adapter's, with the secrets it keeps.
-- `remove` releases the lease, and with `--data` deletes its volumes.
 
 ## Phases
 
-Container servers come first: they are new code beside today's, and they
-are what fixes the attachments and puts several sessions in one container.
-Migrate… already moves a session between any two servers, so a container
-server is usable as soon as it can be made.
-
-1. **One container server, end to end.**
-   - The container host binary, and the Linux `visor-server` in Visor's
-     agent image.
-   - The host makes the container, starts the server, proxies it and its
-     MCP servers, and gives it its credentials.
-   - Started and stopped from the menu bar app as a launchd job of its own.
-2. **The Runner's side.**
-   - Container servers made and removed from the menu bar app.
+1. **One container server, end to end, from the Runner.**
+   - The Linux `visor-server` in Visor's agent image.
+   - The Runner makes, starts, picks up, upgrades, stops and removes
+     container servers with `container`; their ports published; their
+     health checked; their sign-ins given.
+   - The Runner's MCP proxy, which the container servers are configured
+     with.
+2. **The Runner's side in Settings.**
+   - Container servers made and removed, started and stopped.
    - The Claude token and OpenRouter key set there.
    - A code for each server.
 3. **The Mac's server apart from the Runner.**
    - `visor-server` runs as a launchd job that the menu bar app installs,
-     updates and stops.
-   - It keeps the menu bar app's data folder, so sessions, pairings and
-     codes carry over.
-   - Secrets: the keychain or the data folder, by build.
-   - The Runner's settings and menu read and change the server through its
-     local API.
+     updates and stops, and keeps the menu bar app's data folder, so
+     sessions, pairings and codes carry over.
+   - Its MCP servers are the Runner's too.
+   - The Runner's settings and menu read and change it through its local
+     API.
 4. **Moving sessions.**
    - Moving between servers from the Runner.
    - Today's agent-in-a-container sessions (0.44) moved onto container
-     servers; then that way of running is retired.
+     servers; then that way of running, and 0.44's container hosts
+     (docs/container-host.md), are retired.
 
 ## Sessions running today
 
