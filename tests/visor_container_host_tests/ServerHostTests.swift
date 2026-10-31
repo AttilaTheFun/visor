@@ -228,6 +228,19 @@ final class ServerHostTests: XCTestCase {
         XCTAssertEqual(spec.name, "abc")
         XCTAssertEqual(spec.listen, ServerSpec.Listen())
         XCTAssertEqual(spec.containerName, "visor-server-abc")
+        // Within its parts too: a field left out is its default.
+        let parts = #"{"id": "abc", "image": "i", "listen": {"port": 7444}, "mcp": [{"name": "gh", "url": "http://127.0.0.1:7450/mcp"}]}"#
+        try Data(parts.utf8).write(to: folder.appendingPathComponent("server.json"))
+        let read = try ServerSpec.read(folder)
+        XCTAssertEqual(read.listen.port, 7444)
+        XCTAssertFalse(read.listen.lan)
+        XCTAssertEqual(read.mcp, [ServerSpec.Endpoint(name: "gh", url: "http://127.0.0.1:7450/mcp")])
+    }
+
+    func testWithoutApplesContainerItSaysSo() throws {
+        var server = try host().server
+        server = ContainerServer(spec: server.spec, folder: folder, container: AppleContainer(tool: "/no/such/container"), secrets: server.secrets)
+        XCTAssertEqual(server.ensureContainer(), "Apple's container is not installed (github.com/apple/container)")
     }
 
     func testBringingUpMakesTheContainerAndStartsItsServer() throws {

@@ -20,6 +20,12 @@ public struct ServerSpec: Codable, Equatable, Sendable {
         public var source: String
         public var destination: String
         public var readOnly: Bool?
+
+        public init(source: String, destination: String? = nil, readOnly: Bool? = nil) {
+            self.source = source
+            self.destination = destination ?? source
+            self.readOnly = readOnly
+        }
     }
 
     /// Where clients reach the container's server on this computer:
@@ -30,6 +36,13 @@ public struct ServerSpec: Codable, Equatable, Sendable {
         public var vpn = false
 
         public init() {}
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 7440
+            lan = try c.decodeIfPresent(Bool.self, forKey: .lan) ?? false
+            vpn = try c.decodeIfPresent(Bool.self, forKey: .vpn) ?? false
+        }
     }
 
     /// An MCP server the container's agents may use, through the host: its
@@ -40,6 +53,21 @@ public struct ServerSpec: Codable, Equatable, Sendable {
         public var url: String
         public var headers: [String: String] = [:]
         public var secretHeaders: [String] = []
+
+        public init(name: String, url: String, headers: [String: String] = [:], secretHeaders: [String] = []) {
+            self.name = name
+            self.url = url
+            self.headers = headers
+            self.secretHeaders = secretHeaders
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)
+            url = try c.decode(String.self, forKey: .url)
+            headers = try c.decodeIfPresent([String: String].self, forKey: .headers) ?? [:]
+            secretHeaders = try c.decodeIfPresent([String].self, forKey: .secretHeaders) ?? []
+        }
     }
 
     public init(id: String, name: String, image: String) {

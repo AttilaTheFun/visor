@@ -54,6 +54,12 @@ public struct ContainerServer: Sendable {
         case .stopped:
             return container.run(["start", name])?.status == 0 ? nil : "\(name) is there but doesn't start"
         case .missing:
+            guard FileManager.default.isExecutableFile(atPath: container.tool) else {
+                return "Apple's container is not installed (github.com/apple/container)"
+            }
+            guard container.run(["system", "status"])?.status == 0 else {
+                return "Apple's container is not started (container system start)"
+            }
             let home = HostRequest.Volume(name: homeVolume, destination: "/root", sizeBytes: 64 << 30)
             let build = HostRequest.Volume(name: buildVolume, destination: "/var/cache/bazel", sizeBytes: spec.diskBytes ?? (128 << 30))
             for volume in [home, build] {
