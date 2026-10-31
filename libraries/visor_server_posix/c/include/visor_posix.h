@@ -56,6 +56,11 @@ int visor_listen_unix(const char *path);
 /// errno set.
 int visor_connect_unix(const char *path);
 
+/// A TCP connection to `host` (a name or an address) at `port`
+/// (close-on-exec, its writes given up after 30 seconds of a peer that
+/// reads nothing). -1 with errno set.
+int visor_connect_tcp(const char *host, unsigned short port);
+
 /// Whether something listens at the Unix domain socket `path` now: 1 when a
 /// connection to it is taken, 0 otherwise (no file, a stale one).
 int visor_unix_answers(const char *path);

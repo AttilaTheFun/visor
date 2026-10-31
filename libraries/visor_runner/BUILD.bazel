@@ -1,0 +1,20 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# Visor Runner's container servers (docs/co-tenancy.md): each a Visor server
+# in a container the Runner makes and keeps itself with Apple's `container`,
+# its port published for clients, picked up again when the Runner starts;
+# and the Runner's MCP proxy, which every server's MCP servers are set to.
+# Nothing of the Mac's but `container`, which the tests fake.
+swift_library(
+    name = "visor_runner",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorRunner",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_server_posix:visor_posix_c",
+    ],
+)

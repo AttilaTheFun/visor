@@ -10,6 +10,7 @@ import VisorServerApple
 
 struct SettingsPane: View {
     var server: VisorServer
+    var containerServers: RunnerContainerServers
     @State private var draft = ""
     @State private var message: String?
     /// Whether this Mac's sshd answers on port 22 (Remote Login), as last
@@ -175,6 +176,7 @@ struct SettingsPane: View {
             } header: {
                 Text("Containers")
             }
+            ContainerServersSection(servers: containerServers, defaultImage: server.defaultContainerImage)
             Section {
                 let current = server.apnsKey
                 Text(current.configured
