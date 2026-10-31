@@ -1,0 +1,28 @@
+load("@rules_apple//apple:macos.bzl", "macos_command_line_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# The Runner's container servers end to end on a Mac with Apple's
+# `container` (docs/co-tenancy.md), apart from any menu bar app: one made in
+# a folder of its own, its published port reached, an MCP call from inside
+# it through a proxy at its gateway, picked up as after a restart, removed.
+#
+#   bazel build //tools/probes/container_server_probe
+#   container-server-probe <image> [--port=7488] [--mcp-port=7489] [--lan] [--keep]
+swift_library(
+    name = "container_server_probe_lib",
+    copts = STRICT_SWIFT,
+    srcs = ["main.swift"],
+    module_name = "ContainerServerProbe",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_runner",
+        "//libraries/visor_server_posix:visor_posix_c",
+    ],
+)
+
+macos_command_line_application(
+    name = "container_server_probe",
+    minimum_os_version = "15.0",
+    deps = [":container_server_probe_lib"],
+)
