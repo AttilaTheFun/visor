@@ -90,7 +90,22 @@ for the per-container process, which uses a runtime to make its container.
 
 ## Phases
 
-1. **The server apart from the Runner, on the Mac.**
+Container servers come first: they are new code beside today's, and they
+are what fixes the attachments and puts several sessions in one container.
+Migrate… already moves a session between any two servers, so a container
+server is usable as soon as it can be made.
+
+1. **One container server, end to end.**
+   - The container host binary, and the Linux `visor-server` in Visor's
+     agent image.
+   - The host makes the container, starts the server, proxies it and its
+     MCP servers, and gives it its credentials.
+   - Started and stopped from the menu bar app as a launchd job of its own.
+2. **The Runner's side.**
+   - Container servers made and removed from the menu bar app.
+   - The Claude token and OpenRouter key set there.
+   - A code for each server.
+3. **The Mac's server apart from the Runner.**
    - `visor-server` runs as a launchd job that the menu bar app installs,
      updates and stops.
    - It keeps the menu bar app's data folder, so sessions, pairings and
@@ -98,15 +113,6 @@ for the per-container process, which uses a runtime to make its container.
    - Secrets: the keychain or the data folder, by build.
    - The Runner's settings and menu read and change the server through its
      local API.
-2. **One container server, end to end.**
-   - The container host binary, and the Linux `visor-server` in Visor's
-     agent image.
-   - The host makes the container, starts the server, proxies it and its
-     MCP servers, and gives it its credentials.
-3. **The Runner's side.**
-   - Container servers made and removed from the menu bar app.
-   - The Claude token and OpenRouter key set there.
-   - A code for each server.
 4. **Moving sessions.**
    - Moving between servers from the Runner.
    - Today's agent-in-a-container sessions (0.44) moved onto container
@@ -116,6 +122,6 @@ for the per-container process, which uses a runtime to make its container.
 
 - Sessions in OS Server containers (0.43) run on the Mac from 0.44 on, with
   a notice. Move into a Container then puts them in a 0.44 container.
-- Once phase 2 is out, such a session moves to a container server with
+- Once phase 1 is out, such a session moves to a container server with
   Migrate…. The old one is kept until the new one has answered.
 - A server is updated only when its sessions aren't mid-turn.
