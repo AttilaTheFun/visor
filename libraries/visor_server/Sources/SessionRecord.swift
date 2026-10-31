@@ -108,6 +108,10 @@ public final class SessionRecord {
     var closedSubagents: Set<String> = []
     /// The MCP servers it switched from their default: on or off.
     var mcpSwitched: [String: Bool] = [:]
+    /// Whether this agent has said what runs in its background since it
+    /// started (`AgentEvent.background`): until it has, its list says
+    /// nothing of its subagents.
+    var backgroundSaid = false
     /// When the agent's subagents were last read: at most every two
     /// seconds while they work.
     var subagentsRead: ContinuousClock.Instant?
@@ -292,6 +296,7 @@ public final class SessionRecord {
         if let pendingFork { _ = replacement.fork(at: pendingFork.at) }
         // A new process starts with nothing in the background.
         info.background = []
+        backgroundSaid = false
     }
 
     /// Hands each of the agent's events to `handle`, in order, from now
