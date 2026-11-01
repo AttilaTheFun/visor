@@ -25,7 +25,7 @@ ACCEPT=0
 [ "${1:-}" = "--accept" ] && ACCEPT=1
 SIM_NAME="Visor Look iPhone 17"
 SIM="$(xcrun simctl list devices | grep -F "$SIM_NAME (" | grep -o '[0-9A-F-]\{36\}' | head -1 || true)"
-[ -n "$SIM" ] || SIM="$(xcrun simctl create "$SIM_NAME" com.apple.CoreSimulator.SimDeviceType.iPhone-17 com.apple.CoreSimulator.SimRuntime.iOS-27-0)"
+[ -n "$SIM" ] || SIM="$(xcrun simctl create "$SIM_NAME" com.apple.CoreSimulator.SimDeviceType.iPhone-17 com.apple.CoreSimulator.SimRuntime.iOS-27-2)"
 xcrun simctl shutdown "$SIM" 2>/dev/null || true
 xcrun simctl erase "$SIM"
 xcrun simctl boot "$SIM"

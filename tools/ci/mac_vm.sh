@@ -1,5 +1,5 @@
 #!/bin/bash
-# A macOS VM leased from OS Server (xcode-27.0: Xcode 27.0 and its iOS
+# A macOS VM leased from OS Server (xcode_27_2: Xcode 27.2 and its iOS
 # simulator) for one CI script, which sources this file rather than run it:
 # tools/ci/mac_vm_tests.sh (the tests that need a Mac), tools/ci/mac_vm_proof.sh
 # (main's proof) and tools/ci/mac_vm_screenshots.sh (the site's pictures). The VM is the script's alone: leased for an hour,
@@ -131,7 +131,7 @@ EOF
 mac_vm_lease() {
     # A key of the run's own for the VM's SSH, gone with the run.
     ssh-keygen -q -t ed25519 -N '' -C "$key_comment" -f "$work/key"
-    run "$OSS" machine lease macos --config=xcode-27.0 --minutes=60 --wait --key="$work/key.pub" --exports > "$work/lease"
+    run "$OSS" machine lease macos --config=xcode_27_2 --minutes=60 --wait --key="$work/key.pub" --exports > "$work/lease"
     lease="$(. "$work/lease"; printf '%s' "$OSS_ID")"
     echo "Leased $lease"
     # Renewed every ten minutes; told to stop, it stops its sleep too.
