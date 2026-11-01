@@ -1,20 +1,20 @@
 name: CI
-# Every commit pushed to a pull request, and each one merged to main (a
-# squash is a commit of its own): the fast checks, the tests and every
-# platform's build; then, on the release Mac's runner (self-hosted,
-# release-mac), the commit's packages built, signed and published to
-# Releases. Everything runs on self-hosted runners: the repository's own
-# (visor-ci) leases what each job runs in from OS Server — a macOS VM
-# (tools/ci/mac_vm.sh) or a Linux container — and the release Mac's builds
-# the packages. Each commit merged to main has its proof made too (the phone
-# app's fixture screens and its UI cases, compared with the pictures kept
-# at the commit before), on the repository's own runner in a macOS VM
-# leased from OS Server; Reviews reads it from the run's `proof` artifact,
-# and a release is proposed on a commit whose proof is in. A pull request
-# runs no proof: its builds and tests only. A newer push
-# to the pull request cancels this run if it hasn't finished. main requires every job green on a pull request's head
-# commit before it merges. A fork's pull request never runs on a
-# self-hosted runner.
+# Pull requests get the fast checks, all at once, each on a machine leased
+# from OS Server by the repository's own runners: every app built on Linux
+# (the container job), the tests with nothing of Apple's in them on Linux,
+# the command-line server on Windows, the tests that need a Mac in a macOS
+# VM, and blue's web client in headless Chromium in a Linux container. A
+# diff of documentation alone (docs/, .notes/, Markdown) skips them, and a
+# skipped job passes. Each commit merged to main gets them too, then what a
+# release is made of: its number, its packages built, signed and published
+# to Releases (the release Mac's runner, self-hosted, release-mac), the
+# agent image, blue's iPhone snapshots and the proof (the phone app's
+# fixture screens and its UI cases, compared with the pictures kept at the
+# commit before; Reviews reads it from the run's `proof` artifact, and a
+# release is proposed on a commit whose proof is in). A newer push to a
+# pull request cancels its run if it hasn't finished. main requires every
+# job green (or skipped) on a pull request's head before it merges. A
+# fork's pull request never runs on a self-hosted runner.
 on:
   pull_request:
   push:
@@ -32,12 +32,35 @@ permissions:
 env:
   OSS_CLIENT_ID: ${{ github.job }}-${{ github.run_id }}
 jobs:
-  # The build for the Mac and the iPhone and the libraries' tests, in a
-  # macOS VM leased from OS Server (tools/ci/mac_vm_tests.sh): every target
-  # compiles in the Swift 6 mode with warnings as errors (tools/swift), so
-  # building is a check of its own.
-  test:
+  # Whether the pull request changes anything but documentation; a push to
+  # main always does.
+  changes:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, visor-ci]
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -z "$BASE" ]; then echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          files="$(git diff --name-only "$BASE" HEAD)"
+          echo "$files"
+          if printf '%s\n' "$files" | awk '!/^([Dd]ocs\/|\.notes\/)|\.md$/ { code = 1 } END { exit !code }'; then code=true; else code=false; fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  # The tests that need a Mac (the server's Apple side, the client, its
+  # views, SSH), in a macOS VM leased from OS Server
+  # (tools/ci/mac_vm_tests.sh). Every target is built in the container job.
+  test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: [self-hosted, visor-ci]
     timeout-minutes: 120
     steps:
@@ -51,7 +74,8 @@ jobs:
   # itself tried — run, a throwaway session over its WebSocket, restarted,
   # stopped (tools/probes/command_line_server.sh). No agent CLI needed.
   linux:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: [self-hosted, visor-ci]
     timeout-minutes: 60
     steps:
@@ -66,7 +90,8 @@ jobs:
   # session over its WebSocket, stopped through its REST side — in a Windows
   # VM leased from OS Server (tools/ci/windows_vm_tests.sh).
   windows:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: [self-hosted, visor-ci]
     timeout-minutes: 90
     steps:
@@ -118,7 +143,7 @@ jobs:
   # MAJOR.MINOR.BUILD, BUILD one past the line's highest on the release
   # server (the plist says MAJOR.MINOR.0), kept there as the commit's.
   number:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 5
     outputs:
@@ -134,12 +159,11 @@ jobs:
           PIPELINE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
   # The commit's packages (the iPhone's .ipa, the Mac's apps signed and
-  # notarized) at that number, published to Releases as the pull request's
-  # builds, or the version's on a pre-release branch (release-*) or main.
-  # What is done with them is the runner's ($PIPELINE_CI). (On main the pull
-  # request's values are empty, and it takes the push's own.)
+  # notarized) at that number, published to Releases as main's beta. What is
+  # done with them is the runner's ($PIPELINE_CI).
   build:
     needs: number
+    if: github.event_name == 'push'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 90
     steps:
@@ -163,6 +187,7 @@ jobs:
   # that version asks its OS Server for.
   agent-image:
     needs: number
+    if: github.event_name == 'push'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 90
     permissions:
@@ -178,41 +203,61 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
 
   # The apps built on Linux where a session's agent builds them: in a
-  # container of this build's own agent image, leased from the OS Server on
-  # the runner's Mac (self-hosted, oss-container), the Apple apps with
-  # rules_applecross from that server's files, the Linux client and blue
-  # Visor's Android APK (tools/ci/container_build.sh).
+  # container of Visor's agent image, leased from the OS Server on the
+  # runner's Mac (self-hosted, oss-container), the Apple apps with
+  # rules_applecross from that server's files, the Linux client, blue
+  # Visor's Android APK, and the Mac's libraries and servers
+  # (tools/ci/container_build.sh).
   # A fork's pull request never runs there.
   container:
-    needs: [number, agent-image]
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: [changes, number, agent-image]
+    # On a pull request number and agent-image are skipped, and it runs all the same.
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, oss-container]
     timeout-minutes: 90
-    # One build at a time on the runner's Mac.
+    # One build at a time on the runner's Mac: Bazel's tree is one kept volume.
     concurrency:
       group: visor-oss-container
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - run: bazel run //tools/ci:container_build -- ghcr.io/attilathefun/visor-agent:${{ needs.number.outputs.version }}
+      # main's commit in its own agent image; a pull request in its line's
+      # released one (MAJOR.MINOR).
+      - id: image
+        env:
+          VERSION: ${{ needs.number.outputs.version }}
+        run: |
+          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          echo "tag=${VERSION:-${line%.*}}" >> "$GITHUB_OUTPUT"
+      # exec: the runner's cancel reaches oss, which releases the container.
+      - run: exec bazel run //tools/ci:container_build -- ghcr.io/attilathefun/visor-agent:${{ steps.image.outputs.tag }}
 
   # Blue Visor (the client on Isomer: docs/isomer.md), its web client: built
-  # optimized, its tests run, then checked in headless Chrome: the end-to-end
-  # test against the stand-in server on its three roads, the transcript's
-  # layout and the composer typed into. In a macOS VM leased from OS Server
-  # (tools/ci/mac_vm_blue_web.sh), whose image has Chrome. Its Android APK
-  # is built in the container job's build (tools/ci/container_build.sh).
+  # optimized, its tests run, then checked in headless Chromium: the
+  # end-to-end test against the stand-in server on its three roads, the
+  # transcript's layout and the composer typed into. In a container of the
+  # line's agent image leased from the OS Server on the runner's Mac
+  # (tools/ci/container_blue_web.sh). Its Android APK is built in the
+  # container job.
   blue-web:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, visor-ci]
-    timeout-minutes: 120
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: [self-hosted, oss-container]
+    timeout-minutes: 60
+    # One at a time on the runner's Mac: its Bazel tree is one kept volume.
+    concurrency:
+      group: visor-oss-blue-web
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      # exec: the runner's cancel reaches the script's trap, which releases the VM.
-      - run: exec tools/ci/mac_vm_blue_web.sh review
+      - id: image
+        run: |
+          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          echo "tag=${line%.*}" >> "$GITHUB_OUTPUT"
+      # exec: the runner's cancel reaches oss, which releases the container.
+      - run: exec bazel run //tools/ci:container_blue_web -- ghcr.io/attilathefun/visor-agent:${{ steps.image.outputs.tag }} review
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -220,14 +265,15 @@ jobs:
           path: review
           if-no-files-found: ignore
 
-  # Blue Visor on the iPhone: the WasmKit app and the one compiled against
-  # Isomer's frameworks, for the simulator (no signing team needed), then
-  # its fixture's screens in each orientation and the web client's in
-  # Mobile Safari, against tests/snapshots. On the release Mac: GitHub's
+  # Blue Visor on the iPhone, on each commit to main (its snapshots are
+  # proof-like): the WasmKit app and the one compiled against Isomer's
+  # frameworks, for the simulator (no signing team needed), then its
+  # fixture's screens in each orientation and the web client's in Mobile
+  # Safari, against tests/snapshots. On the release Mac: GitHub's
   # hosted Mac minutes are billed. The harness makes its simulators and
   # removes them after.
   blue-ios:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 120
     steps:
