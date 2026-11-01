@@ -12,7 +12,7 @@
 #
 # Needs: the server running on this Mac (the session may be any of its
 # own, opened and read only) and the probe's simulator ("BAZEL_TEST_iPhone
-# 17_27.0"), which is erased, booted and signed in with the connection
+# 17_27.2"), which is erased, booted and signed in with the connection
 # code. Ends with the sheets' folder.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
@@ -24,7 +24,7 @@ API=http://127.0.0.1:7433/api
 PW="${VISOR_TOKEN:-$(security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w 2>/dev/null || true)}"
 CODE_TEXT="$(curl -s -H "Authorization: Bearer $PW" $API/code | python3 -c 'import json,sys; print(json.load(sys.stdin)["text"])')"
 HOST="$(python3 -c 'import json,sys,base64; t=sys.argv[1]; t+="="*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t))["host"])' "$CODE_TEXT")"
-SIM_NAME="BAZEL_TEST_iPhone 17_27.0"
+SIM_NAME="BAZEL_TEST_iPhone 17_27.2"
 SIM="$(xcrun simctl list devices | grep -F "$SIM_NAME (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
 [ -n "$SIM" ] || { echo "No simulator named $SIM_NAME: run an iOS probe once to make it" >&2; exit 2; }
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -39,7 +39,7 @@ python3 -c 'import time; print(time.time())' > "$OUT/rec-start"
 xcrun simctl io "$SIM" recordVideo --codec h264 --force "$OUT/open.mov" > "$OUT/rec.log" 2>&1 &
 REC=$!
 bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
-  --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \
+  --ios_simulator_device="iPhone 17" --ios_simulator_version=27.2 \
   --spawn_strategy=local --nocache_test_results --test_output=streamed \
   --test_filter=VisorProbe/testSelectSession --test_env=VISOR_SELECT_SESSION=$SESSION \
   --test_env=VISOR_PROBE_HOST=$HOST "--test_env=VISOR_PROBE_CODE=$CODE_TEXT" > "$OUT/test.txt" 2>&1 &
