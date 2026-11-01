@@ -86,6 +86,7 @@ extension SessionRecord {
             commands = list
             return nil
         case .background(let items):
+            backgroundSaid = true
             guard info.background != items else { return nil }
             info.background = items
             // The sessions list carries it; the caller broadcasts that.

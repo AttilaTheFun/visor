@@ -42,7 +42,8 @@ extension VisorServer {
         record.subagentsRead = .now
         guard record.pendingFork == nil, let id = record.process.resumeID,
               let harness = harnesses.harness(for: record.info.agent) else { return }
-        let all = harness.subagents(id: id, cwd: record.info.cwd)
+        var all = harness.subagents(id: id, cwd: record.info.cwd)
+        if harness.listsSubagentsInBackground { all = all.map { Self.asItsAgentHasIt($0, in: record) } }
         for agent in all where agent.running || agent.call.map(record.subagentCalls.contains) == true {
             record.watchedSubagents.insert(agent.id)
         }
@@ -51,6 +52,24 @@ extension VisorServer {
         record.info.subagents = shown
         saveArchive()
         broadcastSessions()
+    }
+
+    /// A subagent its agent's files leave unfinished, as the agent itself
+    /// has it: running only while its agent is, and, once the agent has
+    /// said what runs in its background, only while it is on that list or
+    /// its call is still going (one sent off in the foreground). Off both,
+    /// it ended without its files saying so: killed, or gone with its agent.
+    static func asItsAgentHasIt(_ subagent: SubagentInfo, in record: SessionRecord) -> SubagentInfo {
+        guard subagent.running else { return subagent }
+        var subagent = subagent
+        if record.info.agentState == .stopped {
+            subagent.running = false
+        } else if record.backgroundSaid {
+            let listed = record.info.background.contains { $0.id == subagent.id }
+            let calling = subagent.call.map { call in record.turnStatus.contains { $0.id == call && $0.running } } ?? false
+            subagent.running = listed || calling
+        }
+        return subagent
     }
 
     /// `GET /sessions/{id}/subagents/{agent}`: a subagent's conversation.

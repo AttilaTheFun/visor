@@ -1,6 +1,6 @@
 #!/bin/bash
 # The site's pictures (site/), in a macOS VM leased from OS Server
-# (xcode-27.0): the Mac client on the screenshot fixture, its window shown
+# (xcode_27_2): the Mac client on the screenshot fixture, its window shown
 # in the VM's own desktop session (tools/mac_screenshots, held up) and
 # pictured from outside — the VM's screen through its lease, cropped to the
 # window as CoreGraphics' window list gives its frame (nothing in the VM may
@@ -69,8 +69,8 @@ JS
         mkdir -p shots
         # The simulator the probe runs on, made ahead, with the status bar
         # pictures usually show.
-        runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' | head -1)"
-        sim="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.0" "iPhone 17" "$runtime")" || exit
+        runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-2' | head -1)"
+        sim="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.2" "iPhone 17" "$runtime")" || exit
         xcrun simctl boot "$sim" && xcrun simctl bootstatus "$sim" > /dev/null || exit
         xcrun simctl status_bar "$sim" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
             --cellularMode active --cellularBars 4 --operatorName "" --batteryState charged --batteryLevel 100 || exit
@@ -79,7 +79,7 @@ JS
         ;;
 STEPS
 
-echo "::group::A macOS VM (xcode-27.0)"
+echo "::group::A macOS VM (xcode_27_2)"
 mac_vm_lease
 mac_vm_copy_tree
 echo "::endgroup::"

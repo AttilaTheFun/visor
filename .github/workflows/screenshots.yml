@@ -12,6 +12,11 @@ on:
       - 'tools/mac_screenshots/**'
       - 'tools/ci/mac_vm_screenshots.sh'
       - '.github/workflows/screenshots.yml'
+# A pull request's newer commit takes over from the one before: only the
+# branch's head is pictured. A run by hand is never cut short.
+concurrency:
+  group: screenshots-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   pictures:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
