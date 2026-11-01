@@ -238,9 +238,10 @@ jobs:
     if: ${{ !cancelled() && !failure() && needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, oss-container]
     timeout-minutes: 90
-    # One build at a time on the runner's Mac: Bazel's tree is one kept volume.
-    concurrency:
-      group: visor-oss-container
+    # One build at a time on the runner's Mac, as Bazel's tree is one kept
+    # volume: OS Server holds a lease whose volume another lease has until
+    # it is free (`oss machine run` waits). No job-level group, which kept
+    # one job pending and cancelled any other.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -268,9 +269,8 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: [self-hosted, oss-container]
     timeout-minutes: 60
-    # One at a time on the runner's Mac: its Bazel tree is one kept volume.
-    concurrency:
-      group: visor-oss-blue-web
+    # One at a time on the runner's Mac, as its Bazel tree is one kept
+    # volume: OS Server holds the lease until the volume is free.
     steps:
       - uses: actions/checkout@v4
         with:
