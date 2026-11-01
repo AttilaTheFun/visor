@@ -802,8 +802,10 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
   into the Info.plists), the iPhone app and the Mac's disk images built,
   signed and notarized on the release Mac (`build`,
   tools/build_packages.sh; what the runner does with them is
-  `$PIPELINE_CI`'s), the agent image, blue's iPhone snapshots and the
-  proof (`proof`, within the hour, against the commit before). main
+  `$PIPELINE_CI`'s), the agent image and blue's iPhone snapshots. The
+  proof (`proof`) runs only by hand (workflow_dispatch, since 2026-11-01,
+  for CI's time): an agent runs CI on main to propose a release, compared
+  with the previous release. main
   requires every job green (or skipped) on a pull request's head, up to
   date with main; an agent merges its own pull request then. A release is
   of a commit on main: an agent proposes it as a draft GitHub release
@@ -992,15 +994,19 @@ CI makes the proof: its `proof` job, on the repository's own runner
 fixture's screens in each orientation there (the probe's
 `testFixtureScreens` and `testFixtureScreensLandscape` through
 `tools/ios_ui_tests.sh`, on an iPhone 17 simulator made new, its status bar
-held still, keyboard suggestions off), and the UI cases, for each commit
-merged to main (a pull request runs its builds and tests only), within the
-hour. Each screen is compared with its picture kept at the commit before
-(`tests/proof/ios`, `tests/proof/ios-landscape`: red's own, as
-`tests/snapshots` holds blue's), so a commit that takes new pictures shows
-the change, and the run's `proof` artifact holds `proof.json`, `screens/`,
-`diffs/` and the probe's logs. Reviews reads it from GitHub by commit: a
-release is proposed on a main commit whose proof is in, and that proof is
-the one reviewed. A change meant to look different takes its new screens
+held still, keyboard suggestions off), and the UI cases. It runs only by
+hand (CI's workflow_dispatch, since 2026-11-01, for CI's time; pull
+requests and main's commits run their builds and tests only): an agent
+runs it on main to propose a release (`kind` full, the default, or
+quick). Each screen is compared with its picture kept at the previous
+release (the newest `v*` tag before the commit, else the commit before:
+`tests/proof/ios`, `tests/proof/ios-landscape`: red's own, as
+`tests/snapshots` holds blue's), so it shows every change since, and the
+run's `proof` artifact holds `proof.json`, `screens/`, `diffs/` and the
+probe's logs. Reviews reads it from GitHub by commit: no release is made
+without a proof of its commit, and that proof is the one reviewed. To
+bisect a regression, prove an earlier commit after the fact: push a branch
+at it and run the workflow on that branch. A change meant to look different takes its new screens
 into `tests/proof` in its pull request (`tools/proof.sh` makes them), or
 right after from main's proof artifact. The lab's phones are for what needs
 real hardware (a sensor, or a benchmark on a device).

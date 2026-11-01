@@ -8,10 +8,14 @@ name: CI
 # skipped job passes. Each commit merged to main gets them too, then what a
 # release is made of: its number, its packages built, signed and published
 # to Releases (the release Mac's runner, self-hosted, release-mac), the
-# agent image, blue's iPhone snapshots and the proof (the phone app's
-# fixture screens and its UI cases, compared with the pictures kept at the
-# commit before; Reviews reads it from the run's `proof` artifact, and a
-# release is proposed on a commit whose proof is in). A newer push to a
+# agent image and blue's iPhone snapshots. The proof (the phone app's
+# fixture screens and its UI cases) runs only when asked for by hand
+# (workflow_dispatch), which is how an agent proposes a release: on main,
+# compared with the pictures kept at the previous release (the newest v*
+# tag before the commit, else the commit before). Reviews reads it from the
+# run's `proof` artifact, and no release is made without a proof of its
+# commit. To bisect a regression, prove an earlier commit after the fact:
+# push a branch at it and run the workflow on that branch. A newer push to a
 # pull request cancels its run if it hasn't finished. main requires every
 # job green (or skipped) on a pull request's head before it merges. A
 # fork's pull request never runs on a self-hosted runner.
@@ -19,8 +23,17 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The proof, by hand: to propose a release, or to bisect.
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: The proof's kind (full also runs the UI cases)
+        type: choice
+        options: [full, quick]
+        default: full
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # A proof run is its own: it never waits on, or replaces, main's builds.
+  group: ${{ github.event_name == 'workflow_dispatch' && format('proof-{0}', github.run_id) || format('ci-{0}', github.event.pull_request.number || github.ref) }}
   # main's runs are never cut short: their builds are a release's.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
@@ -113,17 +126,27 @@ jobs:
   # the `proof` artifact from GitHub: a release is proposed on a commit
   # whose proof is in, and that is the proof reviewed. Within the hour.
   proof:
-    if: github.event_name == 'push'
+    # Only when asked for by hand: never a pull request's or a push's.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, visor-ci]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
         with:
-          # The commit before too: its kept pictures are what the screens are compared with.
-          fetch-depth: 2
+          # The history and the tags: the previous release's kept pictures
+          # are what the screens are compared with.
+          fetch-depth: 0
+          fetch-tags: true
       - name: The phone app in a macOS VM, and the proof
-        # exec: the runner's cancel reaches the script's trap, which releases the VM.
-        run: exec tools/ci/mac_vm_proof.sh --kind full --base HEAD^ --proof "$RUNNER_TEMP/proof"
+        env:
+          PROOF_KIND: ${{ inputs.kind || 'full' }}
+        # The previous release (the newest v* tag before this commit), else
+        # the commit before. exec: the runner's cancel reaches the script's
+        # trap, which releases the VM.
+        run: |
+          base="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^ 2> /dev/null || git rev-parse HEAD^)"
+          echo "Compared with $base"
+          exec tools/ci/mac_vm_proof.sh --kind "$PROOF_KIND" --base "$base" --proof "$RUNNER_TEMP/proof"
       # The proof whether the screens came up or not: a broken screen is what it's for.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
