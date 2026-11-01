@@ -15,9 +15,9 @@ import VisorServices
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The server runs from launch, whether or not a window or the menu
-        // is ever opened, once it has a password. Without one, Settings opens.
+        // is ever opened, once it has a password. Without one, Settings
+        // opens over the window when it shows (SceneOpeners).
         VisorServer.shared.start()
-        if VisorServer.shared.password.isEmpty { Self.openSettings() }
         UNUserNotificationCenter.current().delegate = self
         // Once launched, when AppKit delivers the token to this delegate:
         // asked any earlier, the answer can go nowhere.
@@ -37,7 +37,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return .terminateLater
     }
 
+    /// Opened again (from the Finder, the Dock, Spotlight) with no window
+    /// showing: Visor's window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag, let open = Self.openWindow { Self.show(window: VisorMacApp.mainWindow, with: open) }
+        return true
+    }
+
     // MARK: Windows and the Dock icon
+
+    /// SwiftUI's own ways to the window and Settings, as a view last had
+    /// them (SceneOpeners).
+    private static var openWindow: OpenWindowAction?
+    private static var openSettingsAction: OpenSettingsAction?
+
+    static func keep(openWindow: OpenWindowAction, openSettings: OpenSettingsAction) {
+        Self.openWindow = openWindow
+        openSettingsAction = openSettings
+    }
 
     /// The Dock icon while a window of the app's own is open, and the menu
     /// bar alone when the last one closes. An app with no Dock icon is not
@@ -95,8 +112,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     static func openSettings() {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
-        // SwiftUI's Settings scene answers the standard action.
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        if let open = openSettingsAction {
+            open()
+        } else {
+            // Before any view has shown: the standard action, which SwiftUI's
+            // Settings scene answers where it still does.
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
         Task { @MainActor in
             for _ in 0..<40 {
                 if let window = NSApp.windows.first(where: { $0.isVisible && $0.styleMask.contains(.titled) && $0.isKeyWindow }) {

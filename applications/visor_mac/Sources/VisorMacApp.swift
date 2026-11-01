@@ -69,8 +69,11 @@ struct VisorMacApp: App {
                 // computer's settings.
                 .onOpenURL { url in store.open(url.absoluteString) }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+                .background(SceneOpeners())
         }
         .handlesExternalEvents(matching: ["*"])
+        // Shown at launch: a menu bar app's window is not, unless asked.
+        .defaultLaunchBehavior(.presented)
         // The sidebar, and a thread about as wide as the transcript grows.
         .defaultSize(width: 1200, height: 820)
         .commands {
