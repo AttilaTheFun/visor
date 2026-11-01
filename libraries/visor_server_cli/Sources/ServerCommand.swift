@@ -53,6 +53,11 @@ public struct ServerCommand {
                    between computers; `standalone off` (the default)
                    shares them. Also
                    VISOR_STANDALONE=1.
+          front    Shows the paths a front reaches this server at (in a
+                   container, behind Visor Runner); `front <url>…` sets them
+                   (the computer's loopback, LAN and VPN, e.g.
+                   http://192.168.1.20:7440), given to clients in place of
+                   this container's own addresses; `front -` clears them.
           containers
                    Shows how sessions' containers are made on this computer
                    (docs/container-host.md). `containers host <command…>|-`
@@ -72,6 +77,7 @@ public struct ServerCommand {
           --password <word>          --auth password|none
           --lan on|off  --vpn on|off  --ssh on|off
           --address <url>|-          --standalone on|off
+          --front <url>,…|-
           --container-host <command>|-  --container-image <name>|-
         In its environment:
           VISOR_DETACH_AGENT_HOST=0|1
@@ -108,6 +114,7 @@ public struct ServerCommand {
             case "auth": try auth(rest.first)
             case "address": address(rest.first)
             case "standalone": try standalone(rest.first)
+            case "front": front(Array(rest))
             case "containers": try containers(rest)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")
