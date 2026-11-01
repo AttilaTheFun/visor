@@ -882,7 +882,9 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
   through to itself). Kill the sshd by its pid file afterwards.
 - `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
   as its user would run it: a password, `run` checked with the server
-  probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
+  probe, then `start`, a restart through `/api/restart`, another after
+  its program file is replaced (Linux then names the running program
+  `<path> (deleted)`; the successor starts from the path), `stop`. CI runs
   it; on the Mac, in a container: a podman machine of your own, an image
   with `swift:6.4-noble` and Node 22, the checkout
   mounted, `swift build --product visor-server` then this.

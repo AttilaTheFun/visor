@@ -21,8 +21,22 @@ public struct LinuxSystem: CommandLineSystem {
         return base.appendingPathComponent("visor")
     }
 
+    /// Where this program is. /proc/self/exe names the file the process was
+    /// started from, and once that file has been replaced (an update put in
+    /// its place, or a build copied over it by hand) it says
+    /// "<path> (deleted)": the path is still where the program is, the new
+    /// build now. A successor started from the name with its suffix never
+    /// ran.
     public var executable: String {
-        (try? FileManager.default.destinationOfSymbolicLink(atPath: "/proc/self/exe")) ?? CommandLine.arguments[0]
+        guard let link = try? FileManager.default.destinationOfSymbolicLink(atPath: "/proc/self/exe") else { return CommandLine.arguments[0] }
+        return Self.program(at: link)
+    }
+
+    /// A link's path to a program, without the " (deleted)" Linux adds once
+    /// the file it was started from has been replaced.
+    static func program(at link: String) -> String {
+        let replaced = " (deleted)"
+        return link.hasSuffix(replaced) ? String(link.dropLast(replaced.count)) : link
     }
 
     /// Whether this server runs in a container: said by whoever started it
