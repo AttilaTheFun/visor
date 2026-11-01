@@ -8,7 +8,12 @@ server's MCP proxy. Revised again on 1 November with Logan's points: a
 container shares nothing with the Mac; the Runner is also GitHub's forward
 proxy (gh_mcp retired) and the push proxy; it holds named Claude accounts a
 server can be switched between; and its menu runs the Mac's server, a
-container server, or both, each with its pairing code.
+container server, or both, each with its pairing code. And that evening,
+Logan's layout of the apps (The app, below): one Visor.app on the Mac and
+the iPhone, `com.LoganShire.Visor`. On the Mac it is a menu bar app whose
+window is Visor's macOS client, with the Runner and the servers inside it as
+processes of their own. There are no beta bundle ids: a build says its
+variant in its Info.plist.
 
 Today one Mac runs one Visor Server, inside the menu bar app. A session can
 run its agent in a Linux container (0.44's container hosts,
@@ -18,7 +23,7 @@ pictures a client attaches, for one — is out of the agent's reach.
 
 This design makes each container a server of its own. One Mac runs any mix:
 two sessions on the Mac's own server, five in one container's server, one in
-another's, all driven by one menu bar app.
+another's, all driven by one app, Visor.app.
 
 ## A container shares nothing with the Mac
 
@@ -43,6 +48,43 @@ portable / self contained."
 - So a container server could as well run in the cloud: it needs the
   Runner's proxies at an address, nothing of the Mac's disk.
 
+## The app
+
+Logan (1 November): Visor.app is the Visor Runner and Visor for macOS in one.
+
+- **On the Mac**, Visor.app (`com.LoganShire.Visor`) is a menu bar app
+  whose window is Visor's macOS client.
+  - The menu shows its state, Copy Visor Connection Code (one per server it
+    runs), Settings… and Quit, like every menu bar server of Logan's.
+  - The window is the client: this Mac's servers through the Runner, other
+    computers as now.
+  - The Runner, the Mac's Visor Server and the container servers run in
+    processes of their own (The parts), each a wrapped, notarized
+    executable in the bundle. So an update replaces them one at a time,
+    quitting the app ends no server, and the app reconnects when it opens
+    again; agents work on throughout under their hosts.
+- **On the iPhone (and iPad)**, the same bundle id: a client only, built
+  from the same Swift libraries.
+- **One bundle id per app, no beta ids.** Versions are MAJOR.MINOR.BUILD.
+  The variant is a key of the Info.plist, `BuildVariant`: `Alpha`
+  (internal), `Beta` (TestFlight, later) or `Production` (the App Store).
+  Applications Server releases the highest BUILD of a MAJOR.MINOR whose
+  variant is Production.
+- **The app group** `group.com.LoganShire.Applications`, which Logan's apps
+  share (Reviews too).
+- **Today's apps fold into it:**
+  - Visor Server.app (applications/visor_menubar, `com.LoganShire.VisorServer.macOS`)
+    and Visor for macOS (applications/visor_macos,
+    `com.LoganShire.VisorClient.macOS`) become Visor.app. Its data folder
+    and its keychain items stay where they are, so sessions, pairings and
+    the server's password carry over.
+  - The iPhone app moves from `com.LoganShire.VisorClient.iOS` to
+    `com.LoganShire.Visor`. That is a new app on the device: installed
+    fresh and paired again. Its push topic changes with it, which the server
+    learns when the device registers. Its widget and share extension move
+    under the new id.
+  - Blue Visor (`com.LoganShire.VisorIsomer`) is Isomer's, and not part of this.
+
 ## The parts
 
 - **Visor Server**: `visor-server`, one Swift binary for macOS and Linux
@@ -56,9 +98,9 @@ portable / self contained."
   - In a container it runs that container's sessions. Its agents, their
     transcripts and attachments, and the agents' hosts are all inside the
     container, so an attached picture is where the agent reads it.
-- **Visor Runner**: the Mac menu bar app and the processes it keeps, every
-  one inside `Visor.app` and registered from the bundle (SMAppService),
-  nothing installed outside it. It runs Visor Servers, natively and in
+- **Visor Runner**: the part of Visor.app that runs the servers, and the
+  processes it keeps, every one inside the bundle and registered from it
+  (SMAppService), nothing installed outside it. It runs Visor Servers, natively and in
   containers, and proxies their MCP requests:
   - starts, updates and stops the Mac's Visor Server (a launchd job of its
     own, so updating either leaves the other running);
@@ -74,12 +116,13 @@ portable / self contained."
   - moves sessions between servers;
   - holds the credentials and gives each server what it needs.
 
-  Its menu lists every server it runs, the Mac's and each container's,
-  each with Copy Pairing Code. It can be set to run the Mac's server, a
-  container server, or both.
+  Visor.app's menu lists every server it runs, the Mac's and each
+  container's, each with Copy Visor Connection Code. It can be set to run
+  the Mac's server, a container server, or both.
 
   Its processes, each a helper in `Contents/Helpers`:
-  - **the menu bar app**, the Runner's face: Settings, the menu, the codes;
+  - **the app itself**: the menu, Settings and the codes, and the window
+    (Visor's macOS client). Quitting it leaves everything below running;
   - **the Runner's agent**, a LaunchAgent: it keeps the container servers
     (picks them up, asks after them, makes again one whose network is
     lost), runs the reverse proxies and the MCP proxy, so that quitting or
@@ -341,20 +384,28 @@ these are checked early rather than assumed:
    - The Runner's client proxy, in place of the forwarder the mini's
      co-tenant has now (socat).
    - GitHub's forward proxy and its rules; gh_mcp retired.
-2. **The Runner's side in Settings.**
+2. **One Visor.app** (The app).
+   - The menu bar app and the macOS client in one bundle,
+     `com.LoganShire.Visor`, with its menu (state, Copy Visor Connection
+     Code, Settings…, Quit). The Runner's agent is in Contents/Helpers.
+   - The iPhone app on the same id, its widget and share extension with it.
+   - `BuildVariant` in every Info.plist, and the beta ids gone, once
+     Applications Server takes the variant from the plist.
+   - Provisioning profiles made again for the new id and the app group.
+3. **The Runner's side in Settings.**
    - Container servers made and removed, started and stopped; the Mac's
      server, a container server, or both.
    - Claude accounts, each server set to one and switched between them;
      the import from the environment; the OpenRouter key.
-   - Copy Pairing Code for each server, in the menu.
-3. **The Mac's server apart from the Runner.**
-   - `visor-server` runs as a launchd job that the menu bar app installs,
-     updates and stops, and keeps the menu bar app's data folder, so
+   - Copy Visor Connection Code for each server, in the menu.
+4. **The Mac's server apart from the Runner.**
+   - `visor-server` runs as a launchd job that Visor.app installs,
+     updates and stops, and keeps the app's data folder, so
      sessions, pairings and codes carry over.
    - Its MCP servers are the Runner's too.
    - The Runner's settings and menu read and change it through its local
      API.
-4. **Moving sessions.**
+5. **Moving sessions.**
    - Moving between servers from the Runner.
    - Today's agent-in-a-container sessions (0.44) moved onto container
      servers; then that way of running, and 0.44's container hosts
