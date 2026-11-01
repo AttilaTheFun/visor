@@ -333,6 +333,23 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(server.signedInBy.count, before)
     }
 
+    /// This device's own loopback before the LAN, and the LAN before the
+    /// tailnet: a server on the same device, then one at home, then one
+    /// away.
+    func testLoopbackThenTheLANThenTheTailnet() {
+        let network = ScriptedNetwork()
+        network.local = ["192.168.1.52"]
+        VisorHost.network = network
+        defer { VisorHost.network = nil }
+        XCTAssertEqual(AgentServerConnection.fit(of: "http://127.0.0.1:7440"), .loopback)
+        XCTAssertEqual(AgentServerConnection.fit(of: "http://localhost:7433"), .loopback)
+        XCTAssertEqual(AgentServerConnection.fit(of: "http://[::1]:7433"), .loopback)
+        let record = AgentServerRecord(name: "Mini", address: "http://mini.example.ts.net:7440", secret: "pw", provider: "scripted",
+                                       paths: ["http://100.64.0.11:7440", "http://192.168.1.52:7440", "http://127.0.0.1:7440"])
+        let host = AgentServerConnection(record: record)
+        XCTAssertEqual(Array(host.pathsToTry().prefix(3)), ["http://127.0.0.1:7440", "http://192.168.1.52:7440", "http://100.64.0.11:7440"])
+    }
+
     /// The networks speaking several times at once (the monitor starting,
     /// an interface coming up) restart the sign-ins once, after they
     /// settle, not once a word.

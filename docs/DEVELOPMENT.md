@@ -429,9 +429,12 @@ one's own, or a front that has signed the user in.
 `networkChanged`): the host says which hosts are on a network the device
 is on now (each interface's address and mask) and whether it has a
 tailnet address, and calls back when the networks change (NWPathMonitor).
-Paths are ranked local, overlay, other, unlikely (a LAN's address when
-away, a tailnet's with no tailnet; a link's own 169.254 address counts as
-a LAN's) — the one that answered last first among its equals, kept in the
+Paths are ranked loopback, local, overlay, other, unlikely (this
+device's own 127.0.0.1 first, for a server on it — a server gives its
+loopback path last among its own, and one whose id isn't the record's
+there is another computer, so that path goes; a LAN's address when away,
+a tailnet's with no tailnet; a link's own 169.254 address counts as a
+LAN's) — the one that answered last first among its equals, kept in the
 record (`lastPath`) so a launch starts with it — and `VisorStore` has
 every connection re-rank on a change: a server connected by a path that
 is no longer the best is connected again by the one that is, and one
@@ -635,8 +638,10 @@ through `POST /api/quit`, so it ends its agents first on every system.
 on|off` serves the socket file for SSH clients (Linux; not Windows),
 `visor-server address <url>` names a front of your own, `visor-server
 standalone on` keeps it to itself (see the protocol's network of
-computers); `run` and `start` take the same as options (`--password`,
-`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`,
+computers), `visor-server front <url>…` gives a server in a container its
+front's paths (Visor Runner's on the computer: its loopback, LAN and VPN)
+for clients in place of the container's own; `run` and `start` take the same as options (`--password`,
+`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`, `--front`,
 `--container-host`, `--container-image`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server

@@ -15,6 +15,8 @@ extension VisorServer {
         var out: [String] = []
         let set = settings.publicAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         if settings.proxyEnabled, !set.isEmpty { out.append(set) }
+        // Behind a front: its paths, not this container's own.
+        if !settings.frontPaths.isEmpty { return out + settings.frontPaths }
         return out + httpPaths + sshPaths
     }
 
