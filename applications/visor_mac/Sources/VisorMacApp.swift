@@ -51,7 +51,12 @@ struct VisorMacApp: App {
             // (The push token is asked for once launched: AppDelegate.)
             VisorHost.notifications?.requestPermission()
         }
-        _store = State(initialValue: VisorStore())
+        // The welcome is this Mac's: its server a password away.
+        VisorOnboardings.current = MacOnboarding(server: server)
+        let store = VisorStore()
+        _store = State(initialValue: store)
+        // This Mac's server among the computers, without pairing.
+        if !VisorFixture.active { OwnServer.follow(server, in: store) }
     }
 
     var body: some Scene {
