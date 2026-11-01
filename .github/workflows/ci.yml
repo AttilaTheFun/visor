@@ -32,8 +32,11 @@ on:
         options: [full, quick]
         default: full
 concurrency:
-  # A proof run is its own: it never waits on, or replaces, main's builds.
-  group: ${{ github.event_name == 'workflow_dispatch' && format('proof-{0}', github.run_id) || format('ci-{0}', github.event.pull_request.number || github.ref) }}
+  # A pull request's newer push replaces its older run. Every other run (a
+  # commit on main, a proof by hand) is a group of its own: GitHub keeps one
+  # pending run per group and cancels the rest, so main's runs sharing one
+  # left a commit queued between two others with no build.
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-{0}', github.run_id) }}
   # main's runs are never cut short: their builds are a release's.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
