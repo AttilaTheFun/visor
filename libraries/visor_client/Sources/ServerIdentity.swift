@@ -7,14 +7,18 @@ public struct ServerIdentity: Equatable, Sendable {
     /// The server stands alone: reached only at the address it was added
     /// at, nothing about it shared (`Envelope.standalone`).
     public var standalone: Bool
+    /// Whether its sessions' messages may be kept on this device's disk
+    /// (`Envelope.keepMessages`): false, they are held in memory only.
+    public var keepMessages: Bool
     /// Its version and build, as it said ("0.31 (8)"); nil from a server
     /// that does not say.
     public var version: String?
 
-    public init(id: String, addresses: [String], standalone: Bool = false, version: String? = nil) {
+    public init(id: String, addresses: [String], standalone: Bool = false, keepMessages: Bool = true, version: String? = nil) {
         self.id = id
         self.addresses = addresses
         self.standalone = standalone
+        self.keepMessages = keepMessages
         self.version = version
     }
 }

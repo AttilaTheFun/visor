@@ -584,6 +584,11 @@ public final class AgentServerConnection: Identifiable {
             record.standalone = identity.standalone
             changed = true
         }
+        if record.keepMessages != identity.keepMessages {
+            record.keepMessages = identity.keepMessages
+            changed = true
+            if !identity.keepMessages { forgetKeptMessages() }
+        }
         // Standing alone: the paths learned before it said so go too.
         if isolated {
             if !record.paths.isEmpty { record.paths = []; changed = true }
@@ -904,6 +909,10 @@ public final class AgentServerConnection: Identifiable {
     /// is SQLite, so a session opens as it was last seen and syncs only
     /// what changed since; in memory on the web.
     static var cache: MessageCache = .open(named: "messages")
+    /// This server's rows kept there: none when it asks for its messages to
+    /// be held in memory only (`AgentServerRecord.keepMessages`), and each
+    /// page let go of is asked of it again.
+    var cache: MessageCache? { record.keepMessages ? Self.cache : nil }
     /// Where the cache is written, and read past what is shown: off the
     /// main actor, in order.
     static let cacheQueue = CacheQueue()
@@ -929,12 +938,13 @@ public final class AgentServerConnection: Identifiable {
         }
         let transcript = SessionTranscript()
         let key = cacheKey(sessionID)
-        fill(transcript, from: key)
-        transcript.keep = { write, state in
-            let cache = Self.cache
-            Self.cacheQueue.write {
-                Self.write(write, to: cache, key: key)
-                try? cache.setSyncState(state, for: key)
+        if let cache {
+            fill(transcript, from: key)
+            transcript.keep = { write, state in
+                Self.cacheQueue.write {
+                    Self.write(write, to: cache, key: key)
+                    try? cache.setSyncState(state, for: key)
+                }
             }
         }
         transcript.info = sessions.first { $0.id == sessionID }
@@ -947,13 +957,24 @@ public final class AgentServerConnection: Identifiable {
     /// As last seen, at once, from this device's cache; the sync then asks
     /// only for what moved.
     private func fill(_ transcript: SessionTranscript, from key: String) {
-        let kept = Self.cache.messages(in: key, limit: Self.initialRows)
-        guard !kept.messages.isEmpty, let state = Self.cache.syncState(of: key) else { return }
+        guard let cache else { return }
+        let kept = cache.messages(in: key, limit: Self.initialRows)
+        guard !kept.messages.isEmpty, let state = cache.syncState(of: key) else { return }
         transcript.entries = kept.messages
         transcript.hasEarlier = kept.more
         transcript.revision = state.revision
         transcript.generation = state.generation
         transcript.loaded = true
+    }
+
+    /// The server asks for its messages to be held in memory only: what
+    /// this device kept of its sessions goes, and the threads open now
+    /// write nothing more.
+    private func forgetKeptMessages() {
+        for transcript in transcripts.values { transcript.keep = nil }
+        let cache = Self.cache, keys = Set(sessions.map(\.id)).union(transcripts.keys).map(cacheKey)
+        note("the server keeps its messages off this device's disk: \(keys.count) sessions' rows forgotten")
+        Self.cacheQueue.write { for key in keys { try? cache.remove(key) } }
     }
 
     /// A sync's change, written to the cache as a change: every row synced
@@ -1494,7 +1515,8 @@ public final class AgentServerConnection: Identifiable {
         if localEdits == nil { act(.end, on: sessionID) } else { editLocally { $0.removed.insert(sessionID) } }
         transcripts.removeValue(forKey: sessionID)
         syncing.removeValue(forKey: sessionID)?.cancel()
-        let cache = Self.cache, key = cacheKey(sessionID)
+        guard let cache else { return }
+        let key = cacheKey(sessionID)
         Self.cacheQueue.write { try? cache.remove(key) }
     }
 }
