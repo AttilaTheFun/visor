@@ -6,3 +6,11 @@ sh_binary(
     name = "container_build",
     srcs = ["container_build.sh"],
 )
+
+# Blue Visor's web client built, tested and checked in headless Chromium, in
+# a Linux container leased from the runner's Mac's OS Server (ci.yml's
+# blue-web job).
+sh_binary(
+    name = "container_blue_web",
+    srcs = ["container_blue_web.sh"],
+)
