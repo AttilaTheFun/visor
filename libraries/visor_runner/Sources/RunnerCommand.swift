@@ -49,6 +49,12 @@ public struct RunnerCommand {
                    The APNs key the push proxy signs with: the .p8's text read
                    from standard input, kept here only.
           apns remove
+          front set <name> --port <port> --to <address>:<port>
+                   The client proxy for a server: its clients come to this Mac
+                   at <port> (every interface, IPv4 and IPv6) and each
+                   connection goes on to the server at <address>:<port>, from
+                   the agent's next start.
+          front remove <name>
           port <number>
                    The proxy's port (7439), from its next start.
 
@@ -69,6 +75,8 @@ public struct RunnerCommand {
             case ("server", "remove"): try removeServer(Array(arguments.dropFirst(2)), in: &config)
             case ("apns", "set"): try setAPNsKey(Array(arguments.dropFirst(2)))
             case ("apns", "remove"): removeAPNsKey()
+            case ("front", "set"): try setFront(Array(arguments.dropFirst(2)), in: &config)
+            case ("front", "remove"): try removeFront(Array(arguments.dropFirst(2)), in: &config)
             case ("port", _): try setPort(Array(arguments.dropFirst()), in: &config)
             case ("help", _), ("-h", _), ("--help", _): output(Self.usage)
             default: throw Problem("unknown command \(arguments.joined(separator: " "))\n\n\(Self.usage)")
@@ -101,6 +109,9 @@ public struct RunnerCommand {
         }
         if config.endpoints.isEmpty { lines.append("  no MCP servers") }
         lines.append(config.servers.isEmpty ? "No Visor servers." : "Visor servers: " + config.servers.joined(separator: ", "))
+        for front in config.fronts {
+            lines.append("Front for \(front.name): port \(front.port) to \(front.host):\(front.hostPort)")
+        }
         if let keyID = secrets.value(APNsProxy.keyIDSecret), secrets.value(APNsProxy.keySecret) != nil {
             lines.append("Pushes: signed with APNs key \(keyID) (team \(secrets.value(APNsProxy.teamIDSecret) ?? "?"))")
         } else {
@@ -220,6 +231,45 @@ public struct RunnerCommand {
         config.servers.removeAll { $0 == name }
         try config.write(folder)
         output("\(name) removed: its token no longer gets through")
+    }
+
+    private func setFront(_ arguments: [String], in config: inout RunnerConfig) throws {
+        let usage = "front set <name> --port <port> --to <address>:<port>"
+        guard arguments.count == 5, let name = arguments.first, !name.isEmpty, !name.hasPrefix("--") else { throw Problem(usage) }
+        var port: Int?, to: String?
+        var rest = arguments.dropFirst()
+        while let flag = rest.popFirst() {
+            guard let value = rest.popFirst() else { throw Problem(usage) }
+            switch flag {
+            case "--port": port = Int(value)
+            case "--to": to = value
+            default: throw Problem("unknown option \(flag)")
+            }
+        }
+        guard let port, (1...65535).contains(port) else { throw Problem("\(usage): a port from 1 to 65535") }
+        // An address and its port: the port after the last colon (an IPv6
+        // address in brackets).
+        guard let to, let colon = to.lastIndex(of: ":"), let hostPort = Int(to[to.index(after: colon)...]), (1...65535).contains(hostPort) else {
+            throw Problem("\(usage): --to takes the server's address and port")
+        }
+        let host = String(to[..<colon]).trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        guard !host.isEmpty else { throw Problem("\(usage): --to takes the server's address and port") }
+        if let other = config.fronts.first(where: { $0.port == port && $0.name != name }) {
+            throw Problem("port \(port) is \(other.name)'s front already")
+        }
+        config.fronts.removeAll { $0.name == name }
+        config.fronts.append(ClientProxy.Front(name: name, port: port, host: host, hostPort: hostPort))
+        try config.write(folder)
+        output("\(name)'s clients come to port \(port) and go on to \(host):\(hostPort), from the agent's next start")
+    }
+
+    private func removeFront(_ arguments: [String], in config: inout RunnerConfig) throws {
+        guard let name = arguments.first, config.fronts.contains(where: { $0.name == name }) else {
+            throw Problem("no front for \(arguments.first ?? "")")
+        }
+        config.fronts.removeAll { $0.name == name }
+        try config.write(folder)
+        output("\(name)'s front removed, from the agent's next start")
     }
 
     private func setPort(_ arguments: [String], in config: inout RunnerConfig) throws {

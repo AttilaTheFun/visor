@@ -94,6 +94,22 @@ final class RunnerCommandTests: XCTestCase {
         XCTAssertNil(secrets.value(APNsProxy.keySecret))
     }
 
+    func testAFrontIsSetForAServersClients() throws {
+        XCTAssertEqual(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433"]), 0)
+        XCTAssertEqual(RunnerConfig.read(folder)?.fronts, [.init(name: "co-tenant", port: 7440, host: "192.168.131.3", hostPort: 7433)])
+        XCTAssertEqual(run(["front", "set", "co-tenant", "--port", "7441", "--to", "[fd00::3]:7433"]), 0, "set again: replaced")
+        XCTAssertEqual(RunnerConfig.read(folder)?.fronts, [.init(name: "co-tenant", port: 7441, host: "fd00::3", hostPort: 7433)])
+        XCTAssertEqual(run(["front", "set", "builds", "--port", "7441", "--to", "192.168.131.4:7433"]), 2, "a port is one server's")
+        XCTAssertEqual(run(["front", "set", "builds", "--port", "70000", "--to", "192.168.131.4:7433"]), 2)
+        XCTAssertEqual(run(["front", "set", "builds", "--port", "7442", "--to", "192.168.131.4"]), 2, "the server's port is needed")
+        said = []
+        _ = run(["status"])
+        XCTAssertTrue(said.joined().contains("Front for co-tenant: port 7441 to fd00::3:7433"), said.joined())
+        XCTAssertEqual(run(["front", "remove", "co-tenant"]), 0)
+        XCTAssertEqual(RunnerConfig.read(folder)?.fronts, [])
+        XCTAssertEqual(run(["front", "remove", "co-tenant"]), 2)
+    }
+
     func testStatusSaysWhatIsKeptButNoSecret() {
         _ = run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp", "--secret", "API_KEY"], input: ["gh-key"])
         _ = run(["server", "add", "Builds", "--host", "h"])
