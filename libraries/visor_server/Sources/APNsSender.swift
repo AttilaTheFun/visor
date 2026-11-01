@@ -57,6 +57,23 @@ final class APNsSender {
         return request(to: device, jwt: jwt, collapse: collapse, type: "background", priority: "5", payload: payload)
     }
 
+    /// The header a request to the push proxy carries this server's token
+    /// in (as Visor Runner's MCP proxy has it).
+    nonisolated static let proxyTokenHeader = "X-Visor-Proxy"
+
+    /// A request for APNs sent instead to a proxy that holds the key
+    /// (`ServerSettings.pushProxy`): at `<proxy>/apns/<APNs's host>/3/device/
+    /// <token>`, with its headers but the authorization, which the proxy
+    /// signs, and this server's token for the proxy.
+    nonisolated static func proxied(_ request: OutgoingRequest, through proxy: String, token: String) -> OutgoingRequest? {
+        guard let url = URLComponents(string: request.url), let host = url.host, !proxy.isEmpty else { return nil }
+        var headers = request.headers.filter { $0.key.lowercased() != "authorization" }
+        headers[proxyTokenHeader] = token
+        let base = proxy.hasSuffix("/") ? String(proxy.dropLast()) : proxy
+        return OutgoingRequest(url: base + "/apns/" + host + url.percentEncodedPath, method: request.method, headers: headers,
+                               body: request.body, timeout: request.timeout)
+    }
+
     /// Sends one: the status APNs answered with (0 when unreachable), and
     /// the reason it gave for a refusal.
     func send(_ request: OutgoingRequest) async -> (status: Int, reason: String?) {
