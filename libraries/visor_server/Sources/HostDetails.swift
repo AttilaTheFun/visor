@@ -7,6 +7,9 @@ public struct HostDetails: Sendable {
     /// The system: "macos", "linux" or "windows" (what a session's row
     /// shows its agent runs on, when not in a container).
     public var system: String
+    /// Whether the server itself runs in a container, its agents with it
+    /// (a co-tenant container): its sessions say so (`SessionInfo.inContainer`).
+    public var inContainer: Bool
     /// The server's own version and build, as installed and running
     /// ("0.31 (8)"); empty where the binary does not say.
     public var version: String
@@ -27,7 +30,8 @@ public struct HostDetails: Sendable {
     /// where it cannot be.
     public var resolve: @Sendable (String) -> String?
 
-    public init(name: String, system: String = "", version: String = "", dataDirectory: URL, addresses: @escaping @Sendable () -> [String] = { [] },
+    public init(name: String, system: String = "", inContainer: Bool = false, version: String = "", dataDirectory: URL,
+                addresses: @escaping @Sendable () -> [String] = { [] },
                 networkAddresses: (@Sendable () -> [NetworkAddress])? = nil,
                 localNetworkName: @escaping @Sendable () -> String? = { nil },
                 resolve: @escaping @Sendable (String) -> String? = { _ in nil }) {
@@ -35,6 +39,7 @@ public struct HostDetails: Sendable {
         self.resolve = resolve
         self.name = name
         self.system = system
+        self.inContainer = inContainer
         self.version = version
         self.dataDirectory = dataDirectory
         self.addresses = addresses
