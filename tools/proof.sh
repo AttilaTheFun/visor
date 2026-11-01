@@ -19,9 +19,9 @@ mkdir -p "$OUT"
 # The simulator as CI's was: iPhone 17, iOS 27, the status bar at 9:41,
 # and new (erased): another app's tests on it leave their state, such as a
 # permission prompt over every screen.
-runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' | head -1)"
-id="$(xcrun simctl list devices | grep -F "BAZEL_TEST_iPhone 17_27.0 (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
-[ -n "$id" ] || id="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.0" "iPhone 17" "$runtime")"
+runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-2' | head -1)"
+id="$(xcrun simctl list devices | grep -F "BAZEL_TEST_iPhone 17_27.2 (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
+[ -n "$id" ] || id="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.2" "iPhone 17" "$runtime")"
 xcrun simctl shutdown "$id" 2>/dev/null || true
 xcrun simctl erase "$id"
 xcrun simctl boot "$id" 2>/dev/null || true
