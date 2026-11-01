@@ -4,8 +4,8 @@
 # this image's commit's). Claude
 # Code, Codex and openrouter (OpenRouter's models), with Node (which also
 # runs Visor's MCP script and `visor`), Swift
-# 6.4.0 (which Bazel's Swift package rules ask for on Linux; the same as
-# rules_applecross builds Apple apps with), git, ssh, tmux, Python, Bazel
+# 6.4.0 (which Bazel's Swift package rules ask for on Linux; rules_applecross
+# brings its own, 6.4.2, for the Apple apps), git, ssh, tmux, Python, Bazel
 # (bazelisk), and what Isomer's Linux apps link (SDL, GL, GTK, WebKitGTK).
 # CI publishes it for each build (tools/containers/publish_agent_image.sh)
 # as ghcr.io/attilathefun/visor-agent:<version> and :<MAJOR.MINOR>, and a
