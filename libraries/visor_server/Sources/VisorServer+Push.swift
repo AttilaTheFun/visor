@@ -10,6 +10,10 @@
 // its widget up to date without opening the app. A change of state that
 // is not worth a notification — a turn beginning — goes as a silent push
 // with the same data. Nothing the agent or the user said goes to Apple.
+//
+// A computer with no key of its own (a Linux server, one in a container)
+// sends its pushes through a push proxy that holds the key and signs them
+// (VisorServer+PushProxy.swift): the same requests, unsigned.
 
 import Foundation
 import VisorProtocol
@@ -67,6 +71,10 @@ extension VisorServer {
         apnsKeyChanges += 1
         return nil
     }
+
+    /// Whether pushes go out from here: signed with this computer's key,
+    /// or through the push proxy.
+    var sendsPushes: Bool { (storedAPNsKey != nil && ServerPlatform.current.pushSigning != nil) || pushProxy != nil }
 
     private var storedAPNsKey: APNsKey? {
         guard let pem = Self.secrets.get("apns.key"), !pem.isEmpty,
@@ -163,15 +171,32 @@ extension VisorServer {
         }
     }
 
-    /// Sends one request per device, forgetting a device APNs says is gone.
+    /// Sends one request per device, forgetting a device APNs says is gone:
+    /// signed here with this computer's key, or else unsigned through the
+    /// push proxy.
     private func deliver(collapse: String, data: [String: String],
                          request make: @escaping @Sendable (PushDevice, String, String, [String: String]) -> OutgoingRequest?) {
         let devices = pushDevices.filter { Self.apnsPlatforms.contains($0.platform) }
-        guard let key = storedAPNsKey, !devices.isEmpty, let signing = ServerPlatform.current.pushSigning else { return }
-        guard let jwt = try? apnsSender.jwt(for: key, signing: signing) else { return }
+        guard !devices.isEmpty else { return }
+        let jwt: String
+        let proxy: (url: String, token: String)?
+        if let key = storedAPNsKey, let signing = ServerPlatform.current.pushSigning {
+            guard let made = try? apnsSender.jwt(for: key, signing: signing) else { return }
+            jwt = made
+            proxy = nil
+        } else if let through = pushProxy {
+            jwt = ""
+            proxy = through
+        } else {
+            return
+        }
         Task {
             for device in devices {
-                guard let request = make(device, jwt, collapse, data) else { continue }
+                guard var request = make(device, jwt, collapse, data) else { continue }
+                if let proxy {
+                    guard let through = APNsSender.proxied(request, through: proxy.url, token: proxy.token) else { continue }
+                    request = through
+                }
                 let answer = await apnsSender.send(request)
                 if APNsSender.forgets(status: answer.status, reason: answer.reason) {
                     pushDevices.removeAll { $0.token == device.token }
@@ -183,7 +208,7 @@ extension VisorServer {
 
     /// A test, from Settings: to every device, now.
     public func sendTestPush() -> String? {
-        guard storedAPNsKey != nil else { return "Set the APNs key first." }
+        guard sendsPushes else { return "Set the APNs key (or a push proxy) first." }
         guard pushDevices.contains(where: { Self.apnsPlatforms.contains($0.platform) }) else {
             return "No device has asked for notifications yet: open Visor on the phone."
         }
