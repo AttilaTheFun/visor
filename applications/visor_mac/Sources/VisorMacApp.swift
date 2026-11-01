@@ -16,7 +16,7 @@ import VisorServices
 import VisorUI
 
 @main
-struct VisorApp: App {
+struct VisorMacApp: App {
     private let server: VisorServer
     @State private var store: VisorStore
     /// The server's life, the client's pushes and the Dock icon.

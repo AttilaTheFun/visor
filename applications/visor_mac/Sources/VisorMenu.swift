@@ -10,7 +10,7 @@ struct VisorMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button("Open Visor") { AppDelegate.show(window: VisorApp.mainWindow, with: openWindow) }
+        Button("Open Visor") { AppDelegate.show(window: VisorMacApp.mainWindow, with: openWindow) }
             .keyboardShortcut("o")
         Divider()
         MenuContent(server: server)
