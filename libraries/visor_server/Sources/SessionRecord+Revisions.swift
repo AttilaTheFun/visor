@@ -35,6 +35,32 @@ extension SessionRecord {
         generation += 1
     }
 
+    /// Lets go of the oldest rows once more than `heldRows` are held, down
+    /// to `servedRows`, when the store has them (the session's file is
+    /// followed into it): what is held here is the end of the conversation
+    /// and what is happening, and `earlier` reads the rest from the store.
+    /// No change to the conversation: clients aren't told of rows removed
+    /// and the revision stays; one whose revision is older than a row let
+    /// go of takes the rows as a whole (`transcriptEnvelope`).
+    func letGoOfOldRows() {
+        guard indexer != nil, entries.count > Self.heldRows else { return }
+        let gone = entries.count - Self.servedRows
+        let dropped = Array(entries.prefix(gone))
+        for row in dropped {
+            if let stamped = rowSeq.removeValue(forKey: row.id) { letGoThrough = max(letGoThrough, stamped) }
+        }
+        // Words sent and not yet written are known by how many rows said
+        // them when they went: those let go of no longer count.
+        for index in unwritten.indices {
+            unwritten[index].seen = max(0, unwritten[index].seen - userRows(dropped, saying: unwritten[index].text))
+        }
+        firstFollows = entries[gone - 1].id
+        moreBefore = true
+        lettingGo = true
+        entries.removeFirst(gone)
+        lettingGo = false
+    }
+
     /// Sets the rows as a change would, for tests.
     func replaceEntriesForTesting(_ rows: [TranscriptEntry]) { entries = rows }
 
@@ -70,6 +96,8 @@ extension SessionRecord {
     /// generation, so the client knows whether it may merge these as a
     /// delta or must take them as the whole.
     func transcriptEnvelope(since: Int?, after: String? = nil) -> Envelope {
+        // Behind a row let go of: the rows held can't bring it up.
+        let since = since.flatMap { $0 < letGoThrough ? nil : $0 }
         let delta = since.map { rows(since: $0, after: after, limit: Self.pageRows) }
         var e = Envelope.transcript(session: info.id, entries: delta?.rows ?? Array(entries.suffix(Self.servedRows)), streaming: streaming,
                                     activity: activity, busy: info.busy, error: error)
