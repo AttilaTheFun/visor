@@ -723,6 +723,27 @@ server's (`<session>@<application>` is each lease's holder), whose tools
 the agent calls as `<endpoint>__oss_lease` and so on. Visor itself knows
 nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
 
+**Visor Runner's MCP proxy.** A Visor server in a container (or any server
+that shouldn't hold the MCP servers' keys) sets its MCP servers to
+`visor-runner-agent` on the Mac (applications/visor_runner_agent,
+libraries/visor_runner; docs/co-tenancy.md). The proxy keeps the secret
+headers, in `runner-secrets.json` in Visor's data folder (this user's
+alone). Each server it serves has a token of its own, sent with every call
+(`X-Visor-Proxy`). A call to `/mcp/<name>` with a known token goes on to
+that MCP server with the secret headers added, and its answer comes back
+as it came (JSON or SSE). Set up on a Mac:
+
+```sh
+visor-runner-agent endpoint set gh http://127.0.0.1:7470/mcp --header 'CLIENT_ID=$SESSION_ID' --secret API_KEY  # the key on stdin
+visor-runner-agent server add co-tenant --host <the Mac's name as the container reaches it>  # prints the server's PUT /api/mcp body
+visor-runner-agent status
+visor-runner-agent serve   # port 7439, every interface; a LaunchAgent keeps it running
+```
+
+The printed body goes to the server's `PUT /api/mcp` with its password.
+The token is kept there as a secret header, and no key goes into the
+container.
+
 ## 4. The working loop
 
 - Every target compiles in the Swift 6 language mode with warnings as

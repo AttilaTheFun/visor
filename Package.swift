@@ -77,6 +77,12 @@ let system: [Target] = [
     // Visor's container host over Apple's container: a Mac's, Bazel's
     // there; built and tested here too, with a script for the tool.
     .target(name: "VisorContainerHost", path: "libraries/visor_container_host/Sources", swiftSettings: strict),
+    // Visor Runner's MCP proxy and its commands; its agent built here too,
+    // for a Mac without Bazel's output for it (`swift build -c release
+    // --product visor-runner-agent`).
+    .target(name: "VisorRunner", dependencies: ["CVisorPOSIX"], path: "libraries/visor_runner/Sources", swiftSettings: strict),
+    .executableTarget(name: "VisorRunnerAgentMain", dependencies: ["VisorRunner"],
+                      path: "applications/visor_runner_agent", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The server's tests, on Linux's platform (tests/visor_server_tests/linux).
 let tests: [Target] = [
@@ -91,10 +97,13 @@ let tests: [Target] = [
                 path: "tests/message_cache_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
     .testTarget(name: "ClaudeTranscriptTests", dependencies: ["ClaudeTranscript"],
                 path: "tests/claude_transcript_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
+    .testTarget(name: "VisorRunnerTests", dependencies: ["VisorRunner", "CVisorPOSIX"],
+                path: "tests/visor_runner_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The agents' host, built with the server: `swift build -c release` puts
 /// both in the same folder, where the server looks for it.
-let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"])]
+let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"]),
+                            .executable(name: "visor-runner-agent", targets: ["VisorRunnerAgentMain"])]
 #endif
 
 let package = Package(

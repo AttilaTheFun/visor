@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -288,6 +289,32 @@ int visor_connect_unix(const char *path) {
         errno = error;
         return -1;
     }
+    struct timeval patience = {30, 0};
+    setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
+    return connection;
+}
+
+int visor_connect_tcp(const char *host, unsigned short port) {
+    struct addrinfo hints, *found = 0;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    char service[8];
+    snprintf(service, sizeof service, "%u", (unsigned)port);
+    int status = getaddrinfo(host, service, &hints, &found);
+    if (status != 0) { errno = EHOSTUNREACH; return -1; }
+    int connection = -1, error = ECONNREFUSED;
+    for (struct addrinfo *each = found; each; each = each->ai_next) {
+        connection = socket(each->ai_family, each->ai_socktype, each->ai_protocol);
+        if (connection < 0) { error = errno; continue; }
+        (void)fcntl(connection, F_SETFD, FD_CLOEXEC);
+        if (connect(connection, each->ai_addr, each->ai_addrlen) == 0) break;
+        error = errno;
+        close(connection);
+        connection = -1;
+    }
+    freeaddrinfo(found);
+    if (connection < 0) { errno = error; return -1; }
     struct timeval patience = {30, 0};
     setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
     return connection;
