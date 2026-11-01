@@ -18,7 +18,12 @@ name: CI
 # push a branch at it and run the workflow on that branch. A newer push to a
 # pull request cancels its run if it hasn't finished. main requires every
 # job green (or skipped) on a pull request's head before it merges. A
-# fork's pull request never runs on a self-hosted runner.
+# fork's pull request never runs on a self-hosted runner. The jobs that only
+# lease what they run in (changes, test, linux, windows, pins) run on OS
+# Server's single-use runners (visor-jit): each a fresh Linux container with
+# `oss` on its PATH. Those that need the Mac itself stay on its own runners:
+# the release Mac's, the container builds (which mount this checkout), blue's
+# iPhone snapshots and the proof (Xcode's tools on the runner).
 on:
   pull_request:
   push:
@@ -49,7 +54,7 @@ jobs:
   # main always does.
   changes:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, visor-ci]
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 5
     outputs:
       code: ${{ steps.diff.outputs.code }}
@@ -74,7 +79,7 @@ jobs:
   test:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: [self-hosted, visor-ci]
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -89,7 +94,7 @@ jobs:
   linux:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: [self-hosted, visor-ci]
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -105,7 +110,7 @@ jobs:
   windows:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: [self-hosted, visor-ci]
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -157,7 +162,7 @@ jobs:
 
   pins:
     if: github.event_name == 'push'
-    runs-on: [self-hosted, visor-ci]
+    runs-on: [self-hosted, visor-jit]
     steps:
       - uses: actions/checkout@v4
       - run: tools/released_pins.sh
