@@ -134,6 +134,9 @@ final class ContainerTests: ServerTestCase {
         let there = "/root/.claude/projects/" + ClaudeSessionFiles.projectDirectoryName(for: resolved, followingLinks: false)
         XCTAssertTrue(asked.mounts.contains { $0.source == here && $0.destination == there && !$0.readOnly }, "where Claude keeps its log, seen here")
         XCTAssertTrue(asked.mounts.contains { $0.destination == ContainerPlacement.toolsFolder && $0.readOnly }, "Visor's tools")
+        let pictures = AgentImages.directory.path
+        XCTAssertTrue(asked.mounts.contains(.init(source: pictures, destination: pictures, readOnly: true)),
+                      "the pictures attached to sessions, at the path the agent is told, to read")
         let tools = try XCTUnwrap(asked.mounts.first { $0.destination == ContainerPlacement.toolsFolder }).source
         XCTAssertEqual(try String(contentsOfFile: tools + "/visor_mcp.js", encoding: .utf8), VisorMCPScript.source)
         XCTAssertFalse(FileManager.default.fileExists(atPath: tools + "/visor"), "machines are the proxied MCP servers' now")
