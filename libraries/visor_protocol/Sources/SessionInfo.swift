@@ -90,6 +90,11 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// The system its agent runs on: "macos", "linux" or "windows" (in a
     /// container, "linux"); nil from a server of 0.37 or before.
     public var system: String?
+    /// Its agent runs in a container that the server didn't make for it:
+    /// the server's own, which every session there shares (a co-tenant
+    /// container). `container` stays nil, as there is nothing to move into
+    /// or out of; nil from a server on a computer of its own.
+    public var inContainer: Bool?
     /// The session it came from, when it is a fork or a branch of one: a
     /// client lists it under that session, not as one of its own.
     public var parent: String?
@@ -162,6 +167,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         container = try c.decodeIfPresent(SessionContainer.self, forKey: .container)
         leases = try c.decodeIfPresent([SessionLease].self, forKey: .leases) ?? []
         system = try c.decodeIfPresent(String.self, forKey: .system)
+        inContainer = try c.decodeIfPresent(Bool.self, forKey: .inContainer)
         parent = try c.decodeIfPresent(String.self, forKey: .parent)
         origin = (try? c.decodeIfPresent(SessionOrigin.self, forKey: .origin)) ?? nil
         side = try c.decodeIfPresent([SideQuestion].self, forKey: .side) ?? []

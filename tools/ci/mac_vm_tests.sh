@@ -1,6 +1,6 @@
 #!/bin/bash
 # Visor's tests that need a Mac, in a macOS VM leased from OS Server
-# (xcode-27.0: Xcode 27.0 and its iOS simulator): the server's Apple side,
+# (xcode_27_2: Xcode 27.2 and its iOS simulator): the server's Apple side,
 # the client, its views and SSH, each an .xctest bundle (macos_unit_test,
 # which builds on Linux too). The builds are the container job's
 # (tools/ci/container_build.sh: every app, and the Mac's libraries, built on
@@ -26,7 +26,7 @@ mac_vm_steps << 'STEPS'
         ;;
 STEPS
 
-echo "::group::A macOS VM (xcode-27.0)"
+echo "::group::A macOS VM (xcode_27_2)"
 mac_vm_lease
 mac_vm_copy_tree
 echo "::endgroup::"

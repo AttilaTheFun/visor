@@ -124,7 +124,8 @@ extension VisorServer {
 
     /// What a session's container sees of this computer: its folder, at
     /// the same path; the agent's log folder for it, where the agent there
-    /// keeps its log; and Visor's tools.
+    /// keeps its log; the pictures attached to sessions, at the same path
+    /// (the agent is told that path), to read; and Visor's tools.
     static func containerMounts(agent: AgentKind, folder: String, tools: URL) -> [ContainerHostRequest.Mount] {
         typealias Mount = ContainerHostRequest.Mount
         var mounts = [Mount(source: folder, destination: folder)]
@@ -155,6 +156,8 @@ extension VisorServer {
             let seen = ClaudeSessionFiles.projectDirectoryName(for: folder, followingLinks: false)
             mounts.append(Mount(source: project.path, destination: "/root/.claude/projects/" + seen))
         }
+        let pictures = AgentImages.directory.path
+        mounts.append(Mount(source: pictures, destination: pictures, readOnly: true))
         mounts.append(Mount(source: tools.path, destination: ContainerPlacement.toolsFolder, readOnly: true))
         return mounts
     }

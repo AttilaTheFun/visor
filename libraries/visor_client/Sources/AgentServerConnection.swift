@@ -363,7 +363,7 @@ public final class AgentServerConnection: Identifiable {
         // A path on the network the device is on answers in milliseconds
         // or not at all: on the first round it is given less time, and the
         // next path is tried sooner.
-        let timeouts = paths.map { attempt == 0 && Self.fit(of: $0) == .local ? Self.localSignInTimeout : Self.signInTimeout }
+        let timeouts = paths.map { attempt == 0 && [.loopback, .local].contains(Self.fit(of: $0)) ? Self.localSignInTimeout : Self.signInTimeout }
         let timeout = timeouts[min(pathIndex, paths.count - 1)]
         // Every path in the round at once, each a moment after the one
         // before, where the server signs in so: the round is one try.
@@ -460,9 +460,10 @@ public final class AgentServerConnection: Identifiable {
     static let signInTimeout: Int32 = 5_000
     static let localSignInTimeout: Int32 = 2_000
 
-    /// The paths for a round: the record's own paths ranked by fit — a
-    /// path on a network the device is on now first (the LAN at home),
-    /// then overlay-network ones (a tailnet) while the device has such a
+    /// The paths for a round: the record's own paths ranked by fit — this
+    /// device's own loopback first (a server on the same device), then a
+    /// path on a network the device is on now (the LAN at home), then
+    /// overlay-network ones (a tailnet) while the device has such a
     /// network, then the rest, with the one that answered last time and
     /// then the record's address first among equals. Where the device has SSH and the computer an SSH
     /// path, SSH is the way in: its paths that fit (the LAN's, the
@@ -476,9 +477,9 @@ public final class AgentServerConnection: Identifiable {
         let own = record.allPaths.filter { canSSH || SSHAddress($0) == nil }
         let preferSSH = canSSH && own.contains { SSHAddress($0) != nil }
         let tiers: [(PathFit, Bool?)] = preferSSH
-            ? [(.local, true), (.overlay, true), (.local, false), (.overlay, false), (.other, true), (.other, false),
+            ? [(.loopback, nil), (.local, true), (.overlay, true), (.local, false), (.overlay, false), (.other, true), (.other, false),
                (.unlikely, true), (.unlikely, false)]
-            : [(.local, nil), (.overlay, nil), (.other, nil), (.unlikely, nil)]
+            : [(.loopback, nil), (.local, nil), (.overlay, nil), (.other, nil), (.unlikely, nil)]
         for (fit, ssh) in tiers {
             var tier = own.filter { Self.fit(of: $0) == fit && (ssh == nil || (SSHAddress($0) != nil) == ssh) }
             // The one that answered last time first among its equals.
@@ -505,9 +506,13 @@ public final class AgentServerConnection: Identifiable {
     }
 
     /// How a path fits where the device is now.
-    enum PathFit { case local, overlay, other, unlikely }
+    enum PathFit { case loopback, local, overlay, other, unlikely }
 
     static func fit(of path: String) -> PathFit {
+        // The device's own: a server on it answers at once, and a path to
+        // another computer's loopback reaches nothing here, or a server whose
+        // id isn't the record's (and that path then goes).
+        if let host = Self.host(ofPath: path), Self.isLoopback(host) { return .loopback }
         guard let network = VisorHost.network, let host = Self.host(ofPath: path) else { return .other }
         if network.isOnLocalNetwork(host) { return .local }
         if Self.isOverlay(host) { return network.hasVPN ? .overlay : .unlikely }
@@ -519,6 +524,12 @@ public final class AgentServerConnection: Identifiable {
     static func host(ofPath path: String) -> String? {
         if let ssh = SSHAddress(path) { return ssh.target.host }
         return ServerAddress(path).flatMap { host(of: $0.root) }
+    }
+
+    /// 127.0.0.0/8, ::1 and `localhost`: the device itself.
+    static func isLoopback(_ host: String) -> Bool {
+        let bare = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]")).lowercased()
+        return bare == "localhost" || bare == "::1" || bare.hasPrefix("127.")
     }
 
     /// 100.64.0.0/10: a tailnet's addresses.

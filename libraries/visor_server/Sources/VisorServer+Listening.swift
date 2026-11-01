@@ -150,10 +150,11 @@ extension VisorServer {
         }
         client.onClose = { [weak self] in
             guard let self else { return }
-            self.connections.removeValue(forKey: key)
+            let gone = self.connections.removeValue(forKey: key)
             self.clientCount = self.connections.count
             Self.log("a client left (\(self.clientCount) now)")
             for session in self.sessions { session.subscribers.remove(key) }
+            if let gone { self.withdrawApprovals(askedBy: gone) }
         }
         client.start()
     }

@@ -108,6 +108,10 @@ public final class SessionRecord {
     var closedSubagents: Set<String> = []
     /// The MCP servers it switched from their default: on or off.
     var mcpSwitched: [String: Bool] = [:]
+    /// Whether this agent has said what runs in its background since it
+    /// started (`AgentEvent.background`): until it has, its list says
+    /// nothing of its subagents.
+    var backgroundSaid = false
     /// When the agent's subagents were last read: at most every two
     /// seconds while they work.
     var subagentsRead: ContinuousClock.Instant?
@@ -198,6 +202,7 @@ public final class SessionRecord {
         // Nothing is on its way to an agent this launch has not handed it.
         self.info.delivered = []
         self.info.system = Self.system(of: info)
+        self.info.inContainer = Self.inContainer(info)
         self.process = process
         self.entries = entries
         self.shownPrompts = shownPrompts
@@ -278,7 +283,15 @@ public final class SessionRecord {
 
     /// What its agent runs on, for its row: this computer's system, or
     /// Linux in a container.
-    func placed() { info.system = Self.system(of: info) }
+    func placed() {
+        info.system = Self.system(of: info)
+        info.inContainer = Self.inContainer(info)
+    }
+
+    /// In a container this server didn't make for it: the server's own.
+    static func inContainer(_ info: SessionInfo) -> Bool? {
+        info.container == nil && ServerPlatform.current.host.inContainer ? true : nil
+    }
 
     static func system(of info: SessionInfo) -> String? {
         let system = info.container != nil ? "linux" : ServerPlatform.current.host.system
@@ -292,6 +305,7 @@ public final class SessionRecord {
         if let pendingFork { _ = replacement.fork(at: pendingFork.at) }
         // A new process starts with nothing in the background.
         info.background = []
+        backgroundSaid = false
     }
 
     /// Hands each of the agent's events to `handle`, in order, from now
