@@ -80,6 +80,12 @@ public struct ServerCommand {
           --front <url>,…|-
           --container-host <command>|-  --container-image <name>|-
         In its environment:
+          VISOR_IN_CONTAINER=1
+                       This server runs in a container, its agents with it
+                       (a co-tenant container): its sessions say so, and
+                       clients mark them with a container rather than the
+                       system. (Docker's and Podman's containers are found
+                       without it.)
           VISOR_DETACH_AGENT_HOST=0|1
                        1 (the default): each session's agent runs under
                        visor-agent-host, beside this program, apart from the

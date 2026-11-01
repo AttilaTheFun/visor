@@ -882,7 +882,9 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
   through to itself). Kill the sshd by its pid file afterwards.
 - `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
   as its user would run it: a password, `run` checked with the server
-  probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
+  probe, then `start`, a restart through `/api/restart`, another after
+  its program file is replaced (Linux then names the running program
+  `<path> (deleted)`; the successor starts from the path), `stop`. CI runs
   it; on the Mac, in a container: a podman machine of your own, an image
   with `swift:6.4-noble` and Node 22, the checkout
   mounted, `swift build --product visor-server` then this.
@@ -902,7 +904,7 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
   Server has Screen Recording (Privacy & Security), which is how the Mac
   apps are looked at. The iOS simulator probe (`tests/ios_probe`) drives
   the phone client. rules_apple 5's runner makes its own simulator
-  (`--ios_simulator_device="iPhone 17" --ios_simulator_version=27.0`;
+  (`--ios_simulator_device="iPhone 17" --ios_simulator_version=27.2`;
   `--destination` is NOT accepted). It adds the host by `VISOR_PROBE_HOST`
   and `VISOR_PROBE_PASSWORD`. The `*Look` cases expect
   a session on the host (`VISOR_LOOK_SESSION` names it); the fixture and
@@ -980,7 +982,7 @@ minutes and read as a timeout). To run it here (or in a VM),
 after touching the thread's rows or its scrolling, `tools/ios_ui_tests.sh`
 or:
 `bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64
---ios_simulator_device="iPhone 17" --ios_simulator_version=27.0
+--ios_simulator_device="iPhone 17" --ios_simulator_version=27.2
 --spawn_strategy=local --test_filter=VisorProbe/testLearningOfEarlierRowsMovesNothing`.
 
 The thread follows its end only while the end is in view (AgentUI 0.29):
@@ -995,7 +997,7 @@ rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 CI makes the proof: its `proof` job, on the repository's own runner
 (`visor-ci`, which a fork's pull request never reaches), runs
 `tools/ci/mac_vm_proof.sh`. That leases a macOS VM from OS Server
-(`xcode-27.0`), copies the committed tree and Bazel in, and takes the
+(`xcode_27_2`), copies the committed tree and Bazel in, and takes the
 fixture's screens in each orientation there (the probe's
 `testFixtureScreens` and `testFixtureScreensLandscape` through
 `tools/ios_ui_tests.sh`, on an iPhone 17 simulator made new, its status bar

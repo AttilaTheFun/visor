@@ -24,7 +24,7 @@ LOG="$(mktemp)"
 # the app taken off, since installing over a copy can leave its old binary,
 # and the permission prompts undecided again (the dictation case answers
 # one).
-SIM="$(xcrun simctl list devices | grep -F "BAZEL_TEST_iPhone 17_27.0 (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
+SIM="$(xcrun simctl list devices | grep -F "BAZEL_TEST_iPhone 17_27.2 (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
 if [ -n "$SIM" ]; then
   xcrun simctl boot "$SIM" 2>/dev/null || true
   xcrun simctl uninstall "$SIM" com.LoganShire.VisorClient.iOS 2>/dev/null || true
@@ -35,7 +35,7 @@ if [ -n "$SIM" ]; then
   xcrun simctl spawn "$SIM" defaults write com.apple.Preferences KeyboardPrediction -bool NO
 fi
 bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
-  --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \
+  --ios_simulator_device="iPhone 17" --ios_simulator_version=27.2 \
   --test_env=VISOR_PROBE_ORIENTATION="${VISOR_PROBE_ORIENTATION:-portrait}" \
   --test_arg=--xctestrun_attachment_lifetime=keepAlways --test_arg=--xctestrun_screen_capture_format=screenRecording \
   --test_arg=--xcodebuild_args=-collect-test-diagnostics --test_arg=--xcodebuild_args=never \

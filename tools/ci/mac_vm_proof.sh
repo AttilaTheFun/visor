@@ -1,5 +1,5 @@
 #!/bin/bash
-# Visor's proof, in a macOS VM leased from OS Server (xcode-27.0: Xcode 27.0
+# Visor's proof, in a macOS VM leased from OS Server (xcode_27_2: Xcode 27.2
 # and its iOS simulator): the phone app's fixture screens (the iOS probe's
 # testFixtureScreens, in portrait and on its side) and, for a full proof, its
 # UI cases; each screen compared with the picture kept for it at the base
@@ -107,10 +107,10 @@ xcrun swiftc -O -o "$work/snapshot_diff" "$ROOT/tools/ci/snapshot_diff.swift"
 mkdir "$work/base"
 git -C "$ROOT" archive "$base_commit" tests/proof | tar -x -C "$work/base"
 
-echo "::group::A macOS VM (xcode-27.0)"
+echo "::group::A macOS VM (xcode_27_2)"
 # A key of the run's own for the VM's SSH, gone with the run.
 ssh-keygen -q -t ed25519 -N '' -C visor-ci -f "$work/key"
-run "$OSS" machine lease macos --config=xcode-27.0 --minutes=120 --wait --key="$work/key.pub" --exports > "$work/lease"
+run "$OSS" machine lease macos --config=xcode_27_2 --minutes=120 --wait --key="$work/key.pub" --exports > "$work/lease"
 lease="$(. "$work/lease"; printf '%s' "$OSS_ID")"
 echo "Leased $lease"
 # Renewed every ten minutes; told to stop, it stops its sleep too.
@@ -143,8 +143,8 @@ case "$1" in
         # The simulator the probe runs on, as tools/proof.sh makes it: new,
         # the status bar held still, no keyboard predictions (what they say
         # is learned, and comes in late).
-        runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' | head -1)"
-        sim="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.0" "iPhone 17" "$runtime")" || exit
+        runtime="$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-27-2' | head -1)"
+        sim="$(xcrun simctl create "BAZEL_TEST_iPhone 17_27.2" "iPhone 17" "$runtime")" || exit
         xcrun simctl boot "$sim" && xcrun simctl bootstatus "$sim" > /dev/null || exit
         xcrun simctl status_bar "$sim" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
             --cellularMode active --cellularBars 4 --operatorName "" --batteryState charged --batteryLevel 100 || exit

@@ -74,12 +74,17 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// (docs/container-host.md): its program and the arguments before each
     /// operation; empty for `visor-container-host` on the PATH, if it is.
     public var containerHost: [String] = []
+    /// Where pushes go when this computer has no APNs key of its own: a
+    /// proxy that holds the key and signs them (Visor Runner's,
+    /// docs/co-tenancy.md), at `<pushProxy>/apns/…`. Empty for none. Its
+    /// token for this server is a secret (`VisorServer.pushProxyTokenKey`).
+    public var pushProxy = ""
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             frontPaths, detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost
+             frontPaths, detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost, pushProxy
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -99,6 +104,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         if !containerCallback.isEmpty { try c.encode(containerCallback, forKey: .containerCallback) }
         if !mcpEndpoints.isEmpty { try c.encode(mcpEndpoints, forKey: .mcpEndpoints) }
         if !containerHost.isEmpty { try c.encode(containerHost, forKey: .containerHost) }
+        if !pushProxy.isEmpty { try c.encode(pushProxy, forKey: .pushProxy) }
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -128,6 +134,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         containerCallback = try c.decodeIfPresent(String.self, forKey: .containerCallback) ?? ""
         mcpEndpoints = try c.decodeIfPresent([MCPEndpoint].self, forKey: .mcpEndpoints) ?? []
         containerHost = try c.decodeIfPresent([String].self, forKey: .containerHost) ?? []
+        pushProxy = try c.decodeIfPresent(String.self, forKey: .pushProxy) ?? ""
     }
 
     public func keep(at url: URL) {
