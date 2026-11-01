@@ -21,7 +21,11 @@ here="$(cd "$(dirname "$0")" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-container build --tag "$repository:$version" --file "$here/visor-agent/Dockerfile" "$here/visor-agent"
+# Its Visor server and agents' host from this checkout's commit (fetched by
+# the build from GitHub, so the commit must have been pushed).
+commit="${VISOR_REF:-$(git -C "$here" rev-parse HEAD)}"
+container build --tag "$repository:$version" --build-arg VISOR_REF="$commit" \
+  --file "$here/visor-agent/Dockerfile" "$here/visor-agent"
 
 # The image as an OCI layout. Its index names the image's own index (its
 # platforms), which becomes the layout's index: the tag then names the
