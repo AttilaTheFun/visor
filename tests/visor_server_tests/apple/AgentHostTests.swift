@@ -16,8 +16,11 @@ final class AgentHostTests: ServerTestCase {
     private var folder: URL!
 
     override func setUp() async throws {
+        // In the test bundle's Resources; else (a test binary of Bazel's
+        // own) among its runfiles.
         let environment = ProcessInfo.processInfo.environment
-        let program = "\(environment["TEST_SRCDIR"] ?? "")/\(environment["TEST_WORKSPACE"] ?? "")/applications/visor_agent_host/visor-agent-host"
+        let program = Bundle(for: Self.self).url(forResource: "visor-agent-host", withExtension: nil)?.path
+            ?? "\(environment["TEST_SRCDIR"] ?? "")/\(environment["TEST_WORKSPACE"] ?? "")/applications/visor_agent_host/visor-agent-host"
         hosting = POSIXAgentHosting(program: program)
         XCTAssertNil(hosting.problem(), "the host program is built beside the tests")
         folder = URL(fileURLWithPath: "/tmp/vh-" + String(UUID().uuidString.prefix(8)), isDirectory: true)

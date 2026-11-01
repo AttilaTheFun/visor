@@ -1,7 +1,8 @@
 #!/bin/bash
 # Visor's tests that need a Mac, in a macOS VM leased from OS Server
 # (xcode_27_2: Xcode 27.2 and its iOS simulator): the server's Apple side,
-# the client, its views and SSH. The builds are the container job's
+# the client, its views and SSH, each an .xctest bundle (macos_unit_test,
+# which builds on Linux too). The builds are the container job's
 # (tools/ci/container_build.sh: every app, and the Mac's libraries, built on
 # Linux), and the tests with nothing of Apple's in them run on Linux
 # (tools/ci/linux_tests.sh).
