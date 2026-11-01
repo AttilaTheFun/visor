@@ -1,9 +1,8 @@
 #!/bin/bash
 # A macOS VM leased from OS Server (xcode-27.0: Xcode 27.0 and its iOS
 # simulator) for one CI script, which sources this file rather than run it:
-# tools/ci/mac_vm_tests.sh (the build and the tests), tools/ci/mac_vm_blue_web.sh
-# (blue's web client, in headless Chrome) and tools/ci/mac_vm_screenshots.sh
-# (the site's pictures). The VM is the script's alone: leased for an hour,
+# tools/ci/mac_vm_tests.sh (the tests that need a Mac), tools/ci/mac_vm_proof.sh
+# (main's proof) and tools/ci/mac_vm_screenshots.sh (the site's pictures). The VM is the script's alone: leased for an hour,
 # renewed while it runs, released however it ends (a kill nothing can trap
 # leaves it an hour at most). The checkout's tree goes in with the runner's
 # bazelisk; Bazel there reads OS Server's cache, as every lease's does.

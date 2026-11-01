@@ -13,17 +13,21 @@
 #
 #   OSS_FILES_HOST   the name the container reaches this Mac's OS Server by
 #                    (default: this Mac's tailnet name, from Tailscale)
-#   VISOR_CI_VOLUME  Bazel's tree (default: one of the run's own, given back
-#                    with the lease: a run a newer push cancels is killed
-#                    before it releases its lease, which holds its volume for
-#                    up to an hour, so a volume shared between runs would
-#                    refuse the next one. Kept between runs, `:keep`, once
-#                    OS Server releases a cancelled run's lease at once.)
+#   VISOR_CI_VOLUME  Bazel's tree, kept between builds (default: visor-ci;
+#                    `:keep`, so OS Server keeps it when the lease ends, and
+#                    a cancelled run's SIGTERM releases the lease at once).
+#                    One build at a time uses it (ci.yml's concurrency).
+#
+# With no build arguments (CI's run) it builds every app (the iPhone's for
+# the simulator, the Mac's, the Linux client, blue Visor's Android APK),
+# then, for the Mac, the libraries, the staging server and the command-line
+# server: every target compiles in the Swift 6 mode with warnings as errors
+# (tools/swift), so building is a check of its own.
 set -euo pipefail
 ROOT="${BUILD_WORKSPACE_DIRECTORY:?run it with bazel run}"
 IMAGE="${1:?the agent image, ghcr.io/attilathefun/visor-agent:<version>}"
 shift
-VOLUME="${VISOR_CI_VOLUME:-visor-ci-${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}}"
+VOLUME="${VISOR_CI_VOLUME:-visor-ci}"
 SDK_SHA256="251c252f7f41bcd3e08655e49e182686682d705945f4a2807049b9051c606ebb"
 
 # The command line inside OS Server, or on the path.
@@ -51,7 +55,29 @@ rewrite apple-sdks\.invalid/.* http://$host:7490/files/sha256/$SDK_SHA256
 rewrite ported-tools\.invalid/sha256/(.*) http://$host:7490/files/sha256/\$1
 EOF
 
+# In the container: the apps, then (CI's run) the Mac's own targets, each
+# build reading the cache (--cache writes the container's ~/.bazelrc).
+steps='
+root=$1 full=$2; shift 2
+cd "$root"
+flags="--keep_going --config=apple_on_linux --downloader_config=$root/.ci/downloader.cfg"
+echo "::group::The apps"
+bazel build $flags "$@"
+apps=$?
+echo "::endgroup::"
+[ "$full" = 1 ] || exit $apps
+echo "::group::The Mac: libraries, staging server, command-line server"
+bazel build $flags --platforms=@apple_support//platforms:macos_arm64 \
+    //libraries/... //tools/staging_server //applications/visor_server_mac:visor-server
+mac=$?
+echo "::endgroup::"
+[ $apps -ne 0 ] && exit $apps
+exit $mac
+'
+
+full=0
 if [ $# -eq 0 ]; then
+    full=1
     set -- --macos_cpus=arm64 \
         //applications/visor_ios \
         //applications/visor_macos \
@@ -62,6 +88,6 @@ fi
 
 cd "$ROOT"
 exec "$OSS" machine run container --image="$IMAGE" --rosetta --cpus=6 --memory=16 \
-    --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:128" \
+    --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:128:keep" \
     --inside --cache="$host" -- \
-    bazel build --keep_going --config=apple_on_linux --downloader_config="$ROOT/.ci/downloader.cfg" "$@"
+    bash -c "$steps" container_build "$ROOT" "$full" "$@"
