@@ -15,6 +15,15 @@ final class ConnectionLogTests: XCTestCase {
         XCTAssertEqual(ConnectionLog.stamp(time), formatter.string(from: Date(timeIntervalSince1970: time)))
     }
 
+    /// A line keeps its own moment's offset: one from summer time reads as
+    /// the clock did then after the clocks have gone back, and one from
+    /// after reads as the clock does now (New York, 1 November 2026).
+    func testAStampTakesTheOffsetOfItsMoment() throws {
+        let newYork = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        XCTAssertEqual(ConnectionLog.stamp(1_791_051_731.25, in: newYork), "10-03 14:22:11.250")
+        XCTAssertEqual(ConnectionLog.stamp(1_793_800_000.5, in: newYork), "11-04 08:46:40.500")
+    }
+
     /// The export says which zone its times are in.
     func testTheHeaderNamesTheZone() {
         XCTAssertEqual(ConnectionLog.header(offset: 0), "Visor connection log. Times are UTC.")

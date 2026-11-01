@@ -82,9 +82,11 @@ public final class ConnectionLog {
     /// Milliseconds from `start` (a `now()`) to now.
     func since(_ start: Double) -> Int { Int(((now() - start) * 1000).rounded()) }
 
-    /// "10-03 15:06:41.250", in the device's own time.
-    static func stamp(_ time: Double) -> String {
-        let local = time + Double(TimeZone.current.secondsFromGMT())
+    /// "10-03 15:06:41.250", in the device's own time: its zone's offset at
+    /// that moment, so a line from before the clocks changed (summer time
+    /// ending) reads as the clock did then, not an hour off.
+    static func stamp(_ time: Double, in zone: TimeZone = .current) -> String {
+        let local = time + Double(zone.secondsFromGMT(for: Date(timeIntervalSince1970: time)))
         let days = Int((local / 86_400).rounded(.down))
         let inDay = local - Double(days) * 86_400
         let seconds = Int(inDay)

@@ -119,6 +119,27 @@ final class QuestionTests: ServerTestCase {
         XCTAssertNil(record.info.pendingApproval)
     }
 
+    /// The agent gave up waiting (its shim's socket closed before an
+    /// answer): the prompt is withdrawn from the clients.
+    func testAPromptWhoseAskerWentIsWithdrawn() throws {
+        let record = SessionRecord(info: SessionInfo(id: "w", agent: .claude, cwd: "/tmp", title: "w", created: 0), process: QuietAgent())
+        server.sessions = [record]
+        var asked = Envelope(type: "approval_request")
+        asked.token = server.agentToken
+        asked.session = "w"
+        asked.id = "r3"
+        asked.text = "Bash"
+        asked.prompt = "rm -rf build"
+        let shim = ClientConnection(stream: ShimStream())
+        server.handle(asked, from: shim)
+        XCTAssertNotNil(record.info.pendingApproval)
+        server.withdrawApprovals(askedBy: ClientConnection(stream: ShimStream()))
+        XCTAssertNotNil(record.info.pendingApproval, "another connection's going withdraws nothing")
+        server.withdrawApprovals(askedBy: shim)
+        XCTAssertNil(record.info.pendingApproval)
+        XCTAssertTrue(record.approvalWaiters.isEmpty)
+    }
+
     /// A tool call that is not a question carries none, as before.
     func testAPermissionCarriesNoQuestions() throws {
         let record = SessionRecord(info: SessionInfo(id: "p", agent: .claude, cwd: "/tmp", title: "p", created: 0), process: QuietAgent())

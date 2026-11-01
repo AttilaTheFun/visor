@@ -11,7 +11,9 @@
 
 /// Starts `path` with `argv` and `envp` as the leader of a new session with
 /// no terminal — a daemon — its standard input /dev/null and its output and
-/// errors `log`. Returns its process id, or -1 with errno set.
+/// errors `log`. Returns its process id once the program has started, or
+/// -1 with errno set (the program's own, when it could not be started: not
+/// there, say).
 pid_t visor_spawn_detached(const char *path, char *const argv[], char *const envp[], int log);
 
 /// Starts `path` with `argv` and `envp` in `directory` on pipes, as the
@@ -47,6 +49,11 @@ unsigned long long visor_physical_memory(void);
 /// reusable at once). -1 with errno set.
 int visor_listen(unsigned short port, int everywhere);
 
+/// A TCP socket listening on every IPv6 address at `port`, IPv6 alone
+/// (beside `visor_listen`'s IPv4; close-on-exec, the address reusable at
+/// once). -1 with errno set.
+int visor_listen6(unsigned short port);
+
 /// A Unix domain socket listening at `path` (a stale file there replaced;
 /// the new one readable and writable by its owner alone). -1 with errno set.
 int visor_listen_unix(const char *path);
@@ -55,6 +62,11 @@ int visor_listen_unix(const char *path);
 /// writes given up after 30 seconds of a peer that reads nothing). -1 with
 /// errno set.
 int visor_connect_unix(const char *path);
+
+/// A TCP connection to `host` (a name or an address) at `port`
+/// (close-on-exec, its writes given up after 30 seconds of a peer that
+/// reads nothing). -1 with errno set.
+int visor_connect_tcp(const char *host, unsigned short port);
 
 /// Whether something listens at the Unix domain socket `path` now: 1 when a
 /// connection to it is taken, 0 otherwise (no file, a stale one).
@@ -71,6 +83,10 @@ void visor_local_address(int socket, char *out, size_t size);
 
 /// Ends both directions of a socket, waking whoever is blocked on it.
 void visor_shutdown(int socket);
+
+/// Ends the sending direction of a socket alone: its peer reads the end,
+/// and can still answer.
+void visor_shutdown_write(int socket);
 
 /// Writing to a pipe or socket whose reader has gone fails the write
 /// (EPIPE) rather than ending the process.

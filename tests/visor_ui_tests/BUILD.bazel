@@ -1,10 +1,13 @@
+load("@rules_apple//apple:macos.bzl", "macos_unit_test")
+load("@rules_swift//swift:swift.bzl", "swift_library")
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
-load("@rules_swift//swift:swift.bzl", "swift_test")
 
-swift_test(
-    name = "visor_ui_tests",
+swift_library(
+    name = "visor_ui_tests_lib",
+    testonly = True,
     copts = STRICT_SWIFT,
     srcs = glob(["*.swift"]),
+    module_name = "VisorUITests",
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//:swift_ui",
@@ -12,4 +15,12 @@ swift_test(
         "//libraries/visor_services",
         "//libraries/visor_ui",
     ],
+)
+
+# An .xctest bundle: built anywhere (on Linux too, with rules_applecross),
+# run on a Mac by `bazel test` or by OS Server (`oss machine xctest`).
+macos_unit_test(
+    name = "visor_ui_tests",
+    minimum_os_version = "15.0",
+    deps = [":visor_ui_tests_lib"],
 )

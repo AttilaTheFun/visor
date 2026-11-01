@@ -429,9 +429,12 @@ one's own, or a front that has signed the user in.
 `networkChanged`): the host says which hosts are on a network the device
 is on now (each interface's address and mask) and whether it has a
 tailnet address, and calls back when the networks change (NWPathMonitor).
-Paths are ranked local, overlay, other, unlikely (a LAN's address when
-away, a tailnet's with no tailnet; a link's own 169.254 address counts as
-a LAN's) — the one that answered last first among its equals, kept in the
+Paths are ranked loopback, local, overlay, other, unlikely (this
+device's own 127.0.0.1 first, for a server on it — a server gives its
+loopback path last among its own, and one whose id isn't the record's
+there is another computer, so that path goes; a LAN's address when away,
+a tailnet's with no tailnet; a link's own 169.254 address counts as a
+LAN's) — the one that answered last first among its equals, kept in the
 record (`lastPath`) so a launch starts with it — and `VisorStore` has
 every connection re-rank on a change: a server connected by a path that
 is no longer the best is connected again by the one that is, and one
@@ -635,8 +638,10 @@ through `POST /api/quit`, so it ends its agents first on every system.
 on|off` serves the socket file for SSH clients (Linux; not Windows),
 `visor-server address <url>` names a front of your own, `visor-server
 standalone on` keeps it to itself (see the protocol's network of
-computers); `run` and `start` take the same as options (`--password`,
-`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`,
+computers), `visor-server front <url>…` gives a server in a container its
+front's paths (Visor Runner's on the computer: its loopback, LAN and VPN)
+for clients in place of the container's own; `run` and `start` take the same as options (`--password`,
+`--auth`, `--lan`, `--vpn`, `--ssh`, `--address`, `--standalone`, `--front`,
 `--container-host`, `--container-image`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server
@@ -665,7 +670,9 @@ this server (`visor.session`, `visor.server`). It sees: the session's folder
 at the same path (so its files, git and the agent's own log are the
 computer's), the agent's log folder for that folder (Claude's
 `~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
-`~/.openrouter/sessions`), and Visor's MCP script read-only at `/opt/visor`
+`~/.openrouter/sessions`), the pictures attached to sessions
+(`<data>/images`, AgentImages) read-only at the same path, since the agent
+is given that path, and Visor's MCP script read-only at `/opt/visor`
 (ContainerTools). The agents' sign-ins for containers are the server's own,
 never the image's (ContainerSignIns: `<data>/containers/agent.env` with
 CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
@@ -717,6 +724,58 @@ servers): an OS Server's own MCP port, set as an endpoint with a key of the
 server's (`<session>@<application>` is each lease's holder), whose tools
 the agent calls as `<endpoint>__oss_lease` and so on. Visor itself knows
 nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
+
+**Visor Runner's MCP proxy.** A Visor server in a container (or any server
+that shouldn't hold the MCP servers' keys) sets its MCP servers to
+`visor-runner-agent` on the Mac (applications/visor_runner_agent,
+libraries/visor_runner; docs/co-tenancy.md). The proxy keeps the secret
+headers, in `runner-secrets.json` in Visor's data folder (this user's
+alone). Each server it serves has a token of its own, sent with every call
+(`X-Visor-Proxy`). A call to `/mcp/<name>` with a known token goes on to
+that MCP server with the secret headers added, and its answer comes back
+as it came (JSON or SSE). Set up on a Mac:
+
+```sh
+visor-runner-agent endpoint set gh http://127.0.0.1:7470/mcp --header 'CLIENT_ID=$SESSION_ID' --secret API_KEY  # the key on stdin
+visor-runner-agent server add co-tenant --host <the Mac's name as the container reaches it>  # prints the server's PUT /api/mcp body
+visor-runner-agent status
+visor-runner-agent serve   # port 7439, every interface; a LaunchAgent keeps it running
+```
+
+The printed body goes to the server's `PUT /api/mcp` with its password.
+The token is kept there as a secret header, and no key goes into the
+container.
+
+**Its push proxy.** On the same port and with the same tokens, a server
+with no APNs key of its own (Linux, a container) sends its pushes to
+`/apns/<APNs's host>/3/device/<token>`, unsigned. The Runner passes on
+APNs's own headers alone, adds a token it signs with the APNs key it keeps
+(CryptoKit; a Runner built elsewhere proxies no pushes), and sends it to
+APNs over HTTP/2. APNs's answer comes back as it came.
+
+```sh
+visor-runner-agent apns set --key-id <key id> --team-id <team id> < AuthKey_<key id>.p8
+visor-runner-agent server push-proxy co-tenant --host <the Mac's name as the container reaches it>  # prints the PUT /api/push-proxy body
+```
+
+The printed body goes to the server's `PUT /api/push-proxy` with its
+password.
+
+**Its client proxy.** A container server's clients reach it through the
+Runner: a front per server, a port of the Mac's on every interface (IPv4
+and IPv6), each connection carried on to the server where only the Mac
+reaches it (its address on the containers' network), the bytes both ways
+as they come. When one way ends, the other has five seconds, then both
+end. Set on the Mac, from the agent's next start:
+
+```sh
+visor-runner-agent front set co-tenant --port 7440 --to 192.168.131.3:7433
+```
+
+It takes the place of a forwarder of the Mac's own (the mini's socat
+LaunchAgents on 7440): stop that first, or the port can't be had. The
+server's pairing code lists the Mac's addresses at the front's port (its
+front paths, `visor-server front`).
 
 ## 4. The working loop
 
@@ -877,7 +936,9 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
   through to itself). Kill the sshd by its pid file afterwards.
 - `tools/probes/command_line_server.sh [binary]` — `visor-server` on Linux
   as its user would run it: a password, `run` checked with the server
-  probe, then `start`, a restart through `/api/restart`, `stop`. CI runs
+  probe, then `start`, a restart through `/api/restart`, another after
+  its program file is replaced (Linux then names the running program
+  `<path> (deleted)`; the successor starts from the path), `stop`. CI runs
   it; on the Mac, in a container: a podman machine of your own, an image
   with `swift:6.4-noble` and Node 22, the checkout
   mounted, `swift build --product visor-server` then this.
@@ -897,7 +958,7 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
   Server has Screen Recording (Privacy & Security), which is how the Mac
   apps are looked at. The iOS simulator probe (`tests/ios_probe`) drives
   the phone client. rules_apple 5's runner makes its own simulator
-  (`--ios_simulator_device="iPhone 17" --ios_simulator_version=27.0`;
+  (`--ios_simulator_device="iPhone 17" --ios_simulator_version=27.2`;
   `--destination` is NOT accepted). It adds the host by `VISOR_PROBE_HOST`
   and `VISOR_PROBE_PASSWORD`. The `*Look` cases expect
   a session on the host (`VISOR_LOOK_SESSION` names it); the fixture and
@@ -975,7 +1036,7 @@ minutes and read as a timeout). To run it here (or in a VM),
 after touching the thread's rows or its scrolling, `tools/ios_ui_tests.sh`
 or:
 `bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64
---ios_simulator_device="iPhone 17" --ios_simulator_version=27.0
+--ios_simulator_device="iPhone 17" --ios_simulator_version=27.2
 --spawn_strategy=local --test_filter=VisorProbe/testLearningOfEarlierRowsMovesNothing`.
 
 The thread follows its end only while the end is in view (AgentUI 0.29):
@@ -990,7 +1051,7 @@ rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 CI makes the proof: its `proof` job, on the repository's own runner
 (`visor-ci`, which a fork's pull request never reaches), runs
 `tools/ci/mac_vm_proof.sh`. That leases a macOS VM from OS Server
-(`xcode-27.0`), copies the committed tree and Bazel in, and takes the
+(`xcode_27_2`), copies the committed tree and Bazel in, and takes the
 fixture's screens in each orientation there (the probe's
 `testFixtureScreens` and `testFixtureScreensLandscape` through
 `tools/ios_ui_tests.sh`, on an iPhone 17 simulator made new, its status bar

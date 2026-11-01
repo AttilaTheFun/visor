@@ -112,6 +112,21 @@ extension ServerCommand {
               : "The server shares its addresses and joins the relay again, from its next start.")
     }
 
+    /// Shows, sets or clears the paths a front reaches this server at.
+    @MainActor
+    func front(_ paths: [String]) {
+        var settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        if paths.isEmpty {
+            print(settings.frontPaths.isEmpty ? "No front: clients are given this computer's own addresses." : settings.frontPaths.joined(separator: "\n"))
+            return
+        }
+        settings.frontPaths = paths == ["-"] ? [] : paths
+        settings.keep(at: VisorServer.settingsURL)
+        print(settings.frontPaths.isEmpty
+              ? "No front: clients are given this computer's own addresses again, from the server's next start."
+              : "Clients are given the front's paths, from the server's next start:\n" + settings.frontPaths.joined(separator: "\n"))
+    }
+
     /// Shows or sets the address clients are told.
     @MainActor
     func address(_ value: String?) {

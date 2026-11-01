@@ -62,6 +62,7 @@ extension ServerCommand {
         case "ssh": try ssh(value)
         case "address": address(value)
         case "standalone": try standalone(value)
+        case "front": front(value == "-" ? ["-"] : value.split(separator: ",").map(String.init))
         case "container-host", "container-image": containerOption(name, value)
         default: throw CommandLineError.usage("unknown option --\(name)")
         }
