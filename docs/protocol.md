@@ -55,7 +55,11 @@ sessions (`GET /sessions?since=`) and each open session's state
 (`GET /sessions/<id>/state?since=`), each held by the server until it
 changes, as the transcript's sync always is; the rows before one from
 `GET /sessions/<id>/earlier`. Pushes are optional the same way: a device
-whose server sends none notifies itself.
+whose server sends none notifies itself. A server with no APNs key of its
+own (on Linux, in a container) sends them through a push proxy that holds
+one (`PUT /push-proxy`; Visor Runner's): each APNs request as it would
+be, unsigned, at `<proxy>/apns/<APNs's host>/3/device/<token>` with the
+server's token for the proxy in `X-Visor-Proxy`, and APNs's answer back.
 
 ## Connection codes
 
@@ -92,6 +96,8 @@ under `/api`.
 | `POST /sessions/<id>/contain` | `container` (true: into a container on its computer; false: out of it) | `sessions` with that one, once its agent has moved; 409 with `error` while it works, or when no container could be made |
 | `GET /mcp` | | `endpoints`: the MCP servers passed on to the sessions' agents (see Proxied MCP servers), each `name`, `url`, `onByDefault` and `headers` (`name`, `secret`, and `value`, or for a secret one only `kept`) |
 | `PUT /mcp` | `endpoints`: all of them, each `name`, `url`, `onByDefault`?, `headers` (`name`, `value`?, `secret`?) | as `GET /mcp`. A secret header's `value` is kept with the server's secrets; sent without one, the value kept stays. Refused (403) with an agent's token. |
+| `GET /push-proxy` | | `url`: where pushes go when this server has no APNs key of its own (empty for nowhere), and `kept`: whether its token for the proxy is kept |
+| `PUT /push-proxy` | `url` (empty for none, which forgets the token too), `token`? | as `GET /push-proxy`. The token is kept with the server's secrets; sent without one, the token kept stays. Refused (403) with an agent's token. |
 | `POST /sessions/{id}/stop` `…/archive` `…/unarchive` | | same |
 | `POST /sessions/{id}/restartAgent` | | same: a running agent (`agentState` `running`) is ended and a new one made and started on the same conversation (`stopping`, then `starting`, then `running`); a turn it was working on is carried on by a nudge that goes first. A stopped agent is started (what a client of 0.34 or before means by it) |
 | `POST /sessions/{id}/stopAgent` `…/startAgent` | | same: a running agent is ended (`stopping`, then `stopped`) and kept so, through a launch of the server too, its turn in flight cut short and not carried on; what is sent meanwhile waits in `queued`. A stopped one is started (`starting`, then `running`, its process up at once) and what waited goes over. Anything else is left as it is |
