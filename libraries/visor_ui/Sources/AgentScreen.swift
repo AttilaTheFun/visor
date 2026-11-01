@@ -249,7 +249,9 @@ struct AgentScreen: View {
                 }
             },
             focus: $composerFocused,
-            branchFromHere: branchFromHere
+            branchFromHere: branchFromHere,
+            // Once the reader stops: rows far above them are let go of.
+            viewport: { [host, sessionID] viewport in host.reading(sessionID, top: viewport.topID) }
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval, host: host, sessionID: sessionID, answering: $answering)
