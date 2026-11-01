@@ -66,9 +66,10 @@ bazel build $flags "$@"
 apps=$?
 echo "::endgroup::"
 [ "$full" = 1 ] || exit $apps
-echo "::group::The Mac: libraries, staging server, command-line server"
+echo "::group::The Mac: libraries, staging server, command-line server, Runner agent"
 bazel build $flags --platforms=@apple_support//platforms:macos_arm64 \
-    //libraries/... //tools/staging_server //applications/visor_server_mac:visor-server
+    //libraries/... //tools/staging_server //applications/visor_server_mac:visor-server \
+    //applications/visor_runner_agent:visor-runner-agent
 mac=$?
 echo "::endgroup::"
 [ $apps -ne 0 ] && exit $apps
