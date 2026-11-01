@@ -37,6 +37,11 @@ public protocol AgentHarness: AnyObject, Sendable {
     /// The subagents the agent's conversation `id` sent off, oldest first;
     /// none where the agent keeps none apart.
     func subagents(id: String, cwd: String) -> [SubagentInfo]
+    /// Whether the agent's list of what runs in the background
+    /// (`AgentEvent.background`) has its subagents on it, by the ids
+    /// `subagents` gives them: one its files leave unfinished but the list
+    /// no longer has ended without saying so.
+    var listsSubagentsInBackground: Bool { get }
     /// One subagent's conversation, as rows.
     func subagentTranscript(id: String, cwd: String, subagent: String) -> [TranscriptEntry]
     /// A finished subagent's conversation made one of the agent's own:
@@ -54,6 +59,7 @@ public extension AgentHarness {
     func readAccount() async -> AgentAccount? { nil }
     func forkPoint(row: String, id: String, cwd: String) -> String? { nil }
     func subagents(id: String, cwd: String) -> [SubagentInfo] { [] }
+    var listsSubagentsInBackground: Bool { false }
     func subagentTranscript(id: String, cwd: String, subagent: String) -> [TranscriptEntry] { [] }
     func continueSubagent(id: String, cwd: String, subagent: String) -> String? { nil }
     /// Claude Code's way: its SendMessage, by the subagent's id.
