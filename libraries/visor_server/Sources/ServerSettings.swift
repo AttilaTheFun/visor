@@ -35,6 +35,12 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// The proxy's or tunnel's URL (`https://proxy.example.com/visor`), or
     /// a name on the network with certificates (HTTPS at the root).
     public var publicAddress = ""
+    /// The paths a front on the computer it runs in reaches it at — that
+    /// computer's loopback, its LAN, its VPN (`http://192.168.1.20:7440`)
+    /// — for a server in a container, behind Visor Runner: given to clients
+    /// in place of the server's own interfaces' addresses, which only that
+    /// computer reaches. Empty for a server on a computer of its own.
+    public var frontPaths: [String] = []
     /// This server's id on the network of computers: made once, kept.
     public var serverID = ""
     /// What a client must show: "password" (a bearer that is the
@@ -78,7 +84,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost, pushProxy
+             frontPaths, detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost, pushProxy
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -92,6 +98,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         try c.encode(serverID, forKey: .serverID)
         try c.encode(authentication, forKey: .authentication)
         try c.encode(standalone, forKey: .standalone)
+        if !frontPaths.isEmpty { try c.encode(frontPaths, forKey: .frontPaths) }
         try c.encode(detachAgents, forKey: .detachAgents)
         if !containerImage.isEmpty { try c.encode(containerImage, forKey: .containerImage) }
         if !containerCallback.isEmpty { try c.encode(containerCallback, forKey: .containerCallback) }
@@ -119,6 +126,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         publicAddress = try c.decodeIfPresent(String.self, forKey: .publicAddress) ?? ""
         proxyEnabled = try c.decodeIfPresent(Bool.self, forKey: .proxyEnabled) ?? !publicAddress.isEmpty
         standalone = try c.decodeIfPresent(Bool.self, forKey: .standalone) ?? false
+        frontPaths = try c.decodeIfPresent([String].self, forKey: .frontPaths) ?? []
         serverID = try c.decodeIfPresent(String.self, forKey: .serverID) ?? ""
         authentication = try c.decodeIfPresent(String.self, forKey: .authentication) ?? "password"
         detachAgents = try c.decodeIfPresent(Bool.self, forKey: .detachAgents) ?? true
