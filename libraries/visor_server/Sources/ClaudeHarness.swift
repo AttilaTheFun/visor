@@ -16,6 +16,9 @@ public final class ClaudeHarness: AgentHarness {
         tool == "claude" ? ClaudeForkPoint.point(row: row, id: id, cwd: cwd) : nil
     }
 
+    /// Claude Code's background tasks name its subagents by their ids.
+    public var listsSubagentsInBackground: Bool { tool == "claude" }
+
     /// Claude Code's, kept beside the session's file (ClaudeSubagent).
     public func subagents(id: String, cwd: String) -> [SubagentInfo] {
         guard tool == "claude", let file = ClaudeSessionFiles.locate(sessionID: id, cwd: cwd) else { return [] }

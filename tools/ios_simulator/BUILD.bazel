@@ -1,0 +1,10 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+# The simulator a test runner (rules_apple's ios_xctestrun_runner) runs
+# iOS tests on: its create_simulator_action, in place of rules_apple's
+# (simulator_create.sh says why).
+sh_binary(
+    name = "create",
+    srcs = ["simulator_create.sh"],
+    visibility = ["//tests:__subpackages__"],
+)

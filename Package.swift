@@ -87,7 +87,8 @@ let system: [Target] = [
 /// The server's tests, on Linux's platform (tests/visor_server_tests/linux).
 let tests: [Target] = [
     .testTarget(name: "VisorServerTests",
-                dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux"],
+                dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux",
+                               "VisorServerPOSIX"],
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
     .testTarget(name: "VisorContainerHostTests", dependencies: ["VisorContainerHost"],
                 path: "tests/visor_container_host_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),

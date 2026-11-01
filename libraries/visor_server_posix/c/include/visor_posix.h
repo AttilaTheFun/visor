@@ -11,7 +11,9 @@
 
 /// Starts `path` with `argv` and `envp` as the leader of a new session with
 /// no terminal — a daemon — its standard input /dev/null and its output and
-/// errors `log`. Returns its process id, or -1 with errno set.
+/// errors `log`. Returns its process id once the program has started, or
+/// -1 with errno set (the program's own, when it could not be started: not
+/// there, say).
 pid_t visor_spawn_detached(const char *path, char *const argv[], char *const envp[], int log);
 
 /// Starts `path` with `argv` and `envp` in `directory` on pipes, as the

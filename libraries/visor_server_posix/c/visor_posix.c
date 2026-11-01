@@ -26,9 +26,10 @@
 #include <unistd.h>
 
 /// Signal handlers and mask back to their defaults, and every descriptor
-/// above the standard three closed: what a child should start from. Only
-/// async-signal-safe calls, in a forked child of a multithreaded parent.
-static void visor_start_clean(int highest) {
+/// above the standard three closed but `keep` (-1 for none): what a child
+/// should start from. Only async-signal-safe calls, in a forked child of a
+/// multithreaded parent.
+static void visor_start_clean(int highest, int keep) {
     sigset_t none;
     sigemptyset(&none);
     sigprocmask(SIG_SETMASK, &none, 0);
@@ -40,7 +41,15 @@ static void visor_start_clean(int highest) {
         if (signal == SIGKILL || signal == SIGSTOP) continue;
         sigaction(signal, &standard, 0);
     }
-    for (int fd = 3; fd < highest; fd++) close(fd);
+    for (int fd = 3; fd < highest; fd++) if (fd != keep) close(fd);
+}
+
+/// In a forked child that could not start its program: why (errno) written
+/// to the parent's pipe, then gone.
+__attribute__((noreturn)) static void visor_child_failed(int told, int status) {
+    int error = errno;
+    (void)!write(told, &error, sizeof error);
+    _exit(status);
 }
 
 static int visor_highest_descriptor(void) {
@@ -59,7 +68,7 @@ pid_t visor_spawn_piped(const char *path, char *const argv[], char *const envp[]
         // The child.
         setpgid(0, 0);
         if (dup2(input[0], 0) < 0 || dup2(output[1], 1) < 0 || dup2(errors[1], 2) < 0) _exit(126);
-        visor_start_clean(highest);
+        visor_start_clean(highest, -1);
         if (directory) (void)chdir(directory);
         execve(path, argv, envp);
         _exit(127);
@@ -183,18 +192,47 @@ pid_t visor_spawn_detached(const char *path, char *const argv[], char *const env
     int highest = visor_highest_descriptor();
     int nothing = open("/dev/null", O_RDONLY | O_CLOEXEC);
     if (nothing < 0) return -1;
+    // Whether the program started: the child writes errno here if it could
+    // not, and the pipe closes without a word once the program runs
+    // (close-on-exec). Nobody else waits for a daemon, so a program that
+    // is not there would otherwise go unnoticed.
+    int told[2];
+    if (pipe(told) != 0) {
+        int error = errno;
+        close(nothing);
+        errno = error;
+        return -1;
+    }
+    (void)fcntl(told[0], F_SETFD, FD_CLOEXEC);
+    (void)fcntl(told[1], F_SETFD, FD_CLOEXEC);
     pid_t pid = fork();
     if (pid != 0) {
+        int error = errno;
         close(nothing);
+        close(told[1]);
+        if (pid < 0) {
+            close(told[0]);
+            errno = error;
+            return -1;
+        }
+        int failed = 0;
+        ssize_t got;
+        do got = read(told[0], &failed, sizeof failed); while (got < 0 && errno == EINTR);
+        close(told[0]);
+        if (got == (ssize_t)sizeof failed) {
+            (void)waitpid(pid, 0, 0);
+            errno = failed;
+            return -1;
+        }
         return pid;
     }
 
     // The child.
-    if (setsid() < 0) _exit(126);
-    if (dup2(nothing, 0) < 0 || dup2(log, 1) < 0 || dup2(log, 2) < 0) _exit(126);
-    visor_start_clean(highest);
+    if (setsid() < 0) visor_child_failed(told[1], 126);
+    if (dup2(nothing, 0) < 0 || dup2(log, 1) < 0 || dup2(log, 2) < 0) visor_child_failed(told[1], 126);
+    visor_start_clean(highest, told[1]);
     execve(path, argv, envp);
-    _exit(127);
+    visor_child_failed(told[1], 127);
 }
 
 int visor_listen(unsigned short port, int everywhere) {

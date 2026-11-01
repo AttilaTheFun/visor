@@ -33,7 +33,7 @@ final class LocalNetworkNameTests: ServerTestCase {
 
     func testTheNameIsAPathWhileTheLANIsOn() {
         server.settings.lan = true
-        XCTAssertEqual(server.httpPaths, ["http://192.168.1.20:7998", "http://Studio-Mac.local:7998"])
+        XCTAssertEqual(server.httpPaths, ["http://192.168.1.20:7998", "http://Studio-Mac.local:7998", "http://127.0.0.1:7998"])
         server.settings.lan = false
         XCTAssertFalse(server.httpPaths.contains { $0.contains("Studio-Mac.local") })
     }
@@ -44,9 +44,26 @@ final class LocalNetworkNameTests: ServerTestCase {
         XCTAssertEqual(server.sshPaths, ["ssh://\(user)@192.168.1.20", "ssh://\(user)@Studio-Mac.local"])
     }
 
+    /// A server behind a front (in a container, behind Visor Runner)
+    /// gives the front's paths, not its own: the code's address is the
+    /// first another device reaches, never loopback.
+    func testAServerBehindAFrontGivesTheFrontsPaths() throws {
+        server.password = "pw"
+        server.settings.lan = true
+        server.settings.frontPaths = ["http://127.0.0.1:7440", "http://192.168.1.20:7440", "http://100.64.0.11:7440"]
+        XCTAssertEqual(server.ownAddresses, server.settings.frontPaths)
+        XCTAssertEqual(server.reachableAddress, "http://192.168.1.20:7440")
+        let code = try XCTUnwrap(server.connectionCode)
+        XCTAssertEqual(code.host, "http://192.168.1.20:7440")
+        XCTAssertFalse(code.paths.contains("http://192.168.1.20:7998"), "not the container's own")
+        XCTAssertTrue(code.paths.contains("http://127.0.0.1:7440"))
+        server.settings.frontPaths = []
+        XCTAssertEqual(server.reachableAddress, "http://192.168.1.20:7998")
+    }
+
     func testAComputerWithNoNameGivesOnlyItsAddresses() {
         ServerPlatform.current.host.localNetworkName = { nil }
         server.settings.lan = true
-        XCTAssertEqual(server.httpPaths, ["http://192.168.1.20:7998"])
+        XCTAssertEqual(server.httpPaths, ["http://192.168.1.20:7998", "http://127.0.0.1:7998"])
     }
 }
