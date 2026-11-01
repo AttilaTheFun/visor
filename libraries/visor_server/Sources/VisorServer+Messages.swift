@@ -212,6 +212,21 @@ extension VisorServer {
         broadcastSessions()
     }
 
+    /// A permission prompt whose asker went before it was answered (the
+    /// agent gave up waiting, or stopped): withdrawn, so no one answers it
+    /// into nothing.
+    func withdrawApprovals(askedBy client: ClientConnection) {
+        for record in sessions {
+            let asked = record.approvalWaiters.filter { $0.value === client }.map(\.key)
+            guard !asked.isEmpty else { continue }
+            for id in asked { record.approvalWaiters.removeValue(forKey: id) }
+            guard let pending = record.info.pendingApproval, asked.contains(pending.id) else { continue }
+            record.setPendingApproval(nil)
+            broadcast(.approval(session: record.info.id, nil), session: record)
+            broadcastSessions()
+        }
+    }
+
     private func performSettings(_ envelope: Envelope) {
         guard let record = session(envelope.session) else { return }
         let model = envelope.model ?? record.info.model

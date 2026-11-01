@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -25,9 +26,10 @@
 #include <unistd.h>
 
 /// Signal handlers and mask back to their defaults, and every descriptor
-/// above the standard three closed: what a child should start from. Only
-/// async-signal-safe calls, in a forked child of a multithreaded parent.
-static void visor_start_clean(int highest) {
+/// above the standard three closed but `keep` (-1 for none): what a child
+/// should start from. Only async-signal-safe calls, in a forked child of a
+/// multithreaded parent.
+static void visor_start_clean(int highest, int keep) {
     sigset_t none;
     sigemptyset(&none);
     sigprocmask(SIG_SETMASK, &none, 0);
@@ -39,7 +41,15 @@ static void visor_start_clean(int highest) {
         if (signal == SIGKILL || signal == SIGSTOP) continue;
         sigaction(signal, &standard, 0);
     }
-    for (int fd = 3; fd < highest; fd++) close(fd);
+    for (int fd = 3; fd < highest; fd++) if (fd != keep) close(fd);
+}
+
+/// In a forked child that could not start its program: why (errno) written
+/// to the parent's pipe, then gone.
+__attribute__((noreturn)) static void visor_child_failed(int told, int status) {
+    int error = errno;
+    (void)!write(told, &error, sizeof error);
+    _exit(status);
 }
 
 static int visor_highest_descriptor(void) {
@@ -58,7 +68,7 @@ pid_t visor_spawn_piped(const char *path, char *const argv[], char *const envp[]
         // The child.
         setpgid(0, 0);
         if (dup2(input[0], 0) < 0 || dup2(output[1], 1) < 0 || dup2(errors[1], 2) < 0) _exit(126);
-        visor_start_clean(highest);
+        visor_start_clean(highest, -1);
         if (directory) (void)chdir(directory);
         execve(path, argv, envp);
         _exit(127);
@@ -182,18 +192,47 @@ pid_t visor_spawn_detached(const char *path, char *const argv[], char *const env
     int highest = visor_highest_descriptor();
     int nothing = open("/dev/null", O_RDONLY | O_CLOEXEC);
     if (nothing < 0) return -1;
+    // Whether the program started: the child writes errno here if it could
+    // not, and the pipe closes without a word once the program runs
+    // (close-on-exec). Nobody else waits for a daemon, so a program that
+    // is not there would otherwise go unnoticed.
+    int told[2];
+    if (pipe(told) != 0) {
+        int error = errno;
+        close(nothing);
+        errno = error;
+        return -1;
+    }
+    (void)fcntl(told[0], F_SETFD, FD_CLOEXEC);
+    (void)fcntl(told[1], F_SETFD, FD_CLOEXEC);
     pid_t pid = fork();
     if (pid != 0) {
+        int error = errno;
         close(nothing);
+        close(told[1]);
+        if (pid < 0) {
+            close(told[0]);
+            errno = error;
+            return -1;
+        }
+        int failed = 0;
+        ssize_t got;
+        do got = read(told[0], &failed, sizeof failed); while (got < 0 && errno == EINTR);
+        close(told[0]);
+        if (got == (ssize_t)sizeof failed) {
+            (void)waitpid(pid, 0, 0);
+            errno = failed;
+            return -1;
+        }
         return pid;
     }
 
     // The child.
-    if (setsid() < 0) _exit(126);
-    if (dup2(nothing, 0) < 0 || dup2(log, 1) < 0 || dup2(log, 2) < 0) _exit(126);
-    visor_start_clean(highest);
+    if (setsid() < 0) visor_child_failed(told[1], 126);
+    if (dup2(nothing, 0) < 0 || dup2(log, 1) < 0 || dup2(log, 2) < 0) visor_child_failed(told[1], 126);
+    visor_start_clean(highest, told[1]);
     execve(path, argv, envp);
-    _exit(127);
+    visor_child_failed(told[1], 127);
 }
 
 int visor_listen(unsigned short port, int everywhere) {
@@ -207,6 +246,27 @@ int visor_listen(unsigned short port, int everywhere) {
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     address.sin_addr.s_addr = htonl(everywhere ? INADDR_ANY : INADDR_LOOPBACK);
+    if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || listen(listener, 64) != 0) {
+        int error = errno;
+        close(listener);
+        errno = error;
+        return -1;
+    }
+    return listener;
+}
+
+int visor_listen6(unsigned short port) {
+    int listener = socket(AF_INET6, SOCK_STREAM, 0);
+    if (listener < 0) return -1;
+    (void)fcntl(listener, F_SETFD, FD_CLOEXEC);
+    int yes = 1;
+    setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
+    setsockopt(listener, IPPROTO_IPV6, IPV6_V6ONLY, &yes, sizeof yes);
+    struct sockaddr_in6 address;
+    memset(&address, 0, sizeof address);
+    address.sin6_family = AF_INET6;
+    address.sin6_port = htons(port);
+    address.sin6_addr = in6addr_any;
     if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || listen(listener, 64) != 0) {
         int error = errno;
         close(listener);
@@ -255,6 +315,32 @@ int visor_connect_unix(const char *path) {
     return connection;
 }
 
+int visor_connect_tcp(const char *host, unsigned short port) {
+    struct addrinfo hints, *found = 0;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    char service[8];
+    snprintf(service, sizeof service, "%u", (unsigned)port);
+    int status = getaddrinfo(host, service, &hints, &found);
+    if (status != 0) { errno = EHOSTUNREACH; return -1; }
+    int connection = -1, error = ECONNREFUSED;
+    for (struct addrinfo *each = found; each; each = each->ai_next) {
+        connection = socket(each->ai_family, each->ai_socktype, each->ai_protocol);
+        if (connection < 0) { error = errno; continue; }
+        (void)fcntl(connection, F_SETFD, FD_CLOEXEC);
+        if (connect(connection, each->ai_addr, each->ai_addrlen) == 0) break;
+        error = errno;
+        close(connection);
+        connection = -1;
+    }
+    freeaddrinfo(found);
+    if (connection < 0) { errno = error; return -1; }
+    struct timeval patience = {30, 0};
+    setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
+    return connection;
+}
+
 int visor_unix_answers(const char *path) {
     struct sockaddr_un address;
     if (strlen(path) >= sizeof address.sun_path) return 0;
@@ -295,6 +381,10 @@ int visor_accept(int listener) {
 
 void visor_shutdown(int socket) {
     shutdown(socket, SHUT_RDWR);
+}
+
+void visor_shutdown_write(int socket) {
+    shutdown(socket, SHUT_WR);
 }
 
 void visor_ignore_broken_pipes(void) {

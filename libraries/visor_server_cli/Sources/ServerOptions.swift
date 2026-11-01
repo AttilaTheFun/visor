@@ -9,8 +9,8 @@ struct ServerOptions: Sendable {
     /// The sessions to carry on (`--resume-sessions`, read by the server).
     var resume: String?
     /// Settings to keep before it runs: `--auth`, `--lan`, `--vpn`,
-    /// `--ssh`, `--address`, `--standalone`, `--container-host`,
-    /// `--container-image`, as the commands of those names keep them (the flag
+    /// `--ssh`, `--address`, `--standalone`, `--front`, `--keep-messages`,
+    /// `--container-host`, `--container-image`, as the commands of those names keep them (the flag
     /// without its dashes, and its value).
     var settings: [(String, String)] = []
     /// The password to set before it runs.
@@ -34,7 +34,8 @@ struct ServerOptions: Sendable {
                 after = pid
             case "--resume-sessions": resume = value
             case "--password": password = value
-            case "--auth", "--lan", "--vpn", "--ssh", "--address", "--standalone", "--container-host", "--container-image":
+            case "--auth", "--lan", "--vpn", "--ssh", "--address", "--standalone", "--front", "--keep-messages",
+                 "--container-host", "--container-image":
                 settings.append((String(flag.dropFirst(2)), value))
             default: throw .usage("unknown option \(flag)")
             }

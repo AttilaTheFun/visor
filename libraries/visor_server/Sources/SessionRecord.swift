@@ -17,6 +17,9 @@ public final class SessionRecord {
 
     public internal(set) var entries: [TranscriptEntry] = [] {
         didSet {
+            // Rows let go of because they are many: the conversation is
+            // as it was (`letGoOfOldRows`).
+            guard !lettingGo else { return }
             revision += 1
             stamp(from: oldValue)
             noteMarks(lookingBack: false)
@@ -47,6 +50,14 @@ public final class SessionRecord {
 
     /// How many removals are remembered before the record starts again.
     static let rememberedRemovals = 2000
+
+    /// The latest revision a row let go of (`letGoOfOldRows`) was stamped
+    /// at: a client holding an older one may lack that row, which the rows
+    /// held can't give it, and takes the latest as a whole.
+    var letGoThrough = 0
+    /// Set while rows go because they are many, not because they went from
+    /// the conversation.
+    var lettingGo = false
 
     /// The turn's status lines so far — tool calls, subagents, shells,
     /// thinking — as announced, kept here so a client that subscribes
@@ -108,6 +119,10 @@ public final class SessionRecord {
     var closedSubagents: Set<String> = []
     /// The MCP servers it switched from their default: on or off.
     var mcpSwitched: [String: Bool] = [:]
+    /// Whether this agent has said what runs in its background since it
+    /// started (`AgentEvent.background`): until it has, its list says
+    /// nothing of its subagents.
+    var backgroundSaid = false
     /// When the agent's subagents were last read: at most every two
     /// seconds while they work.
     var subagentsRead: ContinuousClock.Instant?
@@ -301,6 +316,7 @@ public final class SessionRecord {
         if let pendingFork { _ = replacement.fork(at: pendingFork.at) }
         // A new process starts with nothing in the background.
         info.background = []
+        backgroundSaid = false
     }
 
     /// Hands each of the agent's events to `handle`, in order, from now
@@ -339,7 +355,11 @@ public final class SessionRecord {
     static let servedRows = 100
     /// How many rows go in each page after that: earlier ones, and the
     /// changes a client that is behind catches up on.
-    static let pageRows = 50
+    static let pageRows = 100
+    /// How many rows are held here at most, of a session that goes on:
+    /// past it the oldest go, down to `servedRows`. The store has every
+    /// row, and pages before the first held are read from it.
+    static let heldRows = 200
 
     var transcriptEnvelope: Envelope { transcriptEnvelope(since: nil) }
 

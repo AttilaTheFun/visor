@@ -363,7 +363,7 @@ public final class AgentServerConnection: Identifiable {
         // A path on the network the device is on answers in milliseconds
         // or not at all: on the first round it is given less time, and the
         // next path is tried sooner.
-        let timeouts = paths.map { attempt == 0 && Self.fit(of: $0) == .local ? Self.localSignInTimeout : Self.signInTimeout }
+        let timeouts = paths.map { attempt == 0 && [.loopback, .local].contains(Self.fit(of: $0)) ? Self.localSignInTimeout : Self.signInTimeout }
         let timeout = timeouts[min(pathIndex, paths.count - 1)]
         // Every path in the round at once, each a moment after the one
         // before, where the server signs in so: the round is one try.
@@ -460,9 +460,10 @@ public final class AgentServerConnection: Identifiable {
     static let signInTimeout: Int32 = 5_000
     static let localSignInTimeout: Int32 = 2_000
 
-    /// The paths for a round: the record's own paths ranked by fit — a
-    /// path on a network the device is on now first (the LAN at home),
-    /// then overlay-network ones (a tailnet) while the device has such a
+    /// The paths for a round: the record's own paths ranked by fit — this
+    /// device's own loopback first (a server on the same device), then a
+    /// path on a network the device is on now (the LAN at home), then
+    /// overlay-network ones (a tailnet) while the device has such a
     /// network, then the rest, with the one that answered last time and
     /// then the record's address first among equals. Where the device has SSH and the computer an SSH
     /// path, SSH is the way in: its paths that fit (the LAN's, the
@@ -476,9 +477,9 @@ public final class AgentServerConnection: Identifiable {
         let own = record.allPaths.filter { canSSH || SSHAddress($0) == nil }
         let preferSSH = canSSH && own.contains { SSHAddress($0) != nil }
         let tiers: [(PathFit, Bool?)] = preferSSH
-            ? [(.local, true), (.overlay, true), (.local, false), (.overlay, false), (.other, true), (.other, false),
+            ? [(.loopback, nil), (.local, true), (.overlay, true), (.local, false), (.overlay, false), (.other, true), (.other, false),
                (.unlikely, true), (.unlikely, false)]
-            : [(.local, nil), (.overlay, nil), (.other, nil), (.unlikely, nil)]
+            : [(.loopback, nil), (.local, nil), (.overlay, nil), (.other, nil), (.unlikely, nil)]
         for (fit, ssh) in tiers {
             var tier = own.filter { Self.fit(of: $0) == fit && (ssh == nil || (SSHAddress($0) != nil) == ssh) }
             // The one that answered last time first among its equals.
@@ -505,9 +506,13 @@ public final class AgentServerConnection: Identifiable {
     }
 
     /// How a path fits where the device is now.
-    enum PathFit { case local, overlay, other, unlikely }
+    enum PathFit { case loopback, local, overlay, other, unlikely }
 
     static func fit(of path: String) -> PathFit {
+        // The device's own: a server on it answers at once, and a path to
+        // another computer's loopback reaches nothing here, or a server whose
+        // id isn't the record's (and that path then goes).
+        if let host = Self.host(ofPath: path), Self.isLoopback(host) { return .loopback }
         guard let network = VisorHost.network, let host = Self.host(ofPath: path) else { return .other }
         if network.isOnLocalNetwork(host) { return .local }
         if Self.isOverlay(host) { return network.hasVPN ? .overlay : .unlikely }
@@ -519,6 +524,12 @@ public final class AgentServerConnection: Identifiable {
     static func host(ofPath path: String) -> String? {
         if let ssh = SSHAddress(path) { return ssh.target.host }
         return ServerAddress(path).flatMap { host(of: $0.root) }
+    }
+
+    /// 127.0.0.0/8, ::1 and `localhost`: the device itself.
+    static func isLoopback(_ host: String) -> Bool {
+        let bare = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]")).lowercased()
+        return bare == "localhost" || bare == "::1" || bare.hasPrefix("127.")
     }
 
     /// 100.64.0.0/10: a tailnet's addresses.
@@ -572,6 +583,11 @@ public final class AgentServerConnection: Identifiable {
         if record.standalone != identity.standalone {
             record.standalone = identity.standalone
             changed = true
+        }
+        if record.keepMessages != identity.keepMessages {
+            record.keepMessages = identity.keepMessages
+            changed = true
+            if !identity.keepMessages { forgetKeptMessages() }
         }
         // Standing alone: the paths learned before it said so go too.
         if isolated {
@@ -893,6 +909,10 @@ public final class AgentServerConnection: Identifiable {
     /// is SQLite, so a session opens as it was last seen and syncs only
     /// what changed since; in memory on the web.
     static var cache: MessageCache = .open(named: "messages")
+    /// This server's rows kept there: none when it asks for its messages to
+    /// be held in memory only (`AgentServerRecord.keepMessages`), and each
+    /// page let go of is asked of it again.
+    var cache: MessageCache? { record.keepMessages ? Self.cache : nil }
     /// Where the cache is written, and read past what is shown: off the
     /// main actor, in order.
     static let cacheQueue = CacheQueue()
@@ -901,7 +921,11 @@ public final class AgentServerConnection: Identifiable {
     /// How many rows a thread opens with (from this device's cache, at once;
     /// from the server, the first time), and how many go in each page after.
     static let initialRows = 100
-    static let pageRows = 50
+    static let pageRows = 100
+    /// How many rows are kept in memory above the first one on screen, once
+    /// the reader stops (four pages): rows further up are let go of, and
+    /// read again from the cache (or the server) if the reader scrolls back.
+    static let keptAboveScreen = 400
 
     public func transcript(for sessionID: String) -> SessionTranscript {
         if let existing = transcripts[sessionID] {
@@ -914,12 +938,13 @@ public final class AgentServerConnection: Identifiable {
         }
         let transcript = SessionTranscript()
         let key = cacheKey(sessionID)
-        fill(transcript, from: key)
-        transcript.keep = { write, state in
-            let cache = Self.cache
-            Self.cacheQueue.write {
-                Self.write(write, to: cache, key: key)
-                try? cache.setSyncState(state, for: key)
+        if let cache {
+            fill(transcript, from: key)
+            transcript.keep = { write, state in
+                Self.cacheQueue.write {
+                    Self.write(write, to: cache, key: key)
+                    try? cache.setSyncState(state, for: key)
+                }
             }
         }
         transcript.info = sessions.first { $0.id == sessionID }
@@ -932,13 +957,24 @@ public final class AgentServerConnection: Identifiable {
     /// As last seen, at once, from this device's cache; the sync then asks
     /// only for what moved.
     private func fill(_ transcript: SessionTranscript, from key: String) {
-        let kept = Self.cache.messages(in: key, limit: Self.initialRows)
-        guard !kept.messages.isEmpty, let state = Self.cache.syncState(of: key) else { return }
+        guard let cache else { return }
+        let kept = cache.messages(in: key, limit: Self.initialRows)
+        guard !kept.messages.isEmpty, let state = cache.syncState(of: key) else { return }
         transcript.entries = kept.messages
         transcript.hasEarlier = kept.more
         transcript.revision = state.revision
         transcript.generation = state.generation
         transcript.loaded = true
+    }
+
+    /// The server asks for its messages to be held in memory only: what
+    /// this device kept of its sessions goes, and the threads open now
+    /// write nothing more.
+    private func forgetKeptMessages() {
+        for transcript in transcripts.values { transcript.keep = nil }
+        let cache = Self.cache, keys = Set(sessions.map(\.id)).union(transcripts.keys).map(cacheKey)
+        note("the server keeps its messages off this device's disk: \(keys.count) sessions' rows forgotten")
+        Self.cacheQueue.write { for key in keys { try? cache.remove(key) } }
     }
 
     /// A sync's change, written to the cache as a change: every row synced
@@ -1479,7 +1515,8 @@ public final class AgentServerConnection: Identifiable {
         if localEdits == nil { act(.end, on: sessionID) } else { editLocally { $0.removed.insert(sessionID) } }
         transcripts.removeValue(forKey: sessionID)
         syncing.removeValue(forKey: sessionID)?.cancel()
-        let cache = Self.cache, key = cacheKey(sessionID)
+        guard let cache else { return }
+        let key = cacheKey(sessionID)
         Self.cacheQueue.write { try? cache.remove(key) }
     }
 }

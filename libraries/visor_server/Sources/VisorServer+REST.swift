@@ -147,6 +147,8 @@ extension VisorServer {
         case ("POST", 1, "push"): restRegisterPushDevice(call)
         case ("POST", 2, "ssh") where parts[1] == "keys": restAuthorizeSSHKey(call)
         case ("POST", 1, "restart"): restRestart(call)
+        case ("GET", 1, "push-proxy"): restPushProxy(call)
+        case ("PUT", 1, "push-proxy"): restSetPushProxy(call)
         case ("GET", 1, "mcp"): restMCP(call)
         case ("PUT", 1, "mcp"): restSetMCP(call)
         case ("POST", 1, "quit"): restQuit(call)
@@ -177,6 +179,7 @@ extension VisorServer {
         e.id = id
         e.version = Self.version
         if containersAvailable { e.container = true }
+        if !settings.clientsKeepMessages { e.keepMessages = false }
         if isStandalone {
             // Reached only where the client found it: nothing more to learn.
             e.standalone = true
@@ -308,7 +311,7 @@ extension VisorServer {
         guard registerPush(call.body) else { return HTTPResponse(400, Envelope.error("A push token and its app are required").encoded()) }
         // Whether pushes will come: the device then leaves them to us.
         var reply = Envelope(type: "push")
-        reply.exists = apnsKey.configured
+        reply.exists = sendsPushes
         return .json(reply.encoded())
     }
 

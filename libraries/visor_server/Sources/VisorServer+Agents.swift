@@ -193,6 +193,8 @@ extension VisorServer {
     func setAgentState(_ record: SessionRecord, _ state: AgentState) {
         guard record.info.agentState != state else { return }
         record.info.agentState = state
+        // A stopped agent's subagents stopped with it.
+        if state == .stopped, record.info.subagents.contains(where: \.running) { refreshSubagents(of: record) }
         saveArchive()
         broadcastSessions()
     }

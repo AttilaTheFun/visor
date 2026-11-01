@@ -92,6 +92,19 @@ final class AuthTests: ServerTestCase {
         XCTAssertEqual(server.route(request("/api/hello")).status, 401)
     }
 
+    /// hello says whether clients may keep the sessions' messages on their
+    /// disk: only when they may not, so a server from before reads as yes.
+    func testHelloAsksClientsToKeepMessagesInMemoryOnlyWhenSet() async throws {
+        server.password = "pearl-grove"
+        let kept = Envelope.decode(server.route(request("/api/hello", bearer: "pearl-grove")).body)
+        XCTAssertNil(kept?.keepMessages)
+        server.settings.clientsKeepMessages = false
+        let inMemory = Envelope.decode(server.route(request("/api/hello", bearer: "pearl-grove")).body)
+        XCTAssertEqual(inMemory?.keepMessages, false)
+        let older = try JSONDecoder().decode(ServerSettings.self, from: Data(#"{"lan":true}"#.utf8))
+        XCTAssertTrue(older.clientsKeepMessages, "a settings file from before lets them")
+    }
+
     /// Opened to the network, the server tells clients its first address
     /// with the port; an address set by hand is told instead.
     func testTheAddressClientsAreTold() async {

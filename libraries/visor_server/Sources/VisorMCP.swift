@@ -39,11 +39,15 @@ enum VisorMCP {
         return (node, script)
     }
 
-    /// What the script is given: the session's environment, where this
-    /// server is when the agent is in a container, and whether it offers
-    /// `approve`.
-    private static func scriptEnvironment(_ environment: [String: String], container: ContainerPlacement?, approvals: Bool) -> [String: String] {
-        var env = environment
+    /// What the script is given: Visor's own variables from the session's
+    /// environment (this server's port, the agents' token, the session),
+    /// where this server is when the agent is in a container, and whether
+    /// it offers `approve`. Nothing else of the session's: this goes on the
+    /// agent's command line, which any `ps` shows, and the rest is what
+    /// agents/<kind>.env gives the agent itself — its sign-ins among it (a
+    /// container's Claude token, git's).
+    static func scriptEnvironment(_ environment: [String: String], container: ContainerPlacement?, approvals: Bool) -> [String: String] {
+        var env = environment.filter { $0.key.hasPrefix("VISOR_") }
         if approvals { env["VISOR_APPROVALS"] = "1" }
         if let container { env["VISOR_URL"] = container.serverURL }
         return env

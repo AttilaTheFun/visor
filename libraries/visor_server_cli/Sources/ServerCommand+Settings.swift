@@ -112,6 +112,37 @@ extension ServerCommand {
               : "The server shares its addresses and joins the relay again, from its next start.")
     }
 
+    /// Shows, sets or clears the paths a front reaches this server at.
+    @MainActor
+    func front(_ paths: [String]) {
+        var settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        if paths.isEmpty {
+            print(settings.frontPaths.isEmpty ? "No front: clients are given this computer's own addresses." : settings.frontPaths.joined(separator: "\n"))
+            return
+        }
+        settings.frontPaths = paths == ["-"] ? [] : paths
+        settings.keep(at: VisorServer.settingsURL)
+        print(settings.frontPaths.isEmpty
+              ? "No front: clients are given this computer's own addresses again, from the server's next start."
+              : "Clients are given the front's paths, from the server's next start:\n" + settings.frontPaths.joined(separator: "\n"))
+    }
+
+    /// Lets clients keep the sessions' messages on their disk, or asks them
+    /// not to.
+    @MainActor
+    func keepMessages(_ value: String?) throws {
+        var settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        switch value {
+        case "on": settings.clientsKeepMessages = true
+        case "off": settings.clientsKeepMessages = false
+        default: throw CommandLineError.usage("keep-messages on, or keep-messages off")
+        }
+        settings.keep(at: VisorServer.settingsURL)
+        print(settings.clientsKeepMessages
+              ? "Clients may keep the sessions' messages on their disk again, from the server's next start."
+              : "Clients are asked to keep the sessions' messages only in memory, from the server's next start, and to forget what they kept on disk.")
+    }
+
     /// Shows or sets the address clients are told.
     @MainActor
     func address(_ value: String?) {

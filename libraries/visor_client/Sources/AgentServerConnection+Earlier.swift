@@ -16,10 +16,10 @@ extension AgentServerConnection {
         let transcript = transcript(for: sessionID)
         guard !transcript.loadingEarlier, !transcript.released, let before = transcript.entries.first?.id else { return }
         transcript.loadingEarlier = true
-        let cache = Self.cache, key = cacheKey(sessionID), limit = Self.earlierPage
+        let cache = cache, key = cacheKey(sessionID), limit = Self.earlierPage
         Task { [weak self] in
             let page = await Self.cacheQueue.read { () -> (messages: [TranscriptEntry], more: Bool)? in
-                guard let seq = cache.seq(of: before, in: key) else { return nil }
+                guard let cache, let seq = cache.seq(of: before, in: key) else { return nil }
                 return cache.messages(in: key, limit: limit, before: seq)
             }
             // The thread was replaced while the cache was read.
@@ -40,8 +40,8 @@ extension AgentServerConnection {
     }
 
     /// The server's rows before the one asked about: all of them kept on
-    /// this device, the last page of them shown, the rest read from the
-    /// cache when the thread reaches them.
+    /// this device (where the server lets it), the last page of them
+    /// shown, the rest read from the cache when the thread reaches them.
     func takeEarlier(_ envelope: Envelope, for sessionID: String) {
         guard let transcript = transcripts[sessionID], let before = transcript.earlierAsked else { return }
         transcript.earlierAsked = nil
@@ -52,8 +52,8 @@ extension AgentServerConnection {
         }
         let rows = envelope.entries ?? []
         let more = envelope.more ?? false
-        if !rows.isEmpty {
-            let cache = Self.cache, key = cacheKey(sessionID)
+        if !rows.isEmpty, let cache {
+            let key = cacheKey(sessionID)
             Self.cacheQueue.write {
                 // Only in front of the row asked about, and only when it is
                 // the first kept: anywhere else would leave a gap.
@@ -81,5 +81,19 @@ extension AgentServerConnection {
         for (id, transcript) in transcripts {
             if let before = transcript.earlierAsked { server.loadEarlier(id, before: before) }
         }
+    }
+}
+
+extension AgentServerConnection {
+    /// Where the reader is in a session's thread, once they stop scrolling:
+    /// `top`, the row on screen at the top (by the id the thread shows it
+    /// under). Rows more than four pages above it are let go of, a page or
+    /// more at a time; the cache has them (or the server, one that keeps
+    /// them off this device's disk), and they come back a page at a time if
+    /// the reader does.
+    public func reading(_ sessionID: String, top: String?) {
+        guard let top, let transcript = transcripts[sessionID] else { return }
+        let gone = transcript.letGo(above: top, keeping: Self.keptAboveScreen, atLeast: Self.pageRows)
+        if gone > 0 { note("thread \(sessionID.prefix(8)): \(gone) rows far above the screen let go of") }
     }
 }

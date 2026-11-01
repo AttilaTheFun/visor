@@ -46,7 +46,7 @@ final class TranscriptDeltaTests: ServerTestCase {
         let first = (0..<3).map { row("old\($0)") }
         let r = SessionRecord(info: info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: first)
         let since = r.revision
-        let added = (0..<120).map { row("new\($0)") }
+        let added = (0..<250).map { row("new\($0)") }
         r.replaceEntriesForTesting(Array(first.dropLast()) + added)
 
         var got: [String] = []
@@ -77,7 +77,7 @@ final class TranscriptDeltaTests: ServerTestCase {
         XCTAssertEqual(whole.more, true)
         XCTAssertEqual(whole.follows, "r199", "the row its first follows: a client keeping it keeps what is before")
         let earlier = await r.earlier(before: "r200")
-        XCTAssertEqual(earlier.entries?.map(\.id), (150..<200).map { "r\($0)" })
+        XCTAssertEqual(earlier.entries?.map(\.id), (200 - SessionRecord.pageRows..<200).map { "r\($0)" })
         XCTAssertEqual(earlier.more, true)
     }
 }

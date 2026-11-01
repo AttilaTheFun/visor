@@ -1,12 +1,15 @@
+load("@rules_apple//apple:macos.bzl", "macos_unit_test")
+load("@rules_swift//swift:swift.bzl", "swift_library")
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
-load("@rules_swift//swift:swift.bzl", "swift_test")
 
-swift_test(
-    name = "visor_server_tests",
+swift_library(
+    name = "visor_server_tests_lib",
+    testonly = True,
     copts = STRICT_SWIFT,
-    srcs = glob(["*.swift", "apple/*.swift"]),
-    # The agents' host, which AgentHostTests runs.
+    # The agents' host, which AgentHostTests runs: in the bundle's Resources.
     data = ["//applications/visor_agent_host:visor-agent-host"],
+    srcs = glob(["*.swift", "apple/*.swift"]),
+    module_name = "VisorServerTests",
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//libraries/claude_transcript",
@@ -17,4 +20,12 @@ swift_test(
         "//libraries/visor_server_cli",
         "//libraries/visor_server_posix",
     ],
+)
+
+# An .xctest bundle: built anywhere (on Linux too, with rules_applecross),
+# run on a Mac by `bazel test` or by OS Server (`oss machine xctest`).
+macos_unit_test(
+    name = "visor_server_tests",
+    minimum_os_version = "15.0",
+    deps = [":visor_server_tests_lib"],
 )

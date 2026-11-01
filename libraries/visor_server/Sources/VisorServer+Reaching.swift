@@ -35,20 +35,31 @@ extension VisorServer {
     public var reachableAddress: String? {
         let set = settings.publicAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         if settings.proxyEnabled, !set.isEmpty { return set }
-        return httpPaths.first
+        // A code's own address is one other devices reach: never loopback,
+        // and none where there is no other (no network: no code).
+        let paths = settings.frontPaths.isEmpty ? httpPaths : settings.frontPaths
+        return paths.first { !Self.isLoopbackPath($0) }
     }
 
     /// `http(s)://<address>:<port>` for each address on a path that is
-    /// on, the VPN's first; and while the LAN is, the computer's name on it
+    /// on, the VPN's first; while the LAN is, the computer's name on it
     /// (`<name>.local`), which still reaches it when the network has given
-    /// it another address.
+    /// it another address; and this computer's loopback, last, which a
+    /// client on this computer tries before any other.
     public var httpPaths: [String] {
         let scheme = servesTLS ? "https" : "http"
         let addresses = ServerPlatform.current.host.networkAddresses()
         let open = addresses.filter { $0.kind == .vpn && settings.vpn } + addresses.filter { $0.kind == .lan && settings.lan }
         var paths = open.map { "\(scheme)://\($0.address):\(port)" }
         if settings.lan, let name = ServerPlatform.current.host.localNetworkName() { paths.append("\(scheme)://\(name):\(port)") }
+        paths.append("\(scheme)://127.0.0.1:\(port)")
         return paths
+    }
+
+    /// Whether a path leads to this computer's loopback.
+    static func isLoopbackPath(_ path: String) -> Bool {
+        guard let host = URLComponents(string: path)?.host?.lowercased() else { return false }
+        return host == "localhost" || host == "::1" || host.hasPrefix("127.")
     }
 
     /// `ssh://<user>@<address>` for each of this computer's addresses,

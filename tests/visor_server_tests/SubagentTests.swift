@@ -40,6 +40,9 @@ private final class SubagentHarness: AgentHarness {
     let kind = AgentKind.claude
     let tool = "claude"
     let listed = Mutex<[SubagentInfo]>([])
+    let listsSubagentsInBackground: Bool
+
+    init(listsSubagentsInBackground: Bool = false) { self.listsSubagentsInBackground = listsSubagentsInBackground }
 
     func catalog() -> AgentCatalog { AgentCatalog(agent: kind, models: [], defaultModel: "opus") }
     func transcript(id: String, cwd: String, limit: Int) -> [TranscriptEntry] { [] }
@@ -76,6 +79,72 @@ final class SubagentTests: ServerTestCase {
         let records = ClaudeTranscriptParser.lines(contentsOf: try XCTUnwrap(agents.first).transcript, sidechain: true).compactMap(\.record)
         XCTAssertEqual(records.count, 2)
         XCTAssertTrue(ClaudeTranscriptParser.lines(contentsOf: try XCTUnwrap(agents.first).transcript).isEmpty, "a session's file skips them")
+    }
+
+    /// Not every finished subagent's meta file says so: one whose last word
+    /// is an answer that ended its turn is finished all the same; one that
+    /// last called a tool is not.
+    func testASubagentWhoseLastWordEndedItsTurnIsFinished() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagents-" + UUID().uuidString)
+        let folder = root.appendingPathComponent("S/subagents", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        func agent(_ id: String, last: String) throws {
+            try Data(#"{"agentType":"Explore","description":"Look","toolUseId":"toolu_\#(id)","requestShape":"background"}"#.utf8)
+                .write(to: folder.appendingPathComponent("agent-\(id).meta.json"))
+            let lines = [
+                #"{"type":"user","uuid":"u1","isSidechain":true,"agentId":"\#(id)","message":{"role":"user","content":"Look"}}"#,
+                last,
+                #"{"type":"system","subtype":"turn_duration","isSidechain":true}"#,
+            ]
+            try Data(lines.joined(separator: "\n").utf8).write(to: folder.appendingPathComponent("agent-\(id).jsonl"))
+        }
+        try agent("done", last: #"{"type":"assistant","uuid":"m1","isSidechain":true,"message":{"role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Found it."}]}}"#)
+        try agent("calling", last: #"{"type":"assistant","uuid":"m1","isSidechain":true,"message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"t1","name":"Monitor","input":{}}]}}"#)
+        try agent("answered", last: #"{"type":"user","uuid":"r1","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}"#)
+        let finished = Dictionary(uniqueKeysWithValues: ClaudeSubagent.all(of: root.appendingPathComponent("S.jsonl")).map { ($0.id, $0.finished) })
+        XCTAssertEqual(finished, ["done": true, "calling": false, "answered": false])
+    }
+
+    /// A subagent its files leave unfinished but Claude Code no longer
+    /// lists in its background, with no call of it going, ended without
+    /// saying so (killed); so did every one of an agent that stopped.
+    func testASubagentGoneFromTheAgentsBackgroundHasEnded() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-gone-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7993)
+        defer { server.stop() }
+        let harness = SubagentHarness(listsSubagentsInBackground: true)
+        server.harnesses = AgentHarnesses([harness])
+        let record = SessionRecord(info: SessionInfo(id: "P", agent: .claude, cwd: "/tmp", title: "P", created: 0), process: ListeningAgent())
+        server.sessions = [record]
+        harness.listed.withLock {
+            $0 = [SubagentInfo(id: "bg", description: "Watch CI", type: "general-purpose", running: true, call: "toolu_bg"),
+                  SubagentInfo(id: "fg", description: "Map it", type: "Explore", running: true, call: "toolu_fg")]
+        }
+        server.handle(.toolStarted(id: "toolu_bg", name: "Agent", label: "Watch CI", tasks: nil), from: record)
+        server.handle(.toolStarted(id: "toolu_fg", name: "Agent", label: "Map it", tasks: nil), from: record)
+        // Before the agent has said what runs in its background, the files'
+        // word stands.
+        server.refreshSubagents(of: record)
+        XCTAssertEqual(record.info.subagents.map(\.running), [true, true])
+
+        // The background one on the list, its call over; the other's call going.
+        server.handle(.toolFinished(id: "toolu_bg"), from: record)
+        server.handle(.background([StatusItem(id: "bg", kind: .subagent, label: "Watch CI", running: true)]), from: record)
+        server.refreshSubagents(of: record)
+        XCTAssertEqual(record.info.subagents.map(\.running), [true, true])
+
+        // Gone from the list without a word: ended.
+        server.handle(.background([]), from: record)
+        server.refreshSubagents(of: record)
+        XCTAssertEqual(record.info.subagents.map(\.running), [false, true], "off the list, its call long over")
+
+        // The agent stopped: nothing of it runs.
+        server.setAgentState(record, .stopped)
+        XCTAssertEqual(record.info.subagents.map(\.running), [false, false])
     }
 
     func testAFinishedSubagentsConversationIsWrittenAsASessionOfItsOwn() throws {

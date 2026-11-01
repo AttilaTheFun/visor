@@ -35,6 +35,12 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// The proxy's or tunnel's URL (`https://proxy.example.com/visor`), or
     /// a name on the network with certificates (HTTPS at the root).
     public var publicAddress = ""
+    /// The paths a front on the computer it runs in reaches it at — that
+    /// computer's loopback, its LAN, its VPN (`http://192.168.1.20:7440`)
+    /// — for a server in a container, behind Visor Runner: given to clients
+    /// in place of the server's own interfaces' addresses, which only that
+    /// computer reaches. Empty for a server on a computer of its own.
+    public var frontPaths: [String] = []
     /// This server's id on the network of computers: made once, kept.
     public var serverID = ""
     /// What a client must show: "password" (a bearer that is the
@@ -47,6 +53,11 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// own addresses, its SSH key and the computers it knows told to no
     /// one, introductions refused. Also on with VISOR_STANDALONE=1.
     public var standalone = false
+    /// Let clients keep the sessions' messages on their disk, so a thread
+    /// opens as last seen, syncs only what changed and reads back offline.
+    /// Off, they keep only the pages they show, in memory, and ask this
+    /// server again for any they let go of (`Envelope.keepMessages`).
+    public var clientsKeepMessages = true
     /// Each session's agent runs under a host of its own (visor-agent-host),
     /// apart from the server: a restart or an update leaves it working, and
     /// one that runs away cannot take the server down. Off, agents are the
@@ -68,12 +79,18 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// (docs/container-host.md): its program and the arguments before each
     /// operation; empty for `visor-container-host` on the PATH, if it is.
     public var containerHost: [String] = []
+    /// Where pushes go when this computer has no APNs key of its own: a
+    /// proxy that holds the key and signs them (Visor Runner's,
+    /// docs/co-tenancy.md), at `<pushProxy>/apns/…`. Empty for none. Its
+    /// token for this server is a secret (`VisorServer.pushProxyTokenKey`).
+    public var pushProxy = ""
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost
+             frontPaths, clientsKeepMessages, detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost,
+             pushProxy
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -87,11 +104,14 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         try c.encode(serverID, forKey: .serverID)
         try c.encode(authentication, forKey: .authentication)
         try c.encode(standalone, forKey: .standalone)
+        if !frontPaths.isEmpty { try c.encode(frontPaths, forKey: .frontPaths) }
+        try c.encode(clientsKeepMessages, forKey: .clientsKeepMessages)
         try c.encode(detachAgents, forKey: .detachAgents)
         if !containerImage.isEmpty { try c.encode(containerImage, forKey: .containerImage) }
         if !containerCallback.isEmpty { try c.encode(containerCallback, forKey: .containerCallback) }
         if !mcpEndpoints.isEmpty { try c.encode(mcpEndpoints, forKey: .mcpEndpoints) }
         if !containerHost.isEmpty { try c.encode(containerHost, forKey: .containerHost) }
+        if !pushProxy.isEmpty { try c.encode(pushProxy, forKey: .pushProxy) }
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -113,6 +133,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         publicAddress = try c.decodeIfPresent(String.self, forKey: .publicAddress) ?? ""
         proxyEnabled = try c.decodeIfPresent(Bool.self, forKey: .proxyEnabled) ?? !publicAddress.isEmpty
         standalone = try c.decodeIfPresent(Bool.self, forKey: .standalone) ?? false
+        frontPaths = try c.decodeIfPresent([String].self, forKey: .frontPaths) ?? []
+        clientsKeepMessages = try c.decodeIfPresent(Bool.self, forKey: .clientsKeepMessages) ?? true
         serverID = try c.decodeIfPresent(String.self, forKey: .serverID) ?? ""
         authentication = try c.decodeIfPresent(String.self, forKey: .authentication) ?? "password"
         detachAgents = try c.decodeIfPresent(Bool.self, forKey: .detachAgents) ?? true
@@ -120,6 +142,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         containerCallback = try c.decodeIfPresent(String.self, forKey: .containerCallback) ?? ""
         mcpEndpoints = try c.decodeIfPresent([MCPEndpoint].self, forKey: .mcpEndpoints) ?? []
         containerHost = try c.decodeIfPresent([String].self, forKey: .containerHost) ?? []
+        pushProxy = try c.decodeIfPresent(String.self, forKey: .pushProxy) ?? ""
     }
 
     public func keep(at url: URL) {
