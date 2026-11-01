@@ -25,6 +25,15 @@ public struct LinuxSystem: CommandLineSystem {
         (try? FileManager.default.destinationOfSymbolicLink(atPath: "/proc/self/exe")) ?? CommandLine.arguments[0]
     }
 
+    /// Whether this server runs in a container: said by whoever started it
+    /// (`VISOR_IN_CONTAINER=1`, as the Runner starts a container's server),
+    /// or by the marker Docker or Podman leave. Apple's container leaves
+    /// none, so its servers are told.
+    static var inContainer: Bool {
+        if let said = ProcessInfo.processInfo.environment["VISOR_IN_CONTAINER"] { return said == "1" }
+        return FileManager.default.fileExists(atPath: "/.dockerenv") || FileManager.default.fileExists(atPath: "/run/.containerenv")
+    }
+
     public func platform(log: @escaping @Sendable (String) -> Void, lifecycle: any ServerLifecycle) -> ServerPlatform {
         let data = dataDirectory
         return ServerPlatform(
@@ -36,8 +45,8 @@ public struct LinuxSystem: CommandLineSystem {
             images: HeaderImageMeasuring(),
             files: PollingFileWatching(),
             tools: LinuxTools(),
-            host: HostDetails(name: ProcessInfo.processInfo.hostName, system: "linux", dataDirectory: data, addresses: { POSIXAddresses.all() },
-                              resolve: { POSIXResolver.ipv4($0) }),
+            host: HostDetails(name: ProcessInfo.processInfo.hostName, system: "linux", inContainer: Self.inContainer, dataDirectory: data,
+                              addresses: { POSIXAddresses.all() }, resolve: { POSIXResolver.ipv4($0) }),
             lifecycle: lifecycle,
             agentHosts: POSIXAgentHosting.beside(executable),
             log: log

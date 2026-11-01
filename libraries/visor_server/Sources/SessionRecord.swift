@@ -198,6 +198,7 @@ public final class SessionRecord {
         // Nothing is on its way to an agent this launch has not handed it.
         self.info.delivered = []
         self.info.system = Self.system(of: info)
+        self.info.inContainer = Self.inContainer(info)
         self.process = process
         self.entries = entries
         self.shownPrompts = shownPrompts
@@ -278,7 +279,15 @@ public final class SessionRecord {
 
     /// What its agent runs on, for its row: this computer's system, or
     /// Linux in a container.
-    func placed() { info.system = Self.system(of: info) }
+    func placed() {
+        info.system = Self.system(of: info)
+        info.inContainer = Self.inContainer(info)
+    }
+
+    /// In a container this server didn't make for it: the server's own.
+    static func inContainer(_ info: SessionInfo) -> Bool? {
+        info.container == nil && ServerPlatform.current.host.inContainer ? true : nil
+    }
 
     static func system(of info: SessionInfo) -> String? {
         let system = info.container != nil ? "linux" : ServerPlatform.current.host.system
