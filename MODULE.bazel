@@ -57,10 +57,10 @@ single_version_override(
 
 # The Apple apps built on Linux (a container, a VM): rules_applecross (its
 # clean-room actool, ibtool, codesign and swift-stdlib-tool, LLD), the Swift
-# that built the Apple SDKs, and Xcode 27.0's SDKs, pinned by version and
+# that built the Apple SDKs, and Xcode 27.2's SDKs, pinned by version and
 # SHA-256. A Mac reads its own Xcode (local_xcode); elsewhere the SDK archive
 # is fetched by its name below, a placeholder: each builder's .bazelrc.user
-# says where it is, with `--distdir=<folder holding apple-sdks-27.0.tar.gz>`
+# says where it is, with `--distdir=<folder holding apple-sdks-27.2.tar.gz>`
 # or a `--downloader_config` rewriting apple-sdks.invalid to where it is
 # served (an OS Server's /files/sha256/<hex>, with its read token in .netrc).
 # Without either, Linux fails to resolve apple-sdks.invalid. Its ported
@@ -71,27 +71,29 @@ single_version_override(
 # are registered for Linux alone, by the builder that has the SDKs
 # (.bazelrc's apple_on_linux, turned on in .bazelrc.user), so a Mac builds
 # as before and a Linux without them builds what runs on Linux.
-# From the project's registry: its main at cc07dde (with #216, #217, #219),
-# for every module (rules_apple asks for 0.0.3, which no registry holds).
-bazel_dep(name = "rules_applecross", version = "0.0.3.cc07dde")
+# From the project's registry: its main at 9727e5b (upstream's main at its
+# #246: Xcode 27.2, and XCTest binaries built on Linux link), for every
+# module (rules_apple asks for 0.0.3, which no registry holds). Its actool
+# and coremlc take Xcode 27.0 or 27.2 alone (else --config=relax_xcode_version).
+bazel_dep(name = "rules_applecross", version = "0.0.3.9727e5b")
 single_version_override(
     module_name = "rules_applecross",
-    version = "0.0.3.cc07dde",
+    version = "0.0.3.9727e5b",
 )
 apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
-# The Swift that built Xcode 27.0's SDKs.
+# The Swift that built Xcode 27.2's SDKs.
 apple_cross_toolchain.swift(
     name = "applecross_swift",
     platform_sha256 = {
-        "ubuntu24.04": "69f7b2b4dbce6090b6c92194b71149a057e16269093b5a9dded38afc4a05094e",
-        "ubuntu24.04-aarch64": "21eacfe571194717d269cc1e0030533bbee6131dfde82cd4f9cfbc2512e354a9",
-        "xcode": "8fd03185b98fe27f54a54631c2449decf75d5b466ce8e34abbd414141063c6aa",
+        "ubuntu24.04": "2e9ebec040ad459dd89a6d093a02d8314939135104850fae4d5c0f174fb3ba8c",
+        "ubuntu24.04-aarch64": "307772afcc0b9501faa4797eb4197076facf5768593a0d8d2b83615c95b0040e",
+        "xcode": "0a7d8489900d21dbf5f0187cb570e646a4c0226d0ddef2cbde8c7f54dfe79736",
     },
-    swift_version = "6.4.0",
+    swift_version = "6.4.2",
 )
 apple_cross_toolchain.configure(
     name = "apple_cross_toolchain",
-    apple_sdk_urls = ["https://apple-sdks.invalid/apple-sdks-27.0.tar.gz"],
+    apple_sdk_urls = ["https://apple-sdks.invalid/apple-sdks-27.2.tar.gz"],
     local_xcode = True,
     ported_tools_manifest = "//third_party/applecross:ported_tools.sha256",
     ported_tools_urls = ["https://ported-tools.invalid/sha256/{sha256}"],
@@ -100,7 +102,7 @@ apple_cross_toolchain.configure(
         "x86_64": "@applecross_swift_ubuntu24.04//:tools",
     },
     swift_tools_macos = "@applecross_swift_xcode//:tools",
-    xcode_version = "27.0",
+    xcode_version = "27.2",
 )
 use_repo(apple_cross_toolchain, "apple_cross_toolchain")
 # Where Apple products are bundled: on Linux with the clean-room tools, on a

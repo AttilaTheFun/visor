@@ -36,7 +36,7 @@ build --strategy=SwiftCompile=local
 build --@isomer//foundation:internationalization
 
 # The Apple apps built on Linux with rules_applecross (MODULE.bazel), on a
-# builder that has Xcode 27.0's SDK archive: its .bazelrc.user says where
+# builder that has Xcode 27.2's SDK archive: its .bazelrc.user says where
 # (`--distdir`, or a `--downloader_config` to an OS Server) and turns this
 # on with `build:linux --config=apple_on_linux`. Without it (GitHub's
 # runners) Linux builds what runs on Linux alone, and nothing fetches the

@@ -706,8 +706,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_android/0.7.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_android_ndk/0.1.5/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_apple/5.3.1/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.cc07dde/MODULE.bazel": "eb96af0d41e183a7bf8f26b19d40c62e810b45223bd040859df2d8fc734bd2a6",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.cc07dde/source.json": "2d71f053ec67323029592265bda8b3252dd8b254f6dcca4520829124108e1c97",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.9727e5b/MODULE.bazel": "4399e42cf3be49d9f607cde1592dfe89c658cd74591a4381b21b54ca26f35c57",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.9727e5b/source.json": "e3116e35e681cfd2e2e2902da92429ebe4b3437bce5749885d2cc4b9ecaea008",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.10/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.13/MODULE.bazel": "not found",
@@ -1711,8 +1711,8 @@
     },
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
-        "bzlTransitiveDigest": "ze7Mbo01/ihRZDeotgkE/1hWXQQxKbZYSC+U2IKlc+E=",
-        "usagesDigest": "jZPC4wI3jnce4oaX6ROlQr7YBZQam2KHYet13R6f1MI=",
+        "bzlTransitiveDigest": "qnLvYBz9yC0wKkZ2eTSAz4DlO3gDoqvpjCG6Sus5ahU=",
+        "usagesDigest": "bM3YUrtIpLB04JNpd4nmHvUYM2KnBHXh3pCjIE7p1sU=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
@@ -1723,24 +1723,24 @@
             "repoRuleId": "@@rules_swift+//swift/internal/extensions:standalone_toolchain.bzl%standalone_toolchain",
             "attributes": {
               "platform": "ubuntu24.04",
-              "sha256": "69f7b2b4dbce6090b6c92194b71149a057e16269093b5a9dded38afc4a05094e",
-              "swift_version": "6.4.0"
+              "sha256": "2e9ebec040ad459dd89a6d093a02d8314939135104850fae4d5c0f174fb3ba8c",
+              "swift_version": "6.4.2"
             }
           },
           "applecross_swift_ubuntu24.04-aarch64": {
             "repoRuleId": "@@rules_swift+//swift/internal/extensions:standalone_toolchain.bzl%standalone_toolchain",
             "attributes": {
               "platform": "ubuntu24.04-aarch64",
-              "sha256": "21eacfe571194717d269cc1e0030533bbee6131dfde82cd4f9cfbc2512e354a9",
-              "swift_version": "6.4.0"
+              "sha256": "307772afcc0b9501faa4797eb4197076facf5768593a0d8d2b83615c95b0040e",
+              "swift_version": "6.4.2"
             }
           },
           "applecross_swift_xcode": {
             "repoRuleId": "@@rules_swift+//swift/internal/extensions:standalone_toolchain.bzl%standalone_toolchain",
             "attributes": {
               "platform": "xcode",
-              "sha256": "8fd03185b98fe27f54a54631c2449decf75d5b466ce8e34abbd414141063c6aa",
-              "swift_version": "6.4.0"
+              "sha256": "0a7d8489900d21dbf5f0187cb570e646a4c0226d0ddef2cbde8c7f54dfe79736",
+              "swift_version": "6.4.2"
             }
           },
           "apple_cross_toolchain": {
@@ -1748,12 +1748,12 @@
             "attributes": {
               "apple_sdk_path": "",
               "apple_sdk_urls": [
-                "https://apple-sdks.invalid/apple-sdks-27.0.tar.gz"
+                "https://apple-sdks.invalid/apple-sdks-27.2.tar.gz"
               ],
               "apple_sdk_sha256": "",
               "apple_sdk_strip_prefix": "",
               "apple_sdk_archive_type": "",
-              "xcode_version": "27.0",
+              "xcode_version": "27.2",
               "xcode_xip_urls": [],
               "local_xcode": true,
               "ported_tools_archives": {},
