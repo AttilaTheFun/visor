@@ -255,6 +255,27 @@ int visor_listen(unsigned short port, int everywhere) {
     return listener;
 }
 
+int visor_listen6(unsigned short port) {
+    int listener = socket(AF_INET6, SOCK_STREAM, 0);
+    if (listener < 0) return -1;
+    (void)fcntl(listener, F_SETFD, FD_CLOEXEC);
+    int yes = 1;
+    setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
+    setsockopt(listener, IPPROTO_IPV6, IPV6_V6ONLY, &yes, sizeof yes);
+    struct sockaddr_in6 address;
+    memset(&address, 0, sizeof address);
+    address.sin6_family = AF_INET6;
+    address.sin6_port = htons(port);
+    address.sin6_addr = in6addr_any;
+    if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || listen(listener, 64) != 0) {
+        int error = errno;
+        close(listener);
+        errno = error;
+        return -1;
+    }
+    return listener;
+}
+
 int visor_listen_unix(const char *path) {
     struct sockaddr_un address;
     if (strlen(path) >= sizeof address.sun_path) { errno = ENAMETOOLONG; return -1; }
@@ -360,6 +381,10 @@ int visor_accept(int listener) {
 
 void visor_shutdown(int socket) {
     shutdown(socket, SHUT_RDWR);
+}
+
+void visor_shutdown_write(int socket) {
+    shutdown(socket, SHUT_WR);
 }
 
 void visor_ignore_broken_pipes(void) {

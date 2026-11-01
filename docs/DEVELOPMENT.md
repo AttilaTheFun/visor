@@ -759,6 +759,22 @@ visor-runner-agent server push-proxy co-tenant --host <the Mac's name as the con
 The printed body goes to the server's `PUT /api/push-proxy` with its
 password.
 
+**Its client proxy.** A container server's clients reach it through the
+Runner: a front per server, a port of the Mac's on every interface (IPv4
+and IPv6), each connection carried on to the server where only the Mac
+reaches it (its address on the containers' network), the bytes both ways
+as they come. When one way ends, the other has five seconds, then both
+end. Set on the Mac, from the agent's next start:
+
+```sh
+visor-runner-agent front set co-tenant --port 7440 --to 192.168.131.3:7433
+```
+
+It takes the place of a forwarder of the Mac's own (the mini's socat
+LaunchAgents on 7440): stop that first, or the port can't be had. The
+server's pairing code lists the Mac's addresses at the front's port (its
+front paths, `visor-server front`).
+
 ## 4. The working loop
 
 - Every target compiles in the Swift 6 language mode with warnings as

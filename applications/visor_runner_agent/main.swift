@@ -37,6 +37,17 @@ guard let proxy = MCPProxy(port: UInt16(config.mcpPort), endpoints: { RunnerConf
 }
 proxy.start()
 log("the MCP proxy listens on port \(config.mcpPort)" + (pushes == nil ? "" : ", the push proxy too"))
+// Each server's clients, at the ports set for them (as runner.json had them
+// when the agent started).
+let fronts = config.fronts.compactMap { front -> ClientProxy? in
+    guard let started = ClientProxy(front: front) else {
+        log("port \(front.port) can't be had for \(front.name)'s clients")
+        return nil
+    }
+    started.start()
+    log("\(front.name)'s clients come to port \(front.port), for \(front.host):\(front.hostPort)")
+    return started
+}
 
 // Ended by a signal (TERM, an update): heard on the main queue, which
 // dispatchMain runs. (A handler on another queue would be the main actor's
@@ -46,6 +57,7 @@ let sources = [SIGTERM, SIGINT, SIGHUP].map { number in
     let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
     source.setEventHandler {
         proxy.stop()
+        for front in fronts { front.stop() }
         exit(0)
     }
     source.resume()
