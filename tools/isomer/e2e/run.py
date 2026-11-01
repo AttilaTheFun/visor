@@ -98,6 +98,10 @@ def main():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         built = subprocess.run(["bazel", "cquery", "-c", "opt", "--output=files", "//applications/visor_web:visor_web_site"],
                                cwd=ROOT, capture_output=True, text=True).stdout.split()[0]
+        # Relative to the execution root: the checkout has no bazel-out link
+        # where Bazel makes none (Visor's agent image).
+        root = subprocess.run(["bazel", "info", "-c", "opt", "execution_root"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+        built = os.path.join(root, built)
     site = tempfile.mkdtemp(prefix="visor-e2e-")
     server = None
     try:

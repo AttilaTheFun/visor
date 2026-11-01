@@ -788,27 +788,31 @@ nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
 - agent_ui changes: commit+push there, put the revision in
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
-- Builds and runs of a pull request, before it merges: every
-  commit pushed to it runs ci.yml whole, and a newer push cancels the run
-  before it if it hasn't finished. Beside the tests and every platform's
-  build (self-hosted: the repository's runner leases a macOS VM or a Linux
-  container from OS Server for each; tools/ci/mac_vm.sh), its `build` job
-  builds the iPhone app and the
-  Mac's disk images, signed, on the release Mac's self-hosted runner
-  (tools/build_packages.sh); not for a fork's pull request. What the runner
-  does with them is its own (`$PIPELINE_CI`: the builds to the release
-  server, under their commit, branch and pull request). The proof (the
-  screens and UI tests) is not CI's: see below. Each run's build number is one past the version's highest on
-  the release server (its `number` job: `$PIPELINE_CI number`), stamped
-  into the four Info.plists before building and used for the runs, so
-  every build published is one more without a commit to bump it. main
-  requires every job green on the head commit to merge, so a pull request
-  that can merge has its builds in Releases and its runs in Reviews. CI runs
-  again on each commit merged to main (a squash is a commit of its own), and
-  its builds and runs are the version's. A release is of one of those
-  commits: an agent proposes it as a draft GitHub release
+- CI (ci.yml), self-hosted: the repository's runners lease a macOS VM,
+  a Windows VM or a Linux container from OS Server for each job
+  (tools/ci). A pull request gets the fast checks, all at once, in under
+  ten minutes each: every app and the Mac's libraries built on Linux
+  (`container`, tools/ci/container_build.sh, Bazel's tree in a kept
+  volume), the tests with nothing of Apple's in them on Linux (`linux`),
+  the command-line server on Windows, the tests that need a Mac in a macOS
+  VM (`test`), and blue's web client in headless Chromium in a Linux
+  container (`blue-web`). A diff of documentation alone skips them (the
+  `changes` job), and a newer push cancels a run that hasn't finished.
+  Each commit merged to main (a squash is a commit of its own) gets them
+  too, then what a release is made of: its build number (one past the
+  version's highest on the release server, `$PIPELINE_CI number`, stamped
+  into the Info.plists), the iPhone app and the Mac's disk images built,
+  signed and notarized on the release Mac (`build`,
+  tools/build_packages.sh; what the runner does with them is
+  `$PIPELINE_CI`'s), the agent image and blue's iPhone snapshots. The
+  proof (`proof`) runs only by hand (workflow_dispatch, since 2026-11-01,
+  for CI's time): an agent runs CI on main to propose a release, compared
+  with the previous release. main
+  requires every job green (or skipped) on a pull request's head, up to
+  date with main; an agent merges its own pull request then. A release is
+  of a commit on main: an agent proposes it as a draft GitHub release
   (`agent-token gh claude release create v<version> --draft --target <sha>`),
-  the owner reviews it in Reviews (its CI, builds, screens, and the pull
+  the owner reviews it in Reviews (its CI, builds, proof, and the pull
   requests since the last release) and approves it there, which makes the
   tag and promotes that commit's builds in Releases; nothing is built from
   the tag (releases: docs/RELEASE_PROCESS.md).
@@ -992,15 +996,19 @@ CI makes the proof: its `proof` job, on the repository's own runner
 fixture's screens in each orientation there (the probe's
 `testFixtureScreens` and `testFixtureScreensLandscape` through
 `tools/ios_ui_tests.sh`, on an iPhone 17 simulator made new, its status bar
-held still, keyboard suggestions off), and the UI cases, for each commit
-merged to main (a pull request runs its builds and tests only), within the
-hour. Each screen is compared with its picture kept at the commit before
-(`tests/proof/ios`, `tests/proof/ios-landscape`: red's own, as
-`tests/snapshots` holds blue's), so a commit that takes new pictures shows
-the change, and the run's `proof` artifact holds `proof.json`, `screens/`,
-`diffs/` and the probe's logs. Reviews reads it from GitHub by commit: a
-release is proposed on a main commit whose proof is in, and that proof is
-the one reviewed. A change meant to look different takes its new screens
+held still, keyboard suggestions off), and the UI cases. It runs only by
+hand (CI's workflow_dispatch, since 2026-11-01, for CI's time; pull
+requests and main's commits run their builds and tests only): an agent
+runs it on main to propose a release (`kind` full, the default, or
+quick). Each screen is compared with its picture kept at the previous
+release (the newest `v*` tag before the commit, else the commit before:
+`tests/proof/ios`, `tests/proof/ios-landscape`: red's own, as
+`tests/snapshots` holds blue's), so it shows every change since, and the
+run's `proof` artifact holds `proof.json`, `screens/`, `diffs/` and the
+probe's logs. Reviews reads it from GitHub by commit: no release is made
+without a proof of its commit, and that proof is the one reviewed. To
+bisect a regression, prove an earlier commit after the fact: push a branch
+at it and run the workflow on that branch. A change meant to look different takes its new screens
 into `tests/proof` in its pull request (`tools/proof.sh` makes them), or
 right after from main's proof artifact. The lab's phones are for what needs
 real hardware (a sensor, or a benchmark on a device).

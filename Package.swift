@@ -85,6 +85,11 @@ let tests: [Target] = [
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
     .testTarget(name: "VisorContainerHostTests", dependencies: ["VisorContainerHost"],
                 path: "tests/visor_container_host_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
+    // Here rather than on a Mac: nothing in them is Apple's.
+    .testTarget(name: "MessageCacheTests", dependencies: ["MessageCache", "VisorProtocol"],
+                path: "tests/message_cache_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
+    .testTarget(name: "ClaudeTranscriptTests", dependencies: ["ClaudeTranscript"],
+                path: "tests/claude_transcript_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The agents' host, built with the server: `swift build -c release` puts
 /// both in the same folder, where the server looks for it.
