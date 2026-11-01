@@ -4,7 +4,11 @@ Status: planned for 0.45. Decided on 31 October 2026, and revised the same
 day: Visor embeds Apple's Containerization framework and is one
 self-contained Mac app (a dmg, and one day the Mac App Store); the Runner is
 the only thing clients talk to, passing each on to its server, and every
-server's MCP proxy.
+server's MCP proxy. Revised again on 1 November with Logan's points: a
+container shares nothing with the Mac; the Runner is also GitHub's forward
+proxy (gh_mcp retired) and the push proxy; it holds named Claude accounts a
+server can be switched between; and its menu runs the Mac's server, a
+container server, or both, each with its pairing code.
 
 Today one Mac runs one Visor Server, inside the menu bar app. A session can
 run its agent in a Linux container (0.44's container hosts,
@@ -15,6 +19,29 @@ pictures a client attaches, for one — is out of the agent's reach.
 This design makes each container a server of its own. One Mac runs any mix:
 two sessions on the Mac's own server, five in one container's server, one in
 another's, all driven by one menu bar app.
+
+## A container shares nothing with the Mac
+
+Logan (1 November): "I ultimately don't want the co-tenant container to
+share *anything* with the host mac if possible. That means the agents
+should clone their own copies of the repos inside the containers, not mount
+them from the host. The longer term vision is I might want to legitimately
+run these containers with the agents in the cloud and they need to be fully
+portable / self contained."
+
+- **No bind mounts.** Each session's projects are cloned inside the
+  container, on its home volume, by its agent.
+- **What crosses is network, through the Runner:** the MCP servers (the
+  Runner's MCP proxy), GitHub (its forward proxy), pushes (its push proxy),
+  and Bazel's remote cache, read-only, at a port the Runner proxies with the
+  read token added. No token or key is written into the container but the
+  agents' own sign-ins.
+- **Visor's own tools** (`send_message`, `list_sessions`, `read_messages`,
+  `message_status`, `approve`) are the container's server's own MCP,
+  served to its agents directly, never through the Runner. Messages to
+  other computers go through clients, as today.
+- So a container server could as well run in the cloud: it needs the
+  Runner's proxies at an address, nothing of the Mac's disk.
 
 ## The parts
 
@@ -42,8 +69,14 @@ another's, all driven by one menu bar app.
     connections on to the server;
   - is every server's MCP proxy: the servers' MCP URLs point at it, and it
     adds the secret headers;
+  - is GitHub's forward proxy for every server's agents, and the push proxy
+    for every server with no APNs key of its own (below);
   - moves sessions between servers;
   - holds the credentials and gives each server what it needs.
+
+  Its menu lists every server it runs, the Mac's and each container's,
+  each with Copy Pairing Code. It can be set to run the Mac's server, a
+  container server, or both.
 
   Its processes, each a helper in `Contents/Helpers`:
   - **the menu bar app**, the Runner's face: Settings, the menu, the codes;
@@ -71,13 +104,28 @@ another's, all driven by one menu bar app.
 - **Native sessions:** Claude, Codex and OpenRouter as they sign in on the
   Mac, each in its own way; OpenRouter's key from the Mac's environment.
 - **In containers:**
-  - Codex: the Mac's sign-in file, copied in. Codex has no token to pass
-    instead. If it gets one, it is passed as Claude's is.
-  - Claude: an OAuth token set in the Runner, written into each container
-    server's agents' environment.
+  - Codex: a sign-in of the container's own, made once in it (`codex
+    login --device-auth`), never a copy of the Mac's, and never the Mac's
+    `~/.codex` mounted.
+  - Claude: a Claude account of the Runner's (below), written into each
+    container server's agents' environment (`agents/claude.env`).
   - OpenRouter: an API key set in the Runner, given the same way.
+- **Claude accounts:** the Runner keeps named Claude accounts (each an
+  OAuth token), and each server, the Mac's or a container's, is set to one.
+  Switching a server to another restarts its agents with that token, and
+  their conversations resume: a container's server gets it in its
+  `claude.env`, the Mac's agents as `CLAUDE_CODE_OAUTH_TOKEN` in their
+  environment. A one-time import reads them from the environment Logan's
+  shell sets (`LOGAN_SHIRE_CLAUDE_CODE_OAUTH_TOKEN`, the main account;
+  `LOGAN_SHIRE_CLAUDE_CLAUDE_CODE_OAUTH_TOKEN`, the second;
+  `LOGAN_SHIRE_OPEN_ROUTER_API_KEY`); the Runner never reads them there
+  again.
 - **MCP servers' secret headers:** kept by the Runner, added by its proxy.
   No server, native or in a container, holds them.
+- **GitHub:** a GitHub App key the Runner holds, behind its forward proxy
+  (below). No agent holds a GitHub token.
+- **APNs:** the key pushes are signed with, held by the Runner, behind its
+  push proxy (below). A server in a container holds none.
 - **Where the Runner keeps secrets:** in the keychain for notarized builds
   (alpha, production), and in its data folder for debug builds, chosen by a
   Bazel config (`--config=notarized`, tools/secrets).
@@ -121,6 +169,39 @@ another's, all driven by one menu bar app.
   servers and agents run on; clients can't reach them, and MCP calls fail,
   until it is back.
 
+## GitHub, through the Runner
+
+Logan (1 November): "we retire gh mcp, have the runner hold a github app key
+and be configured with the rules for what agents should be allowed to do and
+it's a true forward proxy like Charles so the agents think they're talking
+to github.com but it passes through the visor proxy. The visor runner
+configures the container / server and tells it to trust its certificates."
+
+- The Runner is an HTTP proxy (`CONNECT`) that every server's agents are
+  set to use (`HTTPS_PROXY`). It opens TLS for GitHub's own names alone
+  (`github.com`, `api.github.com`, `uploads.github.com`) with a certificate
+  authority of its own, name-constrained to them; everything else passes
+  through untouched.
+- A container trusts that authority because the Runner set it up to; the
+  Mac's agents are given it by their environment (`SSL_CERT_FILE`,
+  `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`), never by the login keychain.
+- A request to GitHub goes on with the App's token for the repository, if
+  the Runner's rules allow it: the repositories agents may use, the refs
+  they may not move (the default branch, tags), the writes they may make
+  (pull requests, comments, pushes to their branches, merges once checks
+  pass and the code owners are satisfied). The rules are data in the
+  Runner's settings, not code. A refusal says why, as GitHub's errors do.
+- `git` and `gh` work unchanged, so agents clone, fetch and push as
+  anywhere else. gh_mcp, and its tools, go.
+
+## Pushes, through the Runner
+
+A server with no APNs key of its own (one in a container, or on Linux) is
+set to the Runner's push proxy (`PUT /api/push-proxy`, docs/protocol.md). It
+sends each push as it would send it to APNs, unsigned, to the Runner, which
+signs it with the key it holds and sends it on; APNs's answer comes back,
+so the server forgets a device APNs says is gone.
+
 ## A container server
 
 Each has a folder of the Runner's, `<Runner data>/container-servers/<id>/`:
@@ -135,7 +216,6 @@ Each has a folder of the Runner's, `<Runner data>/container-servers/<id>/`:
   "cpus": 6,
   "memoryBytes": 17179869184,
   "diskBytes": 137438953472,
-  "mounts": [{"source": "/Users/me/Developer", "destination": "/Users/me/Developer"}],
   "listen": {"port": 7440, "lan": true, "vpn": true},
   "setup": "",
   "stopped": false
@@ -149,9 +229,10 @@ Each has a folder of the Runner's, `<Runner data>/container-servers/<id>/`:
 What the Runner does with its container backend:
 
 - **Makes it:** two volumes, its home (`/root`) and Bazel's output
-  (`/var/cache/bazel`), then the container from the image with the mounts,
-  the volumes, its limits and a label naming the container server. The
-  container's main process only waits.
+  (`/var/cache/bazel`), then the container from the image with the
+  volumes, its limits and a label naming the container server; no folder of
+  the Mac's. The container's main process only waits (and reaps what it
+  adopts: the image's `tini`).
 - **Fronts it:** listens at the clients' port (`listen`) and passes each
   connection on to the server at the container's address, for as long as
   the server runs.
@@ -161,7 +242,8 @@ What the Runner does with its container backend:
   on standard input), writes the agents' sign-ins, then starts
   `visor-server start` detached (an exec not tied to the exec's stream),
   its `--address` the Mac's address for it, so its codes lead with that.
-  Then sets its MCP servers to the Runner's.
+  Then sets its MCP servers, its GitHub proxy and its push proxy to the
+  Runner's.
 - **Picks it up:** when the Runner starts, it lists the containers it made
   (by label), starts any stopped one that isn't marked stopped, starts the
   server in any that isn't answering, and gives credentials and MCP
@@ -177,9 +259,10 @@ What the Runner does with its container backend:
 ### The server inside
 
 - **Its disks:** its home holds the server's data
-  (`~/.local/share/visor`: sessions, attachments), the agents' own
-  transcripts (`~/.claude`, `~/.codex`, `~/.openrouter`), which a resumed
-  session reads, and their sign-ins. Kept until it is removed.
+  (`~/.local/share/visor`: sessions, attachments), the projects its agents
+  cloned, the agents' own transcripts (`~/.claude`, `~/.codex`,
+  `~/.openrouter`), which a resumed session reads, and their sign-ins. Kept
+  until it is removed.
 - **Its agents' sign-ins:** Claude's `CLAUDE_CODE_OAUTH_TOKEN` in its
   `agents/claude.env` (in the server's data), OpenRouter's
   `OPENROUTER_API_KEY` in `agents/openrouter.env`, Codex's `auth.json` at
@@ -242,9 +325,9 @@ these are checked early rather than assumed:
 - Visor's Migrate… already moves a session between servers. The client
   carries the conversation's files and the projects across, and the other
   server resumes the session; the original is left until the new one works.
-- The Runner adds a move of its own for servers that see the same folder (a
-  container mounts the Mac's folders at their own paths). It carries the
-  conversation and leaves the project where it is.
+- A container sees no folder of the Mac's, so a move into one always takes
+  the project with it: the client copies it in, or the agent clones it
+  there from GitHub. A move out of one does the same the other way.
 
 ## Phases
 
@@ -254,11 +337,16 @@ these are checked early rather than assumed:
      container servers with `container`; their ports published; their
      health checked; their sign-ins given.
    - The Runner's MCP proxy, which the container servers are configured
-     with.
+     with (visor #169), and its push proxy (#178, #179).
+   - The Runner's client proxy, in place of the forwarder the mini's
+     co-tenant has now (socat).
+   - GitHub's forward proxy and its rules; gh_mcp retired.
 2. **The Runner's side in Settings.**
-   - Container servers made and removed, started and stopped.
-   - The Claude token and OpenRouter key set there.
-   - A code for each server.
+   - Container servers made and removed, started and stopped; the Mac's
+     server, a container server, or both.
+   - Claude accounts, each server set to one and switched between them;
+     the import from the environment; the OpenRouter key.
+   - Copy Pairing Code for each server, in the menu.
 3. **The Mac's server apart from the Runner.**
    - `visor-server` runs as a launchd job that the menu bar app installs,
      updates and stops, and keeps the menu bar app's data folder, so
@@ -271,6 +359,17 @@ these are checked early rather than assumed:
    - Today's agent-in-a-container sessions (0.44) moved onto container
      servers; then that way of running, and 0.44's container hosts
      (docs/container-host.md), are retired.
+
+## Where it stands (1 November)
+
+The mini's co-tenant is the first container server, set up by hand: Visor's
+agent image with `visor-server` in it (visor #151), its server's port
+forwarded by a socat LaunchAgent, its MCP servers set to the Runner's MCP
+proxy (`visor-runner-agent`, from #169, running on the mini). Its sessions
+are marked as a container's (#170), and its pairing code lists the
+forwarder's addresses (#171's front paths). Logan: "Don't move yet until
+everything is working fine with the visor session in the co-tenant
+container."
 
 ## Sessions running today
 
