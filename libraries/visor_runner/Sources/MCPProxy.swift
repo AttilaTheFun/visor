@@ -7,6 +7,8 @@ import Foundation
 /// token goes on to that endpoint with the secret headers the Runner keeps,
 /// and its answer comes back as it comes (JSON, or SSE). No server holds a
 /// secret header. Plain HTTP endpoints (on this computer, or its network).
+/// On the same port, with the same tokens, `/apns/…` is the push proxy
+/// (APNsProxy), when the Runner has one.
 public final class MCPProxy: Sendable {
     /// The header a call carries its server's token in.
     public static let tokenHeader = "X-Visor-Proxy"
@@ -37,12 +39,14 @@ public final class MCPProxy: Sendable {
     private let admits: @Sendable (String) -> Bool
     /// A secret header's value, by its endpoint and name.
     private let secret: @Sendable (_ endpoint: String, _ header: String) -> String?
+    /// The push proxy, if this Runner has one (`/apns/…`).
+    private let pushes: APNsProxy?
 
     /// Listening on `port` on every interface (the containers' network is
     /// one): a call without a server's token is refused. Nil when the port
     /// can't be had.
     public init?(port: UInt16, endpoints: @escaping @Sendable () -> [Endpoint], admits: @escaping @Sendable (String) -> Bool,
-                 secret: @escaping @Sendable (_ endpoint: String, _ header: String) -> String?) {
+                 pushes: APNsProxy? = nil, secret: @escaping @Sendable (_ endpoint: String, _ header: String) -> String?) {
         visor_ignore_broken_pipes()
         let listener = visor_listen(port, 1)
         guard listener >= 0 else { return nil }
@@ -51,6 +55,7 @@ public final class MCPProxy: Sendable {
         self.endpoints = endpoints
         self.admits = admits
         self.secret = secret
+        self.pushes = pushes
     }
 
     public func start() {
@@ -115,6 +120,12 @@ public final class MCPProxy: Sendable {
         send(connection, Data("HTTP/1.1 \(status)\r\nContent-Type: text/plain\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8) + body)
     }
 
+    static func reply(_ connection: Int32, _ answer: APNsProxy.Answer) {
+        let head = "HTTP/1.1 \(answer.status == 0 ? 502 : answer.status) APNs\r\nContent-Type: application/json\r\n"
+            + "Content-Length: \(answer.body.count)\r\nConnection: close\r\n\r\n"
+        send(connection, Data(head.utf8) + answer.body)
+    }
+
     static func send(_ connection: Int32, _ data: Data) {
         var sent = 0
         while sent < data.count {
@@ -142,6 +153,10 @@ public final class MCPProxy: Sendable {
         guard let request = Self.read(client) else { return }
         guard let token = request.header(Self.tokenHeader), admits(token) else {
             return Self.reply(client, "401 Unauthorized", "No server's token for this proxy.")
+        }
+        if request.path.hasPrefix("/apns/") {
+            guard let pushes else { return Self.reply(client, "404 Not Found", "This Runner proxies no pushes.") }
+            return Self.reply(client, pushes.answer(method: request.method, path: request.path, headers: request.headers, body: request.body))
         }
         let name = request.path.hasPrefix("/mcp/") ? String(request.path.dropFirst(5).prefix { $0 != "?" && $0 != "/" }) : ""
         guard let endpoint = endpoints().first(where: { $0.name == name }) else { return Self.reply(client, "404 Not Found", "No MCP server \(name).") }

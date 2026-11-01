@@ -744,6 +744,21 @@ The printed body goes to the server's `PUT /api/mcp` with its password.
 The token is kept there as a secret header, and no key goes into the
 container.
 
+**Its push proxy.** On the same port and with the same tokens, a server
+with no APNs key of its own (Linux, a container) sends its pushes to
+`/apns/<APNs's host>/3/device/<token>`, unsigned. The Runner passes on
+APNs's own headers alone, adds a token it signs with the APNs key it keeps
+(CryptoKit; a Runner built elsewhere proxies no pushes), and sends it to
+APNs over HTTP/2. APNs's answer comes back as it came.
+
+```sh
+visor-runner-agent apns set --key-id <key id> --team-id <team id> < AuthKey_<key id>.p8
+visor-runner-agent server push-proxy co-tenant --host <the Mac's name as the container reaches it>  # prints the PUT /api/push-proxy body
+```
+
+The printed body goes to the server's `PUT /api/push-proxy` with its
+password.
+
 ## 4. The working loop
 
 - Every target compiles in the Swift 6 language mode with warnings as
