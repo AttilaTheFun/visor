@@ -22,7 +22,7 @@
 # first prompt: a long thread, more rows than a client is served at once.
 #
 # Needs: the server running on this Mac and a booted simulator the probe
-# runs on (rules_apple's "BAZEL_TEST_iPhone 17_27.0"; boot it with `xcrun
+# runs on (rules_apple's "BAZEL_TEST_iPhone 17_27.2"; boot it with `xcrun
 # simctl boot`). Its Visor is signed in to this computer if it is not yet. The session is a throwaway,
 # started over the API and ended afterwards. Contact sheets of the frames are
 # left in the output folder for a look (sheet.swift).
@@ -42,7 +42,7 @@ CODE_TEXT="${VISOR_PROBE_CODE:-$(curl -s -H "Authorization: Bearer $PW" $API/cod
 HOST="${1:-$(python3 -c 'import json,sys,base64; t=sys.argv[1]; t+="="*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t))["host"])' "$CODE_TEXT")}"
 # Only the test runner's own simulator, by name: whatever else is booted
 # may be another agent's (one simulator per agent at a time).
-SIM_NAME="BAZEL_TEST_iPhone 17_27.0"
+SIM_NAME="BAZEL_TEST_iPhone 17_27.2"
 SIM="$(xcrun simctl list devices | grep -F "$SIM_NAME (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
 [ -n "$SIM" ] || { echo "No simulator named $SIM_NAME: run an iOS probe once to make it" >&2; exit 2; }
 xcrun simctl list devices booted | grep -qF "$SIM" || { echo "$SIM_NAME is not booted: boot it with xcrun simctl boot $SIM" >&2; exit 2; }
@@ -81,7 +81,7 @@ python3 -c 'import time; print(time.time())' > "$OUT/rec-start"
 xcrun simctl io "$SIM" recordVideo --codec h264 --force "$OUT/send.mov" > "$OUT/rec.log" 2>&1 &
 REC=$!
 bazel test //tests/ios_probe:visor_probe --ios_multi_cpus=sim_arm64 \
-  --ios_simulator_device="iPhone 17" --ios_simulator_version=27.0 \
+  --ios_simulator_device="iPhone 17" --ios_simulator_version=27.2 \
   --spawn_strategy=local --nocache_test_results --test_output=streamed \
   --test_filter=VisorProbe/testSendFrames --test_env=VISOR_FRAMES_SESSION=$SESSION --test_env=VISOR_FRAMES_READ=${VISOR_FRAMES_READ:-0} --test_env=VISOR_FRAMES_AWAY=${VISOR_FRAMES_AWAY:-0} --test_env=VISOR_FRAMES_RELAUNCH=${VISOR_FRAMES_RELAUNCH:-0} \
   "--test_env=VISOR_FRAMES_TEXT=$TEXT" --test_env=VISOR_PROBE_HOST=$HOST "--test_env=VISOR_PROBE_CODE=$CODE_TEXT" > "$OUT/test.txt" 2>&1 &

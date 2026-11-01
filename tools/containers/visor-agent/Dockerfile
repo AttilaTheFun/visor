@@ -58,7 +58,7 @@ LABEL org.opencontainers.image.source="https://github.com/AttilaTheFun/visor"
 LABEL org.opencontainers.image.description="Visor's agent image: the Linux a session's agent runs in, in a container."
 ARG TARGETARCH
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client tmux python3 unzip zip less procps ripgrep bubblewrap \
+ && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client tmux python3 unzip zip less procps ripgrep bubblewrap tini \
       libxml2 libgcc-13-dev lld clang pkg-config \
       libsdl2-dev libsdl2-ttf-dev libcurl4-openssl-dev libgl-dev libegl-dev libglvnd-dev libsqlite3-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
       libnss3 \
@@ -108,3 +108,10 @@ ENV PATH=/opt/visor:$PATH
 # The container is the agent's sandbox: Claude Code skips its permission
 # prompts though it runs as root.
 ENV IS_SANDBOX=1
+# A first process that reaps. A container runs `sleep infinity`, which never
+# waits for the processes it adopts, so every orphan an agent left (git's,
+# an ended claude's, a restarted server) stayed a zombie for the
+# container's life: the mini's co-tenant had 130 after a day. tini is the
+# container's first process and the command its child; it also passes on
+# the stop signal, which `sleep` as the first process ignored.
+ENTRYPOINT ["/usr/bin/tini", "--"]
