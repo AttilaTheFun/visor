@@ -13,7 +13,14 @@ import Security
 
 @MainActor
 public final class NativeVisorSettingsService: VisorSettingsService {
-    public init() {}
+    /// The keychain service secrets are kept under: the app's bundle id,
+    /// unless the app says otherwise (Visor on the Mac keeps the one the
+    /// client had before it was merged into it).
+    private let keychainService: String
+
+    public init(keychainService: String? = nil) {
+        self.keychainService = keychainService ?? Bundle.main.bundleIdentifier ?? "Visor"
+    }
 
     public func get(key: String) -> String {
         UserDefaults.standard.string(forKey: "visor." + key) ?? ""
@@ -29,7 +36,7 @@ public final class NativeVisorSettingsService: VisorSettingsService {
     /// bundle id. The app that wrote one reads it without asking, as long
     /// as it is signed the same way (a stable signature, not ad hoc).
     public func secret(key: String) -> String {
-        var query = Self.query(key)
+        var query = self.query(key)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
@@ -42,7 +49,7 @@ public final class NativeVisorSettingsService: VisorSettingsService {
     }
 
     public func setSecret(key: String, value: String) {
-        let query = Self.query(key)
+        let query = self.query(key)
         guard !value.isEmpty else { SecItemDelete(query as CFDictionary); return }
         let data = Data(value.utf8)
         let update = [kSecValueData as String: data] as CFDictionary
@@ -68,9 +75,9 @@ public final class NativeVisorSettingsService: VisorSettingsService {
 
     private static let logger = Logger(subsystem: "com.LoganShire.VisorClient", category: "keychain")
 
-    private static func query(_ key: String) -> [String: Any] {
+    private func query(_ key: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: Bundle.main.bundleIdentifier ?? "Visor",
+         kSecAttrService as String: keychainService,
          kSecAttrAccount as String: key]
     }
     #else

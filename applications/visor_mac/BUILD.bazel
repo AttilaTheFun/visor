@@ -1,0 +1,51 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load("@rules_apple//apple:macos.bzl", "macos_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+BUNDLE_ID = "com.LoganShire.Visor"
+
+# Visor on the Mac (docs/co-tenancy.md, "The app"): a menu bar app whose
+# window is Visor's macOS client, with the Mac's Visor server under it. It
+# takes over from Visor Server (applications/visor_menubar) and the Mac
+# client (applications/visor_macos), which build on until the switch, and
+# keeps what they kept where they kept it (Sources/FormerApps.swift).
+swift_library(
+    name = "mac_lib",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]) + [
+        "//applications/visor_ios:host_srcs",
+        "//applications/visor_menubar:shared_srcs",
+    ],
+    module_name = "VisorMac",
+    deps = [
+        "//:foundation",
+        "//libraries/message_cache",
+        "//libraries/visor_client",
+        "//libraries/visor_protocol",
+        "//libraries/visor_server",
+        "//libraries/visor_server_apple",
+        "//libraries/visor_services",
+        "//libraries/visor_ui",
+    ],
+)
+
+macos_application(
+    name = "visor_mac",
+    # The agents' host beside the app's own program, as in Visor Server:
+    # each session's agent runs under one. And Visor's container host.
+    additional_contents = {
+        "//applications/visor_agent_host:visor-agent-host": "Helpers",
+        "//applications/visor_container_host:visor-container-host": "Helpers",
+    },
+    app_icons = ["//artwork/app-icon:app_icon"],
+    bundle_id = BUNDLE_ID,
+    bundle_name = "Visor",
+    # The hardened runtime's own (the microphone). Push comes with the
+    # release's profile (tools/sign_mac_app.sh), not a build's.
+    entitlements = "app.entitlements",
+    infoplists = ["Info.plist"],
+    minimum_os_version = "15.0",
+    deps = [":mac_lib"],
+)

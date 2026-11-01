@@ -15,8 +15,15 @@ extension MessageCache {
             base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent(Bundle.main.bundleIdentifier ?? "Visor")
         }
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let path = base.appendingPathComponent(name + ".sqlite").path
+        return open(named: name, in: base)
+    }
+
+    /// A cache in a SQLite file of this name in `folder`, wherever the app
+    /// is: for an app that keeps two caches apart (Visor on the Mac, the
+    /// server's and the client's, each in the folder its own app kept it in).
+    public static func open(named name: String, in folder: URL) -> MessageCache {
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let path = folder.appendingPathComponent(name + ".sqlite").path
         if let storage = try? SQLiteStorage(path: path) { return MessageCache(storage: storage) }
         return inMemory()
     }
