@@ -10,7 +10,10 @@ package(default_visibility = ["//visibility:public"])
 swift_library(
     name = "visor_runner_agent_lib",
     copts = STRICT_SWIFT,
-    srcs = ["main.swift"],
+    srcs = [
+        "SystemPushes.swift",
+        "main.swift",
+    ],
     module_name = "VisorRunnerAgentMain",
     deps = [
         "//:foundation",

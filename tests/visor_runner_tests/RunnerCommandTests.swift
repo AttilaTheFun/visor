@@ -69,6 +69,31 @@ final class RunnerCommandTests: XCTestCase {
         XCTAssertFalse(ProxyTokens.admits(token, servers: RunnerConfig.read(folder)?.servers ?? [], in: secrets))
     }
 
+    func testTheAPNsKeyIsReadFromInputAndAServerGivenThePushProxy() throws {
+        let p8 = ["-----BEGIN PRIVATE KEY-----", "MIGTAgEAMBMG", "-----END PRIVATE KEY-----", "after"]
+        XCTAssertEqual(run(["apns", "set", "--key-id", "ABCDEFGHIJ", "--team-id", "TEAM123456"], input: p8), 0)
+        XCTAssertEqual(secrets.value(APNsProxy.keySecret), "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMG\n-----END PRIVATE KEY-----",
+                       "read up to the key's last line")
+        XCTAssertEqual(secrets.value(APNsProxy.keyIDSecret), "ABCDEFGHIJ")
+        XCTAssertEqual(run(["apns", "set", "--key-id", "short", "--team-id", "TEAM123456"], input: p8), 2)
+        XCTAssertEqual(run(["apns", "set", "--key-id", "ABCDEFGHIJ", "--team-id", "TEAM123456"], input: ["not a key"]), 2)
+
+        XCTAssertEqual(run(["server", "push-proxy", "Builds", "--host", "192.168.131.1"]), 2, "a server added first")
+        _ = run(["server", "add", "Builds", "--host", "192.168.131.1"])
+        said = []
+        XCTAssertEqual(run(["server", "push-proxy", "Builds", "--host", "192.168.131.1"]), 0)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try XCTUnwrap(said.last).utf8)) as? [String: String])
+        XCTAssertEqual(body["url"], "http://192.168.131.1:7439")
+        XCTAssertEqual(body["token"], secrets.value(ProxyTokens.key(server: "Builds")))
+
+        said = []
+        _ = run(["status"])
+        XCTAssertTrue(said.joined().contains("Pushes: signed with APNs key ABCDEFGHIJ (team TEAM123456)"), said.joined())
+        XCTAssertFalse(said.joined().contains("MIGT"))
+        XCTAssertEqual(run(["apns", "remove"]), 0)
+        XCTAssertNil(secrets.value(APNsProxy.keySecret))
+    }
+
     func testStatusSaysWhatIsKeptButNoSecret() {
         _ = run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp", "--secret", "API_KEY"], input: ["gh-key"])
         _ = run(["server", "add", "Builds", "--host", "h"])
