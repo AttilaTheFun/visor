@@ -794,13 +794,13 @@ front paths, `visor-server front`).
   locate outputs with `bazel cquery [-c opt] --output=files <target>`.
 - Build on Linux (a container, say): the same targets, with no Xcode. The
   Apple apps build with rules_applecross (MODULE.bazel, `apple_on_linux` in
-  .bazelrc) from Xcode 27.0's SDK archive and its ported tools, both pinned
+  .bazelrc) from Xcode 27.2's SDK archive and its ported tools, both pinned
   by SHA-256 (the tools in third_party/applecross/ported_tools.sha256).
   `.bazelrc.user` turns it on, `build:linux --config=apple_on_linux`, and
   says where they are, on Linux alone (`common:linux`: CI's Mac runner
   copies .bazelrc.user for its signing team, and none of these is there):
   `common:linux --distdir=<folder>` for each folder holding
-  `apple-sdks-27.0.tar.gz` or the tools' archives (named by their hashes),
+  `apple-sdks-27.2.tar.gz` or the tools' archives (named by their hashes),
   or `common:linux --downloader_config=.bazel_downloader.user` (ignored by
   git, like .bazelrc.user) with the lines `rewrite
   apple-sdks\.invalid/.* http://<oss host>:7490/files/sha256/<the SDK's sha256>`

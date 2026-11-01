@@ -3,7 +3,7 @@
 # client and blue Visor's Android APK, arm64), on a self-hosted runner's
 # Mac: a container leased from that Mac's OS Server (`oss machine run
 # container --inside`), made from this build's own agent image, so CI builds
-# where a session's agent works. The Apple apps take Xcode 27.0's SDK
+# where a session's agent works. The Apple apps take Xcode 27.2's SDK
 # archive and rules_applecross's ported tools from the same OS Server's
 # files (by SHA-256, with its cache's read token) through a downloader
 # config written here, and its Bazel reads that server's cache: no host is
@@ -29,7 +29,7 @@ ROOT="${BUILD_WORKSPACE_DIRECTORY:?run it with bazel run}"
 IMAGE="${1:?the agent image, ghcr.io/attilathefun/visor-agent:<version>}"
 shift
 VOLUME="${VISOR_CI_VOLUME:-visor-ci}"
-SDK_SHA256="251c252f7f41bcd3e08655e49e182686682d705945f4a2807049b9051c606ebb"
+SDK_SHA256="b1583e60f9fd35881b5a948ce71627079877f1ced7ea231e14d3c342dd389668"
 
 # The command line inside OS Server, or on the path.
 OSS="/Applications/OS Server.app/Contents/Helpers/oss"
