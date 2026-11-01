@@ -11,8 +11,15 @@ PORT=7633
 failures=0
 check() { if "$@"; then echo "ok: $*"; else echo "FAILED: $*"; failures=$((failures + 1)); fi; }
 # Gone: no such process, or one that has exited and not been reaped (a
-# container's first process may not reap what it adopts).
-gone() { ! kill -0 "$1" 2>/dev/null || [ "$(sed 's/.*) //' /proc/"$1"/stat 2>/dev/null | cut -c1)" = Z ]; }
+# container's first process may not reap what it adopts); given ten
+# seconds, as a process still ending its agents is not yet either.
+gone() {
+    for _ in $(seq 1 50); do
+        if ! kill -0 "$1" 2>/dev/null || [ "$(sed 's/.*) //' /proc/"$1"/stat 2>/dev/null | cut -c1)" = Z ]; then return 0; fi
+        sleep 0.2
+    done
+    return 1
+}
 
 PW="$($BIN password)"
 check test ${#PW} -ge 12
@@ -33,10 +40,12 @@ DATA="${XDG_DATA_HOME:-$HOME/.local/share}/visor"
 FIRST=$(cut -d' ' -f1 "$DATA/visor-server.pid")
 curl -s -X POST -H "Authorization: Bearer $PW" http://127.0.0.1:$PORT/api/restart -d '{}' > /dev/null
 sleep 4
-SECOND=$(cut -d' ' -f1 "$DATA/visor-server.pid")
-check test "$FIRST" != "$SECOND"
 check gone "$FIRST"
 check node tools/probes/server.mjs
+# The successor's id once it has answered: the pid file can name the one
+# starting it a moment before.
+SECOND=$(cut -d' ' -f1 "$DATA/visor-server.pid")
+check test "$FIRST" != "$SECOND"
 check $BIN stop
 check gone "$SECOND"
 echo "--- the background server's log"
