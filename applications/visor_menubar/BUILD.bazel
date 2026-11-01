@@ -7,6 +7,17 @@ package(default_visibility = ["//visibility:public"])
 # Change to your own bundle id.
 BUNDLE_ID = "com.LoganShire.VisorServer.macOS"
 
+# What Visor on the Mac (applications/visor_mac) shares with this app until
+# it takes over from it: the menu, Settings and the QR code.
+filegroup(
+    name = "shared_srcs",
+    srcs = [
+        "Sources/MenuContent.swift",
+        "Sources/QRCode.swift",
+        "Sources/SettingsPane.swift",
+    ],
+)
+
 # The host: Visor Server, a menu bar app (no Dock icon) running the server. The menu
 # shows the address clients take, the password to type on a client, the
 # connected clients and the running sessions.
