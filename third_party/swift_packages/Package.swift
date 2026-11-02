@@ -27,10 +27,10 @@ let package = Package(
         // ApplicationUpdates: the build this app is, written at launch to
         // the database it shares with Applications (the
         // group.com.LoganShire.Applications container), and its updates
-        // told of. By revision until applications tags a public release.
+        // told of.
         .package(
             url: "https://github.com/AttilaTheFun/applications.git",
-            revision: "8cf429781e1f524ae4c14da65dc8fa32036524f0"
+            exact: "0.10.45"
         ),
     ]
 )
