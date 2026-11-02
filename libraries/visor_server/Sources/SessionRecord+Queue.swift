@@ -11,7 +11,7 @@ extension SessionRecord {
     /// the log has them, and are no row until then.
     func appendUser(_ text: String, images: [String] = []) {
         error = nil
-        unwritten.append((text: text, seen: userRows(entries, saying: text)))
+        unwritten.append((text: text, seen: userRows(entries, saying: text), orphaned: nil))
         noteDelivered()
         // The session's summary is the latest thing said, already.
         if let preview = Self.preview(of: TranscriptEntry(id: "", role: .user, text: text)), preview != info.preview {
@@ -27,10 +27,38 @@ extension SessionRecord {
     /// thread until the log has it. Not the agent's own commands (`/goal`),
     /// which its log may never write.
     func noteDelivered() {
-        let delivered = info.busy ? unwritten.map(\.text).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/") } : []
+        let delivered = info.busy
+            ? unwritten.filter { $0.orphaned == nil }.map(\.text).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/") }
+            : []
         guard delivered != info.delivered else { return }
         info.delivered = delivered
         onInfoChanged?()
+    }
+
+    /// The agent has gone (exited, or let go of): what it was handed and
+    /// its log has not written, it never took — no later agent has those
+    /// words. They are no longer on their way; `dropUntaken` lets go of
+    /// them once the log has had time to catch up. Whether there were any.
+    @discardableResult
+    func agentWent() -> Bool {
+        let now = ContinuousClock.now
+        var any = false
+        for index in unwritten.indices where unwritten[index].orphaned == nil {
+            unwritten[index].orphaned = now
+            any = true
+        }
+        noteDelivered()
+        return any
+    }
+
+    /// The words an agent that went at least `grace` ago was handed and
+    /// its log still hasn't written: let go of, for the user to be told
+    /// (and to say them again).
+    func dropUntaken(after grace: Duration) -> [String] {
+        let before = ContinuousClock.now - grace
+        let untaken = unwritten.filter { $0.orphaned.map { $0 <= before } ?? false }
+        unwritten.removeAll { $0.orphaned.map { $0 <= before } ?? false }
+        return untaken.map(\.text)
     }
 
     /// Holds a message, and its files, until the turn ends: behind what
