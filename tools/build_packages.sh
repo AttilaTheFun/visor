@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds the Mac's packages into dist/packages: its disk images (Visor and
 # Visor Server, Developer ID, notarized: tools/release_mac.sh). CI's
-# mac-dmgs job runs it on the release Mac's runner; what is done with the
+# build job runs it on the release Mac's runner; what is done with the
 # packages then is the runner's ($PIPELINE_CI). The iPhone and iPad app is
 # no longer here: CI's alpha, adhoc and release jobs build it on Linux and
 # publish it to Applications Server, which signs it (tools/ci/

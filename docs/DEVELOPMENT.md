@@ -880,7 +880,7 @@ front paths, `visor-server front`).
   Alpha, as tested, to Production, its plist's BuildVariant restamped and
   signed again, from a release branch's call once that route exists. The Mac's disk images stay
   on the release Mac until the Mac moves to Visor.app: their number
-  (`$PIPELINE_CI number`), built, signed and notarized (`mac-dmgs`,
+  (`$PIPELINE_CI number`), built, signed and notarized (`build`,
   tools/build_packages.sh, then `$PIPELINE_CI`'s), with the agent image
   and blue's iPhone snapshots. The
   proof (`proof`) runs only by hand (workflow_dispatch, since 2026-11-01,

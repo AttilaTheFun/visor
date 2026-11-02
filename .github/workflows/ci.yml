@@ -217,8 +217,10 @@ jobs:
   # The Mac's disk images of this commit of main (Visor and Visor Server,
   # signed and notarized) at that number, published by the release Mac's
   # runner ($PIPELINE_CI), until the Mac moves to Visor.app and to
-  # Applications Server as the iPhone has (alpha).
-  mac-dmgs:
+  # Applications Server as the iPhone has (alpha). Named `build` still:
+  # main's branch protection requires a check of that name, which a pull
+  # request's run reports as skipped.
+  build:
     needs: number
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, release-mac]
