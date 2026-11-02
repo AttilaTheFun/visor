@@ -1060,12 +1060,14 @@ rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 
 CI makes the proof: its `proof` job, on the repository's own runner
 (`visor-ci`, which a fork's pull request never reaches), runs
-`tools/ci/mac_vm_proof.sh`. That leases a macOS VM from OS Server
-(`xcode_27_2`), copies the committed tree and Bazel in, and takes the
-fixture's screens in each orientation there (the probe's
-`testFixtureScreens` and `testFixtureScreensLandscape` through
-`tools/ios_ui_tests.sh`, on an iPhone 17 simulator made new, its status bar
-held still, keyboard suggestions off), and the UI cases. It runs only by
+`tools/ci/ios_lease_proof.sh`. That builds the iPhone app and its probe on
+Linux, in a container leased from OS Server (`tools/ci/container_build.sh`
+with `VISOR_CI_PACKAGE`), and runs the probe on an iOS lease (`oss machine
+xctest`, an iPhone 17 on iOS 27.2, its status bar held still by OS Server,
+keyboard suggestions off): the fixture's screens in each orientation (the
+probe's `testFixtureScreens` and `testFixtureScreensLandscape`), and for a
+full proof the UI cases (`tools/ios_ui_tests.sh`'s). The screens come from
+the runs' result bundles, where the probe attaches each one. It runs only by
 hand (CI's workflow_dispatch, since 2026-11-01, for CI's time; pull
 requests and main's commits run their builds and tests only): an agent
 runs it on main to propose a release (`kind` full, the default, or
