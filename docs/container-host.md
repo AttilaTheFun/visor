@@ -116,6 +116,9 @@ gives the program a terminal: the host is run on one (a pty its caller
 made), and the program's is sized as that one and resized with it
 (SIGWINCH). A host without terminals answers `unsupported`.
 
+A container that has stopped is started first; one that is gone is a
+failing status with `{"error", "code": "notFound"}`, and nothing run.
+
 Visor runs an agent this way, as its agent host's child, so the agent
 lives as long as the host process does, across restarts of Visor Server.
 It runs short commands to their end the same way: writing the sign-ins
@@ -146,7 +149,10 @@ error.
 
 The host's containers made for Visor (by their labels):
 `{"containers": [{"id", "name", "image", "state", "labels"}]}`.
-Visor removes those of sessions it no longer has.
+Visor removes those of sessions it no longer has. When a session's agent
+ends with a failing status, Visor looks for its container here: one the
+host no longer lists is made again as when its network is lost (see
+Network), and the session says so.
 
 ### `network`
 
