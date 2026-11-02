@@ -134,8 +134,9 @@ jobs:
   # a pull request may still pin a revision. Reviews holds a release until
   # it passes.
   # The proof of each commit merged to main: the phone app's fixture
-  # screens, in portrait and on its side, and its UI cases, made in a macOS
-  # VM leased from OS Server (tools/ci/mac_vm_proof.sh), each screen
+  # screens, in portrait and on its side, and its UI cases: the app and its
+  # probe built on Linux in a container leased from OS Server, and run on an
+  # iOS lease (tools/ci/ios_lease_proof.sh), each screen
   # compared with its picture kept at the commit before (tests/proof/ios,
   # ios-landscape: red's own; tests/snapshots holds blue's). Reviews reads
   # the `proof` artifact from GitHub: a release is proposed on a commit
@@ -143,7 +144,10 @@ jobs:
   proof:
     # Only when asked for by hand: never a pull request's or a push's.
     if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, visor-ci]
+    # On the Mac whose OS Server leases the build's container, which mounts
+    # this checkout (as the container job): a runner elsewhere has no folder
+    # it can share. Xcode there reads the result bundles.
+    runs-on: [self-hosted, oss-container]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
@@ -152,16 +156,20 @@ jobs:
           # are what the screens are compared with.
           fetch-depth: 0
           fetch-tags: true
-      - name: The phone app in a macOS VM, and the proof
+      - name: The phone app built on Linux, run on an iOS lease, and the proof
         env:
           PROOF_KIND: ${{ inputs.kind || 'full' }}
         # The previous release (the newest v* tag before this commit), else
-        # the commit before. exec: the runner's cancel reaches the script's
-        # trap, which releases the VM.
+        # the commit before. The container is the line's released agent
+        # image (MAJOR.MINOR), as a pull request's container job takes.
+        # exec: the runner's cancel reaches the script's trap, which
+        # releases the leases.
         run: |
           base="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^ 2> /dev/null || git rev-parse HEAD^)"
           echo "Compared with $base"
-          exec tools/ci/mac_vm_proof.sh --kind "$PROOF_KIND" --base "$base" --proof "$RUNNER_TEMP/proof"
+          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          exec tools/ci/ios_lease_proof.sh --image "ghcr.io/attilathefun/visor-agent:${line%.*}" \
+            --kind "$PROOF_KIND" --base "$base" --proof "$RUNNER_TEMP/proof"
       # The proof whether the screens came up or not: a broken screen is what it's for.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

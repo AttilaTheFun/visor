@@ -16,7 +16,13 @@
 #   VISOR_CI_VOLUME  Bazel's tree, kept between builds (default: visor-ci;
 #                    `:keep`, so OS Server keeps it when the lease ends, and
 #                    a cancelled run's SIGTERM releases the lease at once).
-#                    One build at a time uses it (ci.yml's concurrency).
+#                    One build at a time uses it (OS Server holds a lease
+#                    whose volume another has until it is free).
+#   VISOR_CI_PACKAGE a folder in this checkout: the built targets' files
+#                    (an .ipa, a test bundle's .zip) copied into it, as
+#                    Bazel's tree is the container's (tools/ci/
+#                    ios_lease_proof.sh takes the iPhone app and its probe
+#                    so). Emptied first.
 #
 # With no build arguments (CI's run) it builds every app (the iPhone's for
 # the simulator, the Mac's, the Linux client, blue Visor's Android APK) and
@@ -59,13 +65,26 @@ EOF
 # In the container: the apps, then (CI's run) the Mac's own targets, each
 # build reading the cache (--cache writes the container's ~/.bazelrc).
 steps='
-root=$1 full=$2; shift 2
+root=$1 full=$2 package=$3; shift 3
 cd "$root"
 flags="--keep_going --config=apple_on_linux --downloader_config=$root/.ci/downloader.cfg"
 echo "::group::The apps"
 bazel build $flags "$@"
 apps=$?
 echo "::endgroup::"
+if [ -n "$package" ] && [ $apps -eq 0 ]; then
+    # The files of the targets, by cquery with the build options, from
+    # the execution root (the bazel-out link names a path in here).
+    options=""
+    query=""
+    for argument in "$@"; do
+        case "$argument" in -*) options="$options $argument" ;; *) query="${query:+$query + }$argument" ;; esac
+    done
+    root_out="$(bazel info $flags $options execution_root)" || exit
+    files="$(bazel cquery $flags $options "$query" --output=files 2> /dev/null)" || exit
+    for file in $files; do cp -L "$root_out/$file" "$package/" || exit; done
+    ls -l "$package"
+fi
 [ "$full" = 1 ] || exit $apps
 echo "::group::The Mac: libraries, staging server, command-line server, Runner agent"
 bazel build $flags --platforms=@apple_support//platforms:macos_arm64 \
@@ -93,8 +112,20 @@ if [ $# -eq 0 ]; then
         //tests/visor_ssh_tests
 fi
 
+package=""
+if [ -n "${VISOR_CI_PACKAGE:-}" ]; then
+    mkdir -p "$VISOR_CI_PACKAGE"
+    package="$(cd "$VISOR_CI_PACKAGE" && pwd)"
+    case "$package/" in
+        "$ROOT"/*) ;;
+        *) echo "container_build: VISOR_CI_PACKAGE must be a folder in this checkout ($ROOT)" >&2; exit 1 ;;
+    esac
+    rm -rf "${package:?}"/*
+    chmod 777 "$package"
+fi
+
 cd "$ROOT"
 exec "$OSS" machine run container --image="$IMAGE" --rosetta --cpus=6 --memory=16 \
     --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:128:keep" \
     --inside --cache="$host" -- \
-    bash -c "$steps" container_build "$ROOT" "$full" "$@"
+    bash -c "$steps" container_build "$ROOT" "$full" "$package" "$@"
