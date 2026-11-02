@@ -30,14 +30,12 @@ extension VisorServer {
         self.http = http
         let options = ListeningOptions(port: port, everywhere: settings.reachableFromNetwork, tls: tlsIdentity)
         do {
-            listener = try ServerPlatform.current.listening.listen(options) { [weak self] stream in self?.accept(stream) }
-            listening = true
-            lastError = nil
-            Self.log("listening on \(options.everywhere ? "every interface" : "127.0.0.1"):\(port)\(options.tls == nil ? "" : " with TLS")")
+            try listen(options)
         } catch {
             listening = false
             lastError = "\(error)"
-            Self.log("could not listen on \(port): \(error)")
+            Self.log("could not listen on \(port): \(error); trying again for \(Self.listenRetries / 2) seconds")
+            retryListening(options, for: http)
         }
         listenForSSH()
         keepModelsFresh()
@@ -97,6 +95,37 @@ extension VisorServer {
                 soon = false
                 try? await Task.sleep(for: again)
             }
+        }
+    }
+
+    /// How many times, half a second apart, a port that couldn't be
+    /// listened on is tried again: the server this one replaces may still
+    /// be letting go of it (a restart, 2 Nov 2026).
+    static let listenRetries = 20
+
+    /// Listens on the port, as the options say.
+    private func listen(_ options: ListeningOptions) throws {
+        listener = try ServerPlatform.current.listening.listen(options) { [weak self] stream in self?.accept(stream) }
+        listening = true
+        lastError = nil
+        Self.log("listening on \(options.everywhere ? "every interface" : "127.0.0.1"):\(port)\(options.tls == nil ? "" : " with TLS")")
+    }
+
+    /// The port tried again, half a second apart, while this start's
+    /// listening stands (not stopped, nor started again since).
+    private func retryListening(_ options: ListeningOptions, for http: HTTPServer) {
+        Task {
+            for _ in 0..<Self.listenRetries {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard self.http === http, listener == nil else { return }
+                do {
+                    try listen(options)
+                    return
+                } catch {
+                    lastError = "\(error)"
+                }
+            }
+            Self.log("could not listen on \(port): \(lastError ?? "")")
         }
     }
 

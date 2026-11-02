@@ -962,7 +962,8 @@ front paths, `visor-server front`).
   as its user would run it: a password, `run` checked with the server
   probe, then `start`, a restart through `/api/restart`, another after
   its program file is replaced (Linux then names the running program
-  `<path> (deleted)`; the successor starts from the path), `stop`. CI runs
+  `<path> (deleted)`; the successor starts from the path; a port the
+  server it replaces still holds is tried again for ten seconds), `stop`. CI runs
   it; on the Mac, in a container: a podman machine of your own, an image
   with `swift:6.4-noble` and Node 22, the checkout
   mounted, `swift build --product visor-server` then this.
