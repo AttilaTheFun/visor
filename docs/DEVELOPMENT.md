@@ -822,6 +822,10 @@ front paths, `visor-server front`).
   scratch; a `VisorServer()` built over the real archive KILLS every agent
   it lists as an orphan (it has: "claude exited 143").
   `RealFileIndexTests` indexes a real file when `--test_env=VISOR_REAL_FILE=…`.
+  CI's `test` job builds the Mac's .xctest bundles (`macos_unit_test`
+  under tests/) on Linux in its own container,
+  `tools/ci/build_mac_tests.sh <archive> --config=apple_on_linux …`, and
+  runs them in a leased macOS VM without Bazel (tools/ci/mac_vm_tests.sh).
 - Try a server build against real agents without touching the installed
   one: `bazel run //tools/staging_server -- [port] [password]` (7533,
   `staging`) runs a `VisorServer` of its own — its own ports, a scratch

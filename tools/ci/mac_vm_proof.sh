@@ -116,9 +116,13 @@ echo "Leased $lease"
 # Renewed every ten minutes; told to stop, it stops its sleep too.
 (
     trap 'kill $! 2> /dev/null; exit 0' TERM
-    while :; do
+    # While the script lives: a cancel that kills it (SIGKILL, no trap)
+    # leaves no renewer holding the lease for good. $$ is the script's,
+    # in this subshell too.
+    while kill -0 "$$" 2> /dev/null; do
         sleep 600 &
         wait $!
+        kill -0 "$$" 2> /dev/null || break
         "$OSS" machine renew "$lease" --minutes=120 > /dev/null || true
     done
 ) &
