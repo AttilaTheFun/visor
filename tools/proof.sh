@@ -1,6 +1,7 @@
 #!/bin/bash
 # The proof's screens and UI cases, made on this Mac or a test VM: CI makes
-# the proof itself (tools/ci/mac_vm_proof.sh, in a leased VM), and this is a
+# the proof itself (tools/ci/ios_lease_proof.sh, built on Linux and run on
+# an iOS lease), and this is a
 # look before pushing.
 #
 #   tools/proof.sh                 -> .proof/ (or $PROOF_DIR)
