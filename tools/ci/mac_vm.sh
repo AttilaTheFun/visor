@@ -1,8 +1,8 @@
 #!/bin/bash
 # A macOS VM leased from OS Server (xcode_27_2: Xcode 27.2 and its iOS
 # simulator) for one CI script, which sources this file rather than run it:
-# tools/ci/mac_vm_tests.sh (the tests that need a Mac), tools/ci/mac_vm_proof.sh
-# (main's proof) and tools/ci/mac_vm_screenshots.sh (the site's pictures). The VM is the script's alone: leased for an hour,
+# tools/ci/mac_vm_tests.sh (the tests that need a Mac) and
+# tools/ci/mac_vm_screenshots.sh (the site's pictures). The VM is the script's alone: leased for an hour,
 # renewed while it runs, released however it ends (a kill nothing can trap
 # leaves it an hour at most). The checkout's tree goes in; Bazel is the
 # image's own bazelisk (Homebrew's, on the VM's PATH), not the runner's,
