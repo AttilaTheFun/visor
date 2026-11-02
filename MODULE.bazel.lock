@@ -1809,7 +1809,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved c7eb1381ac793b052f0fb3b0a4e09f1220a0608e0f0d4f32943412658032912a"
+          "FILE:@@//third_party/swift_packages/Package.resolved 35f90561f21843711d1b61c3e54726ad54b314aafd26014c347d48cb814aaa69"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1823,9 +1823,8 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "fb14aa5f2641d0ada7b6a36c55f6b993e4dbd5ab",
+              "commit": "04a6f86fddc779faad695d49611ed1e26f726985",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
-              "version": "0.43.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1899,6 +1898,24 @@
               "commit": "feb21a6e9fe3aeac72c055c4092c34106a4f19df",
               "remote": "https://github.com/AttilaTheFun/swift_sql.git",
               "version": "0.35.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": ""
+            }
+          },
+          "swiftpkg_applications": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_applications",
+              "commit": "b0cdd2d70208193b70a1b89f2d13b8cf612f68f7",
+              "remote": "https://github.com/AttilaTheFun/applications.git",
+              "version": "0.10.45",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -2048,6 +2065,7 @@
             "swiftpkg_agent_ui",
             "swiftpkg_swift_nio_ssh",
             "swiftpkg_swift_sql",
+            "swiftpkg_applications",
             "swift_package"
           ],
           "explicitRootModuleDirectDevDeps": [],
