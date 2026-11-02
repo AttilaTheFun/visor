@@ -312,45 +312,31 @@ jobs:
           if-no-files-found: ignore
 
   # Blue Visor on the iPhone, on each commit to main (its snapshots are
-  # proof-like): the WasmKit app and the one compiled against Isomer's
-  # frameworks, for the simulator (no signing team needed), then its
+  # proof-like): the WasmKit app, the one compiled against Isomer's
+  # frameworks, its fixture probe and the web site built in a Linux
+  # container, then pictured on iOS leases (tools/ci/blue_ios_lease.sh): the
   # fixture's screens in each orientation and the web client's in Mobile
-  # Safari, against tests/snapshots. On the release Mac: GitHub's
-  # hosted Mac minutes are billed. The harness makes its simulators and
-  # removes them after.
+  # Safari, against tests/snapshots. On the Mac whose OS Server leases the
+  # build's container, which mounts this checkout, and serves the web site
+  # to the lease's simulator on its loopback; Xcode there reads the result
+  # bundles.
   blue-ios:
-    if: github.event_name == 'push'
-    runs-on: [self-hosted, release-mac]
-    timeout-minutes: 120
+    # And by hand (with the proof): a branch's run tries it before it merges.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, oss-container]
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Build
-        run: >
-          bazel build -c opt --ios_multi_cpus=sim_arm64
-          //applications/visor_isomer_ios
-          //applications/visor_isomer_compiled_ios
-      # Mobile Safari's simulator is this job's own, made new for the run and
-      # deleted after it (the iPhone fixture's runner makes and deletes its
-      # own), so it never meets the proof's or the releases runner's.
-      - name: A fresh simulator for Mobile Safari
+      - uses: actions/checkout@v5
+      # The line's released agent image (MAJOR.MINOR), as the proof takes.
+      # exec: the runner's cancel reaches the script's trap, which releases
+      # the leases.
+      - name: Built on Linux, pictured on iOS leases
         run: |
-          xcrun simctl list -j devices | python3 -c 'import json, sys; [print(d["udid"]) for r in json.load(sys.stdin)["devices"].values() for d in r if d["name"] == "blue-ci-web-mobile"]' |
-            while read -r udid; do xcrun simctl shutdown "$udid" 2>/dev/null || true; xcrun simctl delete "$udid"; done
-      - name: Snapshots
-        run: python3 tools/isomer/snapshots/snapshots.py run --targets ios,ios-landscape,web-mobile
-        env:
-          VISOR_SNAPSHOT_RUN_DIR: ${{ runner.temp }}/blue-snapshots
-          VISOR_SNAPSHOT_SIMULATOR: blue-ci-web-mobile
-      - name: Delete Mobile Safari's simulator
-        if: always()
-        run: |
-          xcrun simctl list -j devices | python3 -c 'import json, sys; [print(d["udid"]) for r in json.load(sys.stdin)["devices"].values() for d in r if d["name"] == "blue-ci-web-mobile"]' |
-            while read -r udid; do xcrun simctl shutdown "$udid" 2>/dev/null || true; xcrun simctl delete "$udid"; done
+          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          exec tools/ci/blue_ios_lease.sh --image "ghcr.io/attilathefun/visor-agent:${line%.*}" --run "$RUNNER_TEMP/blue-ios"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: blue-ios-snapshots
-          path: ${{ runner.temp }}/blue-snapshots
+          path: ${{ runner.temp }}/blue-ios
           if-no-files-found: ignore
