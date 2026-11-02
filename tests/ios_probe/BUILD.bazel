@@ -62,13 +62,16 @@ ios_ui_test(
 ios_application(
     name = "probe_host",
     testonly = True,
-    bundle_id = "com.LoganShire.VisorClient.iOS",
+    bundle_id = "com.LoganShire.Visor",
     entitlements = "probe_host.entitlements",
     families = [
         "iphone",
         "ipad",
     ],
-    infoplists = ["//applications/visor_ios:Info.plist"],
+    infoplists = [
+        "//applications/visor_ios:Info.plist",
+        "//applications/visor_ios:variant_plist",
+    ],
     minimum_os_version = "18.0",
     provisioning_profile = "//applications/visor_ios:xcode_managed_profile",
     tags = ["manual"],
