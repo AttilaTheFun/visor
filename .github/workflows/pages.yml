@@ -40,7 +40,7 @@ jobs:
   # curl, and the site packed with the Mac's tar into the `github-pages`
   # artifact deploy-pages takes (upload-pages-artifact wants GNU tar there).
   deploy:
-    runs-on: [self-hosted, visor-ci]
+    runs-on: [self-hosted, visor-jit]
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
