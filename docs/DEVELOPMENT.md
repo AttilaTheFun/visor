@@ -815,7 +815,10 @@ front paths, `visor-server front`).
   runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
   the Linux client (`//applications/visor_client_linux`; the server is
   `swift build --product visor-server`), the web site and the Android APK
-  build there as on a Mac.
+  build there as on a Mac. The iPhone app for Apple silicon's simulator
+  says so, `--ios_multi_cpus=sim_arm64` (Linux's own default, x86_64, an
+  Apple-silicon simulator refuses), and a device build says arm64: the
+  flag accumulates, so `apple_on_linux` names neither.
 - Test: `bazel test //tests/visor_server_tests //tests/visor_client_tests
   //tests/message_cache_tests //tests/claude_transcript_tests`.
   Server tests set `VisorServer.storeRoot` and `ServerCache.shared` to

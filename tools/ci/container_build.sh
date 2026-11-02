@@ -108,7 +108,7 @@ exit $mac
 full=0
 if [ $# -eq 0 ]; then
     full=1
-    set -- --macos_cpus=arm64 \
+    set -- --macos_cpus=arm64 --ios_multi_cpus=sim_arm64 \
         //applications/visor_ios \
         //applications/visor_macos \
         //applications/visor_mac \
