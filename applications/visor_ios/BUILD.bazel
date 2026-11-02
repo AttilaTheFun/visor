@@ -83,6 +83,87 @@ xcode_provisioning_profile(
     tags = ["manual"],
 )
 
+# CI's device build (--config=ci_device, .bazelrc): CI holds no profile of
+# the team's, so it signs ad hoc (--ios_signing_cert_name=-) with this
+# placeholder, the app and its widget alike, which allows what their
+# entitlements ask for (push, the keychain group, the Applications group).
+# Applications Server replaces both, the profiles and the signatures, with
+# each bundle id's own (AttilaTheFun/applications' docs/CI.md, "What the
+# server does with each build"). A plain plist: rules_applecross reads the
+# plist in a profile off a Mac, so this builds on Linux alone, as CI does.
+# The setting refines the device's alone, so the selects below take it.
+config_setting(
+    name = "ci_device",
+    constraint_values = ["@apple_support//constraints:device"],
+    values = {"ios_signing_cert_name": "-"},
+)
+
+genrule(
+    name = "ci_placeholder_profile",
+    outs = ["ci_placeholder.mobileprovision"],
+    cmd = """cat > $@ <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AppIDName</key>
+	<string>Visor (CI placeholder)</string>
+	<key>ApplicationIdentifierPrefix</key>
+	<array>
+		<string>{team}</string>
+	</array>
+	<key>CreationDate</key>
+	<date>2026-01-01T00:00:00Z</date>
+	<key>DeveloperCertificates</key>
+	<array>
+	</array>
+	<key>Entitlements</key>
+	<dict>
+		<key>application-identifier</key>
+		<string>{team}.*</string>
+		<key>aps-environment</key>
+		<string>development</string>
+		<key>com.apple.developer.team-identifier</key>
+		<string>{team}</string>
+		<key>com.apple.security.application-groups</key>
+		<array>
+			<string>group.com.LoganShire.Applications</string>
+		</array>
+		<key>get-task-allow</key>
+		<true/>
+		<key>keychain-access-groups</key>
+		<array>
+			<string>{team}.*</string>
+		</array>
+	</dict>
+	<key>ExpirationDate</key>
+	<date>2036-01-01T00:00:00Z</date>
+	<key>Name</key>
+	<string>Visor CI placeholder</string>
+	<key>Platform</key>
+	<array>
+		<string>iOS</string>
+	</array>
+	<key>ProvisionedDevices</key>
+	<array>
+	</array>
+	<key>TeamIdentifier</key>
+	<array>
+		<string>{team}</string>
+	</array>
+	<key>TeamName</key>
+	<string>CI placeholder</string>
+	<key>TimeToLive</key>
+	<integer>3652</integer>
+	<key>UUID</key>
+	<string>00000000-0000-4000-8000-0000000000c3</string>
+	<key>Version</key>
+	<integer>1</integer>
+</dict>
+</plist>
+EOF""".format(team = TEAM_ID),
+)
+
 # The home screen's widget: the latest sessions, as the app keeps them in a
 # keychain group the two share (app.entitlements, Widget/widget.entitlements;
 # the wildcard profile allows any group under the team's prefix, which
@@ -111,6 +192,7 @@ ios_extension(
     infoplists = ["Widget/Info.plist"],
     minimum_os_version = "18.0",
     provisioning_profile = select({
+        ":ci_device": ":ci_placeholder_profile",
         "@apple_support//constraints:device": ":xcode_managed_profile",
         "//conditions:default": None,
     }),
@@ -136,6 +218,7 @@ ios_application(
     ],
     minimum_os_version = "18.0",
     provisioning_profile = select({
+        ":ci_device": ":ci_placeholder_profile",
         "@apple_support//constraints:device": ":app_profile",
         "//conditions:default": None,
     }),

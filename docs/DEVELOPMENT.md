@@ -815,7 +815,10 @@ front paths, `visor-server front`).
   runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
   the Linux client (`//applications/visor_client_linux`; the server is
   `swift build --product visor-server`), the web site and the Android APK
-  build there as on a Mac.
+  build there as on a Mac. The iPhone app for Apple silicon's simulator
+  says so, `--ios_multi_cpus=sim_arm64` (Linux's own default, x86_64, an
+  Apple-silicon simulator refuses), and a device build says arm64: the
+  flag accumulates, so `apple_on_linux` names neither.
 - Test: `bazel test //tests/visor_server_tests //tests/visor_client_tests
   //tests/message_cache_tests //tests/claude_transcript_tests`.
   Server tests set `VisorServer.storeRoot` and `ServerCache.shared` to
@@ -866,12 +869,23 @@ front paths, `visor-server front`).
   container (`blue-web`). A diff of documentation alone skips them (the
   `changes` job), and a newer push cancels a run that hasn't finished.
   Each commit merged to main (a squash is a commit of its own) gets them
-  too, then what a release is made of: its build number (one past the
-  version's highest on the release server, `$PIPELINE_CI number`, stamped
-  into the Info.plists), the iPhone app and the Mac's disk images built,
-  signed and notarized on the release Mac (`build`,
-  tools/build_packages.sh; what the runner does with them is
-  `$PIPELINE_CI`'s), the agent image and blue's iPhone snapshots. The
+  too, then its builds (Logan, 2026-11-02: AdHoc by hand before a merge,
+  an Alpha for each commit after it, Production at a release, nothing
+  else). The iPhone and iPad app: `alpha` (main's commits, after the
+  container job) and `adhoc` (by hand on a pull request's branch) build it
+  on Linux with `--config=alpha` or `adhoc` and `--config=ci_device` (a
+  device build signed ad hoc with a placeholder profile), its version from
+  Applications Server (tools/ci/next_version.sh), and publish it there
+  (tools/ci/publish_from_ci.sh): the server signs it with each bundle id's
+  profile, and the job's OIDC token says which kind it is (the repository
+  secret APPLICATIONS_CI_CODE names the server). A release is no build of
+  its own (Logan, 2026-11-02): Applications Server promotes the commit's
+  Alpha, as tested, to Production, its plist's BuildVariant restamped and
+  signed again, from a release branch's call once that route exists. The Mac's disk images stay
+  on the release Mac until the Mac moves to Visor.app: their number
+  (`$PIPELINE_CI number`), built, signed and notarized (`build`,
+  tools/build_packages.sh, then `$PIPELINE_CI`'s), with the agent image
+  and blue's iPhone snapshots. The
   proof (`proof`) runs only by hand (workflow_dispatch, since 2026-11-01,
   for CI's time): an agent runs CI on main to propose a release, compared
   with the previous release. main

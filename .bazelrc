@@ -54,11 +54,14 @@ build:apple_on_linux --xcode_version_config=@apple_cross_toolchain//:host_xcodes
 build:apple_on_linux --@rules_apple//apple:sdk_tool_files=@apple_cross_toolchain//:sdk_tool_files
 build:apple_on_linux --action_env=DEVELOPER_DIR=external/rules_applecross++apple_cross_toolchain+apple_cross_toolchain/Xcode.app/Contents/Developer
 build:apple_on_linux --action_env=PATH=external/rules_applecross++apple_cross_toolchain+apple_cross_toolchain/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/bin:/usr/bin:/usr/local/bin
-# For the Macs that run what is built: Apple silicon's simulator and Macs
-# (Linux's own default is x86_64, which an Apple-silicon simulator refuses,
-# and which a Mac without Rosetta won't open). A device build says
-# --ios_multi_cpus=arm64, as on a Mac.
-build:apple_on_linux --ios_multi_cpus=sim_arm64
+# For the Macs that run what is built: Apple silicon's Macs (Linux's own
+# default is x86_64, which a Mac without Rosetta won't open). The iPhone's
+# CPU is each build's own: --ios_multi_cpus accumulates rather than
+# replaces, so a default here plus a device build's arm64 (--config=
+# ci_device) made two slices, which no lipo here joins. A simulator build
+# says --ios_multi_cpus=sim_arm64 (container_build.sh's CI run, the proof,
+# blue's snapshots), as Linux's own default, x86_64, an Apple-silicon
+# simulator refuses.
 build:apple_on_linux --macos_cpus=arm64
 # Its clean-room tools make a near match to Xcode's output where they cannot
 # make it byte for byte (Visor's Icon Composer icon, drawn flat).
@@ -79,6 +82,12 @@ build:alpha --//tools/variant:variant=alpha
 build:beta --//tools/variant:variant=beta
 build:prod --//tools/variant:variant=production
 build:adhoc --//tools/variant:variant=adhoc
+# CI's iPhone and iPad app: a device build, signed ad hoc with a placeholder
+# profile (applications/visor_ios/BUILD.bazel), which Applications Server
+# signs again with the team's identity and each bundle id's profile when it
+# is published (tools/ci/publish_from_ci.sh).
+build:ci_device --ios_multi_cpus=arm64
+build:ci_device --ios_signing_cert_name=-
 
 # Your own settings, such as the signing team (tools/signing).
 try-import %workspace%/.bazelrc.user

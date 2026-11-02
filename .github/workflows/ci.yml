@@ -5,10 +5,17 @@ name: CI
 # the command-line server on Windows, the tests that need a Mac in a macOS
 # VM, and blue's web client in headless Chromium in a Linux container. A
 # diff of documentation alone (docs/, .notes/, Markdown) skips them, and a
-# skipped job passes. Each commit merged to main gets them too, then what a
-# release is made of: its number, its packages built, signed and published
-# to Releases (the release Mac's runner, self-hosted, release-mac), the
-# agent image and blue's iPhone snapshots. The proof (the phone app's
+# skipped job passes. Each commit merged to main gets them too, then its
+# builds (Logan, 2026-11-02: AdHoc by hand before a merge, an Alpha for each
+# commit after it, Production at a release, nothing else): the iPhone and
+# iPad app built on Linux and published to Applications Server, which signs
+# it (alpha; adhoc by hand on a pull request's branch; their OIDC token says
+# which: tools/ci/publish_from_ci.sh). A release is no build of its own:
+# Applications Server promotes a commit's Alpha, as tested, to Production
+# (the plist's BuildVariant restamped, signed again), from a release
+# branch's call once its route exists. Then the Mac's disk images, their
+# number and the agent image on the release Mac (self-hosted, release-mac,
+# until the Mac moves to Visor.app), and blue's iPhone snapshots. The proof (the phone app's
 # fixture screens and its UI cases) runs only when asked for by hand
 # (workflow_dispatch), which is how an agent proposes a release: on main,
 # compared with the pictures kept at the previous release (the newest v*
@@ -28,7 +35,8 @@ on:
   pull_request:
   push:
     branches: [main]
-  # The proof, by hand: to propose a release, or to bisect.
+  # By hand: the proof, to propose a release or to bisect; on a pull
+  # request's branch, its AdHoc build (adhoc).
   workflow_dispatch:
     inputs:
       kind:
@@ -185,11 +193,13 @@ jobs:
       - uses: actions/checkout@v4
       - run: tools/released_pins.sh
 
-  # The version this commit's build takes, and its proof is filed under:
-  # MAJOR.MINOR.BUILD, BUILD one past the line's highest on the release
-  # server (the plist says MAJOR.MINOR.0), kept there as the commit's.
+  # The version the Mac's disk images and the agent image of this commit of
+  # main take: MAJOR.MINOR.BUILD, BUILD one past the line's highest on the
+  # release server (the plist says MAJOR.MINOR.0), kept there as the
+  # commit's. The iPhone's comes from Applications Server
+  # (tools/ci/next_version.sh, in alpha and adhoc).
   number:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 5
     outputs:
@@ -204,12 +214,15 @@ jobs:
           # The commit itself (a pull request's head, not its merge ref).
           PIPELINE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
-  # The commit's packages (the iPhone's .ipa, the Mac's apps signed and
-  # notarized) at that number, published to Releases as main's beta. What is
-  # done with them is the runner's ($PIPELINE_CI).
+  # The Mac's disk images of this commit of main (Visor and Visor Server,
+  # signed and notarized) at that number, published by the release Mac's
+  # runner ($PIPELINE_CI), until the Mac moves to Visor.app and to
+  # Applications Server as the iPhone has (alpha). Named `build` still:
+  # main's branch protection requires a check of that name, which a pull
+  # request's run reports as skipped.
   build:
     needs: number
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 90
     steps:
@@ -217,7 +230,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: $PIPELINE_CI prepare
-      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.version }} applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_macos/Info.plist applications/visor_menubar/Info.plist applications/visor_container_host/Info.plist
+      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.version }} applications/visor_macos/Info.plist applications/visor_menubar/Info.plist applications/visor_container_host/Info.plist
       - run: tools/build_packages.sh
       - run: $PIPELINE_CI publish Visor dist/packages/*
         env:
@@ -233,7 +246,7 @@ jobs:
   # that version asks its OS Server for.
   agent-image:
     needs: number
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 90
     permissions:
@@ -321,8 +334,9 @@ jobs:
   # to the lease's simulator on its loopback; Xcode there reads the result
   # bundles.
   blue-ios:
-    # And by hand (with the proof): a branch's run tries it before it merges.
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # main's commits, and by hand (with the proof): a branch's run tries it
+    # before it merges.
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, oss-container]
     timeout-minutes: 90
     steps:
@@ -340,3 +354,87 @@ jobs:
           name: blue-ios-snapshots
           path: ${{ runner.temp }}/blue-ios
           if-no-files-found: ignore
+
+  # The Alpha of each commit on main (--config=alpha), never a pull
+  # request's: its version asked of Applications Server and stamped in
+  # (tools/ci/next_version.sh), the iPhone and iPad app built on Linux in a
+  # container leased from the OS Server on the runner's Mac
+  # (tools/ci/container_build.sh, VISOR_CI_PACKAGE): a device build signed
+  # ad hoc with a placeholder profile (--config=ci_device, CI holds none of
+  # the team's), which the server signs again with each bundle id's own when
+  # it is published (tools/ci/publish_from_ci.sh). After the container job:
+  # nothing is published from a tree that doesn't build. The job's OIDC
+  # token says what it is; no key, profile or password here.
+  alpha:
+    needs: container
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, oss-container]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # The OIDC token Applications Server checks.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      # 0.43.N, the next of the committed line for the token's commit,
+      # stamped into the checkout's Info.plists and never committed.
+      - name: Version
+        env:
+          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
+        run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist
+      # The line's released agent image (MAJOR.MINOR), as the proof takes.
+      - name: Build
+        env:
+          VISOR_CI_PACKAGE: .ci/packages
+          VISOR_CI_VOLUME: visor-ci-alpha
+        run: |
+          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          exec bazel run //tools/ci:container_build -- "ghcr.io/attilathefun/visor-agent:${line%.*}" \
+            --config=alpha --config=ci_device //applications/visor_ios
+      # Untrusted text reaches the shell through env, never ${{ }} in run.
+      - name: Notes
+        env:
+          SUMMARY: ${{ github.event.head_commit.message }}
+        run: printf '%s\n' "$SUMMARY" > "$RUNNER_TEMP/notes.md"
+      - name: Publish
+        env:
+          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
+        run: tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" .ci/packages/*.ipa
+
+  # AdHoc: a pull request's branch built by hand (workflow_dispatch on a
+  # branch that is neither main nor a release branch), the iPhone and iPad
+  # app built as alpha's is with --config=adhoc and published; the server
+  # takes it as an AdHoc build, kept a week (AttilaTheFun/applications'
+  # docs/VARIANTS.md). Not after the container job, which a run by hand
+  # skips: the build itself stops a tree that doesn't build.
+  adhoc:
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release-')
+    runs-on: [self-hosted, oss-container]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Version
+        env:
+          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
+        run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist
+      - name: Build
+        env:
+          VISOR_CI_PACKAGE: .ci/packages
+          VISOR_CI_VOLUME: visor-ci-adhoc
+        run: |
+          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          exec bazel run //tools/ci:container_build -- "ghcr.io/attilathefun/visor-agent:${line%.*}" \
+            --config=adhoc --config=ci_device //applications/visor_ios
+      # The branch's commit's message, from git: a run by hand has no
+      # head_commit in its event.
+      - name: Notes
+        run: git log -1 --format=%B > "$RUNNER_TEMP/notes.md"
+      - name: Publish
+        env:
+          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
+        run: tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" .ci/packages/*.ipa

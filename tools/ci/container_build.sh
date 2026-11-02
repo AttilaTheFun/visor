@@ -18,11 +18,16 @@
 #                    a cancelled run's SIGTERM releases the lease at once).
 #                    One build at a time uses it (OS Server holds a lease
 #                    whose volume another has until it is free).
-#   VISOR_CI_PACKAGE a folder in this checkout: the built targets' files
-#                    (an .ipa, a test bundle's .zip, a web site's folder) copied into it, as
-#                    Bazel's tree is the container's (tools/ci/
-#                    ios_lease_proof.sh takes the iPhone app and its probe
-#                    so). Emptied first.
+#   VISOR_CI_PACKAGE a folder in this checkout (a relative path is taken
+#                    from the checkout): the built targets' files (an .ipa,
+#                    a test bundle's .zip, a web site's folder) copied into
+#                    it, as Bazel's tree is the container's (CI's alpha,
+#                    adhoc and release take the iPhone app so,
+#                    tools/ci/ios_lease_proof.sh the app and its probe).
+#                    Emptied first. Its build arguments are told apart by
+#                    their dash: an option with a value takes it after `=`
+#                    (`--compilation_mode=opt`, not `-c opt`, whose `opt`
+#                    would be read as a target).
 #
 # With no build arguments (CI's run) it builds every app (the iPhone's for
 # the simulator, the Mac's, the Linux client, blue Visor's Android APK) and
@@ -103,7 +108,7 @@ exit $mac
 full=0
 if [ $# -eq 0 ]; then
     full=1
-    set -- --macos_cpus=arm64 \
+    set -- --macos_cpus=arm64 --ios_multi_cpus=sim_arm64 \
         //applications/visor_ios \
         //applications/visor_macos \
         //applications/visor_mac \
@@ -118,6 +123,9 @@ fi
 
 package=""
 if [ -n "${VISOR_CI_PACKAGE:-}" ]; then
+    # `bazel run` starts this in its runfiles: a relative folder is the
+    # checkout's.
+    case "$VISOR_CI_PACKAGE" in /*) ;; *) VISOR_CI_PACKAGE="$ROOT/$VISOR_CI_PACKAGE" ;; esac
     mkdir -p "$VISOR_CI_PACKAGE"
     package="$(cd "$VISOR_CI_PACKAGE" && pwd)"
     case "$package/" in
