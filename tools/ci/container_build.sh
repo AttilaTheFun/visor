@@ -83,6 +83,7 @@ if [ $# -eq 0 ]; then
     set -- --macos_cpus=arm64 \
         //applications/visor_ios \
         //applications/visor_macos \
+        //applications/visor_mac \
         //applications/visor_menubar \
         //applications/visor_client_linux \
         //applications/visor_android:visor_android_apk \

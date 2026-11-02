@@ -46,7 +46,7 @@ import pngdiff
 REFERENCES = os.path.join(ROOT, "tests", "snapshots")
 TARGETS = ["web-mobile", "ios", "ios-landscape", "android", "web-desktop", "macos"]
 SCREENS = ["sessions", "chat", "inspector", "models", "search", "connect", "goal", "earlier", "question", "new-session", "commands"]
-IOS_BUNDLE = "com.LoganShire.VisorClient.iOS"
+IOS_BUNDLE = "com.LoganShire.Visor"
 ANDROID_PACKAGE = "com.loganshire.visor"
 # The harness's own simulator, by name: made if missing, booted for the run and
 # shut down after it. Never whatever happens to be booted, which can be

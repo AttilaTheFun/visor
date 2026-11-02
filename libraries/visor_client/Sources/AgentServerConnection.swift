@@ -907,8 +907,9 @@ public final class AgentServerConnection: Identifiable {
 
     /// The rows already seen, by host and session: on disk where there
     /// is SQLite, so a session opens as it was last seen and syncs only
-    /// what changed since; in memory on the web.
-    static var cache: MessageCache = .open(named: "messages")
+    /// what changed since; in memory on the web. An app that runs a server
+    /// too sets it before connecting, apart from the server's own.
+    public static var cache: MessageCache = .open(named: "messages")
     /// This server's rows kept there: none when it asks for its messages to
     /// be held in memory only (`AgentServerRecord.keepMessages`), and each
     /// page let go of is asked of it again.

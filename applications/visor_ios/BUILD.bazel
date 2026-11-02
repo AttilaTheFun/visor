@@ -4,6 +4,7 @@ load("@rules_apple//apple:ios.bzl", "ios_application", "ios_extension")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 load("@rules_xcodeproj//xcodeproj:defs.bzl", "xcode_provisioning_profile")
 load("@visor_signing//:signing.bzl", "TEAM_ID")
+load("//tools/variant:defs.bzl", "variant_infoplist")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,7 +12,18 @@ package(default_visibility = ["//visibility:public"])
 # (`common --repo_env=VISOR_TEAM_ID=<team>`, see tools/signing), which is
 # not checked in. The provisioning profile is the one Xcode makes for the
 # bundle id; tools/mint_profile makes it on a new Mac.
-BUNDLE_ID = "com.LoganShire.VisorClient.iOS"
+# Visor's one id, the Mac's Visor.app's too (from 0.43; the iPhone's was
+# com.LoganShire.VisorClient.iOS, whose keychain the new id cannot read: the
+# computers are added again once).
+BUNDLE_ID = "com.LoganShire.Visor"
+
+# Which build this is (tools/variant: Alpha unless a release's), and the
+# app's name and link scheme, the same in every build.
+variant_infoplist(
+    name = "variant_plist",
+    display_name = "Visor",
+    url_scheme = "visor",
+)
 
 # The client on a phone: compiled Swift, real SwiftUI, the shared VisorUI
 # screens. The host sources are shared with the Mac client (a filegroup);
@@ -117,7 +129,10 @@ ios_application(
         "iphone",
         "ipad",
     ],
-    infoplists = ["Info.plist"],
+    infoplists = [
+        "Info.plist",
+        ":variant_plist",
+    ],
     minimum_os_version = "18.0",
     provisioning_profile = select({
         "@apple_support//constraints:device": ":app_profile",
