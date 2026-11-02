@@ -144,7 +144,10 @@ jobs:
   proof:
     # Only when asked for by hand: never a pull request's or a push's.
     if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, visor-ci]
+    # On the Mac whose OS Server leases the build's container, which mounts
+    # this checkout (as the container job): a runner elsewhere has no folder
+    # it can share. Xcode there reads the result bundles.
+    runs-on: [self-hosted, oss-container]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
