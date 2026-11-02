@@ -172,6 +172,7 @@ use_repo(
     swift_deps,
     "swift_package",
     "swiftpkg_agent_ui",
+    "swiftpkg_applications",
     "swiftpkg_swift_nio_ssh",
     "swiftpkg_swift_sql",
 )

@@ -40,6 +40,7 @@ swift_library(
     module_name = "VisorIOSHost",
     deps = [
         "//:foundation",
+        "@swiftpkg_applications//:ApplicationUpdates",
         "//libraries/visor_client",
         "//libraries/visor_protocol",
         "//libraries/visor_services",

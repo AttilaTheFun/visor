@@ -1,9 +1,13 @@
 // The app's side of push notifications on iOS: the token the system gives
 // and the notification the user opens, handed to the shared handler (which
 // the client listens to). The one place the app meets UIKit's application
-// delegate, which is where iOS delivers both.
+// delegate, which is where iOS delivers both. And its updates, from
+// Applications (ApplicationUpdates): its build written at launch, a newer
+// one told of with a notification of the library's, which this delegate
+// shows and passes on.
 
 #if os(iOS)
+import ApplicationUpdates
 import UIKit
 import UserNotifications
 import VisorServices
@@ -12,6 +16,8 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // After the delegate: the library leaves an app's own in place.
+        AppUpdates.start()
         return true
     }
 
@@ -53,8 +59,13 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
         NSLog("Visor: no push token: %@", String(describing: error))
     }
 
-    /// The user opened a notification: its session, on its computer.
+    /// The user opened a notification: its session, on its computer; or an
+    /// update's (or chose its Install), which installs it.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        if let update = AppUpdates.update(from: response) {
+            await AppUpdates.install(update)
+            return
+        }
         let data = Self.data(of: response.notification)
         await VisorNotificationHandler.shared.didOpen(data)
     }
@@ -64,6 +75,8 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
     /// already says it.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
+        // An update is told only in the foreground: always shown.
+        if AppUpdates.isUpdateNotification(notification) { return [.banner, .list, .sound] }
         let data = Self.data(of: notification)
         return await VisorNotificationHandler.shared.presents(data) ? [.banner, .list, .sound] : []
     }

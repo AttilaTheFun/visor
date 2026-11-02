@@ -24,5 +24,13 @@ let package = Package(
             url: "https://github.com/AttilaTheFun/swift_sql.git",
             exact: "0.35.0"
         ),
+        // ApplicationUpdates: the build this app is, written at launch to
+        // the database it shares with Applications (the
+        // group.com.LoganShire.Applications container), and its updates
+        // told of.
+        .package(
+            url: "https://github.com/AttilaTheFun/applications.git",
+            exact: "0.10.45"
+        ),
     ]
 )
