@@ -223,8 +223,9 @@ public final class VisorServer {
     var containerLimits: ContainerHost.Limits?
     /// Whether the container host's leftovers were looked for this run.
     var containersSwept = false
-    /// When each session's container's network was last made again: not
-    /// twice in a few minutes (VisorServer+ContainerNetwork.swift).
+    /// When each session's container was last checked, to be made again
+    /// if it was gone or had no network: not twice in a few minutes
+    /// (VisorServer+ContainerChecks.swift).
     var containersRemade: [String: ContinuousClock.Instant] = [:]
 
     /// The last write of the sessions failed; cleared by the next that works.

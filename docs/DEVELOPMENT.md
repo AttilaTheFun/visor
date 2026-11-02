@@ -710,11 +710,13 @@ A session starts in a container with `container: true` and a folder, and
 moves into or out of one with `contain` (its agent made again on the other
 side, the container it leaves removed with its disk; not while it works).
 Ending the session removes its container. When a turn of an agent in a
-container fails on the network (EAI_AGAIN and the like;
-VisorServer+ContainerNetwork.swift), the host is asked the container's
-`network`; with none, the container is made again with its disk kept, the
-agent started again there, and the session says so — not twice in five
-minutes. At start the server removes the host's containers of sessions it
+container fails on the network (EAI_AGAIN and the like), or the agent ends
+with a failing status (`claude exited with status 1`: the host's `exec`
+of a container that is gone; VisorServer+ContainerChecks.swift), the host
+is asked whether it still lists the container and what its `network` says;
+a container that is gone or has no network is made again with its disk
+kept, the agent started again there, and the session says so — not twice
+in five minutes. At start the server removes the host's containers of sessions it
 no longer has, and a session still in a container OS Server lent (0.43 and
 before, `SessionContainer.socket`) runs on the computer from then on. An
 agent in a container reaches this server over the network (VISOR_URL:
