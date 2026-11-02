@@ -61,8 +61,7 @@ extension VisorServer {
             }
             record.info.container = made
             record.placed()
-            broadcast(record.apply(.notice(gone ? "Its container was gone: it was made again, its folder as it was (and its disk, if that was kept). "
-                                                  + "Say again what didn't reach the agent."
+            broadcast(record.apply(.notice(gone ? "Its container was gone: it was made again, its folder as it was (and its disk, if that was kept)."
                                                 : "Its container had lost its network: it was made again, its folder and disk as they were.")),
                       session: record)
             rebuild(record) {}

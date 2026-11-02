@@ -78,4 +78,61 @@ final class OutboxTests: ServerTestCase {
         let reloaded = SessionRecord(info: r.info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))
         XCTAssertEqual(reloaded.info.delivered, [])
     }
+
+    /// Words handed to an agent that went before its log had them (it
+    /// exited as it started) were never taken: not said delivered under a
+    /// later turn, and let go of once the log has had its time.
+    func testWhatAGoneAgentNeverWroteIsNotSaidDeliveredAgain() {
+        let r = record()
+        _ = r.apply(.busy(true))
+        r.appendUser("what is the current status?")
+        XCTAssertTrue(r.agentWent())
+        XCTAssertEqual(r.info.delivered, [], "no longer on its way")
+        XCTAssertFalse(r.agentWent(), "nothing more went")
+        _ = r.apply(.busy(false))
+        // The next agent's turn shows only what it was handed.
+        _ = r.apply(.busy(true))
+        r.appendUser("hello")
+        XCTAssertEqual(r.info.delivered, ["hello"])
+        XCTAssertEqual(r.dropUntaken(after: .seconds(60)), [], "the log has its time first")
+        XCTAssertEqual(r.dropUntaken(after: .zero), ["what is the current status?"])
+        XCTAssertEqual(r.info.delivered, ["hello"])
+    }
+
+    /// Written by the log after its agent went (the log a moment behind):
+    /// taken after all, so nothing is said of it.
+    func testWhatTheLogWritesLateWasTaken() {
+        let r = record()
+        _ = r.apply(.busy(true))
+        r.appendUser("remove the label")
+        r.agentWent()
+        _ = r.take(fileRow: TranscriptEntry(id: "user-file-1", role: .user, text: "remove the label"))
+        XCTAssertEqual(r.dropUntaken(after: .zero), [])
+    }
+
+    /// The server, told the agent went (its memory gone), names what it
+    /// never took once the log has had its time, for the user to say again;
+    /// a command its log may never write is let go of quietly.
+    func testTheSessionSaysWhatTheAgentNeverTook() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-outbox-tests-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let grace = VisorServer.untakenGrace
+        VisorServer.untakenGrace = .milliseconds(50)
+        defer { VisorServer.untakenGrace = grace }
+        let server = VisorServer(port: 7972)
+        defer { server.stop() }
+        let r = record()
+        server.sessions = [r]
+        _ = r.apply(.busy(true))
+        r.appendUser("what is the current status?")
+        r.appendUser("/goal ship it")
+        server.handle(.memory(nil), from: r)
+        server.handle(.busy(false), from: r)
+        for _ in 0..<40 where r.notice == nil { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(r.notice, "The agent ended before it took “what is the current status?”: say it again.")
+        XCTAssertTrue(r.unwritten.isEmpty)
+    }
 }

@@ -227,8 +227,9 @@ public final class SessionRecord {
     /// Words sent to an agent that writes its own log, which the log has
     /// not written yet: kept here, not as rows — the transcript is the log.
     /// Each with how many of the log's user rows had the same words when
-    /// it was sent, so the same words sent again are told apart.
-    var unwritten: [(text: String, seen: Int)] = []
+    /// it was sent, so the same words sent again are told apart, and
+    /// when the agent they were handed to went, if it has (`agentWent`).
+    var unwritten: [(text: String, seen: Int, orphaned: ContinuousClock.Instant?)] = []
 
     /// The on-disk copy of this session.
     var stored: StoredSession {
