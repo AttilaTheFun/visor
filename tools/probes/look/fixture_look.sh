@@ -30,7 +30,7 @@ xcrun simctl shutdown "$SIM" 2>/dev/null || true
 xcrun simctl erase "$SIM"
 xcrun simctl boot "$SIM"
 xcrun simctl bootstatus "$SIM" >/dev/null
-APP=com.LoganShire.VisorClient.iOS
+APP=com.LoganShire.Visor
 cleanup() {
   pkill -INT -f "simctl io $SIM recordVideo" 2>/dev/null || true
   xcrun simctl shutdown "$SIM" 2>/dev/null || true

@@ -4,7 +4,7 @@
 <dict>
     <key>keychain-access-groups</key>
     <array>
-        <string>com.LoganShire.VisorClient.shared</string>
+        <string>com.LoganShire.Visor.shared</string>
     </array>
 </dict>
 </plist>

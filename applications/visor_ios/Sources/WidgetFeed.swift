@@ -13,7 +13,7 @@ import WidgetKit
 
 @MainActor
 final class WidgetFeed: VisorWidgetService {
-    static let service = "com.LoganShire.VisorClient.widget"
+    static let service = "com.LoganShire.Visor.widget"
     static let account = "sessions"
 
     private static let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,

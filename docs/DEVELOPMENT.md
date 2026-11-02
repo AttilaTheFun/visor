@@ -69,7 +69,11 @@ identity keeps its dot: `@swiftpkg_agent_ui//:AgentUI`.
    Connection Code", or the QR code in its Settings scanned with a
    phone's camera (opens `visor://connect?code=…`).
    **Signing.** The bundle ids are constants at the top of each app's
-   BUILD.bazel: change them to your own. Your Apple team id is not in
+   BUILD.bazel: change them to your own. Visor is one id on the iPhone and
+   the Mac, `com.LoganShire.Visor`, in every build; which build it is, its
+   Info.plist's `BuildVariant` says (tools/variant, AttilaTheFun/applications'
+   docs/VARIANTS.md): Alpha by default, `--config=prod` a release's
+   Production. Your Apple team id is not in
    the repository: put it in `.bazelrc.user` at the workspace root (not
    checked in), `common --repo_env=VISOR_TEAM_ID=<team>`; without it
    device builds use the placeholder `YOUR_TEAM_ID` (tools/signing). No

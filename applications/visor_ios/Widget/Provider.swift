@@ -21,7 +21,7 @@ struct Provider: TimelineProvider {
     /// The latest sessions, as the app last kept them.
     static func read() -> [SessionLine] {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                    kSecAttrService as String: "com.LoganShire.VisorClient.widget",
+                                    kSecAttrService as String: "com.LoganShire.Visor.widget",
                                     kSecAttrAccount as String: "sessions",
                                     kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
         var result: AnyObject?

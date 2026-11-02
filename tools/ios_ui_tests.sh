@@ -27,8 +27,8 @@ LOG="$(mktemp)"
 SIM="$(xcrun simctl list devices | grep -F "BAZEL_TEST_iPhone 17_27.2 (" | grep -o '[0-9A-F-]\{36\}' | head -1)"
 if [ -n "$SIM" ]; then
   xcrun simctl boot "$SIM" 2>/dev/null || true
-  xcrun simctl uninstall "$SIM" com.LoganShire.VisorClient.iOS 2>/dev/null || true
-  xcrun simctl privacy "$SIM" reset all com.LoganShire.VisorClient.iOS 2>/dev/null || true
+  xcrun simctl uninstall "$SIM" com.LoganShire.Visor 2>/dev/null || true
+  xcrun simctl privacy "$SIM" reset all com.LoganShire.Visor 2>/dev/null || true
   # No keyboard suggestions over the keys: what they say is learned and
   # comes in late, a picture's noise ("and disc is" one run, nothing the
   # next). Autocorrection stays: a case types through one.
