@@ -84,6 +84,9 @@ if [ -n "$package" ] && [ $apps -eq 0 ]; then
     files="$(bazel cquery $flags $options "$query" --output=files 2> /dev/null)" || exit
     # -R: a folder (a web site) too.
     for file in $files; do cp -RL "$root_out/$file" "$package/" || exit; done
+    # Writable, by the runner too: Bazel'"'"'s outputs are read-only, and a
+    # folder copied so (a web site) kept the next checkout from removing it.
+    chmod -R a+rwX "$package" || exit
     ls -l "$package"
 fi
 [ "$full" = 1 ] || exit $apps

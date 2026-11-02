@@ -45,6 +45,7 @@ xcrun --find xcresulttool > /dev/null 2>&1 || { echo "$me: no xcresulttool on th
 
 work="$(mktemp -d)"
 chmod 700 "$work"
+built="$ROOT/.ci/blue-ios-build"
 lease=""
 renewer=""
 child=""
@@ -67,6 +68,8 @@ cleanup() {
     [ -z "$child" ] || kill "$child" 2> /dev/null || true
     release
     rm -rf "$work"
+    # The build's files too: the checkout is the runner's, kept between jobs.
+    [ -z "${built:-}" ] || { chmod -R u+w "$built" 2> /dev/null || true; rm -rf "$built"; }
     exit "$status"
 }
 trap cleanup EXIT
@@ -106,7 +109,6 @@ lease_ios() {
 }
 
 echo "::group::The apps, the fixture probe and the web site, built on Linux"
-built="$ROOT/.ci/blue-ios-build"
 # --compilation_mode=opt, not -c opt: container_build tells options from
 # targets by a leading dash.
 (cd "$ROOT" && VISOR_CI_PACKAGE="$built" run bazel run //tools/ci:container_build -- "$image" \
