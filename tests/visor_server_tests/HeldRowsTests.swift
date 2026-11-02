@@ -92,7 +92,7 @@ final class HeldRowsTests: ServerTestCase {
         let (record, rows) = try await longSession()
         // "Question 0" went once before; sent again, and written after the
         // first went.
-        record.unwritten = [(text: "Question 0", seen: 1)]
+        record.unwritten = [(text: "Question 0", seen: 1, orphaned: nil)]
         record.letGoOfOldRows()
         XCTAssertEqual(record.unwritten.first?.seen, 0)
         XCTAssertFalse(record.entries.contains { $0.id == rows[0].id })

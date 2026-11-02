@@ -127,6 +127,8 @@ extension VisorServer {
         Task {
             await old.end(within: .seconds(3))
             if rereading { record.followFile() }
+            // Not heard going: the record listens to the new one now.
+            noteAgentWent(record)
             gone?()
             release(record)
         }
@@ -350,6 +352,8 @@ extension VisorServer {
         broadcast(record.apply(event), session: record)
         noteSubagents(after: event, of: record)
         noteContainer(after: event, of: record)
+        // Nil once the agent has gone.
+        if case .memory(nil) = event { noteAgentWent(record) }
         switch event {
         case .context, .session, .background, .goal, .question, .manual:
             // These land in the session list, not an envelope (a question
