@@ -19,7 +19,7 @@
 #                    One build at a time uses it (OS Server holds a lease
 #                    whose volume another has until it is free).
 #   VISOR_CI_PACKAGE a folder in this checkout: the built targets' files
-#                    (an .ipa, a test bundle's .zip) copied into it, as
+#                    (an .ipa, a test bundle's .zip, a web site's folder) copied into it, as
 #                    Bazel's tree is the container's (tools/ci/
 #                    ios_lease_proof.sh takes the iPhone app and its probe
 #                    so). Emptied first.
@@ -82,7 +82,11 @@ if [ -n "$package" ] && [ $apps -eq 0 ]; then
     done
     root_out="$(bazel info $flags $options execution_root)" || exit
     files="$(bazel cquery $flags $options "$query" --output=files 2> /dev/null)" || exit
-    for file in $files; do cp -L "$root_out/$file" "$package/" || exit; done
+    # -R: a folder (a web site) too.
+    for file in $files; do cp -RL "$root_out/$file" "$package/" || exit; done
+    # Writable, by the runner too: Bazel'"'"'s outputs are read-only, and a
+    # folder copied so (a web site) kept the next checkout from removing it.
+    chmod -R a+rwX "$package" || exit
     ls -l "$package"
 fi
 [ "$full" = 1 ] || exit $apps

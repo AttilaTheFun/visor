@@ -31,6 +31,13 @@ Targets:
   macos        the macOS app, on the same lease, its window cropped from the
                machine's screenshot
 
+In CI (tools/ci/blue_ios_lease.sh) the iOS targets run on an iOS lease of
+OS Server's, the apps built on Linux: VISOR_SNAPSHOT_IOS_PICTURES names the
+folder the fixture probe's pictures were exported to (portrait/ and
+landscape/, from its runs' result bundles), VISOR_SNAPSHOT_IOS_LEASE the
+lease web-mobile drives (`oss machine simctl`, its screenshots), and
+VISOR_SNAPSHOT_WEB_SITE the web site built there.
+
 Nothing here touches this Mac's own screen: Safari and the Mac app run on the
 leased Mac, the iOS targets in the simulator, Android in the emulator or the lab's
 phone (never a person's own). Exit status is
@@ -144,9 +151,16 @@ def serve(directory, host, port):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
+# CI's: the iOS lease web-mobile drives, the pictures the fixture probe
+# took on it, and the web site, all made by tools/ci/blue_ios_lease.sh.
+IOS_LEASE = os.environ.get("VISOR_SNAPSHOT_IOS_LEASE", "")
+IOS_PICTURES = os.environ.get("VISOR_SNAPSHOT_IOS_PICTURES", "")
+WEB_SITE = os.environ.get("VISOR_SNAPSHOT_WEB_SITE", "")
+OSS = os.environ.get("OSS", "/Applications/OS Server.app/Contents/Helpers/oss")
+
 @functools.lru_cache(None)
 def web_site():
-    site = bazel_output("//applications/visor_web:visor_web_site", "-c", "opt")
+    site = WEB_SITE or bazel_output("//applications/visor_web:visor_web_site", "-c", "opt")
     copy = "/tmp/visor-snapshot-site"
     remove(copy)
     shutil.copytree(site, copy)
@@ -159,9 +173,30 @@ def web_url(base, screen):
 
 _simulator = None
 
+def simctl(*arguments):
+    """`xcrun simctl` on the harness's simulator, or `oss machine simctl` on
+    CI's lease (its booted simulator)."""
+    if IOS_LEASE:
+        return sh([OSS, "machine", "simctl", IOS_LEASE, *arguments])
+    return sh(["xcrun", "simctl", *arguments])
+
+def screenshot(udid, out):
+    """The display, its mask (corners and the Dynamic Island) drawn black:
+    unmasked, the island shows or not with whatever the system is doing. A
+    lease's screenshots are masked already."""
+    if IOS_LEASE:
+        sh([OSS, "machine", "screenshot", IOS_LEASE, out])
+    else:
+        sh(["xcrun", "simctl", "io", udid, "screenshot", "--mask=black", out])
+
 def simulator():
     global _simulator
     if _simulator:
+        return _simulator
+    if IOS_LEASE:
+        # OS Server holds its status bar still; light, as the harness's own.
+        simctl("ui", "booted", "appearance", "light")
+        _simulator = "booted"
         return _simulator
     listing = json.loads(sh("xcrun simctl list -j").stdout)
     all_devices = [d for runtime in listing["devices"].values() for d in runtime if d.get("isAvailable")]
@@ -195,16 +230,14 @@ class WebMobile:
         # One load to warm Safari up: the first load of a fresh site (the
         # wasm compiled, the modules fetched) outlasts the settle and came
         # out blank.
-        sh(["xcrun", "simctl", "openurl", self.udid, web_url("http://localhost:8791", "sessions")])
+        simctl("openurl", self.udid, web_url("http://localhost:8791", "sessions"))
         time.sleep(SETTLE * 2)
     def capture(self, screen, out):
-        recording = SimulatorRecording(self.udid, out[:-4] + ".mp4")
-        sh(["xcrun", "simctl", "openurl", self.udid, web_url("http://localhost:8791", screen)])
+        recording = SimulatorRecording(self.udid, out[:-4] + ".mp4") if not IOS_LEASE else None
+        simctl("openurl", self.udid, web_url("http://localhost:8791", screen))
         time.sleep(SETTLE)
-        # The display's mask (its corners and the Dynamic Island) drawn black:
-        # unmasked, the island shows or not with whatever the system is doing.
-        sh(["xcrun", "simctl", "io", self.udid, "screenshot", "--mask=black", out])
-        recording.stop()
+        screenshot(self.udid, out)
+        if recording: recording.stop()
         # The page only: Safari's toolbar (its tab count grows with every
         # capture, and a load-progress line comes and goes) is not the app.
         pngdiff.crop_bottom(out, SAFARI_TOOLBAR)
@@ -258,7 +291,19 @@ class IOS:
     case = "BlueFixtureShots/testFixtureScreens"
     pictures = "/private/tmp/visor_isomer_fixture"
 
+    # Where CI's lease runs left the pictures, by orientation.
+    orientation = "portrait"
+
     def prepare(self):
+        if IOS_PICTURES:
+            # CI's: the probe ran on an iOS lease, its pictures exported from
+            # its result bundle (tools/ci/blue_ios_lease.sh).
+            self.pictures = os.path.join(IOS_PICTURES, self.orientation)
+            log_file = os.path.join(IOS_PICTURES, f"{self.orientation}.log")
+            self.log = open(log_file).read() if os.path.exists(log_file) else ""
+            if not os.path.isdir(self.pictures):
+                raise RuntimeError(f"no {self.orientation} pictures in {IOS_PICTURES}")
+            return
         remove(self.pictures)
         done = subprocess.run(["bazel", "test", "-c", "opt", "--ios_multi_cpus=sim_arm64", *EXTRA_FLAGS,
                                "//tests/isomer_ios_fixture:fixture_shots", "--spawn_strategy=local", "--nocache_test_results",
@@ -291,6 +336,7 @@ class IOS:
 class IOSLandscape(IOS):
     describe = {**IOS.describe, "orientation": "landscape"}
     case = "BlueFixtureShots/testFixtureScreensLandscape"
+    orientation = "landscape"
     # On its side an iPhone shows no status bar.
     status_bar = 0
 
