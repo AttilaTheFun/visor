@@ -5,7 +5,8 @@
 // makes it an SSH key, runs the agent there under its host through the
 // host's `exec` with its variables in a file only this user reads, moves a
 // session into and out of its container, makes a container again when its
-// network is lost, and says so on the wire. The host is a script here.
+// network is lost or it is gone, and says so on the wire. The host is a
+// script here.
 
 import ClaudeTranscript
 import Foundation
@@ -434,6 +435,47 @@ final class ContainerTests: ServerTestCase {
         server.handle(.failure("EAI_AGAIN"), from: record)
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertEqual(host.calls.filter { $0.hasPrefix("network") }.count, asked)
+    }
+
+    /// An agent that ends failing (as the host's `exec` of a container
+    /// that is gone does) has its container looked for: one still there
+    /// with its network is left as it is; one the host no longer lists is
+    /// made again, the agent made again there, and the session says so.
+    func testAContainerThatIsGoneIsMadeAgain() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7977)
+        defer { server.stop() }
+        let record = try await start(server, .startInContainer(id: "g1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
+                                                               skipPermissions: true)).get()
+        try host.set("listed.json", #"{"containers":[{"id":"c1","name":"made","labels":{"visor.session":"g1"}}]}"#)
+        server.handle(.failure("claude exited with status 1"), from: record)
+        for _ in 0..<50 where !host.calls.contains("network c1") { try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertTrue(host.calls.contains("network c1"), "still there: its network asked")
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(record.info.container?.id, "c1", "left as it is")
+
+        server.containersRemade = [:]
+        try host.set("listed.json", #"{"containers":[]}"#)
+        server.handle(.failure("claude exited with status 1"), from: record)
+        for _ in 0..<50 where record.info.container?.id != "c2" { try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertEqual(record.info.container?.id, "c2", "made again")
+        XCTAssertTrue(record.notice?.contains("was gone") == true)
+        XCTAssertNotNil((record.process as? HostableProcess)?.container)
+    }
+
+    /// A container that is gone and can't be made again: the session stays
+    /// as it was and says how its agent can run.
+    func testAGoneContainerThatCantBeMadeAgainSaysSo() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: 7986)
+        defer { server.stop() }
+        let record = try await start(server, .startInContainer(id: "g2", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
+                                                               skipPermissions: true)).get()
+        try host.set("busy")
+        server.handle(.failure("claude exited with status 1"), from: record)
+        for _ in 0..<50 where record.notice == nil { try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertTrue(record.notice?.contains("Run on the Computer") == true)
+        XCTAssertEqual(record.info.container?.id, "c1")
     }
 
     /// The host's containers for sessions this server no longer has go,
