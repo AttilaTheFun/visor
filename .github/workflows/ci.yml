@@ -77,8 +77,10 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
 
   # The tests that need a Mac (the server's Apple side, the client, its
-  # views, SSH), in a macOS VM leased from OS Server
-  # (tools/ci/mac_vm_tests.sh). Every target is built in the container job.
+  # views, SSH): their .xctest bundles built on Linux in this job's own
+  # container (tools/ci/build_mac_tests.sh), and only run in a macOS VM
+  # leased from OS Server, which gets the tests alone, no tree and no Bazel
+  # (tools/ci/mac_vm_tests.sh).
   test:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -89,7 +91,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       # exec: the runner's cancel reaches the script's trap, which releases the VM.
-      - run: exec tools/ci/mac_vm_tests.sh
+      - run: exec tools/ci/mac_vm_tests.sh --logs "$RUNNER_TEMP/test-logs"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-logs
+          path: ${{ runner.temp }}/test-logs
 
   # The command-line server on Linux: built, its tests run, and the server
   # itself tried — run, a throwaway session over its WebSocket, restarted,

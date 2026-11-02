@@ -26,6 +26,10 @@
 #                               SHA-256; kept between runs on the runner)
 #   mac_vm_lease                the VM leased and reached over SSH
 #   mac_vm_copy_tree            the tree, Bazel and the steps copied in
+#   mac_vm_copy_tests <archive> or instead tests built elsewhere (a
+#                               tools/ci/build_mac_tests.sh archive), in
+#                               ~/ci/tests there, and the steps: no tree
+#                               and no Bazel
 #   in_vm <step> [args…]        one of the steps, in the VM
 #   mac_vm_fetch <in ~/ci> <here>  a file or folder of the VM's, copied out
 #   vm <command…>               a command in the VM, over SSH
@@ -103,7 +107,8 @@ mac_vm_steps() {
         cat << 'EOF'
 #!/bin/bash
 # In the VM, in ~/ci: the tree in visor/, Bazel in bin/, node in node/ where
-# the script brought it (tools/ci/mac_vm.sh).
+# the script brought it, or tests built elsewhere in tests/
+# (tools/ci/mac_vm.sh).
 set -uo pipefail
 cd ~/ci
 # Homebrew last: the layer's.
@@ -112,8 +117,13 @@ step="$1"
 shift
 case "$step" in
     unpack)
-        mkdir -p visor bin && tar -xzf tree.tar.gz -C visor || exit
-        command -v bazel > /dev/null || { echo "no bazel in this VM's image (its layer installs bazelisk)" >&2; exit 1; }
+        if [ -f tree.tar.gz ]; then
+            mkdir -p visor bin && tar -xzf tree.tar.gz -C visor || exit
+            command -v bazel > /dev/null || { echo "no bazel in this VM's image (its layer installs bazelisk)" >&2; exit 1; }
+        fi
+        if [ -f tests.tar.gz ]; then
+            mkdir -p tests && tar -xzf tests.tar.gz -C tests || exit
+        fi
         if [ -f node.tar.gz ]; then mkdir -p node && tar -xzf node.tar.gz -C node --strip-components 1 && node --version || exit; fi
         xcodebuild -version | head -1
         xcrun simctl list runtimes | grep -i '^ios'
@@ -139,9 +149,13 @@ mac_vm_lease() {
     # Renewed every ten minutes; told to stop, it stops its sleep too.
     (
         trap 'kill $! 2> /dev/null; exit 0' TERM
-        while :; do
+        # While the script lives: a cancel that kills it (SIGKILL, no trap)
+        # leaves no renewer holding the lease for good. $$ is the script's,
+        # in this subshell too.
+        while kill -0 "$$" 2> /dev/null; do
             sleep 600 &
             wait $!
+            kill -0 "$$" 2> /dev/null || break
             "$OSS" machine renew "$lease" --minutes=60 > /dev/null || true
         done
     ) &
@@ -177,6 +191,15 @@ mac_vm_copy_tree() {
     local tree
     tree="$(git -C "$ROOT" -c user.name=CI -c user.email=ci@localhost stash create)"
     git -C "$ROOT" archive --format=tar.gz -o "$work/vm/tree.tar.gz" "${tree:-HEAD}"
+    run "$OSS" machine upload "$lease" --identity="$work/key" "$work/vm" ci
+    run in_vm unpack
+}
+
+# Tests built elsewhere (tools/ci/build_mac_tests.sh), and the steps, into
+# ~/ci there: no tree and no Bazel.
+mac_vm_copy_tests() {
+    [ -f "$work/vm/in_vm.sh" ] || mac_vm_steps < /dev/null
+    cp "${1:?mac_vm_copy_tests takes an archive of tests}" "$work/vm/tests.tar.gz"
     run "$OSS" machine upload "$lease" --identity="$work/key" "$work/vm" ci
     run in_vm unpack
 }
