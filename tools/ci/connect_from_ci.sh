@@ -51,12 +51,21 @@ connect_from_ci() {
     curl -sk --connect-timeout 5 --max-time 10 -o /dev/null "$address/api/hello" || continue
     host_port="${address#https://}"
     host_port="${host_port%%/*}"
+    # An address curl reaches may still give openssl nothing (a Mac's
+    # Local Network permission is the program's own: Homebrew's openssl
+    # finds no route to a LAN address that curl reaches): that address is
+    # passed over, with a word, not the script ended (set -e, pipefail).
     openssl s_client -connect "$host_port" -showcerts </dev/null 2>/dev/null \
       | awk '/-----BEGIN CERTIFICATE-----/ { block = ""; inside = 1 }
              inside { block = block $0 "\n" }
              /-----END CERTIFICATE-----/ { inside = 0; last = block }
-             END { printf "%s", last }' > "$work/ca.pem"
-    fingerprint="$(openssl x509 -in "$work/ca.pem" -outform DER 2>/dev/null | openssl dgst -sha256 | sed 's/.*= *//' | tr 'A-F' 'a-f')"
+             END { printf "%s", last }' > "$work/ca.pem" || true
+    fingerprint="$(openssl x509 -in "$work/ca.pem" -outform DER 2>/dev/null | openssl dgst -sha256 | sed 's/.*= *//' | tr 'A-F' 'a-f')" \
+      || fingerprint=""
+    if [ -z "$fingerprint" ] || [ ! -s "$work/ca.pem" ]; then
+      echo "$(basename "$0" .sh): $address answers, but openssl got no certificate from it; not used" >&2
+      continue
+    fi
     if [ "$fingerprint" = "$ca" ]; then
       server="$address"
       break
