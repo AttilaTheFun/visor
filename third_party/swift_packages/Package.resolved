@@ -9,6 +9,14 @@
       }
     },
     {
+      "identity" : "applications",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AttilaTheFun/applications.git",
+      "state" : {
+        "revision" : "8cf429781e1f524ae4c14da65dc8fa32036524f0"
+      }
+    },
+    {
       "identity" : "swift-asn1",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-asn1.git",
