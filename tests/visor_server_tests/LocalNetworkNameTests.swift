@@ -23,7 +23,7 @@ final class LocalNetworkNameTests: ServerTestCase {
         ServerPlatform.current.host = HostDetails(name: "Studio Mac", dataDirectory: root,
                                                   networkAddresses: { [NetworkAddress(address: "192.168.1.20", interface: "en0")] },
                                                   localNetworkName: { "Studio-Mac.local" })
-        server = VisorServer(port: 7998)
+        server = VisorServer(port: Self.freePort())
     }
 
     override func tearDown() async throws {
@@ -33,7 +33,7 @@ final class LocalNetworkNameTests: ServerTestCase {
 
     func testTheNameIsAPathWhileTheLANIsOn() {
         server.settings.lan = true
-        XCTAssertEqual(server.httpPaths, ["http://192.168.1.20:7998", "http://Studio-Mac.local:7998", "http://127.0.0.1:7998"])
+        XCTAssertEqual(server.httpPaths, ["http://192.168.1.20:\(server.port)", "http://Studio-Mac.local:\(server.port)", "http://127.0.0.1:\(server.port)"])
         server.settings.lan = false
         XCTAssertFalse(server.httpPaths.contains { $0.contains("Studio-Mac.local") })
     }
@@ -55,15 +55,15 @@ final class LocalNetworkNameTests: ServerTestCase {
         XCTAssertEqual(server.reachableAddress, "http://192.168.1.20:7440")
         let code = try XCTUnwrap(server.connectionCode)
         XCTAssertEqual(code.host, "http://192.168.1.20:7440")
-        XCTAssertFalse(code.paths.contains("http://192.168.1.20:7998"), "not the container's own")
+        XCTAssertFalse(code.paths.contains("http://192.168.1.20:\(server.port)"), "not the container's own")
         XCTAssertTrue(code.paths.contains("http://127.0.0.1:7440"))
         server.settings.frontPaths = []
-        XCTAssertEqual(server.reachableAddress, "http://192.168.1.20:7998")
+        XCTAssertEqual(server.reachableAddress, "http://192.168.1.20:\(server.port)")
     }
 
     func testAComputerWithNoNameGivesOnlyItsAddresses() {
         ServerPlatform.current.host.localNetworkName = { nil }
         server.settings.lan = true
-        XCTAssertEqual(server.httpPaths, ["http://192.168.1.20:7998", "http://127.0.0.1:7998"])
+        XCTAssertEqual(server.httpPaths, ["http://192.168.1.20:\(server.port)", "http://127.0.0.1:\(server.port)"])
     }
 }

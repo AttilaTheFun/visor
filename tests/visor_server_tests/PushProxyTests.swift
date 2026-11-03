@@ -35,7 +35,7 @@ final class PushProxyTests: ServerTestCase {
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         ServerPlatform.current.fetching = proxy
-        server = VisorServer(port: 7975)
+        server = VisorServer(port: Self.freePort())
         server.password = "pw"
     }
 

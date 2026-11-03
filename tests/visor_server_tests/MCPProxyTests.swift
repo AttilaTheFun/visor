@@ -60,7 +60,7 @@ final class MCPProxyTests: ServerTestCase {
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         ServerPlatform.current.fetching = endpoint
-        server = VisorServer(port: 7979)
+        server = VisorServer(port: Self.freePort())
         server.password = "pw"
         server.sessions = [SessionRecord(info: SessionInfo(id: "S1", agent: .claude, cwd: "/tmp", title: "Parser", created: 0),
                                          process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])]
