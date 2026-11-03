@@ -706,8 +706,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_android/0.7.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_android_ndk/0.1.5/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_apple/5.3.1/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.22d7d5b/MODULE.bazel": "6fac8b7c63cdb580c45605f4d6bd129c84b99690f43e50f7e8ecca871e2fa324",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.22d7d5b/source.json": "b01bedc22cf3f3889706bea0e7bc6d39636a1d92cfea7c2f433cfdaeeaa291fc",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.f223f0f/MODULE.bazel": "cebbafe62be5ac1fa1ab05747478da5add888f0a8e81a0a46b30366a8a77e0fd",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.f223f0f/source.json": "96e4d8ea34c54fb63e2363a86d1cde9c184d8d50c4c20d4d3b0a0852ebb717aa",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.10/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.13/MODULE.bazel": "not found",
@@ -1782,8 +1782,8 @@
     },
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
-        "bzlTransitiveDigest": "Dn35Rw2aSnd5VU9Pwe1h/4fInCmfLfA2tRCvu72hcS0=",
-        "usagesDigest": "k1RBWxshvoUXUSlb5UtI2GHoTFowblTrMZBJvKhw6+Y=",
+        "bzlTransitiveDigest": "qnLvYBz9yC0wKkZ2eTSAz4DlO3gDoqvpjCG6Sus5ahU=",
+        "usagesDigest": "8wctPo7TTiK7QbzXkvZSoo02ftLfki/Y45xpwdfJsuc=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
