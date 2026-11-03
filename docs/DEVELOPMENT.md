@@ -830,7 +830,11 @@ front paths, `visor-server front`).
   CI's `test` job builds the Mac's .xctest bundles (`macos_unit_test`
   under tests/) on Linux in its own container,
   `tools/ci/build_mac_tests.sh <archive> --config=apple_on_linux …`, and
-  runs them in a leased macOS VM without Bazel (tools/ci/mac_vm_tests.sh).
+  runs each with `oss machine xctest` on a slot of OS Server's primary Mac
+  VM (`oss machine lease mac`, ready in seconds; tools/ci/mac_vm_tests.sh),
+  never a macOS VM of its own: those are left to agents (Logan, 3 Nov
+  2026). Several runs share the primary's loopback, so a test whose server
+  listens takes `ServerTestCase.freePort()`.
 - Try a server build against real agents without touching the installed
   one: `bazel run //tools/staging_server -- [port] [password]` (7533,
   `staging`) runs a `VisorServer` of its own — its own ports, a scratch
