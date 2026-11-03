@@ -14,6 +14,13 @@ import XCTest
 @MainActor
 final class ListenRetryTests: ServerTestCase {
     func testATakenPortIsTriedAgain() async throws {
+        #if canImport(Darwin)
+        // The Network framework lets two listeners share a port
+        // (allowLocalEndpointReuse) and says of one it can't have only later,
+        // in its state: the retry is the POSIX listener's, where a server
+        // that came up with no port was seen (Linux, the co-tenant).
+        throw XCTSkip("POSIX listening only")
+        #else
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-listen-tests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -32,5 +39,6 @@ final class ListenRetryTests: ServerTestCase {
         for _ in 0..<60 where !server.listening { try await Task.sleep(for: .milliseconds(100)) }
         XCTAssertTrue(server.listening, "listening once the port is free")
         XCTAssertNil(server.lastError)
+        #endif
     }
 }
