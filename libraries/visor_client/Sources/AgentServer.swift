@@ -188,6 +188,21 @@ public protocol AgentServer: AnyObject {
     /// server's sessions.
     func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo])
 
+    // MARK: Backing sessions up (`/api/backups`)
+
+    /// Whether this server backs its sessions up to a folder and restores
+    /// them from one.
+    var backsUp: Bool { get }
+    /// Backs up the sessions named (every one not archived, when nil), the
+    /// projects a move would copy too when `projects`: the backup, with
+    /// what became of each session.
+    func backUp(sessions: [String]?, projects: Bool) async throws -> SessionBackup
+    /// The backups kept on the server's computer, newest first.
+    func backups() async throws -> [SessionBackup]
+    /// Puts back the sessions of the backup at `path` (those named, or
+    /// all): what became of each, and the server's sessions.
+    func restore(_ path: String, sessions: [String]?) async throws -> (backup: SessionBackup, sessions: [SessionInfo])
+
     // MARK: Identity and SSH
 
     /// What the server said of itself at the last sign-in: its id and
@@ -245,6 +260,12 @@ public extension AgentServer {
     func migrationClone(_ plan: String, step: MigrationStep) async throws { throw AgentServerError.unsupported }
     func migrationUnpack(_ plan: String, file: String, step: MigrationStep) async throws { throw AgentServerError.unsupported }
     func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo]) {
+        throw AgentServerError.unsupported
+    }
+    var backsUp: Bool { false }
+    func backUp(sessions: [String]?, projects: Bool) async throws -> SessionBackup { throw AgentServerError.unsupported }
+    func backups() async throws -> [SessionBackup] { throw AgentServerError.unsupported }
+    func restore(_ path: String, sessions: [String]?) async throws -> (backup: SessionBackup, sessions: [SessionInfo]) {
         throw AgentServerError.unsupported
     }
     var identity: ServerIdentity? { nil }

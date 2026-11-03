@@ -52,13 +52,32 @@ extension VisorServer {
         let token = UUID().uuidString.lowercased()
         let folder = Self.migrationsFolder.appendingPathComponent("out-" + token, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let carried: (offer: MigrationOffer, urls: [String: URL])
+        switch await offer(of: record, resume: resume, token: token, packingInto: folder) {
+        case .success(let made): carried = made
+        case .failure(let failure): return .error(failure.message)
+        }
+        migrationsOut[token] = OutgoingMigration(session: record.info.id, files: carried.urls, folder: folder, created: Date())
+        var e = Envelope(type: "migration")
+        e.offer = carried.offer
+        return e
+    }
+
+    /// A session as a move offers it (or a backup keeps it): its
+    /// conversation's files — each by an id, where it is here, a folder
+    /// packed into `folder` first, a file to its last whole line — and the
+    /// projects it works in.
+    func offer(of record: SessionRecord, resume: String, token: String,
+               packingInto folder: URL) async -> Result<(offer: MigrationOffer, urls: [String: URL]), MigrationFailure> {
         var files: [MigrationFile] = []
         var urls: [String: URL] = [:]
         for (index, file) in SessionCatalog.conversationFiles(agent: record.info.agent, id: resume, cwd: record.info.cwd).enumerated() {
             let id = "conversation-\(index)"
             if file.folder {
                 let archive = folder.appendingPathComponent(id + ".tgz", isDirectory: false)
-                if let problem = await Self.pack(folder: file.url, into: archive) { return .error("Could not pack \(file.url.path): \(problem)") }
+                if let problem = await Self.pack(folder: file.url, into: archive) {
+                    return .failure(MigrationFailure(message: "Could not pack \(file.url.path): \(problem)"))
+                }
                 urls[id] = archive
                 files.append(MigrationFile(id: id, place: file.place, size: Self.fileSize(archive), packed: true))
             } else {
@@ -66,15 +85,15 @@ extension VisorServer {
                 files.append(MigrationFile(id: id, place: file.place, size: Self.wholeLines(of: file.url), packed: false))
             }
         }
-        guard files.contains(where: { !$0.packed }) else { return .error("The agent's own record of “\(record.info.title)” is not on this computer.") }
+        guard files.contains(where: { !$0.packed }) else {
+            return .failure(MigrationFailure(message: "The agent's own record of “\(record.info.title)” is not on this computer."))
+        }
         let home = SessionCatalog.home.path
         let projects = await ProjectSurvey.projects(cwd: record.info.cwd, conversation: urls["conversation-0"], home: home)
-        migrationsOut[token] = OutgoingMigration(session: record.info.id, files: urls, folder: folder, created: Date())
         var info = record.info
         info.cwd = (info.cwd as NSString).expandingTildeInPath
-        var e = Envelope(type: "migration")
-        e.offer = MigrationOffer(token: token, from: hostName, session: info, resumeID: resume, home: home, files: files, projects: projects)
-        return e
+        let offer = MigrationOffer(token: token, from: hostName, session: info, resumeID: resume, home: home, files: files, projects: projects)
+        return .success((offer, urls))
     }
 
     /// A piece of one of an offer's files (`migration`, `file`): from
