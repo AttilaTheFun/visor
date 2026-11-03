@@ -6,6 +6,7 @@ import VisorProtocol
 @testable import VisorUI
 import XCTest
 
+@MainActor
 final class BackupSectionTests: XCTestCase {
     private let backup = SessionBackup(path: "/Users/me/.local/share/visor/backups/20261103-013108", created: 1_000, from: "Mac", sessions: [
         SessionBackupItem(id: "a", title: "App", outcome: "Backed up.", kept: true),
