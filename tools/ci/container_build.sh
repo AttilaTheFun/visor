@@ -1,9 +1,9 @@
 #!/bin/bash
 # CI's build of the apps in a Linux container (the Apple apps, the Linux
-# client and blue Visor's Android APK, arm64), on a self-hosted runner's
-# Mac: a container leased from that Mac's OS Server (`oss machine run
-# container --inside`), made from this build's own agent image, so CI builds
-# where a session's agent works. The Apple apps take Xcode 27.2's SDK
+# client and blue Visor's Android APK, arm64): the job's own (CI's
+# visor-jit, a container OS Server makes for each job, side by side with the
+# others), or, run on a Mac, one leased from that Mac's OS Server (`oss
+# machine run container --inside`) of the agent image named. The Apple apps take Xcode 27.2's SDK
 # archive and rules_applecross's ported tools from the same OS Server's
 # files (by SHA-256, with its cache's read token) through a downloader
 # config written here, and its Bazel reads that server's cache: no host is
@@ -36,28 +36,46 @@
 # server: every target compiles in the Swift 6 mode with warnings as errors
 # (tools/swift), so building is a check of its own.
 set -euo pipefail
-ROOT="${BUILD_WORKSPACE_DIRECTORY:?run it with bazel run}"
+ROOT="${BUILD_WORKSPACE_DIRECTORY:-$(cd "$(dirname "$0")/../.." && pwd)}"
 IMAGE="${1:?the agent image, ghcr.io/attilathefun/visor-agent:<version>}"
 shift
 VOLUME="${VISOR_CI_VOLUME:-visor-ci}"
 SDK_SHA256="b1583e60f9fd35881b5a948ce71627079877f1ced7ea231e14d3c342dd389668"
 
-# The command line inside OS Server, or on the path.
-OSS="/Applications/OS Server.app/Contents/Helpers/oss"
-[ -x "$OSS" ] || OSS="$(command -v oss)"
-APP="$(cd "$(dirname "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$OSS")")/../.." && pwd)"
-
-# `--inside` came in OS Server 0.12.0. An older oss takes it for an option it
-# doesn't know and runs the build on this Mac instead: refused here.
-version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null || echo 0)"
-if ! python3 -c 'import sys; v = [int(x) for x in sys.argv[1].split(".")[:3]] + [0, 0]; sys.exit(0 if v[:3] >= [0, 12, 0] else 1)' "$version"; then
-    echo "container_build: needs OS Server 0.12.0 or later on this Mac (oss machine run --inside); it has $version" >&2
-    exit 1
-fi
+# Already in a Linux container (CI's visor-jit: OS Server's cache in its
+# ~/.bazelrc and its read token in ~/.netrc): built here, in the job's own
+# container and image, and IMAGE goes unused. On a Mac: in a container of
+# IMAGE leased from its OS Server.
+here=""
+[ "$(uname -s)" = Linux ] && here=1
 
 host="${OSS_FILES_HOST:-}"
-if [ -z "$host" ]; then
-    host="$(/Applications/Tailscale.app/Contents/MacOS/Tailscale status --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
+if [ -n "$here" ]; then
+    # The job's own OS Server, the first of OSS_SERVERS, by name.
+    if [ -z "$host" ]; then
+        host="${OSS_SERVERS:-}"
+        host="${host%%[ ,]*}"
+        host="${host#*://}"
+        host="${host%%[:/]*}"
+    fi
+    [ -n "$host" ] || { echo "container_build: no host for OS Server's files (OSS_SERVERS): set OSS_FILES_HOST" >&2; exit 1; }
+else
+    # The command line inside OS Server, or on the path.
+    OSS="/Applications/OS Server.app/Contents/Helpers/oss"
+    [ -x "$OSS" ] || OSS="$(command -v oss)"
+    APP="$(cd "$(dirname "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$OSS")")/../.." && pwd)"
+
+    # `--inside` came in OS Server 0.12.0. An older oss takes it for an
+    # option it doesn't know and runs the build on this Mac instead:
+    # refused here.
+    version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null || echo 0)"
+    if ! python3 -c 'import sys; v = [int(x) for x in sys.argv[1].split(".")[:3]] + [0, 0]; sys.exit(0 if v[:3] >= [0, 12, 0] else 1)' "$version"; then
+        echo "container_build: needs OS Server 0.12.0 or later on this Mac (oss machine run --inside); it has $version" >&2
+        exit 1
+    fi
+    if [ -z "$host" ]; then
+        host="$(/Applications/Tailscale.app/Contents/MacOS/Tailscale status --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
+    fi
 fi
 
 # MODULE.bazel's placeholders, to this Mac's OS Server.
@@ -137,6 +155,7 @@ if [ -n "${VISOR_CI_PACKAGE:-}" ]; then
 fi
 
 cd "$ROOT"
+[ -z "$here" ] || exec bash -c "$steps" container_build "$ROOT" "$full" "$package" "$@"
 exec "$OSS" machine run container --image="$IMAGE" --rosetta --cpus=6 --memory=16 \
     --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:128:keep" \
     --inside --cache="$host" -- \

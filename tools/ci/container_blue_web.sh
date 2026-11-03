@@ -1,7 +1,7 @@
 #!/bin/bash
 # Blue Visor's web client (the client on Isomer: docs/isomer.md) in a Linux
-# container leased from the runner's Mac's OS Server (`oss machine run
-# container --inside`), of Visor's agent image: built optimized, its tests
+# container (CI's own, visor-jit; or, run on a Mac, one leased from its OS
+# Server with `oss machine run container --inside`, of the agent image named): built optimized, its tests
 # run, then checked in headless Chromium — the end-to-end test against the
 # stand-in server on its three roads, the transcript's layout, and the
 # composer typed into. Chromium is Playwright's arm64 build at a pinned
@@ -21,17 +21,24 @@
 # given, in the checkout, for the run's `blue-web-review` artifact. The
 # script fails as the first step that fails, after all ran.
 set -euo pipefail
-ROOT="${BUILD_WORKSPACE_DIRECTORY:?run it with bazel run}"
+ROOT="${BUILD_WORKSPACE_DIRECTORY:-$(cd "$(dirname "$0")/../.." && pwd)}"
 IMAGE="${1:?the agent image, ghcr.io/attilathefun/visor-agent:<version>}"
 REVIEW="$ROOT/${2:?the review folder, in the checkout}"
 VOLUME="${VISOR_CI_VOLUME:-visor-web-ci}"
 PLAYWRIGHT="1.64.1"
 
-OSS="/Applications/OS Server.app/Contents/Helpers/oss"
-[ -x "$OSS" ] || OSS="$(command -v oss)"
-host="${OSS_FILES_HOST:-}"
-if [ -z "$host" ]; then
-    host="$(/Applications/Tailscale.app/Contents/MacOS/Tailscale status --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
+# Already in a Linux container (CI's visor-jit, its Bazel reading OS
+# Server's cache): run here, IMAGE unused, Chromium fetched for the run. On
+# a Mac: in a container of IMAGE leased from its OS Server.
+here=""
+[ "$(uname -s)" = Linux ] && here=1
+if [ -z "$here" ]; then
+    OSS="/Applications/OS Server.app/Contents/Helpers/oss"
+    [ -x "$OSS" ] || OSS="$(command -v oss)"
+    host="${OSS_FILES_HOST:-}"
+    if [ -z "$host" ]; then
+        host="$(/Applications/Tailscale.app/Contents/MacOS/Tailscale status --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
+    fi
 fi
 
 steps='
@@ -62,6 +69,8 @@ exit $failed
 '
 
 cd "$ROOT"
+mkdir -p "$REVIEW"
+[ -z "$here" ] || exec bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT"
 exec "$OSS" machine run container --image="$IMAGE" --cpus=6 --memory=16 \
     --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:64:keep" \
     --inside --cache="$host" -- \
