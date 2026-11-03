@@ -272,26 +272,24 @@ jobs:
     needs: [changes, number, agent-image]
     # On a pull request number and agent-image are skipped, and it runs all the same.
     if: ${{ !cancelled() && !failure() && needs.changes.outputs.code == 'true' }}
-    runs-on: [self-hosted, oss-container]
+    # In a container of its own (visor-jit), side by side with the other
+    # jobs, its Bazel reading OS Server's cache (tools/ci/container_build.sh
+    # builds where it runs): no runner's Mac between jobs, no kept volume.
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
-    # One build at a time on the runner's Mac, as Bazel's tree is one kept
-    # volume: OS Server holds a lease whose volume another lease has until
-    # it is free (`oss machine run` waits). No job-level group, which kept
-    # one job pending and cancelled any other.
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      # main's commit in its own agent image; a pull request in its line's
-      # released one (MAJOR.MINOR).
+      # The agent image a build on a Mac would use (main's commit's own, a
+      # pull request its line's): named, unused in the job's own container.
       - id: image
         env:
           VERSION: ${{ needs.number.outputs.version }}
         run: |
-          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           echo "tag=${VERSION:-${line%.*}}" >> "$GITHUB_OUTPUT"
-      # exec: the runner's cancel reaches oss, which releases the container.
-      - run: exec bazel run //tools/ci:container_build -- ghcr.io/attilathefun/visor-agent:${{ steps.image.outputs.tag }}
+      - run: exec tools/ci/container_build.sh ghcr.io/attilathefun/visor-agent:${{ steps.image.outputs.tag }}
 
   # Blue Visor (the client on Isomer: docs/isomer.md), its web client: built
   # optimized, its tests run, then checked in headless Chromium: the
@@ -303,20 +301,19 @@ jobs:
   blue-web:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: [self-hosted, oss-container]
+    # In a container of its own (visor-jit), side by side with the other
+    # jobs (tools/ci/container_blue_web.sh runs where it runs).
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 60
-    # One at a time on the runner's Mac, as its Bazel tree is one kept
-    # volume: OS Server holds the lease until the volume is free.
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - id: image
         run: |
-          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           echo "tag=${line%.*}" >> "$GITHUB_OUTPUT"
-      # exec: the runner's cancel reaches oss, which releases the container.
-      - run: exec bazel run //tools/ci:container_blue_web -- ghcr.io/attilathefun/visor-agent:${{ steps.image.outputs.tag }} review
+      - run: exec tools/ci/container_blue_web.sh ghcr.io/attilathefun/visor-agent:${{ steps.image.outputs.tag }} review
       - uses: actions/upload-artifact@v4
         if: always()
         with:

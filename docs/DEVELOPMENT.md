@@ -871,15 +871,16 @@ front paths, `visor-server front`).
 - agent_ui changes: commit+push there, put the revision in
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
-- CI (ci.yml), self-hosted: the repository's runners lease a macOS VM,
-  a Windows VM or a Linux container from OS Server for each job
-  (tools/ci). A pull request gets the fast checks, all at once, in under
-  ten minutes each: every app and the Mac's libraries built on Linux
-  (`container`, tools/ci/container_build.sh, Bazel's tree in a kept
-  volume), the tests with nothing of Apple's in them on Linux (`linux`),
-  the command-line server on Windows, the tests that need a Mac in a macOS
-  VM (`test`), and blue's web client in headless Chromium in a Linux
-  container (`blue-web`). A diff of documentation alone skips them (the
+- CI (ci.yml), self-hosted: most jobs run in a Linux container OS Server
+  makes for each (visor-jit), side by side, their Bazel reading its
+  cache; the Mac's tests go on to a slot of its primary Mac, the server's
+  Windows build to a Windows VM (tools/ci). A pull request gets the fast
+  checks, all at once, in under ten minutes each: every app and the Mac's
+  libraries built on Linux in the job's own container (`container`,
+  tools/ci/container_build.sh), the tests with nothing of Apple's in them
+  on Linux (`linux`), the command-line server on Windows, the tests that
+  need a Mac on a slot (`test`), and blue's web client in headless
+  Chromium (`blue-web`). A diff of documentation alone skips them (the
   `changes` job), and a newer push cancels a run that hasn't finished.
   Each commit merged to main (a squash is a commit of its own) gets them
   too, then its builds (Logan, 2026-11-02: AdHoc by hand before a merge,
