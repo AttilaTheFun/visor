@@ -411,16 +411,28 @@ these are checked early rather than assumed:
      servers; then that way of running, and 0.44's container hosts
      (docs/container-host.md), are retired.
 
-## Where it stands (1 November)
+## Where it stands (3 November)
 
-The mini's co-tenant is the first container server, set up by hand: Visor's
-agent image with `visor-server` in it (visor #151), its server's port
-forwarded by a socat LaunchAgent, its MCP servers set to the Runner's MCP
-proxy (`visor-runner-agent`, from #169, running on the mini). Its sessions
-are marked as a container's (#170), and its pairing code lists the
-forwarder's addresses (#171's front paths). Logan: "Don't move yet until
-everything is working fine with the visor session in the co-tenant
-container."
+- **Phase 1:** the Runner's proxies are in. Its MCP proxy (#169), push
+  proxy (#178, #179) and client proxy (#180, in place of the socat
+  forwarder) serve the mini's co-tenant, the first container server, which
+  is still made by hand: Visor's agent image with `visor-server` in it
+  (#151), its sessions marked as a container's (#170), its pairing code
+  listing the front's paths (#171). The Runner making container servers
+  itself (#158) waits on the container runtime package taken out of OS
+  Server, which doesn't exist yet. GitHub's forward proxy isn't started.
+- **Phase 2:** begun. Visor.app is a target (applications/visor_mac,
+  #187, #188). The iPhone app is `com.LoganShire.Visor`, with
+  `BuildVariant` in its Info.plist and the app group (#189, #190), and its
+  Alphas go to Applications Server (#196). The Mac still ships Visor
+  Server.app and the Mac client: switching to Visor.app costs one
+  login-keychain prompt per item the old apps made (each is ACL'd to the
+  app that made it), which Logan hasn't decided on yet.
+- **Phase 5's groundwork:** sessions are backed up to a folder and
+  restored from one (#200), each half of a move; a move survives a dropped
+  piece (#203).
+- Logan (1 November): "Don't move yet until everything is working fine
+  with the visor session in the co-tenant container."
 
 ## Sessions running today
 
