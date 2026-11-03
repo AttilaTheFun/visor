@@ -20,13 +20,13 @@ final class RelayMessagingTests: ServerTestCase {
         try? FileManager.default.createDirectory(at: root.appendingPathComponent("there"), withIntermediateDirectories: true)
         VisorServer.secrets = MemorySecrets()
         VisorServer.storeRoot = root
-        here = VisorServer(port: 7980)
+        here = VisorServer(port: Self.freePort())
         here.password = "here-password"
         // Its own folder: a server of its own, with an id of its own. (The
         // folder is the process's: what either keeps from here on is kept
         // there, the outbox and the ledger in files of their own.)
         VisorServer.storeRoot = root.appendingPathComponent("there")
-        there = VisorServer(port: 7982)
+        there = VisorServer(port: Self.freePort())
         there.password = "there-password"
         VisorServer.relaySendWait = 0.3
         VisorServer.relayReadWait = 0.3

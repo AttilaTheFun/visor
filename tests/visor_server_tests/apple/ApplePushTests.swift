@@ -37,7 +37,7 @@ final class PushKeyRouteTests: ServerTestCase {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
-        let server = VisorServer(port: 7974)
+        let server = VisorServer(port: Self.freePort())
         server.password = "pw"
         defer { server.stop() }
         func post(_ path: String, _ body: String, bearer: String = "pw") -> HTTPResponse {

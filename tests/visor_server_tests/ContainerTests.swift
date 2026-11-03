@@ -113,7 +113,7 @@ final class ContainerTests: ServerTestCase {
         try Data("machine cache login visor password read\n".utf8).write(to: home.appendingPathComponent(".netrc"))
         try Data("build --remote_cache=http://cache:7490\n".utf8).write(to: home.appendingPathComponent(".bazelrc"))
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7997)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         XCTAssertTrue(server.containersAvailable)
         XCTAssertEqual(server.sessionsEnvelope().container, true, "clients are told a session can start in a container")
@@ -185,7 +185,7 @@ final class ContainerTests: ServerTestCase {
     /// in it.
     func testCodexInAContainerHasTheContainersOwnHome() async throws {
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7990)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         _ = try await start(server, .startInContainer(id: "c1", agent: .codex, cwd: root.appendingPathComponent("work").path, title: "",
                                                       skipPermissions: true)).get()
@@ -202,7 +202,7 @@ final class ContainerTests: ServerTestCase {
     /// key), the computer's sessions folder in it.
     func testOpenRouterInAContainerHasTheContainersOwnHome() async throws {
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7970)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         _ = try await start(server, .startInContainer(id: "o1", agent: .openrouter, cwd: root.appendingPathComponent("work").path, title: "",
                                                       skipPermissions: true)).get()
@@ -219,7 +219,7 @@ final class ContainerTests: ServerTestCase {
     /// in a container (its welcome), and hears again with the list when
     /// that changes.
     func testTheLiveChannelSaysWhetherContainersAreOnOffer() async throws {
-        let server = await server(try FakeHost(in: root), port: 7971)
+        let server = await server(try FakeHost(in: root), port: Self.freePort())
         defer { server.stop() }
         server.password = "pw"
         let stream = EnvelopeStream()
@@ -245,7 +245,7 @@ final class ContainerTests: ServerTestCase {
     /// is a volume at Bazel's output folder.
     func testAContainerIsGivenTheSizeAskedFor() async throws {
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7973)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         let gigabyte = ContainerSize.gigabyte
         let work = root.appendingPathComponent("work").path
@@ -276,7 +276,7 @@ final class ContainerTests: ServerTestCase {
         let host = try FakeHost(in: root)
         let gigabyte = ContainerSize.gigabyte
         try host.set("limits.json", #"{"cpus": 2, "memoryBytes": \#(8 * gigabyte)}"#)
-        let server = await server(host, port: 7974)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         XCTAssertEqual(server.containerLimits, .init(cpus: 2, memoryBytes: 8 * gigabyte))
         let work = root.appendingPathComponent("work").path
@@ -301,7 +301,7 @@ final class ContainerTests: ServerTestCase {
     /// A folder that is not on the computer says so, and no container is made.
     func testAMissingFolderSaysSoAndMakesNoContainer() async throws {
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7994)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         let ended = await start(server, .startInContainer(id: "s2", agent: .codex, cwd: "/no/such/folder", title: "", skipPermissions: true))
         guard case .failure(let failure) = ended else { return XCTFail("started all the same") }
@@ -314,18 +314,18 @@ final class ContainerTests: ServerTestCase {
     /// server on the network: without either none can start, and the
     /// clients are not offered it.
     func testContainersNeedAHostAndTheNetwork() async throws {
-        let none = await server(nil, port: 7993)
+        let none = await server(nil, port: Self.freePort())
         defer { none.stop() }
         XCTAssertFalse(none.containersAvailable, "no host")
         XCTAssertEqual(none.sessionsEnvelope().container, false, "the clients are told so")
 
         let sick = try FakeHost(in: root)
         try sick.set("unhealthy")
-        let unhealthy = await server(sick, port: 7989)
+        let unhealthy = await server(sick, port: Self.freePort())
         defer { unhealthy.stop() }
         XCTAssertFalse(unhealthy.containersAvailable, "a host that says it can't")
 
-        let loopback = await server(try FakeHost(in: root), port: 7992)
+        let loopback = await server(try FakeHost(in: root), port: Self.freePort())
         defer { loopback.stop() }
         XCTAssertTrue(loopback.containersAvailable)
         loopback.settings.lan = false
@@ -339,7 +339,7 @@ final class ContainerTests: ServerTestCase {
     func testABusyHostSaysSo() async throws {
         let host = try FakeHost(in: root)
         try host.set("busy")
-        let server = await server(host, port: 7984)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         let ended = await start(server, .startInContainer(id: "f1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
                                                           skipPermissions: true))
@@ -358,7 +358,7 @@ final class ContainerTests: ServerTestCase {
         try FileManager.default.createDirectory(at: root.appendingPathComponent("containers"), withIntermediateDirectories: true)
         try "CLAUDE_CODE_OAUTH_TOKEN=sign-in\n".write(to: root.appendingPathComponent("containers/agent.env"), atomically: true, encoding: .utf8)
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7995)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         AgentChildren.detach = false
         defer { AgentChildren.detach = true }
@@ -388,7 +388,7 @@ final class ContainerTests: ServerTestCase {
     /// removed (its disk with it).
     func testASessionMovesIntoItsContainerAndOutAgain() async throws {
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7996)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         let info = SessionInfo(id: "s3", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Claude", created: 0)
         let record = SessionRecord(info: info, process: server.makeProcess(info, resume: nil), entries: [])
@@ -411,7 +411,7 @@ final class ContainerTests: ServerTestCase {
     /// while.
     func testAContainerThatLostItsNetworkIsMadeAgain() async throws {
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7983)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         let record = try await start(server, .startInContainer(id: "n1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
                                                                skipPermissions: true)).get()
@@ -443,7 +443,7 @@ final class ContainerTests: ServerTestCase {
     /// made again, the agent made again there, and the session says so.
     func testAContainerThatIsGoneIsMadeAgain() async throws {
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7977)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         let record = try await start(server, .startInContainer(id: "g1", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
                                                                skipPermissions: true)).get()
@@ -467,7 +467,7 @@ final class ContainerTests: ServerTestCase {
     /// as it was and says how its agent can run.
     func testAGoneContainerThatCantBeMadeAgainSaysSo() async throws {
         let host = try FakeHost(in: root)
-        let server = await server(host, port: 7986)
+        let server = await server(host, port: Self.freePort())
         defer { server.stop() }
         let record = try await start(server, .startInContainer(id: "g2", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "",
                                                                skipPermissions: true)).get()
@@ -483,7 +483,7 @@ final class ContainerTests: ServerTestCase {
     /// container hosts) moves onto this computer.
     func testLeftoversGoAndOSServersContainersAreLeft() async throws {
         let host = try FakeHost(in: root)
-        let server = VisorServer(port: 7982)
+        let server = VisorServer(port: Self.freePort())
         defer { server.stop() }
         server.settings.lan = true
         server.settings.containerHost = [host.path]

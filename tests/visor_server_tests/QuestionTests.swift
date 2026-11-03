@@ -62,7 +62,7 @@ final class QuestionTests: ServerTestCase {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
-        server = VisorServer(port: 7984)
+        server = VisorServer(port: Self.freePort())
         server.password = "pw"
     }
 

@@ -29,8 +29,9 @@ final class ListenRetryTests: ServerTestCase {
         VisorServer.socketPathOverride = "/tmp/visor-listen-\(getpid()).sock"
         defer { VisorServer.socketPathOverride = nil }
 
-        let taken = try ServerPlatform.current.listening.listen(ListeningOptions(port: 7999)) { $0.close() }
-        let server = VisorServer(port: 7999)
+        let port = Self.freePort()
+        let taken = try ServerPlatform.current.listening.listen(ListeningOptions(port: port)) { $0.close() }
+        let server = VisorServer(port: port)
         defer { server.stop() }
         server.password = "pearl-grove"
         XCTAssertFalse(server.listening, "the port is taken")

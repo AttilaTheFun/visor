@@ -28,7 +28,7 @@ final class AuthTests: ServerTestCase {
         // Never the real keychain.
         VisorServer.secrets = MemorySecrets()
         VisorServer.socketPathOverride = "/tmp/visor-auth-\(getpid()).sock"
-        server = VisorServer(port: 7997)
+        server = VisorServer(port: Self.freePort())
     }
 
     override func tearDown() async throws {
@@ -117,7 +117,7 @@ final class AuthTests: ServerTestCase {
             XCTAssertNil(server.reachableAddress, "no network at all")
         } else {
             XCTAssertEqual(server.reachableAddress, server.httpPaths.first)
-            XCTAssertTrue(server.reachableAddress?.hasSuffix(":7997") == true)
+            XCTAssertTrue(server.reachableAddress?.hasSuffix(":\(server.port)") == true)
         }
         // Each path admits its own connections, and only while on.
         XCTAssertTrue(server.admits(localAddress: nil))
