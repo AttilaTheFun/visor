@@ -27,6 +27,10 @@ extension VisorServer {
         if request.method == "POST", parts.count == 2, parts[0] == "migration", authorized(request) {
             return routeMigration(parts[1], body: Envelope.decodeBody(request.body), respond: respond)
         }
+        // Sessions backed up to a folder here, and restored from one.
+        if parts.first == "backups", authorized(request) {
+            return routeBackups(request, parts: parts, respond: respond)
+        }
         // A session whose agent runs in a container: answered once its
         // container is made.
         if request.method == "POST", parts == ["sessions"], authorized(request), Envelope.decodeBody(request.body).container == true {

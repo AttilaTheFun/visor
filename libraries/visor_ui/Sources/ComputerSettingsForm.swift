@@ -114,6 +114,7 @@ struct ComputerSettingsForm: View {
                     Text("This device tells the computer which other computers it is connected to and their sessions, so the agents here can message the sessions there, and it carries those messages. No address or password goes from one computer to another. Off: the computer is told nothing by this device.")
                 }
             }
+            if host.backsUp, host.state == .connected { BackupSection(host: host) }
             ConnectionCodeSection(host: host)
             // What the client did about its connections, to send to
             // whoever is finding out why one was slow.

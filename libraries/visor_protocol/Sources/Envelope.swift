@@ -200,6 +200,14 @@ public struct Envelope: Codable, Sendable {
     public var steps: [MigrationStep]?
     public var file: MigrationFile?
     public var offset: Int?
+    /// Sessions backed up to a folder and restored from one
+    /// (`/api/backups`): the backup made or restored from, those kept on
+    /// the computer, the sessions a request is about (all when none), and
+    /// whether the projects a move would copy are backed up too.
+    public var backup: SessionBackup?
+    public var backups: [SessionBackup]?
+    public var sessionIDs: [String]?
+    public var projects: Bool?
 
     public init(type: String) { self.type = type }
 
