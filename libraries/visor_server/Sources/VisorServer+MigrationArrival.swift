@@ -170,30 +170,41 @@ extension VisorServer {
                 }
             }
         }
-        var start = Envelope(type: "start")
-        start.id = Self.newSessionID()
-        start.agent = offer.session.agent
-        start.cwd = plan.cwd
-        start.title = offer.session.title
-        start.skipPermissions = offer.session.skipPermissions
-        start.resume = offer.resumeID
-        perform(start, from: nil)
-        guard let record = session(start.id) else { return .error("The session could not be started here.") }
-        record.setSettings(model: offer.session.model, effort: offer.session.effort)
-        var notice = "Moved here from \(offer.from.isEmpty ? "another computer" : offer.from). The session there is as it was: remove it once this one works."
-        if let goal = offer.session.goal, !goal.isEmpty, record.process.carryGoal(goal) {
-            notice += " Its goal came too, paused: /goal resume carries on with it."
+        let notice = "Moved here from \(offer.from.isEmpty ? "another computer" : offer.from). The session there is as it was: remove it once this one works."
+        guard let record = startCarried(offer, id: Self.newSessionID(), cwd: plan.cwd, notice: notice) else {
+            return .error("The session could not be started here.")
         }
-        broadcast(record.apply(.notice(notice)), session: record)
         Self.log("session moved here from \(offer.from): \(offer.session.title) (\(record.info.id))")
-        saveArchive()
-        broadcastSessions()
         try? files.removeItem(at: move.folder)
         migrationsIn[id] = nil
         var e = Envelope(type: "migration")
         e.session = record.info.id
         e.sessions = sessions.map(\.info)
         return e
+    }
+
+    /// The session a move (or a backup) carried, started here as `id` in
+    /// `cwd` on the same conversation, its model and effort kept and its
+    /// goal carried too (paused), told `notice`.
+    func startCarried(_ offer: MigrationOffer, id: String, cwd: String, notice: String) -> SessionRecord? {
+        var start = Envelope(type: "start")
+        start.id = id
+        start.agent = offer.session.agent
+        start.cwd = cwd
+        start.title = offer.session.title
+        start.skipPermissions = offer.session.skipPermissions
+        start.resume = offer.resumeID
+        perform(start, from: nil)
+        guard let record = session(id) else { return nil }
+        record.setSettings(model: offer.session.model, effort: offer.session.effort)
+        var said = notice
+        if let goal = offer.session.goal, !goal.isEmpty, record.process.carryGoal(goal) {
+            said += " Its goal came too, paused: /goal resume carries on with it."
+        }
+        broadcast(record.apply(.notice(said)), session: record)
+        saveArchive()
+        broadcastSessions()
+        return record
     }
 
     /// `path` from a computer whose home folder is `from`, on this one

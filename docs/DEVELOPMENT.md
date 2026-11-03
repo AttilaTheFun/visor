@@ -847,6 +847,13 @@ front paths, `visor-server front`).
   carry on from there. Verify with `shasum` of the installed binary vs
   the staged one and exactly one `claude -p` per session. Never `pkill`
   the menu bar app (endAll kills every agent).
+- Before an update that might lose sessions (a server swapped, a
+  container made again), back them up: `curl -X POST
+  http://127.0.0.1:7433/api/backups -H "Authorization: Bearer
+  $VISOR_TOKEN"` (body `{"path": "<a folder of its own>"}` to keep them
+  off the disk at risk), or Back Up Sessions in the computer's settings.
+  `POST /api/backups/restore {"path": …}` puts back what is gone and
+  leaves what is there (docs/protocol.md).
 - Upgrade to a released build from inside a session the same way: copy
   `Visor Server.app` out of the disk image to a staging folder and
   `POST /api/restart {path, session}` with it (bearer `$VISOR_TOKEN`).
