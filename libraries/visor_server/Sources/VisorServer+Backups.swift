@@ -133,8 +133,10 @@ extension VisorServer {
     /// The backups kept in backupsFolder, newest first.
     static func keptBackups() -> [SessionBackup] {
         let files = FileManager.default
-        let folders = (try? files.contentsOfDirectory(at: backupsFolder, includingPropertiesForKeys: nil)) ?? []
-        return folders.compactMap { folder in
+        // By name under backupsFolder, as a backup made there says its
+        // path (a listing's URLs resolve links: /private/var for /var).
+        let names = (try? files.contentsOfDirectory(atPath: backupsFolder.path)) ?? []
+        return names.map { backupsFolder.appendingPathComponent($0, isDirectory: true) }.compactMap { folder in
             guard let data = files.contents(atPath: folder.appendingPathComponent("backup.json").path),
                   let backup = SessionBackup(json: parseJSON(String(decoding: data, as: UTF8.self)) ?? .null) else { return nil }
             // Found where it is now, whatever path it was made at.
