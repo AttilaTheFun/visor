@@ -75,6 +75,14 @@ extension VisorServer {
         }
         let url = move.folder.appendingPathComponent(file, isDirectory: false)
         let offset = body.offset ?? 0
+        // The last piece sent again (its answer lost on the way back): what
+        // is here already ends with the same bytes, so it is taken as written.
+        let size = Self.fileSize(url)
+        if offset < size, offset + data.count == size, Self.endsWith(url, data) {
+            var e = Envelope(type: "migration")
+            e.offset = size
+            return e
+        }
         if offset == 0 { _ = FileManager.default.createFile(atPath: url.path, contents: nil) }
         guard Self.fileSize(url) == offset, let handle = try? FileHandle(forWritingTo: url) else {
             return .error("That piece does not follow on from what was written (\(Self.fileSize(url)) bytes).")
@@ -205,6 +213,15 @@ extension VisorServer {
         saveArchive()
         broadcastSessions()
         return record
+    }
+
+    /// Whether the file at `url` ends with `data`.
+    static func endsWith(_ url: URL, _ data: Data) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        let size = fileSize(url)
+        guard size >= data.count, (try? handle.seek(toOffset: UInt64(size - data.count))) != nil else { return false }
+        return (try? handle.read(upToCount: data.count)) == data
     }
 
     /// `path` from a computer whose home folder is `from`, on this one
