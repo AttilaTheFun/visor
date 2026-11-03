@@ -55,6 +55,10 @@ public final class SessionMigration: Identifiable {
 
     /// How much of a file is carried at a time.
     static let piece = 4 << 20
+    /// How long to wait before each new try of a piece whose request was
+    /// cut short (the connection lost: a phone's SSH tunnel, a network
+    /// that came and went), in milliseconds; then the move fails.
+    static let retryDelays: [Int32] = [1_000, 3_000, 10_000]
 
     public init(session: SessionInfo, from: AgentServerConnection, to: AgentServerConnection) {
         id = from.id + "|" + session.id + "|" + to.id
@@ -148,12 +152,34 @@ public final class SessionMigration: Identifiable {
         }
         var offset = 0
         while offset < file.size {
-            let piece = try await from.server.migrationRead(offer, file: file.id, offset: offset, length: min(Self.piece, file.size - offset))
+            let at = offset
+            let piece = try await retrying {
+                try await self.from.server.migrationRead(offer, file: file.id, offset: at, length: min(Self.piece, file.size - at))
+            }
             guard piece.next > offset else { throw AgentServerError.message("\(file.id) ended early, at \(offset) bytes") }
-            try await to.server.migrationWrite(plan, file: file.id, offset: offset, data: piece.data)
+            // Written again after a lost answer, the piece is taken as the
+            // server has it (it accepts a piece it already holds).
+            try await retrying { try await self.to.server.migrationWrite(plan, file: file.id, offset: at, data: piece.data) }
             carried += piece.next - offset
             offset = piece.next
             progress = min(0.99, Double(carried) / Double(total))
+        }
+    }
+
+    /// `step` tried again after a lost connection, a few times with a wait
+    /// between (retryDelays); a server's refusal (its own words) is not tried
+    /// again.
+    private func retrying<T>(_ step: () async throws -> T) async throws -> T {
+        var waits = Self.retryDelays[...]
+        while true {
+            do {
+                return try await step()
+            } catch let refusal as AgentServerError {
+                throw refusal
+            } catch {
+                guard let wait = waits.popFirst() else { throw error }
+                await to.server.delay(milliseconds: wait)
+            }
         }
     }
 

@@ -195,6 +195,32 @@ final class MigrationTests: ServerTestCase {
         XCTAssertEqual(try Data(contentsOf: placed), try Data(contentsOf: file))
     }
 
+    /// A piece written again after its answer was lost (a phone's tunnel
+    /// dropping mid-move) is taken as written, the same bytes; other bytes
+    /// at a place already written are refused.
+    func testAPieceSentAgainIsTakenAsWritten() throws {
+        let folder = home.appendingPathComponent("move-in", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let info = SessionInfo(id: "S", agent: .claude, cwd: home.path, title: "Moving", created: 0)
+        let offer = MigrationOffer(token: "t", from: "Mini", session: info, resumeID: conversation, home: home.path, files: [], projects: [])
+        server.migrationsIn["p"] = IncomingMigration(offer: offer, plan: MigrationPlan(id: "p", cwd: home.path, agentInstalled: true, steps: []),
+                                                     folder: folder, created: Date())
+        func write(_ text: String, at offset: Int) -> Envelope {
+            var e = Envelope(type: "migration")
+            e.migration = "p"
+            e.file = MigrationFile(id: "conversation-0", place: "", size: 0, packed: false)
+            e.offset = offset
+            e.data = Data(text.utf8).base64EncodedString()
+            return server.migrationWrite(e)
+        }
+        XCTAssertEqual(write("first,", at: 0).offset, 6)
+        XCTAssertEqual(write("second", at: 6).offset, 12)
+        XCTAssertEqual(write("second", at: 6).offset, 12, "sent again: taken")
+        XCTAssertEqual(write("SECOND", at: 6).type, "error", "other bytes")
+        XCTAssertEqual(write(".", at: 12).offset, 13)
+        XCTAssertEqual(try String(contentsOf: folder.appendingPathComponent("conversation-0"), encoding: .utf8), "first,second.")
+    }
+
     func testAnOfferNeedsAConversation() async {
         server.sessions = [SessionRecord(info: SessionInfo(id: "N", agent: .claude, cwd: "/tmp", title: "New", created: 0),
                                          process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))]
