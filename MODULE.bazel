@@ -71,18 +71,20 @@ single_version_override(
 # are registered for Linux alone, by the builder that has the SDKs
 # (.bazelrc's apple_on_linux, turned on in .bazelrc.user), so a Mac builds
 # as before and a Linux without them builds what runs on Linux.
-# From the project's registry: its main at f223f0f (upstream's main at its
-# #249: Xcode 27.2; XCTest binaries built on Linux link, with XCTest's
+# From the project's registry: its main at 22d7d5b (upstream's main at its
+# #256: Xcode 27.2; XCTest binaries built on Linux link, with XCTest's
 # re-exports, and run on a Mac, their run path reaching the installed
 # Xcode's usr/lib; its Swift toolchain takes rules_swift's module mapping
 # and --@rules_swift//swift:copt, which Isomer's compiled SwiftUI needs),
 # for every module (rules_apple asks for 0.0.3, which no registry holds).
+# Its own rules_apple patch for imported dynamic frameworks (ditto off a
+# Mac) is not in the override above: Visor imports none.
 # Its actool and coremlc take Xcode 27.0 or 27.2 alone (else
 # --config=relax_xcode_version).
-bazel_dep(name = "rules_applecross", version = "0.0.3.f223f0f")
+bazel_dep(name = "rules_applecross", version = "0.0.3.22d7d5b")
 single_version_override(
     module_name = "rules_applecross",
-    version = "0.0.3.f223f0f",
+    version = "0.0.3.22d7d5b",
 )
 apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
 # The Swift that built Xcode 27.2's SDKs.
