@@ -79,7 +79,7 @@ if [ -n "$here" ]; then
     memory_watch_report "container_blue_web"
     exit "$status"
 fi
-exec "$OSS" machine run container --image="$IMAGE" --cpus=6 --memory=16 \
+exec "$OSS" machine run container --image="$IMAGE" --cpus=6 --memory=12 \
     --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:64:keep" \
     --inside --cache="$host" -- \
     bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT"
