@@ -6,8 +6,16 @@ pixels red over a faded copy of the reference, and an HTML report.
   pngdiff.py compare <reference.png> <capture.png> <diff.png>   -> prints changed-pixel count
   pngdiff.py report <run dir>                                   -> writes <run dir>/report.html
   pngdiff.py crop <in.png> <x> <y> <width> <height> <out.png>   -> the rectangle, in pixels
+  pngdiff.py width <in.png>                                     -> prints its width in pixels
 """
 import html, os, struct, sys, zlib
+
+def width(path):
+    """The picture's width in pixels, from its header alone (IHDR comes
+    first: bytes 16 to 20 of the file)."""
+    data = open(path, "rb").read(24)
+    assert data[:8] == b"\x89PNG\r\n\x1a\n" and data[12:16] == b"IHDR", path
+    return struct.unpack(">I", data[16:20])[0]
 
 def read_png(path):
     data = open(path, "rb").read()
@@ -125,3 +133,5 @@ if __name__ == "__main__":
         report(sys.argv[2])
     elif sys.argv[1] == "crop":
         crop(sys.argv[2], *(int(v) for v in sys.argv[3:7]), sys.argv[7])
+    elif sys.argv[1] == "width":
+        print(width(sys.argv[2]))

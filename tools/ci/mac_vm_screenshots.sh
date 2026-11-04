@@ -96,7 +96,7 @@ mac_screen() {
     frame="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "mac_screenshots" && $2 == 0 { a = $5 * $6; if (a > best) { best = a; f = int($3) " " int($4) " " int($5) " " int($6) } } END { print f }')"
     points="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "Window Server" { print int($5); exit }')"
     [ -n "$frame" ] && [ -n "$points" ] || { echo "no window of mac_screenshots on the screen" >&2; return 1; }
-    pixels="$(sips -g pixelWidth "$whole" | awk '/pixelWidth/ { print $2 }')"
+    pixels="$(python3 "$ROOT/tools/isomer/snapshots/pngdiff.py" width "$whole")" || return 1
     scale=$(( pixels / points ))
     read -r x y w h <<< "$frame"
     python3 "$ROOT/tools/isomer/snapshots/pngdiff.py" crop "$whole" $(( x * scale )) $(( y * scale )) $(( w * scale )) $(( h * scale )) \
