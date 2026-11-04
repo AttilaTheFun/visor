@@ -22,6 +22,6 @@ is tools/containers: the container host makes each one.)
   The Xcode build's last lines say what it has (`xcode:`, `ios:`, `git:`,
   `bazelisk:`): the Xcode and iOS versions must be the config's. (With
   `OSS_XCODE_VERSION` in its environment, the script checks both itself.)
-  The older `dev` and `xcode-27.0` macOS images stay until CI's Mac jobs
-  (tools/ci/mac_vm.sh) lease `xcode_27_2`.
+  `xcode_27_2` is the Xcode config CI's Mac jobs lease (tools/ci/mac_vm.sh);
+  the older `xcode-27.0` image is gone.
 

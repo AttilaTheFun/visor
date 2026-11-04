@@ -1120,8 +1120,9 @@ nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
 rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 
-CI makes the proof: its `proof` job, on the repository's own runner
-(`visor-ci`, which a fork's pull request never reaches), runs
+CI makes the proof: its `proof` job, on a runner of the Mac whose OS Server
+leases its container (`oss-container`, which a fork's pull request never
+reaches), runs
 `tools/ci/ios_lease_proof.sh`. That builds the iPhone app and its probe on
 Linux, in a container leased from OS Server (`tools/ci/container_build.sh`
 with `VISOR_CI_PACKAGE`), and runs the probe on an iOS lease (`oss machine
