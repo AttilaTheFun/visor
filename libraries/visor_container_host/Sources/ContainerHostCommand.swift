@@ -103,6 +103,9 @@ public enum ContainerHostCommand {
         guard !request.name.isEmpty, request.name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }) else {
             return failure("\(request.name) can't name a container")
         }
+        // The volumes made for it here: a container that doesn't come up
+        // takes them with it, as it found none.
+        var new: [HostRequest.Volume] = []
         // Asked again for one it made: that one, started if it had stopped.
         if let had = inspected(request.name, container: container) {
             guard had.labels[specLabel] == spec(of: request) else {
@@ -112,7 +115,6 @@ public enum ContainerHostCommand {
                 return failure("\(request.name) is there but doesn't start")
             }
         } else {
-            var new: [HostRequest.Volume] = []
             for volume in request.volumes {
                 switch ensure(volume, container: container) {
                 case .kept: break
@@ -125,6 +127,7 @@ public enum ContainerHostCommand {
             guard made.status == 0 else {
                 let said = made.said
                 let missing = said.localizedCaseInsensitiveContains("not found") || said.localizedCaseInsensitiveContains("pull")
+                discard(new, container: container)
                 return failure("Could not make \(request.name) from \(request.image): \(said)", code: missing ? "noImage" : nil)
             }
         }
@@ -140,7 +143,13 @@ public enum ContainerHostCommand {
             if attempt < tries - 1 { Thread.sleep(forTimeInterval: pause) }
         }
         _ = container.run(["delete", "--force", request.name])
+        discard(new, container: container)
         return failure("\(request.name) was made but resolves no names: its network doesn't work", code: "network")
+    }
+
+    /// The volumes a create made, deleted when its container didn't come up.
+    static func discard(_ volumes: [HostRequest.Volume], container: AppleContainer) {
+        for volume in volumes { _ = container.run(["volume", "delete", volume.name]) }
     }
 
     /// What `ensure` did about a volume.

@@ -204,6 +204,14 @@ final class ContainerHostCommandTests: XCTestCase {
         XCTAssertEqual(made.status, 1)
         XCTAssertEqual(made.json["code"] as? String, "noImage")
         XCTAssertTrue((made.json["error"] as? String ?? "").contains("image not found"))
+        // The volume it made for it goes with it.
+        XCTAssertTrue(fake.calls.contains("volume delete visor-s1-build"))
+        XCTAssertFalse(fake.has("volume-visor-s1-build"))
+
+        // One it found, a container made again's disk, stays.
+        try fake.set("volume-visor-s1-build", "137438953472")
+        _ = ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0)
+        XCTAssertTrue(fake.has("volume-visor-s1-build"))
     }
 
     func testOneThatResolvesNothingIsNotHandedOver() throws {
@@ -214,6 +222,7 @@ final class ContainerHostCommandTests: XCTestCase {
         XCTAssertEqual(fake.calls.filter { $0.contains("getent") }.count, 2)
         XCTAssertTrue(fake.calls.contains("delete --force visor-s1"))
         XCTAssertFalse(fake.has("running-visor-s1"))
+        XCTAssertFalse(fake.has("volume-visor-s1-build"), "and the volume made for it")
     }
 
     func testCreateRefusesWhatIsNotARequest() throws {

@@ -174,8 +174,16 @@ extension VisorServer {
         }
         let pictures = AgentImages.directory.path
         mounts.append(Mount(source: pictures, destination: pictures, readOnly: true))
-        mounts.append(Mount(source: tools.path, destination: ContainerPlacement.toolsFolder, readOnly: true))
-        if let programs { mounts.append(Mount(source: programs.path, destination: ContainerPlacement.programsFolder, readOnly: true)) }
+        // Visor's programs, whose agents' host is the MCP server, else the
+        // tools' folder with the script for the image's Node. Never both:
+        // the programs' folder is inside the tools', which is read-only, so
+        // the runtime could not make its mount point there (Apple's
+        // container: "mount failed with errno 30").
+        if let programs {
+            mounts.append(Mount(source: programs.path, destination: ContainerPlacement.programsFolder, readOnly: true))
+        } else {
+            mounts.append(Mount(source: tools.path, destination: ContainerPlacement.toolsFolder, readOnly: true))
+        }
         return mounts
     }
 
