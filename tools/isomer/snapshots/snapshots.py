@@ -12,10 +12,6 @@ pixels are painted red in a diff next to them (report.html).
 
 Targets:
   web-mobile   the web client in Mobile Safari, on an iOS simulator
-  ios          blue's iPhone app (the WasmKit one), on an iPhone 17 with iOS 27,
-               pictured by tests/isomer_ios_fixture as red's CI pictures red's, so
-               the review server holds each picture against red's (parity)
-  ios-landscape  the same, on its side (filed as target ios, landscape)
   red-ios      red Visor's iOS app on web-mobile's simulator, for a look at
                red beside blue here (not published: red's runs are its own)
   android      the Android app, on the hermetic emulator (booted if none)
@@ -31,11 +27,9 @@ Targets:
   macos        the macOS app, on the same lease, its window cropped from the
                machine's screenshot
 
-In CI (tools/ci/blue_ios_lease.sh) the iOS targets run on an iOS lease of
-OS Server's, the apps built on Linux: VISOR_SNAPSHOT_IOS_PICTURES names the
-folder the fixture probe's pictures were exported to (portrait/ and
-landscape/, from its runs' result bundles), VISOR_SNAPSHOT_IOS_LEASE the
-lease web-mobile drives (`oss machine simctl`, its screenshots), and
+In CI (tools/ci/blue_ios_lease.sh) web-mobile runs on an iOS lease of OS
+Server's, the web site built on Linux: VISOR_SNAPSHOT_IOS_LEASE names the
+lease it drives (`oss machine simctl`, its screenshots), and
 VISOR_SNAPSHOT_WEB_SITE the web site built there.
 
 Nothing here touches this Mac's own screen: Safari and the Mac app run on the
@@ -51,7 +45,7 @@ sys.path.insert(0, HERE)
 import pngdiff
 
 REFERENCES = os.path.join(ROOT, "tests", "snapshots")
-TARGETS = ["web-mobile", "ios", "ios-landscape", "android", "web-desktop", "macos"]
+TARGETS = ["web-mobile", "android", "web-desktop", "macos"]
 SCREENS = ["sessions", "chat", "inspector", "models", "search", "connect", "goal", "earlier", "question", "new-session", "commands"]
 IOS_BUNDLE = "com.LoganShire.Visor"
 ANDROID_PACKAGE = "com.loganshire.visor"
@@ -154,7 +148,6 @@ def serve(directory, host, port):
 # CI's: the iOS lease web-mobile drives, the pictures the fixture probe
 # took on it, and the web site, all made by tools/ci/blue_ios_lease.sh.
 IOS_LEASE = os.environ.get("VISOR_SNAPSHOT_IOS_LEASE", "")
-IOS_PICTURES = os.environ.get("VISOR_SNAPSHOT_IOS_PICTURES", "")
 WEB_SITE = os.environ.get("VISOR_SNAPSHOT_WEB_SITE", "")
 OSS = os.environ.get("OSS", "/Applications/OS Server.app/Contents/Helpers/oss")
 
@@ -326,70 +319,6 @@ class RedIOS:
         recording.stop()
     def finish(self):
         sh(["xcrun", "simctl", "terminate", self.udid, IOS_BUNDLE], check=False)
-
-class IOS:
-    """Blue's iPhone app, its fixture screens pictured by tests/isomer_ios_fixture
-    (an XCUITest that takes them as red's probe takes red's) on a
-    simulator the test's runner makes for the run and deletes after: an
-    iPhone 17 on iOS 27 with red's CI status bar, so each picture can be
-    held against red's same-named one. One test run pictures every screen;
-    `capture` hands each picture over."""
-    describe = {"app": "Visor Isomer", "device": "iOS simulator (iPhone 17, iOS 27)", "orientation": "portrait"}
-    status_bar = IOS_STATUS_BAR
-    # What the review store files it as: red's iPhone runs are target ios
-    # in each orientation.
-    manifest_target = "ios"
-    case = "BlueFixtureShots/testFixtureScreens"
-    pictures = "/private/tmp/visor_isomer_fixture"
-
-    # Where CI's lease runs left the pictures, by orientation.
-    orientation = "portrait"
-
-    def prepare(self):
-        if IOS_PICTURES:
-            # CI's: the probe ran on an iOS lease, its pictures exported from
-            # its result bundle (tools/ci/blue_ios_lease.sh).
-            self.pictures = os.path.join(IOS_PICTURES, self.orientation)
-            log_file = os.path.join(IOS_PICTURES, f"{self.orientation}.log")
-            self.log = open(log_file).read() if os.path.exists(log_file) else ""
-            if not os.path.isdir(self.pictures):
-                raise RuntimeError(f"no {self.orientation} pictures in {IOS_PICTURES}")
-            return
-        remove(self.pictures)
-        done = subprocess.run(["bazel", "test", "-c", "opt", "--ios_multi_cpus=sim_arm64", *EXTRA_FLAGS,
-                               "//tests/isomer_ios_fixture:fixture_shots", "--spawn_strategy=local", "--nocache_test_results",
-                               "--test_output=errors", f"--test_filter={self.case}",
-                               # No simulator diagnostics gathered after the
-                               # test (minutes, and read as a hang).
-                               "--test_arg=--xcodebuild_args=-collect-test-diagnostics", "--test_arg=--xcodebuild_args=never"],
-                              cwd=ROOT, capture_output=True, text=True)
-        self.log = done.stdout + done.stderr
-        simulator = os.path.join(self.pictures, "simulator.txt")
-        if os.path.exists(simulator):
-            log(f"{self.manifest_target} fixture simulator: {open(simulator).read().strip()}")
-        if done.returncode != 0:
-            log("ios fixture probe failed:", " | ".join(l for l in self.log.splitlines() if "error:" in l and "warning" not in l)[-600:])
-            if not os.path.isdir(self.pictures):
-                raise RuntimeError("the fixture probe took no pictures")
-    def capture(self, screen, out):
-        picture = os.path.join(self.pictures, f"fixture-{screen}.png")
-        if not os.path.exists(picture):
-            raise RuntimeError(f"no picture of {screen}")
-        shutil.copy(picture, out)
-    def check(self, screen):
-        # The probe's own check: the search's matches in messages came.
-        if screen == "search" and "the search found no messages" in self.log:
-            return ["the search found no messages"]
-        return []
-    def finish(self):
-        pass
-
-class IOSLandscape(IOS):
-    describe = {**IOS.describe, "orientation": "landscape"}
-    case = "BlueFixtureShots/testFixtureScreensLandscape"
-    orientation = "landscape"
-    # On its side an iPhone shows no status bar.
-    status_bar = 0
 
 # --- the Android emulator
 
@@ -680,7 +609,7 @@ class MacOS:
     def finish(self):
         guest("pkill -x Visor; true", check=False)
 
-KINDS = {"web-mobile": WebMobile, "ios": IOS, "ios-landscape": IOSLandscape, "red-ios": RedIOS, "android": Android, "android-lab": AndroidLab,
+KINDS = {"web-mobile": WebMobile, "red-ios": RedIOS, "android": Android, "android-lab": AndroidLab,
          "android-lab-landscape": AndroidLabLandscape, "web-desktop": WebDesktop, "macos": MacOS}
 
 def blue_version():

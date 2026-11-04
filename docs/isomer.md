@@ -5,11 +5,12 @@
 > ([Isomer](https://github.com/AttilaTheFun/isomer)): their behaviour will
 > change without notice, and nothing here is supported.
 
-Blue Visor (com.LoganShire.VisorIsomer, the blue icon) is the same client as
-red Visor — libraries/visor_client, visor_services and visor_ui, the same
-SwiftUI source — carried by Isomer to the web, Android, Linux and Windows,
-and to the iPhone as WebAssembly. It was its own repository, visor_isomer,
-until 0.37. One release ships red and blue.
+Blue Visor (the blue icon) is the same client as red Visor —
+libraries/visor_client, visor_services and visor_ui, the same SwiftUI
+source — carried by Isomer to the web, Android, Linux and Windows. It was
+its own repository, visor_isomer, until 0.37, and had iPhone apps of its own
+(com.LoganShire.VisorIsomer: WasmKit, and compiled against Isomer's
+frameworks) until 4 Nov 2026. One release ships red and blue.
 
 ## The parts
 
@@ -24,8 +25,8 @@ until 0.37. One release ships red and blue.
   settings and the rest a host gives) as swift_ffi interfaces a host
   implements across a boundary: `SocketBridge`, `HttpBridge`,
   `SettingsBridge` and so on. `installBridgedVisorServices` reads them
-  from the injected dependency dictionary (the browser, the iPhone's
-  WasmView); `installVisorBridges` takes them directly (Android's Kotlin).
+  from the injected dependency dictionary (the browser);
+  `installVisorBridges` takes them directly (Android's Kotlin).
 - **libraries/visor_pasteboard_isomer**, **libraries/visor_camera_isomer**:
   the defaults of `//:pasteboard` and `//:camera`, Isomer's `Clipboard` and
   `cameraCapture` where SwiftUI is Isomer's and visor's own libraries
@@ -39,21 +40,11 @@ until 0.37. One release ships red and blue.
 - **applications/visor_android**: VisorServices.kt implements the bridges
   over an SSL socket (a small RFC 6455 client of its own), HttpURLConnection
   and SharedPreferences.
-- **applications/visor_isomer_ios**: blue on the iPhone and iPad, the client
-  as a wasm reactor interpreted by WasmKit in a native iOS 18 shell
-  (VisorIsomerServices.swift serves the bridges). Its reactor is built
-  threaded (wasm32-unknown-wasip1-threads) and single-threaded; it runs the
-  threaded one where WasmKit can make a shared memory.
-- **applications/visor_isomer_compiled_ios**: the same client compiled
-  natively against Isomer's frameworks (isomer's `isomer_compiled_feature`),
-  drawn by Apple's SwiftUI through Isomer's WasmView; iOS 16. Its screens are
-  held against red's (launch it with `-visor.fixture snapshot
-  -visor.fixture.screen <screen>`).
 - **applications/visor_client_linux**, **applications/visor_client_windows**:
   visor_services' native implementations compiled for that platform's
   Foundation. Built on those hosts; unverified from a Mac.
-- **artwork/visor_isomer_icon**: blue's icon, from red's Icon Composer
-  document.
+- **artwork/visor_isomer_icon**: blue's icon (Android's launcher icon), from
+  red's Icon Composer document.
 
 ## Building
 
@@ -63,8 +54,6 @@ builds with the default; the tools below pass `-c opt` themselves.
 
     bazel build -c opt //applications/visor_web:visor_web_site
     bazel build -c opt //applications/visor_android:visor_android_apk
-    bazel build -c opt //applications/visor_isomer_ios --ios_multi_cpus=sim_arm64
-    bazel build -c opt //applications/visor_isomer_compiled_ios --ios_multi_cpus=sim_arm64
     tools/isomer/package_site.sh    # visor-isomer-site.tar.gz, for a release
 
 ## Rules
@@ -80,8 +69,8 @@ builds with the default; the tools below pass `-c opt` themselves.
   the environment (`suggestionsInPopover`).
 - What the guest needs from its host (sockets, HTTP, settings, dictation,
   networks) goes through the bridges in libraries/visor_services_ffi, which
-  each host implements (index.html on the web, VisorServices.kt on Android,
-  VisorIsomerServices.swift on iOS).
+  each host implements (index.html on the web, VisorServices.kt on
+  Android).
 - The web build is 32-bit (wasm32: `Int` is 32 bits, and `Int(Double)`
   traps out of range): the end-to-end test's stand-in server sends numbers
   a 32-bit client can't hold, and the client must survive them.
@@ -97,10 +86,9 @@ request and every commit to main:
 - The APK (arm64) is built in the `container` job's build, in a container
   of Visor's agent image (tools/ci/container_build.sh). The emulator flow and
   the Android transcript and composer checks are in the local CI for now.
-- `blue-ios` (the release Mac, each commit to main only: its snapshots are
-  proof-like): the WasmKit and compiled iPhone apps built for the
-  simulator, and the snapshots of the iPhone in both orientations
-  and of Mobile Safari, against tests/snapshots.
+- `blue-ios` (each commit to main only: its snapshots are proof-like): the
+  web site built on Linux, and the snapshots of Mobile Safari on an iOS
+  lease, against tests/snapshots.
 
 The harnesses take Chrome from `$CHROME` where it isn't at its usual place,
 and `VISOR_SNAPSHOT_RUN_DIR` says where a snapshot run goes.
@@ -169,12 +157,6 @@ flow takes it too.
 
 - `web-mobile`: the web client in Mobile Safari on the harness's own
   simulator, `visor-snapshots`, made if missing and shut down after.
-- `ios`, `ios-landscape`: blue's iPhone app (applications/visor_isomer_ios),
-  pictured by tests/isomer_ios_fixture, an XCUITest that takes the fixture's
-  screens as red's own probe takes red's, on an iPhone 17 with iOS 27 and the
-  same status bar, a simulator its runner makes and deletes. Filed as target
-  `ios` in each orientation, so a review server can hold each picture
-  against red's.
 - `android`: the hermetic emulator (emulator-5554, booted if none).
 - `android-lab`, `android-lab-landscape`: a leased lab phone, only inside a
   lease (`ANDROID_SERIAL` and the lab's adb from it), with references of

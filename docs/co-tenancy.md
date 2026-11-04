@@ -88,7 +88,8 @@ Logan (1 November): Visor.app is the Visor Runner and Visor for macOS in one.
     fresh and paired again. Its push topic changes with it, which the server
     learns when the device registers. Its widget and share extension move
     under the new id.
-  - Blue Visor (`com.LoganShire.VisorIsomer`) is Isomer's, and not part of this.
+  - Blue Visor's iPhone app (`com.LoganShire.VisorIsomer`) is gone (4 Nov
+    2026): blue is the web and Android, and not part of this.
 
 ## The parts
 

@@ -118,9 +118,7 @@ Android.
 
 Blue Visor, the same client on Isomer, is built here too: the web client
 (applications/visor_web, at https://attilathefun.github.io/visor/app/),
-Android (applications/visor_android), the iPhone as WebAssembly
-(applications/visor_isomer_ios) and natively against Isomer
-(applications/visor_isomer_compiled_ios), Linux and Windows
+Android (applications/visor_android), Linux and Windows
 (applications/visor_client_linux, …_windows). docs/isomer.md says how.
 
 ## Security

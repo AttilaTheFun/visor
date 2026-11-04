@@ -3,14 +3,9 @@ package(default_visibility = ["//visibility:public"])
 # Visor's Icon Composer document (//artwork/app-icon) with the visor
 # bar recoloured, one colour per way the client is built:
 #   red    — compiled (Visor's own apps),
-#   blue   — this one: the client as wasm, compiled ahead of time, in an iOS
-#            16 shell (com.LoganShire.VisorIsomer),
+#   blue   — this one: the client on Isomer (Android's launcher icon, below),
 #   yellow — an internal fork at work.
 # Only Assets/Visor.svg differs from Visor's; keep the rest in step with it.
-filegroup(
-    name = "app_icon",
-    srcs = glob(["VisorIsomer.icon/**"]),
-)
 
 # The Android launcher icon: the document's iOS rendition at 192 px, made
 # with Icon Composer's command-line tool and sips:

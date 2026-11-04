@@ -10,11 +10,9 @@
 # Suites, in order (all by default):
 #   test              bazel test //...
 #   snapshots         the fixture's screens on web-mobile (Mobile Safari in
-#                     the visor-snapshots simulator), android (the hermetic
-#                     emulator) and blue's iPhone app in each orientation
-#                     (ios, ios-landscape: tests/isomer_ios_fixture, as red's CI
-#                     pictures red's), against tests/snapshots; any change
-#                     fails until accepted
+#                     the visor-snapshots simulator) and android (the hermetic
+#                     emulator), against tests/snapshots; any change fails
+#                     until accepted
 #   layout-web        the transcript's code blocks and pictures in headless Chrome
 #   composer-web      AgentUI's composer typed into in headless Chrome
 #   layout-android    the same on the emulator
@@ -58,7 +56,7 @@ verdict() {
 for suite in "${SUITES[@]}"; do
   case "$suite" in
     test) $CHECK local/test -- bazel test //... ;;
-    snapshots) $CHECK local/snapshots -- python3 tools/isomer/snapshots/snapshots.py run --targets web-mobile,android,ios,ios-landscape ;;
+    snapshots) $CHECK local/snapshots -- python3 tools/isomer/snapshots/snapshots.py run --targets web-mobile,android ;;
     layout-web) bazel build -c opt //applications/visor_web:visor_web_site >/dev/null 2>&1
       $CHECK local/layout-web -- node tools/isomer/e2e/transcript_layout_check.js "$(SITE)" ;;
     composer-web) bazel build -c opt //applications/visor_web:visor_web_site >/dev/null 2>&1

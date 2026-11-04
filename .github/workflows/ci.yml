@@ -350,15 +350,12 @@ jobs:
           path: review
           if-no-files-found: ignore
 
-  # Blue Visor on the iPhone, on each commit to main (its snapshots are
-  # proof-like): the WasmKit app, the one compiled against Isomer's
-  # frameworks, its fixture probe and the web site built in a Linux
-  # container, then pictured on iOS leases (tools/ci/blue_ios_lease.sh): the
-  # fixture's screens in each orientation and the web client's in Mobile
-  # Safari, against tests/snapshots. On the Mac whose OS Server leases the
-  # build's container, which mounts this checkout, and serves the web site
-  # to the lease's simulator on its loopback; Xcode there reads the result
-  # bundles.
+  # Blue Visor's web client on the iPhone, on each commit to main (its
+  # snapshots are proof-like): the web site built in a Linux container, then
+  # pictured in an iOS lease's Mobile Safari (tools/ci/blue_ios_lease.sh),
+  # against tests/snapshots. On the Mac whose OS Server leases the build's
+  # container, which mounts this checkout, and serves the web site to the
+  # lease's simulator on its loopback.
   blue-ios:
     # main's commits, and by hand (with the proof): a branch's run tries it
     # before it merges.
