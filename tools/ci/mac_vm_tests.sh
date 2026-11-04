@@ -89,8 +89,12 @@ rewrite ported-tools\.invalid/sha256/(.*) http://$host:7490/files/sha256/\$1
 EOF
 echo "::group::The tests, built on Linux"
 echo "This container: $(nproc) CPUs, $(awk '/MemTotal/ { printf "%.1f GB", $2 / 1048576 }' /proc/meminfo 2> /dev/null) memory"
+# And how much memory the build took (tools/ci/memory_watch.sh).
+. "$ROOT/tools/ci/memory_watch.sh"
+memory_watch_start
 run bash -c 'cd "$0" && exec tools/ci/build_mac_tests.sh "$@"' "$ROOT" "$work/mac-tests.tar.gz" \
     --config=apple_on_linux --downloader_config="$work/downloader.cfg"
+memory_watch_report "the Mac tests' build"
 mkdir "$work/tests"
 tar -xzf "$work/mac-tests.tar.gz" -C "$work/tests"
 echo "::endgroup::"

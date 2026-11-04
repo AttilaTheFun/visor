@@ -666,10 +666,13 @@ in Visor Server's Contents/Helpers to be linked there); with neither,
 sessions run on the computer only and New Session offers no containers
 (`containersAvailable`, from the
 host's `health`). VisorServer+Containers.swift asks the host to `create`
-one from Visor's image (tools/containers/visor-agent, published by CI's
-agent-image job as `ghcr.io/attilathefun/visor-agent:<version>` and
-`:<MAJOR.MINOR>`; a server asks for its own version's, `visor-server
-containers image <ref>` for another) with the size the session asked for
+one from Visor's image (tools/containers/visor-agent's runtime target,
+published by CI's agent-image job as `ghcr.io/attilathefun/visor:<version>`,
+`:<MAJOR.MINOR>` and `:latest`: Claude Code, Codex, openrouter, Node, git,
+ssh, tmux, no toolchains; its build target, with them, is
+`ghcr.io/attilathefun/visor-agent`, CI's and the co-tenant's; a server asks
+for its own version's, `visor-server containers image <ref>` for another,
+any image at all) with the size the session asked for
 (ContainerSize: 6 cores, 16 GB of memory and 128 GB of disk unless asked
 otherwise, fitted to the host's `limits`, else what the computer has; the disk is a volume,
 `visor-<session>-build` at /var/cache/bazel, where the image keeps Bazel's

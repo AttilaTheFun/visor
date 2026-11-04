@@ -239,11 +239,12 @@ jobs:
           PIPELINE_BRANCH: ${{ github.event.pull_request.head.ref }}
           PIPELINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
 
-  # Visor's agent image (tools/containers/visor-agent), which sessions'
-  # containers are made from: built on the release Mac (Apple's container)
-  # and pushed to GitHub's registry as this build's version and its
-  # MAJOR.MINOR (ghcr.io/attilathefun/visor-agent), which a Visor server of
-  # that version asks its OS Server for.
+  # Visor's images (tools/containers/visor-agent/Dockerfile), built on the
+  # release Mac (Apple's container) and pushed to GitHub's registry as this
+  # build's version, its MAJOR.MINOR and latest: its runtime target as
+  # ghcr.io/attilathefun/visor, which a Visor server of that version makes
+  # sessions' containers from, and its build target, with the toolchains, as
+  # ghcr.io/attilathefun/visor-agent, CI's containers' and the co-tenant's.
   agent-image:
     needs: number
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -260,7 +260,7 @@ Each has a folder of the Runner's, `<Runner data>/container-servers/<id>/`:
 {
   "id": "<uuid>",
   "name": "Builds",
-  "image": "ghcr.io/attilathefun/visor-agent:0.45.3",
+  "image": "ghcr.io/attilathefun/visor:0.45.3",
   "cpus": 6,
   "memoryBytes": 17179869184,
   "diskBytes": 137438953472,
@@ -349,6 +349,51 @@ containers are short leases and need nothing special.
   from inside it. Then the container is made again with its volumes kept,
   so its sessions are as they were. A server that has merely stopped is
   started again.
+
+## Container images
+
+Logan (4 November): Visor brings its own Linux programs into whatever image
+a container is made from, so any image can be used; its own image is only
+the default.
+
+- **Visor's programs, mounted.** Visor.app carries `visor-server` and
+  `visor-agent-host` built for Linux (arm64, the Swift runtime linked in,
+  so they need nothing of the image's), in `Contents/Resources/Linux`,
+  signed with the app. Every container Visor makes, a container server's or
+  a session's, has that folder read-only at `/opt/visor/bin`, and Visor
+  runs its own from there, never an image's: the server in a container is
+  always the app's version, and no image is made again for a Visor release.
+- **Visor's MCP tools, in Swift.** `visor-agent-host mcp` is the MCP server
+  every agent is given (its tools, `approve`, and the MCP servers the
+  computer passes on), in place of a Node script: an image needs no Node,
+  and neither does the Mac.
+- **What an image needs:** Linux on arm64, a shell, git, ssh and tmux, and
+  the agents' own command-line tools (`claude`, `codex`, `openrouter`) on
+  its path, at whatever versions it carries. Visor checks for them when it
+  makes a container and says which are missing.
+- **The default:** `ghcr.io/attilathefun/visor:<version>`, published with
+  each release, and `:latest`: Ubuntu, git, ssh, tmux, ripgrep, Python,
+  Claude Code, Codex and openrouter (and Visor's two programs, for anyone
+  running it on its own). Visor uses its own version's.
+- **Another image:** Settings names any image, from any registry: one of
+  the person's own, or their company's with its own build tools (a private
+  registry, ECR say, with a sign-in that Visor runs before it pulls, as
+  `aws ecr get-login-password` gives one for 12 hours).
+- **The build image:** `visor-build`, the default with the Swift
+  toolchain, Bazel, clang, the libraries Isomer's Linux apps link, NSS for
+  headless Chromium, and x86_64 glibc for Android's tools: for CI and for
+  sessions that build. It is published to Shireworks' own registry (OS
+  Server's, Isomer's), which Logan's CI pulls from, not to ghcr.
+- **What is kept:** a container server's home and Bazel's output are
+  volumes (above); a session's container in today's model keeps its
+  agent's home in a volume of its own too, beside the logs it already
+  writes on the Mac. A container is made again from another image with
+  its volumes, when the setting or the app's version changes it, once its
+  sessions aren't mid-turn: their agents resume where they were.
+- **Order:** the MCP tools in Swift; the Linux programs in Visor.app and
+  mounted; the default image published as `visor`; the home volume and
+  remaking a container for a new image; Settings' image and its sign-in;
+  `visor-build` on Shireworks once its registry is there.
 
 ## OS Server
 
