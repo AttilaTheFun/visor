@@ -352,6 +352,7 @@ extension VisorServer {
         broadcast(record.apply(event), session: record)
         noteSubagents(after: event, of: record)
         noteContainer(after: event, of: record)
+        noteContainerUpgrade(after: event, of: record)
         // Nil once the agent has gone.
         if case .memory(nil) = event { noteAgentWent(record) }
         switch event {

@@ -16,7 +16,7 @@ import XCTest
 
 /// A container host played by a script: each call written down, answers as
 /// the test sets them (files beside it: `busy`, `unhealthy`, `nonetwork`,
-/// `listed.json`, `limits.json`).
+/// `listed.json`, `limits.json`, and `refused`: an image it can't get).
 private struct FakeHost {
     let folder: URL
 
@@ -39,6 +39,9 @@ private struct FakeHost {
                 n=$(( $(cat "$dir/count" 2>/dev/null || echo 0) + 1 )); echo $n > "$dir/count"
                 cat > "$dir/request-$n.json"
                 if [ -f "$dir/busy" ]; then echo '{"error":"no room","code":"busy"}'; exit 1; fi
+                if [ -f "$dir/refused" ] && tr -d '\\' < "$dir/request-$n.json" | grep -qF "\"$(cat "$dir/refused")\""; then
+                  echo '{"error":"no such image","code":"noImage"}'; exit 1
+                fi
                 echo "{\"id\":\"c$n\",\"name\":\"made\"}" ;;
               put)
                 cat > "$dir/put-$(echo "$2" | tr '/' '_')"
@@ -192,6 +195,61 @@ final class ContainerTests: ServerTestCase {
         XCTAssertNil(VisorServer.containerPrograms(programs))
     }
 
+    /// A container made from another image than the one the server would
+    /// make it from now is made again from that one once its turn is over,
+    /// its disks kept; mid-turn it waits.
+    func testAContainerFromAnotherImageIsMadeAgainBetweenTurns() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: Self.freePort())
+        defer { server.stop() }
+        let work = root.appendingPathComponent("work").path
+        let made = try await start(server, .startInContainer(id: "u1", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        XCTAssertFalse(server.containerIsBehind(try XCTUnwrap(made.info.container)), "made from the image it would be")
+
+        server.settings.containerImage = "ghcr.io/example/tools:1"
+        XCTAssertTrue(server.containerIsBehind(try XCTUnwrap(made.info.container)))
+        made.info.busy = true
+        server.upgradeContainer(of: made)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(made.info.container?.id, "c1", "not mid-turn")
+
+        server.handle(.busy(false), from: made)
+        for _ in 0..<100 where made.info.container?.id == "c1" { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(made.info.container?.id, "c2")
+        XCTAssertEqual(made.info.container?.image, "ghcr.io/example/tools:1")
+        let again = try host.request(2)
+        XCTAssertEqual(again.image, "ghcr.io/example/tools:1")
+        XCTAssertEqual(again.volumes.map(\.name), ["visor-u1-build", "visor-u1-home"], "the same disks")
+        XCTAssertTrue(host.calls.contains("rm c1"), "the old one removed")
+        XCTAssertFalse(host.calls.contains("rm c1 --volumes"), "its disks kept")
+        XCTAssertTrue(made.notice?.hasPrefix("Its container was made again from ghcr.io/example/tools:1") ?? false, made.notice ?? "no notice")
+        XCTAssertFalse(server.containerIsBehind(try XCTUnwrap(made.info.container)))
+    }
+
+    /// When the image wanted can't be had, the container is made again from
+    /// the one it had, and the new one isn't tried again until another is
+    /// wanted.
+    func testAnImageThatCantBeHadLeavesTheContainerOnItsOwn() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: Self.freePort())
+        defer { server.stop() }
+        let work = root.appendingPathComponent("work").path
+        let made = try await start(server, .startInContainer(id: "u2", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        let old = try XCTUnwrap(made.info.container?.image)
+
+        try host.set("refused", "ghcr.io/example/private:1")
+        server.settings.containerImage = "ghcr.io/example/private:1"
+        server.handle(.busy(false), from: made)
+        for _ in 0..<100 where made.info.container?.id == "c1" { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(made.info.container?.id, "c3", "the new image refused (c2), the old one made again")
+        XCTAssertEqual(made.info.container?.image, old)
+        XCTAssertTrue(made.notice?.hasPrefix("Its container couldn't be made from ghcr.io/example/private:1") ?? false, made.notice ?? "no notice")
+
+        server.handle(.busy(false), from: made)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertThrowsError(try host.request(4), "not tried again")
+    }
+
     /// Visor's image is this build's, published by CI; a build CI did not
     /// number takes its version's latest.
     func testTheImageIsThisVersions() {
@@ -291,7 +349,9 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(standard.info.container?.size, VisorServer.fitted(.standard))
         let first = try host.request(1)
         XCTAssertEqual(first.cpus, VisorServer.fitted(.standard).cpus)
-        XCTAssertEqual(first.volumes, [.init(name: "visor-z1-build", destination: "/var/cache/bazel", sizeBytes: 128 * gigabyte)])
+        XCTAssertEqual(first.volumes, [.init(name: "visor-z1-build", destination: "/var/cache/bazel", sizeBytes: 128 * gigabyte),
+                                       .init(name: "visor-z1-home", destination: "/root", sizeBytes: 32 * gigabyte)],
+                       "Bazel's output, and the agent's home, which a container made again keeps")
 
         let asked = ContainerSize(cpus: 2, memoryBytes: 4 * gigabyte, diskBytes: 64 * gigabyte)
         let sized = try await start(server, .startInContainer(id: "z2", agent: .claude, cwd: work, title: "", skipPermissions: true,

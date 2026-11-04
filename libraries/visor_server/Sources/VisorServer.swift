@@ -227,6 +227,11 @@ public final class VisorServer {
     /// if it was gone or had no network: not twice in a few minutes
     /// (VisorServer+ContainerChecks.swift).
     var containersRemade: [String: ContinuousClock.Instant] = [:]
+    /// The sessions whose containers are being made again from another
+    /// image now, and the image each failed to be made from (not tried
+    /// again until another is wanted: VisorServer+ContainerUpgrades.swift).
+    var containersUpgrading: Set<String> = []
+    var containerUpgradeFailed: [String: String] = [:]
 
     /// The last write of the sessions failed; cleared by the next that works.
     var savingFailed = false

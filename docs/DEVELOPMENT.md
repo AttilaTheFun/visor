@@ -674,7 +674,9 @@ any image at all) with the size the session asked for
 (ContainerSize: 6 cores, 16 GB of memory and 128 GB of disk unless asked
 otherwise, fitted to the host's `limits`, else what the computer has; the disk is a volume,
 `visor-<session>-build` at /var/cache/bazel, where the image keeps Bazel's
-output), with Rosetta for x86_64 programs, labelled with the session and
+output, and the agent's home another, `visor-<session>-home` at /root, 32 GB
+always: its tools' settings and caches and its SSH key outlast the
+container), with Rosetta for x86_64 programs, labelled with the session and
 this server (`visor.session`, `visor.server`). It sees: the session's folder
 at the same path (so its files, git and the agent's own log are the
 computer's), the agent's log folder for that folder (Claude's
@@ -728,7 +730,14 @@ of a container that is gone; VisorServer+ContainerChecks.swift), the host
 is asked whether it still lists the container and what its `network` says;
 a container that is gone or has no network is made again with its disk
 kept, the agent started again there, and the session says so — not twice
-in five minutes. At start the server removes the host's containers of sessions it
+in five minutes. A container made from another image than the one the
+server would make it from now (`wantedContainerImage`: the one set, else
+its own version's, so every update of the server), or without Visor's own
+Linux programs where the computer has them, is made again from it, its
+disks kept, when the server finds its containers and whenever a session's
+turn ends, never mid-turn (VisorServer+ContainerUpgrades.swift); when that
+image can't be had, the container is made again from its own, and the new
+one isn't tried again until another is wanted. At start the server removes the host's containers of sessions it
 no longer has, and a session still in a container OS Server lent (0.43 and
 before, `SessionContainer.socket`) runs on the computer from then on. An
 agent in a container reaches this server over the network (VISOR_URL:
