@@ -1,8 +1,9 @@
 // Sessions whose agents run in Linux containers rather than on this computer
 // directly: each made by this server's container host (docs/container-host.md
 // — the program set in its settings, or `visor-container-host` on the PATH;
-// with neither, sessions run here only), from Visor's agent image
-// (tools/containers/visor-agent, published by CI to ghcr.io), and kept while
+// with neither, sessions run here only), from Visor's image (its runtime
+// target, tools/containers/visor-agent, published by CI to ghcr.io as
+// visor) or the one set, and kept while
 // the session lasts. The agent runs in it under a host of its own, as any
 // agent does, through the container host's `exec`, so it outlives a restart
 // of this server. The container sees the session's folder at the same path,
@@ -23,9 +24,12 @@ extension VisorServer {
     /// The name a container host on the PATH goes by (visor-container-host).
     public nonisolated static let containerHostName = ContainerHost.defaultName
 
-    /// Where Visor's own agent image is published (by CI, for each build
-    /// as its version, and as its MAJOR.MINOR for the latest of those).
-    public nonisolated static let containerImageRepository = "ghcr.io/attilathefun/visor-agent"
+    /// Where Visor's own image is published (by CI, for each build as its
+    /// version, and as its MAJOR.MINOR for the latest of those): its
+    /// runtime image, Claude Code and Codex with what they work with
+    /// (tools/containers/visor-agent/Dockerfile). Visor's own Linux
+    /// programs come mounted, so any other image will do as well.
+    public nonisolated static let containerImageRepository = "ghcr.io/attilathefun/visor"
 
     /// Visor's own image for a server of `version` ("0.40.12"): that
     /// build's, or its MAJOR.MINOR's latest for a build CI did not number

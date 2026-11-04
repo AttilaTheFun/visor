@@ -71,7 +71,7 @@ Makes a container and starts it. Given:
 {
   "api": 1,
   "name": "visor-<session id>",
-  "image": "ghcr.io/attilathefun/visor-agent:0.44.1",
+  "image": "ghcr.io/attilathefun/visor:0.44.1",
   "cpus": 6,
   "memoryBytes": 17179869184,
   "mounts": [{"source": "/Users/me/project", "destination": "/Users/me/project", "readOnly": false}],
