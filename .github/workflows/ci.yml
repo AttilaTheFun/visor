@@ -86,9 +86,9 @@ jobs:
 
   # The tests that need a Mac (the server's Apple side, the client, its
   # views, SSH): their .xctest bundles built on Linux in this job's own
-  # container (tools/ci/build_mac_tests.sh), and only run in a macOS VM
-  # leased from OS Server, which gets the tests alone, no tree and no Bazel
-  # (tools/ci/mac_vm_tests.sh).
+  # container (tools/ci/build_mac_tests.sh), and only run on a slot of OS
+  # Server's primary Mac (`oss machine xctest`), which gets the bundles
+  # alone, no tree and no Bazel (tools/ci/mac_vm_tests.sh).
   test:
     needs: changes
     if: needs.changes.outputs.code == 'true'

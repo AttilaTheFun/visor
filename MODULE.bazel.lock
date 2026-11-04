@@ -626,8 +626,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.66.0.bcr.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/grpc/1.70.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.1.1/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.2/MODULE.bazel": "44aed7b54e03171299f912dd61c47b56597ecce88674917d01dab4c9edc49635",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.2/source.json": "8fa7cc566ec7d438b2b16011d148eebcf5bc7e23d51346fe304e48e99f74ffb4",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.3/MODULE.bazel": "38349926ddc11a81dfd99f43f23212478c7a37467a05e783e3bfcfffa0702cbc",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.39.3/source.json": "940778f0f19696f34911379d7748efaf262cf7792d917d0b93c7ba5049383769",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.4.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jsoncpp/1.9.5/MODULE.bazel": "not found",
@@ -706,8 +706,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_android/0.7.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_android_ndk/0.1.5/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_apple/5.3.1/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.f223f0f/MODULE.bazel": "cebbafe62be5ac1fa1ab05747478da5add888f0a8e81a0a46b30366a8a77e0fd",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.f223f0f/source.json": "96e4d8ea34c54fb63e2363a86d1cde9c184d8d50c4c20d4d3b0a0852ebb717aa",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.a2b0558/MODULE.bazel": "66e41410850dac09a01890f61b14b797399d0ff831f40ecb23079afce7600c68",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_applecross/0.0.3.a2b0558/source.json": "8a757c20a0adea13015e11fb94a1fe02b812d5c5f76ab1367de4c054bc2fc5cf",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.10/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_cc/0.0.13/MODULE.bazel": "not found",
@@ -1001,7 +1001,7 @@
     "@@aspect_rules_ts+//ts:extensions.bzl%ext": {
       "general": {
         "bzlTransitiveDigest": "39Imx8fj/wmgCRC4TUG38yih5rg7z9GUkCWi0sDE+LA=",
-        "usagesDigest": "tbguOEPZnO+eBz2BaqDwtBr/tuRk5OKwbLi7YKeS/Sc=",
+        "usagesDigest": "RBHX8OJ7ob53Toidj6KwxkJookGL+Z169njrmwFbPQ0=",
         "recordedInputs": [
           "REPO_MAPPING:aspect_rules_ts+,aspect_rules_ts aspect_rules_ts+",
           "REPO_MAPPING:aspect_rules_ts+,bazel_tools bazel_tools"
@@ -1519,6 +1519,77 @@
       }
     },
     "@@isomer+//tools/android:extensions.bzl%android_tools": {
+      "os:linux,arch:aarch64": {
+        "bzlTransitiveDigest": "k+KVmZZM9GG6V3/GKQ8lZd6Nm/Rcjal0sh2SCGktwe8=",
+        "usagesDigest": "Qvj/OwEk7jWP5+QZiEo6p2lJcsojE5FgqpAlfrfeclY=",
+        "recordedInputs": [
+          "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
+        ],
+        "generatedRepoSpecs": {
+          "hermetic_jdk": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_linux_hotspot_21.0.5_11.tar.gz",
+              "sha256": "3c654d98404c073b8a7e66bffb27f4ae3e7ede47d13284c132d40a83144bfd8c",
+              "strip_prefix": "jdk-21.0.5+11",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nexports_files([\n    \"Contents/Home/bin/java\",\n    \"Contents/Home/bin/jar\",\n])\n\nfilegroup(\n    name = \"java\",\n    srcs = [\"Contents/Home/bin/java\"],\n)\n\nfilegroup(\n    name = \"all\",\n    srcs = glob([\"Contents/Home/**\"]),\n)\n"
+            }
+          },
+          "kotlin_compiler": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://github.com/JetBrains/kotlin/releases/download/v2.1.20/kotlin-compiler-2.1.20.zip",
+              "sha256": "a118197b0de55ffab2bc8d5cd03a5e39033cfb53383d6931bc761dec0784891a",
+              "strip_prefix": "kotlinc",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nexports_files([\n    \"lib/kotlin-compiler.jar\",\n    \"lib/kotlin-stdlib.jar\",\n    \"lib/annotations-13.0.jar\",\n])\n\nfilegroup(\n    name = \"all\",\n    srcs = glob([\"**\"]),\n)\n"
+            }
+          },
+          "android_build_tools": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://dl.google.com/android/repository/build-tools_r35_linux.zip",
+              "sha256": "bd3a4966912eb8b30ed0d00b0cda6b6543b949d5ffe00bea54c04c81e1561d88",
+              "strip_prefix": "android-15",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nexports_files([\n    \"aapt2\",\n    \"zipalign\",\n    \"lib/d8.jar\",\n    \"lib/apksigner.jar\",\n])\n\nfilegroup(\n    name = \"all\",\n    srcs = glob([\"**\"]),\n)\n"
+            }
+          },
+          "android_platform_jar": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://dl.google.com/android/repository/platform-35_r02.zip",
+              "sha256": "0988cacad01b38a18a47bac14a0695f246bc76c1b06c0eeb8eb0dc825ab0c8e0",
+              "strip_prefix": "android-35",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nfilegroup(\n    name = \"android_jar\",\n    srcs = [\"android.jar\"],\n)\n"
+            }
+          },
+          "android_platform_tools": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://dl.google.com/android/repository/platform-tools_r35.0.2-linux.zip",
+              "sha256": "acfdcccb123a8718c46c46c059b2f621140194e5ec1ac9d81715be3d6ab6cd0a",
+              "strip_prefix": "platform-tools",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nexports_files([\"adb\"])\n\nfilegroup(\n    name = \"all\",\n    srcs = glob([\"**\"]),\n)\n"
+            }
+          },
+          "android_emulator": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://dl.google.com/android/repository/emulator-linux_x64-15565763.zip",
+              "sha256": "6b6eff96c228b96e3feedddf3f5c8e00e84cb66499aaba5a3fd94d74b59d84e1",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nexports_files([\"emulator/emulator\"])\n\nfilegroup(\n    name = \"all\",\n    srcs = glob([\"emulator/**\"]),\n)\n"
+            }
+          },
+          "android_system_image": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "url": "https://dl.google.com/android/repository/sys-img/android/x86_64-34_r04.zip",
+              "sha256": "b57f6386af25b0fe5488e77196b43c03778c6760e6f4311611d090391b9cb2b3",
+              "strip_prefix": "x86_64",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nexports_files([\"system.img\"])\n\nfilegroup(\n    name = \"all\",\n    srcs = glob([\"**\"]),\n)\n"
+            }
+          }
+        }
+      },
       "os:osx,arch:aarch64": {
         "bzlTransitiveDigest": "k+KVmZZM9GG6V3/GKQ8lZd6Nm/Rcjal0sh2SCGktwe8=",
         "usagesDigest": "RXehJqYUjpOuNDciV4vK1l173zvnHsF0xq+X7GKUxxU=",
@@ -1594,7 +1665,7 @@
     "@@isomer+//tools/wasm:extensions.bzl%wasm_tools": {
       "general": {
         "bzlTransitiveDigest": "4sWkWFiytNpozmcCtTYcMkDIhtiS5kjbFGlOVWEzFp8=",
-        "usagesDigest": "lP0LOX7D/bIm/fPCTLK0kMcr7RcUcVvlTfafF3M4vo4=",
+        "usagesDigest": "kB3F0yhiQ2iXZECAk+gR8Hx+KqvpDSl7Jn2krtz/AzU=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -1699,7 +1770,7 @@
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "qHbR00gVzVzkxX+PRtv4UGcUFMtBz7TK9CNYUWH8nIE=",
-        "usagesDigest": "l1jFvZ2kr1OoXc1aGVRkij/93h8rGgDmlMGX76iUwtY=",
+        "usagesDigest": "IdpnbVy/MGqmYj82AYDN5Hlrc0V3sOMluOhORcRMSR8=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "androidsdk": {
@@ -1711,8 +1782,8 @@
     },
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
-        "bzlTransitiveDigest": "qnLvYBz9yC0wKkZ2eTSAz4DlO3gDoqvpjCG6Sus5ahU=",
-        "usagesDigest": "8wctPo7TTiK7QbzXkvZSoo02ftLfki/Y45xpwdfJsuc=",
+        "bzlTransitiveDigest": "Dn35Rw2aSnd5VU9Pwe1h/4fInCmfLfA2tRCvu72hcS0=",
+        "usagesDigest": "UOPtgNBUH/qWtS/ss+Wwg2qAmb3/4QUFRRsu5Aq6nlk=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
@@ -2069,6 +2140,80 @@
             "swift_package"
           ],
           "explicitRootModuleDirectDevDeps": [],
+          "useAllRepos": "NO",
+          "reproducible": false
+        }
+      }
+    },
+    "@@windows_support+//windows:extensions.bzl%msvc_runtime": {
+      "general": {
+        "bzlTransitiveDigest": "/fpjACapwytnUWPsK9hfNxq/3i0vYEbGgvEFP3etVEA=",
+        "usagesDigest": "F67RFOB16o65ZcTOb6O+921Noq5pKt2u8+7I+y0KV6c=",
+        "recordedInputs": [
+          "REPO_MAPPING:windows_support+,bazel_tools bazel_tools"
+        ],
+        "generatedRepoSpecs": {
+          "msvc_runtime": {
+            "repoRuleId": "@@windows_support+//windows/private/extensions:msvc_runtime.bzl%_msvc_runtime_repository",
+            "attributes": {
+              "msvc_version": "14.50.35717",
+              "architectures": [
+                "x64",
+                "arm64"
+              ],
+              "installer_manifest_url": "https://download.visualstudio.microsoft.com/download/pr/fdc37f6e-59f6-4054-838a-b476eeaa6ec3/1d82370739911457e0a2f6be15d8b5f569531b352b2eabb961429eea1e99e356/VisualStudio.vsman",
+              "installer_manifest_integrity": "sha256-qOhU+p8/uurCfXME4pfxZg1xN0ATid61fPeYPzPBb+8="
+            }
+          }
+        },
+        "moduleExtensionMetadata": {
+          "explicitRootModuleDirectDeps": [],
+          "explicitRootModuleDirectDevDeps": [
+            "msvc_runtime"
+          ],
+          "useAllRepos": "NO",
+          "reproducible": false
+        }
+      }
+    },
+    "@@windows_support+//windows:extensions.bzl%windows_sdk": {
+      "general": {
+        "bzlTransitiveDigest": "/fpjACapwytnUWPsK9hfNxq/3i0vYEbGgvEFP3etVEA=",
+        "usagesDigest": "VXji9vWlit/EOKjyygayKHrGPoxNlBTnw8CbFcsc1qA=",
+        "recordedInputs": [
+          "REPO_MAPPING:windows_support+,bazel_tools bazel_tools"
+        ],
+        "generatedRepoSpecs": {
+          "windows_sdk": {
+            "repoRuleId": "@@windows_support+//windows/private/extensions:windows_sdk.bzl%_windows_sdk_repository",
+            "attributes": {
+              "windows_sdk_version": "10.0.26100.7705",
+              "windows_sdk_integrity": {
+                "Microsoft.Windows.SDK.CPP": "sha256-/0VWYL7gcadEcVqWZWZvopwHaBV509gVlZqe7FpVZCQ=",
+                "Microsoft.Windows.SDK.CPP.x64": "sha256-rWzpD/lAEGmdKVSLPCseUsieuBFD4hmRVdmlw4ABtSs=",
+                "Microsoft.Windows.SDK.CPP.arm64": "sha256-A7wMA9Q5zvhQdLvNQl+dXTptO0Z5Z6zSHaO6bf7q+mc="
+              },
+              "transformations": {
+                "base/c/Include/10.0.26100.0/shared/driverspecs.h": "base/c/Include/10.0.26100.0/shared/DriverSpecs.h",
+                "base/c/Include/10.0.26100.0/shared/specstrings.h": "base/c/Include/10.0.26100.0/shared/SpecStrings.h",
+                "base/c/Include/10.0.26100.0/um/ole2.h": "base/c/Include/10.0.26100.0/um/Ole2.h",
+                "base/c/Include/10.0.26100.0/um/olectl.h": "base/c/Include/10.0.26100.0/um/OleCtl.h",
+                "**/*.h": "lowercase",
+                "**/*.lib": "lowercase",
+                "**/*.Lib": "lowercase"
+              },
+              "architectures": [
+                "x64",
+                "arm64"
+              ]
+            }
+          }
+        },
+        "moduleExtensionMetadata": {
+          "explicitRootModuleDirectDeps": [],
+          "explicitRootModuleDirectDevDeps": [
+            "windows_sdk"
+          ],
           "useAllRepos": "NO",
           "reproducible": false
         }
@@ -4224,6 +4369,17 @@
           "zope_event": "/simple/zope-event/",
           "zope_interface": "/simple/zope-interface/"
         }
+      }
+    },
+    "@@windows_support+//windows:extensions.bzl%msvc_runtime": {
+      "visual_studio_installer_manifest_v1": {
+        "integrity": "sha256-qOhU+p8/uurCfXME4pfxZg1xN0ATid61fPeYPzPBb+8=",
+        "request": {
+          "visual_studio_channel_url": "https://aka.ms/vs/stable/channel",
+          "visual_studio_installer_manifest_integrity": "sha256-qOhU+p8/uurCfXME4pfxZg1xN0ATid61fPeYPzPBb+8=",
+          "visual_studio_installer_manifest_url": "https://download.visualstudio.microsoft.com/download/pr/fdc37f6e-59f6-4054-838a-b476eeaa6ec3/1d82370739911457e0a2f6be15d8b5f569531b352b2eabb961429eea1e99e356/VisualStudio.vsman"
+        },
+        "url": "https://download.visualstudio.microsoft.com/download/pr/fdc37f6e-59f6-4054-838a-b476eeaa6ec3/1d82370739911457e0a2f6be15d8b5f569531b352b2eabb961429eea1e99e356/VisualStudio.vsman"
       }
     }
   },
