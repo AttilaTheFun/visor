@@ -76,8 +76,13 @@ Logan (1 November): Visor.app is the Visor Runner and Visor for macOS in one.
   - Visor Server.app (applications/visor_menubar, `com.LoganShire.VisorServer.macOS`)
     and Visor for macOS (applications/visor_macos,
     `com.LoganShire.VisorClient.macOS`) become Visor.app. Its data folder
-    and its keychain items stay where they are, so sessions, pairings and
-    the server's password carry over.
+    stays where it is. Its first launch copies the old apps' keychain items
+    and caches into places of its own: `com.LoganShire.Visor.server` and
+    `com.LoganShire.Visor` in the keychain, `Application Support/
+    com.LoganShire.Visor/Server` and `/Client`. So sessions, pairings and the
+    server's password carry over. Reading another app's item asks once per
+    item, with Always Allow, which Logan accepted (4 Nov). The release
+    after the switch drops the copying (#210).
   - The iPhone app moves from `com.LoganShire.VisorClient.iOS` to
     `com.LoganShire.Visor`. That is a new app on the device: installed
     fresh and paired again. Its push topic changes with it, which the server

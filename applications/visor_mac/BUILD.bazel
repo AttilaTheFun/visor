@@ -19,7 +19,7 @@ variant_infoplist(
 # window is Visor's macOS client, with the Mac's Visor server under it. It
 # takes over from Visor Server (applications/visor_menubar) and the Mac
 # client (applications/visor_macos), which build on until the switch, and
-# keeps what they kept where they kept it (Sources/FormerApps.swift).
+# copies what they kept into places of its own once (Sources/FormerApps.swift).
 swift_library(
     name = "mac_lib",
     copts = STRICT_SWIFT,

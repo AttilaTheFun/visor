@@ -197,9 +197,11 @@ version reads every file again once, bytes,
 nextSeq), syncs (revision, generation), nodes (the source tree), messages
 (seq, id, role, text, source key, JSON of the row), messages_fts (FTS5).
 Server cache: `~/Library/Application Support/com.LoganShire.VisorServer.macOS/
-messages.sqlite`, keyed by Visor session id; every agent's rows are
+messages.sqlite` (Visor.app's: `…/com.LoganShire.Visor/Server/
+messages.sqlite`), keyed by Visor session id; every agent's rows are
 written by the indexer from its log. Client cache: `…/com.LoganShire.
-VisorClient.macOS/messages.sqlite` (iOS in its container), keyed
+VisorClient.macOS/messages.sqlite` (Visor.app's: `…/com.LoganShire.Visor/
+Client/messages.sqlite`; iOS in its container), keyed
 `<host id>/<session id>`; a session opens from it synchronously
 (`AgentServerConnection.transcript(for:)`, called from `AgentScreen.init`)
 with its latest 100 rows, and syncs only what moved; earlier pages are 50
@@ -1011,7 +1013,8 @@ front paths, `visor-server front`).
   mounted, `swift build --product visor-server` then this.
 - REST locally is plain HTTP: `http://127.0.0.1:7433/api/...` with
   `Authorization: Bearer <password>` (`security find-generic-password -s
-  com.LoganShire.VisorServer.macOS -a password -w`), or, inside a Visor
+  com.LoganShire.VisorServer.macOS -a password -w`; Visor.app's service is
+  `com.LoganShire.Visor.server`), or, inside a Visor
   session, its `$VISOR_TOKEN`. Node's http needs an
   explicit Content-Length on POST bodies (the server ignores chunked).
 - The indexer logs to the unified log: `log show --predicate 'subsystem ==
