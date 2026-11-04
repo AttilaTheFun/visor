@@ -70,7 +70,15 @@ exit $failed
 
 cd "$ROOT"
 mkdir -p "$REVIEW"
-[ -z "$here" ] || exec bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT"
+if [ -n "$here" ]; then
+    # And how much memory it took (tools/ci/memory_watch.sh).
+    . "$ROOT/tools/ci/memory_watch.sh"
+    memory_watch_start
+    status=0
+    bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT" || status=$?
+    memory_watch_report "container_blue_web"
+    exit "$status"
+fi
 exec "$OSS" machine run container --image="$IMAGE" --cpus=6 --memory=16 \
     --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:64:keep" \
     --inside --cache="$host" -- \
