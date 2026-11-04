@@ -1,16 +1,9 @@
 #!/bin/bash
-# Blue Visor on the iPhone without a Mac of its own: the WasmKit app, the one
-# compiled against Isomer's frameworks, the fixture probe
-# (tests/isomer_ios_fixture) and the web site built in a Linux container
-# leased from this Mac's OS Server (tools/ci/container_build.sh, with
-# rules_applecross), then pictured on iOS leases as
-# tools/isomer/snapshots/snapshots.py pictures them on a Mac:
+# Blue Visor's web client on the iPhone without a Mac of its own: the web
+# site built in a Linux container leased from this Mac's OS Server
+# (tools/ci/container_build.sh), then pictured on an iOS lease as
+# tools/isomer/snapshots/snapshots.py pictures it on a Mac:
 #
-#   ios, ios-landscape  the probe's testFixtureScreens and
-#                       testFixtureScreensLandscape run on an iPhone 17 lease
-#                       (`oss machine xctest`, as its runner's iPhone 17 on
-#                       iOS 27.2), its pictures exported from the result
-#                       bundles by xcresulttool on this Mac
 #   web-mobile          the web site served where the lease reaches this Mac
 #                       (its loopback, or this Mac's address on the network to
 #                       OS Server's primary Mac VM, which runs the simulators:
@@ -21,6 +14,8 @@
 # then compared with tests/snapshots by snapshots.py, its run (report.html,
 # manifests) in <run dir>. As tools/ci/ios_lease_proof.sh. The script fails
 # as snapshots.py does (a changed or failed screen), or when a step fails.
+# (Blue's own iPhone apps, the WasmKit one and the one compiled against
+# Isomer's frameworks, were pictured here too until they went, 4 Nov 2026.)
 #
 #   tools/ci/blue_ios_lease.sh --image <agent image> --run <dir>
 #
@@ -44,7 +39,6 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ -n "$image" ] && [ -n "$run_dir" ] || usage
-xcrun --find xcresulttool > /dev/null 2>&1 || { echo "$me: no xcresulttool on this Mac (Xcode's): the pictures can't be read from the result bundles" >&2; exit 1; }
 
 work="$(mktemp -d)"
 chmod 700 "$work"
@@ -111,74 +105,23 @@ lease_ios() {
     echo "::endgroup::"
 }
 
-echo "::group::The apps, the fixture probe and the web site, built on Linux"
+echo "::group::The web site, built on Linux"
 # --compilation_mode=opt, not -c opt: container_build tells options from
 # targets by a leading dash.
 (cd "$ROOT" && VISOR_CI_PACKAGE="$built" run bazel run //tools/ci:container_build -- "$image" \
-    --compilation_mode=opt --ios_multi_cpus=sim_arm64 \
-    //applications/visor_isomer_ios //applications/visor_isomer_compiled_ios \
-    //tests/isomer_ios_fixture:fixture_shots //applications/visor_web:visor_web_site)
-for file in "$built/visor_isomer_ios.ipa" "$built/visor_isomer_compiled_ios.ipa" "$built/fixture_shots.zip" "$built/visor_web_site"; do
-    [ -e "$file" ] || { echo "$me: the build left no $(basename "$file")" >&2; exit 1; }
-done
+    --compilation_mode=opt //applications/visor_web:visor_web_site)
+[ -e "$built/visor_web_site" ] || { echo "$me: the build left no visor_web_site" >&2; exit 1; }
 echo "::endgroup::"
 
-# The fixture probe, in each orientation, on an iPhone 17 (its runner's).
-lease_ios "iPhone 17"
-"$OSS" machine simctl "$lease" ui booted appearance light
-probe_status=0
-mkdir -p "$work/results"
-for orientation in portrait landscape; do
-    case_name="testFixtureScreens"
-    [ "$orientation" = portrait ] || case_name="testFixtureScreensLandscape"
-    echo "::group::The fixture probe ($orientation)"
-    # Its output kept too: snapshots.py's check of the search screen reads it.
-    run "$OSS" machine xctest "$lease" --tests="$built/fixture_shots.zip" --host="$built/visor_isomer_ios.ipa" --ui \
-        --only-testing="BlueFixtureShots/$case_name" \
-        --junit="$work/results/$orientation.xml" --result="$work/results/$orientation.xcresult.zip" \
-        > "$work/results/$orientation.log" 2>&1 || probe_status=1
-    cat "$work/results/$orientation.log"
-    echo "::endgroup::"
-done
-release
-
-# The pictures: each attachment named fixture-<screen>, from its
-# orientation's result bundle, where snapshots.py's ios targets take them.
-pictures="$work/pictures"
-for orientation in portrait landscape; do
-    mkdir -p "$pictures/$orientation"
-    cp "$work/results/$orientation.log" "$pictures/$orientation.log" 2> /dev/null || true
-    result="$work/results/$orientation.xcresult.zip"
-    [ -f "$result" ] || { echo "$me: the $orientation run left no result bundle" >&2; continue; }
-    rm -rf "$work/unzipped" "$work/attachments"
-    mkdir "$work/unzipped" "$work/attachments"
-    ditto -x -k "$result" "$work/unzipped"
-    bundle="$(find "$work/unzipped" -maxdepth 2 -name '*.xcresult' -type d | head -1)"
-    xcrun xcresulttool export attachments --path "$bundle" --output-path "$work/attachments" > /dev/null
-    python3 - "$work/attachments" "$pictures/$orientation" << 'PY'
-import json, os, re, shutil, sys
-source, out = sys.argv[1], sys.argv[2]
-for test in json.load(open(os.path.join(source, "manifest.json"))):
-    for attachment in test.get("attachments", []):
-        # The name the probe gave it, which xcresulttool suffixes with an
-        # index and an identifier.
-        name = re.sub(r"_\d+_[0-9A-Fa-f-]{36}(?=\.png$)", "", attachment.get("suggestedHumanReadableName", ""))
-        if name.startswith("fixture-") and name.endswith(".png"):
-            shutil.copy(os.path.join(source, attachment["exportedFileName"]), os.path.join(out, name))
-PY
-done
-
-# Mobile Safari, on an iPhone 17 Pro (web-mobile's pictures'), then every
-# target compared by snapshots.py.
+# Mobile Safari, on an iPhone 17 Pro (web-mobile's pictures'), compared by
+# snapshots.py.
 lease_ios "iPhone 17 Pro"
-mkdir -p "$run_dir/logs"
-cp "$work/results"/* "$run_dir/logs"/ 2> /dev/null || true
+mkdir -p "$run_dir"
 snapshots_status=0
-run env VISOR_SNAPSHOT_RUN_DIR="$run_dir/snapshots" VISOR_SNAPSHOT_IOS_PICTURES="$pictures" \
-    VISOR_SNAPSHOT_IOS_LEASE="$lease" VISOR_SNAPSHOT_WEB_SITE="$built/visor_web_site" \
-    python3 "$ROOT/tools/isomer/snapshots/snapshots.py" run --targets ios,ios-landscape,web-mobile || snapshots_status=$?
+run env VISOR_SNAPSHOT_RUN_DIR="$run_dir/snapshots" VISOR_SNAPSHOT_IOS_LEASE="$lease" \
+    VISOR_SNAPSHOT_WEB_SITE="$built/visor_web_site" \
+    python3 "$ROOT/tools/isomer/snapshots/snapshots.py" run --targets web-mobile || snapshots_status=$?
 release
 
 finished=1
-[ "$probe_status" -eq 0 ] || exit "$probe_status"
 exit "$snapshots_status"
