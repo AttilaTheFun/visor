@@ -676,7 +676,8 @@ otherwise, fitted to the host's `limits`, else what the computer has; the disk i
 `visor-<session>-build` at /var/cache/bazel, where the image keeps Bazel's
 output, and the agent's home another, `visor-<session>-home` at /root, 32 GB
 always: its tools' settings and caches and its SSH key outlast the
-container), with Rosetta for x86_64 programs, labelled with the session and
+container; a new one starts with what the image has there, copied in by the
+host, docs/container-host.md), with Rosetta for x86_64 programs, labelled with the session and
 this server (`visor.session`, `visor.server`). It sees: the session's folder
 at the same path (so its files, git and the agent's own log are the
 computer's), the agent's log folder for that folder (Claude's

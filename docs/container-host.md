@@ -84,9 +84,13 @@ Makes a container and starts it. Given:
 
 - `mounts` are this computer's folders, seen at `destination`; the
   session's folder is always among them, at its own path.
-- A volume is a disk of the container's own, made empty the first time
-  and kept by its name until `rm --volumes`, so a container made again
-  (see Network) finds it as it was.
+- A volume is a disk of the container's own, kept by its name until
+  `rm --volumes`, so a container made again (see Network) finds it as it
+  was. The first time, it starts with what the image has at its
+  `destination`, as Docker's do (empty if the image has nothing there):
+  the agent's home at `/root` keeps an image's tools and settings there.
+  Apple's container mounts a new volume empty, so visor-container-host
+  first runs the image once to copy them in.
 - `name` and `labels` are the host's to use or not; a host that keeps
   accounts (OS Server) shows them.
 
