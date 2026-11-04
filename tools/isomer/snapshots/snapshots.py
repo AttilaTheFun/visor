@@ -169,6 +169,52 @@ def web_site():
 def web_url(base, screen):
     return f"{base}/?fixture=snapshot&screen={screen}&t={int(time.time() * 1000)}"
 
+def _leases(listing, out):
+    """Every lease (a dict with an `id`) anywhere in `oss machine list
+    --json`'s answer, whatever it nests them in."""
+    if isinstance(listing, dict):
+        if "id" in listing:
+            out.append(listing)
+        for value in listing.values():
+            _leases(value, out)
+    elif isinstance(listing, list):
+        for value in listing:
+            _leases(value, out)
+    return out
+
+@functools.lru_cache(None)
+def lease_host():
+    """The address the iOS lease's simulator reaches this Mac by, for the
+    site web-mobile serves it. A simulator on this Mac shares its loopback;
+    one in OS Server's primary Mac VM (the lease names it as `primary`) has
+    the VM's own, and reaches this Mac on the VMs' network: the address of
+    this Mac's side of the route to the VM (`route -n get` its
+    `guestAddress`, then `ipconfig getifaddr` that interface), or what the
+    lease says it is (`hostAddress`). Only that address is bound, so
+    nothing else on the network sees the site."""
+    if not IOS_LEASE:
+        return "127.0.0.1"
+    leases = _leases(json.loads(sh([OSS, "machine", "list", "--json"]).stdout), [])
+    ours = next((l for l in leases if l.get("id") == IOS_LEASE), {})
+    if ours.get("hostAddress"):
+        return ours["hostAddress"]
+    primary = ours.get("primary")
+    if not primary:
+        return "127.0.0.1"
+    if isinstance(primary, dict):
+        guest = primary.get("guestAddress") or next((l.get("guestAddress") for l in leases if l.get("id") == primary.get("id")), None)
+    else:
+        guest = next((l.get("guestAddress") for l in leases if l.get("id") == primary), None)
+    if not guest:
+        sys.exit(f"snapshots: lease {IOS_LEASE} is in primary {primary}, whose guestAddress oss machine list does not give")
+    route = sh(["route", "-n", "get", guest]).stdout
+    interface = next((line.split(":", 1)[1].strip() for line in route.splitlines() if line.strip().startswith("interface:")), "")
+    address = sh(["ipconfig", "getifaddr", interface], check=False).stdout.strip() if interface else ""
+    if not address:
+        sys.exit(f"snapshots: no address of this Mac on the route to {guest} (interface {interface or 'none'})")
+    log(f"web-mobile serves on {address}, this Mac's side of the network to primary {guest}")
+    return address
+
 # --- the iOS simulator (the harness's own, booted once per run)
 
 _simulator = None
@@ -226,15 +272,17 @@ class WebMobile:
 
     def prepare(self):
         self.udid = simulator()
-        self.server = serve(web_site(), "127.0.0.1", 8791)
+        host = lease_host()
+        self.server = serve(web_site(), host, 8791)
+        self.base = "http://localhost:8791" if host == "127.0.0.1" else f"http://{host}:8791"
         # One load to warm Safari up: the first load of a fresh site (the
         # wasm compiled, the modules fetched) outlasts the settle and came
         # out blank.
-        simctl("openurl", self.udid, web_url("http://localhost:8791", "sessions"))
+        simctl("openurl", self.udid, web_url(self.base, "sessions"))
         time.sleep(SETTLE * 2)
     def capture(self, screen, out):
         recording = SimulatorRecording(self.udid, out[:-4] + ".mp4") if not IOS_LEASE else None
-        simctl("openurl", self.udid, web_url("http://localhost:8791", screen))
+        simctl("openurl", self.udid, web_url(self.base, screen))
         time.sleep(SETTLE)
         screenshot(self.udid, out)
         if recording: recording.stop()
