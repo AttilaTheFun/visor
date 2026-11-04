@@ -158,7 +158,7 @@ final class ContainerTests: ServerTestCase {
     /// number takes its version's latest.
     func testTheImageIsThisVersions() {
         let repository = VisorServer.containerImageRepository
-        XCTAssertEqual(repository, "ghcr.io/attilathefun/visor-agent")
+        XCTAssertEqual(repository, "ghcr.io/attilathefun/visor")
         XCTAssertEqual(VisorServer.containerImage(version: "0.40.12"), repository + ":0.40.12")
         XCTAssertEqual(VisorServer.containerImage(version: "0.40.12 (1)"), repository + ":0.40.12")
         XCTAssertEqual(VisorServer.containerImage(version: "0.40.0"), repository + ":0.40")
