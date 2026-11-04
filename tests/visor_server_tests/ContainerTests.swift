@@ -183,6 +183,10 @@ final class ContainerTests: ServerTestCase {
         let asked = try host.request(1)
         XCTAssertTrue(asked.mounts.contains(.init(source: programs.path, destination: ContainerPlacement.programsFolder, readOnly: true)),
                       "Visor's programs, read-only at /opt/visor/bin")
+        // Not under the read-only tools' folder too, where the runtime can't
+        // make /opt/visor/bin to mount them on.
+        XCTAssertFalse(asked.mounts.contains { $0.destination == ContainerPlacement.toolsFolder },
+                       "the script's folder is for a container without the programs")
         XCTAssertEqual(made.info.container?.programs, ContainerPlacement.programsFolder)
         let placement = try XCTUnwrap(server.placement(for: made.info))
         let mcp = VisorMCP.launch(["VISOR_SESSION": "S2"], container: placement)

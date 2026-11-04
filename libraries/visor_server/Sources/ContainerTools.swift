@@ -1,9 +1,10 @@
 import Foundation
 import Synchronization
 
-/// What every container sees of this server, read-only at
-/// `ContainerPlacement.toolsFolder`: Visor's MCP script, which the agent
-/// there runs with the container's Node. Written into the data directory
+/// What a container made without Visor's Linux programs sees of this
+/// server, read-only at `ContainerPlacement.toolsFolder`: Visor's MCP
+/// script, which the agent there runs with the container's Node (one made
+/// with them has their `mcp` instead). Written into the data directory
 /// the first time a container is made in a run (again when it differs from
 /// what is there).
 enum ContainerTools {

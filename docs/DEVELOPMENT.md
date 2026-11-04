@@ -690,8 +690,7 @@ computer's), the agent's log folder for that folder (Claude's
 `~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
 `~/.openrouter/sessions`), the pictures attached to sessions
 (`<data>/images`, AgentImages) read-only at the same path, since the agent
-is given that path, Visor's MCP script read-only at `/opt/visor`
-(ContainerTools), and, where the computer has them
+is given that path, and, where the computer has them
 (`HostDetails.containerPrograms`: the app's `Contents/Resources/Linux`,
 which tools/release_mac.sh fills in a release's Visor Server from CI's
 linux-programs job, tools/ci/linux_programs.sh, or `linux/` beside the
@@ -702,7 +701,10 @@ read-only at `/opt/visor/bin`: `visor-server`, also the agents' host as
 in any image. An agent in a container made with them has
 `/opt/visor/bin/visor-agent-host mcp` for its MCP server, so its image
 needs no Node; one made without them (`SessionContainer.programs` nil)
-keeps the image's Node and the script. The agents' sign-ins for containers are the server's own,
+has Visor's MCP script read-only at `/opt/visor` (ContainerTools) instead,
+for the image's Node. Never both: under a read-only `/opt/visor` the
+runtime can't make `/opt/visor/bin` to mount the programs on (Apple's
+container: "mount failed with errno 30"). The agents' sign-ins for containers are the server's own,
 never the image's (ContainerSignIns: `<data>/containers/agent.env` with
 CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
 `<data>/containers/codex`, mounted at `/root/.codex` with the computer's
