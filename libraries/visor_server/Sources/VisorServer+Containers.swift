@@ -45,6 +45,12 @@ extension VisorServer {
     /// own, this server's version's.
     public var defaultContainerImage: String { Self.containerImage(version: ServerPlatform.current.host.version) }
 
+    /// The image a container is made from now: the one set, else Visor's own.
+    public var wantedContainerImage: String {
+        let set = settings.containerImage.trimmingCharacters(in: .whitespaces)
+        return set.isEmpty ? defaultContainerImage : set
+    }
+
     /// Whether a session can run in a container here (as last found).
     public var containersAvailable: Bool { containerProblem == nil }
 
@@ -69,10 +75,15 @@ extension VisorServer {
         if problem == nil, !settings.reachableFromNetwork, settings.containerCallback.trimmingCharacters(in: .whitespaces).isEmpty {
             problem = "an agent in a container reaches this server over the network: turn on “Reachable from the network”"
         }
+        var swept = false
         if problem == nil, !containersSwept, let host = containerHost {
             containersSwept = true
             await sweepContainers(host)
+            swept = true
         }
+        // Then those made from another image than this server's, or without
+        // Visor's own programs, made again while their agents rest.
+        defer { if swept { upgradeContainers() } }
         guard problem != containerProblem else { return }
         let was = containersAvailable
         containerProblem = problem
@@ -120,8 +131,8 @@ extension VisorServer {
         broadcastSessions()
     }
 
-    /// The name of a session's container, and of its disk's volume with
-    /// "-build" after it.
+    /// The name of a session's container, and of its disks' volumes with
+    /// "-build" (Bazel's output) and "-home" (the agent's home) after it.
     static func containerName(session: String) -> String {
         "visor-" + session.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "-" }
     }
@@ -169,13 +180,15 @@ extension VisorServer {
     }
 
     /// Makes the container a session's agent runs in, by the container
-    /// host: from the image, with its mounts and a disk of its own for
-    /// builds, the sign-ins for containers written into its home, and an SSH
-    /// key of its own. Removed again when any of that fails. One an earlier
-    /// attempt left goes first, with its disk unless `keepingDisk` (a
-    /// container made again, its network lost).
+    /// host: from the image (`image`, else the one set, else Visor's own),
+    /// with its mounts and two disks of its own, for builds and for the
+    /// agent's home, the sign-ins for containers written into its home, and
+    /// an SSH key of its own unless its home has one. Removed again when
+    /// any of that fails. One an earlier attempt left goes first, with its
+    /// disks unless `keepingDisk` (a container made again: its network
+    /// lost, or another image).
     func makeContainer(session: String, agent: AgentKind, folder: String, size: ContainerSize = .standard,
-                       keepingDisk: Bool = false) async throws -> SessionContainer {
+                       keepingDisk: Bool = false, image asked: String? = nil) async throws -> SessionContainer {
         if containerProblem != nil { await checkContainers() }
         if let containerProblem { throw ContainerFailure(message: "This computer cannot run containers: \(containerProblem).") }
         guard let host = containerHost, let tools = ContainerTools.folder else {
@@ -187,7 +200,7 @@ extension VisorServer {
             throw ContainerFailure(message: "There is no folder \(folder) on this computer.")
         }
         let name = Self.containerName(session: session)
-        let image = settings.containerImage.trimmingCharacters(in: .whitespaces).isEmpty ? defaultContainerImage : settings.containerImage
+        let image = asked ?? wantedContainerImage
         for left in (try? await host.list()) ?? [] where left.labels["visor.session"] == session {
             try? await host.remove(left.id, volumes: !keepingDisk)
         }
@@ -198,7 +211,9 @@ extension VisorServer {
         let programs = Self.containerPrograms()
         let request = ContainerHostRequest(name: name, image: image, cpus: given.cpus, memoryBytes: given.memoryBytes,
                                            mounts: Self.containerMounts(agent: agent, folder: resolved, tools: tools, programs: programs),
-                                           volumes: [.init(name: name + "-build", destination: ContainerPlacement.buildOutput, sizeBytes: given.diskBytes)],
+                                           volumes: [.init(name: name + "-build", destination: ContainerPlacement.buildOutput, sizeBytes: given.diskBytes),
+                                                     .init(name: name + "-home", destination: ContainerPlacement.home,
+                                                           sizeBytes: ContainerPlacement.homeBytes)],
                                            labels: ["visor.session": session, "visor.server": id])
         let made: ContainerHost.Made
         do {

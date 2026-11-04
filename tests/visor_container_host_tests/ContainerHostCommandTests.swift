@@ -36,6 +36,7 @@ private struct FakeTool {
               *)
                 case "$1" in
                   run) [ -f "$dir/noimage" ] && { echo "Error: image not found" >&2; exit 1; }
+                    [ "$2" = "--rm" ] && exit 0
                     name=""; spec=""; prev=""
                     for a in "$@"; do
                       [ "$prev" = "--name" ] && name="$a"
@@ -120,7 +121,7 @@ final class ContainerHostCommandTests: XCTestCase {
         XCTAssertEqual(made.json["id"] as? String, "visor-s1")
         XCTAssertEqual(made.json["cpus"] as? Int, 6)
         XCTAssertEqual(fake.read("volume-visor-s1-build")?.trimmingCharacters(in: .whitespacesAndNewlines), "137438953472")
-        let run = try XCTUnwrap(fake.calls.first { $0.hasPrefix("run ") })
+        let run = try XCTUnwrap(fake.calls.first { $0.hasPrefix("run --detach ") })
         let spec = ContainerHostCommand.spec(of: try JSONDecoder().decode(HostRequest.self, from: request))
         XCTAssertEqual(run, "run --detach --name visor-s1 --volume visor-s1-build:/var/cache/bazel"
             + " --mount type=bind,source=/Users/me/project,target=/Users/me/project"
@@ -133,7 +134,7 @@ final class ContainerHostCommandTests: XCTestCase {
 
     func testRosettaOnlyWhereAskedAndHere() throws {
         _ = ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0)
-        XCTAssertFalse(try XCTUnwrap(fake.calls.first { $0.hasPrefix("run ") }).contains("--rosetta"))
+        XCTAssertFalse(try XCTUnwrap(fake.calls.first { $0.hasPrefix("run --detach ") }).contains("--rosetta"))
         let plain = HostRequest(name: "n", image: "i")
         XCTAssertEqual(ContainerHostCommand.runArguments(plain, rosetta: true),
                        ["run", "--detach", "--name", "n", "--label", "visor.host=visor-container-host",
@@ -153,19 +154,38 @@ final class ContainerHostCommandTests: XCTestCase {
         XCTAssertTrue(fake.calls.contains("volume create -s 131072M visor-s1-build"))
     }
 
+    func testANewVolumeIsGivenWhatTheImageHasThereFirst() throws {
+        // Apple's container mounts a new volume empty, over the image's
+        // files there; Docker's way, which an image's home at /root needs,
+        // is that it starts with them.
+        _ = ContainerHostCommand.create(request, container: fake.tool, rosetta: true, tries: 1, pause: 0)
+        let runs = fake.calls.filter { $0.hasPrefix("run ") }
+        XCTAssertEqual(runs.count, 2)
+        XCTAssertEqual(runs.first, "run --rm --volume visor-s1-build:/visor-seed/0 --rosetta ghcr.io/example/agent:1 sh -c "
+            + #"i=0; for d in "$@"; do if [ -d "$d" ]; then cp -a "$d/." "/visor-seed/$i/"; fi; i=$((i + 1)); done"#
+            + " sh /var/cache/bazel")
+        XCTAssertTrue(runs.last?.hasPrefix("run --detach ") == true)
+
+        // Made again on the volume it has: nothing copied into it again.
+        _ = ContainerHostCommand.answer(["rm", "visor-s1"], input: Data(), container: fake.tool, version: "")
+        _ = ContainerHostCommand.create(request, container: fake.tool, rosetta: true, tries: 1, pause: 0)
+        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run --rm ") }.count, 1)
+        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run --detach ") }.count, 2)
+    }
+
     func testCreateAskedAgainAnswersTheOneItMade() throws {
         XCTAssertEqual(ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0).status, 0)
         let again = ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0)
         XCTAssertEqual(again.status, 0, again.text)
         XCTAssertEqual(again.json["id"] as? String, "visor-s1")
-        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run ") }.count, 1)
+        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run --detach ") }.count, 1)
 
         // Stopped meanwhile (the Mac restarted): started again.
         try FileManager.default.moveItem(at: fake.folder.appendingPathComponent("running-visor-s1"),
                                          to: fake.folder.appendingPathComponent("stopped-visor-s1"))
         XCTAssertEqual(ContainerHostCommand.create(request, container: fake.tool, rosetta: false, tries: 1, pause: 0).status, 0)
         XCTAssertTrue(fake.calls.contains("start visor-s1"))
-        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run ") }.count, 1)
+        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run --detach ") }.count, 1)
     }
 
     func testCreateRefusesANameMadeOtherwise() throws {
@@ -174,7 +194,7 @@ final class ContainerHostCommandTests: XCTestCase {
         let refused = ContainerHostCommand.create(other, container: fake.tool, rosetta: false, tries: 1, pause: 0)
         XCTAssertEqual(refused.status, 1)
         XCTAssertEqual(refused.json["code"] as? String, "exists")
-        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run ") }.count, 1)
+        XCTAssertEqual(fake.calls.filter { $0.hasPrefix("run --detach ") }.count, 1)
     }
 
     func testAMissingImageIsNoImage() throws {
