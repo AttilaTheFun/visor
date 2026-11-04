@@ -12,6 +12,14 @@
 # Without that keychain, the profile is looked for in the login keychain.
 # The team is VISOR_TEAM_ID in .bazelrc.user. Xcode's sign-in is not needed.
 #
+# Visor Server carries Visor's own Linux programs for the containers it makes
+# (docs/co-tenancy.md, "Container images"), in Contents/Resources/Linux,
+# signed with it: tools/linux_programs.sh's, as the tar that
+# tools/ci/linux_programs.sh makes in a container of an OS Server. CI's build
+# job is given the linux-programs job's (VISOR_LINUX_PROGRAMS, the tar), as
+# the release Mac has no OS Server of its own; without it, they're built here
+# in a container leased from this Mac's.
+#
 #   tools/release_mac.sh <version>               # the .dmgs in dist/
 #   tools/release_mac.sh <version> --publish     # and a GitHub release v<version>
 set -euo pipefail
@@ -38,6 +46,21 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p dist
 
+# Visor's own Linux programs, once for every app that carries them, in
+# $WORK/linux: the tar VISOR_LINUX_PROGRAMS names, else one made here.
+linux_programs() {
+  local archive="${VISOR_LINUX_PROGRAMS:-}"
+  if [ -z "$archive" ]; then
+    archive="$WORK/linux-programs.tar"
+    tools/ci/linux_programs.sh "$archive"
+  fi
+  mkdir -p "$WORK/linux"
+  tar -x -C "$WORK/linux" -f "$archive"
+  [ -f "$WORK/linux/visor-server" ] && [ -x "$WORK/linux/visor-server" ] \
+    && [ "$(readlink "$WORK/linux/visor-agent-host")" = visor-server ] \
+    || { echo "Visor's Linux programs are not in $archive" >&2; exit 1; }
+}
+
 # Sends a file for notarization and waits; fails unless Apple accepts it.
 notarize() {
   local file="$1" log="$WORK/notary-$(basename "$1").json"
@@ -46,7 +69,7 @@ notarize() {
 }
 
 release_app() {
-  local target="$1" name="$2"
+  local target="$1" name="$2" linux="${3:-}"
   bazel build -c opt "//applications/$target" >/dev/null
   local zip; zip="$(bazel cquery -c opt --output=files "//applications/$target" 2>/dev/null | grep '\.zip$' | head -1)"
   mkdir -p "$WORK/$target"
@@ -54,6 +77,11 @@ release_app() {
   local app="$WORK/$target/$name.app"
   [ "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "$VERSION" ] \
     || { echo "$name's CFBundleShortVersionString is not $VERSION" >&2; exit 1; }
+  # Visor's Linux programs, sealed with the app (the link kept a link).
+  if [ -n "$linux" ]; then
+    rm -rf "$app/Contents/Resources/Linux"
+    ditto "$WORK/linux" "$app/Contents/Resources/Linux"
+  fi
   tools/sign_mac_app.sh "$app" >/dev/null
   local signature; signature="$(codesign -dvv "$app" 2>&1)"
   [[ "$signature" == *"Authority=Developer ID Application"* ]] \
@@ -80,7 +108,8 @@ release_app() {
   echo "$name: $dmg"
 }
 
-release_app visor_menubar "Visor Server"
+linux_programs
+release_app visor_menubar "Visor Server" linux
 release_app visor_macos "Visor"
 
 if [ "$PUBLISH" = "--publish" ]; then
