@@ -15,6 +15,7 @@ swift_library(
     deps = [
         "//:foundation",
         "//libraries/visor_agent_host",
+        "//libraries/visor_mcp_bridge",
     ],
 )
 
