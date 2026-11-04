@@ -12,6 +12,13 @@
 # Without that keychain, the profile is looked for in the login keychain.
 # The team is VISOR_TEAM_ID in .bazelrc.user. Xcode's sign-in is not needed.
 #
+# Visor Server carries Visor's own Linux programs for the containers it makes
+# (docs/co-tenancy.md, "Container images"), in Contents/Resources/Linux,
+# signed with it: tools/linux_programs.sh, run in a container leased from
+# this Mac's OS Server (`oss machine run container`) of Visor's agent image
+# at a build with the Swift its SDK is for (VISOR_LINUX_PROGRAMS_IMAGE names
+# another), the SDK and the build kept in a volume of their own.
+#
 #   tools/release_mac.sh <version>               # the .dmgs in dist/
 #   tools/release_mac.sh <version> --publish     # and a GitHub release v<version>
 set -euo pipefail
@@ -38,6 +45,18 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p dist
 
+# Visor's own Linux programs, once for every app that carries them.
+linux_programs() {
+  local oss="/Applications/OS Server.app/Contents/Helpers/oss"
+  [ -x "$oss" ] || oss="$(command -v oss)" || { echo "Visor's Linux programs are built in an OS Server container: no oss here" >&2; exit 1; }
+  rm -rf dist/linux
+  "$oss" machine run container --image="${VISOR_LINUX_PROGRAMS_IMAGE:-ghcr.io/attilathefun/visor-agent:0.43.132}" --cpus=6 --memory=12 \
+    --mount="$PWD:$PWD" --volume="visor-linux-programs:/root/.swiftpm:16:keep" --inside -- \
+    env VISOR_LINUX_PROGRAMS_SCRATCH=/root/.swiftpm/visor-build "$PWD/tools/linux_programs.sh" "$PWD/dist/linux"
+  [ -x dist/linux/visor-server ] && [ -L dist/linux/visor-agent-host ] \
+    || { echo "Visor's Linux programs were not built" >&2; exit 1; }
+}
+
 # Sends a file for notarization and waits; fails unless Apple accepts it.
 notarize() {
   local file="$1" log="$WORK/notary-$(basename "$1").json"
@@ -46,7 +65,7 @@ notarize() {
 }
 
 release_app() {
-  local target="$1" name="$2"
+  local target="$1" name="$2" linux="${3:-}"
   bazel build -c opt "//applications/$target" >/dev/null
   local zip; zip="$(bazel cquery -c opt --output=files "//applications/$target" 2>/dev/null | grep '\.zip$' | head -1)"
   mkdir -p "$WORK/$target"
@@ -54,6 +73,11 @@ release_app() {
   local app="$WORK/$target/$name.app"
   [ "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "$VERSION" ] \
     || { echo "$name's CFBundleShortVersionString is not $VERSION" >&2; exit 1; }
+  # Visor's Linux programs, sealed with the app (the link kept a link).
+  if [ -n "$linux" ]; then
+    rm -rf "$app/Contents/Resources/Linux"
+    ditto dist/linux "$app/Contents/Resources/Linux"
+  fi
   tools/sign_mac_app.sh "$app" >/dev/null
   local signature; signature="$(codesign -dvv "$app" 2>&1)"
   [[ "$signature" == *"Authority=Developer ID Application"* ]] \
@@ -80,7 +104,8 @@ release_app() {
   echo "$name: $dmg"
 }
 
-release_app visor_menubar "Visor Server"
+linux_programs
+release_app visor_menubar "Visor Server" linux
 release_app visor_macos "Visor"
 
 if [ "$PUBLISH" = "--publish" ]; then
