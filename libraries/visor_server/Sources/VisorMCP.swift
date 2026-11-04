@@ -1,7 +1,10 @@
-// Visor's MCP server, as each agent is told of it: a script (VisorMCPScript)
-// run by Node, that gives a session tools to list, message and read the
-// other sessions on this computer (and, in Claude's manual mode, the
-// `approve` tool the phone answers). The server side of those tools is
+// Visor's MCP server, as each agent is told of it: `visor-agent-host mcp`
+// (libraries/visor_mcp_bridge), the agents' host program run as an MCP
+// server, that gives a session tools to list, message and read the other
+// sessions on this computer (and, in Claude's manual mode, the `approve`
+// tool the phone answers). Where there is no agent host (Windows), and in a
+// container until Visor's own Linux programs are mounted there, the Node
+// script it replaced (VisorMCPScript). The server side of those tools is
 // `VisorServer.agentReply`.
 
 import Foundation
@@ -28,15 +31,18 @@ enum VisorMCP {
         }
     }
 
-    /// Node and the script, when both are here and the session has its
-    /// environment (which is how the script reaches the menu bar app). In a
-    /// container, the container's node and the script among Visor's tools
-    /// there (ContainerTools).
-    private static func launch(_ environment: [String: String], container: ContainerPlacement?) -> (node: String, script: String)? {
+    /// What runs the MCP server for a session that has its environment
+    /// (which is how it reaches this server): this computer's agent host,
+    /// as `mcp`. In a container, the container's node and the script among
+    /// Visor's tools there (ContainerTools); with no agent host here, Node
+    /// and the script, when both are here.
+    static func launch(_ environment: [String: String], container: ContainerPlacement?,
+                       agentHost: String? = ServerPlatform.current.agentHosts?.program) -> (command: String, arguments: [String])? {
         guard !environment.isEmpty else { return nil }
-        if container != nil { return ("node", ContainerPlacement.scriptPath) }
+        if container != nil { return ("node", [ContainerPlacement.scriptPath]) }
+        if let agentHost, FileManager.default.isExecutableFile(atPath: agentHost) { return (agentHost, ["mcp"]) }
         guard let script, let node = ToolPath.resolve("node") else { return nil }
-        return (node, script)
+        return (node, [script])
     }
 
     /// What the script is given: Visor's own variables from the session's
@@ -58,7 +64,7 @@ enum VisorMCP {
     static func claudeConfig(_ environment: [String: String], approvals: Bool, container: ContainerPlacement? = nil) -> String? {
         guard let launch = launch(environment, container: container) else { return nil }
         let env = scriptEnvironment(environment, container: container, approvals: approvals)
-        let servers: [String: Any] = ["visor": ["command": launch.node, "args": [launch.script], "env": env]]
+        let servers: [String: Any] = ["visor": ["command": launch.command, "args": launch.arguments, "env": env]]
         guard let data = try? JSONSerialization.data(withJSONObject: ["mcpServers": servers]) else { return nil }
         return String(data: data, encoding: .utf8)
     }
@@ -68,8 +74,8 @@ enum VisorMCP {
         guard let launch = launch(environment, container: container) else { return [] }
         let env = scriptEnvironment(environment, container: container, approvals: false).sorted { $0.key < $1.key }
             .map { "\($0.key)=\(toml($0.value))" }.joined(separator: ", ")
-        return ["-c", "mcp_servers.visor.command=\(toml(launch.node))",
-                "-c", "mcp_servers.visor.args=[\(toml(launch.script))]",
+        return ["-c", "mcp_servers.visor.command=\(toml(launch.command))",
+                "-c", "mcp_servers.visor.args=[\(launch.arguments.map(toml).joined(separator: ", "))]",
                 "-c", "mcp_servers.visor.env={\(env)}"]
     }
 

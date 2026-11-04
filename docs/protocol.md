@@ -257,8 +257,9 @@ the agent and what it runs use now.
 
 ## Approvals and questions
 
-Claude runs with `--permission-prompt-tool mcp__visor__approve`, a tool of the
-MCP server the menu bar app bundles (`visor_mcp.js`, run with node), in either
+Claude runs with `--permission-prompt-tool mcp__visor__approve`, a tool of
+Visor's MCP server (`visor-agent-host mcp`; in a container, and where there
+is no agent host, the Node script `visor_mcp.js`), in either
 mode: in manual mode (`--permission-mode acceptEdits`) every tool call that
 is not an edit comes to it; auto-approving (`bypassPermissions`) only the
 agent's questions do (AskUserQuestion, which Claude Code offers only where a
