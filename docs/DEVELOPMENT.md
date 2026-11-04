@@ -670,7 +670,11 @@ published by CI's agent-image job as `ghcr.io/attilathefun/visor:<version>`,
 ssh, tmux, no toolchains; its build target, with them, is
 `ghcr.io/attilathefun/visor-agent`, CI's and the co-tenant's; a server asks
 for its own version's, `visor-server containers image <ref>` for another,
-any image at all) with the size the session asked for
+any image at all, from a private registry too: `visor-server containers
+sign-in <user> <command…>`, or Settings → Containers, names a command that
+prints its password, run before each container is made from it and given to
+the host's `login`, VisorServer+ContainerRegistry.swift) with the size the
+session asked for
 (ContainerSize: 6 cores, 16 GB of memory and 128 GB of disk unless asked
 otherwise, fitted to the host's `limits`, else what the computer has; the disk is a volume,
 `visor-<session>-build` at /var/cache/bazel, where the image keeps Bazel's
