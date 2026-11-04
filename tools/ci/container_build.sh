@@ -155,8 +155,16 @@ if [ -n "${VISOR_CI_PACKAGE:-}" ]; then
 fi
 
 cd "$ROOT"
-[ -z "$here" ] || exec bash -c "$steps" container_build "$ROOT" "$full" "$package" "$@"
-exec "$OSS" machine run container --image="$IMAGE" --rosetta --cpus=6 --memory=16 \
+if [ -n "$here" ]; then
+    # And how much memory it took (tools/ci/memory_watch.sh).
+    . "$ROOT/tools/ci/memory_watch.sh"
+    memory_watch_start
+    status=0
+    bash -c "$steps" container_build "$ROOT" "$full" "$package" "$@" || status=$?
+    memory_watch_report "container_build"
+    exit "$status"
+fi
+exec "$OSS" machine run container --image="$IMAGE" --rosetta --cpus=6 --memory=12 \
     --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:128:keep" \
     --inside --cache="$host" -- \
     bash -c "$steps" container_build "$ROOT" "$full" "$package" "$@"
