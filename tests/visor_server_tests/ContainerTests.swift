@@ -52,6 +52,9 @@ private struct FakeHost {
                 echo "{\"removed\":\"$1\"}" ;;
               ls)
                 if [ -f "$dir/listed.json" ]; then cat "$dir/listed.json"; else echo '{"containers":[]}'; fi ;;
+              login)
+                cat > "$dir/login-$1"
+                echo '{"ok":true}' ;;
               network)
                 if [ -f "$dir/nonetwork" ]; then echo '{"ok":false,"dns":false,"detail":"EAI_AGAIN"}'; else echo '{"ok":true,"detail":"fine"}'; fi ;;
             esac
@@ -248,6 +251,44 @@ final class ContainerTests: ServerTestCase {
         server.handle(.busy(false), from: made)
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertThrowsError(try host.request(4), "not tried again")
+    }
+
+    /// An image in a private registry, with a sign-in set for it: the
+    /// sign-in's password goes to the host's `login` before each container
+    /// is made from it. Without a user, it says so and makes none.
+    func testAPrivateImagesRegistryIsSignedInToFirst() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: Self.freePort())
+        defer { server.stop() }
+        let registry = "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+        server.settings.containerImage = registry + "/team/tools:1"
+        server.settings.containerSignIn = ["/bin/echo", "token-123"]
+        let work = root.appendingPathComponent("work").path
+        let missing = await start(server, .startInContainer(id: "r0", agent: .claude, cwd: work, title: "", skipPermissions: true))
+        guard case .failure(let failure) = missing else { return XCTFail("made without a user") }
+        XCTAssertTrue(failure.message.contains("needs a user"), failure.message)
+        XCTAssertThrowsError(try host.request(1), "nothing made")
+
+        server.settings.containerSignInUser = "AWS"
+        let made = try await start(server, .startInContainer(id: "r1", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        XCTAssertEqual(made.info.container?.image, registry + "/team/tools:1")
+        let calls = host.calls.filter { $0.hasPrefix("login") || $0.hasPrefix("create") }
+        XCTAssertEqual(calls, ["login \(registry) --username AWS", "create "], "signed in, then made")
+        XCTAssertEqual(try String(contentsOf: host.folder.appendingPathComponent("login-" + registry), encoding: .utf8), "token-123")
+
+        // Visor's own image needs none.
+        server.settings.containerImage = ""
+        _ = try await start(server, .startInContainer(id: "r2", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        XCTAssertEqual(host.calls.filter { $0.hasPrefix("login") }.count, 1)
+    }
+
+    func testTheRegistryAnImageIsIn() {
+        XCTAssertEqual(VisorServer.registry(of: "ghcr.io/attilathefun/visor:0.44.1"), "ghcr.io")
+        XCTAssertEqual(VisorServer.registry(of: "123456789012.dkr.ecr.us-east-1.amazonaws.com/team/tools:1"),
+                       "123456789012.dkr.ecr.us-east-1.amazonaws.com")
+        XCTAssertEqual(VisorServer.registry(of: "localhost:5000/tools"), "localhost:5000")
+        XCTAssertEqual(VisorServer.registry(of: "ubuntu:24.04"), "docker.io")
+        XCTAssertEqual(VisorServer.registry(of: "library/ubuntu"), "docker.io")
     }
 
     /// Visor's image is this build's, published by CI; a build CI did not

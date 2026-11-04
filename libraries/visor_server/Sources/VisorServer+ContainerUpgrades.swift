@@ -22,7 +22,7 @@ extension VisorServer {
 
     /// Every session whose container is behind and whose agent isn't
     /// working: its container made again.
-    func upgradeContainers() {
+    public func upgradeContainers() {
         for record in sessions where !record.info.busy {
             upgradeContainer(of: record)
         }

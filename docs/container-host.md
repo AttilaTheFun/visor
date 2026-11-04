@@ -158,6 +158,19 @@ ends with a failing status, Visor looks for its container here: one the
 host no longer lists is made again as when its network is lost (see
 Network), and the session says so.
 
+### `login`
+
+`<host> login <registry> --username <user>`, the password on standard
+input: the host signs in to that registry, so `create` can pull a private
+image from it.
+- Visor calls it before each `create` from the image set in its settings,
+  when a sign-in is set with it (a command that prints the password, such
+  as `aws ecr get-login-password`, whose password lasts 12 hours).
+- visor-container-host: `container registry login --username <user>
+  --password-stdin <registry>`. The password goes on no command line.
+- Answers `{"ok", "registry"}`; a host without it answers `unsupported`,
+  and Visor says the host can't sign in to registries.
+
 ### `network`
 
 `<host> network <id>`: whether the container's network works now.

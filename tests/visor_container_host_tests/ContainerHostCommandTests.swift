@@ -30,6 +30,7 @@ private struct FakeTool {
                 echo "[{\"configuration\":{\"name\":\"$3\",\"sizeInBytes\":$(cat "$dir/volume-$3")}}]" ;;
               "volume create") echo $(( ${4%M} * 1048576 )) > "$dir/volume-$5" ;;
               "volume delete") rm -f "$dir/volume-$3" ;;
+              "registry login") cat > "$dir/login-password" ;;
               "volume list") printf '['; sep=""
                 for f in "$dir"/volume-*; do [ -f "$f" ] || continue; printf '%s{"configuration":{"name":"%s"}}' "$sep" "${f##*/volume-}"; sep=","; done
                 echo ']' ;;
@@ -220,6 +221,23 @@ final class ContainerHostCommandTests: XCTestCase {
         let badName = Data(#"{"name": "a b; rm", "image": "i"}"#.utf8)
         XCTAssertEqual(ContainerHostCommand.create(badName, container: fake.tool, rosetta: false).status, 1)
         XCTAssertTrue(fake.calls.isEmpty)
+    }
+
+    /// `login` signs Apple's container in to a registry, the password on
+    /// standard input and nowhere else.
+    func testLoginSignsTheToolInWithThePasswordOnItsInput() throws {
+        let login = ContainerHostCommand.answer(["login", "123456789012.dkr.ecr.us-east-1.amazonaws.com", "--username", "AWS"],
+                                                input: Data("token-123".utf8), container: fake.tool, version: "")
+        XCTAssertEqual(login.status, 0, login.text)
+        XCTAssertEqual(login.json["registry"] as? String, "123456789012.dkr.ecr.us-east-1.amazonaws.com")
+        XCTAssertEqual(fake.calls.last, "registry login --username AWS --password-stdin 123456789012.dkr.ecr.us-east-1.amazonaws.com")
+        XCTAssertEqual(fake.read("login-password"), "token-123")
+        XCTAssertFalse(fake.calls.contains { $0.contains("token-123") }, "the password on no command line")
+
+        let bare = ContainerHostCommand.answer(["login", "ghcr.io"], input: Data("x".utf8), container: fake.tool, version: "")
+        XCTAssertEqual(bare.status, 1, "a user is needed")
+        let empty = ContainerHostCommand.answer(["login", "ghcr.io", "--username", "me"], input: Data(), container: fake.tool, version: "")
+        XCTAssertEqual(empty.status, 1, "and a password")
     }
 
     func testPutWritesItsInputAtThePath() throws {
