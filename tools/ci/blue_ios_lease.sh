@@ -11,8 +11,11 @@
 #                       (`oss machine xctest`, as its runner's iPhone 17 on
 #                       iOS 27.2), its pictures exported from the result
 #                       bundles by xcresulttool on this Mac
-#   web-mobile          the web site served on this Mac's loopback and opened
-#                       in an iPhone 17 Pro lease's Mobile Safari (`oss
+#   web-mobile          the web site served where the lease reaches this Mac
+#                       (its loopback, or this Mac's address on the network to
+#                       OS Server's primary Mac VM, which runs the simulators:
+#                       snapshots.py's lease_host) and opened in an iPhone 17
+#                       Pro lease's Mobile Safari (`oss
 #                       machine simctl openurl`, the lease's screenshots)
 #
 # then compared with tests/snapshots by snapshots.py, its run (report.html,
