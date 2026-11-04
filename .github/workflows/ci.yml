@@ -358,8 +358,11 @@ jobs:
   # lease's simulator on its loopback.
   blue-ios:
     # main's commits, and by hand (with the proof): a branch's run tries it
-    # before it merges.
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    # before it merges. After agent-image on a push to main, which publishes
+    # the line's image it takes: a commit that starts a line (0.44.0) has
+    # none before it (agent-image is skipped by hand, and it runs anyway).
+    needs: agent-image
+    if: ${{ !cancelled() && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') }}
     runs-on: [self-hosted, oss-container]
     timeout-minutes: 90
     steps:
@@ -399,7 +402,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v5
-      # 0.43.N, the next of the committed line for the token's commit,
+      # 0.44.N, the next of the committed line for the token's commit,
       # stamped into the checkout's Info.plists and never committed.
       - name: Version
         env:
