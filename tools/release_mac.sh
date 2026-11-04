@@ -14,10 +14,11 @@
 #
 # Visor Server carries Visor's own Linux programs for the containers it makes
 # (docs/co-tenancy.md, "Container images"), in Contents/Resources/Linux,
-# signed with it: tools/linux_programs.sh, run in a container leased from
-# this Mac's OS Server (`oss machine run container`) of Visor's agent image
-# at a build with the Swift its SDK is for (VISOR_LINUX_PROGRAMS_IMAGE names
-# another), the SDK and the build kept in a volume of their own.
+# signed with it: tools/linux_programs.sh's, as the tar that
+# tools/ci/linux_programs.sh makes in a container of an OS Server. CI's build
+# job is given the linux-programs job's (VISOR_LINUX_PROGRAMS, the tar), as
+# the release Mac has no OS Server of its own; without it, they're built here
+# in a container leased from this Mac's.
 #
 #   tools/release_mac.sh <version>               # the .dmgs in dist/
 #   tools/release_mac.sh <version> --publish     # and a GitHub release v<version>
@@ -45,16 +46,19 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p dist
 
-# Visor's own Linux programs, once for every app that carries them.
+# Visor's own Linux programs, once for every app that carries them, in
+# $WORK/linux: the tar VISOR_LINUX_PROGRAMS names, else one made here.
 linux_programs() {
-  local oss="/Applications/OS Server.app/Contents/Helpers/oss"
-  [ -x "$oss" ] || oss="$(command -v oss)" || { echo "Visor's Linux programs are built in an OS Server container: no oss here" >&2; exit 1; }
-  rm -rf dist/linux
-  "$oss" machine run container --image="${VISOR_LINUX_PROGRAMS_IMAGE:-ghcr.io/attilathefun/visor-agent:0.43.132}" --cpus=6 --memory=12 \
-    --mount="$PWD:$PWD" --volume="visor-linux-programs:/root/.swiftpm:16:keep" --inside -- \
-    env VISOR_LINUX_PROGRAMS_SCRATCH=/root/.swiftpm/visor-build "$PWD/tools/linux_programs.sh" "$PWD/dist/linux"
-  [ -x dist/linux/visor-server ] && [ -L dist/linux/visor-agent-host ] \
-    || { echo "Visor's Linux programs were not built" >&2; exit 1; }
+  local archive="${VISOR_LINUX_PROGRAMS:-}"
+  if [ -z "$archive" ]; then
+    archive="$WORK/linux-programs.tar"
+    tools/ci/linux_programs.sh "$archive"
+  fi
+  mkdir -p "$WORK/linux"
+  tar -x -C "$WORK/linux" -f "$archive"
+  [ -f "$WORK/linux/visor-server" ] && [ -x "$WORK/linux/visor-server" ] \
+    && [ "$(readlink "$WORK/linux/visor-agent-host")" = visor-server ] \
+    || { echo "Visor's Linux programs are not in $archive" >&2; exit 1; }
 }
 
 # Sends a file for notarization and waits; fails unless Apple accepts it.
@@ -76,7 +80,7 @@ release_app() {
   # Visor's Linux programs, sealed with the app (the link kept a link).
   if [ -n "$linux" ]; then
     rm -rf "$app/Contents/Resources/Linux"
-    ditto dist/linux "$app/Contents/Resources/Linux"
+    ditto "$WORK/linux" "$app/Contents/Resources/Linux"
   fi
   tools/sign_mac_app.sh "$app" >/dev/null
   local signature; signature="$(codesign -dvv "$app" 2>&1)"

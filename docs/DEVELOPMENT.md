@@ -691,8 +691,9 @@ computer's), the agent's log folder for that folder (Claude's
 is given that path, Visor's MCP script read-only at `/opt/visor`
 (ContainerTools), and, where the computer has them
 (`HostDetails.containerPrograms`: the app's `Contents/Resources/Linux`,
-which tools/release_mac.sh fills in a release's Visor Server, or `linux/`
-beside the command-line server), Visor's own Linux programs
+which tools/release_mac.sh fills in a release's Visor Server from CI's
+linux-programs job, tools/ci/linux_programs.sh, or `linux/` beside the
+command-line server), Visor's own Linux programs
 read-only at `/opt/visor/bin`: `visor-server`, also the agents' host as
 `visor-agent-host`, linked fully static (Swift's Static Linux SDK, musl:
 `tools/linux_programs.sh <folder>`, on Linux with Swift 6.4.0), so they run
