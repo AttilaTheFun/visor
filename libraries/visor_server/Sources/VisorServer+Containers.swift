@@ -215,6 +215,8 @@ extension VisorServer {
                                                      .init(name: name + "-home", destination: ContainerPlacement.home,
                                                            sizeBytes: ContainerPlacement.homeBytes)],
                                            labels: ["visor.session": session, "visor.server": id])
+        // A private registry's sign-in first, where one is set for it.
+        try await signIn(for: image, host: host)
         let made: ContainerHost.Made
         do {
             made = try await host.create(request)

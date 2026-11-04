@@ -44,8 +44,25 @@ public enum ContainerHostCommand {
         case "rm": return remove(rest, container: container)
         case "ls": return list(container)
         case "network": return network(rest, container: container)
-        default: return failure("\(name) health | create | exec | put | rm | ls | network", code: "unsupported")
+        case "login": return login(rest, input: input, container: container)
+        default: return failure("\(name) health | create | exec | put | rm | ls | network | login", code: "unsupported")
         }
+    }
+
+    /// `login <registry> --username <user>`, the password on standard input:
+    /// Apple's container signed in to the registry, so `create` can pull a
+    /// private image from it.
+    static func login(_ arguments: [String], input: Data, container: AppleContainer) -> Answer {
+        guard let registry = arguments.first, !registry.hasPrefix("-"), let at = arguments.firstIndex(of: "--username"),
+              at + 1 < arguments.count, !input.isEmpty else {
+            return failure("login <registry> --username <user>, the password on standard input")
+        }
+        let user = arguments[at + 1]
+        guard let signed = container.run(["registry", "login", "--username", user, "--password-stdin", registry], input: input),
+              signed.status == 0 else {
+            return failure("Apple's container couldn't sign in to \(registry)", code: "signIn")
+        }
+        return Answer(status: 0, json: ["ok": true, "registry": registry])
     }
 
     static func health(_ container: AppleContainer, version: String) -> Answer {
