@@ -154,6 +154,44 @@ final class ContainerTests: ServerTestCase {
         XCTAssertNotNil((made.process as? HostableProcess)?.container)
     }
 
+    /// Visor's own Linux programs, where this computer has them, are in
+    /// every container it makes, read-only: its agents' MCP server is the
+    /// agent host there, not the image's Node. A container made without
+    /// them keeps the script.
+    func testVisorsOwnProgramsAreMountedAndRunTheAgentsMCPServer() async throws {
+        let programs = root.appendingPathComponent("linux", isDirectory: true)
+        try FileManager.default.createDirectory(at: programs, withIntermediateDirectories: true)
+        for name in ["visor-server", "visor-agent-host"] {
+            let file = programs.appendingPathComponent(name)
+            try "#!/bin/sh\n".write(to: file, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+        }
+        ServerPlatform.current.host.containerPrograms = programs
+        defer { ServerPlatform.current.host.containerPrograms = nil }
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: Self.freePort())
+        defer { server.stop() }
+
+        let folder = root.appendingPathComponent("work").path
+        let made = try await start(server, .startInContainer(id: "S2", agent: .claude, cwd: folder, title: "", skipPermissions: true)).get()
+        let asked = try host.request(1)
+        XCTAssertTrue(asked.mounts.contains(.init(source: programs.path, destination: ContainerPlacement.programsFolder, readOnly: true)),
+                      "Visor's programs, read-only at /opt/visor/bin")
+        XCTAssertEqual(made.info.container?.programs, ContainerPlacement.programsFolder)
+        let placement = try XCTUnwrap(server.placement(for: made.info))
+        let mcp = VisorMCP.launch(["VISOR_SESSION": "S2"], container: placement)
+        XCTAssertEqual(mcp?.command, "/opt/visor/bin/visor-agent-host")
+        XCTAssertEqual(mcp?.arguments, ["mcp"])
+
+        var older = made.info
+        older.container?.programs = nil
+        let script = VisorMCP.launch(["VISOR_SESSION": "S2"], container: try XCTUnwrap(server.placement(for: older)))
+        XCTAssertEqual(script?.command, "node", "a container made before them keeps the image's Node and the script")
+        // A folder missing either is none.
+        try FileManager.default.removeItem(at: programs.appendingPathComponent("visor-server"))
+        XCTAssertNil(VisorServer.containerPrograms(programs))
+    }
+
     /// Visor's image is this build's, published by CI; a build CI did not
     /// number takes its version's latest.
     func testTheImageIsThisVersions() {

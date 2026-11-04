@@ -2,9 +2,10 @@
 // (libraries/visor_mcp_bridge), the agents' host program run as an MCP
 // server, that gives a session tools to list, message and read the other
 // sessions on this computer (and, in Claude's manual mode, the `approve`
-// tool the phone answers). Where there is no agent host (Windows), and in a
-// container until Visor's own Linux programs are mounted there, the Node
-// script it replaced (VisorMCPScript). The server side of those tools is
+// tool the phone answers): this computer's, or in a container the one
+// mounted there with Visor's own Linux programs. Where there is no agent
+// host (Windows), and in a container made without them, the Node script it
+// replaced (VisorMCPScript). The server side of those tools is
 // `VisorServer.agentReply`.
 
 import Foundation
@@ -33,13 +34,17 @@ enum VisorMCP {
 
     /// What runs the MCP server for a session that has its environment
     /// (which is how it reaches this server): this computer's agent host,
-    /// as `mcp`. In a container, the container's node and the script among
-    /// Visor's tools there (ContainerTools); with no agent host here, Node
-    /// and the script, when both are here.
+    /// as `mcp`. In a container, the agent host among Visor's programs
+    /// mounted there, or for one made without them the container's node
+    /// and the script among Visor's tools there (ContainerTools); with no
+    /// agent host here, Node and the script, when both are here.
     static func launch(_ environment: [String: String], container: ContainerPlacement?,
                        agentHost: String? = ServerPlatform.current.agentHosts?.program) -> (command: String, arguments: [String])? {
         guard !environment.isEmpty else { return nil }
-        if container != nil { return ("node", [ContainerPlacement.scriptPath]) }
+        if let container {
+            if let programs = container.programs { return (programs + "/visor-agent-host", ["mcp"]) }
+            return ("node", [ContainerPlacement.scriptPath])
+        }
         if let agentHost, FileManager.default.isExecutableFile(atPath: agentHost) { return (agentHost, ["mcp"]) }
         guard let script, let node = ToolPath.resolve("node") else { return nil }
         return (node, [script])

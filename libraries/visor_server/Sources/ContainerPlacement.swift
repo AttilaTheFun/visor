@@ -11,6 +11,9 @@ struct ContainerPlacement {
     let serverURL: String
     /// How commands are run in it: its container host.
     let exec: any ContainerExecuting
+    /// Where Visor's own Linux programs are in it, when they are
+    /// (SessionContainer.programs).
+    var programs: String? = nil
 
     /// Where the server's tools for containers (ContainerTools: Visor's MCP
     /// script) are seen in each container.
@@ -20,4 +23,7 @@ struct ContainerPlacement {
     static let buildOutput = "/var/cache/bazel"
     /// Visor's MCP script, in the container.
     static var scriptPath: String { toolsFolder + "/visor_mcp.js" }
+    /// Where Visor's own Linux programs are mounted in each container
+    /// (HostDetails.containerPrograms), read-only.
+    static let programsFolder = "/opt/visor/bin"
 }
