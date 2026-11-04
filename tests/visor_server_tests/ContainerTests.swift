@@ -16,7 +16,7 @@ import XCTest
 
 /// A container host played by a script: each call written down, answers as
 /// the test sets them (files beside it: `busy`, `unhealthy`, `nonetwork`,
-/// `listed.json`, `limits.json`).
+/// `listed.json`, `limits.json`, and `refused`: an image it can't get).
 private struct FakeHost {
     let folder: URL
 
@@ -39,6 +39,9 @@ private struct FakeHost {
                 n=$(( $(cat "$dir/count" 2>/dev/null || echo 0) + 1 )); echo $n > "$dir/count"
                 cat > "$dir/request-$n.json"
                 if [ -f "$dir/busy" ]; then echo '{"error":"no room","code":"busy"}'; exit 1; fi
+                if [ -f "$dir/refused" ] && tr -d '\\' < "$dir/request-$n.json" | grep -qF "\"$(cat "$dir/refused")\""; then
+                  echo '{"error":"no such image","code":"noImage"}'; exit 1
+                fi
                 echo "{\"id\":\"c$n\",\"name\":\"made\"}" ;;
               put)
                 cat > "$dir/put-$(echo "$2" | tr '/' '_')"
@@ -49,6 +52,9 @@ private struct FakeHost {
                 echo "{\"removed\":\"$1\"}" ;;
               ls)
                 if [ -f "$dir/listed.json" ]; then cat "$dir/listed.json"; else echo '{"containers":[]}'; fi ;;
+              login)
+                cat > "$dir/login-$1"
+                echo '{"ok":true}' ;;
               network)
                 if [ -f "$dir/nonetwork" ]; then echo '{"ok":false,"dns":false,"detail":"EAI_AGAIN"}'; else echo '{"ok":true,"detail":"fine"}'; fi ;;
             esac
@@ -154,11 +160,142 @@ final class ContainerTests: ServerTestCase {
         XCTAssertNotNil((made.process as? HostableProcess)?.container)
     }
 
+    /// Visor's own Linux programs, where this computer has them, are in
+    /// every container it makes, read-only: its agents' MCP server is the
+    /// agent host there, not the image's Node. A container made without
+    /// them keeps the script.
+    func testVisorsOwnProgramsAreMountedAndRunTheAgentsMCPServer() async throws {
+        let programs = root.appendingPathComponent("linux", isDirectory: true)
+        try FileManager.default.createDirectory(at: programs, withIntermediateDirectories: true)
+        for name in ["visor-server", "visor-agent-host"] {
+            let file = programs.appendingPathComponent(name)
+            try "#!/bin/sh\n".write(to: file, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+        }
+        ServerPlatform.current.host.containerPrograms = programs
+        defer { ServerPlatform.current.host.containerPrograms = nil }
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: Self.freePort())
+        defer { server.stop() }
+
+        let folder = root.appendingPathComponent("work").path
+        let made = try await start(server, .startInContainer(id: "S2", agent: .claude, cwd: folder, title: "", skipPermissions: true)).get()
+        let asked = try host.request(1)
+        XCTAssertTrue(asked.mounts.contains(.init(source: programs.path, destination: ContainerPlacement.programsFolder, readOnly: true)),
+                      "Visor's programs, read-only at /opt/visor/bin")
+        XCTAssertEqual(made.info.container?.programs, ContainerPlacement.programsFolder)
+        let placement = try XCTUnwrap(server.placement(for: made.info))
+        let mcp = VisorMCP.launch(["VISOR_SESSION": "S2"], container: placement)
+        XCTAssertEqual(mcp?.command, "/opt/visor/bin/visor-agent-host")
+        XCTAssertEqual(mcp?.arguments, ["mcp"])
+
+        var older = made.info
+        older.container?.programs = nil
+        let script = VisorMCP.launch(["VISOR_SESSION": "S2"], container: try XCTUnwrap(server.placement(for: older)))
+        XCTAssertEqual(script?.command, "node", "a container made before them keeps the image's Node and the script")
+        // A folder missing either is none.
+        try FileManager.default.removeItem(at: programs.appendingPathComponent("visor-server"))
+        XCTAssertNil(VisorServer.containerPrograms(programs))
+    }
+
+    /// A container made from another image than the one the server would
+    /// make it from now is made again from that one once its turn is over,
+    /// its disks kept; mid-turn it waits.
+    func testAContainerFromAnotherImageIsMadeAgainBetweenTurns() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: Self.freePort())
+        defer { server.stop() }
+        let work = root.appendingPathComponent("work").path
+        let made = try await start(server, .startInContainer(id: "u1", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        XCTAssertFalse(server.containerIsBehind(try XCTUnwrap(made.info.container)), "made from the image it would be")
+
+        server.settings.containerImage = "ghcr.io/example/tools:1"
+        XCTAssertTrue(server.containerIsBehind(try XCTUnwrap(made.info.container)))
+        made.info.busy = true
+        server.upgradeContainer(of: made)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(made.info.container?.id, "c1", "not mid-turn")
+
+        server.handle(.busy(false), from: made)
+        for _ in 0..<100 where made.info.container?.id == "c1" { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(made.info.container?.id, "c2")
+        XCTAssertEqual(made.info.container?.image, "ghcr.io/example/tools:1")
+        let again = try host.request(2)
+        XCTAssertEqual(again.image, "ghcr.io/example/tools:1")
+        XCTAssertEqual(again.volumes.map(\.name), ["visor-u1-build", "visor-u1-home"], "the same disks")
+        XCTAssertTrue(host.calls.contains("rm c1"), "the old one removed")
+        XCTAssertFalse(host.calls.contains("rm c1 --volumes"), "its disks kept")
+        XCTAssertTrue(made.notice?.hasPrefix("Its container was made again from ghcr.io/example/tools:1") ?? false, made.notice ?? "no notice")
+        XCTAssertFalse(server.containerIsBehind(try XCTUnwrap(made.info.container)))
+    }
+
+    /// When the image wanted can't be had, the container is made again from
+    /// the one it had, and the new one isn't tried again until another is
+    /// wanted.
+    func testAnImageThatCantBeHadLeavesTheContainerOnItsOwn() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: Self.freePort())
+        defer { server.stop() }
+        let work = root.appendingPathComponent("work").path
+        let made = try await start(server, .startInContainer(id: "u2", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        let old = try XCTUnwrap(made.info.container?.image)
+
+        try host.set("refused", "ghcr.io/example/private:1")
+        server.settings.containerImage = "ghcr.io/example/private:1"
+        server.handle(.busy(false), from: made)
+        for _ in 0..<100 where made.info.container?.id == "c1" { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(made.info.container?.id, "c3", "the new image refused (c2), the old one made again")
+        XCTAssertEqual(made.info.container?.image, old)
+        XCTAssertTrue(made.notice?.hasPrefix("Its container couldn't be made from ghcr.io/example/private:1") ?? false, made.notice ?? "no notice")
+
+        server.handle(.busy(false), from: made)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertThrowsError(try host.request(4), "not tried again")
+    }
+
+    /// An image in a private registry, with a sign-in set for it: the
+    /// sign-in's password goes to the host's `login` before each container
+    /// is made from it. Without a user, it says so and makes none.
+    func testAPrivateImagesRegistryIsSignedInToFirst() async throws {
+        let host = try FakeHost(in: root)
+        let server = await server(host, port: Self.freePort())
+        defer { server.stop() }
+        let registry = "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+        server.settings.containerImage = registry + "/team/tools:1"
+        server.settings.containerSignIn = ["/bin/echo", "token-123"]
+        let work = root.appendingPathComponent("work").path
+        let missing = await start(server, .startInContainer(id: "r0", agent: .claude, cwd: work, title: "", skipPermissions: true))
+        guard case .failure(let failure) = missing else { return XCTFail("made without a user") }
+        XCTAssertTrue(failure.message.contains("needs a user"), failure.message)
+        XCTAssertThrowsError(try host.request(1), "nothing made")
+
+        server.settings.containerSignInUser = "AWS"
+        let made = try await start(server, .startInContainer(id: "r1", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        XCTAssertEqual(made.info.container?.image, registry + "/team/tools:1")
+        let calls = host.calls.filter { $0.hasPrefix("login") || $0.hasPrefix("create") }
+        XCTAssertEqual(calls, ["login \(registry) --username AWS", "create "], "signed in, then made")
+        XCTAssertEqual(try String(contentsOf: host.folder.appendingPathComponent("login-" + registry), encoding: .utf8), "token-123")
+
+        // Visor's own image needs none.
+        server.settings.containerImage = ""
+        _ = try await start(server, .startInContainer(id: "r2", agent: .claude, cwd: work, title: "", skipPermissions: true)).get()
+        XCTAssertEqual(host.calls.filter { $0.hasPrefix("login") }.count, 1)
+    }
+
+    func testTheRegistryAnImageIsIn() {
+        XCTAssertEqual(VisorServer.registry(of: "ghcr.io/attilathefun/visor:0.44.1"), "ghcr.io")
+        XCTAssertEqual(VisorServer.registry(of: "123456789012.dkr.ecr.us-east-1.amazonaws.com/team/tools:1"),
+                       "123456789012.dkr.ecr.us-east-1.amazonaws.com")
+        XCTAssertEqual(VisorServer.registry(of: "localhost:5000/tools"), "localhost:5000")
+        XCTAssertEqual(VisorServer.registry(of: "ubuntu:24.04"), "docker.io")
+        XCTAssertEqual(VisorServer.registry(of: "library/ubuntu"), "docker.io")
+    }
+
     /// Visor's image is this build's, published by CI; a build CI did not
     /// number takes its version's latest.
     func testTheImageIsThisVersions() {
         let repository = VisorServer.containerImageRepository
-        XCTAssertEqual(repository, "ghcr.io/attilathefun/visor-agent")
+        XCTAssertEqual(repository, "ghcr.io/attilathefun/visor")
         XCTAssertEqual(VisorServer.containerImage(version: "0.40.12"), repository + ":0.40.12")
         XCTAssertEqual(VisorServer.containerImage(version: "0.40.12 (1)"), repository + ":0.40.12")
         XCTAssertEqual(VisorServer.containerImage(version: "0.40.0"), repository + ":0.40")
@@ -253,7 +390,9 @@ final class ContainerTests: ServerTestCase {
         XCTAssertEqual(standard.info.container?.size, VisorServer.fitted(.standard))
         let first = try host.request(1)
         XCTAssertEqual(first.cpus, VisorServer.fitted(.standard).cpus)
-        XCTAssertEqual(first.volumes, [.init(name: "visor-z1-build", destination: "/var/cache/bazel", sizeBytes: 128 * gigabyte)])
+        XCTAssertEqual(first.volumes, [.init(name: "visor-z1-build", destination: "/var/cache/bazel", sizeBytes: 128 * gigabyte),
+                                       .init(name: "visor-z1-home", destination: "/root", sizeBytes: 32 * gigabyte)],
+                       "Bazel's output, and the agent's home, which a container made again keeps")
 
         let asked = ContainerSize(cpus: 2, memoryBytes: 4 * gigabyte, diskBytes: 64 * gigabyte)
         let sized = try await start(server, .startInContainer(id: "z2", agent: .claude, cwd: work, title: "", skipPermissions: true,

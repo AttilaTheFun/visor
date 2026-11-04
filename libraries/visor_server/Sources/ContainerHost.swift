@@ -89,6 +89,12 @@ struct ContainerHost: ContainerExecuting, Equatable {
         } ?? []
     }
 
+    /// `login`: signs the host in to a registry, the password on standard
+    /// input, so it can pull a private image from it.
+    func login(registry: String, user: String, password: String) async throws {
+        _ = try await json(["login", registry, "--username", user], input: Data(password.utf8))
+    }
+
     func network(_ container: String) async throws -> Network {
         let answer = try await json(["network", container])
         return Network(ok: answer["ok"].bool ?? false, detail: answer["detail"].string ?? "")

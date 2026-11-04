@@ -1,17 +1,23 @@
-# Visor's agent image: the Linux a session's agent runs in when it runs in a
-# container on its Visor server's Mac (leased from OS Server there), or that
-# a container's own Visor server runs in (visor-server, visor-agent-host,
-# this image's commit's). Claude
-# Code, Codex and openrouter (OpenRouter's models), with Node (which also
-# runs Visor's MCP script and `visor`), Swift
-# 6.4.0 (which Bazel's Swift package rules ask for on Linux; rules_applecross
-# brings its own, 6.4.2, for the Apple apps), git, ssh, tmux, Python, Bazel
-# (bazelisk), and what Isomer's Linux apps link (SDL, GL, GTK, WebKitGTK).
-# CI publishes it for each build (tools/containers/publish_agent_image.sh)
-# as ghcr.io/attilathefun/visor-agent:<version> and :<MAJOR.MINOR>, and a
-# Visor server leases each session's container from the OS Server on its
-# Mac made from its own version's (its `containers image` setting names
-# another).
+# Visor's images, two targets of one file (docs/co-tenancy.md, "Container
+# images"); CI publishes both for each build
+# (tools/containers/publish_agent_image.sh):
+#
+# - runtime: ghcr.io/attilathefun/visor:<version>, :<MAJOR.MINOR> and
+#   :latest, the image a Visor server makes a session's container from
+#   unless its `containers image` setting names another. What an agent
+#   works with and nothing to build with: Ubuntu, Claude Code, Codex and
+#   openrouter (OpenRouter's models), Node, git, ssh, tmux, ripgrep, Python.
+#   Visor mounts its own Linux programs at /opt/visor/bin in every container
+#   it makes, so any image will do; this one carries them too
+#   (visor-server, visor-agent-host, this image's commit's), for anyone
+#   running it on its own.
+# - build (the last, so the default): ghcr.io/attilathefun/visor-agent, the
+#   same with the toolchains: Swift 6.4.0 (which Bazel's Swift package rules
+#   ask for on Linux; rules_applecross brings its own, 6.4.2, for the Apple
+#   apps), Bazel (bazelisk), clang and lld, what Isomer's Linux apps link
+#   (SDL, GL, GTK, WebKitGTK), NSS for headless Chromium, x86_64 glibc for
+#   Android's tools. CI's containers and the co-tenant run it; it moves to
+#   Shireworks' registry as visor-build once that is there.
 # The container sees the session's folder at the same path and Visor's
 # tools at /opt/visor (read-only, from the server); no Xcode: Apple apps
 # build with rules_applecross from the SDK archive an OS Server serves, and
@@ -28,6 +34,11 @@
 #       ghcr.io/attilathefun/visor-agent:<version> openrouter auth login
 #   <Visor's data>/containers/home/       other files, copied into each container's home
 
+# The Swift programs below are built with the Swift runtime and Foundation
+# linked in (--static-swift-stdlib; SwiftPM's native build system, as its
+# newer one leaves CoreFoundation out of that link in 6.4.0), so the runtime
+# image needs no toolchain: only libcurl, which FoundationNetworking opens.
+
 # openrouter (github.com/AttilaTheFun/open_router_cli), built from a tag (or
 # any commit: OPENROUTER_REF) in a stage of its own; only the binary comes
 # over.
@@ -35,8 +46,8 @@ FROM docker.io/library/swift:6.4.0-noble AS openrouter
 ARG OPENROUTER_REF=v0.5.0
 RUN git init -q /src && cd /src \
  && git fetch -q --depth 1 https://github.com/AttilaTheFun/open_router_cli "$OPENROUTER_REF" && git checkout -q FETCH_HEAD \
- && swift build -c release --product openrouter \
- && install -m 755 "$(swift build -c release --show-bin-path)/openrouter" /usr/local/bin/openrouter
+ && swift build -c release --build-system native --static-swift-stdlib --product openrouter \
+ && install -m 755 "$(swift build -c release --build-system native --static-swift-stdlib --show-bin-path)/openrouter" /usr/local/bin/openrouter
 
 # Visor's own server and the agents' host (visor-server, visor-agent-host),
 # for a container that runs a Visor server of its own (docs/co-tenancy.md),
@@ -46,11 +57,35 @@ FROM docker.io/library/swift:6.4.0-noble AS visor
 ARG VISOR_REF=main
 RUN git init -q /src && cd /src \
  && git fetch -q --depth 1 https://github.com/AttilaTheFun/visor "$VISOR_REF" && git checkout -q FETCH_HEAD \
- && swift build -c release --product visor-server \
- && swift build -c release --product visor-agent-host \
- && install -m 755 "$(swift build -c release --show-bin-path)/visor-server" "$(swift build -c release --show-bin-path)/visor-agent-host" /usr/local/bin/
+ && swift build -c release --build-system native --static-swift-stdlib --product visor-server \
+ && swift build -c release --build-system native --static-swift-stdlib --product visor-agent-host \
+ && bin="$(swift build -c release --build-system native --static-swift-stdlib --show-bin-path)" \
+ && install -m 755 "$bin/visor-server" "$bin/visor-agent-host" /usr/local/bin/
 
-FROM docker.io/library/swift:6.4.0-noble
+# The runtime image: ghcr.io/attilathefun/visor.
+FROM docker.io/library/ubuntu:24.04 AS runtime
+LABEL org.opencontainers.image.source="https://github.com/AttilaTheFun/visor"
+LABEL org.opencontainers.image.description="Visor's image: the Linux a session's agent runs in, in a container, with Claude Code and Codex."
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client tmux python3 unzip zip less procps ripgrep bubblewrap tini \
+      libcurl4t64 libstdc++6 \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=docker.io/library/node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=docker.io/library/node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+RUN npm install -g @anthropic-ai/claude-code @openai/codex && npm cache clean --force
+COPY --from=openrouter /usr/local/bin/openrouter /usr/local/bin/openrouter
+COPY --from=visor /usr/local/bin/visor-server /usr/local/bin/visor-agent-host /usr/local/bin/
+RUN git config --system --add safe.directory '*'
+# Visor's programs (/opt/visor/bin, mounted from the app) and its tools
+# (/opt/visor, from the server) before the image's own.
+ENV PATH=/opt/visor/bin:/opt/visor:$PATH
+ENV IS_SANDBOX=1
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# The build image: ghcr.io/attilathefun/visor-agent.
+
+FROM docker.io/library/swift:6.4.0-noble AS build
 # libnss3: headless Chromium's (blue's web checks, tools/ci/container_blue_web.sh).
 # The repository the image is published from: GitHub's registry links the
 # package to it, which lets the repository's own CI token push it.
@@ -103,8 +138,9 @@ COPY --from=openrouter /usr/local/bin/openrouter /usr/local/bin/openrouter
 COPY --from=visor /usr/local/bin/visor-server /usr/local/bin/visor-agent-host /usr/local/bin/
 # The session's folder belongs to the Mac's user, not root: git works in it.
 RUN git config --system --add safe.directory '*'
-# Visor's tools (`visor`), which the server mounts here.
-ENV PATH=/opt/visor:$PATH
+# Visor's programs (/opt/visor/bin, mounted from the app) and its tools
+# (/opt/visor, from the server).
+ENV PATH=/opt/visor/bin:/opt/visor:$PATH
 # The container is the agent's sandbox: Claude Code skips its permission
 # prompts though it runs as root.
 ENV IS_SANDBOX=1
