@@ -31,9 +31,11 @@ makes tags, whatever a tool gets wrong.
   Server machines through the server, in the session's name, with oss's
   token, which the session never sees. This is the pattern for every
   tool below.
-- Visor's MCP server (`visor_mcp.js`) gives agents `list_sessions`,
-  `send_message`, `read_messages`, `message_status` and `approve`.
-  Its `initialize` instructions tell the agent where it runs.
+- Visor's MCP server (`visor-agent-host mcp`, libraries/visor_mcp_bridge;
+  in a container, and with no agent host, the Node script it replaced,
+  `visor_mcp.js`) gives agents `list_sessions`, `send_message`,
+  `read_messages`, `message_status` and `approve`. Its `initialize`
+  instructions tell the agent where it runs.
 - A session authenticates to its server with its agent token
   (`VISOR_TOKEN`). The token is the session's own, and is good only
   for what the server lets a session do.

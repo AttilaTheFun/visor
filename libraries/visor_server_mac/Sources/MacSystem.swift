@@ -36,6 +36,10 @@ public struct MacSystem: CommandLineSystem {
             files: DispatchFileWatching(),
             tools: MacTools(),
             host: HostDetails(name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName, system: "macos", dataDirectory: data,
+                              // Visor's Linux programs for its containers, in
+                              // a folder `linux` beside the binary when given.
+                              containerPrograms: URL(fileURLWithPath: executable).resolvingSymlinksInPath().deletingLastPathComponent()
+                                  .appendingPathComponent("linux", isDirectory: true),
                               addresses: { NetworkAddresses.all().map(\.address) },
                               networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } },
                               localNetworkName: { LocalNetworkName.current() }, resolve: { POSIXResolver.ipv4($0) }),

@@ -67,6 +67,14 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// The image sessions' containers are made from; empty for Visor's own
     /// (`VisorServer.defaultContainerImage`, this version's).
     public var containerImage = ""
+    /// How to sign in to the registry `containerImage` is in, when it is a
+    /// private one: a command, and its arguments, that prints the password
+    /// (`aws ecr get-login-password --region us-east-1` gives ECR's, good
+    /// for 12 hours), run each time a container is made from it; empty for
+    /// none.
+    public var containerSignIn: [String] = []
+    /// The user that password is for (ECR's is `AWS`).
+    public var containerSignInUser = ""
     /// How an agent in a container reaches this server (Visor's tools for
     /// it): a ws:// address; empty for this computer's LAN address, at the
     /// server's port.
@@ -90,7 +98,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
              frontPaths, clientsKeepMessages, detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost,
-             pushProxy
+             pushProxy, containerSignIn, containerSignInUser
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -111,6 +119,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         if !containerCallback.isEmpty { try c.encode(containerCallback, forKey: .containerCallback) }
         if !mcpEndpoints.isEmpty { try c.encode(mcpEndpoints, forKey: .mcpEndpoints) }
         if !containerHost.isEmpty { try c.encode(containerHost, forKey: .containerHost) }
+        if !containerSignIn.isEmpty { try c.encode(containerSignIn, forKey: .containerSignIn) }
+        if !containerSignInUser.isEmpty { try c.encode(containerSignInUser, forKey: .containerSignInUser) }
         if !pushProxy.isEmpty { try c.encode(pushProxy, forKey: .pushProxy) }
     }
 
@@ -142,6 +152,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         containerCallback = try c.decodeIfPresent(String.self, forKey: .containerCallback) ?? ""
         mcpEndpoints = try c.decodeIfPresent([MCPEndpoint].self, forKey: .mcpEndpoints) ?? []
         containerHost = try c.decodeIfPresent([String].self, forKey: .containerHost) ?? []
+        containerSignIn = try c.decodeIfPresent([String].self, forKey: .containerSignIn) ?? []
+        containerSignInUser = try c.decodeIfPresent(String.self, forKey: .containerSignInUser) ?? ""
         pushProxy = try c.decodeIfPresent(String.self, forKey: .pushProxy) ?? ""
     }
 

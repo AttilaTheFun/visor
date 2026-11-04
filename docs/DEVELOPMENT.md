@@ -672,19 +672,37 @@ published by CI's agent-image job as `ghcr.io/attilathefun/visor:<version>`,
 ssh, tmux, no toolchains; its build target, with them, is
 `ghcr.io/attilathefun/visor-agent`, CI's and the co-tenant's; a server asks
 for its own version's, `visor-server containers image <ref>` for another,
-any image at all) with the size the session asked for
+any image at all, from a private registry too: `visor-server containers
+sign-in <user> <command…>`, or Settings → Containers, names a command that
+prints its password, run before each container is made from it and given to
+the host's `login`, VisorServer+ContainerRegistry.swift) with the size the
+session asked for
 (ContainerSize: 6 cores, 16 GB of memory and 128 GB of disk unless asked
 otherwise, fitted to the host's `limits`, else what the computer has; the disk is a volume,
 `visor-<session>-build` at /var/cache/bazel, where the image keeps Bazel's
-output), with Rosetta for x86_64 programs, labelled with the session and
+output, and the agent's home another, `visor-<session>-home` at /root, 32 GB
+always: its tools' settings and caches and its SSH key outlast the
+container; a new one starts with what the image has there, copied in by the
+host, docs/container-host.md), with Rosetta for x86_64 programs, labelled with the session and
 this server (`visor.session`, `visor.server`). It sees: the session's folder
 at the same path (so its files, git and the agent's own log are the
 computer's), the agent's log folder for that folder (Claude's
 `~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
 `~/.openrouter/sessions`), the pictures attached to sessions
 (`<data>/images`, AgentImages) read-only at the same path, since the agent
-is given that path, and Visor's MCP script read-only at `/opt/visor`
-(ContainerTools). The agents' sign-ins for containers are the server's own,
+is given that path, Visor's MCP script read-only at `/opt/visor`
+(ContainerTools), and, where the computer has them
+(`HostDetails.containerPrograms`: the app's `Contents/Resources/Linux`,
+which tools/release_mac.sh fills in a release's Visor Server from CI's
+linux-programs job, tools/ci/linux_programs.sh, or `linux/` beside the
+command-line server), Visor's own Linux programs
+read-only at `/opt/visor/bin`: `visor-server`, also the agents' host as
+`visor-agent-host`, linked fully static (Swift's Static Linux SDK, musl:
+`tools/linux_programs.sh <folder>`, on Linux with Swift 6.4.0), so they run
+in any image. An agent in a container made with them has
+`/opt/visor/bin/visor-agent-host mcp` for its MCP server, so its image
+needs no Node; one made without them (`SessionContainer.programs` nil)
+keeps the image's Node and the script. The agents' sign-ins for containers are the server's own,
 never the image's (ContainerSignIns: `<data>/containers/agent.env` with
 CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
 `<data>/containers/codex`, mounted at `/root/.codex` with the computer's
@@ -721,7 +739,14 @@ of a container that is gone; VisorServer+ContainerChecks.swift), the host
 is asked whether it still lists the container and what its `network` says;
 a container that is gone or has no network is made again with its disk
 kept, the agent started again there, and the session says so — not twice
-in five minutes. At start the server removes the host's containers of sessions it
+in five minutes. A container made from another image than the one the
+server would make it from now (`wantedContainerImage`: the one set, else
+its own version's, so every update of the server), or without Visor's own
+Linux programs where the computer has them, is made again from it, its
+disks kept, when the server finds its containers and whenever a session's
+turn ends, never mid-turn (VisorServer+ContainerUpgrades.swift); when that
+image can't be had, the container is made again from its own, and the new
+one isn't tried again until another is wanted. At start the server removes the host's containers of sessions it
 no longer has, and a session still in a container OS Server lent (0.43 and
 before, `SessionContainer.socket`) runs on the computer from then on. An
 agent in a container reaches this server over the network (VISOR_URL:

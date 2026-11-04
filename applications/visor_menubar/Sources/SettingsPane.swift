@@ -23,9 +23,13 @@ struct SettingsPane: View {
     /// The field being edited, so leaving it applies what was typed: an
     /// address that only Return applied was easy to leave unapplied.
     @FocusState private var editing: EditedField?
-    enum EditedField: Hashable { case publicAddress, tlsPath, tlsPassword, containerHost, containerImage, containerCallback }
+    enum EditedField: Hashable {
+        case publicAddress, tlsPath, tlsPassword, containerHost, containerImage, containerSignIn, containerSignInUser, containerCallback
+    }
     @State private var containerHost = ""
     @State private var containerImage = ""
+    @State private var containerSignIn = ""
+    @State private var containerSignInUser = ""
     @State private var containerCallback = ""
     @State private var keyID = ""
     @State private var teamID = ""
@@ -175,11 +179,17 @@ struct SettingsPane: View {
                 TextField("Image (empty: \(server.defaultContainerImage))", text: $containerImage)
                     .focused($editing, equals: .containerImage)
                     .onSubmit { apply(.containerImage) }
+                TextField("Its registry's sign-in: a command that prints the password (e.g. aws ecr get-login-password)", text: $containerSignIn)
+                    .focused($editing, equals: .containerSignIn)
+                    .onSubmit { apply(.containerSignIn) }
+                TextField("Its registry's user (ECR's: AWS)", text: $containerSignInUser)
+                    .focused($editing, equals: .containerSignInUser)
+                    .onSubmit { apply(.containerSignInUser) }
                 TextField("How containers reach this Mac (empty: its LAN address)", text: $containerCallback)
                     .focused($editing, equals: .containerCallback)
                     .onSubmit { apply(.containerCallback) }
                 Text(server.containersAvailable
-                     ? "Sessions can run their agent in a Linux container, made by the container host, which sees the session's folder and nothing else of the Mac."
+                     ? "Sessions can run their agent in a Linux container, made by the container host, which sees the session's folder and nothing else of the Mac. Any Linux image will do: Visor brings its own programs into it, and the image brings the agents' tools (Visor's own has Claude Code and Codex). A private registry's sign-in is run each time a container is made from it."
                      : "Put a container host on the PATH (\(VisorServer.containerHostName), from Visor, over Apple's container) or set one here, and turn on “Reachable from the network”, to run sessions' agents in Linux containers.")
                     .font(.caption).foregroundColor(.secondary)
             } header: {
@@ -229,6 +239,8 @@ struct SettingsPane: View {
             tlsPath = server.settings.tlsIdentityPath
             containerHost = server.settings.containerHost.joined(separator: " ")
             containerImage = server.settings.containerImage
+            containerSignIn = server.settings.containerSignIn.joined(separator: " ")
+            containerSignInUser = server.settings.containerSignInUser
             containerCallback = server.settings.containerCallback
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
@@ -242,6 +254,8 @@ struct SettingsPane: View {
             apply(.tlsPath)
             apply(.containerHost)
             apply(.containerImage)
+            apply(.containerSignIn)
+            apply(.containerSignInUser)
             apply(.containerCallback)
         }
     }
@@ -263,7 +277,17 @@ struct SettingsPane: View {
             }
         case .containerImage:
             let image = containerImage.trimmingCharacters(in: .whitespaces)
-            if server.settings.containerImage != image { server.settings.containerImage = image }
+            if server.settings.containerImage != image {
+                server.settings.containerImage = image
+                // Sessions resting in containers of the old one: made again.
+                server.upgradeContainers()
+            }
+        case .containerSignIn:
+            let words = containerSignIn.split(separator: " ").map(String.init)
+            if server.settings.containerSignIn != words { server.settings.containerSignIn = words }
+        case .containerSignInUser:
+            let user = containerSignInUser.trimmingCharacters(in: .whitespaces)
+            if server.settings.containerSignInUser != user { server.settings.containerSignInUser = user }
         case .containerCallback:
             let address = containerCallback.trimmingCharacters(in: .whitespaces)
             if server.settings.containerCallback != address { server.settings.containerCallback = address }

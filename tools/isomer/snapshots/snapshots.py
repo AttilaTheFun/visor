@@ -189,8 +189,8 @@ def lease_host():
     one in OS Server's primary Mac VM (the lease names it as `primary`) has
     the VM's own, and reaches this Mac on the VMs' network: the address of
     this Mac's side of the route to the VM (`route -n get` its
-    `guestAddress`, then `ipconfig getifaddr` that interface), or what the
-    lease says it is (`hostAddress`). Only that address is bound, so
+    `guestAddress`, then that interface's address from `ifconfig`), or what
+    the lease says it is (`hostAddress`). Only that address is bound, so
     nothing else on the network sees the site."""
     if not IOS_LEASE:
         return "127.0.0.1"
@@ -209,7 +209,10 @@ def lease_host():
         sys.exit(f"snapshots: lease {IOS_LEASE} is in primary {primary}, whose guestAddress oss machine list does not give")
     route = sh(["route", "-n", "get", guest]).stdout
     interface = next((line.split(":", 1)[1].strip() for line in route.splitlines() if line.strip().startswith("interface:")), "")
-    address = sh(["ipconfig", "getifaddr", interface], check=False).stdout.strip() if interface else ""
+    # The interface's IPv4 address, as ifconfig says it (ipconfig getifaddr
+    # answers nothing for vmnet's bridge, bridge100).
+    shown = sh(["ifconfig", interface], check=False).stdout if interface else ""
+    address = next((line.split()[1] for line in shown.splitlines() if line.strip().startswith("inet ") and len(line.split()) > 1), "")
     if not address:
         sys.exit(f"snapshots: no address of this Mac on the route to {guest} (interface {interface or 'none'})")
     log(f"web-mobile serves on {address}, this Mac's side of the network to primary {guest}")

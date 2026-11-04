@@ -221,7 +221,7 @@ jobs:
   # main's branch protection requires a check of that name, which a pull
   # request's run reports as skipped.
   build:
-    needs: number
+    needs: [number, linux-programs]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 90
@@ -231,13 +231,41 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: $PIPELINE_CI prepare
       - run: $PIPELINE_CI stamp ${{ needs.number.outputs.version }} applications/visor_macos/Info.plist applications/visor_menubar/Info.plist applications/visor_container_host/Info.plist
+      # Visor's own Linux programs, which Visor Server carries
+      # (tools/release_mac.sh), from the linux-programs job.
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-programs
+          path: ${{ runner.temp }}/linux-programs
       - run: tools/build_packages.sh
+        env:
+          VISOR_LINUX_PROGRAMS: ${{ runner.temp }}/linux-programs/linux-programs.tar
       - run: $PIPELINE_CI publish Visor dist/packages/*
         env:
           GH_TOKEN: ${{ github.token }}
           PIPELINE_SHA: ${{ github.event.pull_request.head.sha }}
           PIPELINE_BRANCH: ${{ github.event.pull_request.head.ref }}
           PIPELINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+
+  # Visor's own Linux programs (tools/linux_programs.sh: visor-server, also
+  # the agents' host, linked fully static), which the build job seals into
+  # Visor Server for the containers it makes: built in a container of
+  # Visor's agent image leased from the OS Server on the runner's Mac
+  # (tools/ci/linux_programs.sh), as the release Mac has none, and handed
+  # over as a tar. Not waiting on number: it needs no version.
+  linux-programs:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, visor-jit]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: exec tools/ci/linux_programs.sh "$RUNNER_TEMP/linux-programs.tar"
+      - run: tar -tvf "$RUNNER_TEMP/linux-programs.tar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-programs
+          path: ${{ runner.temp }}/linux-programs.tar
+          retention-days: 7
 
   # Visor's images (tools/containers/visor-agent/Dockerfile), built on the
   # release Mac (Apple's container) and pushed to GitHub's registry as this

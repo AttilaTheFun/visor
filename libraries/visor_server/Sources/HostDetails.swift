@@ -15,6 +15,13 @@ public struct HostDetails: Sendable {
     public var version: String
     /// Where the server keeps its sessions, pictures and settings.
     public var dataDirectory: URL
+    /// Visor's own Linux programs, for the containers the server makes
+    /// (docs/co-tenancy.md, "Container images"): a folder of this
+    /// computer's holding `visor-server` and `visor-agent-host` built for
+    /// Linux, mounted read-only at `ContainerPlacement.programsFolder` in
+    /// each, so a container needs nothing of Visor's in its image. Nil
+    /// where the binary carries none (a build without them).
+    public var containerPrograms: URL?
     /// This computer's addresses on its networks (IPv4, loopback left
     /// out), the most likely one first; asked when a client needs one.
     public var addresses: @Sendable () -> [String]
@@ -31,6 +38,7 @@ public struct HostDetails: Sendable {
     public var resolve: @Sendable (String) -> String?
 
     public init(name: String, system: String = "", inContainer: Bool = false, version: String = "", dataDirectory: URL,
+                containerPrograms: URL? = nil,
                 addresses: @escaping @Sendable () -> [String] = { [] },
                 networkAddresses: (@Sendable () -> [NetworkAddress])? = nil,
                 localNetworkName: @escaping @Sendable () -> String? = { nil },
@@ -42,6 +50,7 @@ public struct HostDetails: Sendable {
         self.inContainer = inContainer
         self.version = version
         self.dataDirectory = dataDirectory
+        self.containerPrograms = containerPrograms
         self.addresses = addresses
         let given = networkAddresses ?? { addresses().map { NetworkAddress(address: $0) } }
         self.networkAddresses = { given().filter { !NetworkAddress.isLinkLocal($0.address) && !NetworkAddress.isLoopback($0.address) } }

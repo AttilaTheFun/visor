@@ -84,9 +84,13 @@ Makes a container and starts it. Given:
 
 - `mounts` are this computer's folders, seen at `destination`; the
   session's folder is always among them, at its own path.
-- A volume is a disk of the container's own, made empty the first time
-  and kept by its name until `rm --volumes`, so a container made again
-  (see Network) finds it as it was.
+- A volume is a disk of the container's own, kept by its name until
+  `rm --volumes`, so a container made again (see Network) finds it as it
+  was. The first time, it starts with what the image has at its
+  `destination`, as Docker's do (empty if the image has nothing there):
+  the agent's home at `/root` keeps an image's tools and settings there.
+  Apple's container mounts a new volume empty, so visor-container-host
+  first runs the image once to copy them in.
 - `name` and `labels` are the host's to use or not; a host that keeps
   accounts (OS Server) shows them.
 
@@ -153,6 +157,19 @@ Visor removes those of sessions it no longer has. When a session's agent
 ends with a failing status, Visor looks for its container here: one the
 host no longer lists is made again as when its network is lost (see
 Network), and the session says so.
+
+### `login`
+
+`<host> login <registry> --username <user>`, the password on standard
+input: the host signs in to that registry, so `create` can pull a private
+image from it.
+- Visor calls it before each `create` from the image set in its settings,
+  when a sign-in is set with it (a command that prints the password, such
+  as `aws ecr get-login-password`, whose password lasts 12 hours).
+- visor-container-host: `container registry login --username <user>
+  --password-stdin <registry>`. The password goes on no command line.
+- Answers `{"ok", "registry"}`; a host without it answers `unsupported`,
+  and Visor says the host can't sign in to registries.
 
 ### `network`
 

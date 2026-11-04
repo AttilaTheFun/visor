@@ -66,13 +66,15 @@ let system: [Target] = [
     .target(name: "CVisorPOSIX", path: "libraries/visor_server_posix/c"),
     .target(name: "VisorAgentHost", dependencies: ["AgentHostWire", "CVisorPOSIX"],
             path: "libraries/visor_agent_host/Sources", swiftSettings: strict),
-    .executableTarget(name: "VisorAgentHostMain", dependencies: ["VisorAgentHost"],
+    .target(name: "VisorMCPBridge", dependencies: ["VisorProtocol", "CVisorPOSIX"],
+            path: "libraries/visor_mcp_bridge/Sources", swiftSettings: strict),
+    .executableTarget(name: "VisorAgentHostMain", dependencies: ["VisorAgentHost", "VisorMCPBridge"],
                       path: "applications/visor_agent_host", exclude: ["BUILD.bazel"], swiftSettings: strict),
     .target(name: "VisorServerPOSIX", dependencies: ["CVisorPOSIX", "VisorServer"],
             path: "libraries/visor_server_posix/Sources", swiftSettings: strict),
     .target(name: "VisorServerLinux", dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI", "VisorServerPOSIX"],
             path: "libraries/visor_server_linux/Sources", swiftSettings: strict),
-    .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerLinux"],
+    .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge"],
                       path: "applications/visor_server_linux", swiftSettings: strict),
     // Visor's container host over Apple's container: a Mac's, Bazel's
     // there; built and tested here too, with a script for the tool.
@@ -88,7 +90,7 @@ let system: [Target] = [
 let tests: [Target] = [
     .testTarget(name: "VisorServerTests",
                 dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux",
-                               "VisorServerPOSIX"],
+                               "VisorServerPOSIX", "VisorMCPBridge"],
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
     .testTarget(name: "VisorContainerHostTests", dependencies: ["VisorContainerHost"],
                 path: "tests/visor_container_host_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),

@@ -44,8 +44,25 @@ public enum ContainerHostCommand {
         case "rm": return remove(rest, container: container)
         case "ls": return list(container)
         case "network": return network(rest, container: container)
-        default: return failure("\(name) health | create | exec | put | rm | ls | network", code: "unsupported")
+        case "login": return login(rest, input: input, container: container)
+        default: return failure("\(name) health | create | exec | put | rm | ls | network | login", code: "unsupported")
         }
+    }
+
+    /// `login <registry> --username <user>`, the password on standard input:
+    /// Apple's container signed in to the registry, so `create` can pull a
+    /// private image from it.
+    static func login(_ arguments: [String], input: Data, container: AppleContainer) -> Answer {
+        guard let registry = arguments.first, !registry.hasPrefix("-"), let at = arguments.firstIndex(of: "--username"),
+              at + 1 < arguments.count, !input.isEmpty else {
+            return failure("login <registry> --username <user>, the password on standard input")
+        }
+        let user = arguments[at + 1]
+        guard let signed = container.run(["registry", "login", "--username", user, "--password-stdin", registry], input: input),
+              signed.status == 0 else {
+            return failure("Apple's container couldn't sign in to \(registry)", code: "signIn")
+        }
+        return Answer(status: 0, json: ["ok": true, "registry": registry])
     }
 
     static func health(_ container: AppleContainer, version: String) -> Answer {
@@ -95,9 +112,15 @@ public enum ContainerHostCommand {
                 return failure("\(request.name) is there but doesn't start")
             }
         } else {
+            var new: [HostRequest.Volume] = []
             for volume in request.volumes {
-                if let problem = ensure(volume, container: container) { return failure(problem) }
+                switch ensure(volume, container: container) {
+                case .kept: break
+                case .made: new.append(volume)
+                case .failed(let problem): return failure(problem)
+                }
             }
+            if !new.isEmpty { _ = container.run(seedArguments(request, volumes: new, rosetta: rosetta)) }
             guard let made = container.run(runArguments(request, rosetta: rosetta)) else { return failure("Apple's container couldn't be started") }
             guard made.status == 0 else {
                 let said = made.said
@@ -120,18 +143,39 @@ public enum ContainerHostCommand {
         return failure("\(request.name) was made but resolves no names: its network doesn't work", code: "network")
     }
 
+    /// What `ensure` did about a volume.
+    enum Ensured: Equatable {
+        case kept, made
+        case failed(String)
+    }
+
     /// A volume there at the size asked: one at another size goes first (a
-    /// volume isn't made larger or smaller). Nil, or what went wrong.
-    static func ensure(_ volume: HostRequest.Volume, container: AppleContainer) -> String? {
+    /// volume isn't made larger or smaller).
+    static func ensure(_ volume: HostRequest.Volume, container: AppleContainer) -> Ensured {
         // In MB, as it is made.
         let megabytes = UInt64(max(volume.sizeBytes, 0)) / 1_048_576
         let size = volumeSize(volume.name, container: container).map { $0 / 1_048_576 }
         if let size, size != megabytes { _ = container.run(["volume", "delete", volume.name]) }
-        guard size != megabytes else { return nil }
+        guard size != megabytes else { return .kept }
         guard let made = container.run(["volume", "create", "-s", "\(megabytes)M", volume.name]), made.status == 0 else {
-            return "Could not make the volume \(volume.name)"
+            return .failed("Could not make the volume \(volume.name)")
         }
-        return nil
+        return .made
+    }
+
+    /// `container run`'s arguments for Docker's way with a volume, which
+    /// Apple's container hasn't (it mounts a new one empty, hiding the
+    /// image's files there): a run of the image that copies what it has at
+    /// each new volume's destination into it, before the container is made
+    /// on them. A home volume at /root so keeps an image's tools and
+    /// settings there. Best effort: an image without a shell, or with
+    /// nothing there, leaves the volume empty.
+    static func seedArguments(_ request: HostRequest, volumes: [HostRequest.Volume], rosetta: Bool) -> [String] {
+        var arguments = ["run", "--rm"]
+        for (index, volume) in volumes.enumerated() { arguments += ["--volume", "\(volume.name):/visor-seed/\(index)"] }
+        if request.rosetta && rosetta { arguments += ["--rosetta"] }
+        let copy = #"i=0; for d in "$@"; do if [ -d "$d" ]; then cp -a "$d/." "/visor-seed/$i/"; fi; i=$((i + 1)); done"#
+        return arguments + [request.image, "sh", "-c", copy, "sh"] + volumes.map(\.destination)
     }
 
     static func volumeSize(_ name: String, container: AppleContainer) -> UInt64? {

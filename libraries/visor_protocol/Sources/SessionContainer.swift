@@ -14,11 +14,17 @@ public struct SessionContainer: Codable, Hashable, Sendable {
     /// socket): kept by the server, never sent to a client. Nil for a
     /// container from before oss ran them (Apple's container).
     public var socket: String?
+    /// Where Visor's own Linux programs are in it (`/opt/visor/bin`), when
+    /// it was made with them mounted: kept by the server, never sent to a
+    /// client. Nil for one made without them, whose agents' MCP server is
+    /// the image's Node and the script.
+    public var programs: String?
 
-    public init(id: String, image: String? = nil, size: ContainerSize? = nil, socket: String? = nil) {
+    public init(id: String, image: String? = nil, size: ContainerSize? = nil, socket: String? = nil, programs: String? = nil) {
         self.id = id
         self.image = image
         self.size = size
         self.socket = socket
+        self.programs = programs
     }
 }
