@@ -74,7 +74,7 @@ let system: [Target] = [
             path: "libraries/visor_server_posix/Sources", swiftSettings: strict),
     .target(name: "VisorServerLinux", dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI", "VisorServerPOSIX"],
             path: "libraries/visor_server_linux/Sources", swiftSettings: strict),
-    .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerLinux"],
+    .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge"],
                       path: "applications/visor_server_linux", swiftSettings: strict),
     // Visor's container host over Apple's container: a Mac's, Bazel's
     // there; built and tested here too, with a script for the tool.

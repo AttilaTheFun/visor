@@ -95,7 +95,7 @@ extension VisorServer {
     /// Where a session's agent runs, when that is a container.
     func placement(for info: SessionInfo) -> ContainerPlacement? {
         guard let container = info.container, container.socket == nil, let host = containerHost else { return nil }
-        return ContainerPlacement(id: container.id, serverURL: containerServerURL, exec: host)
+        return ContainerPlacement(id: container.id, serverURL: containerServerURL, exec: host, programs: container.programs)
     }
 
     /// The containers this server's host keeps for sessions it no longer
@@ -129,8 +129,9 @@ extension VisorServer {
     /// What a session's container sees of this computer: its folder, at
     /// the same path; the agent's log folder for it, where the agent there
     /// keeps its log; the pictures attached to sessions, at the same path
-    /// (the agent is told that path), to read; and Visor's tools.
-    static func containerMounts(agent: AgentKind, folder: String, tools: URL) -> [ContainerHostRequest.Mount] {
+    /// (the agent is told that path), to read; Visor's tools; and Visor's
+    /// own Linux programs, where this computer has them.
+    static func containerMounts(agent: AgentKind, folder: String, tools: URL, programs: URL? = nil) -> [ContainerHostRequest.Mount] {
         typealias Mount = ContainerHostRequest.Mount
         var mounts = [Mount(source: folder, destination: folder)]
         switch agent {
@@ -163,6 +164,7 @@ extension VisorServer {
         let pictures = AgentImages.directory.path
         mounts.append(Mount(source: pictures, destination: pictures, readOnly: true))
         mounts.append(Mount(source: tools.path, destination: ContainerPlacement.toolsFolder, readOnly: true))
+        if let programs { mounts.append(Mount(source: programs.path, destination: ContainerPlacement.programsFolder, readOnly: true)) }
         return mounts
     }
 
@@ -193,8 +195,9 @@ extension VisorServer {
         // (else this computer has).
         let given = Self.fitted(size, cores: containerLimits?.cpus ?? ProcessInfo.processInfo.activeProcessorCount,
                                 memory: containerLimits?.memoryBytes.map { UInt64(clamping: $0) } ?? ProcessInfo.processInfo.physicalMemory)
+        let programs = Self.containerPrograms()
         let request = ContainerHostRequest(name: name, image: image, cpus: given.cpus, memoryBytes: given.memoryBytes,
-                                           mounts: Self.containerMounts(agent: agent, folder: resolved, tools: tools),
+                                           mounts: Self.containerMounts(agent: agent, folder: resolved, tools: tools, programs: programs),
                                            volumes: [.init(name: name + "-build", destination: ContainerPlacement.buildOutput, sizeBytes: given.diskBytes)],
                                            labels: ["visor.session": session, "visor.server": id])
         let made: ContainerHost.Made
@@ -214,11 +217,21 @@ extension VisorServer {
                                              ["sh", "-c", "test -f /root/.ssh/id_ed25519 || ssh-keygen -q -t ed25519 -N '' -C visor-container -f /root/.ssh/id_ed25519"],
                                              input: nil)
             guard key.status == 0 else { throw ContainerFailure(message: "Could not make the container's SSH key: \(key.output)") }
-            return SessionContainer(id: made.id, image: image, size: given)
+            return SessionContainer(id: made.id, image: image, size: given, programs: programs.map { _ in ContainerPlacement.programsFolder })
         } catch {
             try? await host.remove(made.id, volumes: !keepingDisk)
             throw error
         }
+    }
+
+    /// Visor's own Linux programs on this computer, when it has both of
+    /// them (HostDetails.containerPrograms).
+    nonisolated static func containerPrograms(_ folder: URL? = ServerPlatform.current.host.containerPrograms) -> URL? {
+        guard let folder else { return nil }
+        let present = ["visor-server", "visor-agent-host"].allSatisfy {
+            FileManager.default.isExecutableFile(atPath: folder.appendingPathComponent($0).path)
+        }
+        return present ? folder : nil
     }
 
     /// What a container host's refusal means here, in words New Session

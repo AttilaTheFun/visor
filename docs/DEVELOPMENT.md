@@ -681,8 +681,17 @@ computer's), the agent's log folder for that folder (Claude's
 `~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
 `~/.openrouter/sessions`), the pictures attached to sessions
 (`<data>/images`, AgentImages) read-only at the same path, since the agent
-is given that path, and Visor's MCP script read-only at `/opt/visor`
-(ContainerTools). The agents' sign-ins for containers are the server's own,
+is given that path, Visor's MCP script read-only at `/opt/visor`
+(ContainerTools), and, where the computer has them
+(`HostDetails.containerPrograms`: Visor.app's `Contents/Resources/Linux`,
+or `linux/` beside the command-line server), Visor's own Linux programs
+read-only at `/opt/visor/bin`: `visor-server`, also the agents' host as
+`visor-agent-host`, linked fully static (Swift's Static Linux SDK, musl:
+`tools/linux_programs.sh <folder>`, on Linux with Swift 6.4.0), so they run
+in any image. An agent in a container made with them has
+`/opt/visor/bin/visor-agent-host mcp` for its MCP server, so its image
+needs no Node; one made without them (`SessionContainer.programs` nil)
+keeps the image's Node and the script. The agents' sign-ins for containers are the server's own,
 never the image's (ContainerSignIns: `<data>/containers/agent.env` with
 CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
 `<data>/containers/codex`, mounted at `/root/.codex` with the computer's
