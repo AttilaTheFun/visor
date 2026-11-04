@@ -22,12 +22,17 @@ memory_watch_start() {
     (
         peak=0
         cached=0
+        # Its sleep ended with it, so no process outlives the job's step.
+        sleeper=""
+        trap '[ -z "$sleeper" ] || kill "$sleeper" 2> /dev/null; exit 0' TERM
         while :; do
             set -- $(awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } /^MemFree:/ { f = $2 } END { print t, a, f }' /proc/meminfo)
             if [ $(($1 - $2)) -gt "$peak" ]; then peak=$(($1 - $2)); fi
             if [ $(($1 - $3)) -gt "$cached" ]; then cached=$(($1 - $3)); fi
             echo "$1 $peak $cached" > "$MEMORY_WATCH_FILE.new" && mv -f "$MEMORY_WATCH_FILE.new" "$MEMORY_WATCH_FILE"
-            sleep 2
+            sleep 2 &
+            sleeper=$!
+            wait "$sleeper" || true
         done
     ) > /dev/null 2>&1 &
     MEMORY_WATCH_PID=$!
