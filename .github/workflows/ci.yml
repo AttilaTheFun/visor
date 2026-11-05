@@ -2,11 +2,16 @@ name: CI
 # Pull requests get the fast checks, all at once, each on a machine leased
 # from OS Server by the repository's own runners: every app built on Linux
 # (the container job), the tests with nothing of Apple's in them on Linux,
-# the command-line server on Windows, the tests that need a Mac in a macOS
-# VM, and blue's web client in headless Chromium in a Linux container. A
-# diff of documentation alone (docs/, .notes/, Markdown) skips them, and a
-# skipped job passes. Each commit merged to main gets them too, then its
-# builds (Logan, 2026-11-02: AdHoc by hand before a merge, an Alpha for each
+# the tests that need a Mac in a macOS VM, and blue's web client built in a
+# Linux container. A diff of documentation alone (docs/, .notes/,
+# Markdown) skips them, and a skipped job passes. Until the Mac Studio
+# (Logan, 5 Nov 2026: "scope visor down to just ios, macos and android",
+# the other platforms kept building where that stays in a container, not
+# run), the web client is only built, and the command-line server on
+# Windows (a Windows VM) and blue's iPhone snapshots (iOS leases) are off:
+# their jobs stay, skipped, and their scripts run by hand. To bring one
+# back, drop its `if: false`. Each commit merged to main gets them too,
+# then its builds (Logan, 2026-11-02: AdHoc by hand before a merge, an Alpha for each
 # commit after it, Production at a release, nothing else): the iPhone and
 # iPad app built on Linux and published to Applications Server, which signs
 # it (alpha; adhoc by hand on a pull request's branch; their OIDC token says
@@ -15,7 +20,8 @@ name: CI
 # (the plist's BuildVariant restamped, signed again), from a release
 # branch's call once its route exists. Then the Mac's disk images, their
 # number and the agent image on the release Mac (self-hosted, release-mac,
-# until the Mac moves to Visor.app), and blue's iPhone snapshots. The proof (the phone app's
+# until the Mac moves to Visor.app), and blue's iPhone snapshots (off for
+# now, above). The proof (the phone app's
 # fixture screens and its UI cases) runs only when asked for by hand
 # (workflow_dispatch), which is how an agent proposes a release: on main,
 # compared with the pictures kept at the previous release (the newest v*
@@ -25,12 +31,10 @@ name: CI
 # push a branch at it and run the workflow on that branch. A newer push to a
 # pull request cancels its run if it hasn't finished. main requires every
 # job green (or skipped) on a pull request's head before it merges. A
-# fork's pull request never runs on a self-hosted runner. The jobs that only
-# lease what they run in (changes, test, linux, windows, pins) run on OS
-# Server's single-use runners (visor-jit): each a fresh Linux container with
-# `oss` on its PATH. Those that need the Mac itself stay on its own runners:
-# the release Mac's, the container builds (which mount this checkout), blue's
-# iPhone snapshots and the proof (Xcode's tools on the runner).
+# fork's pull request never runs on a self-hosted runner. Every job but the
+# release Mac's (number, build, agent-image) runs on OS Server's single-use
+# runners (visor-jit): each a fresh Linux container with `oss` on its PATH,
+# leasing what it needs a Mac for.
 on:
   pull_request:
   push:
@@ -124,10 +128,13 @@ jobs:
 
   # The command-line server on Windows: built, and tried — run, a throwaway
   # session over its WebSocket, stopped through its REST side — in a Windows
-  # VM leased from OS Server (tools/ci/windows_vm_tests.sh).
+  # VM leased from OS Server (tools/ci/windows_vm_tests.sh). Off until the
+  # Mac Studio (the header): a 16 GB VM, and it builds only on Windows, so
+  # no container keeps it building. Skipped, it still reports, as main's
+  # required check. To bring it back: `if: needs.changes.outputs.code == 'true'`.
   windows:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: false
     runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
     steps:
@@ -152,10 +159,11 @@ jobs:
   proof:
     # Only when asked for by hand: never a pull request's or a push's.
     if: github.event_name == 'workflow_dispatch'
-    # On the Mac whose OS Server leases the build's container, which mounts
-    # this checkout (as the container job): a runner elsewhere has no folder
-    # it can share. Xcode there reads the result bundles.
-    runs-on: [self-hosted, oss-container]
+    # In a container of its own (visor-jit), as the container job builds:
+    # the app and its probe built where it runs, run on an iOS lease, and
+    # the result bundles read and compared on a Mac slot
+    # (tools/ci/ios_lease_proof.sh).
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
@@ -175,7 +183,7 @@ jobs:
         run: |
           base="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^ 2> /dev/null || git rev-parse HEAD^)"
           echo "Compared with $base"
-          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           exec tools/ci/ios_lease_proof.sh --image "ghcr.io/attilathefun/visor-agent:${line%.*}" \
             --kind "$PROOF_KIND" --base "$base" --proof "$RUNNER_TEMP/proof"
       # The proof whether the screens came up or not: a broken screen is what it's for.
@@ -291,8 +299,7 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
 
   # The apps built on Linux where a session's agent builds them: in a
-  # container of Visor's agent image, leased from the OS Server on the
-  # runner's Mac (self-hosted, oss-container), the Apple apps with
+  # container of Visor's agent image, the job's own (visor-jit), the Apple apps with
   # rules_applecross from that server's files, the Linux client, blue
   # Visor's Android APK, and the Mac's libraries and servers
   # (tools/ci/container_build.sh).
@@ -321,11 +328,11 @@ jobs:
       - run: exec tools/ci/container_build.sh ghcr.io/attilathefun/visor-agent:${{ steps.image.outputs.tag }}
 
   # Blue Visor (the client on Isomer: docs/isomer.md), its web client: built
-  # optimized, its tests run, then checked in headless Chromium: the
-  # end-to-end test against the stand-in server on its three roads, the
-  # transcript's layout and the composer typed into. In a container of the
-  # line's agent image leased from the OS Server on the runner's Mac
-  # (tools/ci/container_blue_web.sh). Its Android APK is built in the
+  # optimized (tools/ci/container_blue_web.sh --build-only). Until the Mac
+  # Studio (the header) nothing runs it: without --build-only the script
+  # goes on to its tests, then the end-to-end test against the stand-in
+  # server on its three roads, the transcript's layout and the composer
+  # typed into, in headless Chromium. Its Android APK is built in the
   # container job.
   blue-web:
     needs: changes
@@ -342,7 +349,7 @@ jobs:
         run: |
           line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           echo "tag=${line%.*}" >> "$GITHUB_OUTPUT"
-      - run: exec tools/ci/container_blue_web.sh ghcr.io/attilathefun/visor-agent:${{ steps.image.outputs.tag }} review
+      - run: exec tools/ci/container_blue_web.sh ghcr.io/attilathefun/visor-agent:${{ steps.image.outputs.tag }} review --build-only
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -351,19 +358,21 @@ jobs:
           if-no-files-found: ignore
 
   # Blue Visor's web client on the iPhone, on each commit to main (its
-  # snapshots are proof-like): the web site built in a Linux container, then
-  # pictured in an iOS lease's Mobile Safari (tools/ci/blue_ios_lease.sh),
-  # against tests/snapshots. On the Mac whose OS Server leases the build's
-  # container, which mounts this checkout, and serves the web site to the
-  # lease's simulator on its loopback.
+  # snapshots are proof-like): the web site built in the job's own container
+  # (visor-jit), served on a Mac slot of OS Server's primary, and pictured
+  # in an iOS lease's Mobile Safari there (tools/ci/blue_ios_lease.sh),
+  # against tests/snapshots. Off until the Mac Studio (the header): an iOS
+  # lease and a 12 GB container for each commit, to run the web client.
   blue-ios:
-    # main's commits, and by hand (with the proof): a branch's run tries it
-    # before it merges. After agent-image on a push to main, which publishes
-    # the line's image it takes: a commit that starts a line (0.44.0) has
-    # none before it (agent-image is skipped by hand, and it runs anyway).
+    # When on: main's commits, and by hand (with the proof): a branch's run
+    # tries it before it merges. After agent-image on a push to main, which
+    # publishes the line's image it takes: a commit that starts a line
+    # (0.44.0) has none before it (agent-image is skipped by hand, and it
+    # runs anyway). To bring it back:
+    # `if: ${{ !cancelled() && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') }}`
     needs: agent-image
-    if: ${{ !cancelled() && !failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') }}
-    runs-on: [self-hosted, oss-container]
+    if: false
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
@@ -372,7 +381,7 @@ jobs:
       # the leases.
       - name: Built on Linux, pictured on iOS leases
         run: |
-          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
+          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           exec tools/ci/blue_ios_lease.sh --image "ghcr.io/attilathefun/visor-agent:${line%.*}" --run "$RUNNER_TEMP/blue-ios"
       - uses: actions/upload-artifact@v4
         if: always()
@@ -383,9 +392,9 @@ jobs:
 
   # The Alpha of each commit on main (--config=alpha), never a pull
   # request's: its version asked of Applications Server and stamped in
-  # (tools/ci/next_version.sh), the iPhone and iPad app built on Linux in a
-  # container leased from the OS Server on the runner's Mac
-  # (tools/ci/container_build.sh, VISOR_CI_PACKAGE): a device build signed
+  # (tools/ci/next_version.sh), the iPhone and iPad app built on Linux in
+  # the job's own container (visor-jit; tools/ci/container_build.sh,
+  # VISOR_CI_PACKAGE): a device build signed
   # ad hoc with a placeholder profile (--config=ci_device, CI holds none of
   # the team's), which the server signs again with each bundle id's own when
   # it is published (tools/ci/publish_from_ci.sh). After the container job:
@@ -394,7 +403,7 @@ jobs:
   alpha:
     needs: container
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, oss-container]
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
     permissions:
       contents: read
@@ -412,10 +421,9 @@ jobs:
       - name: Build
         env:
           VISOR_CI_PACKAGE: .ci/packages
-          VISOR_CI_VOLUME: visor-ci-alpha
         run: |
-          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
-          exec bazel run //tools/ci:container_build -- "ghcr.io/attilathefun/visor-agent:${line%.*}" \
+          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
+          exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${line%.*}" \
             --config=alpha --config=ci_device //applications/visor_ios
       # Untrusted text reaches the shell through env, never ${{ }} in run.
       - name: Notes
@@ -437,7 +445,7 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' &&
       github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release-')
-    runs-on: [self-hosted, oss-container]
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
     permissions:
       contents: read
@@ -451,10 +459,9 @@ jobs:
       - name: Build
         env:
           VISOR_CI_PACKAGE: .ci/packages
-          VISOR_CI_VOLUME: visor-ci-adhoc
         run: |
-          line="$(plutil -extract CFBundleShortVersionString raw applications/visor_ios/Info.plist)"
-          exec bazel run //tools/ci:container_build -- "ghcr.io/attilathefun/visor-agent:${line%.*}" \
+          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
+          exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${line%.*}" \
             --config=adhoc --config=ci_device //applications/visor_ios
       # The branch's commit's message, from git: a run by hand has no
       # head_commit in its event.

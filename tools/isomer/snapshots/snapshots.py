@@ -30,7 +30,9 @@ Targets:
 In CI (tools/ci/blue_ios_lease.sh) web-mobile runs on an iOS lease of OS
 Server's, the web site built on Linux: VISOR_SNAPSHOT_IOS_LEASE names the
 lease it drives (`oss machine simctl`, its screenshots), and
-VISOR_SNAPSHOT_WEB_SITE the web site built there.
+VISOR_SNAPSHOT_WEB_BASE where the lease's simulator reaches the site,
+served on a Mac slot beside it (serve_site.py); VISOR_SNAPSHOT_WEB_SITE
+names a site built elsewhere for this harness to serve itself.
 
 Nothing here touches this Mac's own screen: Safari and the Mac app run on the
 leased Mac, the iOS targets in the simulator, Android in the emulator or the lab's
@@ -43,6 +45,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 sys.path.insert(0, HERE)
 import pngdiff
+from serve_site import serve
 
 REFERENCES = os.path.join(ROOT, "tests", "snapshots")
 TARGETS = ["web-mobile", "android", "web-desktop", "macos"]
@@ -131,23 +134,11 @@ def bazel_output(target, *flags, suffix=""):
 
 # --- the web site, served on the loopback (to a simulator, or the leased Mac over SSH)
 
-def serve(directory, host, port):
-    class Quiet(http.server.SimpleHTTPRequestHandler):
-        def end_headers(self):
-            self.send_header("Cache-Control", "no-store"); super().end_headers()
-        def log_message(self, *args): pass
-        extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map, ".wasm": "application/wasm", ".js": "text/javascript"}
-    # A backlog past socketserver's 5: the page asks for a dozen runtime
-    # modules at once, and a reset one leaves it blank with no error.
-    class Server(http.server.ThreadingHTTPServer):
-        request_queue_size = 128
-    server = Server((host, port), functools.partial(Quiet, directory=directory))
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server
-
-# CI's: the iOS lease web-mobile drives, the pictures the fixture probe
-# took on it, and the web site, all made by tools/ci/blue_ios_lease.sh.
+# CI's (tools/ci/blue_ios_lease.sh): the iOS lease web-mobile drives, and
+# where the lease's simulator reaches the web site, served on a Mac slot
+# beside it (serve_site.py), or the site itself, served here.
 IOS_LEASE = os.environ.get("VISOR_SNAPSHOT_IOS_LEASE", "")
+WEB_BASE = os.environ.get("VISOR_SNAPSHOT_WEB_BASE", "").rstrip("/")
 WEB_SITE = os.environ.get("VISOR_SNAPSHOT_WEB_SITE", "")
 OSS = os.environ.get("OSS", "/Applications/OS Server.app/Contents/Helpers/oss")
 
@@ -268,9 +259,14 @@ class WebMobile:
 
     def prepare(self):
         self.udid = simulator()
-        host = lease_host()
-        self.server = serve(web_site(), host, 8791)
-        self.base = "http://localhost:8791" if host == "127.0.0.1" else f"http://{host}:8791"
+        self.server = None
+        if WEB_BASE:
+            # Served already, where the lease's simulator reaches it.
+            self.base = WEB_BASE
+        else:
+            host = lease_host()
+            self.server = serve(web_site(), host, 8791)
+            self.base = "http://localhost:8791" if host == "127.0.0.1" else f"http://{host}:8791"
         # One load to warm Safari up: the first load of a fresh site (the
         # wasm compiled, the modules fetched) outlasts the settle and came
         # out blank.
@@ -286,7 +282,7 @@ class WebMobile:
         # capture, and a load-progress line comes and goes) is not the app.
         pngdiff.crop_bottom(out, SAFARI_TOOLBAR)
     def finish(self):
-        self.server.shutdown()
+        if self.server: self.server.shutdown()
 
 class RedIOS:
     # Red Visor, the reference blue is held to.

@@ -9,7 +9,11 @@
 # Without ffmpeg the end-to-end review keeps its screens and makes no
 # recording. Run with `bazel run //tools/ci:container_blue_web`.
 #
-#   bazel run //tools/ci:container_blue_web -- <image> <review folder>
+#   bazel run //tools/ci:container_blue_web -- <image> <review folder> [--build-only]
+#
+# --build-only builds the site and runs nothing, neither its tests nor
+# Chromium: CI's run until the Mac Studio (Logan, 5 Nov 2026: Visor is
+# iOS, macOS and Android for now; the web is kept building, not run).
 #
 #   OSS_FILES_HOST   the name the container reaches this Mac's OS Server by
 #                    (default: this Mac's tailnet name, from Tailscale)
@@ -24,6 +28,12 @@ set -euo pipefail
 ROOT="${BUILD_WORKSPACE_DIRECTORY:-$(cd "$(dirname "$0")/../.." && pwd)}"
 IMAGE="${1:?the agent image, ghcr.io/attilathefun/visor-agent:<version>}"
 REVIEW="$ROOT/${2:?the review folder, in the checkout}"
+RUNS=1
+case "${3:-}" in
+    "") ;;
+    --build-only) RUNS=0 ;;
+    *) echo "usage: container_blue_web.sh <image> <review folder> [--build-only]" >&2; exit 2 ;;
+esac
 VOLUME="${VISOR_CI_VOLUME:-visor-web-ci}"
 PLAYWRIGHT="1.64.1"
 
@@ -42,10 +52,14 @@ if [ -z "$here" ]; then
 fi
 
 steps='
-root=$1 review=$2 playwright=$3
+root=$1 review=$2 playwright=$3 runs=$4
 cd "$root"
 failed=0
 step() { echo "::group::$1"; shift; "$@" || { echo "::error::failed: $*"; failed=1; }; echo "::endgroup::"; }
+if [ "$runs" -eq 0 ]; then
+    step "Build" bazel build -c opt //applications/visor_web:visor_web_site
+    exit $failed
+fi
 # Chromium needs NSS, which images before 0.44 lack.
 if ! ldconfig -p | grep -q libnss3.so; then
     step "NSS" sh -c "apt-get update -qq && apt-get install -y -qq --no-install-recommends libnss3 >/dev/null"
@@ -75,11 +89,11 @@ if [ -n "$here" ]; then
     . "$ROOT/tools/ci/memory_watch.sh"
     memory_watch_start
     status=0
-    bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT" || status=$?
+    bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT" "$RUNS" || status=$?
     memory_watch_report "container_blue_web"
     exit "$status"
 fi
 exec "$OSS" machine run container --image="$IMAGE" --cpus=6 --memory=12 \
     --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:64:keep" \
     --inside --cache="$host" -- \
-    bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT"
+    bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT" "$RUNS"
