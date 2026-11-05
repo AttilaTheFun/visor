@@ -118,7 +118,10 @@ while read -r name; do
     [ "$result" -ne 124 ] || echo "stopped after 15 minutes" >> "$out/test.log"
     # XCTest's own count, the last of its "Executed N tests" lines (the
     # whole bundle's): a bundle that ran nothing says so (and `oss` fails it).
-    executed="$(grep -E 'Executed [0-9]+ tests?' "$out/test.log" | tail -1 | sed 's/^[[:space:]]*//')"
+    # A run that never started (stopped waiting for the slot's GUI session,
+    # say) has none: without `|| true`, set -e would end the script here,
+    # before the failure and its log are shown.
+    executed="$(grep -E 'Executed [0-9]+ tests?' "$out/test.log" | tail -1 | sed 's/^[[:space:]]*//' || true)"
     if [ "$result" -eq 0 ]; then
         echo "//$(dirname "$name"):$(basename "$name") PASSED in $((SECONDS - started))s: ${executed:-no count}"
     else
