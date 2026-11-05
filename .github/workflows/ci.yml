@@ -442,6 +442,10 @@ jobs:
           line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${line%.*}" \
             --config=alpha --config=ci_device --compilation_mode=opt //applications/visor_ios //applications/visor_mac
+      # The server signs it again from the entitlements it carries: built
+      # unsigned, it would lose the microphone.
+      - name: Visor.app signed with its entitlements
+        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input
       - uses: actions/download-artifact@v4
         with:
           name: linux-programs
@@ -488,6 +492,10 @@ jobs:
           line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${line%.*}" \
             --config=adhoc --config=ci_device --compilation_mode=opt //applications/visor_ios //applications/visor_mac
+      # The server signs it again from the entitlements it carries: built
+      # unsigned, it would lose the microphone.
+      - name: Visor.app signed with its entitlements
+        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input
       - uses: actions/download-artifact@v4
         with:
           name: linux-programs
