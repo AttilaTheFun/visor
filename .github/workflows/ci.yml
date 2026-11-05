@@ -265,12 +265,16 @@ jobs:
 
   # Visor's own Linux programs (tools/linux_programs.sh: visor-server, also
   # the agents' host, linked fully static), which the build job seals into
-  # Visor Server for the containers it makes: built in a container of
-  # Visor's agent image leased from the OS Server on the runner's Mac
-  # (tools/ci/linux_programs.sh), as the release Mac has none, and handed
-  # over as a tar. Not waiting on number: it needs no version.
+  # Visor Server, and alpha and adhoc into Visor.app, for the containers
+  # they make: built in a container of Visor's agent image leased from the
+  # OS Server on the runner's Mac (tools/ci/linux_programs.sh), as the
+  # release Mac has none, and handed over as a tar. Not waiting on number:
+  # it needs no version. For main's commits and adhoc's runs by hand.
   linux-programs:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release-'))
     runs-on: [self-hosted, visor-jit]
     timeout-minutes: 60
     steps:
@@ -400,16 +404,21 @@ jobs:
 
   # The Alpha of each commit on main (--config=alpha), never a pull
   # request's: its version asked of Applications Server and stamped in
-  # (tools/ci/next_version.sh), the iPhone and iPad app built on Linux in
-  # the job's own container (visor-jit; tools/ci/container_build.sh,
-  # VISOR_CI_PACKAGE): a device build signed
-  # ad hoc with a placeholder profile (--config=ci_device, CI holds none of
-  # the team's), which the server signs again with each bundle id's own when
-  # it is published (tools/ci/publish_from_ci.sh). After the container job:
-  # nothing is published from a tree that doesn't build. The job's OIDC
-  # token says what it is; no key, profile or password here.
+  # (tools/ci/next_version.sh), then the iPhone and iPad app and Visor.app
+  # for the Mac built on Linux in the job's own container (visor-jit;
+  # tools/ci/container_build.sh, VISOR_CI_PACKAGE), optimized, as a release
+  # promotes this very build (the release job). The iPhone's is a device
+  # build signed ad hoc with a placeholder profile (--config=ci_device, CI
+  # holds none of the team's); Visor.app is given Visor's Linux programs
+  # (linux-programs, tools/ci/mac_app_linux_programs.sh). The server signs
+  # each again with its bundle id's own identity and profile when it is
+  # published (tools/ci/publish_from_ci.sh), and notarizes the Mac's
+  # (Logan, 5 Nov 2026: Alpha and Production both through Applications).
+  # After the container job: nothing is published from a tree that doesn't
+  # build. The job's OIDC token says what it is; no key, profile or
+  # password here.
   alpha:
-    needs: container
+    needs: [container, linux-programs]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
@@ -424,7 +433,7 @@ jobs:
       - name: Version
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist
+        run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_container_host/Info.plist
       # The line's released agent image (MAJOR.MINOR), as the proof takes.
       - name: Build
         env:
@@ -432,7 +441,13 @@ jobs:
         run: |
           line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${line%.*}" \
-            --config=alpha --config=ci_device //applications/visor_ios
+            --config=alpha --config=ci_device --compilation_mode=opt //applications/visor_ios //applications/visor_mac
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-programs
+          path: ${{ runner.temp }}/linux-programs
+      - name: Visor's Linux programs into Visor.app
+        run: tools/ci/mac_app_linux_programs.sh .ci/packages/visor_mac.zip "$RUNNER_TEMP/linux-programs/linux-programs.tar"
       # Untrusted text reaches the shell through env, never ${{ }} in run.
       - name: Notes
         env:
@@ -441,15 +456,17 @@ jobs:
       - name: Publish
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" .ci/packages/*.ipa
+        run: tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" .ci/packages/*.ipa .ci/packages/visor_mac.zip
 
   # AdHoc: a pull request's branch built by hand (workflow_dispatch on a
   # branch that is neither main nor a release branch), the iPhone and iPad
-  # app built as alpha's is with --config=adhoc and published; the server
-  # takes it as an AdHoc build, kept a week (AttilaTheFun/applications'
-  # docs/VARIANTS.md). Not after the container job, which a run by hand
-  # skips: the build itself stops a tree that doesn't build.
+  # app and Visor.app built as alpha's are with --config=adhoc and
+  # published; the server takes them as AdHoc builds, kept a week
+  # (AttilaTheFun/applications' docs/VARIANTS.md). Not after the container
+  # job, which a run by hand skips: the build itself stops a tree that
+  # doesn't build.
   adhoc:
+    needs: linux-programs
     if: >
       github.event_name == 'workflow_dispatch' &&
       github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release-')
@@ -463,14 +480,20 @@ jobs:
       - name: Version
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist
+        run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_container_host/Info.plist
       - name: Build
         env:
           VISOR_CI_PACKAGE: .ci/packages
         run: |
           line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${line%.*}" \
-            --config=adhoc --config=ci_device //applications/visor_ios
+            --config=adhoc --config=ci_device --compilation_mode=opt //applications/visor_ios //applications/visor_mac
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-programs
+          path: ${{ runner.temp }}/linux-programs
+      - name: Visor's Linux programs into Visor.app
+        run: tools/ci/mac_app_linux_programs.sh .ci/packages/visor_mac.zip "$RUNNER_TEMP/linux-programs/linux-programs.tar"
       # The branch's commit's message, from git: a run by hand has no
       # head_commit in its event.
       - name: Notes
@@ -478,7 +501,7 @@ jobs:
       - name: Publish
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" .ci/packages/*.ipa
+        run: tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" .ci/packages/*.ipa .ci/packages/visor_mac.zip
 
   # Production, at a release. Nothing is built: Applications Server
   # promotes the Alphas main's CI published of the release's commit

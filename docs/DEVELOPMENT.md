@@ -926,17 +926,23 @@ front paths, `visor-server front`).
   Each commit merged to main (a squash is a commit of its own) gets them
   too, then its builds (Logan, 2026-11-02: AdHoc by hand before a merge,
   an Alpha for each commit after it, Production at a release, nothing
-  else). The iPhone and iPad app: `alpha` (main's commits, after the
-  container job) and `adhoc` (by hand on a pull request's branch) build it
-  on Linux with `--config=alpha` or `adhoc` and `--config=ci_device` (a
-  device build signed ad hoc with a placeholder profile), its version from
-  Applications Server (tools/ci/next_version.sh), and publish it there
-  (tools/ci/publish_from_ci.sh): the server signs it with each bundle id's
-  profile, and the job's OIDC token says which kind it is (the repository
-  secret APPLICATIONS_CI_CODE names the server). A release is no build of
-  its own (Logan, 2026-11-02): Applications Server promotes the commit's
-  Alpha, as tested, to Production, its plist's BuildVariant restamped and
-  signed again, from a release branch's call once that route exists. The Mac's disk images stay
+  else). The iPhone and iPad app and Visor.app for the Mac: `alpha`
+  (main's commits, after the container job) and `adhoc` (by hand on a
+  pull request's branch) build them on Linux, optimized, with
+  `--config=alpha` or `adhoc` and `--config=ci_device` (the iPhone's a
+  device build signed ad hoc with a placeholder profile), Visor.app given
+  Visor's Linux programs from the `linux-programs` job
+  (tools/ci/mac_app_linux_programs.sh), their version from Applications
+  Server (tools/ci/next_version.sh), and publish them there
+  (tools/ci/publish_from_ci.sh): the server signs each with its bundle
+  id's identity and profile, notarizes the Mac's, and the job's OIDC token
+  says which kind it is (the repository secret APPLICATIONS_CI_CODE names
+  the server). Alpha and Production both go through Applications (Logan,
+  5 Nov 2026). A release is no build of its own (Logan, 2026-11-02):
+  Applications Server promotes the commit's Alphas, as tested, to
+  Production, their plists' BuildVariant restamped and signed again, when
+  the owner releases it in Reviews (the `release` job). The old Mac apps'
+  disk images (Visor Server and the Mac client) stay
   on the release Mac until the Mac moves to Visor.app: their number
   (`$PIPELINE_CI number`), built, signed and notarized (`build`,
   tools/build_packages.sh, then `$PIPELINE_CI`'s), with the agent image
