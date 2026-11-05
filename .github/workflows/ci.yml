@@ -172,15 +172,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          # The history and the tags: the previous release's kept pictures
-          # are what the screens are compared with.
+          # The history and the tags: the previous release is what the
+          # screens are compared with.
           fetch-depth: 0
           fetch-tags: true
       - name: The phone app built on Linux, run on an iOS lease, and the proof
         env:
           PROOF_KIND: ${{ inputs.kind || 'full' }}
+          # To read the previous release's own proof from its run
+          # (tools/ci/base_proof_screens.sh; actions: read).
+          GITHUB_TOKEN: ${{ github.token }}
         # The previous release (the newest v* tag before this commit), else
-        # the commit before. The container is the line's released agent
+        # the commit before, as its own proof showed it: version over
+        # version (Logan, 5 Nov 2026). The container is the line's released agent
         # image (MAJOR.MINOR), as a pull request's container job takes.
         # exec: the runner's cancel reaches the script's trap, which
         # releases the leases.

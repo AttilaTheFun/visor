@@ -9,8 +9,10 @@
 # (tools/ios_ui_tests.sh's). The pictures come from the runs' result
 # bundles, where the probe attaches every screen it takes, by xcresulttool
 # on a Mac slot of OS Server's primary (tools/ci/mac_slot.sh), which compares
-# each there with the picture kept for it at the base (CI: the release
-# before, else the commit before; else this commit). As reviews'
+# each there with the same screen at the base (CI: the release before, else
+# the commit before; else this commit): as the base's own proof showed it,
+# version over version (tools/ci/base_proof_screens.sh, Logan, 5 Nov 2026),
+# else the picture kept for it at the base (tests/proof). As reviews'
 # tools/ci/ios_lease_tests.sh.
 #
 #   tools/ci/ios_lease_proof.sh --image <agent image> --proof <dir> [--kind quick|full] [--base <revision>]
@@ -18,12 +20,15 @@
 # The proof, in <dir>, as Reviews reads it from the run's `proof` artifact:
 #   screens/<name>.png  each fixture screen at this commit ("chat",
 #                       "chat-landscape", …)
-#   diffs/<name>.png    each that differs from its kept picture at the base
-#                       (tests/proof/ios, tests/proof/ios-landscape),
-#                       its changed pixels red (tools/ci/snapshot_diff.swift,
-#                       built and run on the slot: CoreGraphics)
-#   proof.json          {"commit", "ref", "kind", "run", "base": {"commit"},
-#                        "screens": [{"name", "changed", "changedPixels"}]}
+#   before/<name>.png   each that differs, as the base had it; none for a
+#                       screen the base hasn't got (new, and changed)
+#   diffs/<name>.png    each that differs from the base's, its changed
+#                       pixels red (tools/ci/snapshot_diff.swift, built and
+#                       run on the slot: CoreGraphics)
+#   proof.json          {"commit", "ref", "kind", "run", "base": {"commit",
+#                        "proof": the run whose proof it was, or null for the
+#                        pictures kept in the tree}, "screens": [{"name",
+#                        "changed", "changedPixels"}]}
 #   logs/               each run's JUnit and result bundle
 # The script fails as the probe does (a full proof's UI cases too), or when
 # no screen comes back.
@@ -108,10 +113,28 @@ run() {
     return "$status"
 }
 
-# What the slot compares with, later: the pictures kept at the base, and
-# the diff tool's source (built there, with CoreGraphics).
+# What the slot compares with, later: the base's screens, laid out as the
+# pictures kept in the tree are (tests/proof/ios, ios-landscape), and the
+# diff tool's source (built there, with CoreGraphics). The base's own proof
+# if GitHub keeps one, else the pictures kept at the base.
 mkdir -p "$work/slot-in/base" "$work/slot-in/results"
-git -C "$ROOT" archive "$base_commit" tests/proof | tar -x -C "$work/slot-in/base"
+base_proof="null"
+if run_id="$("$ROOT/tools/ci/base_proof_screens.sh" "$base_commit" "$work/base-proof")"; then
+    base_proof="$run_id"
+    mkdir -p "$work/slot-in/base/tests/proof/ios" "$work/slot-in/base/tests/proof/ios-landscape"
+    for picture in "$work/base-proof/screens/"*.png; do
+        [ -f "$picture" ] || continue
+        name="$(basename "$picture" .png)"
+        case "$name" in
+            *-landscape) cp "$picture" "$work/slot-in/base/tests/proof/ios-landscape/${name%-landscape}.png" ;;
+            *) cp "$picture" "$work/slot-in/base/tests/proof/ios/$name.png" ;;
+        esac
+    done
+    echo "Compared with the proof of $base (run $run_id)"
+else
+    git -C "$ROOT" archive "$base_commit" tests/proof | tar -x -C "$work/slot-in/base"
+    echo "Compared with the pictures kept at $base"
+fi
 cp "$ROOT/tools/ci/snapshot_diff.swift" "$work/slot-in/"
 
 echo "::group::The app and its probe, built on Linux"
@@ -234,9 +257,9 @@ mac_slot_release
 [ "$compared" -eq 0 ] || { echo "$me: the screens were not all compared on the slot ($compared)" >&2; status=1; }
 echo "::endgroup::"
 
-# The proof, from the pictures and how each compared with its kept one.
+# The proof, from the pictures and how each compared with the base's.
 json() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-mkdir -p "$proof/screens" "$proof/diffs"
+mkdir -p "$proof/screens" "$proof/diffs" "$proof/before"
 screens=""
 summary=""
 while IFS="$(printf '\t')" read -r screen orientation pixels; do
@@ -248,6 +271,10 @@ while IFS="$(printf '\t')" read -r screen orientation pixels; do
     [ ! -f "$work/slot-out/diffs/$name.png" ] || cp "$work/slot-out/diffs/$name.png" "$proof/diffs/$name.png"
     changed=false
     [ "$pixels" -eq 0 ] || changed=true
+    # How the base had it, beside it in Reviews (Before and After).
+    kept="$work/slot-in/base/tests/proof/ios"
+    [ "$orientation" = portrait ] || kept="$kept-landscape"
+    [ "$changed" = false ] || [ ! -f "$kept/$screen.png" ] || cp "$kept/$screen.png" "$proof/before/$name.png"
     screens="$screens${screens:+,}
     {\"name\": \"$(json "$name")\", \"changed\": $changed, \"changedPixels\": $pixels}"
     summary="$summary| $name | $([ "$changed" = true ] && echo "$pixels pixels changed" || echo unchanged) |
@@ -259,14 +286,14 @@ cat > "$proof/proof.json" << EOF
   "ref": "$(json "$ref")",
   "kind": "$kind",
   "run": ${GITHUB_RUN_ID:-null},
-  "base": {"commit": "$base_commit"},
+  "base": {"commit": "$base_commit", "proof": $base_proof},
   "screens": [$screens
   ]
 }
 EOF
 cat "$proof/proof.json"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    printf '### Proof (%s, on an iOS lease) of %s\n\n| Screen | Against its picture kept at %s |\n| --- | --- |\n%s' "$kind" "${commit:0:7}" "${base_commit:0:7}" "$summary" >> "$GITHUB_STEP_SUMMARY"
+    printf '### Proof (%s, on an iOS lease) of %s\n\n| Screen | Against the base, %s |\n| --- | --- |\n%s' "$kind" "${commit:0:7}" "${base_commit:0:7}" "$summary" >> "$GITHUB_STEP_SUMMARY"
 fi
 
 if [ -z "$screens" ]; then
