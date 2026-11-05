@@ -164,11 +164,13 @@ jobs:
     # Only when asked for by hand: never a pull request's or a push's.
     if: github.event_name == 'workflow_dispatch'
     # In a container of its own (visor-jit), as the container job builds:
-    # the app and its probe built where it runs, run on an iOS lease, and
-    # the result bundles read and compared on a Mac slot
-    # (tools/ci/ios_lease_proof.sh).
+    # the phone app and its probe built where it runs, run on an iOS lease,
+    # and the result bundles read and compared on a Mac slot
+    # (tools/ci/ios_lease_proof.sh); then Visor on Android built there too
+    # and pictured on an Android lease (tools/ci/android_lease_proof.sh).
+    # One proof of both (Logan, 5 Nov 2026: iOS, macOS and Android).
     runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
         with:
@@ -194,6 +196,17 @@ jobs:
           line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           exec tools/ci/ios_lease_proof.sh --image "ghcr.io/attilathefun/visor-agent:${line%.*}" \
             --kind "$PROOF_KIND" --base "$base" --proof "$RUNNER_TEMP/proof"
+      # Whatever came of the phone's: a proof has each platform's screens.
+      - name: Visor on Android built on Linux, pictured on an Android lease
+        if: ${{ !cancelled() }}
+        env:
+          PROOF_KIND: ${{ inputs.kind || 'full' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          base="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^ 2> /dev/null || git rev-parse HEAD^)"
+          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
+          exec tools/ci/android_lease_proof.sh --image "ghcr.io/attilathefun/visor-agent:${line%.*}" \
+            --base "$base" --proof "$RUNNER_TEMP/proof"
       # The proof whether the screens came up or not: a broken screen is what it's for.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
