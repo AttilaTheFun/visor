@@ -889,7 +889,7 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "9iMl/x5uGTLwIPJ+BF7duI1h0f5fqIeHsYNMuzqOZzQ=",
-        "usagesDigest": "Gp772a6hK3V3Whw8CNu/TYSeocQPfpXtX0oA0iSv88s=",
+        "usagesDigest": "CiQtxgnHJ/C9MmqXJD2CFDgMFgeHdD12eBoOv9Jw03w=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
@@ -1521,7 +1521,7 @@
     "@@isomer+//tools/android:extensions.bzl%android_tools": {
       "os:linux,arch:aarch64": {
         "bzlTransitiveDigest": "k+KVmZZM9GG6V3/GKQ8lZd6Nm/Rcjal0sh2SCGktwe8=",
-        "usagesDigest": "qP2VlbGIZpTugNDzpSg71L8wId6OPiXqec6NGRPq784=",
+        "usagesDigest": "S29QnTbLF+EYcuDiEU/tMiEzn9hQhknttD4ZPIMcejo=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -1770,7 +1770,7 @@
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "qHbR00gVzVzkxX+PRtv4UGcUFMtBz7TK9CNYUWH8nIE=",
-        "usagesDigest": "06rnZSWqFRpt9r8Uj7c+uV/fnU+o9TYz2hmfwmhIElI=",
+        "usagesDigest": "3sCw0gBEUI495FtL18sI5sCQGKp4CPwU8yKB2UHpTRY=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "androidsdk": {
@@ -1783,7 +1783,7 @@
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
         "bzlTransitiveDigest": "Dn35Rw2aSnd5VU9Pwe1h/4fInCmfLfA2tRCvu72hcS0=",
-        "usagesDigest": "/WLMI1t3Jy2izDWp3nyaTbyr7sxe/UvhxdO3W9nqJ6M=",
+        "usagesDigest": "I4pIcfF8lNTZBtG4iyaPIUmihT7GGpTkXLT3VEsOPvA=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
@@ -1875,12 +1875,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "rGypP5nrTI9oaJIH2p4vvfzarcXFntsjmKbWV4stK2I=",
-        "usagesDigest": "DLiEZc7u7+7i+NUAtVg/30AjWb2+aQ+EoSzJjUuAMFQ=",
+        "usagesDigest": "e2dCHBIfZ1Oj8noH0lVNIzc9QC7WvkYm2maJ94yhf8U=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved eb08f1b8885d5be867a8da96804e1c32a06dc818ffad1e66287e1f920d62b351"
+          "FILE:@@//third_party/swift_packages/Package.resolved 7b0fba7f4272b794be272235e2db1c3030831ae8cd0c8766358126a7bb364b0f"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1894,9 +1894,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "9c007fe073fa4e49741d8997399c1dc05804713f",
+              "commit": "aaac84cd53f61ff7343f09ed9984d9bf2ea8328f",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
-              "version": "0.45.0",
+              "version": "0.45.1",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
