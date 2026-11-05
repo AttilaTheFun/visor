@@ -905,15 +905,24 @@ front paths, `visor-server front`).
   folder (updates Package.resolved), then build here.
 - CI (ci.yml), self-hosted: most jobs run in a Linux container OS Server
   makes for each (visor-jit), side by side, their Bazel reading its
-  cache; the Mac's tests go on to a slot of its primary Mac, the server's
-  Windows build to a Windows VM (tools/ci). A pull request gets the fast
-  checks, all at once, in under ten minutes each: every app and the Mac's
-  libraries built on Linux in the job's own container (`container`,
-  tools/ci/container_build.sh), the tests with nothing of Apple's in them
-  on Linux (`linux`), the command-line server on Windows, the tests that
-  need a Mac on a slot (`test`), and blue's web client in headless
-  Chromium (`blue-web`). A diff of documentation alone skips them (the
-  `changes` job), and a newer push cancels a run that hasn't finished.
+  cache; the Mac's tests go on to a slot of its primary Mac (tools/ci). A
+  pull request gets the fast checks, all at once, in under ten minutes
+  each: every app and the Mac's libraries built on Linux in the job's own
+  container (`container`, tools/ci/container_build.sh), the tests with
+  nothing of Apple's in them on Linux (`linux`), the tests that need a Mac
+  on a slot (`test`), and blue's web client built (`blue-web`). A diff of
+  documentation alone skips them (the `changes` job), and a newer push
+  cancels a run that hasn't finished. Until the Mac Studio (Logan, 5 Nov
+  2026: Visor is iOS, macOS and Android for now, the other platforms kept
+  building where that stays in a container), the jobs that run the web
+  client or the Windows server are off: `windows` (the command-line server
+  on Windows, in a Windows VM: tools/ci/windows_vm_tests.sh) and
+  `blue-ios` are skipped, and `blue-web` only builds (its tests and
+  Chromium checks run without `--build-only`). Each script still runs by
+  hand, and each job comes back by dropping its `if: false` in ci.yml.
+  `linux` still runs: the command-line server on Linux is what Visor's
+  containers run (visor-agent-host, and visor-server in a co-tenant), so
+  it is the Mac's, not a platform of its own.
   Each commit merged to main (a squash is a commit of its own) gets them
   too, then its builds (Logan, 2026-11-02: AdHoc by hand before a merge,
   an Alpha for each commit after it, Production at a release, nothing
