@@ -1120,17 +1120,19 @@ nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
 rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 
-CI makes the proof: its `proof` job, on a runner of the Mac whose OS Server
-leases its container (`oss-container`, which a fork's pull request never
-reaches), runs
+CI makes the proof: its `proof` job, in a container of its own (`visor-jit`,
+which a fork's pull request never reaches), runs
 `tools/ci/ios_lease_proof.sh`. That builds the iPhone app and its probe on
-Linux, in a container leased from OS Server (`tools/ci/container_build.sh`
-with `VISOR_CI_PACKAGE`), and runs the probe on an iOS lease (`oss machine
+Linux, where it runs (`tools/ci/container_build.sh` with
+`VISOR_CI_PACKAGE`), and runs the probe on an iOS lease (`oss machine
 xctest`, an iPhone 17 on iOS 27.2, its status bar held still by OS Server,
 keyboard suggestions off): the fixture's screens in each orientation (the
 probe's `testFixtureScreens` and `testFixtureScreensLandscape`), and for a
 full proof the UI cases (`tools/ios_ui_tests.sh`'s). The screens come from
-the runs' result bundles, where the probe attaches each one. It runs only by
+the runs' result bundles, where the probe attaches each one, read and
+compared with their kept pictures on a Mac slot of OS Server's primary
+(`tools/ci/mac_slot.sh`: xcresulttool, and the diff tool built with
+CoreGraphics). It runs only by
 hand (CI's workflow_dispatch, since 2026-11-01, for CI's time; pull
 requests and main's commits run their builds and tests only): an agent
 runs it on main to propose a release (`kind` full, the default, or
