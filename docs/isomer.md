@@ -83,8 +83,8 @@ iOS, macOS and Android, with Android the only client on Isomer: the web
 client is kept building but not run, and blue's iPhone snapshots are off.
 - `blue-web` (a Linux container of Visor's agent image leased from OS
   Server, tools/ci/container_blue_web.sh --build-only): the web client
-  built and its tests run. Without `--build-only`, by hand, the script
-  goes on to the end-to-end test, the transcript layout and the composer
+  built. Without `--build-only`, by hand, the script goes on to its tests,
+  then the end-to-end test, the transcript layout and the composer
   checks in headless Chromium (Playwright's arm64 build, pinned).
 - The APK (arm64) is built in the `container` job's build, in a container
   of Visor's agent image (tools/ci/container_build.sh). The emulator flow and

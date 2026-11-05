@@ -917,9 +917,12 @@ front paths, `visor-server front`).
   building where that stays in a container), the jobs that run the web
   client or the Windows server are off: `windows` (the command-line server
   on Windows, in a Windows VM: tools/ci/windows_vm_tests.sh) and
-  `blue-ios` are skipped, and `blue-web` only builds (its Chromium checks
-  run without `--build-only`). Each script still runs by hand, and each job
-  comes back by dropping its `if: false` in ci.yml.
+  `blue-ios` are skipped, and `blue-web` only builds (its tests and
+  Chromium checks run without `--build-only`). Each script still runs by
+  hand, and each job comes back by dropping its `if: false` in ci.yml.
+  `linux` still runs: the command-line server on Linux is what Visor's
+  containers run (visor-agent-host, and visor-server in a co-tenant), so
+  it is the Mac's, not a platform of its own.
   Each commit merged to main (a squash is a commit of its own) gets them
   too, then its builds (Logan, 2026-11-02: AdHoc by hand before a merge,
   an Alpha for each commit after it, Production at a release, nothing

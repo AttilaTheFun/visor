@@ -11,7 +11,7 @@
 #
 #   bazel run //tools/ci:container_blue_web -- <image> <review folder> [--build-only]
 #
-# --build-only builds the site and runs its tests, and nothing in
+# --build-only builds the site and runs nothing, neither its tests nor
 # Chromium: CI's run until the Mac Studio (Logan, 5 Nov 2026: Visor is
 # iOS, macOS and Android for now; the web is kept building, not run).
 #
@@ -58,7 +58,6 @@ failed=0
 step() { echo "::group::$1"; shift; "$@" || { echo "::error::failed: $*"; failed=1; }; echo "::endgroup::"; }
 if [ "$runs" -eq 0 ]; then
     step "Build" bazel build -c opt //applications/visor_web:visor_web_site
-    step "Test" bazel test -c opt --test_output=errors //applications/visor_web/...
     exit $failed
 fi
 # Chromium needs NSS, which images before 0.44 lack.
