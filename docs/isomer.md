@@ -77,18 +77,22 @@ builds with the default; the tools below pass `-c opt` themselves.
 
 ## CI
 
-visor's CI (.github/workflows/ci.yml) builds and checks blue on every pull
-request and every commit to main:
+visor's CI (.github/workflows/ci.yml) builds blue on every pull request and
+every commit to main. Until the Mac Studio (Logan, 5 Nov 2026), Visor is
+iOS, macOS and Android, with Android the only client on Isomer: the web
+client is kept building but not run, and blue's iPhone snapshots are off.
 - `blue-web` (a Linux container of Visor's agent image leased from OS
-  Server, tools/ci/container_blue_web.sh): the web client built and its
-  tests run, then the end-to-end test, the transcript layout and the
-  composer checks in headless Chromium (Playwright's arm64 build, pinned).
+  Server, tools/ci/container_blue_web.sh --build-only): the web client
+  built and its tests run. Without `--build-only`, by hand, the script
+  goes on to the end-to-end test, the transcript layout and the composer
+  checks in headless Chromium (Playwright's arm64 build, pinned).
 - The APK (arm64) is built in the `container` job's build, in a container
   of Visor's agent image (tools/ci/container_build.sh). The emulator flow and
   the Android transcript and composer checks are in the local CI for now.
-- `blue-ios` (each commit to main only: its snapshots are proof-like): the
-  web site built on Linux, and the snapshots of Mobile Safari on an iOS
-  lease, against tests/snapshots.
+- `blue-ios` (off; when on, each commit to main only, its snapshots being
+  proof-like): the web site built on Linux, and the snapshots of Mobile
+  Safari on an iOS lease, against tests/snapshots
+  (tools/ci/blue_ios_lease.sh, which also runs by hand).
 
 The harnesses take Chrome from `$CHROME` where it isn't at its usual place,
 and `VISOR_SNAPSHOT_RUN_DIR` says where a snapshot run goes.
