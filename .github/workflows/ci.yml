@@ -17,8 +17,8 @@ name: CI
 # it (alpha; adhoc by hand on a pull request's branch; their OIDC token says
 # which: tools/ci/publish_from_ci.sh). A release is no build of its own:
 # Applications Server promotes a commit's Alpha, as tested, to Production
-# (the plist's BuildVariant restamped, signed again), from a release
-# branch's call once its route exists. Then the Mac's disk images, their
+# (the plist's BuildVariant restamped, signed again), when the owner
+# releases it in Reviews (the release job). Then the Mac's disk images, their
 # number and the agent image on the release Mac (self-hosted, release-mac,
 # until the Mac moves to Visor.app), and blue's iPhone snapshots (off for
 # now, above). The proof (the phone app's
@@ -39,6 +39,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The owner's Release in Reviews publishes the draft, which makes its v*
+  # tag on the commit reviewed: its Alphas promoted to Production (release).
+  release:
+    types: [published]
   # By hand: the proof, to propose a release or to bisect; on a pull
   # request's branch, its AdHoc build (adhoc).
   workflow_dispatch:
@@ -471,3 +475,39 @@ jobs:
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
         run: tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" .ci/packages/*.ipa
+
+  # Production, at a release. Nothing is built: Applications Server
+  # promotes the Alphas main's CI published of the release's commit
+  # (alpha), the builds Logan tested, stamping them Production and signing
+  # them again (tools/ci/promote_from_ci.sh, AttilaTheFun/applications'
+  # docs/CI.md, "Production by promotion"; Logan, 2026-11-02: "the alpha
+  # builds and production builds should be identical today modulo the
+  # plist key"). The token's v* tag, released by a releaser, is the
+  # permission. An Alpha that isn't its app's newest is kept a week, so a
+  # release is made within a week of its commit (or while it is still the
+  # newest). The Mac's disk images are the build job's, as before.
+  release:
+    if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, visor-jit]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # The OIDC token Applications Server checks.
+      id-token: write
+    steps:
+      # The release's commit, with main's history beside it.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # A release is a main commit: a tag on any other stops here.
+      - name: The release is a main commit
+        run: git merge-base --is-ancestor HEAD origin/main || { echo "::error::$GITHUB_REF_NAME's commit is not on main"; exit 1; }
+      # Untrusted text reaches the shell through env, never ${{ }} in run.
+      - name: Notes
+        env:
+          BODY: ${{ github.event.release.body }}
+        run: printf '%s\n' "$BODY" > "$RUNNER_TEMP/notes.md"
+      - name: Promote
+        env:
+          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
+        run: tools/ci/promote_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md"
