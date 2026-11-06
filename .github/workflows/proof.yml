@@ -30,10 +30,6 @@ on:
         default: full
   release:
     types: [published]
-  # TEMPORARY, for this branch's own runs while it is a draft (a workflow
-  # GitHub hasn't seen on main can't be dispatched): taken out before review.
-  push:
-    branches: [proof-hosted]
 permissions:
   contents: read
   actions: read
@@ -42,7 +38,7 @@ jobs:
   # Visor.app (signed ad hoc, as a build on Linux is), in the job's own
   # container (tools/ci/container_build.sh, which then takes no image).
   build-apple:
-    if: github.event_name != 'release'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, visor-jit]
     timeout-minutes: 45
     env:
@@ -70,7 +66,7 @@ jobs:
 
   # Blue Visor's APK for x86_64, which GitHub's emulator is.
   build-android:
-    if: github.event_name != 'release'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, visor-jit]
     timeout-minutes: 45
     env:
@@ -151,7 +147,7 @@ jobs:
   # when a platform's part did, after the proof is kept.
   proof:
     needs: [build-apple, build-android, ios, mac, android]
-    if: ${{ !cancelled() && github.event_name != 'release' }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
     runs-on: xcode-27
     timeout-minutes: 20
     steps:
