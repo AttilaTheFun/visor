@@ -257,12 +257,14 @@ public final class SessionTranscript {
     /// or paged to, so a change is written as a change — never the rows in
     /// memory in place of the history kept.
     enum CacheWrite: Equatable {
-        /// Rows new at the end or changed in place, and rows gone.
-        case upsert([TranscriptEntry], removed: [String])
+        /// Rows new at the end or changed in place, and rows gone; and
+        /// rows changed before the rows held (`elsewhere`), changed where
+        /// the cache keeps them, or not kept.
+        case upsert([TranscriptEntry], removed: [String], elsewhere: [TranscriptEntry] = [])
         /// Everything from the row `from` on is these rows (a row moved,
         /// inserted or removed there); `all`, the rows held, if the cache
-        /// does not have that row.
-        case rewrite(from: String, [TranscriptEntry], all: [TranscriptEntry])
+        /// does not have that row. Rows `elsewhere` as for `upsert`.
+        case rewrite(from: String, [TranscriptEntry], all: [TranscriptEntry], elsewhere: [TranscriptEntry] = [])
         /// Everything after the row `after` is these rows (the whole, in a
         /// new generation, carrying on the history kept); the rows alone,
         /// if the cache does not have that row.
@@ -325,8 +327,29 @@ public final class SessionTranscript {
                 structural = next.count != old.count
             }
             let after = envelope.after ?? []
+            // Rows changed before the rows held, written to the cache only
+            // where it keeps them.
+            var elsewhere: [TranscriptEntry] = []
             for (offset, row) in rows.enumerated() {
                 let anchor = offset < after.count ? after[offset] : nil
+                // A row that follows one not held is before the rows held
+                // (they are the conversation's end, a window on it): the
+                // first row held changes where it is, and any other stays
+                // out of them. Put at the end, it would stay there, below
+                // every row that came after it, each going in after the row
+                // it follows.
+                if let anchor, !anchor.isEmpty, !next.contains(where: { $0.id == anchor }) {
+                    if let index = next.firstIndex(where: { $0.id == row.id }) {
+                        if index == 0 {
+                            next[0] = row
+                            continue
+                        }
+                        next.remove(at: index)
+                        structural = true
+                    }
+                    elsewhere.append(row)
+                    continue
+                }
                 if let index = next.firstIndex(where: { $0.id == row.id }) {
                     let before = index > 0 ? next[index - 1].id : ""
                     if anchor == nil || anchor == before { next[index] = row; continue }
@@ -346,11 +369,12 @@ public final class SessionTranscript {
             // The first place where the rows held differ from before.
             let diverge = (0..<min(old.count, next.count)).first { old[$0].id != next[$0].id } ?? (next.count < old.count ? next.count : nil)
             if structural, let first = diverge, first < old.count {
-                write = .rewrite(from: old[first].id, Array(next[min(first, next.count)...]), all: next)
+                write = .rewrite(from: old[first].id, Array(next[min(first, next.count)...]), all: next, elsewhere: elsewhere)
             } else {
                 // Rows that went from what the cache keeps beyond the
                 // rows held go too.
-                write = .upsert(rows, removed: removed)
+                let outside = Set(elsewhere.map(\.id))
+                write = .upsert(rows.filter { !outside.contains($0.id) }, removed: removed, elsewhere: elsewhere)
             }
             entries = next
         } else {

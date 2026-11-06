@@ -17,6 +17,9 @@ public final class MemoryStorage: MessageStorage {
     public func setSourceState(_ state: SourceState, _ session: String) throws { sources[session] = state }
     public func syncState(_ session: String) -> SyncState? { syncs[session] }
     public func setSyncState(_ state: SyncState, _ session: String) throws { syncs[session] = state }
+    public func forgetGenerations() throws {
+        for session in syncs.keys { syncs[session]?.generation = -1 }
+    }
 
     public func deleteSession(_ session: String) throws {
         sources[session] = nil; syncs[session] = nil; nodes[session] = nil; rows[session] = nil
