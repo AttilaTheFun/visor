@@ -59,6 +59,8 @@ public final class SQLiteStorage: MessageStorage {
         try db.run("INSERT OR REPLACE INTO syncs (session, revision, generation) VALUES (?, ?, ?)", s, state.revision, state.generation)
     }
 
+    public func forgetGenerations() throws { try db.execute("UPDATE syncs SET generation = -1") }
+
     public func deleteSession(_ s: String) throws {
         try db.run("DELETE FROM sources WHERE session = ?", s)
         try db.run("DELETE FROM syncs WHERE session = ?", s)

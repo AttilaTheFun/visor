@@ -18,10 +18,10 @@ final class MCPProxy {
 
     /// The tools of the endpoints a session has, each renamed under its
     /// endpoint; one that doesn't answer gives none.
-    func tools(of endpoints: [MCPEndpoint], session: String, title: String, secrets: any SecretStore) async -> [JSONValue] {
+    func tools(of endpoints: [MCPEndpoint], session: String, title: String, repository: String, secrets: any SecretStore) async -> [JSONValue] {
         var listed: [JSONValue] = []
         for endpoint in endpoints {
-            let connection = connection(endpoint, session: session, title: title, secrets: secrets)
+            let connection = connection(endpoint, session: session, title: title, repository: repository, secrets: secrets)
             var cursor: String?
             for _ in 0..<Self.pages {
                 let params: JSONValue = cursor.map { .object(["cursor": .string($0)]) } ?? .object([:])
@@ -40,21 +40,22 @@ final class MCPProxy {
 
     /// A call of `tool` (`<endpoint>__<tool>`) passed on to its endpoint,
     /// answered with the endpoint's result as it gave it.
-    func call(_ tool: String, arguments: JSONValue, endpoints: [MCPEndpoint], session: String, title: String,
+    func call(_ tool: String, arguments: JSONValue, endpoints: [MCPEndpoint], session: String, title: String, repository: String,
               secrets: any SecretStore) async throws -> JSONValue {
         guard let split = tool.range(of: "__") else { throw MCPProxyError.noEndpoint(tool) }
         let name = String(tool[..<split.lowerBound])
         guard let endpoint = endpoints.first(where: { $0.name == name }) else { throw MCPProxyError.noEndpoint(name) }
-        let connection = connection(endpoint, session: session, title: title, secrets: secrets)
+        let connection = connection(endpoint, session: session, title: title, repository: repository, secrets: secrets)
         return try await connection.request("tools/call", .object(["name": .string(String(tool[split.upperBound...])), "arguments": arguments]),
                                             timeout: Self.callTimeout)
     }
 
     /// A session's connection to an endpoint, its headers as they are now;
     /// a new one when the endpoint moved.
-    private func connection(_ endpoint: MCPEndpoint, session: String, title: String, secrets: any SecretStore) -> MCPConnection {
+    private func connection(_ endpoint: MCPEndpoint, session: String, title: String, repository: String,
+                            secrets: any SecretStore) -> MCPConnection {
         let key = endpoint.name + "\u{0}" + session
-        let headers = endpoint.filledHeaders(session: session, title: title, secrets: secrets)
+        let headers = endpoint.filledHeaders(session: session, title: title, repository: repository, secrets: secrets)
         if let known = connections[key], known.url == endpoint.url {
             known.headers = headers
             return known

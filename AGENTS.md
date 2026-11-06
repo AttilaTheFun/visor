@@ -17,6 +17,12 @@ to one focused change, and say in it how the change was verified.
 
 ## Rules
 
+CI's `rules` job (tools/check_rules.py) checks the ones that must hold:
+signing material, the strict Swift copts, `nonisolated(unsafe)` and
+`@unchecked Sendable`, Combine, networking in visor_client and visor_ui,
+platform checks in the server library, and attribution lines in a pull
+request's commits. A rule that matters and can be checked goes there too.
+
 - No attribution lines in commits.
 - No Apple team ids, certificates, provisioning profiles or device UDIDs in
   the repository: the team comes from the builder's own `.bazelrc.user`

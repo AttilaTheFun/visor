@@ -1,4 +1,5 @@
 load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -6,6 +7,7 @@ package(default_visibility = ["//visibility:public"])
 # alias below). The module name is the seam's.
 swift_library(
     name = "isomer_camera",
+    copts = STRICT_SWIFT,
     srcs = ["Camera.swift"],
     module_name = "VisorCamera",
     # Only where the alias below picks it: an Apple build of Apple's SwiftUI

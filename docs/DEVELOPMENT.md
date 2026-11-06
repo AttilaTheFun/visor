@@ -777,6 +777,8 @@ as it came (JSON or SSE). Set up on a Mac:
 
 ```sh
 visor-runner-agent endpoint set gh http://127.0.0.1:7470/mcp --header 'CLIENT_ID=$SESSION_ID' --secret API_KEY  # the key on stdin
+visor-runner-agent endpoint set keymaster http://<Keymaster's Mac>:7450/mcp --header 'CLIENT_ID=$SESSION_ID' \
+    --header 'Keymaster-Repository=$SESSION_REPOSITORY' --secret Authorization --withhold github_token  # "Bearer km_…" on stdin
 visor-runner-agent server add co-tenant --host <the Mac's name as the container reaches it>  # prints the server's PUT /api/mcp body
 visor-runner-agent status
 visor-runner-agent serve   # port 7439, every interface; a LaunchAgent keeps it running
@@ -785,6 +787,14 @@ visor-runner-agent serve   # port 7439, every interface; a LaunchAgent keeps it 
 The printed body goes to the server's `PUT /api/mcp` with its password.
 The token is kept there as a secret header, and no key goes into the
 container.
+
+A tool whose answer holds a credential (Keymaster's `github_token`, a
+GitHub installation token) is withheld (`--withhold`): left out of the
+tools a server lists, and a call of it refused by the proxy, never passed
+on. A container's server shares the container with its agents, so what
+the server is given an agent could read. `$SESSION_REPOSITORY` is filled
+in by the server: owner/name of the GitHub repository the session's folder
+is a checkout of (its `origin`), empty for one that isn't.
 
 **Its push proxy.** On the same port and with the same tokens, a server
 with no APNs key of its own (Linux, a container) sends its pushes to
@@ -859,14 +869,15 @@ front paths, `visor-server front`).
   scratch; a `VisorServer()` built over the real archive KILLS every agent
   it lists as an orphan (it has: "claude exited 143").
   `RealFileIndexTests` indexes a real file when `--test_env=VISOR_REAL_FILE=…`.
-  CI's `test` job builds the Mac's .xctest bundles (`macos_unit_test`
-  under tests/) on Linux in its own container,
-  `tools/ci/build_mac_tests.sh <archive> --config=apple_on_linux …`, and
-  runs each with `oss machine xctest` on a slot of OS Server's primary Mac
-  VM (`oss machine lease mac`, ready in seconds; tools/ci/mac_vm_tests.sh),
-  never a macOS VM of its own: those are left to agents (Logan, 3 Nov
-  2026). Several runs share the primary's loopback, so a test whose server
-  listens takes `ServerTestCase.freePort()`.
+  CI's `build-tests` job builds the Mac's .xctest bundles
+  (`macos_unit_test` under tests/) on Linux in its own container
+  (tools/ci/mac_tests_build.sh: `tools/ci/build_mac_tests.sh <archive>
+  --config=apple_on_linux …`, OS Server's SDK archive and cache), and its
+  `test` job runs each with `xcrun xctest` on one of GitHub's own Macs
+  (`xcode-27`, tools/ci/mac_tests_run.sh), which a public repository has
+  for free: OS Server's Mac slots and VMs are left to agents (Logan, 3 and
+  5 Nov 2026). A test whose server listens takes
+  `ServerTestCase.freePort()`.
 - Try a server build against real agents without touching the installed
   one: `bazel run //tools/staging_server -- [port] [password]` (7533,
   `staging`) runs a `VisorServer` of its own — its own ports, a scratch

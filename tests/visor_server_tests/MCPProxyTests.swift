@@ -125,6 +125,40 @@ final class MCPProxyTests: ServerTestCase {
         XCTAssertEqual(call.headers["Mcp-Session-Id"], "mcp-1", "the MCP session it was given")
     }
 
+    /// A remote's URL names its GitHub repository, as owner/name; any other
+    /// host's, or a path that isn't owner/name, none.
+    func testARemoteNamesItsGitHubRepository() {
+        XCTAssertEqual(GitHubRepository.name(ofRemote: "https://github.com/AttilaTheFun/visor.git"), "AttilaTheFun/visor")
+        XCTAssertEqual(GitHubRepository.name(ofRemote: "git@github.com:AttilaTheFun/agent_ui.git\n"), "AttilaTheFun/agent_ui")
+        XCTAssertEqual(GitHubRepository.name(ofRemote: "ssh://git@github.com/AttilaTheFun/oss"), "AttilaTheFun/oss")
+        XCTAssertNil(GitHubRepository.name(ofRemote: "https://gitlab.com/AttilaTheFun/visor.git"))
+        XCTAssertNil(GitHubRepository.name(ofRemote: "https://github.com/AttilaTheFun"))
+        XCTAssertNil(GitHubRepository.name(ofRemote: "https://github.com/AttilaTheFun/visor/tree/main"))
+        XCTAssertNil(GitHubRepository.name(ofRemote: "/Users/logan/Developer/visor"))
+    }
+
+    /// `$SESSION_REPOSITORY` in a header is the repository the session's
+    /// folder is a checkout of; empty for a folder that is none.
+    func testAHeaderNamesTheSessionsRepository() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("visor-mcp-repo-" + UUID().uuidString).path
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        for arguments in [["init", "-q"], ["remote", "add", "origin", "git@github.com:AttilaTheFun/visor.git"]] {
+            let ran = await ProjectSurvey.git(arguments, in: folder)
+            XCTAssertNotNil(ran, "git \(arguments.joined(separator: " "))")
+        }
+        let keymaster = #"{"endpoints":[{"name":"keymaster","url":"http://127.0.0.1:7450/mcp","headers":[{"name":"Keymaster-Repository","value":"$SESSION_REPOSITORY"}]}]}"#
+        XCTAssertEqual(setEndpoints(keymaster).status, 200)
+
+        _ = try await ask("mcp_tools")
+        XCTAssertEqual(endpoint.heard.withLock { $0.last }?.headers["Keymaster-Repository"], "", "/tmp is no checkout")
+
+        server.sessions = [SessionRecord(info: SessionInfo(id: "S1", agent: .claude, cwd: folder, title: "Parser", created: 0),
+                                         process: ClaudeProcess(cwd: folder, skipPermissions: true, resume: nil), entries: [])]
+        _ = try await ask("mcp_tools")
+        XCTAssertEqual(endpoint.heard.withLock { $0.last }?.headers["Keymaster-Repository"], "AttilaTheFun/visor")
+    }
+
     func testASessionSwitchesAnEndpointOff() async throws {
         XCTAssertEqual(setEndpoints(gh).status, 200)
         server.perform(.mcp(session: "S1", endpoint: "gh", on: false), from: nil)

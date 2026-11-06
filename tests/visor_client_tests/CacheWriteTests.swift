@@ -69,6 +69,58 @@ final class CacheWriteTests: XCTestCase {
         XCTAssertEqual(Array(kept.suffix(4)), ["r296", "x", "r297", "r299"])
     }
 
+    /// A row changed before the rows held (the row it follows not among
+    /// them) changes where it is kept, and isn't put at the end, where it
+    /// would stay below every row that came after it.
+    func testARowChangedBeforeTheRowsHeldStaysInItsPlace() async throws {
+        let transcript = try open()
+        transcript.sync(delta([TranscriptEntry(id: "r150", role: .assistant, text: "changed"),
+                               TranscriptEntry(id: "r200", role: .assistant, text: "first held, changed"),
+                               TranscriptEntry(id: "gone", role: .assistant, text: "never kept")],
+                              after: ["r149", "r199", "elsewhere"], revision: 4))
+        await settle()
+        XCTAssertEqual(transcript.entries.map(\.id), rows("r", 200..<300).map(\.id), "nothing moved to the end")
+        XCTAssertEqual(transcript.entries.first?.text, "first held, changed")
+        XCTAssertEqual(kept, rows("r", 0..<300).map(\.id), "kept in order, and nothing not kept added")
+        let changed = AgentServerConnection.cache.messages(in: key, limit: 1 << 20).messages.first { $0.id == "r150" }
+        XCTAssertEqual(changed?.text, "changed")
+
+        // What comes after goes at the end, here and in the cache.
+        transcript.sync(delta([TranscriptEntry(id: "sent", role: .user, text: "hi")], after: ["r299"], revision: 5))
+        await settle()
+        XCTAssertEqual(transcript.entries.last?.id, "sent")
+        XCTAssertEqual(kept.last, "sent")
+    }
+
+    /// A cache an earlier build left a row misplaced in (at the end) is
+    /// synced whole once: the session is shown as kept, asked for in no
+    /// generation of the server's, and the whole puts the rows in order.
+    func testACacheAnEarlierBuildMisplacedARowInIsSyncedWholeOnce() async throws {
+        let cache = MessageCache.inMemory()
+        var misplaced = rows("r", 0..<300)
+        misplaced.append(misplaced.remove(at: 250))
+        try cache.replace(key, with: misplaced)
+        try cache.setSyncState(SyncState(revision: 3, generation: 1), for: key)
+        AgentServerConnection.cache = cache
+        let transcript = host.transcript(for: "S")
+        XCTAssertEqual(transcript.entries.last?.id, "r250", "shown as kept until the server answers")
+        XCTAssertEqual(transcript.generation, -1)
+
+        var whole = Envelope(type: "transcript")
+        whole.entries = rows("r", 200..<300)
+        whole.reset = true; whole.revision = 3; whole.generation = 1; whole.more = true
+        whole.follows = "r199"
+        transcript.sync(whole)
+        await settle()
+        XCTAssertEqual(transcript.entries.map(\.id), rows("r", 200..<300).map(\.id))
+        XCTAssertEqual(kept, rows("r", 0..<300).map(\.id))
+        XCTAssertEqual(cache.syncState(of: key), SyncState(revision: 3, generation: 1))
+
+        // Once: a cache mended already syncs on as before.
+        AgentServerConnection.cache = cache
+        XCTAssertEqual(cache.syncState(of: key)?.generation, 1)
+    }
+
     func testANewGenerationCarriesOnFromTheRowItFollows() async throws {
         let transcript = try open()
         // The server started again: the whole, its last rows, after r249.
