@@ -16,7 +16,7 @@ swift_library(
     deps = [
         "//libraries/visor_services_ffi",
         "@isomer//android/libraries/swift_ui",
-        "@isomer//android/libraries/swift_ui:isomer_bridge",
+        "@isomer//android/libraries/swift_ui:isomer",
         "//libraries/visor_client",
         "//libraries/visor_services",
         "//libraries/visor_ui",

@@ -25,7 +25,7 @@ swift_library(
         "//libraries/visor_ui",
         "@swiftpkg_agent_ui//:AgentUI",
         "@isomer//wasm/libraries/swift_ui",
-        "@isomer//wasm/libraries/swift_ui:isomer_bridge",
+        "@isomer//wasm/libraries/swift_ui:isomer",
     ],
 )
 

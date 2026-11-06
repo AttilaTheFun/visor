@@ -9,50 +9,33 @@ module(
 
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
-bazel_dep(name = "apple_support", version = "2.10.1")
-# Built on Linux with rules_applecross (below): its patches to apple_support
-# and rules_apple, which only a root module's overrides apply.
-single_version_override(
-    module_name = "apple_support",
-    patch_strip = 1,
-    patches = ["//third_party/patches/applecross:apple_support_bazel8_xcode_properties.patch"],
-    version = "2.10.1",
-)
+# The BCR's apple_support 2.11.0, as rules_applecross (below) asks for: it
+# has the fix the older one was patched for.
+bazel_dep(name = "apple_support", version = "2.11.0")
 # rules_swift from the project's registry (AttilaTheFun/bazel_registry,
-# before the BCR in .bazelrc): 4.1.0.isomer.2 is upstream's 4.1.0 with
-# rules_swift#1860 (the wasi-threads SDK, not yet merged), isomer's two
-# patches, and the worker's incremental-copy fix (upstream #1905, from 4.2.0). It sorts above the releases the graph asks for, so every module
-# gets it; the Apple apps build on it as they did on 4.1.0.
-bazel_dep(name = "rules_swift", version = "4.1.0.isomer.2")
-# rules_applecross asks for 4.2.2, which sorts above it: the fork all the same.
-single_version_override(
-    module_name = "rules_swift",
-    version = "4.1.0.isomer.2",
-)
+# before the BCR in .bazelrc), as isomer asks for: 4.2.2.isomer.1 is
+# upstream's 4.2.2 with four of its pull requests (the wasm SDK's clang
+# resource directory, the wasi-threads SDK beside the single-threaded one,
+# Swift/C++ interop on Android). It sorts above the 4.2.2 rules_applecross
+# asks for, so no override holds it.
+bazel_dep(name = "rules_swift", version = "4.2.2.isomer.1")
 
 # The server's one C file (libraries/visor_server_posix/c); already in the
-# graph at this version through rules_swift.
-bazel_dep(name = "rules_cc", version = "0.2.20")
-bazel_dep(name = "rules_apple", version = "5.3.1")
-# rules_applecross's patches (bundling and signing on Linux, Apple silicon by
-# default off a Mac), then, on a phone
-# (the lab's iPhone), a UI test's runner app named as Xcode names a device's
-# (<app>.xctrunner): a device finds no container for the simulator's
-# "com.apple.test." name.
+# graph at this version through rules_applecross.
+bazel_dep(name = "rules_cc", version = "0.2.26")
+# rules_apple from the project's registry: 5.3.1.applecross.6 is rules_apple
+# 5.3.1 with rules_applecross's patches (bundling and signing on Linux),
+# asking for rules_applecross 0.0.3.382f8c3, which asks for it back (a
+# preset pair, as isomer has it).
+bazel_dep(name = "rules_apple", version = "5.3.1.applecross.6")
+# Visor's own patch on top: on a phone (the lab's iPhone), a UI test's runner
+# app named as Xcode names a device's (<app>.xctrunner): a device finds no
+# container for the simulator's "com.apple.test." name.
 single_version_override(
     module_name = "rules_apple",
     patch_strip = 1,
-    patches = [
-        "//third_party/patches/applecross:rules_apple_execution_platform.patch",
-        "//third_party/patches/applecross:rules_apple_bundletool_path.patch",
-        "//third_party/patches/applecross:rules_apple_no_absolute_tool_paths.patch",
-        "//third_party/patches/applecross:rules_apple_codesign_inputs_sdk_tools.patch",
-        "//third_party/patches/applecross:rules_apple_alticonstool_missing_icons.patch",
-        "//third_party/patches/applecross:rules_apple_xctoolrunner_sorted_listdir.patch",
-        "//third_party/patches/applecross:rules_apple_arm64_default.patch",
-        "//third_party/patches:rules_apple_device_xctrunner.patch",
-    ],
-    version = "5.3.1",
+    patches = ["//third_party/patches:rules_apple_device_xctrunner.patch"],
+    version = "5.3.1.applecross.6",
 )
 
 # The Apple apps built on Linux (a container, a VM): rules_applecross (its
@@ -71,23 +54,13 @@ single_version_override(
 # are registered for Linux alone, by the builder that has the SDKs
 # (.bazelrc's apple_on_linux, turned on in .bazelrc.user), so a Mac builds
 # as before and a Linux without them builds what runs on Linux.
-# From the project's registry: its main at a2b0558 (upstream's main at its
-# #257: Xcode 27.2; XCTest binaries built on Linux link, with XCTest's
-# re-exports, and run on a Mac, their run path reaching the installed
-# Xcode's usr/lib; its Swift toolchain takes rules_swift's module mapping
-# and --@rules_swift//swift:copt, which Isomer's compiled SwiftUI needs,
-# and loads with the 4.1.0 fork above, naming rules_swift 4.2's features
-# itself), for every module (rules_apple asks for 0.0.3, which no registry
-# holds).
-# Its own rules_apple patch for imported dynamic frameworks (ditto off a
-# Mac) is not in the override above: Visor imports none.
+# From the project's registry: 0.0.3.382f8c3 is rules_applecross's main at
+# 382f8c3 (rules_apple's imported frameworks find its lipo on Linux, and
+# ibtool fixes), the preset rules_apple above asks for, until it has a
+# release in the BCR.
 # Its actool and coremlc take Xcode 27.0 or 27.2 alone (else
 # --config=relax_xcode_version).
-bazel_dep(name = "rules_applecross", version = "0.0.3.a2b0558")
-single_version_override(
-    module_name = "rules_applecross",
-    version = "0.0.3.a2b0558",
-)
+bazel_dep(name = "rules_applecross", version = "0.0.3.382f8c3")
 apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
 # The Swift that built Xcode 27.2's SDKs.
 apple_cross_toolchain.swift(
@@ -120,16 +93,7 @@ register_toolchains(
     "@rules_applecross//toolchain:apple_bundling_on_macos",
 )
 bazel_dep(name = "rules_xcodeproj", version = "4.1.0")
-bazel_dep(name = "rules_swift_package_manager", version = "1.24.1")
-
-# A package builds at its importer's minimum OS when that is higher: AgentUI
-# says iOS 16 below (patch_cmds) for the compiled Visor on Isomer, and the
-# Apple apps, at iOS 18, still build it at 18 with Apple's SwiftUI.
-single_version_override(
-    module_name = "rules_swift_package_manager",
-    patch_strip = 1,
-    patches = ["//third_party/patches:rspm_importer_minimum_os.patch"],
-)
+bazel_dep(name = "rules_swift_package_manager", version = "1.25.0")
 
 # The chat, composer and navigation views: the agent_ui package, pinned by
 # revision in third_party/swift_packages.
@@ -146,12 +110,6 @@ swift_deps.from_package(
 # Isomer's on the web and Android and in a compiled feature.
 swift_deps.configure_package(
     name = "agent_ui",
-    # The Visor compiled against Isomer's frameworks runs on iOS 16 (its
-    # SwiftUI and Observation are Isomer's). AgentUI's package says iOS 18,
-    # and rules_swift_package_manager refuses a package to an app below its
-    # minimum, so here it says 16 (an app above it builds it at its own: the
-    # override above).
-    patch_cmds = ["sed -i.orig 's/\\.iOS(\"18\\.0\")/.iOS(\"16.0\")/' Package.swift"],
     target_deps = {
         "AgentUI": ["@@isomer+//:swift_ui", "@@isomer+//:foundation"],
         "InboxUI": ["@@isomer+//:swift_ui", "@@isomer+//:foundation"],
@@ -177,6 +135,7 @@ use_repo(
     "swift_package",
     "swiftpkg_agent_ui",
     "swiftpkg_applications",
+    "swiftpkg_swift_collections",
     "swiftpkg_swift_nio_ssh",
     "swiftpkg_swift_sql",
 )
@@ -189,27 +148,14 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.39.19")
+bazel_dep(name = "isomer", version = "0.40.1")
 
-# flatbuffers' released Swift BUILD glob misses Sources/FlatBuffers/Vectors/,
-# and its Foundation use breaks under WASI: isomer's patches, which a root
-# module repeats (an override is the root's alone).
-bazel_dep(name = "flatbuffers", version = "25.12.19")
-single_version_override(
-    module_name = "flatbuffers",
-    patch_strip = 1,
-    patches = [
-        "//third_party/patches:flatbuffers_foundation_wasi.patch",
-        "//third_party/patches:flatbuffers_swift_vectors.patch",
-    ],
-    version = "25.12.19",
-)
-
-# flatbuffers' transitive rules_foreign_cc 0.10.1 fails to load under Bazel 9.
-single_version_override(
-    module_name = "rules_foreign_cc",
-    version = "0.15.1",
-)
+# isomer's Foundation (swift-foundation, a package of isomer's own
+# rules_swift_package_manager graph) and Visor's SwiftNIO both build
+# swift-collections: isomer's graph takes Visor's, so one copy of its
+# modules is linked.
+isomer_swift_deps = use_extension("@isomer//third_party/swift_packages:extensions.bzl", "swift_deps")
+override_repo(isomer_swift_deps, swiftpkg_swift_collections = "swiftpkg_swift_collections")
 
 # isomer's Android cross-compile toolchains. The extension insists on a
 # root-level android.sdk tag even when only the NDK's cc toolchains are used.
@@ -300,8 +246,9 @@ bazel_dep(name = "rules_java", version = "9.3.0")
 bazel_dep(name = "rules_kotlin", version = "2.2.2")
 bazel_dep(name = "rules_python", version = "2.0.2")
 
-# The transitively resolved rules_go is too old for Bazel 9.
-bazel_dep(name = "rules_go", version = "0.61.1")
+# The transitively resolved rules_go is too old for Bazel 9; rules_applecross's
+# graph raises it to 0.62.
+bazel_dep(name = "rules_go", version = "0.62.0")
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.24.12")
