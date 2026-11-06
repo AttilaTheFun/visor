@@ -692,8 +692,8 @@ computer's), the agent's log folder for that folder (Claude's
 (`<data>/images`, AgentImages) read-only at the same path, since the agent
 is given that path, and, where the computer has them
 (`HostDetails.containerPrograms`: the app's `Contents/Resources/Linux`,
-which tools/release_mac.sh fills in a release's Visor Server from CI's
-linux-programs job, tools/ci/linux_programs.sh, or `linux/` beside the
+which alpha and adhoc fill in Visor.app from CI's linux-programs job,
+tools/ci/linux_programs.sh and mac_app_linux_programs.sh, or `linux/` beside the
 command-line server), Visor's own Linux programs
 read-only at `/opt/visor/bin`: `visor-server`, also the agents' host as
 `visor-agent-host`, linked fully static (Swift's Static Linux SDK, musl:
@@ -954,12 +954,14 @@ front paths, `visor-server front`).
   5 Nov 2026). A release is no build of its own (Logan, 2026-11-02):
   Applications Server promotes the commit's Alphas, as tested, to
   Production, their plists' BuildVariant restamped and signed again, when
-  the owner releases it in Reviews (the `release` job). The old Mac apps'
-  disk images (Visor Server and the Mac client) stay
-  on the release Mac until the Mac moves to Visor.app: their number
-  (`$PIPELINE_CI number`), built, signed and notarized (`build`,
-  tools/build_packages.sh, then `$PIPELINE_CI`'s), with the agent image
-  and blue's iPhone snapshots. The
+  the owner releases it in Reviews (the `release` job). The server makes
+  the promoted Visor.app's disk image as it promotes it (signed,
+  notarized and stapled), which `release` downloads
+  (tools/ci/promote_from_ci.sh `--dmg-dir`) and `release-dmg` attaches to
+  the GitHub release, beside the source archives. The old Mac apps' disk
+  images (Visor Server and the Mac client, `build` on the release Mac)
+  are no more since 0.46; the release Mac keeps the agent image, its
+  number (`$PIPELINE_CI number`) and blue's iPhone snapshots. The
   proof is a workflow of its own (`proof.yml`, since 0.46), run only by
   hand on GitHub's own runners: an agent runs it on main to propose a
   release, compared with the previous release's proof. main

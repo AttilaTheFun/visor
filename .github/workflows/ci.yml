@@ -19,15 +19,16 @@ name: CI
 # which: tools/ci/publish_from_ci.sh). A release is no build of its own:
 # Applications Server promotes a commit's Alpha, as tested, to Production
 # (the plist's BuildVariant restamped, signed again), when the owner
-# releases it in Reviews (the release job). Then the Mac's disk images, their
-# number and the agent image on the release Mac (self-hosted, release-mac,
-# until the Mac moves to Visor.app), and blue's iPhone snapshots (off for
-# now, above). The proof, which is how an agent proposes a release, is a
+# releases it in Reviews (the release job), and the promoted Visor.app's
+# notarized disk image goes among the release's files on GitHub
+# (release-dmg). Then the agent image and its number on the release Mac
+# (self-hosted, release-mac), and blue's iPhone snapshots (off for now,
+# above). The proof, which is how an agent proposes a release, is a
 # workflow of its own (proof.yml), run by hand on GitHub's own runners. A
 # newer push to a pull request cancels its run if it hasn't finished. main requires every
 # job green (or skipped) on a pull request's head before it merges. A
 # fork's pull request never runs on a self-hosted runner. Every job but the
-# release Mac's (number, build, agent-image) runs on OS Server's single-use
+# release Mac's (number, agent-image) runs on OS Server's single-use
 # runners: each a fresh Linux container with `oss` on its PATH, leasing what
 # it needs a Mac for. Its label is its size: visor-jit (12 GB) for a build,
 # visor-jit-small (2 GB) for the jobs that only run git or a script. A
@@ -196,8 +197,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: tools/released_pins.sh
 
-  # The version the Mac's disk images and the agent image of this commit of
-  # main take: MAJOR.MINOR.BUILD, BUILD one past the line's highest on the
+  # The version the agent image of this commit of main takes:
+  # MAJOR.MINOR.BUILD, BUILD one past the line's highest on the
   # release server (the plist says MAJOR.MINOR.0), kept there as the
   # commit's. The iPhone's comes from Applications Server
   # (tools/ci/next_version.sh, in alpha and adhoc).
@@ -217,43 +218,9 @@ jobs:
           # The commit itself (a pull request's head, not its merge ref).
           PIPELINE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
-  # The Mac's disk images of this commit of main (Visor and Visor Server,
-  # signed and notarized) at that number, published by the release Mac's
-  # runner ($PIPELINE_CI), until the Mac moves to Visor.app and to
-  # Applications Server as the iPhone has (alpha). Named `build` still:
-  # main's branch protection requires a check of that name, which a pull
-  # request's run reports as skipped.
-  build:
-    needs: [number, linux-programs]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, release-mac]
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - run: $PIPELINE_CI prepare
-      - run: $PIPELINE_CI stamp ${{ needs.number.outputs.version }} applications/visor_macos/Info.plist applications/visor_menubar/Info.plist applications/visor_container_host/Info.plist
-      # Visor's own Linux programs, which Visor Server carries
-      # (tools/release_mac.sh), from the linux-programs job.
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-programs
-          path: ${{ runner.temp }}/linux-programs
-      - run: tools/build_packages.sh
-        env:
-          VISOR_LINUX_PROGRAMS: ${{ runner.temp }}/linux-programs/linux-programs.tar
-      - run: $PIPELINE_CI publish Visor dist/packages/*
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PIPELINE_SHA: ${{ github.event.pull_request.head.sha }}
-          PIPELINE_BRANCH: ${{ github.event.pull_request.head.ref }}
-          PIPELINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
-
   # Visor's own Linux programs (tools/linux_programs.sh: visor-server, also
-  # the agents' host, linked fully static), which the build job seals into
-  # Visor Server, and alpha and adhoc into Visor.app, for the containers
-  # they make: built in a container of Visor's agent image leased from the
+  # the agents' host, linked fully static), which alpha and adhoc seal into
+  # Visor.app, for the containers it makes: built in a container of Visor's agent image leased from the
   # OS Server on the runner's Mac (tools/ci/linux_programs.sh), as the
   # release Mac has none, and handed over as a tar. Not waiting on number:
   # it needs no version. For main's commits and adhoc's runs by hand.
@@ -509,7 +476,9 @@ jobs:
   # plist key"). The token's v* tag, released by a releaser, is the
   # permission. An Alpha that isn't its app's newest is kept a week, so a
   # release is made within a week of its commit (or while it is still the
-  # newest). The Mac's disk images are the build job's, as before.
+  # newest). The Mac's promoted Visor.app comes with its disk image, which
+  # the server makes as it promotes it (the app and a link to
+  # /Applications, signed, notarized and stapled), handed to release-dmg.
   release:
     if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags/v')
     runs-on: [self-hosted, visor-jit-small]
@@ -534,4 +503,31 @@ jobs:
       - name: Promote
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/promote_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md"
+        run: tools/ci/promote_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" --dmg-dir "$RUNNER_TEMP/dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dmg
+          path: ${{ runner.temp }}/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
+  # The release's notarized Visor.app disk image among its files on GitHub,
+  # beside the source archives (Logan, 5 Nov 2026: "the dmg should go in the
+  # files attached to the releases on github like the source tar"). On
+  # GitHub's own runner, so that the job reaching Applications Server
+  # (release) keeps a read-only token.
+  release-dmg:
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-dmg
+          path: ${{ runner.temp }}/dmg
+      - run: gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP"/dmg/*.dmg --repo "$GITHUB_REPOSITORY" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
