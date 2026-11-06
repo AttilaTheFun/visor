@@ -1,8 +1,7 @@
 #!/bin/bash
 # The proof's screens and UI cases, made on this Mac or a test VM: CI makes
-# the proof itself (tools/ci/ios_lease_proof.sh, built on Linux and run on
-# an iOS lease), and this is a
-# look before pushing.
+# the proof itself (.github/workflows/proof.yml, built on Linux and run on
+# GitHub's own runners), and this is a look before pushing.
 #
 #   tools/proof.sh                 -> .proof/ (or $PROOF_DIR)
 #     ios-portrait/, ios-landscape/  the fixture's screens (screens/fixture-*.png) and the UI cases, each

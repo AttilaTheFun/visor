@@ -64,13 +64,17 @@ cleanup() {
 trap cleanup EXIT
 
 echo "::group::An $DEVICE"
-# The newest iOS the image has; the device made for this run alone.
+# The newest iOS the image has that runs the device (a runtime that came
+# with a new phone runs that phone alone: xcode-27's iOS 27.1, the iPhone
+# Duo); the device made for this run alone.
 runtime="$(xcrun simctl list runtimes --json | python3 -I -c '
 import json, sys
-runtimes = [r for r in json.load(sys.stdin)["runtimes"] if r.get("platform") == "iOS" and r.get("isAvailable")]
+device = sys.argv[1]
+runtimes = [r for r in json.load(sys.stdin)["runtimes"] if r.get("platform") == "iOS" and r.get("isAvailable")
+            and any(t.get("name") == device for t in r.get("supportedDeviceTypes", []))]
 runtimes.sort(key=lambda r: [int(part) for part in r["version"].split(".")])
-print(runtimes[-1]["identifier"] + " " + runtimes[-1]["version"] if runtimes else "")')"
-[ -n "$runtime" ] || { echo "$me: no iOS simulator runtime on this Mac" >&2; exit 1; }
+print(runtimes[-1]["identifier"] + " " + runtimes[-1]["version"] if runtimes else "")' "$DEVICE")"
+[ -n "$runtime" ] || { echo "$me: no iOS simulator runtime on this Mac runs an $DEVICE" >&2; exit 1; }
 version="${runtime#* }"
 runtime="${runtime%% *}"
 udid="$(xcrun simctl create "Visor proof" "$DEVICE" "$runtime")"
