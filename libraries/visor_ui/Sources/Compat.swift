@@ -71,6 +71,23 @@ extension View {
         #endif
     }
 
+    /// The chat's column on the Mac: no minimum width of its own, so its
+    /// column's is the split view's (320) and the rows and the composer fit
+    /// what they get. With the chat's own minimum (its composer's buttons
+    /// and command, the rows' fixed pieces), opening the inspector on a
+    /// screen too narrow for the three columns set the split view raising
+    /// and lowering the detail's minimum until AppKit gave up on the window
+    /// (visor#240: a 1024-point screen). Elsewhere the chat as it is: on the
+    /// iPhone the same frame kept a thread with a goal laying itself out
+    /// in landscape, never settling (0.46's proof).
+    @ViewBuilder func chatColumn() -> some View {
+        #if os(macOS)
+        frame(minWidth: 0, maxWidth: .infinity)
+        #else
+        self
+        #endif
+    }
+
     /// The system's preview of a file (Quick Look: pictures zoom, videos
     /// play, documents open), where the system has one; nothing elsewhere.
     @ViewBuilder func filePreview(_ file: Binding<URL?>) -> some View {
