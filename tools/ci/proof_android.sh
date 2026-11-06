@@ -62,7 +62,9 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger --name-match=kvm
 sdkmanager="$(ls "$sdk"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)"
 avdmanager="${sdkmanager%/sdkmanager}/avdmanager"
-yes | "$sdkmanager" --install "$IMAGE" emulator platform-tools > "$out/logs/sdkmanager.txt" 2>&1 \
+# (`yes` ends on SIGPIPE when sdkmanager does, which pipefail would take
+# for sdkmanager's failure.)
+{ yes || true; } | "$sdkmanager" --install "$IMAGE" emulator platform-tools > "$out/logs/sdkmanager.txt" 2>&1 \
     || { tail -20 "$out/logs/sdkmanager.txt"; exit 1; }
 echo no | "$avdmanager" create avd --force --name proof --package "$IMAGE" > /dev/null
 # The AVD as Isomer's (run_emulator.sh's config.ini), on x86_64: these keys

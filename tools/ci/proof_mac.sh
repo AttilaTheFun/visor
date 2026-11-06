@@ -46,9 +46,13 @@ ditto -x -k "$apps/visor_mac.zip" "$work"
 app="$(find "$work" -maxdepth 1 -name '*.app' | head -1)"
 [ -n "$app" ] || { echo "$me: no app in visor_mac.zip" >&2; exit 1; }
 executable="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Contents/Info.plist")"
+identifier="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Contents/Info.plist")"
 codesign --verify --verbose=1 "$app" 2>&1 | tail -2 || true
-printf 'macOS %s, %s\n' "$(sw_vers -productVersion)" \
-    "$(system_profiler SPDisplaysDataType 2> /dev/null | sed -n 's/^ *Resolution: //p' | head -1)" | tee "$out/device.txt"
+screen_size="$(osascript -l JavaScript -e 'ObjC.import("AppKit"); const f = $.NSScreen.mainScreen.frame; `${f.size.width} by ${f.size.height}`')"
+printf 'macOS %s, a screen %s points\n' "$(sw_vers -productVersion)" "$screen_size" | tee "$out/device.txt"
+# No "quit unexpectedly" dialog over the screens after a crash (a crash is
+# the screen's failure, and its log says so), as OS Server's guests have.
+defaults write com.apple.CrashReporter DialogType -string none
 
 # The windows of a process on the screen, from CGWindowList (owners and
 # frames need no permission): "layer x y width height", one a line.
@@ -72,6 +76,10 @@ status=0
 mkdir -p "$out/screens" "$out/logs"
 for screen in $SCREENS; do
     echo "::group::$screen"
+    # Each launch a first one, whatever the one before did (a crash left
+    # its windows to be restored: Settings over every screen after it).
+    rm -rf "$HOME/Library/Saved Application State/$identifier.savedState"
+    defaults delete "$identifier" > /dev/null 2>&1 || true
     # Opened as apps are, so it comes to the front with its window key, on
     # the fixture, with no windows restored from the run before.
     open -n --stdout "$out/logs/$screen.log" --stderr "$out/logs/$screen.log" "$app" --args \
