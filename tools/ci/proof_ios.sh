@@ -83,7 +83,7 @@ runtimes = [r for r in json.load(sys.stdin)["runtimes"] if r.get("platform") == 
             and (r["version"] == version or r["version"].startswith(version + "."))
             and any(t.get("name") == device for t in r.get("supportedDeviceTypes", []))]
 runtimes.sort(key=lambda r: [int(part) for part in r["version"].split(".")])
-print(runtimes[-1]["identifier"] + " " + runtimes[-1]["version"] if runtimes else "")' "$DEVICE" "$IOS_VERSION"
+print(runtimes[-1]["identifier"] + " " + runtimes[-1]["version"] + " (" + runtimes[-1].get("buildversion", "?") + ")" if runtimes else "")' "$DEVICE" "$IOS_VERSION"
 }
 runtime="$(pick_runtime)"
 if [ -z "$runtime" ]; then
@@ -91,7 +91,12 @@ if [ -z "$runtime" ]; then
     mkdir -p "$out/logs"
     xcodebuild -downloadPlatform iOS -buildVersion "$IOS_VERSION" > "$out/logs/download-platform.log" 2>&1 \
         || tail -20 "$out/logs/download-platform.log"
-    runtime="$(pick_runtime)"
+    # Listed a little after it is installed, once CoreSimulator has mounted it.
+    for _ in $(seq 1 24); do
+        runtime="$(pick_runtime)"
+        [ -z "$runtime" ] || break
+        sleep 5
+    done
 fi
 [ -n "$runtime" ] || { echo "::error::No iOS $IOS_VERSION simulator that runs an $DEVICE on this runner: its pictures would not compare with the base's"; exit 1; }
 version="${runtime#* }"
@@ -110,7 +115,7 @@ xcrun simctl status_bar "$udid" override --time "$still" "${bar[@]}" 2> /dev/nul
     || xcrun simctl status_bar "$udid" override --time 9:41 "${bar[@]}"
 xcrun simctl spawn "$udid" defaults write com.apple.Preferences KeyboardPrediction -bool NO
 xcode="$(xcodebuild -version | tr '\n' ' ' | sed 's/ *$//')"
-printf '%s, iOS %s (%s)\n' "$DEVICE" "$version" "$xcode" | tee "$out/device.txt"
+printf '%s, iOS %s, %s\n' "$DEVICE" "$version" "$xcode" | tee "$out/device.txt"
 echo "::endgroup::"
 
 # A run's folder as rules_apple's runner makes its test folder: the probe
