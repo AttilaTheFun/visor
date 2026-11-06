@@ -1,10 +1,10 @@
 #!/bin/bash
 # The tests that need a Mac, built on Linux for an Apple silicon Mac, in the
-# checkout (tools/ci/mac_vm_tests.sh runs it in the job's own container):
+# checkout (tools/ci/mac_tests_build.sh runs it in the job's own container):
 # the .xctest bundles under tests/ (macos_unit_test: the server's Apple
 # side, the client, its views, SSH), each rules_apple's .zip of its bundle
-# at its package's path (what OS Server's Mac test slot takes, and the
-# Mac's `xcrun xctest` runs), and tests.txt naming them, in one archive,
+# at its package's path (what the Mac's `xcrun xctest` runs:
+# tools/ci/mac_tests_run.sh), and tests.txt naming them, in one archive,
 # for a Mac to run without Bazel or the tree. A bundle is
 # whole: what its tests need is in its Resources (the agent host the
 # server's tests run), and its run paths reach the installed Xcode's
