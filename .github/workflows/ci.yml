@@ -27,8 +27,11 @@ name: CI
 # job green (or skipped) on a pull request's head before it merges. A
 # fork's pull request never runs on a self-hosted runner. Every job but the
 # release Mac's (number, build, agent-image) runs on OS Server's single-use
-# runners (visor-jit): each a fresh Linux container with `oss` on its PATH,
-# leasing what it needs a Mac for.
+# runners: each a fresh Linux container with `oss` on its PATH, leasing what
+# it needs a Mac for. Its label is its size: visor-jit (12 GB) for a build,
+# visor-jit-small (2 GB) for the jobs that only run git or a script
+# (changes, pins, release). A runner serves its own label alone, so no job
+# lands in the wrong size.
 on:
   pull_request:
   push:
@@ -60,7 +63,7 @@ jobs:
   # main always does.
   changes:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, visor-jit]
+    runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 5
     outputs:
       code: ${{ steps.diff.outputs.code }}
@@ -141,7 +144,7 @@ jobs:
   # it passes.
   pins:
     if: github.event_name == 'push'
-    runs-on: [self-hosted, visor-jit]
+    runs-on: [self-hosted, visor-jit-small]
     steps:
       - uses: actions/checkout@v4
       - run: tools/released_pins.sh
@@ -431,7 +434,7 @@ jobs:
   # newest). The Mac's disk images are the build job's, as before.
   release:
     if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: [self-hosted, visor-jit]
+    runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 90
     permissions:
       contents: read
