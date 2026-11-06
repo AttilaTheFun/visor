@@ -97,14 +97,8 @@ struct AgentScreen: View {
 
     var body: some View {
         chat
-        // No minimum width of the chat's own: its column's is the split
-        // view's (320), and the rows and the composer fit what they get.
-        // With the chat's own minimum (its composer's buttons and command,
-        // the rows' fixed pieces), opening the inspector on a screen too
-        // narrow for the three columns set the split view raising and
-        // lowering the detail's minimum until AppKit gave up on the window
-        // (visor#240: a 1024-point screen).
-        .frame(minWidth: 0, maxWidth: .infinity)
+        // On the Mac, no minimum width of the chat's own (Compat.swift).
+        .chatColumn()
         // Screenshot and UI tests: the new-rows pill stays until tapped, so a
         // test on a slow machine still finds it (4 s otherwise).
         .environment(\.newRowsPillSeconds, VisorFixture.active ? 600 : 4)
