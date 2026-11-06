@@ -1147,8 +1147,13 @@ own runners, which a public repository has for free, so OS Server's
 machines are left to CI and the agents (Logan, 5 Nov 2026):
 
 - The iPhone (`tools/ci/proof_ios.sh`, on an `xcode-27` Mac): the app and
-  its probe on an iPhone 17 simulator of the newest iOS the image has, made
-  for the run, its status bar held still and keyboard suggestions off. The
+  its probe on an iPhone 17 simulator of iOS 27.2, made for the run, its
+  status bar held still and keyboard suggestions off. GitHub rolls a new
+  image out over days, and the older one had iOS 27.0 alone, whose
+  pictures differ from 27.2's in most screens: where the image hasn't got
+  27.2, it is downloaded. A test that fails runs once more (GitHub's Macs
+  vary in speed, which a UI case's timing feels), and fails the proof only
+  if it fails again. The
   probe runs as rules_apple's runner runs it (an XCTRunner app made from
   Xcode's, an `.xctestrun`, then `xcodebuild test-without-building`), as
   OS Server ran it on a lease until 0.46. It takes the fixture's screens in

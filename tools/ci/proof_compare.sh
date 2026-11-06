@@ -22,8 +22,11 @@
 #                       pixels red (tools/ci/snapshot_diff.swift)
 #   proof.json          {"commit", "ref", "kind", "run", "base": {"ref",
 #                        "commit", "proof": the run whose proof it was, or
-#                        null}, "devices": {each platform: what it ran on},
-#                        "screens": [{"name", "changed", "changedPixels"}]}
+#                        null, "devices": what the base's ran on}, "devices":
+#                        {each platform: what it ran on}, "screens":
+#                        [{"name", "changed", "changedPixels"}]}
+# The summary says where a platform's device isn't the base's (another
+# simulator runtime, another screen): a screen may differ by that alone.
 #   logs/<platform>/    each part's logs
 #
 #   PROOF_BASE  the revision compared with (default: as above)
@@ -111,10 +114,19 @@ with open(os.path.join(work, "compared.tsv")) as file:
             new.add(name)
 with open(os.path.join(work, "devices.tsv")) as file:
     devices = dict(line.rstrip("\n").split("\t", 1) for line in file if "\t" in line)
+# What the base's proof ran on (from 0.46): a screen may differ by the
+# simulator or the screen alone where that isn't what this one ran on.
+base_devices = {}
+try:
+    with open(os.path.join(work, "base", "proof.json")) as file:
+        base_devices = json.load(file).get("devices") or {}
+except (OSError, ValueError):
+    pass
 kept = {name[:-4] for name in os.listdir(os.path.join(work, "base", "screens")) if name.endswith(".png")}
 gone = sorted(kept - {screen["name"] for screen in screens})
 document = {"commit": commit, "ref": ref, "kind": kind, "run": int(run) if run else None,
-            "base": {"ref": base_ref, "commit": base_commit, "proof": None if base_proof == "null" else int(base_proof)},
+            "base": {"ref": base_ref, "commit": base_commit, "proof": None if base_proof == "null" else int(base_proof),
+                     "devices": base_devices},
             "devices": devices, "screens": screens}
 with open(os.path.join(proof, "proof.json"), "w") as file:
     json.dump(document, file, indent=2)
@@ -130,6 +142,9 @@ if summary:
             continue
         changed = [screen for screen in mine if screen["changed"]]
         lines += [f"**{title}** ({devices.get(platform, 'no device')}): {len(mine)} screens, {len(changed)} changed", ""]
+        if platform in base_devices and platform in devices and base_devices[platform] != devices[platform]:
+            lines += [f"> **The base's {title} ran on another device:** {base_devices[platform]}. "
+                      "A screen may differ by that alone.", ""]
         if mine:
             lines += ["| Screen | Against the base |", "| --- | --- |"]
             for screen in mine:

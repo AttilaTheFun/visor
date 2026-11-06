@@ -36,9 +36,12 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
-  # On the repository's own runner (a Mac): the release's asset fetched with
-  # curl, and the site packed with the Mac's tar into the `github-pages`
-  # artifact deploy-pages takes (upload-pages-artifact wants GNU tar there).
+  # On OS Server's single-use runners (visor-jit, a Linux container): the
+  # release's asset fetched with curl, and the site packed into the
+  # `github-pages` artifact deploy-pages takes, with GNU tar as
+  # upload-pages-artifact packs it (links followed). BSD tar's `-cLf`, from
+  # when this ran on a Mac, is GNU tar's tape length: every deploy from
+  # 0.44 on failed there.
   deploy:
     runs-on: [self-hosted, visor-jit]
     environment:
@@ -68,7 +71,7 @@ jobs:
           fi
       - uses: actions/configure-pages@v5
       - name: The site, packed
-        run: tar -cLf "$RUNNER_TEMP/artifact.tar" -C site --exclude .git --exclude .github .
+        run: tar --dereference --hard-dereference --directory site -cf "$RUNNER_TEMP/artifact.tar" --exclude=.git --exclude=.github .
       - uses: actions/upload-artifact@v4
         with:
           name: github-pages
