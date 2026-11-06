@@ -3,7 +3,10 @@
 # GitHub's own Macs (`xcode-27`, a desktop session whose shell may picture
 # the screen): Visor.app (applications/visor_mac), built on Linux by the
 # proof's build job and signed ad hoc there, opened on the screenshot
-# fixture in the light look, once for each of the fixture's screens. Each
+# fixture in the light look, once for each of the fixture's screens, on a
+# screen of 1920 by 1080 points (displayplacer; the runner's own is 1024 by
+# 768, too narrow for the sidebar, the chat and the inspector together:
+# Visor's split view looped until AppKit stopped it, visor#240). Each
 # is pictured once it has settled, cropped to the app's window as
 # CoreGraphics' window list gives its frame (with any sheet over it): no
 # menu bar, Dock or wallpaper.
@@ -48,6 +51,12 @@ app="$(find "$work" -maxdepth 1 -name '*.app' | head -1)"
 executable="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Contents/Info.plist")"
 identifier="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Contents/Info.plist")"
 codesign --verify --verbose=1 "$app" 2>&1 | tail -2 || true
+# The screen made 1920 by 1080, which its modes include; said either way.
+brew install displayplacer > /dev/null 2>&1 || true
+screen_id="$(displayplacer list 2> /dev/null | sed -n 's/^Persistent screen id: //p' | head -1 || true)"
+if [ -z "$screen_id" ] || ! displayplacer "id:$screen_id res:1920x1080 scaling:off origin:(0,0) degree:0" > /dev/null 2>&1; then
+    echo "::warning::The runner's screen stayed as it was (displayplacer)"
+fi
 screen_size="$(osascript -l JavaScript -e 'ObjC.import("AppKit"); const f = $.NSScreen.mainScreen.frame; `${f.size.width} by ${f.size.height}`')"
 printf 'macOS %s, a screen %s points\n' "$(sw_vers -productVersion)" "$screen_size" | tee "$out/device.txt"
 # No "quit unexpectedly" dialog over the screens after a crash (a crash is
