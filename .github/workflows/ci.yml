@@ -30,9 +30,14 @@ name: CI
 # release Mac's (number, build, agent-image) runs on OS Server's single-use
 # runners: each a fresh Linux container with `oss` on its PATH, leasing what
 # it needs a Mac for. Its label is its size: visor-jit (12 GB) for a build,
-# visor-jit-small (2 GB) for the jobs that only run git or a script
-# (changes, pins, release). A runner serves its own label alone, so no job
-# lands in the wrong size.
+# visor-jit-small (2 GB) for the jobs that only run git or a script. A
+# runner serves its own label alone, so no job lands in the wrong size. Two
+# of those, changes and pins, run on GitHub's own ubuntu-latest while the
+# repository is public, which leaves OS Server's runners to the builds
+# (Logan, 6 Nov 2026); on OS Server's small one if it goes private, or
+# when the repository variable HOSTED_RUNNERS is `off` (GitHub's runners
+# down or backed up). release stays on OS Server's: it reaches Applications
+# Server on the LAN.
 on:
   pull_request:
   push:
@@ -64,7 +69,7 @@ jobs:
   # main always does.
   changes:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, visor-jit-small]
+    runs-on: ${{ (github.event.repository.private || vars.HOSTED_RUNNERS == 'off') && fromJSON('["self-hosted", "visor-jit-small"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       code: ${{ steps.diff.outputs.code }}
@@ -168,7 +173,7 @@ jobs:
   # it passes.
   pins:
     if: github.event_name == 'push'
-    runs-on: [self-hosted, visor-jit-small]
+    runs-on: ${{ (github.event.repository.private || vars.HOSTED_RUNNERS == 'off') && fromJSON('["self-hosted", "visor-jit-small"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - run: tools/released_pins.sh
