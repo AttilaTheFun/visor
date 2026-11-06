@@ -166,7 +166,7 @@ public final class MCPProxy: Sendable {
     }
 
     private func answer(_ client: Int32) {
-        guard let request = Self.read(client) else { return }
+        guard var request = Self.read(client) else { return }
         guard let token = request.header(Self.tokenHeader), admits(token) else {
             return Self.reply(client, "401 Unauthorized", "No server's token for this proxy.")
         }
@@ -180,13 +180,17 @@ public final class MCPProxy: Sendable {
             return Self.reply(client, "502 Bad Gateway", "\(endpoint.url) is not a plain HTTP address.")
         }
         // A tool kept from servers: a call of it refused here, and a tool
-        // list given without it.
+        // list given without it. What goes on is what was checked.
         let withheld = Set(endpoint.withheldTools)
-        if !withheld.isEmpty, let refusal = Self.refusal(of: request.body, withheld: withheld) {
-            return Self.send(client, Self.jsonAnswer(refusal))
+        var listing = false
+        if !withheld.isEmpty {
+            switch Self.checked(request, withheld: withheld) {
+            case .refused(let error): return Self.send(client, Self.jsonAnswer(error))
+            case .passed(let body, let lists):
+                request.body = body
+                listing = lists
+            }
         }
-        let listing = !withheld.isEmpty
-            && ((try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any])?["method"] as? String == "tools/list"
         let port = url.port ?? 80
         let upstream = visor_connect_tcp(host, UInt16(port))
         guard upstream >= 0 else { return Self.reply(client, "502 Bad Gateway", "\(endpoint.url) doesn't answer.") }
@@ -207,19 +211,46 @@ public final class MCPProxy: Sendable {
         if listing { Self.send(client, Self.withoutTools(withheld, in: held)) }
     }
 
-    /// A JSON-RPC error for a call of a withheld tool, if the request is
-    /// one (or a batch holding one); nil for anything else.
-    static func refusal(of body: Data, withheld: Set<String>) -> Data? {
-        guard let parsed = try? JSONSerialization.jsonObject(with: body) else { return nil }
-        let messages = (parsed as? [[String: Any]]) ?? [parsed as? [String: Any]].compactMap { $0 }
-        let refused = messages.filter { message in
-            (message["method"] as? String) == "tools/call"
-                && ((message["params"] as? [String: Any])?["name"] as? String).map(withheld.contains) == true
+    /// A request to an endpoint that withholds tools, checked.
+    enum Checked: Equatable {
+        /// Its body as it goes on, and whether it asks for the tools.
+        case passed(Data, listsTools: Bool)
+        /// The JSON-RPC error to answer with.
+        case refused(Data)
+    }
+
+    /// A request to an endpoint that withholds tools, failing closed: a
+    /// POST's body must be a JSON-RPC message or a batch of them (else
+    /// -32600), and a `tools/call` must name, as a plain string, a tool not
+    /// withheld (else -32601). What passes goes on as read here, written
+    /// again, so the endpoint reads only what was checked: no key twice,
+    /// nothing two parsers read differently. Another method (an MCP
+    /// session's GET or DELETE) passes only with no body.
+    static func checked(_ request: Request, withheld: Set<String>) -> Checked {
+        let notMessages = error(id: nil, -32600, "Only JSON-RPC messages go to this endpoint.")
+        guard request.method == "POST" else { return request.body.isEmpty ? .passed(Data(), listsTools: false) : .refused(notMessages) }
+        let parsed = try? JSONSerialization.jsonObject(with: request.body)
+        var messages: [[String: Any]] = []
+        if let one = parsed as? [String: Any] {
+            messages = [one]
+        } else if let batch = parsed as? [Any], !batch.isEmpty {
+            messages = batch.compactMap { $0 as? [String: Any] }
+            if messages.count != batch.count { messages = [] }
         }
-        guard let first = refused.first else { return nil }
-        let error: [String: Any] = ["jsonrpc": "2.0", "id": first["id"] ?? NSNull(),
-                                    "error": ["code": -32601, "message": "This tool is kept from Visor's servers."]]
-        return try? JSONSerialization.data(withJSONObject: error)
+        guard !messages.isEmpty, let parsed, let body = try? JSONSerialization.data(withJSONObject: parsed) else { return .refused(notMessages) }
+        for message in messages where message["method"] as? String == "tools/call" {
+            guard let name = (message["params"] as? [String: Any])?["name"] as? String, !withheld.contains(name) else {
+                return .refused(error(id: message["id"], -32601, "This tool is kept from Visor's servers."))
+            }
+        }
+        let lists = messages.count == 1 && messages[0]["method"] as? String == "tools/list"
+        return .passed(body, listsTools: lists)
+    }
+
+    /// A JSON-RPC error answering the message `id`.
+    static func error(id: Any?, _ code: Int, _ message: String) -> Data {
+        let error: [String: Any] = ["jsonrpc": "2.0", "id": id ?? NSNull(), "error": ["code": code, "message": message]]
+        return (try? JSONSerialization.data(withJSONObject: error)) ?? Data()
     }
 
     /// An HTTP answer of JSON.

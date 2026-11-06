@@ -108,6 +108,18 @@ final class MCPProxyTests: XCTestCase {
         XCTAssertEqual(try post(#"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"whoami"}}"#).status, "200")
         XCTAssertEqual(endpoint.requests.withLock { $0.count }, 2)
         XCTAssertTrue(try XCTUnwrap(endpoint.requests.withLock { $0.last }).contains("Authorization: Bearer keymaster-secret\r\n"))
+
+        // Failing closed: what can't be read as JSON-RPC, or a call that
+        // names no tool plainly, goes no further.
+        for body in ["not json", "[]", "[1]", #"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":7}}"#] {
+            let answer = try post(body)
+            XCTAssertTrue(answer.body.contains("-32600") || answer.body.contains("-32601"), "\(body): \(answer.body)")
+        }
+        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 2, "none reached the endpoint")
+        // A key given twice: refused, or passed on as read here, once.
+        _ = try post(#"{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"whoami","name":"github_token"}}"#)
+        let sent = endpoint.requests.withLock { $0 }
+        XCTAssertTrue(sent.count == 2 || !(sent.last ?? "").contains("github_token"), sent.last ?? "")
     }
 
     /// An endpoint kept before tools could be withheld reads with none.
