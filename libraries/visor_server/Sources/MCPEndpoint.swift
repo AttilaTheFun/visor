@@ -1,8 +1,10 @@
 // An MCP server this server passes on to its sessions' agents (MCPProxy):
 // where it is, the headers each request to it carries, and whether a
 // session gets it unless switched off. A header's value may name the
-// session (`$SESSION_ID`, `$SESSION_TITLE`); a secret one is kept with the
-// server's secrets, never in its settings, a session or a container.
+// session (`$SESSION_ID`, `$SESSION_TITLE`, and `$SESSION_REPOSITORY`, the
+// GitHub repository its folder is a checkout of); a secret one is kept
+// with the server's secrets, never in its settings, a session or a
+// container.
 
 import Foundation
 
@@ -26,8 +28,9 @@ public struct MCPEndpoint: Codable, Equatable, Sendable {
     /// A header each request carries.
     public struct Header: Codable, Equatable, Sendable {
         public var name: String
-        /// Its value, with `$SESSION_ID` and `$SESSION_TITLE` filled in per
-        /// session; empty for a secret one, whose value is kept apart.
+        /// Its value, with `$SESSION_ID`, `$SESSION_TITLE` and
+        /// `$SESSION_REPOSITORY` filled in per session; empty for a secret
+        /// one, whose value is kept apart.
         public var value: String
         public var secret: Bool
 
@@ -55,17 +58,23 @@ public struct MCPEndpoint: Codable, Equatable, Sendable {
             && name.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) && $0.isASCII || $0 == "-" || $0 == "_" }
     }
 
+    /// Whether a header names the session's repository, which is looked up
+    /// for it (git, in the session's folder).
+    var namesRepository: Bool { headers.contains { !$0.secret && $0.value.contains("$SESSION_REPOSITORY") } }
+
     /// Where a secret header's value is kept with the server's secrets.
     static func secretKey(endpoint: String, header: String) -> String { "mcpHeader \(endpoint) \(header.lowercased())" }
 
     /// The headers a session's requests carry: each value with the session
-    /// filled in, a secret one as kept.
-    func filledHeaders(session: String, title: String, secrets: any SecretStore) -> [String: String] {
+    /// filled in, a secret one as kept. `repository` is owner/name, empty
+    /// for a folder that is no GitHub checkout.
+    func filledHeaders(session: String, title: String, repository: String, secrets: any SecretStore) -> [String: String] {
         var filled: [String: String] = [:]
         for header in headers {
             let value = header.secret ? (secrets.get(Self.secretKey(endpoint: name, header: header.name)) ?? "") : header.value
             filled[header.name] = value.replacingOccurrences(of: "$SESSION_ID", with: session)
                 .replacingOccurrences(of: "$SESSION_TITLE", with: title)
+                .replacingOccurrences(of: "$SESSION_REPOSITORY", with: repository)
         }
         return filled
     }

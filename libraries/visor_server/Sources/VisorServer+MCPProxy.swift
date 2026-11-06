@@ -39,9 +39,12 @@ extension VisorServer {
         var reply = Envelope(type: "agent_result")
         reply.id = envelope.id
         let endpoints = mcpEndpoints(for: caller)
+        // The repository the session works in, for a header that names it.
+        let repository = endpoints.contains(where: \.namesRepository) ? await GitHubRepository.of(folder: caller.info.cwd) ?? "" : ""
         switch envelope.mode {
         case "mcp_tools":
-            let tools = await mcpProxy.tools(of: endpoints, session: caller.info.id, title: caller.displayName, secrets: Self.secrets)
+            let tools = await mcpProxy.tools(of: endpoints, session: caller.info.id, title: caller.displayName, repository: repository,
+                                             secrets: Self.secrets)
             reply.text = JSONValue.array(tools).encoded()
         default:
             let asked = parseJSON(envelope.text ?? "") ?? .object([:])
@@ -51,7 +54,7 @@ extension VisorServer {
             }
             do {
                 let result = try await mcpProxy.call(tool, arguments: asked["arguments"], endpoints: endpoints, session: caller.info.id,
-                                                     title: caller.displayName, secrets: Self.secrets)
+                                                     title: caller.displayName, repository: repository, secrets: Self.secrets)
                 reply.text = result.encoded()
             } catch {
                 reply.error = "\(error)"

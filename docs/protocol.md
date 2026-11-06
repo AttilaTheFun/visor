@@ -303,7 +303,8 @@ Node must be on the PATH (as it already is for approvals).
 A server can pass MCP servers of its own choosing on to its sessions'
 agents, native and in containers alike (`GET`/`PUT /api/mcp`): each a
 name, a Streamable HTTP address, and headers whose values may name the
-session (`$SESSION_ID`, `$SESSION_TITLE`), a secret one kept with the
+session (`$SESSION_ID`, `$SESSION_TITLE`, and `$SESSION_REPOSITORY`: owner/name
+of the GitHub repository its folder is a checkout of), a secret one kept with the
 server's secrets. The agent never sees an address or a secret header:
 Visor's MCP script lists each endpoint's tools as `<name>__<tool>` beside
 its own (`"mode":"mcp_tools"`, answered with the list as JSON in `text`),
