@@ -93,7 +93,7 @@ for screen in $SCREENS; do
     # the fixture, with no windows restored from the run before.
     open -n --stdout "$out/logs/$screen.log" --stderr "$out/logs/$screen.log" "$app" --args \
         -visor.fixture snapshot -visor.fixture.screen "$screen" -visor.fixture.appearance light \
-        -ApplePersistenceIgnoreState YES
+        -ApplePersistenceIgnoreState YES $PROOF_MAC_EXTRA_ARGS
     pid=""
     for _ in $(seq 1 30); do
         pid="$(pgrep -n -f "$app/Contents/MacOS/$executable" || true)"
