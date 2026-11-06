@@ -12,6 +12,18 @@ swift_library(
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorServicesFFI",
+    # Only for those hosts (the web, Android: what Isomer runs on), not an
+    # Apple build of Apple's SwiftUI, which injects nothing (a plain `bazel
+    # build //...` there): its adapters hold the host's objects, made by its
+    # bridge generator without Sendable, and are compiled by Isomer's rules.
+    target_compatible_with = select({
+        "@isomer//apple/compiled:feature_on": [],
+        "@platforms//os:wasi": [],
+        "@platforms//os:android": [],
+        "@platforms//os:linux": [],
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         "@isomer//swift_ffi/swift_ffi",
         "//libraries/visor_services",
