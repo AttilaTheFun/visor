@@ -2,7 +2,8 @@ name: CI
 # Pull requests get the fast checks, all at once, each on a machine leased
 # from OS Server by the repository's own runners: every app built on Linux
 # (the container job), the tests with nothing of Apple's in them on Linux,
-# the tests that need a Mac in a macOS VM, and blue's web client built in a
+# the tests that need a Mac built there and run on GitHub's own Macs (free
+# for a public repository), and blue's web client built in a
 # Linux container. A diff of documentation alone (docs/, .notes/,
 # Markdown) skips them, and a skipped job passes. Until the Mac Studio
 # (Logan, 5 Nov 2026: "scope visor down to just ios, macos and android",
@@ -84,20 +85,43 @@ jobs:
 
   # The tests that need a Mac (the server's Apple side, the client, its
   # views, SSH): their .xctest bundles built on Linux in this job's own
-  # container (tools/ci/build_mac_tests.sh), and only run on a slot of OS
-  # Server's primary Mac (`oss machine xctest`), which gets the bundles
-  # alone, no tree and no Bazel (tools/ci/mac_vm_tests.sh).
-  test:
+  # container (tools/ci/mac_tests_build.sh: OS Server's SDK archive and
+  # cache), then run on one of GitHub's own Macs (test).
+  build-tests:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 120
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      # exec: the runner's cancel reaches the script's trap, which releases the VM.
-      - run: exec tools/ci/mac_vm_tests.sh --logs "$RUNNER_TEMP/test-logs"
+      - run: tools/ci/mac_tests_build.sh "$RUNNER_TEMP/mac-tests.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-tests
+          path: ${{ runner.temp }}/mac-tests.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  # The bundles run on an xcode-27 runner (tools/ci/mac_tests_run.sh: `xcrun
+  # xctest`, Xcode 27.2), which a public repository has for free, leaving OS
+  # Server's Mac slots to the agents (Logan, 5 Nov 2026). Named `test` still:
+  # main's branch protection requires a check of that name, which a pull
+  # request of documentation alone reports as skipped.
+  test:
+    needs: build-tests
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-tests
+          path: ${{ runner.temp }}
+      - run: tools/ci/mac_tests_run.sh "$RUNNER_TEMP/mac-tests.tar.gz" --logs "$RUNNER_TEMP/test-logs"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

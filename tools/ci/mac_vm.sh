@@ -2,7 +2,7 @@
 # A macOS VM leased from OS Server (xcode_27_2: Xcode 27.2 and its iOS
 # simulator) for one script, which sources this file rather than run it:
 # tools/ci/mac_vm_screenshots.sh (the site's pictures). CI's Mac tests run
-# on a slot of OS Server's primary Mac instead (tools/ci/mac_vm_tests.sh).
+# on GitHub's own Macs instead (tools/ci/mac_tests_run.sh).
 # The VM is the script's alone: leased for an hour,
 # renewed while it runs, released however it ends (a kill nothing can trap
 # leaves it an hour at most). The checkout's tree goes in; Bazel is the
