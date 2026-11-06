@@ -116,6 +116,20 @@ public final class MessageCache: Sendable {
         }
     }
 
+    /// Rows already kept (by id) changed where they are; one not kept
+    /// stays out, rather than being put somewhere it isn't.
+    public func update(_ session: String, _ messages: [TranscriptEntry]) throws {
+        guard !messages.isEmpty else { return }
+        try storage.withLock { storage in
+            try storage.transaction {
+                for message in messages {
+                    guard let seq = storage.seq(session, of: message.id) else { continue }
+                    try storage.upsertMessage(session, message, seq: seq, sourceKey: nil)
+                }
+            }
+        }
+    }
+
     /// Rows before the first kept, in order.
     public func prepend(_ session: String, _ messages: [TranscriptEntry]) throws {
         try storage.withLock { storage in
@@ -171,6 +185,24 @@ public final class MessageCache: Sendable {
 
     public func syncState(of session: String) -> SyncState? { storage.withLock { $0.syncState(session) } }
     public func setSyncState(_ state: SyncState, for session: String) throws { try storage.withLock { try $0.setSyncState(state, session) } }
+
+    /// Every session kept is synced whole the next time it syncs: its
+    /// generation forgotten (-1, which no server has), so the server sends
+    /// its rows as a whole, and they replace what is kept from the row they
+    /// follow. Its rows are shown until then. Once for each `reason`, a way
+    /// an earlier build got the rows kept wrong that no delta mends: done,
+    /// it is noted with the sync states (under "resync <reason>", which
+    /// names no session).
+    public func resyncAll(once reason: String) {
+        let note = "resync " + reason
+        storage.withLock { storage in
+            guard storage.syncState(note) == nil else { return }
+            try? storage.transaction {
+                try storage.forgetGenerations()
+                try storage.setSyncState(SyncState(revision: 0, generation: 0), note)
+            }
+        }
+    }
 
     // MARK: Search
 

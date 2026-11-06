@@ -9,6 +9,8 @@ public protocol MessageStorage: AnyObject {
     func setSourceState(_ state: SourceState, _ session: String) throws
     func syncState(_ session: String) -> SyncState?
     func setSyncState(_ state: SyncState, _ session: String) throws
+    /// Every sync state's generation set to -1, which no server has.
+    func forgetGenerations() throws
     func deleteSession(_ session: String) throws
     func insertNodes(_ session: String, _ nodes: [SourceNode]) throws
     func nodes(_ session: String) -> [SourceNode]
@@ -37,6 +39,10 @@ extension MessageStorage {
     /// A storage that cannot look: nothing found, and the rows at hand are
     /// all there is to go by.
     public func lastMessage(_ session: String, idPrefixes: [String], userTexts: [String]) -> TranscriptEntry? { nil }
+
+    /// A storage that keeps no list of its sessions: none forgotten, and
+    /// each syncs on from where it stood.
+    public func forgetGenerations() throws {}
 
     /// For a storage a host made before these could be asked of it: the
     /// rows read, and written back without those that go.
