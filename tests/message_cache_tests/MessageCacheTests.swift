@@ -49,6 +49,20 @@ final class MessageCacheTests: XCTestCase {
         XCTAssertEqual(cache.search("pelican").map(\.messageID), ["u1"])
         XCTAssertTrue(cache.search("pelican walrus").isEmpty)
         XCTAssertTrue(cache.search("\"pelican\" OR").isEmpty)
+        // A row kept changes where it is; one not kept stays out.
+        try cache.update("S", [row("u1", "Hello pelican, changed", role: .user), row("nowhere", "Not kept")])
+        XCTAssertEqual(cache.messages(in: "S", limit: 10).messages.map(\.id), ["z0", "z1", "u1", "a2"])
+        XCTAssertEqual(cache.messages(in: "S", limit: 10).messages[2].text, "Hello pelican, changed")
+        XCTAssertEqual(cache.search("changed").map(\.messageID), ["u1"])
+        // Every session synced whole, once for each reason: its generation
+        // forgotten, its revision and rows kept.
+        try cache.setSyncState(SyncState(revision: 7, generation: 2), for: "S")
+        cache.resyncAll(once: "a test")
+        XCTAssertEqual(cache.syncState(of: "S"), SyncState(revision: 7, generation: -1))
+        XCTAssertEqual(cache.count(in: "S"), 4)
+        try cache.setSyncState(SyncState(revision: 8, generation: 2), for: "S")
+        cache.resyncAll(once: "a test")
+        XCTAssertEqual(cache.syncState(of: "S")?.generation, 2, "once")
         // Sync state kept; a replace stands in whole.
         try cache.setSyncState(SyncState(revision: 7, generation: 2), for: "S")
         XCTAssertEqual(cache.syncState(of: "S"), SyncState(revision: 7, generation: 2))

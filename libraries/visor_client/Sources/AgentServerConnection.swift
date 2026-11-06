@@ -909,7 +909,21 @@ public final class AgentServerConnection: Identifiable {
     /// is SQLite, so a session opens as it was last seen and syncs only
     /// what changed since; in memory on the web. An app that runs a server
     /// too sets it before connecting, apart from the server's own.
-    public static var cache: MessageCache = .open(named: "messages")
+    public static var cache: MessageCache = mended(.open(named: "messages")) {
+        didSet { mended(cache) }
+    }
+
+    /// The cache, with what an earlier build got wrong in its rows, and no
+    /// delta can mend, mended once (`MessageCache.resyncAll`): every
+    /// session kept is synced whole the next time it opens.
+    @discardableResult
+    nonisolated static func mended(_ cache: MessageCache) -> MessageCache {
+        // Up to 0.46.7, a row changed before the rows held (the row it
+        // follows not among them) was put at the end, where it stayed, below
+        // every row that came after it.
+        cache.resyncAll(once: "rows changed before the rows held")
+        return cache
+    }
     /// This server's rows kept there: none when it asks for its messages to
     /// be held in memory only (`AgentServerRecord.keepMessages`), and each
     /// page let go of is asked of it again.
@@ -983,11 +997,13 @@ public final class AgentServerConnection: Identifiable {
     /// was ever seen.
     nonisolated static func write(_ write: SessionTranscript.CacheWrite, to cache: MessageCache, key: String) {
         switch write {
-        case .upsert(let rows, let removed):
+        case .upsert(let rows, let removed, let elsewhere):
             try? cache.remove(removed, in: key)
             try? cache.append(key, rows)
-        case .rewrite(let from, let rows, let all):
+            try? cache.update(key, elsewhere)
+        case .rewrite(let from, let rows, let all, let elsewhere):
             if (try? cache.replace(key, from: from, with: rows)) != true { try? cache.replace(key, with: all) }
+            try? cache.update(key, elsewhere)
         case .follow(let after, let rows):
             if (try? cache.replace(key, after: after, with: rows)) != true { try? cache.replace(key, with: rows) }
         case .replace(let rows):
