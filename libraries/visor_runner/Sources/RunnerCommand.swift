@@ -29,11 +29,13 @@ public struct RunnerCommand {
                    on to APNs signed with the APNs key kept here.
           status   The proxy's port, its MCP servers and the Visor servers it
                    serves (no secrets).
-          endpoint set <name> <url> [--header Name=Value]… [--secret Name]…
+          endpoint set <name> <url> [--header Name=Value]… [--secret Name]… [--withhold tool]…
                    An MCP server (plain HTTP, on this Mac or its network). Each
                    --secret header's value is read from standard input, a
                    line each, in order, and kept here only; --header ones are
-                   given to the servers, which send them ($SESSION_ID filled in).
+                   given to the servers, which send them ($SESSION_ID,
+                   $SESSION_REPOSITORY filled in). A --withhold tool is kept
+                   from the servers: not listed, its calls refused here.
           endpoint remove <name>
           server add <name> --host <address>
                    A Visor server the proxy serves, given a token of its own.
@@ -105,7 +107,8 @@ public struct RunnerCommand {
             let given = endpoint.headers.keys.sorted()
             lines.append("  \(endpoint.name): \(endpoint.url)"
                 + (secret.isEmpty ? "" : "; secret: " + secret.joined(separator: ", "))
-                + (given.isEmpty ? "" : "; given to servers: " + given.joined(separator: ", ")))
+                + (given.isEmpty ? "" : "; given to servers: " + given.joined(separator: ", "))
+                + (endpoint.withheldTools.isEmpty ? "" : "; withheld: " + endpoint.withheldTools.joined(separator: ", ")))
         }
         if config.endpoints.isEmpty { lines.append("  no MCP servers") }
         lines.append(config.servers.isEmpty ? "No Visor servers." : "Visor servers: " + config.servers.joined(separator: ", "))
@@ -121,7 +124,9 @@ public struct RunnerCommand {
     }
 
     private func setEndpoint(_ arguments: [String], in config: inout RunnerConfig) throws {
-        guard arguments.count >= 2 else { throw Problem("endpoint set <name> <url> [--header Name=Value]… [--secret Name]…") }
+        guard arguments.count >= 2 else {
+            throw Problem("endpoint set <name> <url> [--header Name=Value]… [--secret Name]… [--withhold tool]…")
+        }
         let name = arguments[0], url = arguments[1]
         guard !name.isEmpty, !name.contains("__"), name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else {
             throw Problem("an MCP server's name is letters, digits, - and _, without __")
@@ -129,7 +134,7 @@ public struct RunnerCommand {
         guard URLComponents(string: url)?.scheme == "http", URLComponents(string: url)?.host != nil else {
             throw Problem("\(url) is not a plain HTTP address")
         }
-        var headers: [String: String] = [:], secret: [String] = []
+        var headers: [String: String] = [:], secret: [String] = [], withheld: [String] = []
         var rest = arguments.dropFirst(2)
         while let flag = rest.popFirst() {
             guard let value = rest.popFirst() else { throw Problem("\(flag) needs a value") }
@@ -138,6 +143,7 @@ public struct RunnerCommand {
                 guard let equals = value.firstIndex(of: "="), equals != value.startIndex else { throw Problem("--header takes Name=Value") }
                 headers[String(value[..<equals])] = String(value[value.index(after: equals)...])
             case "--secret": secret.append(value)
+            case "--withhold": withheld.append(value)
             default: throw Problem("unknown option \(flag)")
             }
         }
@@ -154,7 +160,7 @@ public struct RunnerCommand {
         }
         for (header, value) in zip(secret, values) { secrets.set(ProxyTokens.secretKey(endpoint: name, header: header), value) }
         config.endpoints.removeAll { $0.name == name }
-        config.endpoints.append(MCPProxy.Endpoint(name: name, url: url, headers: headers, secretHeaders: secret))
+        config.endpoints.append(MCPProxy.Endpoint(name: name, url: url, headers: headers, secretHeaders: secret, withheldTools: withheld))
         try config.write(folder)
         output("\(name): \(url)" + (secret.isEmpty ? "" : ", \(secret.count) secret header\(secret.count == 1 ? "" : "s") kept"))
     }

@@ -15,19 +15,35 @@ public final class MCPProxy: Sendable {
 
     /// An MCP server the Runner passes calls on to: its name, its address,
     /// its headers (a value may name the session, `$SESSION_ID`, which the
-    /// calling server fills in) and the names of those whose values are
-    /// secrets, kept by the Runner.
+    /// calling server fills in), the names of those whose values are
+    /// secrets, kept by the Runner, and the tools it keeps from servers.
     public struct Endpoint: Codable, Equatable, Sendable {
         public var name: String
         public var url: String
         public var headers: [String: String]
         public var secretHeaders: [String]
+        /// Tools no server is given: left out of `tools/list`, and a call
+        /// of one refused here, never passed on. One whose answer holds a
+        /// credential (Keymaster's `github_token`): the container a server
+        /// runs in is its agents' too, so what a server is given, an agent
+        /// can read.
+        public var withheldTools: [String]
 
-        public init(name: String, url: String, headers: [String: String] = [:], secretHeaders: [String] = []) {
+        public init(name: String, url: String, headers: [String: String] = [:], secretHeaders: [String] = [], withheldTools: [String] = []) {
             self.name = name
             self.url = url
             self.headers = headers
             self.secretHeaders = secretHeaders
+            self.withheldTools = withheldTools
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)
+            url = try c.decode(String.self, forKey: .url)
+            headers = try c.decodeIfPresent([String: String].self, forKey: .headers) ?? [:]
+            secretHeaders = try c.decodeIfPresent([String].self, forKey: .secretHeaders) ?? []
+            withheldTools = try c.decodeIfPresent([String].self, forKey: .withheldTools) ?? []
         }
     }
 
@@ -163,6 +179,14 @@ public final class MCPProxy: Sendable {
         guard let url = URLComponents(string: endpoint.url), url.scheme == "http", let host = url.host else {
             return Self.reply(client, "502 Bad Gateway", "\(endpoint.url) is not a plain HTTP address.")
         }
+        // A tool kept from servers: a call of it refused here, and a tool
+        // list given without it.
+        let withheld = Set(endpoint.withheldTools)
+        if !withheld.isEmpty, let refusal = Self.refusal(of: request.body, withheld: withheld) {
+            return Self.send(client, Self.jsonAnswer(refusal))
+        }
+        let listing = !withheld.isEmpty
+            && ((try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any])?["method"] as? String == "tools/list"
         let port = url.port ?? 80
         let upstream = visor_connect_tcp(host, UInt16(port))
         guard upstream >= 0 else { return Self.reply(client, "502 Bad Gateway", "\(endpoint.url) doesn't answer.") }
@@ -171,12 +195,58 @@ public final class MCPProxy: Sendable {
         var head = "\(request.method) \(path) HTTP/1.1\r\n"
         for header in forwarded(request, to: endpoint, host: "\(host):\(port)") { head += "\(header.name): \(header.value)\r\n" }
         Self.send(upstream, Data((head + "\r\n").utf8) + request.body)
-        // Its answer, as it comes, to its end (Connection: close).
+        // Its answer, as it comes, to its end (Connection: close); a tool
+        // list from an endpoint that withholds tools whole, without them.
         var buffer = [UInt8](repeating: 0, count: 64 << 10)
+        var held = Data()
         while true {
             let count = buffer.withUnsafeMutableBytes { Foundation.read(upstream, $0.baseAddress, $0.count) }
-            if count <= 0 { return }
-            Self.send(client, Data(buffer[0..<count]))
+            if count <= 0 { break }
+            if listing { held.append(contentsOf: buffer[0..<count]) } else { Self.send(client, Data(buffer[0..<count])) }
         }
+        if listing { Self.send(client, Self.withoutTools(withheld, in: held)) }
+    }
+
+    /// A JSON-RPC error for a call of a withheld tool, if the request is
+    /// one (or a batch holding one); nil for anything else.
+    static func refusal(of body: Data, withheld: Set<String>) -> Data? {
+        guard let parsed = try? JSONSerialization.jsonObject(with: body) else { return nil }
+        let messages = (parsed as? [[String: Any]]) ?? [parsed as? [String: Any]].compactMap { $0 }
+        let refused = messages.filter { message in
+            (message["method"] as? String) == "tools/call"
+                && ((message["params"] as? [String: Any])?["name"] as? String).map(withheld.contains) == true
+        }
+        guard let first = refused.first else { return nil }
+        let error: [String: Any] = ["jsonrpc": "2.0", "id": first["id"] ?? NSNull(),
+                                    "error": ["code": -32601, "message": "This tool is kept from Visor's servers."]]
+        return try? JSONSerialization.data(withJSONObject: error)
+    }
+
+    /// An HTTP answer of JSON.
+    static func jsonAnswer(_ body: Data) -> Data {
+        Data("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8) + body
+    }
+
+    /// An endpoint's whole HTTP answer to `tools/list`, without the tools
+    /// withheld: its JSON body rewritten, its length set again. Any other
+    /// answer (an error, a stream) as it came.
+    static func withoutTools(_ withheld: Set<String>, in answer: Data) -> Data {
+        let blank = Data("\r\n\r\n".utf8)
+        guard let end = answer.range(of: blank) else { return answer }
+        let head = String(decoding: answer[..<end.lowerBound], as: UTF8.self)
+        let lines = head.components(separatedBy: "\r\n")
+        let headers = lines.dropFirst()
+        func header(_ name: String) -> String? {
+            headers.first { $0.lowercased().hasPrefix(name + ":") }.map { String($0.dropFirst(name.count + 1)).trimmingCharacters(in: .whitespaces) }
+        }
+        guard header("content-type")?.lowercased().hasPrefix("application/json") == true, header("transfer-encoding") == nil,
+              var message = (try? JSONSerialization.jsonObject(with: answer[end.upperBound...])) as? [String: Any],
+              var result = message["result"] as? [String: Any], let tools = result["tools"] as? [[String: Any]] else { return answer }
+        result["tools"] = tools.filter { ($0["name"] as? String).map(withheld.contains) != true }
+        message["result"] = result
+        guard let body = try? JSONSerialization.data(withJSONObject: message) else { return answer }
+        var kept = [lines[0]] + headers.filter { !$0.lowercased().hasPrefix("content-length:") }
+        kept.append("Content-Length: \(body.count)")
+        return Data((kept.joined(separator: "\r\n") + "\r\n\r\n").utf8) + body
     }
 }
