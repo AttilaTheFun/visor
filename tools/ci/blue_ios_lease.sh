@@ -13,7 +13,7 @@
 #                       screenshots)
 #
 # then compared with tests/snapshots by snapshots.py, its run (report.html,
-# manifests) in <run dir>. As tools/ci/ios_lease_proof.sh. The script fails
+# manifests) in <run dir>. The script fails
 # as snapshots.py does (a changed or failed screen), or when a step fails.
 # (Blue's own iPhone apps, the WasmKit one and the one compiled against
 # Isomer's frameworks, were pictured here too until they went, 4 Nov 2026.)

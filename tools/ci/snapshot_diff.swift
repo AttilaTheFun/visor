@@ -1,6 +1,6 @@
-// A snapshot's pixels compared with its kept picture, for CI's proof
-// (tools/ci/ios_lease_proof.sh builds this file with swiftc, and runs it, on
-// a Mac slot):
+// A snapshot's pixels compared with its picture in the base's proof, for
+// CI's proof (tools/ci/proof_compare.sh builds this file with swiftc, and
+// runs it, on one of GitHub's Macs):
 //
 //   snapshot_diff <kept.png> <new.png> <diff.png>
 //

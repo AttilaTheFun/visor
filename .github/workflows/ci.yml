@@ -21,15 +21,9 @@ name: CI
 # releases it in Reviews (the release job). Then the Mac's disk images, their
 # number and the agent image on the release Mac (self-hosted, release-mac,
 # until the Mac moves to Visor.app), and blue's iPhone snapshots (off for
-# now, above). The proof (the phone app's
-# fixture screens and its UI cases) runs only when asked for by hand
-# (workflow_dispatch), which is how an agent proposes a release: on main,
-# compared with the pictures kept at the previous release (the newest v*
-# tag before the commit, else the commit before). Reviews reads it from the
-# run's `proof` artifact, and no release is made without a proof of its
-# commit. To bisect a regression, prove an earlier commit after the fact:
-# push a branch at it and run the workflow on that branch. A newer push to a
-# pull request cancels its run if it hasn't finished. main requires every
+# now, above). The proof, which is how an agent proposes a release, is a
+# workflow of its own (proof.yml), run by hand on GitHub's own runners. A
+# newer push to a pull request cancels its run if it hasn't finished. main requires every
 # job green (or skipped) on a pull request's head before it merges. A
 # fork's pull request never runs on a self-hosted runner. Every job but the
 # release Mac's (number, build, agent-image) runs on OS Server's single-use
@@ -43,18 +37,11 @@ on:
   # tag on the commit reviewed: its Alphas promoted to Production (release).
   release:
     types: [published]
-  # By hand: the proof, to propose a release or to bisect; on a pull
-  # request's branch, its AdHoc build (adhoc).
+  # By hand, on a pull request's branch: its AdHoc build (adhoc).
   workflow_dispatch:
-    inputs:
-      kind:
-        description: The proof's kind (full also runs the UI cases)
-        type: choice
-        options: [full, quick]
-        default: full
 concurrency:
   # A pull request's newer push replaces its older run. Every other run (a
-  # commit on main, a proof by hand) is a group of its own: GitHub keeps one
+  # commit on main, a build by hand) is a group of its own: GitHub keeps one
   # pending run per group and cancels the rest, so main's runs sharing one
   # left a commit queued between two others with no build.
   group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-{0}', github.run_id) }}
@@ -152,56 +139,6 @@ jobs:
   # (tools/released_pins.sh). Run on main's commits, which releases are of;
   # a pull request may still pin a revision. Reviews holds a release until
   # it passes.
-  # The proof of each commit merged to main: the phone app's fixture
-  # screens, in portrait and on its side, and its UI cases: the app and its
-  # probe built on Linux in a container leased from OS Server, and run on an
-  # iOS lease (tools/ci/ios_lease_proof.sh), each screen
-  # compared with its picture kept at the commit before (tests/proof/ios,
-  # ios-landscape: red's own; tests/snapshots holds blue's). Reviews reads
-  # the `proof` artifact from GitHub: a release is proposed on a commit
-  # whose proof is in, and that is the proof reviewed. Within the hour.
-  proof:
-    # Only when asked for by hand: never a pull request's or a push's.
-    if: github.event_name == 'workflow_dispatch'
-    # In a container of its own (visor-jit), as the container job builds:
-    # the app and its probe built where it runs, run on an iOS lease, and
-    # the result bundles read and compared on a Mac slot
-    # (tools/ci/ios_lease_proof.sh).
-    runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          # The history and the tags: the previous release is what the
-          # screens are compared with.
-          fetch-depth: 0
-          fetch-tags: true
-      - name: The phone app built on Linux, run on an iOS lease, and the proof
-        env:
-          PROOF_KIND: ${{ inputs.kind || 'full' }}
-          # To read the previous release's own proof from its run
-          # (tools/ci/base_proof_screens.sh; actions: read).
-          GITHUB_TOKEN: ${{ github.token }}
-        # The previous release (the newest v* tag before this commit), else
-        # the commit before, as its own proof showed it: version over
-        # version (Logan, 5 Nov 2026). The container is the line's released agent
-        # image (MAJOR.MINOR), as a pull request's container job takes.
-        # exec: the runner's cancel reaches the script's trap, which
-        # releases the leases.
-        run: |
-          base="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^ 2> /dev/null || git rev-parse HEAD^)"
-          echo "Compared with $base"
-          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
-          exec tools/ci/ios_lease_proof.sh --image "ghcr.io/attilathefun/visor-agent:${line%.*}" \
-            --kind "$PROOF_KIND" --base "$base" --proof "$RUNNER_TEMP/proof"
-      # The proof whether the screens came up or not: a broken screen is what it's for.
-      - uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
-        with:
-          name: proof
-          path: ${{ runner.temp }}/proof
-          retention-days: 90
-
   pins:
     if: github.event_name == 'push'
     runs-on: [self-hosted, visor-jit]
@@ -376,8 +313,8 @@ jobs:
   # against tests/snapshots. Off until the Mac Studio (the header): an iOS
   # lease and a 12 GB container for each commit, to run the web client.
   blue-ios:
-    # When on: main's commits, and by hand (with the proof): a branch's run
-    # tries it before it merges. After agent-image on a push to main, which
+    # When on: main's commits, and by hand: a branch's run tries it before
+    # it merges. After agent-image on a push to main, which
     # publishes the line's image it takes: a commit that starts a line
     # (0.44.0) has none before it (agent-image is skipped by hand, and it
     # runs anyway). To bring it back:
@@ -388,7 +325,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-      # The line's released agent image (MAJOR.MINOR), as the proof takes.
+      # The line's released agent image (MAJOR.MINOR), as a pull request's
+      # container job takes.
       # exec: the runner's cancel reaches the script's trap, which releases
       # the leases.
       - name: Built on Linux, pictured on iOS leases
@@ -434,7 +372,8 @@ jobs:
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
         run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_container_host/Info.plist
-      # The line's released agent image (MAJOR.MINOR), as the proof takes.
+      # The line's released agent image (MAJOR.MINOR), as a pull request's
+      # container job takes.
       - name: Build
         env:
           VISOR_CI_PACKAGE: .ci/packages
