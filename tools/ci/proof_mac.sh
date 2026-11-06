@@ -90,10 +90,14 @@ for screen in $SCREENS; do
     rm -rf "$HOME/Library/Saved Application State/$identifier.savedState"
     defaults delete "$identifier" > /dev/null 2>&1 || true
     # Opened as apps are, so it comes to the front with its window key, on
-    # the fixture, with no windows restored from the run before.
+    # the fixture, with no windows restored from the run before, and a text
+    # field's caret held lit rather than blinking (AppKit's blink periods,
+    # in milliseconds): a picture caught it lit or not from run to run
+    # (visor#244).
     open -n --stdout "$out/logs/$screen.log" --stderr "$out/logs/$screen.log" "$app" --args \
         -visor.fixture snapshot -visor.fixture.screen "$screen" -visor.fixture.appearance light \
-        -ApplePersistenceIgnoreState YES
+        -ApplePersistenceIgnoreState YES \
+        -NSTextInsertionPointBlinkPeriodOn 100000000 -NSTextInsertionPointBlinkPeriodOff 0.001
     pid=""
     for _ in $(seq 1 30); do
         pid="$(pgrep -n -f "$app/Contents/MacOS/$executable" || true)"
