@@ -25,7 +25,7 @@ swift_binary(
     deps = [
         ":native_services",
         "@isomer//linux/libraries/swift_ui",
-        "@isomer//linux/libraries/swift_ui:isomer_bridge",
+        "@isomer//linux/libraries/swift_ui:isomer",
         "//libraries/visor_client",
         "//libraries/visor_services",
         "//libraries/visor_ui",
