@@ -5,12 +5,18 @@
 # run as OS Server runs them on an iOS lease, which is rules_apple's runner
 # (apple/testing/default_runner/ios_xctestrun_runner.template.sh): an
 # XCTRunner app made from Xcode's with the probe in it, an .xctestrun, then
-# `xcodebuild test-without-building`. On an iPhone 17 of the newest iOS
-# the image has, made for the run, its status bar held still and keyboard
+# `xcodebuild test-without-building`. On an iPhone 17 of iOS 27.2 (the
+# runtime the pictures it is compared with were taken on: GitHub rolls a
+# new image out over days, and its runners' older one had iOS 27.0 alone,
+# whose pictures differ in most screens; downloaded where the image hasn't
+# got it), made for the run, its status bar held still and keyboard
 # suggestions off, it runs the fixture's screens in portrait and on its side
 # (the probe's testFixtureScreens and testFixtureScreensLandscape) and, for
-# a full proof, its UI cases (tools/ios_ui_tests.sh's). The pictures come
-# out of the runs' result bundles, where the probe attaches each.
+# a full proof, its UI cases (tools/ios_ui_tests.sh's). A test that fails is
+# run once more (GitHub's Macs vary in speed: a UI case's timing, an app
+# that didn't launch), and fails the proof only if it fails again. The
+# pictures come out of the runs' result bundles, where the probe attaches
+# each (from the last repetition that took it).
 #
 #   tools/ci/proof_ios.sh <apps> <out> [quick|full]
 #
@@ -19,8 +25,9 @@
 # <out>/logs/ (each run's xcodebuild log and result bundle, zipped), and
 # <out>/device.txt (the simulator and Xcode, for the proof's summary).
 #
-#   DEVELOPER_DIR  the Xcode (default: Xcode 27.2, the SDK the apps are
-#                  built with, where the image has it; else its default)
+#   DEVELOPER_DIR      the Xcode (default: Xcode 27.2, the SDK the apps are
+#                      built with, where the image has it; else its default)
+#   PROOF_IOS_VERSION  the simulator's iOS (default: 27.2)
 #
 # Fails as the probe does (a full proof's UI cases too), after every run.
 set -euo pipefail
@@ -64,17 +71,34 @@ cleanup() {
 trap cleanup EXIT
 
 echo "::group::An $DEVICE"
-# The newest iOS the image has that runs the device (a runtime that came
-# with a new phone runs that phone alone: xcode-27's iOS 27.1, the iPhone
-# Duo); the device made for this run alone.
-runtime="$(xcrun simctl list runtimes --json | python3 -I -c '
+# The runtime of that iOS that runs the device (a runtime that came with a
+# new phone runs that phone alone: xcode-27's iOS 27.1, the iPhone Duo; its
+# iOS 27.2 has one for the iPhone 19 beside the one for the rest).
+IOS_VERSION="${PROOF_IOS_VERSION:-27.2}"
+pick_runtime() {
+    xcrun simctl list runtimes --json | python3 -I -c '
 import json, sys
-device = sys.argv[1]
+device, version = sys.argv[1:3]
 runtimes = [r for r in json.load(sys.stdin)["runtimes"] if r.get("platform") == "iOS" and r.get("isAvailable")
+            and (r["version"] == version or r["version"].startswith(version + "."))
             and any(t.get("name") == device for t in r.get("supportedDeviceTypes", []))]
 runtimes.sort(key=lambda r: [int(part) for part in r["version"].split(".")])
-print(runtimes[-1]["identifier"] + " " + runtimes[-1]["version"] if runtimes else "")' "$DEVICE")"
-[ -n "$runtime" ] || { echo "$me: no iOS simulator runtime on this Mac runs an $DEVICE" >&2; exit 1; }
+print(runtimes[-1]["identifier"] + " " + runtimes[-1]["version"] + " (" + runtimes[-1].get("buildversion", "?") + ")" if runtimes else "")' "$DEVICE" "$IOS_VERSION"
+}
+runtime="$(pick_runtime)"
+if [ -z "$runtime" ]; then
+    echo "::warning::This image has no iOS $IOS_VERSION simulator that runs an $DEVICE: downloading it"
+    mkdir -p "$out/logs"
+    xcodebuild -downloadPlatform iOS -buildVersion "$IOS_VERSION" > "$out/logs/download-platform.log" 2>&1 \
+        || tail -20 "$out/logs/download-platform.log"
+    # Listed a little after it is installed, once CoreSimulator has mounted it.
+    for _ in $(seq 1 24); do
+        runtime="$(pick_runtime)"
+        [ -z "$runtime" ] || break
+        sleep 5
+    done
+fi
+[ -n "$runtime" ] || { echo "::error::No iOS $IOS_VERSION simulator that runs an $DEVICE on this runner: its pictures would not compare with the base's"; exit 1; }
 version="${runtime#* }"
 runtime="${runtime%% *}"
 udid="$(xcrun simctl create "Visor proof" "$DEVICE" "$runtime")"
@@ -91,7 +115,7 @@ xcrun simctl status_bar "$udid" override --time "$still" "${bar[@]}" 2> /dev/nul
     || xcrun simctl status_bar "$udid" override --time 9:41 "${bar[@]}"
 xcrun simctl spawn "$udid" defaults write com.apple.Preferences KeyboardPrediction -bool NO
 xcode="$(xcodebuild -version | tr '\n' ' ' | sed 's/ *$//')"
-printf '%s, iOS %s (%s)\n' "$DEVICE" "$version" "$xcode" | tee "$out/device.txt"
+printf '%s, iOS %s, %s\n' "$DEVICE" "$version" "$xcode" | tee "$out/device.txt"
 echo "::endgroup::"
 
 # A run's folder as rules_apple's runner makes its test folder: the probe
@@ -220,7 +244,8 @@ xctest() {
     local result=0
     xcodebuild test-without-building -xctestrun "$folder/tests.xctestrun" -destination "id=$udid" \
         -resultBundlePath "$folder/result.xcresult" -derivedDataPath "$folder/derived_data" \
-        -collect-test-diagnostics never "${only[@]}" > "$out/logs/$name.log" 2>&1 || result=$?
+        -collect-test-diagnostics never -retry-tests-on-failure -test-iterations 2 \
+        "${only[@]}" > "$out/logs/$name.log" 2>&1 || result=$?
     grep -E '^(Test Suite|Test Case .*(passed|failed)|.*error:|\*\* TEST)' "$out/logs/$name.log" | tail -40 || true
     if [ "$result" -ne 0 ]; then
         echo "::error::$name failed ($result)"
@@ -251,6 +276,9 @@ import json, os, re, shutil, sys
 source, out, suffix = sys.argv[1:4]
 with open(os.path.join(source, "manifest.json")) as file:
     manifest = json.load(file)
+# Each screen from the last repetition that took it: a test run again after
+# a failure attaches its pictures again.
+chosen = {}
 for test in manifest:
     for attachment in test.get("attachments", []):
         # The attachment's name as the probe gave it, which xcresulttool
@@ -258,8 +286,12 @@ for test in manifest:
         name = attachment.get("suggestedHumanReadableName", "")
         name = re.sub(r"_\d+_[0-9A-Fa-f-]{36}(?=\.png$)", "", name)
         if name.startswith("fixture-") and name.endswith(".png"):
-            screen = name[len("fixture-"):-len(".png")]
-            shutil.copy(os.path.join(source, attachment["exportedFileName"]), os.path.join(out, f"ios-{screen}{suffix}.png"))
+            repetition = attachment.get("repetitionNumber") or 0
+            if name not in chosen or repetition >= chosen[name][0]:
+                chosen[name] = (repetition, attachment["exportedFileName"])
+for name, (_, exported) in chosen.items():
+    screen = name[len("fixture-"):-len(".png")]
+    shutil.copy(os.path.join(source, exported), os.path.join(out, f"ios-{screen}{suffix}.png"))
 PY
 done
 count="$(find "$out/screens" -name 'ios-*.png' | wc -l | tr -d ' ')"

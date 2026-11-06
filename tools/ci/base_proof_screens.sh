@@ -9,7 +9,8 @@
 # artifact (90 days), as Reviews finds a commit's proof. Its screens go in
 # <dir>/screens/<screen>.png, each named for its platform (ios-chat,
 # android-chat, mac-chat): one of a proof from before 0.46, which had the
-# iPhone's alone, unnamed, is the iPhone's. The id of the run that made the
+# iPhone's alone, unnamed, is the iPhone's; its proof.json in <dir>/proof.json
+# (what each platform ran on, from 0.46). The id of the run that made the
 # proof goes to standard output ("null" when its release doesn't say).
 #
 #   tools/ci/base_proof_screens.sh <revision> <dir>
@@ -63,6 +64,7 @@ for asset in json.load(open(sys.argv[1])).get("assets", []):
                 || { fetched=""; break; }
         done < "$work/assets.tsv"
         if [ -n "$fetched" ]; then
+            cp "$work/proof.json" "$out/proof.json"
             python3 -I -c 'import json, sys
 run = json.load(open(sys.argv[1])).get("run")
 print(run if isinstance(run, int) else "null")' "$work/proof.json"
@@ -93,6 +95,8 @@ for artifact in json.load(open(sys.argv[1])).get("artifacts", []):
     rm -rf "$work/unzipped"
     mkdir -p "$work/unzipped"
     unzip -q -o "$work/proof.zip" 'screens/*' -d "$work/unzipped" || continue
+    unzip -q -o "$work/proof.zip" proof.json -d "$work/unzipped" 2> /dev/null || true
+    [ ! -f "$work/unzipped/proof.json" ] || cp "$work/unzipped/proof.json" "$out/proof.json"
     for picture in "$work/unzipped/screens/"*.png; do
         [ -f "$picture" ] || continue
         cp "$picture" "$out/screens/$(named "$(basename "$picture" .png)").png"
