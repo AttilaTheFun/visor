@@ -445,7 +445,7 @@ jobs:
       # The server signs it again from the entitlements it carries: built
       # unsigned, it would lose the microphone.
       - name: Visor.app signed with its entitlements
-        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input
+        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
       - uses: actions/download-artifact@v4
         with:
           name: linux-programs
@@ -495,7 +495,7 @@ jobs:
       # The server signs it again from the entitlements it carries: built
       # unsigned, it would lose the microphone.
       - name: Visor.app signed with its entitlements
-        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input
+        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
       - uses: actions/download-artifact@v4
         with:
           name: linux-programs

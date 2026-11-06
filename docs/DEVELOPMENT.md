@@ -930,7 +930,9 @@ front paths, `visor-server front`).
   (main's commits, after the container job) and `adhoc` (by hand on a
   pull request's branch) build them on Linux, optimized, with
   `--config=alpha` or `adhoc` and `--config=ci_device` (the iPhone's a
-  device build signed ad hoc with a placeholder profile), Visor.app given
+  device build signed ad hoc with a placeholder profile; Visor.app signed
+  ad hoc asking for push, `app.ci.entitlements`, which a build to run
+  locally leaves out), Visor.app given
   Visor's Linux programs from the `linux-programs` job
   (tools/ci/mac_app_linux_programs.sh), their version from Applications
   Server (tools/ci/next_version.sh), and publish them there

@@ -41,6 +41,13 @@ swift_library(
     ],
 )
 
+# CI's builds to publish (--config=ci_device, .bazelrc), signed ad hoc for
+# Applications Server to sign again (applications/visor_ios's ci_device).
+config_setting(
+    name = "ci_signed",
+    values = {"ios_signing_cert_name": "-"},
+)
+
 macos_application(
     name = "visor_mac",
     # The agents' host beside the app's own program, as in Visor Server:
@@ -52,9 +59,15 @@ macos_application(
     app_icons = ["//artwork/app-icon:app_icon"],
     bundle_id = BUNDLE_ID,
     bundle_name = "Visor",
-    # The hardened runtime's own (the microphone). Push comes with the
-    # release's profile (tools/sign_mac_app.sh), not a build's.
-    entitlements = "app.entitlements",
+    # The hardened runtime's own (the microphone); and push in a build CI
+    # publishes, which Applications Server signs again with the Developer
+    # ID profile, taking push's value from it, but only for an app that
+    # asks for push. A build to run here asks for none: a restricted
+    # entitlement with no profile to allow it stops the app at launch.
+    entitlements = select({
+        ":ci_signed": "app.ci.entitlements",
+        "//conditions:default": "app.entitlements",
+    }),
     infoplists = [
         "Info.plist",
         ":variant_plist",
