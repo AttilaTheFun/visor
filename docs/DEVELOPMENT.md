@@ -777,6 +777,8 @@ as it came (JSON or SSE). Set up on a Mac:
 
 ```sh
 visor-runner-agent endpoint set gh http://127.0.0.1:7470/mcp --header 'CLIENT_ID=$SESSION_ID' --secret API_KEY  # the key on stdin
+visor-runner-agent endpoint set keymaster http://<Keymaster's Mac>:7450/mcp --header 'CLIENT_ID=$SESSION_ID' \
+    --header 'Keymaster-Repository=$SESSION_REPOSITORY' --secret Authorization --withhold github_token  # "Bearer km_…" on stdin
 visor-runner-agent server add co-tenant --host <the Mac's name as the container reaches it>  # prints the server's PUT /api/mcp body
 visor-runner-agent status
 visor-runner-agent serve   # port 7439, every interface; a LaunchAgent keeps it running
@@ -785,6 +787,14 @@ visor-runner-agent serve   # port 7439, every interface; a LaunchAgent keeps it 
 The printed body goes to the server's `PUT /api/mcp` with its password.
 The token is kept there as a secret header, and no key goes into the
 container.
+
+A tool whose answer holds a credential (Keymaster's `github_token`, a
+GitHub installation token) is withheld (`--withhold`): left out of the
+tools a server lists, and a call of it refused by the proxy, never passed
+on. A container's server shares the container with its agents, so what
+the server is given an agent could read. `$SESSION_REPOSITORY` is filled
+in by the server: owner/name of the GitHub repository the session's folder
+is a checkout of (its `origin`), empty for one that isn't.
 
 **Its push proxy.** On the same port and with the same tokens, a server
 with no APNs key of its own (Linux, a container) sends its pushes to
