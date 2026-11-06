@@ -31,8 +31,8 @@ name: CI
 # runners: each a fresh Linux container with `oss` on its PATH, leasing what
 # it needs a Mac for. Its label is its size: visor-jit (12 GB) for a build,
 # visor-jit-small (2 GB) for the jobs that only run git or a script. A
-# runner serves its own label alone, so no job lands in the wrong size. Two
-# of those, changes and pins, run on GitHub's own ubuntu-latest while the
+# runner serves its own label alone, so no job lands in the wrong size. Three
+# of those, changes, rules and pins, run on GitHub's own ubuntu-latest while the
 # repository is public, which leaves OS Server's runners to the builds
 # (Logan, 6 Nov 2026); on OS Server's small one if it goes private, or
 # when the repository variable HOSTED_RUNNERS is `off` (GitHub's runners
@@ -87,6 +87,24 @@ jobs:
           echo "$files"
           if printf '%s\n' "$files" | awk '!/^([Dd]ocs\/|\.notes\/)|\.md$/ { code = 1 } END { exit !code }'; then code=true; else code=false; fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  # The rules of AGENTS.md that must hold, checked (tools/check_rules.py):
+  # no signing material, every Swift target strict, no unchecked
+  # concurrency, no Combine, no networking in the client's libraries, no
+  # platform checks in the server's; on a pull request, its commits without
+  # attribution lines. On GitHub's own runners, as changes.
+  rules:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ (github.event.repository.private || vars.HOSTED_RUNNERS == 'off') && fromJSON('["self-hosted", "visor-jit-small"]') || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: python3 tools/check_rules.py ${BASE:+--commits "$BASE..HEAD"}
 
   # The tests that need a Mac (the server's Apple side, the client, its
   # views, SSH): their .xctest bundles built on Linux in this job's own
