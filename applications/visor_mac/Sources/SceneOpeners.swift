@@ -3,9 +3,11 @@
 // other way to a SwiftUI scene. (Sending showSettingsWindow:, as Visor
 // Server does, opened nothing at this app's launch on macOS 27.) The first
 // time the window shows with no password set, Settings opens over it:
-// there is no serving without one.
+// there is no serving without one. Not on the screenshot fixture, whose
+// computer is canned: a fresh Mac's proof would picture Settings instead.
 
 import SwiftUI
+import VisorClient
 import VisorServer
 
 struct SceneOpeners: View {
@@ -17,7 +19,7 @@ struct SceneOpeners: View {
             .frame(width: 0, height: 0)
             .onAppear {
                 AppDelegate.keep(openWindow: openWindow, openSettings: openSettings)
-                if VisorServer.shared.password.isEmpty { AppDelegate.openSettings() }
+                if !VisorFixture.active, VisorServer.shared.password.isEmpty { AppDelegate.openSettings() }
             }
     }
 }

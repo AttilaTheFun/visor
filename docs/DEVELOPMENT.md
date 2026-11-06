@@ -941,9 +941,9 @@ front paths, `visor-server front`).
   (`$PIPELINE_CI number`), built, signed and notarized (`build`,
   tools/build_packages.sh, then `$PIPELINE_CI`'s), with the agent image
   and blue's iPhone snapshots. The
-  proof (`proof`) runs only by hand (workflow_dispatch, since 2026-11-01,
-  for CI's time): an agent runs CI on main to propose a release, compared
-  with the previous release. main
+  proof is a workflow of its own (`proof.yml`, since 0.46), run only by
+  hand on GitHub's own runners: an agent runs it on main to propose a
+  release, compared with the previous release's proof. main
   requires every job green (or skipped) on a pull request's head, up to
   date with main; an agent merges its own pull request then. A release is
   of a commit on main: an agent proposes it as a draft GitHub release
@@ -1129,34 +1129,51 @@ nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
 rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 
-CI makes the proof: its `proof` job, in a container of its own (`visor-jit`,
-which a fork's pull request never reaches), runs
-`tools/ci/ios_lease_proof.sh`. That builds the iPhone app and its probe on
-Linux, where it runs (`tools/ci/container_build.sh` with
-`VISOR_CI_PACKAGE`), and runs the probe on an iOS lease (`oss machine
-xctest`, an iPhone 17 on iOS 27.2, its status bar held still by OS Server,
-keyboard suggestions off): the fixture's screens in each orientation (the
-probe's `testFixtureScreens` and `testFixtureScreensLandscape`), and for a
-full proof the UI cases (`tools/ios_ui_tests.sh`'s). The screens come from
-the runs' result bundles, where the probe attaches each one, read and
-compared with their kept pictures on a Mac slot of OS Server's primary
-(`tools/ci/mac_slot.sh`: xcresulttool, and the diff tool built with
-CoreGraphics). It runs only by
-hand (CI's workflow_dispatch, since 2026-11-01, for CI's time; pull
-requests and main's commits run their builds and tests only): an agent
-runs it on main to propose a release (`kind` full, the default, or
-quick). Each screen is compared with its picture kept at the previous
-release (the newest `v*` tag before the commit, else the commit before:
-`tests/proof/ios`, `tests/proof/ios-landscape`: red's own, as
-`tests/snapshots` holds blue's), so it shows every change since, and the
-run's `proof` artifact holds `proof.json`, `screens/`, `diffs/` and the
-probe's logs. Reviews reads it from GitHub by commit: no release is made
-without a proof of its commit, and that proof is the one reviewed. To
-bisect a regression, prove an earlier commit after the fact: push a branch
-at it and run the workflow on that branch. A change meant to look different takes its new screens
-into `tests/proof` in its pull request (`tools/proof.sh` makes them), or
-right after from main's proof artifact. The lab's phones are for what needs
-real hardware (a sensor, or a benchmark on a device).
+CI makes the proof in a workflow of its own (`.github/workflows/proof.yml`,
+since 0.46), run only by hand: an agent runs it on main to propose a
+release (`gh workflow run proof.yml --ref main`; `kind` full, the
+default, or quick). Its apps are built on Linux in containers of the
+repository's own (`visor-jit`, which a fork never reaches, with
+`tools/ci/container_build.sh` and `VISOR_CI_PACKAGE`) and run on GitHub's
+own runners, which a public repository has for free, so OS Server's
+machines are left to CI and the agents (Logan, 5 Nov 2026):
+
+- The iPhone (`tools/ci/proof_ios.sh`, on an `xcode-27` Mac): the app and
+  its probe on an iPhone 17 simulator of the newest iOS the image has, made
+  for the run, its status bar held still and keyboard suggestions off. The
+  probe runs as rules_apple's runner runs it (an XCTRunner app made from
+  Xcode's, an `.xctestrun`, then `xcodebuild test-without-building`), as
+  OS Server ran it on a lease until 0.46. It takes the fixture's screens in
+  each orientation (the probe's `testFixtureScreens` and
+  `testFixtureScreensLandscape`) and, for a full proof, the UI cases
+  (`tools/ios_ui_tests.sh`'s). The pictures come out of the runs' result
+  bundles, where the probe attaches each one.
+- The Mac (`tools/ci/proof_mac.sh`, on another `xcode-27` Mac):
+  Visor.app, signed ad hoc as a build on Linux is, opened on each of the
+  fixture's screens in the light look and pictured cropped to its window.
+- Android (`tools/ci/proof_android.sh`, on Ubuntu): blue Visor's APK, built
+  for x86_64, on an emulator under the runner's KVM, made as Isomer's
+  hermetic one is (API 34, 1080 by 1920 at 420 dpi), its status bar held
+  still by System UI's demo mode. Each of snapshots.py's screens is opened
+  with its intent and cut below the status bar.
+
+`tools/ci/proof_compare.sh` then compares each screen (`ios-chat`,
+`ios-chat-landscape`, `mac-chat`, `android-chat`, …) with the same one in
+the previous release's proof (the newest `v*` tag before the commit, else
+the commit before), version over version (Logan, 5 Nov 2026). The base's
+proof comes from its GitHub release, which carries its `proof.json` and a
+`proof-<screen>.png` for each screen from the moment the owner publishes it
+(the workflow's release job, `tools/ci/release_proof.sh`), else from its
+run's `proof` artifact while GitHub keeps it (90 days;
+`tools/ci/base_proof_screens.sh`). The run's `proof` artifact holds
+`proof.json` (with each platform's device), `screens/`, `before/`,
+`diffs/` and each platform's logs. Reviews reads it from GitHub by commit:
+no release is made without a proof of its commit, and that proof is the
+one reviewed. To bisect a regression, prove an earlier commit after the
+fact: push a branch at it and run the workflow on that branch. No
+pictures are kept in the tree for it (`tests/proof` went in 0.46): a
+release is compared with the release before. The lab's phones are for
+what needs real hardware (a sensor, or a benchmark on a device).
 
 `tools/proof.sh` still makes the same screens and UI cases on your own
 Mac, to look at before pushing, and the Mac's screens with `PROOF_MAC=1`

@@ -22,8 +22,8 @@
 #                    from the checkout): the built targets' files (an .ipa,
 #                    a test bundle's .zip, a web site's folder) copied into
 #                    it, as Bazel's tree is the container's (CI's alpha,
-#                    adhoc and release take the iPhone app so,
-#                    tools/ci/ios_lease_proof.sh the app and its probe).
+#                    adhoc and release take the iPhone app so, the
+#                    proof's build jobs the apps and the probe).
 #                    Emptied first. Its build arguments are told apart by
 #                    their dash: an option with a value takes it after `=`
 #                    (`--compilation_mode=opt`, not `-c opt`, whose `opt`
