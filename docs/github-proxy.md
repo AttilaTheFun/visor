@@ -153,17 +153,23 @@ changes without a build:
 }
 ```
 
-## Decisions, proposed
+## Decisions
 
-1. **Forced pushes** ([G3f]). On the wire a forced push, a lease and a
+Logan approved this design as proposed on 7 Nov 2026 (through Manager): agents
+may force-push to their own branches, never to `main` or another protected
+branch; `gh pr merge` is checked exactly as the REST merge, and `--auto` is
+refused. gh_mcp is retired by it (Rollout, step 5), its cut-over agreed with
+the Shireworks session, which maintains it. 0.47 is this work.
+
+1. **Forced pushes** ([G3f]), approved. On the wire a forced push, a lease and a
    fast-forward look the same; gh_mcp forced only with
-   `--force-with-lease`, which lives in the client. Proposed: allow
+   `--force-with-lease`, which lives in the client. So: allow
    non-fast-forward updates to agents' own branches (never the protected
    ones). GitHub's compare-and-swap still stops a push over commits that
    arrived after the agent fetched. The deviation: a plain `--force` can now
    replace a branch another agent pushed. The alternative, reading the pack to
    tell a rewrite from a fast-forward, is costly and fragile.
-2. **`gh pr merge`.** Proposed: treat its `mergePullRequest` as the REST
+2. **`gh pr merge`**, approved: treat its `mergePullRequest` as the REST
    merge: the proxy runs every merge check and injects `expectedHeadOid` with
    the head it read, so the merge is of exactly what was checked. Auto-merge
    (`--auto`) stays refused: it merges later, unchecked.
