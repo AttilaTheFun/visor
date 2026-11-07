@@ -29,6 +29,8 @@ backend, and a client may hold several Runners.
   directly by its connection code, as today, so clients can move over. The
   version after it removes that: a Runner's servers are reached through the
   Runner alone.
+- **Messages between servers go through the clients**, those of one Runner
+  as any others: one path for all.
 - **Reachable over HTTPS on the tailnet** (and the internet in the fork),
   not only where a port happens to be open: today the mini's co-tenant is
   reachable only on the tailnet, through two socat forwarders.
@@ -163,9 +165,3 @@ path), not a need.
    records of an account's servers, trust on first use; the fork's
    `VisorAccount` as one such account. This ships as the version between.
 6. The version after: the direct way removed.
-
-## Question for Logan
-
-- **The relay between two servers of one Runner**: through the clients, as
-  between any servers (proposed: one path for all, as you said for agents'
-  messages), or through the Runner directly when both ends are its own?
