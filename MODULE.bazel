@@ -134,7 +134,6 @@ use_repo(
     swift_deps,
     "swift_package",
     "swiftpkg_agent_ui",
-    "swiftpkg_applications",
     "swiftpkg_swift_asn1",
     "swiftpkg_swift_certificates",
     "swiftpkg_swift_collections",
@@ -143,6 +142,7 @@ use_repo(
     "swiftpkg_swift_nio_ssl",
     "swiftpkg_swift_nio_ssh",
     "swiftpkg_swift_sql",
+    "swiftpkg_update_kit",
 )
 
 # The builder's own signing values (the Apple team), from .bazelrc.user.
