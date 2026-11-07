@@ -103,11 +103,22 @@ path), not a need.
 | `GET /runner/v1/servers` | The servers this session may reach: `id`, `name`, `kind` (`mac`, `container`), `state`, `version`. Answered again when it changes (an `ETag`; a live channel later). |
 | `/runner/v1/servers/<id>/…` | That server's whole API, HTTP and its WebSocket, reverse-proxied: the client's session checked, the request passed on with the server's own token in place of it. |
 
-- **Pluggable on the Runner too** (`RunnerAuth`): the default keeps the
-  Runner's one user and its password hash in the Runner's secrets, set in
-  Settings; a fork's checks its identity provider's token instead (an OIDC
-  ID token from Okta, verified against the issuer's keys). Sessions are the
-  Runner's own, either way.
+- **Pluggable on the Runner too** (`RunnerAuth`), its providers from the
+  Runner's configuration (issues#4, the Works design, 7 Nov):
+  - **Password:** the Runner's one user and its password hash in the
+    Runner's secrets, set in Settings. The default.
+  - **Generic OpenID Connect:** discovery, the authorization-code flow
+    with PKCE, and the ID token checked against the issuer's keys and the
+    allowed users or groups. Okta, Microsoft Entra, Google Workspace and
+    Keycloak are each configuration (issuer, client id, who is allowed), so
+    no provider's code is in Visor, and the fork needs none of its own.
+  - **GitHub:** not OIDC. The client gives a GitHub token (Works' one
+    GitHub sign-in), and the Runner asks GitHub `GET /user` whose it is,
+    against an allow-list, and caches the answer for a few minutes.
+
+  Whichever proved it, the Runner answers with a session of its own: the
+  client's one bearer from then on, revocable at the Runner, and no
+  provider's token is passed on to a server.
 - **A token per server**: the Runner gives each server it runs a token (as
   `visor-server password` sets one now, but held by the Runner alone) and
   adds it to what it passes on. A server's own `hello` and REST side are as
@@ -122,9 +133,11 @@ path), not a need.
   set as the one account): an account's URL, pinned fingerprint (on the
   LAN), sign-in kind, name and session. Kept in the keychain as records are
   now.
-- **`RunnerSignIn`**, registered as authenticators are: `password` (a form
-  of URL, username and password) shipped; a fork's (`okta`: a web sign-in)
-  in its build. A fork can make its kind the only one offered.
+- **`RunnerSignIn`**, one per provider the Runner offers (it says which in
+  an unauthenticated `GET /runner/v1/sign-in`): `password` (a form of
+  username and password), `oidc` (a web sign-in, the system's
+  authentication session), and `github` (the app's GitHub token, where it
+  has one, as Works does). A fork can limit which are offered.
 - **Each server is a record of the account's** (`fromAccount`, the account's
   id), its address the Runner's `…/servers/<id>` path. The record is not
   removable; Forget is on the account.
