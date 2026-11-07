@@ -1,13 +1,14 @@
 #!/bin/bash
 # A release's proof attached to its GitHub release when the owner publishes
-# it (.github/workflows/proof.yml's release job): the proof of its commit
-# that Reviews showed, the newest run's `proof` artifact (any workflow's,
-# as Reviews finds it), its proof.json and each screen as
+# it (ci.yml's release-dmg job): the proof of its commit that Reviews
+# showed, the `proof` artifact of the run that verified it
+# (tools/ci/verified_run.sh, the release job's), or else the newest run's
+# by hand that kept one; its proof.json and each screen as
 # proof-<screen>.png. Kept so as long as the release is, past an
 # artifact's 90 days: the next release's proof is compared with these
 # (tools/ci/base_proof_screens.sh), and anyone can see what was released.
 #
-#   tools/ci/release_proof.sh <tag>
+#   tools/ci/release_proof.sh <tag> [--run <run id>]
 #
 #   GH_TOKEN           a token that reads the repository's Actions and
 #                      writes its releases (contents: write)
@@ -17,16 +18,24 @@
 # proof is of another commit.
 set -euo pipefail
 me="$(basename "$0")"
-tag="${1:?usage: tools/ci/release_proof.sh <tag>}"
+tag="${1:?usage: tools/ci/release_proof.sh <tag> [--run <run id>]}"
+given=""
+if [ $# -gt 1 ]; then
+    [ "$2" = --run ] && [ -n "${3:-}" ] || { echo "usage: $me <tag> [--run <run id>]" >&2; exit 2; }
+    given="$3"
+fi
 [ -n "${GH_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] || { echo "$me: no GH_TOKEN and GITHUB_REPOSITORY" >&2; exit 1; }
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
 
-# The commit's runs by hand, newest first, and the first that kept a proof.
+# The run given, or the commit's runs by hand, newest first: the first that
+# kept a proof.
 run=""
-for candidate in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$commit&event=workflow_dispatch&per_page=50" \
-    --jq '.workflow_runs | sort_by(.created_at) | reverse | .[].id'); do
+candidates="$given"
+[ -n "$candidates" ] || candidates="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$commit&event=workflow_dispatch&per_page=50" \
+    --jq '.workflow_runs | sort_by(.created_at) | reverse | .[].id')"
+for candidate in $candidates; do
     id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate/artifacts?name=proof" \
         --jq '[.artifacts[] | select(.name == "proof" and (.expired | not))][0].id // empty')"
     [ -n "$id" ] || continue

@@ -1,32 +1,21 @@
 name: Screenshots
 # The site's pictures (site/): the Mac client and the phone app on the
 # screenshot fixture, in the dark look, kept as this run's artifact to be
-# copied into site/images. Run by hand (the release Mac's runner starts it
-# for a version's dossier), or when the Mac's screenshot tool or how it is
-# run changes. In a macOS VM leased from OS Server, from a runner OS Server
-# makes for the job (visor-jit, a Linux container): everything Mac happens
-# in the VM (tools/ci/mac_vm_screenshots.sh).
+# copied into site/images. Run by hand only (the release Mac's runner starts
+# it for a version's dossier): it leases a VM, which a pull request's CI
+# never does (docs/CI_POLICY.md in AttilaTheFun/reviews), so a change to the
+# Mac's screenshot tool is tried by running this on its branch. In a macOS
+# VM leased from OS Server, from a runner OS Server makes for the job
+# (visor-jit-small, a Linux container that only leases): everything Mac,
+# the build too, happens in the VM (tools/ci/mac_vm_screenshots.sh).
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'tools/mac_screenshots/**'
-      - 'tools/ci/mac_vm_screenshots.sh'
-      - '.github/workflows/screenshots.yml'
-# A pull request's newer commit takes over from the one before: only the
-# branch's head is pictured. A run by hand is never cut short.
-concurrency:
-  group: screenshots-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   pictures:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, visor-jit]
+    runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       # exec: the runner's cancel reaches the script's trap, which releases the VM.
       - run: exec tools/ci/mac_vm_screenshots.sh shots
       - uses: actions/upload-artifact@v4

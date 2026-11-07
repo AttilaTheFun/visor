@@ -1,5 +1,5 @@
 #!/bin/bash
-# The proof (.github/workflows/proof.yml), from its platforms' pictures, on
+# The proof (ci.yml's verify), from its platforms' pictures, on
 # one of GitHub's Macs (the diff tool draws with CoreGraphics): each screen
 # compared with the same screen in the base's own proof
 # (tools/ci/base_proof_screens.sh), version over version (Logan, 5 Nov

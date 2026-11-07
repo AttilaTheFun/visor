@@ -1,6 +1,6 @@
 #!/bin/bash
 # The proof's screens and UI cases, made on this Mac or a test VM: CI makes
-# the proof itself (.github/workflows/proof.yml, built on Linux and run on
+# the proof itself (ci.yml's verify, built on Linux and run on
 # GitHub's own runners), and this is a look before pushing.
 #
 #   tools/proof.sh                 -> .proof/ (or $PROOF_DIR)

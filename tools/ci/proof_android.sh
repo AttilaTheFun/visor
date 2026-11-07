@@ -1,5 +1,5 @@
 #!/bin/bash
-# Visor on Android's part of the proof (.github/workflows/proof.yml), on one
+# Visor on Android's part of the proof (ci.yml's verify), on one
 # of GitHub's own Ubuntu runners (x86_64, with KVM): blue Visor's APK, built
 # on Linux by the proof's build job for x86_64, installed on an emulator
 # made here from the runner's Android SDK as Isomer's hermetic one is

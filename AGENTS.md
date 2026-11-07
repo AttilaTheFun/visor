@@ -10,14 +10,17 @@ its rules, and its local CI, end-to-end and snapshot harnesses
 ## Changes
 
 This repo is public. Every change to `main` goes through a pull request:
-`main` is protected, direct pushes are rejected, and the CI check (every
-library and the apps' code built, then the tests) must pass before a pull
-request can merge. Keep each pull request
-to one focused change, and say in it how the change was verified.
+`main` is protected, direct pushes are rejected, and CI's one check,
+`container` (the rules, every app and library built on Linux, the
+command-line server's tests), must pass on main's head before a pull
+request can merge. The tests that need a Mac and the proof run by hand
+(`run: verify`), and every release proposal runs them (docs/DEVELOPMENT.md,
+CI). Keep each pull request to one focused change, and say in it how the
+change was verified.
 
 ## Rules
 
-CI's `rules` job (tools/check_rules.py) checks the ones that must hold:
+CI's rules step (tools/check_rules.py, in the `container` job) checks the ones that must hold:
 signing material, the strict Swift copts, `nonisolated(unsafe)` and
 `@unchecked Sendable`, Combine, networking in visor_client and visor_ui,
 platform checks in the server library, and attribution lines in a pull

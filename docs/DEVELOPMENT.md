@@ -918,65 +918,62 @@ front paths, `visor-server front`).
 - agent_ui changes: commit+push there, put the revision in
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
-- CI (ci.yml), self-hosted: most jobs run in a Linux container OS Server
-  makes for each (visor-jit), side by side, their Bazel reading its
-  cache; the Mac's tests go on to a slot of its primary Mac (tools/ci). A
-  pull request gets the fast checks, all at once, in under ten minutes
-  each: every app and the Mac's libraries built on Linux in the job's own
-  container (`container`, tools/ci/container_build.sh), the tests with
-  nothing of Apple's in them on Linux (`linux`), the tests that need a Mac
-  on a slot (`test`), and blue's web client built (`blue-web`). A diff of
-  documentation alone skips them (the `changes` job), and a newer push
-  cancels a run that hasn't finished. Until the Mac Studio (Logan, 5 Nov
-  2026: Visor is iOS, macOS and Android for now, the other platforms kept
-  building where that stays in a container), the jobs that run the web
-  client or the Windows server are off: `windows` (the command-line server
-  on Windows, in a Windows VM: tools/ci/windows_vm_tests.sh) and
-  `blue-ios` are skipped, and `blue-web` only builds (its tests and
-  Chromium checks run without `--build-only`). Each script still runs by
-  hand, and each job comes back by dropping its `if: false` in ci.yml.
-  `linux` still runs: the command-line server on Linux is what Visor's
-  containers run (visor-agent-host, and visor-server in a co-tenant), so
-  it is the Mac's, not a platform of its own.
-  Each commit merged to main (a squash is a commit of its own) gets them
-  too, then its builds (Logan, 2026-11-02: AdHoc by hand before a merge,
-  an Alpha for each commit after it, Production at a release, nothing
-  else). The iPhone and iPad app and Visor.app for the Mac: `alpha`
-  (main's commits, after the container job) and `adhoc` (by hand on a
-  pull request's branch) build them on Linux, optimized, with
-  `--config=alpha` or `adhoc` and `--config=ci_device` (the iPhone's a
-  device build signed ad hoc with a placeholder profile; Visor.app signed
-  ad hoc asking for push, `app.ci.entitlements`, which a build to run
-  locally leaves out), Visor.app given
-  Visor's Linux programs from the `linux-programs` job
-  (tools/ci/mac_app_linux_programs.sh), their version from Applications
-  Server (tools/ci/next_version.sh), and publish them there
-  (tools/ci/publish_from_ci.sh): the server signs each with its bundle
-  id's identity and profile, notarizes the Mac's, and the job's OIDC token
-  says which kind it is (the repository secret APPLICATIONS_CI_CODE names
-  the server). Alpha and Production both go through Applications (Logan,
-  5 Nov 2026). A release is no build of its own (Logan, 2026-11-02):
-  Applications Server promotes the commit's Alphas, as tested, to
-  Production, their plists' BuildVariant restamped and signed again, when
-  the owner releases it in Reviews (the `release` job). The server makes
-  the promoted Visor.app's disk image as it promotes it (signed,
-  notarized and stapled), which `release` downloads
-  (tools/ci/promote_from_ci.sh `--dmg-dir`) and `release-dmg` attaches to
-  the GitHub release, beside the source archives. The old Mac apps' disk
-  images (Visor Server and the Mac client, `build` on the release Mac)
-  are no more since 0.46; the release Mac keeps the agent image, its
-  number (tools/ci/next_version.sh, as alpha's) and blue's iPhone snapshots. The
-  proof is a workflow of its own (`proof.yml`, since 0.46), run only by
-  hand on GitHub's own runners: an agent runs it on main to propose a
-  release, compared with the previous release's proof. main
-  requires every job green (or skipped) on a pull request's head, up to
-  date with main; an agent merges its own pull request then. A release is
-  of a commit on main: an agent proposes it as a draft GitHub release
-  (`agent-token gh claude release create v<version> --draft --target <sha>`),
-  the owner reviews it in Reviews (its CI, builds, proof, and the pull
-  requests since the last release) and approves it there, which makes the
-  tag and promotes that commit's builds in Releases; nothing is built from
-  the tag (releases: docs/RELEASE_PROCESS.md).
+- CI (ci.yml) follows Reviews' policy (AttilaTheFun/reviews
+  docs/CI_POLICY.md; Logan, 7 Nov 2026). The header of ci.yml has it whole.
+  - **A pull request** runs one job, `container`, main's required check:
+    in a Linux container OS Server makes for it (visor-jit, 12 GB, a runner
+    of Visor's agent image), leasing nothing, the rules
+    (tools/check_rules.py), every app and the Mac's test bundles, libraries
+    and servers built on Linux (tools/ci/container_build.sh), blue Visor's
+    web client built (tools/ci/container_blue_web.sh `--build-only`), and
+    the command-line server built and tested with SwiftPM and tried
+    (tools/ci/linux_tests.sh, in the same container). Its Bazel reads OS
+    Server's cache and never writes it. A diff of documentation alone checks
+    the rules and stops there; a newer push cancels the run before. A fork's
+    pull request runs nothing.
+  - **Each commit on main** runs `populate`, the cache's one writer: the
+    merged tree built as `container` builds it, no tests, nothing
+    published.
+  - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
+    the gh tools' run_dispatch): `verify` runs the tests that need a Mac
+    (their bundles built on Linux, run on GitHub's `xcode-27` Macs) and the
+    proof below, and keeps the `proof` artifact; `prerelease` builds and
+    publishes the commit's Alphas and proposes a draft pre-release;
+    `release` verifies first, with the pins (tools/released_pins.sh), then
+    does as `prerelease` and proposes a draft release naming its run. A
+    proposal's version comes from Applications Server
+    (tools/ci/next_version.sh: the same again for the same commit), its
+    builds are made on Linux, optimized, with `--config=alpha` and
+    `--config=ci_device` (the iPhone's a device build signed ad hoc with a
+    placeholder profile; Visor.app signed ad hoc asking for push,
+    `app.ci.entitlements`), Visor.app given Visor's Linux programs
+    (`linux-programs`, tools/ci/mac_app_linux_programs.sh), and published
+    to Applications Server (tools/ci/publish_from_ci.sh), which signs each
+    with its bundle id's identity and notarizes the Mac's; the job's OIDC
+    token says which kind it is (the repository secret
+    APPLICATIONS_CI_CODE names the server). The draft is CI's
+    (tools/ci/propose_release.sh, the run's token): no agent makes a draft
+    or a tag. The agent image of that version follows (`agent-image`, on
+    the release Mac). `adhoc`, on a branch other than main, builds and
+    publishes its AdHoc build.
+  - **Released**: Logan's Release in Reviews publishes a proposed
+    release's draft, which makes its tag. `release` checks the commit is on
+    main and that a `verify` run of it passed and kept its proof
+    (tools/ci/verified_run.sh), then Applications Server promotes its
+    Alphas, as tested, to Production (BuildVariant restamped, signed again;
+    nothing is rebuilt) and makes Visor.app's notarized disk image, which
+    `release-dmg` attaches to the release with that proof
+    (tools/ci/release_proof.sh). A pre-release is never released: its
+    commit is proposed as a release, which verifies it (releases:
+    docs/RELEASE_PROCESS.md in AttilaTheFun/reviews).
+  - Until the Mac Studio (Logan, 5 Nov 2026: Visor is iOS, macOS and
+    Android for now), the web client is only built, and `windows` (the
+    command-line server in a Windows VM: tools/ci/windows_vm_tests.sh) and
+    `blue-ios` are verify's jobs, skipped: each script still runs by hand,
+    and each comes back by dropping its `if: false`.
+  - main is strict: a pull request merges once its CI is green on main's
+    head. One that touches a path CODEOWNERS gives Logan is his to merge;
+    any other its agent squash-merges.
 - Rules (AGENTS.md): every change through a pull request, no attribution lines; no
   Combine; visor_client/visor_ui stay Foundation-free of networking,
   JSON, UserDefaults (they build for the web — `String.trimmingCharacters`
@@ -1154,10 +1151,9 @@ nothing moves, the pill's count, its going, and its tap;
 `testRowsArrivingAtTheEndAreScrolledTo` stays at the end and checks the
 rows are scrolled to. `tools/ios_ui_tests.sh` runs all three (and the proof).
 
-CI makes the proof in a workflow of its own (`.github/workflows/proof.yml`,
-since 0.46), run only by hand: an agent runs it on main to propose a
-release (`gh workflow run proof.yml --ref main`; `kind` full, the
-default, or quick). Its apps are built on Linux in containers of the
+CI makes the proof in its `verify` run, only by hand: on main
+(`gh workflow run ci.yml --ref main -f run=verify`), and in every
+`release` run, which proposes a release once it passes. Its apps are built on Linux in containers of the
 repository's own (`visor-jit`, which a fork never reaches, with
 `tools/ci/container_build.sh` and `VISOR_CI_PACKAGE`) and run on GitHub's
 own runners, which a public repository has for free, so OS Server's
