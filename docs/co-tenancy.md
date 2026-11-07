@@ -285,6 +285,13 @@ What the Runner does with its container backend:
 - **Fronts it:** listens at the clients' port (`listen`) and passes each
   connection on to the server at the container's address, for as long as
   the server runs.
+- **Keeps it up:** a front set with `--start <command>` (`front set
+  co-tenant --port 7440 --to 192.168.131.3:7433 --start "container exec -d
+  visor-co-tenant visor-server start"`) is watched: every half minute the
+  Runner asks whether the server answers, and when it hasn't twice running
+  it runs the command, at most every two minutes (ServerWatch). The mini's
+  co-tenant died on 7 Nov with nothing to start it again until someone
+  noticed.
 - **Sets it up:** runs the setup script in it (below), before the server
   first starts and again after an upgrade or a change to the script.
 - **Starts the server in it:** sets its password (`visor-server password`,
