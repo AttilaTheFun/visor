@@ -2,12 +2,12 @@
 // and the notification the user opens, handed to the shared handler (which
 // the client listens to). The one place the app meets UIKit's application
 // delegate, which is where iOS delivers both. And its updates, from
-// Applications (ApplicationUpdates): its build written at launch, a newer
+// Applications (UpdateKit): its build written at launch, a newer
 // one told of with a notification of the library's, which this delegate
 // shows and passes on.
 
 #if os(iOS)
-import ApplicationUpdates
+import UpdateKit
 import UIKit
 import UserNotifications
 import VisorServices

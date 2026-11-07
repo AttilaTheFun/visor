@@ -30,7 +30,7 @@ swift_library(
     module_name = "VisorMac",
     deps = [
         "//:foundation",
-        "@swiftpkg_applications//:ApplicationUpdates",
+        "@swiftpkg_update_kit//:UpdateKit",
         "//libraries/message_cache",
         "//libraries/visor_client",
         "//libraries/visor_protocol",
