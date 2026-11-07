@@ -9,8 +9,9 @@ public enum GateCheck: Equatable, Sendable {
     case merge(repository: String, number: Int, sha: String, method: String)
     /// `mergePullRequest` by GraphQL, treated as the REST merge: the pull
     /// request's node resolved, the same checks, and `expectedHeadOid` set to
-    /// the head read.
-    case graphQLMerge(pullRequestID: String, method: String)
+    /// the head read, in the variable that holds the input (gh's `$input`);
+    /// one the request named already must be that head.
+    case graphQLMerge(pullRequestID: String, method: String, variable: String?, expectedHeadOid: String?)
     /// `PUT …/pulls/{n}/update-branch` ([M1]-[M3]).
     case updateBranch(repository: String, number: Int)
     /// `updatePullRequestBranch` by GraphQL: the node resolved, then as above.

@@ -192,7 +192,7 @@ final class GitHubGateTests: XCTestCase {
     func testGhPrMergeIsTheRESTMergeAndAutoMergeIsRefused() {
         XCTAssertEqual(graphQL("mutation PullRequestMerge($input:MergePullRequestInput!){mergePullRequest(input:$input){clientMutationId}}",
                                variables: #"{"input":{"pullRequestId":"PR_1","mergeMethod":"SQUASH","commitHeadline":"t"}}"#),
-                       .check(.graphQLMerge(pullRequestID: "PR_1", method: "squash")))
+                       .check(.graphQLMerge(pullRequestID: "PR_1", method: "squash", variable: "input", expectedHeadOid: nil)))
         refused(graphQL("mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_1\"}) { clientMutationId } }"), "no auto-merge")
         refused(graphQL("mutation { updatePullRequestBranch(input: {pullRequestId: \"PR_1\", expectedHeadOid: \"\(sha)\", updateMethod: REBASE}) { clientMutationId } }"),
                 "never rebased")
