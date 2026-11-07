@@ -10,8 +10,9 @@ in the transcript and the agent can be notified."
 ## Decided (Logan, 7 Nov)
 
 - **Channels where the agent has them** (Claude Code); for an agent that
-  hasn't, a notice of how many messages are unread ("You have 4 unread
-  messages").
+  hasn't, a notice turn. Either way the agent is told only how many
+  messages are unread ("You have 4 unread messages"), never their text, so
+  as not to fill its context: it reads them with `read_inbox`.
 - **The boxes keep their messages for the session's lifetime**, as its
   transcript is kept.
 
@@ -56,8 +57,8 @@ in the transcript and the agent can be notified."
 - **Claude: a channel notification.** Visor's MCP server
   (`visor-agent-host mcp`) declares Claude Code's channel capability
   (`experimental: {"claude/channel": {}}`) and, when the agent's inbox gets
-  a message, sends `notifications/claude/channel` with a short notice and
-  the message's id in `meta`. Claude Code takes a channel message as a meta
+  a message, sends `notifications/claude/channel` with the unread count
+  alone ("You have 4 unread messages; read them with read_inbox"). Claude Code takes a channel message as a meta
   prompt for its next turn (`origin: channel`, not the user's), starting one
   if the session is idle. The server tells the MCP server over the
   WebSocket it already holds (a subscription per session).
@@ -117,10 +118,7 @@ in the transcript and the agent can be notified."
 5. The client: the mail row in the chat, and the inspector's Inbox and
    Outbox.
 
-## Open
+## Later
 
-- **What a channel message carries**: the message itself (proposed: no
-  extra call, and through a channel it isn't a turn of the user's), or only
-  the count, as the notice does.
-- **Writing into an inbox from the inspector**, apart from the chat: later,
-  if wanted.
+- Writing into an agent's inbox from the inspector, apart from the chat, if
+  wanted.
