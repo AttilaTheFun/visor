@@ -46,14 +46,30 @@ there.
      graph through swift-nio-ssh's neighbours or added by version.
 2. **GitHubGate**, the policy, as data in the Runner's settings (below), with
    gh_mcp's rules as the default. Default deny.
-3. **Tokens from Keymaster.** The Runner holds no App key. For each allowed
-   request it asks Keymaster (`github_token`, its client key, the session and
-   repository) for an installation token. The token is limited to the allowed
-   repositories and the permissions agents need (contents, pull requests,
-   issues and actions write; checks, statuses and metadata read; workflows
-   write). That limit is what keeps reads in bounds where the proxy can't see
-   the repository: GraphQL queries, search, `/repositories/{id}`. Tokens are
-   cached per (agent App, owner) for a few minutes; a 401 asks again once.
+3. **Tokens from Keymaster** (Keymaster's review, 7 Nov). The Runner holds no
+   App key. The proxy is a Keymaster client of its own, `<Mac>-github-proxy`
+   (`mac-mini-github-proxy` on the mini), apart from the Runner's MCP relay
+   (`mac-mini-visor`, which has approval grants only and can't mint a token).
+   Each key can be revoked alone, and Keymaster's audit tells the proxy's
+   tokens from the sessions' approval requests. Both keys live only in the
+   Runner.
+   - It asks over REST, `POST /v1/github/token {app, repositories,
+     permissions}`, with `CLIENT_ID: <session>`. Keymaster's audit then names
+     the session, and `keymaster revoke --holder <session>@<Mac>-github-proxy`
+     ends one session's tokens at GitHub.
+   - Each request names its repositories (the session's allowed set, one
+     owner per token) and its permissions. The grant is `AttilaTheFun/*`, and
+     each request narrows it. The permissions are those gh_mcp's token has
+     today: contents, pull requests, issues, actions and workflows write;
+     checks, statuses and metadata read. Pushing a change to
+     `.github/workflows/` needs workflows write, and agents' pull requests do
+     that through gh_mcp now.
+   - The token's limit keeps reads in bounds where the proxy can't see the
+     repository: GraphQL queries, search, `/repositories/{id}`.
+   - Tokens are cached per (agent App, owner, session) until the earlier of a
+     few minutes and Keymaster's `expires_at` less five minutes. A 401 from
+     GitHub asks Keymaster once more. A 401 from Keymaster (a revoked client)
+     is not retried: the request is refused, saying so.
 4. **Setup.**
    - A container server's agents: the Runner's CA in the container's trust
      store (`update-ca-certificates`), `HTTPS_PROXY` and `NO_PROXY` in the
@@ -151,8 +167,8 @@ changes without a build:
    merge: the proxy runs every merge check and injects `expectedHeadOid` with
    the head it read, so the merge is of exactly what was checked. Auto-merge
    (`--auto`) stays refused: it merges later, unchecked.
-3. **Tokens limited by repository** at Keymaster, as above. Keymaster's
-   `github_token` already takes `repositories` and `permissions`.
+3. **Tokens limited by repository**, per session, from a Keymaster client
+   of the proxy's own, as above (agreed with Keymaster).
 4. **LFS**: downloads pass as reads; uploads and locks are refused.
 5. **What gh_mcp did on the Mac that has no place here**: its scratch
    repositories, hook switches and artifact destinations protected the Mac
@@ -162,7 +178,7 @@ changes without a build:
 ## Identity and logs
 
 - The session's agent picks the App (`claude`, `codex`, or the generic
-  `agent`); Keymaster mints that App's token.
+  `agent`); Keymaster mints that App's token for that session.
 - One log line a request: time, `<session>@<server>`, method, host, path
   template, repository, outcome. Never a token or a body.
 - The token never reaches the agent, and as defence in depth it's scrubbed
