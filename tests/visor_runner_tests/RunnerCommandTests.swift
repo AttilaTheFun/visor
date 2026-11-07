@@ -110,6 +110,20 @@ final class RunnerCommandTests: XCTestCase {
         XCTAssertEqual(run(["front", "remove", "co-tenant"]), 2)
     }
 
+    func testTheGitHubProxyIsSetUpForAServer() throws {
+        XCTAssertEqual(run(["server", "add", "co-tenant", "--host", "192.168.131.1"]), 0)
+        XCTAssertEqual(run(["github-proxy", "server", "co-tenant", "--host", "192.168.131.1", "--sessions", "S"]), 2, "no proxy port yet")
+        XCTAssertEqual(run(["github-proxy", "port", "7441"]), 0)
+        said = []
+        XCTAssertEqual(run(["github-proxy", "server", "co-tenant", "--host", "192.168.131.1", "--sessions", "S, T"]), 0)
+        let body = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(said.joined().utf8)) as? [String: Any])
+        XCTAssertEqual(body["url"] as? String, "http://192.168.131.1:7441")
+        XCTAssertEqual(body["token"] as? String, ProxyTokens.token(for: "co-tenant", in: secrets))
+        XCTAssertEqual(body["sessions"] as? [String], ["S", "T"])
+        XCTAssertTrue((body["authority"] as? String)?.hasPrefix("-----BEGIN CERTIFICATE-----") == true)
+        XCTAssertEqual(run(["github-proxy", "server", "nobody", "--host", "192.168.131.1", "--sessions", "*"]), 2)
+    }
+
     func testAFrontCanSayHowItsServerStartsAgain() throws {
         let start = "/usr/local/bin/container exec -d visor-co-tenant visor-server start"
         XCTAssertEqual(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433", "--start", start]), 0)
