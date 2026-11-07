@@ -10,13 +10,26 @@
 // (libraries/visor_server_linux), the one built on Windows gives it
 // Windows's (libraries/visor_server_windows). The Mac's apps and the iOS
 // app are Bazel's (MODULE.bazel); this builds none of them.
+//
+// Resolved on a Mac, it also offers Visor's client as libraries, for an app
+// that has a Visor of its own (Shireworks' Visor tab: issues#4): VisorClient,
+// VisorUI and VisorServices, for iOS and macOS on Apple's SwiftUI. The
+// client on Isomer (the web, Android) stays Bazel's.
 
 import PackageDescription
 
 /// Swift 6, and a warning is an error, as in the Bazel build (STRICT_SWIFT)
 /// — except on Windows, whose SDK module warns about itself ("wchar_t …
 /// broken by a context change") in everything that imports Foundation.
-let strict: [SwiftSetting] = [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-as-errors"], .when(platforms: [.macOS, .linux]))]
+///
+/// Resolved on a Mac, the language mode alone: a product built with unsafe
+/// flags can't be another package's dependency (the client libraries below),
+/// and the Mac's builds are Bazel's, which holds them to STRICT_SWIFT.
+#if os(macOS)
+let strict: [SwiftSetting] = [.swiftLanguageMode(.v6)]
+#else
+let strict: [SwiftSetting] = [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-as-errors"], .when(platforms: [.linux]))]
+#endif
 
 /// The client's host services, built on their own here, on Linux's CI
 /// (`swift build --target VisorServices`): a file that uses Foundation
@@ -108,11 +121,56 @@ let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["Vis
                             .executable(name: "visor-runner-agent", targets: ["VisorRunnerAgentMain"])]
 #endif
 
+#if os(macOS)
+/// Visor's client for Apple's platforms, as libraries: what the Bazel build
+/// compiles for the iPhone and the Mac (visor_client, visor_ui and
+/// visor_services with its native services), on AgentUI, at the versions
+/// third_party/swift_packages pins. Only where the package is resolved on a
+/// Mac: Linux and Windows don't fetch AgentUI or SwiftNIO for the server.
+let client: [Target] = [
+    .target(name: "VisorSSH",
+            dependencies: [.product(name: "NIOSSH", package: "swift-nio-ssh"), .product(name: "NIOCore", package: "swift-nio"),
+                           .product(name: "NIOPosix", package: "swift-nio"), .product(name: "Crypto", package: "swift-crypto")],
+            path: "libraries/visor_ssh/Sources", swiftSettings: strict),
+    .target(name: "VisorPasteboard", path: "libraries/visor_pasteboard/Sources", swiftSettings: strict),
+    .target(name: "VisorCamera", path: "libraries/visor_camera/Sources", swiftSettings: strict),
+    .target(name: "VisorClient", dependencies: ["MessageCache", "VisorProtocol", "VisorServices"],
+            path: "libraries/visor_client/Sources", swiftSettings: strict),
+    .target(name: "VisorUI",
+            dependencies: ["VisorCamera", "VisorPasteboard", "VisorClient", "VisorProtocol", "VisorServices",
+                           .product(name: "AgentUI", package: "agent_ui"), .product(name: "NavigationUI", package: "agent_ui")],
+            path: "libraries/visor_ui/Sources", swiftSettings: strict),
+]
+/// The client's host services with their native ones (the sockets, HTTP,
+/// settings, notifications, SSH), as Bazel compiles them for Apple's
+/// platforms: one module, both folders.
+let services: [Target] = [
+    .target(name: "VisorServices", dependencies: ["VisorSSH"], path: "libraries/visor_services",
+            exclude: ["BUILD.bazel"], sources: ["Sources", "native"], swiftSettings: strict),
+]
+let clientProducts: [Product] = [
+    .library(name: "VisorClient", targets: ["VisorClient"]),
+    .library(name: "VisorUI", targets: ["VisorUI"]),
+    .library(name: "VisorServices", targets: ["VisorServices"]),
+]
+let clientPackages: [Package.Dependency] = [
+    .package(url: "https://github.com/AttilaTheFun/agent_ui.git", exact: "0.45.1"),
+    .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.0"),
+    .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
+    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
+]
+#else
+let client: [Target] = []
+let services = clientServices
+let clientProducts: [Product] = []
+let clientPackages: [Package.Dependency] = []
+#endif
+
 let package = Package(
     name: "visor",
-    platforms: [.macOS(.v15)],
-    products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
+    platforms: [.macOS(.v15), .iOS(.v18)],
+    products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost + clientProducts,
     // swift_sql at its release, as third_party/swift_packages pins it.
-    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0")],
-    targets: clientServices + shared + system + tests
+    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0")] + clientPackages,
+    targets: services + shared + system + tests + client
 )
