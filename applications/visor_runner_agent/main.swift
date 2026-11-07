@@ -48,6 +48,10 @@ let fronts = config.fronts.compactMap { front -> ClientProxy? in
     log("\(front.name)'s clients come to port \(front.port), for \(front.host):\(front.hostPort)")
     return started
 }
+// Their servers, started again when they stop answering (those with a
+// command for it).
+let watches = config.fronts.compactMap { ServerWatch(front: $0, log: log) }
+for watch in watches { watch.start() }
 
 // Ended by a signal (TERM, an update): heard on the main queue, which
 // dispatchMain runs. (A handler on another queue would be the main actor's
@@ -58,6 +62,7 @@ let sources = [SIGTERM, SIGINT, SIGHUP].map { number in
     source.setEventHandler {
         proxy.stop()
         for front in fronts { front.stop() }
+        for watch in watches { watch.stop() }
         exit(0)
     }
     source.resume()
