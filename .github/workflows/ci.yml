@@ -198,25 +198,35 @@ jobs:
       - run: tools/released_pins.sh
 
   # The version the agent image of this commit of main takes:
-  # MAJOR.MINOR.BUILD, BUILD one past the line's highest on the
-  # release server (the plist says MAJOR.MINOR.0), kept there as the
-  # commit's. The iPhone's comes from Applications Server
-  # (tools/ci/next_version.sh, in alpha and adhoc).
+  # MAJOR.MINOR.BUILD, the next of the committed line (the plist says
+  # MAJOR.MINOR.0) as Applications Server gives it for the token's commit
+  # (tools/ci/next_version.sh), the same version alpha stamps into the
+  # commit's builds. Asked of the server since Reviews 0.10 deleted
+  # pipeline-ci (reviews#80), which this job ran: its empty answer had
+  # failed agent-image and skipped container and alpha on main since #258.
+  # No version is no job: it fails rather than hand on an empty one.
   number:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, release-mac]
     timeout-minutes: 5
+    permissions:
+      contents: read
+      # The OIDC token Applications Server checks.
+      id-token: write
     outputs:
       version: ${{ steps.next.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       - id: next
-        run: echo "version=$($PIPELINE_CI number Visor applications/visor_ios/Info.plist)" >> "$GITHUB_OUTPUT"
         env:
-          # The commit itself (a pull request's head, not its merge ref).
-          PIPELINE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
+        run: |
+          tools/ci/next_version.sh Visor applications/visor_ios/Info.plist
+          version="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
+          case "$version" in
+            "" | *.0) echo "::error::Applications Server gave no build version (the plist says \"$version\")"; exit 1 ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   # Visor's own Linux programs (tools/linux_programs.sh: visor-server, also
   # the agents' host, linked fully static), which alpha and adhoc seal into
