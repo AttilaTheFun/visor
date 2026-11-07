@@ -29,6 +29,7 @@ extension VisorServer {
             guard !record.watchedSubagents.isEmpty || record.info.background.contains(where: { $0.kind == .subagent }) else { return }
             refreshSubagents(of: record)
         case .busy(false):
+            // Also when the agent has gone, which ends its turn.
             guard !record.watchedSubagents.isEmpty else { return }
             refreshSubagents(of: record)
         default:
@@ -55,21 +56,29 @@ extension VisorServer {
     }
 
     /// A subagent its agent's files leave unfinished, as the agent itself
-    /// has it: running only while its agent is, and, once the agent has
-    /// said what runs in its background, only while it is on that list or
-    /// its call is still going (one sent off in the foreground). Off both,
-    /// it ended without its files saying so: killed, or gone with its agent.
+    /// has it: running only while its agent is, and only while it is on
+    /// the agent's background list or its call is still going (one sent off
+    /// in the foreground). Off both, it ended without its files saying so:
+    /// killed, or gone with an agent that has since been started again. A
+    /// list missed while no server listened says nothing either way.
     static func asItsAgentHasIt(_ subagent: SubagentInfo, in record: SessionRecord) -> SubagentInfo {
         guard subagent.running else { return subagent }
         var subagent = subagent
         if record.info.agentState == .stopped {
             subagent.running = false
-        } else if record.backgroundSaid {
+        } else if record.backgroundKnown {
             let listed = record.info.background.contains { $0.id == subagent.id }
-            let calling = subagent.call.map { call in record.turnStatus.contains { $0.id == call && $0.running } } ?? false
+            let calling = record.turnPickedUp || subagent.call.map { call in record.turnStatus.contains { $0.id == call && $0.running } } ?? false
             subagent.running = listed || calling
         }
         return subagent
+    }
+
+    /// Subagents a launch found listed as running, read again once it knows
+    /// whether their agent still runs.
+    func recheckSubagents(of record: SessionRecord) {
+        guard record.info.subagents.contains(where: \.running) else { return }
+        refreshSubagents(of: record)
     }
 
     /// `GET /sessions/{id}/subagents/{agent}`: a subagent's conversation.

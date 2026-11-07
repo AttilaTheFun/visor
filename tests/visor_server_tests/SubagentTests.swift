@@ -126,8 +126,7 @@ final class SubagentTests: ServerTestCase {
         }
         server.handle(.toolStarted(id: "toolu_bg", name: "Agent", label: "Watch CI", tasks: nil), from: record)
         server.handle(.toolStarted(id: "toolu_fg", name: "Agent", label: "Map it", tasks: nil), from: record)
-        // Before the agent has said what runs in its background, the files'
-        // word stands.
+        // Both calls going: both run.
         server.refreshSubagents(of: record)
         XCTAssertEqual(record.info.subagents.map(\.running), [true, true])
 
@@ -145,6 +144,85 @@ final class SubagentTests: ServerTestCase {
         // The agent stopped: nothing of it runs.
         server.setAgentState(record, .stopped)
         XCTAssertEqual(record.info.subagents.map(\.running), [false, false])
+    }
+
+    /// Claude Code says what runs in its background only when that
+    /// changes, and a process of its starts with nothing there: a subagent
+    /// its files leave unfinished, from an agent since started again (a
+    /// launch of the server, a restart), has ended; so has one sent to the
+    /// background by an agent that has gone.
+    func testASubagentOfAnAgentThatHasGoneHasEnded() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-went-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7994)
+        defer { server.stop() }
+        let harness = SubagentHarness(listsSubagentsInBackground: true)
+        server.harnesses = AgentHarnesses([harness])
+        harness.listed.withLock { $0 = [SubagentInfo(id: "old", description: "Clean-room actool", type: "general-purpose", running: true, call: "toolu_old")] }
+
+        // Seen running by a launch before; nothing said since.
+        let record = SessionRecord(info: SessionInfo(id: "P", agent: .claude, cwd: "/tmp", title: "P", created: 0), process: ListeningAgent())
+        record.watchedSubagents = ["old"]
+        server.sessions = [record]
+        server.refreshSubagents(of: record)
+        XCTAssertEqual(record.info.subagents.map(\.running), [false], "a new agent has nothing in its background")
+
+        // Sent to the background now, then its agent went.
+        harness.listed.withLock { $0.append(SubagentInfo(id: "bg", description: "Watch CI", type: "general-purpose", running: true, call: "toolu_bg")) }
+        server.handle(.background([StatusItem(id: "bg", kind: .subagent, label: "Watch CI", running: true)]), from: record)
+        server.refreshSubagents(of: record)
+        XCTAssertEqual(record.info.subagents.map(\.running), [false, true])
+        server.handle(.memory(nil), from: record)
+        server.handle(.busy(false), from: record)
+        XCTAssertEqual(record.info.subagents.map(\.running), [false, false], "gone with its agent")
+        XCTAssertTrue(record.info.background.isEmpty)
+    }
+
+    /// A turn a launch picked up already going may still be waiting on a
+    /// subagent it sent off: one its files leave unfinished runs until that
+    /// turn ends.
+    func testASubagentOfATurnPickedUpRunsUntilTheTurnEnds() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-picked-up-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7995)
+        defer { server.stop() }
+        let harness = SubagentHarness(listsSubagentsInBackground: true)
+        server.harnesses = AgentHarnesses([harness])
+        harness.listed.withLock { $0 = [SubagentInfo(id: "fg", description: "Map it", type: "Explore", running: true, call: "toolu_fg")] }
+        let record = SessionRecord(info: SessionInfo(id: "P", agent: .claude, cwd: "/tmp", title: "P", created: 0), process: ListeningAgent())
+        record.watchedSubagents = ["fg"]
+        record.turnPickedUp = true
+        server.sessions = [record]
+        server.handle(.busy(true), from: record)
+        server.refreshSubagents(of: record)
+        XCTAssertEqual(record.info.subagents.map(\.running), [true])
+        server.handle(.busy(false), from: record)
+        XCTAssertEqual(record.info.subagents.map(\.running), [false])
+    }
+
+    /// A launch whose sessions' agents are gone (not left under a host)
+    /// lists none of their subagents as running.
+    func testALaunchListsNoSubagentOfAGoneAgentAsRunning() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-launch-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        let server = VisorServer(port: 7996)
+        let record = SessionRecord(info: SessionInfo(id: "P", agent: .claude, cwd: "/tmp", title: "P", created: 0), process: ListeningAgent())
+        record.info.subagents = [SubagentInfo(id: "a1", description: "Map it", type: "Explore", running: true)]
+        record.info.background = [StatusItem(id: "a1", kind: .subagent, label: "Map it", running: true)]
+        server.sessions = [record]
+        server.saveArchive()
+        server.stop()
+
+        let again = VisorServer(port: 7997)
+        defer { again.stop() }
+        XCTAssertEqual(again.session("P")?.info.subagents.map(\.running), [false])
+        XCTAssertEqual(again.session("P")?.info.background, [])
     }
 
     func testAFinishedSubagentsConversationIsWrittenAsASessionOfItsOwn() throws {

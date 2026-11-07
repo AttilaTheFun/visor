@@ -309,7 +309,14 @@ final class MCPBridgeTests: ServerTestCase {
         }
 
         let link = MCPWebSocketLink(url: "ws://127.0.0.1:\(port)", token: server.agentToken, session: "A")
-        let reply = await link.call(["mode": .string("sessions")])
+        // On a Mac the Network framework's listener is ready a moment after
+        // it is started (NWListener.start is asynchronous, `listening` is
+        // set at once): the first call waits for it, up to three seconds.
+        var reply = await link.call(["mode": .string("sessions")])
+        for _ in 0..<30 where reply.text == "Visor is not reachable." {
+            try await Task.sleep(for: .milliseconds(100))
+            reply = await link.call(["mode": .string("sessions")])
+        }
         XCTAssertTrue(reply.ok, reply.text)
         XCTAssertTrue(reply.text.contains("B — Client work"), reply.text)
 

@@ -24,7 +24,6 @@ final class AuthTests: ServerTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-auth-tests-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
-        UserDefaults.standard.removeObject(forKey: "visor.password")
         // Never the real keychain.
         VisorServer.secrets = MemorySecrets()
         VisorServer.socketPathOverride = "/tmp/visor-auth-\(getpid()).sock"
@@ -33,7 +32,6 @@ final class AuthTests: ServerTestCase {
 
     override func tearDown() async throws {
         server.stop()
-        UserDefaults.standard.removeObject(forKey: "visor.password")
         VisorServer.socketPathOverride = nil
     }
 

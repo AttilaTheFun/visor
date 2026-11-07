@@ -1,9 +1,7 @@
 // Visor on the Mac (docs/co-tenancy.md, "The app"): a menu bar app, the eye
 // in the bar with the server's menu, whose window is Visor's macOS client,
-// and the Mac's Visor server under both. It takes over from Visor Server and
-// the Mac client (Info.plist's VisorReplaces: a server update installs it in
-// Visor Server's place), taking their keychain items, caches and settings
-// into places of its own once (FormerApps).
+// and the Mac's Visor server under both, each keeping what it has in places
+// of its own (MacPlaces).
 
 import AppKit
 import MessageCache
@@ -33,22 +31,16 @@ struct VisorMacApp: App {
     }
 
     init() {
-        FormerApps.adoptClientSettings()
-        // What Visor Server and the Mac client kept, copied into this app's
-        // own places the first time (FormerApps): their keychain items, then
-        // their folders.
-        FormerApps.adoptKeychain(from: FormerApps.server, into: FormerApps.ownServerService)
-        FormerApps.adoptKeychain(from: FormerApps.client, into: FormerApps.ownClientService)
         // The server's own: its keychain items and its store. Then the
         // server, before anything asks for it.
-        ServerCache.shared = .open(named: "messages", in: FormerApps.adoptFolder(of: FormerApps.server, into: FormerApps.ownFolder("Server")))
-        ServerPlatform.current = .apple(secrets: KeychainSecrets(service: FormerApps.ownServerService))
+        ServerCache.shared = .open(named: "messages", in: MacPlaces.folder("Server"))
+        ServerPlatform.current = .apple(secrets: KeychainSecrets(service: MacPlaces.serverService))
         server = VisorServer.shared
         // The client's own: its cache and its keychain items. Then its
         // services, which the store connects through.
-        AgentServerConnection.cache = .open(named: "messages", in: FormerApps.adoptFolder(of: FormerApps.client, into: FormerApps.ownFolder("Client")))
+        AgentServerConnection.cache = .open(named: "messages", in: MacPlaces.folder("Client"))
         installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(),
-                             settings: NativeVisorSettingsService(keychainService: FormerApps.ownClientService),
+                             settings: NativeVisorSettingsService(keychainService: MacPlaces.clientService),
                              notifications: NativeVisorNotificationService(), ssh: NativeVisorSSHService(), network: NativeVisorNetworkService(),
                              dictation: NativeVisorDictationService(), deviceName: Host.current().localizedName ?? "",
                              appVersion: Self.bundleVersion, platformName: "macOS")

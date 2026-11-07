@@ -119,10 +119,16 @@ public final class SessionRecord {
     var closedSubagents: Set<String> = []
     /// The MCP servers it switched from their default: on or off.
     var mcpSwitched: [String: Bool] = [:]
-    /// Whether this agent has said what runs in its background since it
-    /// started (`AgentEvent.background`): until it has, its list says
-    /// nothing of its subagents.
-    var backgroundSaid = false
+    /// Whether `info.background` is what runs in the agent's background
+    /// now. Claude Code says its list whenever it changes, and a process of
+    /// its starts with nothing there and says nothing until that changes,
+    /// so the list is known from the start; not for an agent a launch
+    /// picked up past what its host still kept of what it said.
+    var backgroundKnown = true
+    /// A turn a launch picked up already going: which of its calls go on
+    /// is not known (a subagent its files leave unfinished may be one of
+    /// them) until it ends.
+    var turnPickedUp = false
     /// When the agent's subagents were last read: at most every two
     /// seconds while they work.
     var subagentsRead: ContinuousClock.Instant?
@@ -316,8 +322,14 @@ public final class SessionRecord {
         process = replacement
         if let pendingFork { _ = replacement.fork(at: pendingFork.at) }
         // A new process starts with nothing in the background.
+        backgroundEnded()
+    }
+
+    /// The agent's process went, and what ran in its background with it:
+    /// the next starts with nothing there.
+    func backgroundEnded() {
         info.background = []
-        backgroundSaid = false
+        backgroundKnown = true
     }
 
     /// Hands each of the agent's events to `handle`, in order, from now

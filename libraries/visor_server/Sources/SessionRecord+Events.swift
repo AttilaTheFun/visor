@@ -59,6 +59,7 @@ extension SessionRecord {
             if !value {
                 info.pendingApproval = nil
                 turn.clear()
+                turnPickedUp = false
                 // A stream is not cleared by the turn ending: it stays
                 // until the record carries its row. Only an agent whose
                 // rows never come from a file lets the turn's end clear it.
@@ -86,7 +87,7 @@ extension SessionRecord {
             commands = list
             return nil
         case .background(let items):
-            backgroundSaid = true
+            backgroundKnown = true
             guard info.background != items else { return nil }
             info.background = items
             // The sessions list carries it; the caller broadcasts that.
@@ -106,6 +107,8 @@ extension SessionRecord {
             return ephemeralEnvelope
         case .memory(let bytes):
             info.memory = bytes
+            // Nil once the agent has gone, and its background with it.
+            if bytes == nil { backgroundEnded() }
             return nil
         case .question(let request):
             info.pendingApproval = request

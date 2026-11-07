@@ -76,8 +76,13 @@ extension VisorServer {
             }
             // What ran in the background ran in an agent that has gone
             // (an agent says its list when one changes, not when it
-            // starts with none, so a kept list would stay up for good).
-            info.background = []
+            // starts with none, so a kept list would stay up for good),
+            // and so did its subagents. One left under its host may go on,
+            // and its list with it (pickUp).
+            if item.host == nil {
+                info.background = []
+                for index in info.subagents.indices { info.subagents[index].running = false }
+            }
             // An agent of ours that outlived the app (we were killed
             // outright, or quit before it went): it still holds the
             // session, so it goes before anything resumes into it.

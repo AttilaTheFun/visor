@@ -76,13 +76,13 @@ Logan (1 November): Visor.app is the Visor Runner and Visor for macOS in one.
   - Visor Server.app (applications/visor_menubar, `com.LoganShire.VisorServer.macOS`)
     and Visor for macOS (applications/visor_macos,
     `com.LoganShire.VisorClient.macOS`) become Visor.app. Its data folder
-    stays where it is. Its first launch copies the old apps' keychain items
-    and caches into places of its own: `com.LoganShire.Visor.server` and
+    stays where it is. Its own places: `com.LoganShire.Visor.server` and
     `com.LoganShire.Visor` in the keychain, `Application Support/
-    com.LoganShire.Visor/Server` and `/Client`. So sessions, pairings and the
-    server's password carry over. Reading another app's item asks once per
-    item, with Always Allow, which Logan accepted (4 Nov). The release
-    after the switch drops the copying (#210).
+    com.LoganShire.Visor/Server` and `/Client`. In 0.46 its first launch
+    copied the old apps' keychain items and caches there (one Always Allow
+    per item, which Logan accepted on 4 Nov). 0.47 dropped the copying
+    (#210): a Mac that skipped 0.46 starts fresh, its server password set
+    and its computers added again.
   - The iPhone app moves from `com.LoganShire.VisorClient.iOS` to
     `com.LoganShire.Visor`. That is a new app on the device: installed
     fresh and paired again. Its push topic changes with it, which the server
@@ -285,6 +285,13 @@ What the Runner does with its container backend:
 - **Fronts it:** listens at the clients' port (`listen`) and passes each
   connection on to the server at the container's address, for as long as
   the server runs.
+- **Keeps it up:** a front set with `--start <command>` (`front set
+  co-tenant --port 7440 --to 192.168.131.3:7433 --start "container exec -d
+  visor-co-tenant visor-server start"`) is watched: every half minute the
+  Runner asks whether the server answers, and when it hasn't twice running
+  it runs the command, at most every two minutes (ServerWatch). The mini's
+  co-tenant died on 7 Nov with nothing to start it again until someone
+  noticed.
 - **Sets it up:** runs the setup script in it (below), before the server
   first starts and again after an upgrade or a change to the script.
 - **Starts the server in it:** sets its password (`visor-server password`,

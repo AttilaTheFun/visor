@@ -17,9 +17,9 @@ variant_infoplist(
 
 # Visor on the Mac (docs/co-tenancy.md, "The app"): a menu bar app whose
 # window is Visor's macOS client, with the Mac's Visor server under it. It
-# takes over from Visor Server (applications/visor_menubar) and the Mac
-# client (applications/visor_macos), which build on until the switch, and
-# copies what they kept into places of its own once (Sources/FormerApps.swift).
+# took over from Visor Server (applications/visor_menubar) and the Mac
+# client (applications/visor_macos) in 0.46, and keeps what it has in places
+# of its own (Sources/MacPlaces.swift).
 swift_library(
     name = "mac_lib",
     copts = STRICT_SWIFT,

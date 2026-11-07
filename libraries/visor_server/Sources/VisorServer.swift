@@ -44,9 +44,6 @@ public final class VisorServer {
     /// platform's); tests swap in their own.
     static var secrets: any SecretStore = ServerPlatform.current.secrets
 
-    /// The bundle ids this app had before, whose settings it takes over.
-    static let formerBundleIDs = ["com.LoganShire.Visor.MenuBar"]
-
     /// How the server is reached (ServerSettings): kept as set, and
     /// listened by again when how it listens changes.
     public var settings: ServerSettings = ServerSettings.kept(at: VisorServer.settingsURL) {
@@ -137,7 +134,6 @@ public final class VisorServer {
 
     public init(port: UInt16 = Envelope.defaultPort) {
         self.port = port
-        Self.adoptFormerFolders()
         password = Self.keptPassword()
         agentToken = Self.keptAgentToken()
         applyAgentDetaching()
