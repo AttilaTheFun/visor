@@ -55,11 +55,13 @@ extension GitHubGate {
             guard Set(arguments.keys).isSubset(of: ["input"]), let given = arguments["input"]?.resolved(variables)?.object else {
                 return .refuse("\(name) takes its fields in input")
             }
+            var variable: String?
+            if case .variable(let named)? = arguments["input"] { variable = named }
             switch Mutation(rawValue: name) {
             case nil:
                 return .refuse(Mutation.refusal(name))
             case let mutation?:
-                switch mutation.decide(given, rules: rules) {
+                switch mutation.decide(given, variable: variable, rules: rules) {
                 case .failure(let refusal): return .refuse(refusal.reason)
                 case .success(let outcome):
                     nodes += outcome.nodes
@@ -112,7 +114,8 @@ extension GitHubGate {
             return named.union(["clientMutationId"])
         }
 
-        func decide(_ input: [String: GateJSON], rules: GateRules) -> Result<Outcome, Refusal> {
+        /// `variable`: the one that holds the input, when one does.
+        func decide(_ input: [String: GateJSON], variable: String?, rules: GateRules) -> Result<Outcome, Refusal> {
             let extra = Set(input.keys).subtracting(fields)
             guard extra.isEmpty else { return .failure(Refusal("\(rawValue) never sends \(extra.sorted().joined(separator: ", "))")) }
             func node(_ key: String, _ kinds: [String]) -> Result<GateCheck.GraphQLNode, Refusal> {
@@ -179,7 +182,10 @@ extension GitHubGate {
                     return .failure(Refusal("a rebase makes no merge commit: title and message are for squash or merge"))
                 }
                 guard let id = input["pullRequestId"]?.string, !id.isEmpty else { return .failure(Refusal("\(rawValue) names its pullRequestId")) }
-                return .success(Outcome(nodes: [], check: .graphQLMerge(pullRequestID: id, method: method)))
+                let expected = input["expectedHeadOid"]?.string
+                if let expected, !GitRefName.isSHA(expected) { return .failure(Refusal("expectedHeadOid is a commit's SHA")) }
+                return .success(Outcome(nodes: [], check: .graphQLMerge(pullRequestID: id, method: method, variable: variable,
+                                                                       expectedHeadOid: expected)))
             }
         }
 
