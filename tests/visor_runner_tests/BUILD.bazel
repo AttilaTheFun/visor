@@ -10,5 +10,9 @@ swift_test(
         "//libraries/visor_server_posix:visor_posix_c",
         "@swiftpkg_swift_certificates//:X509",
         "@swiftpkg_swift_crypto//:Crypto",
+        "@swiftpkg_swift_nio//:NIOCore",
+        "@swiftpkg_swift_nio//:NIOHTTP1",
+        "@swiftpkg_swift_nio//:NIOPosix",
+        "@swiftpkg_swift_nio_ssl//:NIOSSL",
     ],
 )
