@@ -6,10 +6,11 @@ import VisorProtocol
 
 /// A session in the sidebar: where its agent runs (a container, or the
 /// computer's system), its name, its goal and loop, and at the end of that
-/// line what is happening — a spinner while the agent works, a raised hand
-/// while it waits to be allowed something; then the full path of its
-/// folder, the first lines of the latest message, and the machines it
-/// leases. Whether the computer answers is its section's.
+/// line what is happening — a raised hand while it waits to be allowed
+/// something, a question while it waits for an answer, a spinner while the
+/// agent works; then the full path of its folder, the first lines of the
+/// latest message, and the machines it leases. Whether the computer
+/// answers is its section's.
 @MainActor
 struct SessionCardRow: View {
     let session: SessionInfo
@@ -48,7 +49,9 @@ struct SessionCardRow: View {
                         .accessibilityLabel("Looping")
                 }
                 Spacer(minLength: 8)
-                activity
+                // Only when there is something (an empty mark would take
+                // the line's spacing on Isomer).
+                if Self.activity(of: session) != .none { activity }
             }
             Text(session.cwd)
                 .font(.subheadline)
@@ -85,10 +88,31 @@ struct SessionCardRow: View {
         .accessibilityIdentifier("session-" + session.id)
     }
 
-    /// What is happening: the agent works, waits to be allowed something,
-    /// or waits on work in the background.
+    /// What is happening at the line's end.
+    enum Activity: Equatable {
+        case approval, question, working, background, none
+    }
+
+    /// What holds the agent up comes first: a prompt or a question it
+    /// waits on stops a turn that is still going, so the turn's spinner
+    /// would hide it.
+    static func activity(of session: SessionInfo) -> Activity {
+        if let request = session.pendingApproval { return request.questions?.isEmpty == false ? .question : .approval }
+        if session.busy { return .working }
+        return session.background.isEmpty ? .none : .background
+    }
+
+    /// What is happening: the agent waits to be allowed something or for
+    /// an answer, works, or waits on work in the background.
     @ViewBuilder private var activity: some View {
-        if session.busy {
+        switch Self.activity(of: session) {
+        case .approval:
+            Image(systemName: "hand.raised.fill").foregroundColor(.yellow)
+                .accessibilityLabel("Waiting for approval")
+        case .question:
+            Image(systemName: "questionmark.bubble.fill").foregroundStyle(mark)
+                .accessibilityLabel("Waiting for an answer")
+        case .working:
             // Screenshot tests want the same pixels every run.
             if VisorFixture.active {
                 Image(systemName: "ellipsis.circle.fill").foregroundStyle(.secondary)
@@ -97,12 +121,11 @@ struct SessionCardRow: View {
                 ProgressView().controlSize(.small)
                     .accessibilityLabel("Working")
             }
-        } else if session.pendingApproval != nil {
-            Image(systemName: "hand.raised.fill").foregroundColor(.yellow)
-                .accessibilityLabel("Waiting for approval")
-        } else if !session.background.isEmpty {
+        case .background:
             Image(systemName: "clock").foregroundStyle(.secondary)
                 .accessibilityLabel("Waiting on background work")
+        case .none:
+            EmptyView()
         }
     }
 
