@@ -168,7 +168,13 @@ changes without a build:
    the head it read, so the merge is of exactly what was checked. Auto-merge
    (`--auto`) stays refused: it merges later, unchecked.
 3. **Tokens limited by repository**, per session, from a Keymaster client
-   of the proxy's own, as above (agreed with Keymaster).
+   of the proxy's own, as above (agreed with Keymaster). Worth knowing, as it
+   is today with gh_mcp: workflows write lets an agent push a branch whose
+   changed workflow runs at once on the repository's self-hosted runners
+   (a same-repository branch or pull request; forks never reach them), with
+   that run's own token and OIDC. Keymaster's CI rules honour only the refs
+   they name (main, release-*), and Applications takes a branch's builds only
+   as betas.
 4. **LFS**: downloads pass as reads; uploads and locks are refused.
 5. **What gh_mcp did on the Mac that has no place here**: its scratch
    repositories, hook switches and artifact destinations protected the Mac
