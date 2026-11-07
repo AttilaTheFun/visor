@@ -92,13 +92,21 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// docs/co-tenancy.md), at `<pushProxy>/apns/…`. Empty for none. Its
     /// token for this server is a secret (`VisorServer.pushProxyTokenKey`).
     public var pushProxy = ""
+    /// The GitHub proxy agents reach GitHub through (Visor Runner's,
+    /// docs/github-proxy.md): `http://<host>:<port>`, empty for none. Its
+    /// token for this server is a secret (`VisorServer.githubProxyTokenKey`),
+    /// its authority's certificate is kept beside the settings.
+    public var githubProxy = ""
+    /// The sessions it is on for, by id; `*` for every one. On for one
+    /// session first, then for all (docs/github-proxy.md, Rollout).
+    public var githubProxySessions: [String] = []
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
              frontPaths, clientsKeepMessages, detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost,
-             pushProxy, containerSignIn, containerSignInUser
+             pushProxy, containerSignIn, containerSignInUser, githubProxy, githubProxySessions
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -122,6 +130,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         if !containerSignIn.isEmpty { try c.encode(containerSignIn, forKey: .containerSignIn) }
         if !containerSignInUser.isEmpty { try c.encode(containerSignInUser, forKey: .containerSignInUser) }
         if !pushProxy.isEmpty { try c.encode(pushProxy, forKey: .pushProxy) }
+        if !githubProxy.isEmpty { try c.encode(githubProxy, forKey: .githubProxy) }
+        if !githubProxySessions.isEmpty { try c.encode(githubProxySessions, forKey: .githubProxySessions) }
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -155,6 +165,8 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         containerSignIn = try c.decodeIfPresent([String].self, forKey: .containerSignIn) ?? []
         containerSignInUser = try c.decodeIfPresent(String.self, forKey: .containerSignInUser) ?? ""
         pushProxy = try c.decodeIfPresent(String.self, forKey: .pushProxy) ?? ""
+        githubProxy = try c.decodeIfPresent(String.self, forKey: .githubProxy) ?? ""
+        githubProxySessions = try c.decodeIfPresent([String].self, forKey: .githubProxySessions) ?? []
     }
 
     public func keep(at url: URL) {
