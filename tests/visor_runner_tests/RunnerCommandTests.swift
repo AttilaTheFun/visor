@@ -110,6 +110,20 @@ final class RunnerCommandTests: XCTestCase {
         XCTAssertEqual(run(["front", "remove", "co-tenant"]), 2)
     }
 
+    func testAFrontCanSayHowItsServerStartsAgain() throws {
+        let start = "/usr/local/bin/container exec -d visor-co-tenant visor-server start"
+        XCTAssertEqual(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433", "--start", start]), 0)
+        XCTAssertEqual(RunnerConfig.read(folder)?.fronts, [.init(name: "co-tenant", port: 7440, host: "192.168.131.3", hostPort: 7433, start: start)])
+        said = []
+        _ = run(["status"])
+        XCTAssertTrue(said.joined().contains("started again with: " + start), said.joined())
+        XCTAssertEqual(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433", "--start", " "]), 2, "a command, not nothing")
+        // A runner.json from before has no command: none is run.
+        let before = #"{"fronts":[{"name":"co-tenant","port":7440,"host":"192.168.131.3","hostPort":7433}]}"#
+        try Data(before.utf8).write(to: folder.appendingPathComponent("runner.json"))
+        XCTAssertNil(RunnerConfig.read(folder)?.fronts.first?.start)
+    }
+
     func testStatusSaysWhatIsKeptButNoSecret() {
         _ = run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp", "--secret", "API_KEY"], input: ["gh-key"])
         _ = run(["server", "add", "Builds", "--host", "h"])
