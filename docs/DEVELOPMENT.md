@@ -232,7 +232,10 @@ run in the background, a monitor, an agent of its own — is different:
 Claude Code reports the whole list whenever it changes
 (`system/background_tasks_changed` → `AgentEvent.background`), the
 session carries it (`SessionInfo.background: [StatusItem]`, cleared when
-its process starts over) and the sessions list broadcasts it; the
+its process goes or starts over: a new process has nothing there and says
+nothing until that changes, so the list is known from its start, and a
+Claude subagent its files leave unfinished runs only while it is on the
+list or its call goes on) and the sessions list broadcasts it; the
 sidebar row shows a clock and "Waiting on …" while the session is idle,
 and the chat's status lines carry the items under the turn's own. A
 streamed delta for a message the record already carries is
@@ -479,8 +482,9 @@ hands the key to every computer connected, after which the new device
 scans the SSH connection code and comes in over SSH at once.
 
 **UI** (`libraries/visor_ui` on AgentUI): `RootView` sidebar (flat session
-rows: title / status dot-or-spinner • computer • project / two-line
-preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:
+rows: title / status dot-or-spinner, or the raised hand or question of a
+prompt or question waiting, ahead of the spinner of the turn it holds up
+• computer • project / two-line preview), `AgentScreen` (chat: `AgentView(messages:streams:activity:
 status:…)`), `SessionInspector`, `ComposeSessionSheet`. In agent_ui,
 `TranscriptView` renders the record, then ONE always-present
 `EphemeralFooter` cell (id "bottom": streams, queued, sending,

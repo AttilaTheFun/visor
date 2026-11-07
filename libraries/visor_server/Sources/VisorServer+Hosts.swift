@@ -28,10 +28,17 @@ extension VisorServer {
             // it says when that ends, as ever (unless what it said was
             // more than its host keeps, and the end may be among it).
             if record.interrupted, child.isRunning, !child.missedLines { broadcast(record.apply(.busy(true)), session: record) }
+            // What it ran in the background is as the last launch left it,
+            // with what its host kept of what it said since; past that,
+            // not known until it says its list again.
+            if child.missedLines { record.backgroundKnown = false }
+            record.turnPickedUp = record.interrupted && child.isRunning
         } else {
             if let agentPID { await Self.endOrphan(pid: agentPID, resume: resume) }
             if record.interrupted, !record.info.archived { pendingResumes.append(record.info.id) }
+            record.backgroundEnded()
         }
+        recheckSubagents(of: record)
         release(record)
         if listening { resumePending() }
         broadcastSessions()
