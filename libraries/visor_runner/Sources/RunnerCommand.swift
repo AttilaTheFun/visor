@@ -51,7 +51,7 @@ public struct RunnerCommand {
                    The APNs key the push proxy signs with: the .p8's text read
                    from standard input, kept here only.
           apns remove
-          front set <name> --port <port> --to <address>:<port>
+          front set <name> --port <port> --to <address>:<port> [--start <command>]
                    The client proxy for a server: its clients come to this Mac
                    at <port> (every interface, IPv4 and IPv6) and each
                    connection goes on to the server at <address>:<port>, from
@@ -113,7 +113,8 @@ public struct RunnerCommand {
         if config.endpoints.isEmpty { lines.append("  no MCP servers") }
         lines.append(config.servers.isEmpty ? "No Visor servers." : "Visor servers: " + config.servers.joined(separator: ", "))
         for front in config.fronts {
-            lines.append("Front for \(front.name): port \(front.port) to \(front.host):\(front.hostPort)")
+            lines.append("Front for \(front.name): port \(front.port) to \(front.host):\(front.hostPort)"
+                + (front.start.map { "; started again with: " + $0 } ?? ""))
         }
         if let keyID = secrets.value(APNsProxy.keyIDSecret), secrets.value(APNsProxy.keySecret) != nil {
             lines.append("Pushes: signed with APNs key \(keyID) (team \(secrets.value(APNsProxy.teamIDSecret) ?? "?"))")
@@ -240,15 +241,16 @@ public struct RunnerCommand {
     }
 
     private func setFront(_ arguments: [String], in config: inout RunnerConfig) throws {
-        let usage = "front set <name> --port <port> --to <address>:<port>"
-        guard arguments.count == 5, let name = arguments.first, !name.isEmpty, !name.hasPrefix("--") else { throw Problem(usage) }
-        var port: Int?, to: String?
+        let usage = "front set <name> --port <port> --to <address>:<port> [--start <command>]"
+        guard [5, 7].contains(arguments.count), let name = arguments.first, !name.isEmpty, !name.hasPrefix("--") else { throw Problem(usage) }
+        var port: Int?, to: String?, start: String?
         var rest = arguments.dropFirst()
         while let flag = rest.popFirst() {
             guard let value = rest.popFirst() else { throw Problem(usage) }
             switch flag {
             case "--port": port = Int(value)
             case "--to": to = value
+            case "--start": start = value
             default: throw Problem("unknown option \(flag)")
             }
         }
@@ -264,9 +266,12 @@ public struct RunnerCommand {
             throw Problem("port \(port) is \(other.name)'s front already")
         }
         config.fronts.removeAll { $0.name == name }
-        config.fronts.append(ClientProxy.Front(name: name, port: port, host: host, hostPort: hostPort))
+        if let given = start, given.trimmingCharacters(in: .whitespaces).isEmpty { throw Problem("\(usage): --start takes a command") }
+        config.fronts.append(ClientProxy.Front(name: name, port: port, host: host, hostPort: hostPort, start: start))
         try config.write(folder)
-        output("\(name)'s clients come to port \(port) and go on to \(host):\(hostPort), from the agent's next start")
+        output("\(name)'s clients come to port \(port) and go on to \(host):\(hostPort)"
+            + (start == nil ? "" : ", the server started again with `\(start ?? "")` when it stops answering")
+            + ", from the agent's next start")
     }
 
     private func removeFront(_ arguments: [String], in config: inout RunnerConfig) throws {

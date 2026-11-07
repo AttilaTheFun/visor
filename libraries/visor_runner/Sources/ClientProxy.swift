@@ -16,12 +16,16 @@ public final class ClientProxy: Sendable {
         /// The server's address and port, as the Mac reaches it.
         public var host: String
         public var hostPort: Int
+        /// What starts the server again when it stops answering (a shell
+        /// command line, ServerWatch); nil, and nothing does.
+        public var start: String?
 
-        public init(name: String, port: Int, host: String, hostPort: Int) {
+        public init(name: String, port: Int, host: String, hostPort: Int, start: String? = nil) {
             self.name = name
             self.port = port
             self.host = host
             self.hostPort = hostPort
+            self.start = start
         }
     }
 

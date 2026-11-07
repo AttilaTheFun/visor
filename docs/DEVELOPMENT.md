@@ -965,7 +965,7 @@ front paths, `visor-server front`).
   the GitHub release, beside the source archives. The old Mac apps' disk
   images (Visor Server and the Mac client, `build` on the release Mac)
   are no more since 0.46; the release Mac keeps the agent image, its
-  number (`$PIPELINE_CI number`) and blue's iPhone snapshots. The
+  number (tools/ci/next_version.sh, as alpha's) and blue's iPhone snapshots. The
   proof is a workflow of its own (`proof.yml`, since 0.46), run only by
   hand on GitHub's own runners: an agent runs it on main to propose a
   release, compared with the previous release's proof. main
