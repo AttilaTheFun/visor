@@ -7,7 +7,7 @@ common --registry=https://bcr.bazel.build
 
 # isomer's hermetic Android NDK and SDK: their licenses, which resolving its
 # toolchains needs even for a build only for Apple's platforms.
-common --repo_env=ACCEPTED_ANDROID_NDK_LICENSE_VERSION=r27c
+common --repo_env=ACCEPTED_ANDROID_NDK_LICENSE_VERSION=r30
 common --repo_env=ACCEPTED_ANDROID_SDK_LICENSE_VERSION=35
 common --android_platforms=@rules_android//:arm64-v8a
 
