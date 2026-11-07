@@ -68,6 +68,13 @@ int visor_connect_unix(const char *path);
 /// reads nothing). -1 with errno set.
 int visor_connect_tcp(const char *host, unsigned short port);
 
+/// As visor_connect_tcp, but only to an address off this computer: the
+/// name is resolved here and loopback, link-local, unspecified and multicast
+/// addresses are skipped (IPv4, IPv6, and IPv4 in IPv6), so a name can't lead
+/// a proxied connection back to the computer's own services. -1 with errno
+/// EACCES when every address was one of those.
+int visor_connect_tcp_public(const char *host, unsigned short port);
+
 /// Whether something listens at the Unix domain socket `path` now: 1 when a
 /// connection to it is taken, 0 otherwise (no file, a stale one).
 int visor_unix_answers(const char *path);

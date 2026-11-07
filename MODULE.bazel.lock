@@ -1422,7 +1422,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 7b0fba7f4272b794be272235e2db1c3030831ae8cd0c8766358126a7bb364b0f"
+          "FILE:@@//third_party/swift_packages/Package.resolved 636d6a60f70b2c80f7a7aa17c335b09fe078f9583a0c48eed14e5bb3f2b6942d"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1440,6 +1440,7 @@
                 "swiftpkg_applications",
                 "swiftpkg_swift_asn1",
                 "swiftpkg_swift_atomics",
+                "swiftpkg_swift_certificates",
                 "swiftpkg_swift_collections",
                 "swiftpkg_swift_crypto",
                 "swiftpkg_swift_nio",
@@ -1510,6 +1511,25 @@
               "commit": "3ec281496f28a3b6581afd946b759e2642f5cd8d",
               "remote": "https://github.com/apple/swift-nio-ssh.git",
               "version": "0.15.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_certificates": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_certificates",
+              "commit": "84f03fafeca28c19f5fc4b528df3d22ce8896bd7",
+              "remote": "https://github.com/apple/swift-certificates.git",
+              "version": "1.21.1",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1703,6 +1723,7 @@
           "explicitRootModuleDirectDeps": [
             "swiftpkg_agent_ui",
             "swiftpkg_swift_nio_ssh",
+            "swiftpkg_swift_certificates",
             "swiftpkg_swift_sql",
             "swiftpkg_applications",
             "swift_package"
