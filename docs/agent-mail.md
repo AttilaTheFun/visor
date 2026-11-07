@@ -7,6 +7,14 @@ but a copy is retained on both the source and target servers (which may be
 the same) once it is delivered. … Ideally this doesn't have to be a message
 in the transcript and the agent can be notified."
 
+## Decided (Logan, 7 Nov)
+
+- **Channels where the agent has them** (Claude Code); for an agent that
+  hasn't, a notice of how many messages are unread ("You have 4 unread
+  messages").
+- **The boxes keep their messages for the session's lifetime**, as its
+  transcript is kept.
+
 ## Today
 
 - `send_message(session, server, text)` from Visor's MCP server
@@ -24,8 +32,8 @@ in the transcript and the agent can be notified."
 ## The model
 
 - **Every session has an inbox and an outbox**, kept by its server with the
-  session (in the server's store, as its rows are), until the session is
-  deleted.
+  session (in the server's store, as its rows are) for as long as the
+  session is kept, and deleted with it.
   - **Outbox:** each message the session sent: its id, to whom (server,
     session, their names), text, when sent, and what became of it
     (`waiting`, `delivered`, `read`, `failed`, `expired`).
@@ -66,12 +74,13 @@ in the transcript and the agent can be notified."
     headless.
 - **Codex, and Claude without channels: a notice turn.** Codex's app server
   takes input only as the user's (`turn/start`, `turn/steer`). Visor starts
-  a turn whose whole input is a one-line notice, `[Visor: a message from
-  "Isomer" is in your inbox: read it with read_inbox]`, queued while the
-  agent works, as today's messages are. The text itself stays in the inbox.
+  a turn whose whole input is one line, `[Visor: you have 4 unread messages
+  in your inbox; read them with read_inbox]`, queued while the agent works,
+  as today's messages are. The messages themselves stay in the inbox.
   Visor knows the notice by its form and shows it as the mail row, not as
   the person's.
-- Either way, **several messages arriving together are one notice**.
+- **Messages arriving together are one notice**: one waiting while the
+  agent works counts what is unread when its turn comes.
 
 ## The MCP tools
 
@@ -108,14 +117,10 @@ in the transcript and the agent can be notified."
 5. The client: the mail row in the chat, and the inspector's Inbox and
    Outbox.
 
-## Questions for Logan
+## Open
 
-1. **What the agent is told**: only that there is mail (it reads it with
-   `read_inbox`, one more call), or the message itself in the notice (no
-   call, but its text is then in the agent's context as a meta prompt)?
-   Proposed: the message itself through Claude's channel, where it isn't a
-   turn of the user's; only a notice for Codex, where it would be.
-2. **How long the boxes keep messages**: with the session until it is
-   deleted (proposed), or a cap (the last 500 of each)?
-3. **Messages from the person**: should the person be able to write into an
-   agent's inbox from the inspector, apart from the chat?
+- **What a channel message carries**: the message itself (proposed: no
+  extra call, and through a channel it isn't a turn of the user's), or only
+  the count, as the notice does.
+- **Writing into an inbox from the inspector**, apart from the chat: later,
+  if wanted.
