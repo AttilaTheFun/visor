@@ -2,23 +2,25 @@ name: CI
 # Visor's CI, as Reviews' policy for Logan's protected repositories has it
 # (AttilaTheFun/reviews, docs/CI_POLICY.md; Logan, 7 Nov 2026):
 #
+# Automated CI only builds: no test runs on its own (Logan, 7 Nov 2026).
+#
 # - A pull request runs one job, `container`, the required check: in one of
 #   OS Server's single-use Linux containers (visor-jit, a runner of Visor's
-#   agent image), leasing nothing, it checks the rules, builds every app
-#   and the Mac's targets on Linux, builds blue Visor's web client, and
-#   builds and tests the command-line server with SwiftPM. Its Bazel reads
-#   OS Server's cache and never writes it. A pull request of documentation
-#   alone checks the rules and stops there. A newer push cancels its run.
-#   A fork's pull request runs nothing here: no self-hosted runner ever runs
-#   a fork's code.
-# - Each commit on main runs `populate`: the merged tree built, cache-only
-#   (no tests, nothing published), the one job that writes the cache.
-# - What needs a Mac or a simulator runs only by hand (workflow_dispatch on
-#   main, `run`):
+#   agent image), leasing nothing, it checks the rules, builds every app,
+#   the Mac's test bundles, libraries and servers on Linux, and builds the
+#   command-line server with SwiftPM. Its Bazel reads OS Server's cache and
+#   never writes it. A pull request of documentation alone checks the rules
+#   and stops there. A newer push cancels its run. A fork's pull request
+#   runs nothing here: no self-hosted runner ever runs a fork's code.
+# - Each commit on main runs `populate`: the merged tree built as
+#   `container` builds it, cache-only (nothing run, nothing published), the
+#   one job that writes the cache.
+# - Every test runs only by hand (workflow_dispatch on main, `run`):
 #   - `verify`: the Mac's tests (their bundles built on Linux, run on
-#     GitHub's own xcode-27 Macs), and the proof: the iPhone's, Visor.app's
-#     and blue Visor on Android's screens, on GitHub's own runners, compared
-#     with the previous release's. Its last job, `verify`, keeps the `proof`
+#     GitHub's own xcode-27 Macs), the command-line server's tests on Linux
+#     (linux), blue Visor's web client (blue-web), and the proof: the
+#     iPhone's, Visor.app's and blue Visor on Android's screens, on GitHub's
+#     own runners, compared with the previous release's. Its last job, `verify`, keeps the `proof`
 #     artifact, and its success is the commit's tests passing. Run on a
 #     branch pushed at an earlier commit, it bisects a regression;
 #   - `prerelease`: no tests or proof. The commit's version is asked of
@@ -113,21 +115,18 @@ jobs:
       - name: The apps
         if: steps.changes.outputs.code == 'true'
         run: tools/ci/container_build.sh "$GITHUB_JOB"
-      # Blue Visor's web client, built optimized and not run until the Mac
-      # Studio (tools/ci/container_blue_web.sh --build-only).
-      - name: Blue Visor's web client
-        if: steps.changes.outputs.code == 'true'
-        run: tools/ci/container_blue_web.sh "$GITHUB_JOB" review --build-only
       # Bazel's server let go before SwiftPM builds beside it.
       - name: Bazel stopped
         if: steps.changes.outputs.code == 'true'
         run: bazel shutdown || true
-      # The command-line server with SwiftPM: built, its tests run, and the
-      # server tried, a throwaway session over its WebSocket
-      # (tools/ci/linux_tests.sh, in this container).
+      # The command-line server with SwiftPM, and the client's host services
+      # on their own (a file that uses Foundation without importing it fails
+      # here, as in Visor on Isomer). Its tests are verify's (linux).
       - name: The command-line server on Linux
         if: steps.changes.outputs.code == 'true'
-        run: tools/ci/linux_tests.sh
+        run: |
+          swift build --product visor-server
+          swift build --target VisorServices
 
   # ---- main ----------------------------------------------------------------
 
@@ -143,8 +142,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: The apps
         run: tools/ci/container_build.sh "$GITHUB_JOB"
-      - name: Blue Visor's web client
-        run: tools/ci/container_blue_web.sh "$GITHUB_JOB" review --build-only
 
   # ---- By hand: verify -----------------------------------------------------
 
@@ -293,6 +290,36 @@ jobs:
           path: ${{ runner.temp }}/part
           retention-days: 7
 
+  # The command-line server on Linux with SwiftPM: built, its tests run,
+  # and the server tried, a throwaway session over its WebSocket
+  # (tools/ci/linux_tests.sh, in the job's own container).
+  linux:
+    if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
+    runs-on: [self-hosted, visor-jit]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/ci/linux_tests.sh
+
+  # Blue Visor's web client (docs/isomer.md), built optimized
+  # (tools/ci/container_blue_web.sh --build-only). Until the Mac Studio
+  # nothing runs it: without --build-only the script goes on to its tests and
+  # the end-to-end test in headless Chromium.
+  blue-web:
+    if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
+    runs-on: [self-hosted, visor-jit]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
+      - run: tools/ci/container_blue_web.sh "$GITHUB_JOB" review --build-only
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blue-web-review
+          path: review
+          if-no-files-found: ignore
+
   # The command-line server on Windows, in a Windows VM leased from OS
   # Server (tools/ci/windows_vm_tests.sh). Off until the Mac Studio (a
   # 16 GB VM). To bring it back: verify's `if`, and in verify's needs.
@@ -331,10 +358,11 @@ jobs:
   # The proof, from what the platforms pictured, each screen compared with
   # the previous release's (tools/ci/proof_compare.sh: CoreGraphics' diff,
   # so on a Mac), kept as the `proof` artifact Reviews reads. It passes only
-  # when the Mac's tests and every platform's part did: its success is the
-  # commit verified, which a release's alpha and the release job ask for.
+  # when the Mac's tests, Linux's, the web client and every platform's part
+  # did: its success is the commit verified, which a release's alpha and the
+  # release job ask for.
   verify:
-    needs: [build-tests, test, build-apple, build-android, proof-ios, proof-mac, proof-android]
+    needs: [build-tests, test, linux, blue-web, build-apple, build-android, proof-ios, proof-mac, proof-android]
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release') }}
     runs-on: xcode-27
     timeout-minutes: 20
@@ -359,12 +387,14 @@ jobs:
           name: proof
           path: ${{ runner.temp }}/proof
           retention-days: 90
-      - if: needs.test.result != 'success' || needs.proof-ios.result != 'success' || needs.proof-mac.result != 'success' || needs.proof-android.result != 'success'
+      - if: needs.test.result != 'success' || needs.linux.result != 'success' || needs.blue-web.result != 'success' || needs.proof-ios.result != 'success' || needs.proof-mac.result != 'success' || needs.proof-android.result != 'success'
         run: |
-          echo "::error::Not verified: the Mac's tests $TESTS, iPhone $IOS, Mac $MAC, Android $ANDROID"
+          echo "::error::Not verified: the Mac's tests $TESTS, Linux's $LINUX, the web client $WEB, iPhone $IOS, Mac $MAC, Android $ANDROID"
           exit 1
         env:
           TESTS: ${{ needs.test.result }}
+          LINUX: ${{ needs.linux.result }}
+          WEB: ${{ needs.blue-web.result }}
           IOS: ${{ needs.proof-ios.result }}
           MAC: ${{ needs.proof-mac.result }}
           ANDROID: ${{ needs.proof-android.result }}

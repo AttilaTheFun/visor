@@ -11,11 +11,11 @@ its rules, and its local CI, end-to-end and snapshot harnesses
 
 This repo is public. Every change to `main` goes through a pull request:
 `main` is protected, direct pushes are rejected, and CI's one check,
-`container` (the rules, every app and library built on Linux, the
-command-line server's tests), must pass on main's head before a pull
-request can merge. The tests that need a Mac and the proof run by hand
-(`run: verify`), and every release proposal runs them (docs/DEVELOPMENT.md,
-CI). Keep each pull request to one focused change, and say in it how the
+`container` (the rules, then every app, library and server built on
+Linux), must pass on main's head before a pull request can merge. No test
+runs on its own: the tests and the proof run by hand (`run: verify`), and
+every release proposal runs them (docs/DEVELOPMENT.md, CI). Run the tests
+that touch your change before you push. Keep each pull request to one focused change, and say in it how the
 change was verified.
 
 ## Rules

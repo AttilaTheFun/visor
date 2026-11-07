@@ -3,9 +3,8 @@
 # itself tried — run, a throwaway session over its WebSocket, restarted,
 # stopped (tools/probes/command_line_server.sh) — in a container leased
 # from OS Server, of Visor's agent image (Swift 6.4, node, aarch64); or,
-# already in a Linux container (CI's container job, a visor-jit runner of
-# that image), right there, leasing nothing (docs/CI_POLICY.md in
-# AttilaTheFun/reviews: a pull request's one job leases nothing). Also
+# already in a Linux container (verify's linux job, a visor-jit runner of
+# that image), right there, leasing nothing. Also
 # the client's host services on their own: a file that uses Foundation
 # without importing it fails here, as in Visor on Isomer (Package.swift's
 # clientServices).
