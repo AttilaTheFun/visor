@@ -5,7 +5,7 @@ import FoundationNetworking
 #endif
 
 /// The GitHub proxy's token (docs/github-proxy.md): one for every agent,
-/// which they never see, from the agents' GitHub App (logan-shire-claude) whose
+/// which they never see, from the agents' GitHub App (logan-shire-agent) whose
 /// private key the Runner alone holds (Logan, 7 Nov 2026). The Runner signs a
 /// short JWT with the key (RS256) and asks GitHub for the App's installation
 /// token (an hour), keeps it in memory, and asks again five minutes before it
