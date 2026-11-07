@@ -48,7 +48,7 @@ there.
    gh_mcp's rules as the default. Default deny.
 3. **One token, from the agents' App** (Logan, 7 Nov: "one read-write GitHub
    token for all agents, which agents can never see"; no Keymaster). The
-   Runner holds the logan-shire-claude App's private key in its secrets (the
+   Runner holds the logan-shire-agent App's private key in its secrets (the
    keychain for notarized builds, a mode-600 file for debug ones) and mints
    the App's installation token itself: a JWT signed RS256 with the key, then
    `POST /app/installations/{id}/access_tokens` (an hour). The token is kept
@@ -58,7 +58,7 @@ there.
    - It is broad, and Logan accepts that: what protects his repositories is
      GitHub's branch protection, CODEOWNERS and required checks, and
      GitHubGate's rules here. Agents' pull requests stay the App's
-     (`logan-shire-claude[bot]`), so Logan reviews them, in the Shireworks app.
+     (`logan-shire-agent[bot]`), so Logan reviews them, in the Shireworks app.
    - `visor-runner-agent github-proxy app --app-id <id> --installation <id>`
      takes the key on standard input, once per Mac.
 4. **Setup.**
@@ -181,8 +181,8 @@ the Shireworks session, which maintains it. 0.47 is this work.
 ## Identity and logs
 
 - The session's agent picks the App (`claude`, `codex`, or the generic
-  `agent`); one App for now, logan-shire-claude, whose token the Runner
-  mints.
+  `agent`); one App for all of them, logan-shire-agent, whose token the
+  Runner mints (Logan, 7 Nov: logan-shire-claude and -codex retire).
 - One log line a request: time, `<session>@<server>`, method, host, path
   template, repository, outcome. Never a token or a body.
 - The token never reaches the agent, and as defence in depth it's scrubbed
