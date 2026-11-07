@@ -27,4 +27,12 @@ public protocol ToolLocating: Sendable {
     /// How to start `executable` with `arguments` (a script goes through
     /// its interpreter where the system does not start one itself).
     func command(_ executable: String, _ arguments: [String]) -> ShellCommand
+    /// The system's own certificate authorities, as one PEM file tools read
+    /// (`SSL_CERT_FILE`); nil where there is none. An agent trusting the
+    /// GitHub proxy's authority is given these with it.
+    var certificateBundle: String? { get }
+}
+
+public extension ToolLocating {
+    var certificateBundle: String? { nil }
 }

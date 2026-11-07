@@ -15,6 +15,31 @@ enum GitHubRepository {
         return remote.flatMap(name(ofRemote:))
     }
 
+    /// The same, read from the checkout's `.git/config` alone, at once (no
+    /// git run): for an agent being started. `origin`'s URL, in the folder
+    /// or the nearest above it that has a `.git` folder; nil otherwise.
+    static func ofCheckout(folder: String) -> String? {
+        var directory = URL(fileURLWithPath: HostFolders.resolve(folder), isDirectory: true)
+        for _ in 0..<32 {
+            let config = directory.appendingPathComponent(".git/config")
+            if let text = try? String(contentsOf: config, encoding: .utf8) {
+                var inOrigin = false
+                for line in text.split(whereSeparator: \.isNewline) {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    if trimmed.hasPrefix("[") { inOrigin = trimmed == "[remote \"origin\"]"; continue }
+                    if inOrigin, trimmed.hasPrefix("url"), let equals = trimmed.firstIndex(of: "=") {
+                        return name(ofRemote: String(trimmed[trimmed.index(after: equals)...]))
+                    }
+                }
+                return nil
+            }
+            let parent = directory.deletingLastPathComponent()
+            if parent.path == directory.path { return nil }
+            directory = parent
+        }
+        return nil
+    }
+
     /// owner/name from a remote's URL: `https://github.com/owner/name(.git)`,
     /// `git@github.com:owner/name(.git)` or `ssh://git@github.com/owner/name`;
     /// nil for any other host, or a path that isn't owner/name.

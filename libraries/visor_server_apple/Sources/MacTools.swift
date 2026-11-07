@@ -28,6 +28,8 @@ public struct MacTools: ToolLocating {
         ["/Library/Managed Preferences/com.anthropic.claudecode.plist", "/Library/Application Support/ClaudeCode/managed-settings.json"]
     }
 
+    public var certificateBundle: String? { "/etc/ssl/cert.pem" }
+
     public func environment(_ base: [String: String]) -> [String: String] {
         var environment = base
         let extra = ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.claude/local"]

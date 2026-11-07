@@ -43,6 +43,23 @@ extension RunnerCommand {
         output("The GitHub proxy uses App \(arguments[1])'s installation \(arguments[3]) from the agent's next start")
     }
 
+    /// The body of a server's `PUT /api/github-proxy`: this Runner's proxy as
+    /// the server reaches it, the server's token, the proxy's authority, and
+    /// the sessions it is on for (one first, then `*`).
+    func githubProxyBody(_ arguments: [String], config: RunnerConfig) throws {
+        let usage = "github-proxy server <name> --host <address> --sessions <id,id…|*>"
+        guard arguments.count == 5, arguments[1] == "--host", !arguments[2].isEmpty, arguments[3] == "--sessions", !arguments[4].isEmpty else {
+            throw Problem(usage)
+        }
+        guard config.servers.contains(arguments[0]) else { throw Problem("no Visor server \(arguments[0]) (server add it first)") }
+        guard let port = config.githubProxyPort else { throw Problem("no GitHub proxy (github-proxy port <number>)") }
+        let body: [String: Any] = ["url": "http://\(arguments[2]):\(port)", "token": ProxyTokens.token(for: arguments[0], in: secrets),
+                                   "authority": try RunnerCA.kept(in: secrets).pem,
+                                   "sessions": arguments[4].split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }]
+        let data = try JSONSerialization.data(withJSONObject: body, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        output(String(decoding: data, as: UTF8.self))
+    }
+
     /// Where the App's private key is kept with the Runner's secrets.
     public static let githubAppKeySecret = "github-proxy app key"
 

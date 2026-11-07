@@ -25,6 +25,11 @@ public struct LinuxTools: ToolLocating {
 
     public var claudeManagedSettings: [String] { ["/etc/claude-code/managed-settings.json"] }
 
+    /// Debian's and Ubuntu's, else Fedora's and its kin's.
+    public var certificateBundle: String? {
+        ["/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt"].first { FileManager.default.fileExists(atPath: $0) }
+    }
+
     public func environment(_ base: [String: String]) -> [String: String] {
         var environment = base
         let extra = ["\(home)/.local/bin", "\(home)/.claude/local", "\(home)/.npm-global/bin", "/usr/local/bin"]

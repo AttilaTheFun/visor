@@ -66,6 +66,10 @@ public struct RunnerCommand {
           github-proxy ca
                    Prints the certificate of the proxy's own authority, made
                    the first time, for the agents' systems to trust.
+          github-proxy server <name> --host <address> --sessions <id,id…|*>
+                   Prints the body of the server's `PUT /api/github-proxy`:
+                   this proxy where the server reaches this Mac, the server's
+                   token, the proxy's authority, and the sessions it is on for.
           github-proxy app --app-id <id> --installation <id>
                    The GitHub App the proxy mints its token from: its private
                    key read from standard input, kept here only. One token for
@@ -95,6 +99,7 @@ public struct RunnerCommand {
             case ("github-proxy", "port"): try setGitHubProxyPort(Array(arguments.dropFirst(2)), in: &config)
             case ("github-proxy", "ca"): try printGitHubProxyCA()
             case ("github-proxy", "app"): try setGitHubProxyApp(Array(arguments.dropFirst(2)), in: &config)
+            case ("github-proxy", "server"): try githubProxyBody(Array(arguments.dropFirst(2)), config: config)
             case ("help", _), ("-h", _), ("--help", _): output(Self.usage)
             default: throw Problem("unknown command \(arguments.joined(separator: " "))\n\n\(Self.usage)")
             }
