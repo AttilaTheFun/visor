@@ -19,6 +19,12 @@ backend, and a client may hold several Runners.
 - **Visor.app is the Runner.** The Mac's Visor server and each container's
   are its child processes, their binaries in the notarized bundle. Settings
   says which it runs: the Mac's server, container servers, or both.
+- **Shireworks.app hosts it too** (Logan, 7 Nov, the factory's combined app:
+  issues#4): on the Mac, a menu bar app with Shireworks' OS Server and
+  Visor's Runner together; on iOS and Android a client only, whose Visor
+  tab signs in to Runners as Visor's own client does. So the Runner is a
+  library with no app of its own, which Visor.app (standalone) and
+  Shireworks.app each run.
 - **A Runner is reached by signing in alone**, never by a connection code:
   its URL, a username and a password, the sign-in pluggable so the fork puts
   Okta in its place.
