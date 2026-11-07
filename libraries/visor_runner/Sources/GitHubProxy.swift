@@ -7,7 +7,7 @@ import Foundation
 /// The server token is one the Runner gave a server it serves (ProxyTokens,
 /// as the MCP proxy checks it); the session id and its repository (the
 /// session folder's, `$SESSION_REPOSITORY`) are the server's word, for the
-/// logs and the session's tokens.
+/// logs.
 ///
 /// A tunnel goes only to an address off this computer
 /// (`visor_connect_tcp_public`), so no name leads an agent, a container's
@@ -20,8 +20,7 @@ public final class GitHubProxy: Sendable {
     public struct Caller: Equatable, Sendable {
         public var token: String
         public var session: String
-        /// The session's own repository, `owner/name`: whose token a read
-        /// that names none (a GraphQL query, a search) goes with.
+        /// The session's own repository, `owner/name`, for the logs.
         public var repository: String?
     }
 
@@ -60,11 +59,11 @@ public final class GitHubProxy: Sendable {
     }
 
     /// The Runner's: GitHub's hosts opened with the Runner's authority and
-    /// GitHubGate's rules, each session's tokens from Keymaster.
+    /// GitHubGate's rules, the token minted from the agents' App.
     public convenience init?(port: Int, admits: @escaping @Sendable (String) -> Bool, ca: RunnerCA, rules: GateRules = .standard,
-                             keymaster: URL, app: String, key: @escaping @Sendable () -> String?,
+                             appID: String, installation: String, key: @escaping @Sendable () -> String?,
                              log: @escaping @Sendable (String) -> Void) {
-        let tokens = KeymasterTokens(url: keymaster, app: app, key: key)
+        let tokens = GitHubAppTokens(appID: appID, installation: installation, key: key)
         guard let interceptor = try? GitHubInterceptor(gate: GitHubGate(rules: rules), ca: ca, tokens: tokens, log: log) else { return nil }
         self.init(port: port, admits: admits, interceptor: interceptor, log: log)
     }

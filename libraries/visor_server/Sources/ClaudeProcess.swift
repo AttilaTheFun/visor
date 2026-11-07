@@ -46,6 +46,14 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     /// Set by `interrupt()`: the error result that follows is the turn
     /// ending on request, not a failure to show.
     private var interrupting = false
+    /// How long a turn has to end once interrupted before its agent is
+    /// ended (the conversation goes on from the next message, resumed): a
+    /// claude stuck in a tool, or that never answers the interrupt, would
+    /// otherwise hold the session and all that is queued for it (7 Nov 2026,
+    /// eighteen messages behind a Write that never came back).
+    var interruptGrace: Duration = .seconds(20)
+    /// Turns ended so far: an interrupt's deadline is for its own turn.
+    private var turnsEnded = 0
     /// A message is written and its turn has not begun (claude says so
     /// with its `system/init`): an interrupt now is taken and ignored —
     /// the turn then runs to its end (measured) — so it waits for the turn
@@ -185,6 +193,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     public func interrupt() {
         guard let child = running() else { return }
         interrupting = true
+        endIfStillWorking(child)
         if turnStarting {
             stopWhenBegun = true
             return
@@ -196,6 +205,20 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
             "request": ["subtype": "interrupt"],
         ])
         counter += 1
+    }
+
+    /// Once an interrupt's grace is over: if the turn it asked to end is
+    /// still going in the same agent, the agent is ended, and with it the
+    /// turn; the session is idle and what waits for it goes over.
+    private func endIfStillWorking(_ child: any AgentChild) {
+        let turn = turnsEnded
+        let grace = interruptGrace
+        Task { [weak self] in
+            try? await Task.sleep(for: grace)
+            guard let self, self.child === child, self.turnsEnded == turn, self.working || self.turnStarting else { return }
+            self.emit.yield(.notice("Claude didn't end the turn when asked, so its agent was stopped. The conversation goes on from the next message."))
+            self.stop()
+        }
     }
 
     /// Graceful first: end of input lets claude finish and exit on its
@@ -388,6 +411,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
                 waiting.resume(throwing: AgentProcessError.declined(error ?? "Claude had no answer."))
             }
         case .result(let failure, let spent):
+            turnsEnded += 1
             turnStarting = false
             stopWhenBegun = false
             working = false

@@ -104,9 +104,7 @@ final class GitHubInterceptor: Sendable {
         case .allow(let named):
             repository = named ?? caller.repository
         case .check(let check):
-            guard let named = Self.repository(of: check) ?? caller.repository else {
-                return .fail("Visor's proxy doesn't know this session's repository, to ask for its token")
-            }
+            let named = Self.repository(of: check) ?? caller.repository ?? ""
             let token: String
             do {
                 token = try await tokens.token(session: caller.session, repository: named)
@@ -120,9 +118,10 @@ final class GitHubInterceptor: Sendable {
             }
             repository = named
         }
-        guard let repository else { return .fail("Visor's proxy doesn't know this session's repository, to ask for its token") }
+        // One token for every agent: the repository is the log's.
+        let named = repository ?? ""
         do {
-            return .forward(repository: repository, token: try await tokens.token(session: caller.session, repository: repository), rewrite: rewrite)
+            return .forward(repository: named, token: try await tokens.token(session: caller.session, repository: named), rewrite: rewrite)
         } catch {
             return .fail("\(error)")
         }

@@ -102,7 +102,8 @@ let system: [Target] = [
             dependencies: ["CVisorPOSIX", .product(name: "X509", package: "swift-certificates"),
                            .product(name: "Crypto", package: "swift-crypto"), .product(name: "SwiftASN1", package: "swift-asn1"),
                            .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOPosix", package: "swift-nio"),
-                           .product(name: "NIOHTTP1", package: "swift-nio"), .product(name: "NIOSSL", package: "swift-nio-ssl")],
+                           .product(name: "NIOHTTP1", package: "swift-nio"), .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                           .product(name: "CryptoExtras", package: "swift-crypto")],
             path: "libraries/visor_runner/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorRunnerAgentMain", dependencies: ["VisorRunner"],
                       path: "applications/visor_runner_agent", exclude: ["BUILD.bazel"], swiftSettings: strict),
@@ -124,7 +125,7 @@ let tests: [Target] = [
                 dependencies: ["VisorRunner", "CVisorPOSIX", .product(name: "X509", package: "swift-certificates"),
                                .product(name: "Crypto", package: "swift-crypto"), .product(name: "NIOCore", package: "swift-nio"),
                                .product(name: "NIOPosix", package: "swift-nio"), .product(name: "NIOHTTP1", package: "swift-nio"),
-                               .product(name: "NIOSSL", package: "swift-nio-ssl")],
+                               .product(name: "NIOSSL", package: "swift-nio-ssl"), .product(name: "CryptoExtras", package: "swift-crypto")],
                 path: "tests/visor_runner_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The agents' host, built with the server: `swift build -c release` puts

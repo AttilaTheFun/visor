@@ -11,11 +11,11 @@ public struct RunnerConfig: Codable, Equatable, Sendable {
     public var servers: [String] = []
     public var fronts: [ClientProxy.Front] = []
     public var githubProxyPort: Int?
-    /// Keymaster, where the GitHub proxy gets each session's token
-    /// (`http://<its Mac>:7450`), and the GitHub App agents act as. Without
-    /// them GitHub's hosts are tunnels too.
-    public var keymasterURL: String?
-    public var githubApp: String?
+    /// The GitHub App agents act as, and its installation, whose tokens the
+    /// GitHub proxy mints with the App's key (a secret). Without them
+    /// GitHub's hosts are tunnels too.
+    public var githubAppID: String?
+    public var githubInstallation: String?
 
     public init(mcpPort: Int = 7439, endpoints: [MCPProxy.Endpoint] = [], servers: [String] = [], fronts: [ClientProxy.Front] = [],
                 githubProxyPort: Int? = nil) {
@@ -33,8 +33,8 @@ public struct RunnerConfig: Codable, Equatable, Sendable {
         servers = try c.decodeIfPresent([String].self, forKey: .servers) ?? []
         fronts = try c.decodeIfPresent([ClientProxy.Front].self, forKey: .fronts) ?? []
         githubProxyPort = try c.decodeIfPresent(Int.self, forKey: .githubProxyPort)
-        keymasterURL = try c.decodeIfPresent(String.self, forKey: .keymasterURL)
-        githubApp = try c.decodeIfPresent(String.self, forKey: .githubApp)
+        githubAppID = try c.decodeIfPresent(String.self, forKey: .githubAppID)
+        githubInstallation = try c.decodeIfPresent(String.self, forKey: .githubInstallation)
     }
 
     static func file(_ folder: URL) -> URL { folder.appendingPathComponent("runner.json") }

@@ -61,9 +61,9 @@ let github: GitHubProxy? = config.githubProxyPort.flatMap { port in
     }
     let admits: @Sendable (String) -> Bool = { ProxyTokens.admits($0, servers: RunnerConfig.read(data)?.servers ?? [], in: secrets) }
     let made: GitHubProxy?
-    if let keymaster = config.keymasterURL.flatMap(URL.init(string:)), let app = config.githubApp, let ca = try? RunnerCA.kept(in: secrets) {
-        made = GitHubProxy(port: port, admits: admits, ca: ca, keymaster: keymaster, app: app,
-                           key: { secrets.value(RunnerCommand.keymasterKeySecret) }, log: log)
+    if let app = config.githubAppID, let installation = config.githubInstallation, let ca = try? RunnerCA.kept(in: secrets) {
+        made = GitHubProxy(port: port, admits: admits, ca: ca, appID: app, installation: installation,
+                           key: { secrets.value(RunnerCommand.githubAppKeySecret) }, log: log)
     } else {
         made = GitHubProxy(port: port, admits: admits, log: log)
     }
