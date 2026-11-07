@@ -621,8 +621,10 @@ jobs:
         id: verified
         env:
           GH_TOKEN: ${{ github.token }}
+        # An assignment, so that the script's failure fails the step.
         run: |
-          run="$(tools/ci/verified_run.sh "$(git rev-parse HEAD)")"
+          run="$(tools/ci/verified_run.sh "$(git rev-parse HEAD)")" \
+            || { echo "::error::$GITHUB_REF_NAME's commit was not verified: nothing promoted"; exit 1; }
           echo "Verified by run $run"
           echo "run=$run" >> "$GITHUB_OUTPUT"
       # Untrusted text reaches the shell through env, never ${{ }} in run.

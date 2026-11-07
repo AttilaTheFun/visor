@@ -12,7 +12,8 @@
 #   GH_TOKEN           a token that reads the repository's Actions
 #   GITHUB_REPOSITORY  owner/name (a job has it)
 #
-# Prints the run's id; fails, saying so, when no run verified the commit.
+# Prints the run's id; fails, saying why on standard error, when no run
+# verified the commit.
 set -euo pipefail
 me="$(basename "$0")"
 commit="${1:?usage: $me <commit>}"
@@ -26,7 +27,7 @@ get() { curl -fsSL --max-time 60 -H @"$work/auth" -H 'Accept: application/vnd.gi
 read_json() { python3 -I -c 'import json, sys; j = json.load(open(sys.argv[1])); exec(sys.argv[2])' "$@"; }
 
 get "$api/actions/workflows/ci.yml/runs?head_sha=$commit&event=workflow_dispatch&status=completed&per_page=50" > "$work/runs.json" \
-    || { echo "::error::GitHub didn't list ${commit:0:7}'s runs"; exit 1; }
+    || { echo "GitHub didn't list ${commit:0:7}'s runs" >&2; exit 1; }
 runs="$(read_json "$work/runs.json" 'for r in sorted(j.get("workflow_runs", []), key=lambda r: r["created_at"], reverse=True): print(r["id"])')"
 for run in $runs; do
     # The jobs of its latest attempt: a failed verify run again that passed counts.
@@ -39,5 +40,6 @@ for run in $runs; do
     echo "$run"
     exit 0
 done
-echo "::error::${commit:0:7} has no passed verify run whose proof GitHub keeps: run CI by hand on main with run: verify"
+# On standard error: the caller takes standard output for the run's id.
+echo "${commit:0:7} has no passed verify run whose proof GitHub keeps: run CI by hand on main with run: verify" >&2
 exit 1
