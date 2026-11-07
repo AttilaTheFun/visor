@@ -153,6 +153,8 @@ extension VisorServer {
         case ("POST", 1, "restart"): restRestart(call)
         case ("GET", 1, "push-proxy"): restPushProxy(call)
         case ("PUT", 1, "push-proxy"): restSetPushProxy(call)
+        case ("GET", 1, "github-proxy"): restGitHubProxy(call)
+        case ("PUT", 1, "github-proxy"): restSetGitHubProxy(call)
         case ("GET", 1, "mcp"): restMCP(call)
         case ("PUT", 1, "mcp"): restSetMCP(call)
         case ("POST", 1, "quit"): restQuit(call)
