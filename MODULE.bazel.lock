@@ -1422,7 +1422,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 636d6a60f70b2c80f7a7aa17c335b09fe078f9583a0c48eed14e5bb3f2b6942d"
+          "FILE:@@//third_party/swift_packages/Package.resolved 0f266adf075adec407db2e11f2477bcf02695643330c28f587713b11b8c288f2"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1437,7 +1437,6 @@
             "attributes": {
               "repo_names": [
                 "swiftpkg_agent_ui",
-                "swiftpkg_applications",
                 "swiftpkg_swift_asn1",
                 "swiftpkg_swift_atomics",
                 "swiftpkg_swift_certificates",
@@ -1446,7 +1445,8 @@
                 "swiftpkg_swift_nio",
                 "swiftpkg_swift_nio_ssh",
                 "swiftpkg_swift_sql",
-                "swiftpkg_swift_system"
+                "swiftpkg_swift_system",
+                "swiftpkg_update_kit"
               ]
             }
           },
@@ -1561,13 +1561,13 @@
               "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
             }
           },
-          "swiftpkg_applications": {
+          "swiftpkg_update_kit": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
-              "bazel_package_name": "swiftpkg_applications",
-              "commit": "b0cdd2d70208193b70a1b89f2d13b8cf612f68f7",
-              "remote": "https://github.com/AttilaTheFun/applications.git",
-              "version": "0.10.45",
+              "bazel_package_name": "swiftpkg_update_kit",
+              "commit": "eaa240496a742e2d132978da739c65a55816bf59",
+              "remote": "https://github.com/AttilaTheFun/update_kit.git",
+              "version": "0.11.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1725,7 +1725,7 @@
             "swiftpkg_swift_nio_ssh",
             "swiftpkg_swift_certificates",
             "swiftpkg_swift_sql",
-            "swiftpkg_applications",
+            "swiftpkg_update_kit",
             "swift_package"
           ],
           "explicitRootModuleDirectDevDeps": [],
