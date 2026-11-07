@@ -7,22 +7,6 @@ import Foundation
 import VisorProtocol
 
 extension VisorServer {
-    /// The folder an earlier build kept its cache in (Application Support,
-    /// by bundle id), taken over the first time this build runs.
-    static func adoptFormerFolders() {
-        guard storeRoot == nil, let current = Bundle.main.bundleIdentifier, !formerBundleIDs.contains(current) else { return }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let target = base.appendingPathComponent(current)
-        guard !FileManager.default.fileExists(atPath: target.path) else { return }
-        for former in formerBundleIDs {
-            let source = base.appendingPathComponent(former)
-            if FileManager.default.fileExists(atPath: source.path) {
-                try? FileManager.default.moveItem(at: source, to: target)
-                return
-            }
-        }
-    }
-
     /// The agents' token as kept, made the first time.
     static func keptAgentToken() -> String {
         if let kept = secrets.get("agentToken"), !kept.isEmpty { return kept }
@@ -31,19 +15,9 @@ extension VisorServer {
         return made
     }
 
-    /// The password as kept — the keychain — or, the first time, as an
-    /// earlier build kept it (in its settings), moved into the keychain.
+    /// The password as kept: the system's place for secrets.
     static func keptPassword() -> String {
-        if let kept = secrets.get("password"), !kept.isEmpty { return kept }
-        let earlier = [UserDefaults.standard] + formerBundleIDs.compactMap { UserDefaults(suiteName: $0) }
-        for defaults in earlier {
-            if let old = defaults.string(forKey: "visor.password"), !old.isEmpty {
-                secrets.set("password", old)
-                for place in earlier { place.removeObject(forKey: "visor.password") }
-                return old
-            }
-        }
-        return ""
+        secrets.get("password") ?? ""
     }
 
     /// Whether a request may be answered: it came on a trusted connection
