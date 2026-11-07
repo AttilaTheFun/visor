@@ -138,10 +138,14 @@ final class GitHubProxyTests: XCTestCase {
         defer { upper.stop() }
         let (proxy, port) = try proxy()
         defer { proxy.stop() }
-        for host in ["127.0.0.1", "localhost", "[::1]"] {
+        for host in ["127.0.0.1", "[::1]"] {
             let answer = try Self.ask(port, "CONNECT \(host):\(upper.port) HTTP/1.1\r\n" + Self.authorization(Self.token, "s") + "\r\n")
             XCTAssertTrue(answer.hasPrefix("HTTP/1.1 403 "), "\(host): \(answer)")
         }
+        // A name: refused when it resolves here, unreachable where it doesn't
+        // (a container with no localhost in its hosts); never a tunnel.
+        let named = try Self.ask(port, "CONNECT localhost:\(upper.port) HTTP/1.1\r\n" + Self.authorization(Self.token, "s") + "\r\n")
+        XCTAssertFalse(named.hasPrefix("HTTP/1.1 200 "), named)
         XCTAssertEqual(visor_connect_tcp_public("127.0.0.1", upper.port), -1)
         XCTAssertEqual(errno, EACCES)
         XCTAssertEqual(visor_connect_tcp_public("0.0.0.0", upper.port), -1)
