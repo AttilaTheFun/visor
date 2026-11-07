@@ -72,6 +72,7 @@ let system: [Target] = [
 ]
 let tests: [Target] = []
 let agentHost: [Product] = []
+let runnerPackages: [Package.Dependency] = []
 #else
 /// Linux: POSIX signals and sockets (shared with the Mac), and the agents'
 /// host, built beside the server.
@@ -95,7 +96,11 @@ let system: [Target] = [
     // Visor Runner's MCP proxy and its commands; its agent built here too,
     // for a Mac without Bazel's output for it (`swift build -c release
     // --product visor-runner-agent`).
-    .target(name: "VisorRunner", dependencies: ["CVisorPOSIX"], path: "libraries/visor_runner/Sources", swiftSettings: strict),
+    // Its GitHub proxy's authority (RunnerCA) is swift-certificates'.
+    .target(name: "VisorRunner",
+            dependencies: ["CVisorPOSIX", .product(name: "X509", package: "swift-certificates"),
+                           .product(name: "Crypto", package: "swift-crypto"), .product(name: "SwiftASN1", package: "swift-asn1")],
+            path: "libraries/visor_runner/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorRunnerAgentMain", dependencies: ["VisorRunner"],
                       path: "applications/visor_runner_agent", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
@@ -112,13 +117,22 @@ let tests: [Target] = [
                 path: "tests/message_cache_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
     .testTarget(name: "ClaudeTranscriptTests", dependencies: ["ClaudeTranscript"],
                 path: "tests/claude_transcript_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
-    .testTarget(name: "VisorRunnerTests", dependencies: ["VisorRunner", "CVisorPOSIX"],
+    .testTarget(name: "VisorRunnerTests",
+                dependencies: ["VisorRunner", "CVisorPOSIX", .product(name: "X509", package: "swift-certificates"),
+                               .product(name: "Crypto", package: "swift-crypto")],
                 path: "tests/visor_runner_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The agents' host, built with the server: `swift build -c release` puts
 /// both in the same folder, where the server looks for it.
 let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"]),
                             .executable(name: "visor-runner-agent", targets: ["VisorRunnerAgentMain"])]
+/// The Runner's packages: X509 and its cryptography, at the versions
+/// third_party/swift_packages pins.
+let runnerPackages: [Package.Dependency] = [
+    .package(url: "https://github.com/apple/swift-certificates.git", from: "1.21.1"),
+    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
+    .package(url: "https://github.com/apple/swift-asn1.git", from: "1.7.3"),
+]
 #endif
 
 #if os(macOS)
@@ -157,7 +171,6 @@ let clientPackages: [Package.Dependency] = [
     .package(url: "https://github.com/AttilaTheFun/agent_ui.git", exact: "0.45.1"),
     .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.0"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
-    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
 ]
 #else
 let client: [Target] = []
@@ -171,6 +184,6 @@ let package = Package(
     platforms: [.macOS(.v15), .iOS(.v18)],
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost + clientProducts,
     // swift_sql at its release, as third_party/swift_packages pins it.
-    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0")] + clientPackages,
+    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0")] + runnerPackages + clientPackages,
     targets: services + shared + system + tests + client
 )

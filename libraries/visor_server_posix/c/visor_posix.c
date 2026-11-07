@@ -315,7 +315,34 @@ int visor_connect_unix(const char *path) {
     return connection;
 }
 
-int visor_connect_tcp(const char *host, unsigned short port) {
+/// Whether an IPv4 address (in network order) is this computer's or
+/// nobody's: 0/8, 127/8, 169.254/16, 224/4 and above.
+static int visor_ipv4_local(const unsigned char *a) {
+    return a[0] == 0 || a[0] == 127 || (a[0] == 169 && a[1] == 254) || a[0] >= 224;
+}
+
+/// Whether an address is one a proxied connection may not reach: loopback,
+/// link-local, unspecified or multicast.
+static int visor_address_local(const struct sockaddr *address) {
+    if (address->sa_family == AF_INET) {
+        return visor_ipv4_local((const unsigned char *)&((const struct sockaddr_in *)address)->sin_addr);
+    }
+    if (address->sa_family == AF_INET6) {
+        const unsigned char *a = ((const struct sockaddr_in6 *)address)->sin6_addr.s6_addr;
+        static const unsigned char zero[16] = {0};
+        // ::, ::1
+        if (memcmp(a, zero, 15) == 0 && (a[15] == 0 || a[15] == 1)) return 1;
+        // fe80::/10, ff00::/8
+        if ((a[0] == 0xfe && (a[1] & 0xc0) == 0x80) || a[0] == 0xff) return 1;
+        // ::ffff:a.b.c.d
+        static const unsigned char mapped[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+        if (memcmp(a, mapped, 12) == 0) return visor_ipv4_local(a + 12);
+        return 0;
+    }
+    return 1;
+}
+
+static int visor_connect_tcp_checked(const char *host, unsigned short port, int public_only) {
     struct addrinfo hints, *found = 0;
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
@@ -324,8 +351,9 @@ int visor_connect_tcp(const char *host, unsigned short port) {
     snprintf(service, sizeof service, "%u", (unsigned)port);
     int status = getaddrinfo(host, service, &hints, &found);
     if (status != 0) { errno = EHOSTUNREACH; return -1; }
-    int connection = -1, error = ECONNREFUSED;
+    int connection = -1, error = public_only ? EACCES : ECONNREFUSED;
     for (struct addrinfo *each = found; each; each = each->ai_next) {
+        if (public_only && visor_address_local(each->ai_addr)) continue;
         connection = socket(each->ai_family, each->ai_socktype, each->ai_protocol);
         if (connection < 0) { error = errno; continue; }
         (void)fcntl(connection, F_SETFD, FD_CLOEXEC);
@@ -339,6 +367,14 @@ int visor_connect_tcp(const char *host, unsigned short port) {
     struct timeval patience = {30, 0};
     setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
     return connection;
+}
+
+int visor_connect_tcp(const char *host, unsigned short port) {
+    return visor_connect_tcp_checked(host, port, 0);
+}
+
+int visor_connect_tcp_public(const char *host, unsigned short port) {
+    return visor_connect_tcp_checked(host, port, 1);
 }
 
 int visor_unix_answers(const char *path) {

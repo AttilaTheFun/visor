@@ -59,6 +59,13 @@ public struct RunnerCommand {
           front remove <name>
           port <number>
                    The proxy's port (7439), from its next start.
+          github-proxy port <number> | off
+                   The GitHub proxy (docs/github-proxy.md): its port, or none,
+                   from the agent's next start. Agents reach it through
+                   HTTPS_PROXY with their server's token and session.
+          github-proxy ca
+                   Prints the certificate of the proxy's own authority, made
+                   the first time, for the agents' systems to trust.
 
         The data folder is Visor's (~/Library/Application Support/Visor) unless
         given: runner.json and runner-secrets.json there.
@@ -80,6 +87,8 @@ public struct RunnerCommand {
             case ("front", "set"): try setFront(Array(arguments.dropFirst(2)), in: &config)
             case ("front", "remove"): try removeFront(Array(arguments.dropFirst(2)), in: &config)
             case ("port", _): try setPort(Array(arguments.dropFirst()), in: &config)
+            case ("github-proxy", "port"): try setGitHubProxyPort(Array(arguments.dropFirst(2)), in: &config)
+            case ("github-proxy", "ca"): try printGitHubProxyCA()
             case ("help", _), ("-h", _), ("--help", _): output(Self.usage)
             default: throw Problem("unknown command \(arguments.joined(separator: " "))\n\n\(Self.usage)")
             }
@@ -116,6 +125,7 @@ public struct RunnerCommand {
             lines.append("Front for \(front.name): port \(front.port) to \(front.host):\(front.hostPort)"
                 + (front.start.map { "; started again with: " + $0 } ?? ""))
         }
+        lines.append(config.githubProxyPort.map { "GitHub proxy on port \($0)" } ?? "No GitHub proxy (github-proxy port)")
         if let keyID = secrets.value(APNsProxy.keyIDSecret), secrets.value(APNsProxy.keySecret) != nil {
             lines.append("Pushes: signed with APNs key \(keyID) (team \(secrets.value(APNsProxy.teamIDSecret) ?? "?"))")
         } else {
