@@ -21,6 +21,18 @@ indirect enum GateJSON: Equatable, Sendable {
         return reader.at == reader.bytes.count ? value : nil
     }
 
+    /// As Foundation's JSON objects take it, to write it out again.
+    var foundation: Any {
+        switch self {
+        case .object(let members): members.mapValues(\.foundation)
+        case .array(let items): items.map(\.foundation)
+        case .string(let text): text
+        case .number(let digits): Int(digits).map { $0 as Any } ?? (Double(digits) ?? 0)
+        case .bool(let value): value
+        case .null: NSNull()
+        }
+    }
+
     var object: [String: GateJSON]? { if case .object(let o) = self { o } else { nil } }
     var string: String? { if case .string(let s) = self { s } else { nil } }
     var array: [GateJSON]? { if case .array(let a) = self { a } else { nil } }

@@ -66,6 +66,11 @@ public struct RunnerCommand {
           github-proxy ca
                    Prints the certificate of the proxy's own authority, made
                    the first time, for the agents' systems to trust.
+          github-proxy app --app-id <id> --installation <id>
+                   The GitHub App the proxy mints its token from: its private
+                   key read from standard input, kept here only. One token for
+                   every agent, which none of them sees. Without it GitHub's
+                   hosts are tunnels too.
 
         The data folder is Visor's (~/Library/Application Support/Visor) unless
         given: runner.json and runner-secrets.json there.
@@ -89,6 +94,7 @@ public struct RunnerCommand {
             case ("port", _): try setPort(Array(arguments.dropFirst()), in: &config)
             case ("github-proxy", "port"): try setGitHubProxyPort(Array(arguments.dropFirst(2)), in: &config)
             case ("github-proxy", "ca"): try printGitHubProxyCA()
+            case ("github-proxy", "app"): try setGitHubProxyApp(Array(arguments.dropFirst(2)), in: &config)
             case ("help", _), ("-h", _), ("--help", _): output(Self.usage)
             default: throw Problem("unknown command \(arguments.joined(separator: " "))\n\n\(Self.usage)")
             }
@@ -125,7 +131,9 @@ public struct RunnerCommand {
             lines.append("Front for \(front.name): port \(front.port) to \(front.host):\(front.hostPort)"
                 + (front.start.map { "; started again with: " + $0 } ?? ""))
         }
-        lines.append(config.githubProxyPort.map { "GitHub proxy on port \($0)" } ?? "No GitHub proxy (github-proxy port)")
+        lines.append(config.githubProxyPort.map { port in
+            "GitHub proxy on port \(port)" + (config.githubAppID.map { "; App \($0), installation \(config.githubInstallation ?? "?")" + (secrets.value(Self.githubAppKeySecret) == nil ? " (no key kept)" : "") } ?? "; GitHub's hosts are tunnels (github-proxy app)")
+        } ?? "No GitHub proxy (github-proxy port)")
         if let keyID = secrets.value(APNsProxy.keyIDSecret), secrets.value(APNsProxy.keySecret) != nil {
             lines.append("Pushes: signed with APNs key \(keyID) (team \(secrets.value(APNsProxy.teamIDSecret) ?? "?"))")
         } else {
