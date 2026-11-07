@@ -31,6 +31,7 @@ name: CI
 # release Mac's (number, agent-image) runs on OS Server's single-use
 # runners: each a fresh Linux container with `oss` on its PATH, leasing what
 # it needs a Mac for. Its label is its size: visor-jit (12 GB) for a build,
+# visor-jit-medium (4 GB) for a job whose build runs in what it leases,
 # visor-jit-small (2 GB) for the jobs that only run git or a script. A
 # runner serves its own label alone, so no job lands in the wrong size. Three
 # of those, changes, rules and pins, run on GitHub's own ubuntu-latest while the
@@ -158,9 +159,10 @@ jobs:
   linux:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    # The small runner: the build is in the container the script leases, so
-    # the job's own needs a script's room, not a build's (Shireworks, 7 Nov).
-    runs-on: [self-hosted, visor-jit-small]
+    # The medium runner (4 GB): the build is in the container the script
+    # leases, so the job's own needs a script's room; 4 GB is the least a job
+    # that builds the apps on Linux takes (Logan, 7 Nov).
+    runs-on: [self-hosted, visor-jit-medium]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -179,7 +181,7 @@ jobs:
   windows:
     needs: changes
     if: false
-    runs-on: [self-hosted, visor-jit-small]
+    runs-on: [self-hosted, visor-jit-medium]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
