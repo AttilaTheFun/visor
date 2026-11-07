@@ -158,7 +158,9 @@ jobs:
   linux:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: [self-hosted, visor-jit]
+    # The small runner: the build is in the container the script leases, so
+    # the job's own needs a script's room, not a build's (Shireworks, 7 Nov).
+    runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -177,7 +179,7 @@ jobs:
   windows:
     needs: changes
     if: false
-    runs-on: [self-hosted, visor-jit]
+    runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
