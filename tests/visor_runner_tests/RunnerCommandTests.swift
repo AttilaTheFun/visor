@@ -3,6 +3,7 @@
 // alone; a Visor server added is given its settings, every MCP server at
 // the proxy with its own token, and no secret.
 
+import CryptoExtras
 import Foundation
 import VisorRunner
 import XCTest
@@ -108,6 +109,20 @@ final class RunnerCommandTests: XCTestCase {
         XCTAssertEqual(run(["front", "remove", "co-tenant"]), 0)
         XCTAssertEqual(RunnerConfig.read(folder)?.fronts, [])
         XCTAssertEqual(run(["front", "remove", "co-tenant"]), 2)
+    }
+
+    func testTheGitHubProxysAppIsSetItsKeyKeptHereOnly() throws {
+        let pem = try _RSA.Signing.PrivateKey(keySize: .bits2048).pemRepresentation
+        let lines = pem.split(separator: "\n").map(String.init)
+        XCTAssertEqual(run(["github-proxy", "app", "--app-id", "123", "--installation", "456"], input: ["not a key"]), 2)
+        XCTAssertEqual(run(["github-proxy", "app", "--app-id", "x", "--installation", "456"], input: lines), 2, "ids are numbers")
+        said = []
+        XCTAssertEqual(run(["github-proxy", "app", "--app-id", "123", "--installation", "456"], input: lines), 0)
+        XCTAssertEqual(RunnerConfig.read(folder)?.githubAppID, "123")
+        XCTAssertEqual(RunnerConfig.read(folder)?.githubInstallation, "456")
+        XCTAssertEqual(secrets.value(RunnerCommand.githubAppKeySecret), pem.trimmingCharacters(in: .whitespacesAndNewlines) + "\n")
+        XCTAssertFalse(said.joined().contains("PRIVATE KEY"), "never said back")
+        XCTAssertFalse((try String(contentsOf: folder.appendingPathComponent("runner.json"), encoding: .utf8)).contains("PRIVATE KEY"))
     }
 
     func testAFrontCanSayHowItsServerStartsAgain() throws {

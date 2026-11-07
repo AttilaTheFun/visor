@@ -59,8 +59,15 @@ let github: GitHubProxy? = config.githubProxyPort.flatMap { port in
         log("the GitHub proxy's authority couldn't be made: \(error)")
         return nil
     }
-    guard let started = GitHubProxy(port: port, admits: { ProxyTokens.admits($0, servers: RunnerConfig.read(data)?.servers ?? [], in: secrets) },
-                                    log: log) else {
+    let admits: @Sendable (String) -> Bool = { ProxyTokens.admits($0, servers: RunnerConfig.read(data)?.servers ?? [], in: secrets) }
+    let made: GitHubProxy?
+    if let app = config.githubAppID, let installation = config.githubInstallation, let ca = try? RunnerCA.kept(in: secrets) {
+        made = GitHubProxy(port: port, admits: admits, ca: ca, appID: app, installation: installation,
+                           key: { secrets.value(RunnerCommand.githubAppKeySecret) }, log: log)
+    } else {
+        made = GitHubProxy(port: port, admits: admits, log: log)
+    }
+    guard let started = made else {
         log("port \(port) can't be had for the GitHub proxy")
         return nil
     }

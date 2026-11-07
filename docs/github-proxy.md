@@ -46,30 +46,21 @@ there.
      graph through swift-nio-ssh's neighbours or added by version.
 2. **GitHubGate**, the policy, as data in the Runner's settings (below), with
    gh_mcp's rules as the default. Default deny.
-3. **Tokens from Keymaster** (Keymaster's review, 7 Nov). The Runner holds no
-   App key. The proxy is a Keymaster client of its own, `<Mac>-github-proxy`
-   (`mac-mini-github-proxy` on the mini), apart from the Runner's MCP relay
-   (`mac-mini-visor`, which has approval grants only and can't mint a token).
-   Each key can be revoked alone, and Keymaster's audit tells the proxy's
-   tokens from the sessions' approval requests. Both keys live only in the
-   Runner.
-   - It asks over REST, `POST /v1/github/token {app, repositories,
-     permissions}`, with `CLIENT_ID: <session>`. Keymaster's audit then names
-     the session, and `keymaster revoke --holder <session>@<Mac>-github-proxy`
-     ends one session's tokens at GitHub.
-   - Each request names its repositories (the session's allowed set, one
-     owner per token) and its permissions. The grant is `AttilaTheFun/*`, and
-     each request narrows it. The permissions are those gh_mcp's token has
-     today: contents, pull requests, issues, actions and workflows write;
-     checks, statuses and metadata read. Pushing a change to
-     `.github/workflows/` needs workflows write, and agents' pull requests do
-     that through gh_mcp now.
-   - The token's limit keeps reads in bounds where the proxy can't see the
-     repository: GraphQL queries, search, `/repositories/{id}`.
-   - Tokens are cached per (agent App, owner, session) until the earlier of a
-     few minutes and Keymaster's `expires_at` less five minutes. A 401 from
-     GitHub asks Keymaster once more. A 401 from Keymaster (a revoked client)
-     is not retried: the request is refused, saying so.
+3. **One token, from the agents' App** (Logan, 7 Nov: "one read-write GitHub
+   token for all agents, which agents can never see"; no Keymaster). The
+   Runner holds the logan-shire-agent App's private key in its secrets (the
+   keychain for notarized builds, a mode-600 file for debug ones) and mints
+   the App's installation token itself: a JWT signed RS256 with the key, then
+   `POST /app/installations/{id}/access_tokens` (an hour). The token is kept
+   in memory, asked for again five minutes before it expires and at once on a
+   401 from GitHub, and attached to every request the gate lets through, for
+   every session. No agent, server or container holds the key or the token.
+   - It is broad, and Logan accepts that: what protects his repositories is
+     GitHub's branch protection, CODEOWNERS and required checks, and
+     GitHubGate's rules here. Agents' pull requests stay the App's
+     (`logan-shire-agent[bot]`), so Logan reviews them, in the Shireworks app.
+   - `visor-runner-agent github-proxy app --app-id <id> --installation <id>`
+     takes the key on standard input, once per Mac.
 4. **Setup.**
    - A container server's agents: the Runner's CA in the container's trust
      store (`update-ca-certificates`), `HTTPS_PROXY` and `NO_PROXY` in the
@@ -173,8 +164,8 @@ the Shireworks session, which maintains it. 0.47 is this work.
    merge: the proxy runs every merge check and injects `expectedHeadOid` with
    the head it read, so the merge is of exactly what was checked. Auto-merge
    (`--auto`) stays refused: it merges later, unchecked.
-3. **Tokens limited by repository**, per session, from a Keymaster client
-   of the proxy's own, as above (agreed with Keymaster). Worth knowing, as it
+3. **One token for all agents**, the App's, as above (Logan, 7 Nov; the
+   per-session Keymaster tokens first planned were dropped). Worth knowing, as it
    is today with gh_mcp: workflows write lets an agent push a branch whose
    changed workflow runs at once on the repository's self-hosted runners
    (a same-repository branch or pull request; forks never reach them), with
@@ -190,7 +181,8 @@ the Shireworks session, which maintains it. 0.47 is this work.
 ## Identity and logs
 
 - The session's agent picks the App (`claude`, `codex`, or the generic
-  `agent`); Keymaster mints that App's token for that session.
+  `agent`); one App for all of them, logan-shire-agent, whose token the
+  Runner mints (Logan, 7 Nov: logan-shire-claude and -codex retire).
 - One log line a request: time, `<session>@<server>`, method, host, path
   template, repository, outcome. Never a token or a body.
 - The token never reaches the agent, and as defence in depth it's scrubbed

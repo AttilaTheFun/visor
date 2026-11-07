@@ -96,10 +96,14 @@ let system: [Target] = [
     // Visor Runner's MCP proxy and its commands; its agent built here too,
     // for a Mac without Bazel's output for it (`swift build -c release
     // --product visor-runner-agent`).
-    // Its GitHub proxy's authority (RunnerCA) is swift-certificates'.
+    // Its GitHub proxy's authority (RunnerCA) is swift-certificates'; the
+    // proxy opens GitHub's hosts with SwiftNIO and swift-nio-ssl.
     .target(name: "VisorRunner",
             dependencies: ["CVisorPOSIX", .product(name: "X509", package: "swift-certificates"),
-                           .product(name: "Crypto", package: "swift-crypto"), .product(name: "SwiftASN1", package: "swift-asn1")],
+                           .product(name: "Crypto", package: "swift-crypto"), .product(name: "SwiftASN1", package: "swift-asn1"),
+                           .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOPosix", package: "swift-nio"),
+                           .product(name: "NIOHTTP1", package: "swift-nio"), .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                           .product(name: "CryptoExtras", package: "swift-crypto")],
             path: "libraries/visor_runner/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorRunnerAgentMain", dependencies: ["VisorRunner"],
                       path: "applications/visor_runner_agent", exclude: ["BUILD.bazel"], swiftSettings: strict),
@@ -119,7 +123,9 @@ let tests: [Target] = [
                 path: "tests/claude_transcript_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
     .testTarget(name: "VisorRunnerTests",
                 dependencies: ["VisorRunner", "CVisorPOSIX", .product(name: "X509", package: "swift-certificates"),
-                               .product(name: "Crypto", package: "swift-crypto")],
+                               .product(name: "Crypto", package: "swift-crypto"), .product(name: "NIOCore", package: "swift-nio"),
+                               .product(name: "NIOPosix", package: "swift-nio"), .product(name: "NIOHTTP1", package: "swift-nio"),
+                               .product(name: "NIOSSL", package: "swift-nio-ssl"), .product(name: "CryptoExtras", package: "swift-crypto")],
                 path: "tests/visor_runner_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The agents' host, built with the server: `swift build -c release` puts
@@ -132,6 +138,8 @@ let runnerPackages: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-certificates.git", from: "1.21.1"),
     .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
     .package(url: "https://github.com/apple/swift-asn1.git", from: "1.7.3"),
+    .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
+    .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.6"),
 ]
 #endif
 
@@ -170,7 +178,6 @@ let clientProducts: [Product] = [
 let clientPackages: [Package.Dependency] = [
     .package(url: "https://github.com/AttilaTheFun/agent_ui.git", exact: "0.45.1"),
     .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.0"),
-    .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
 ]
 #else
 let client: [Target] = []
