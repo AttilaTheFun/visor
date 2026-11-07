@@ -135,7 +135,10 @@ use_repo(
     "swift_package",
     "swiftpkg_agent_ui",
     "swiftpkg_applications",
+    "swiftpkg_swift_asn1",
+    "swiftpkg_swift_certificates",
     "swiftpkg_swift_collections",
+    "swiftpkg_swift_crypto",
     "swiftpkg_swift_nio_ssh",
     "swiftpkg_swift_sql",
 )

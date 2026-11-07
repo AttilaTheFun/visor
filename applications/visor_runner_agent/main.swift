@@ -48,6 +48,26 @@ let fronts = config.fronts.compactMap { front -> ClientProxy? in
     log("\(front.name)'s clients come to port \(front.port), for \(front.host):\(front.hostPort)")
     return started
 }
+// The GitHub proxy, for every server's agents, where a port is set: its
+// authority's certificate kept beside runner.json, for the agents' systems
+// to trust.
+let github: GitHubProxy? = config.githubProxyPort.flatMap { port in
+    do {
+        let ca = try RunnerCA.kept(in: secrets)
+        try ca.pem.write(to: data.appendingPathComponent("github-proxy-ca.pem"), atomically: true, encoding: .utf8)
+    } catch {
+        log("the GitHub proxy's authority couldn't be made: \(error)")
+        return nil
+    }
+    guard let started = GitHubProxy(port: port, admits: { ProxyTokens.admits($0, servers: RunnerConfig.read(data)?.servers ?? [], in: secrets) },
+                                    log: log) else {
+        log("port \(port) can't be had for the GitHub proxy")
+        return nil
+    }
+    started.start()
+    log("the GitHub proxy listens on port \(port)")
+    return started
+}
 // Their servers, started again when they stop answering (those with a
 // command for it).
 let watches = config.fronts.compactMap { ServerWatch(front: $0, log: log) }
@@ -63,6 +83,7 @@ let sources = [SIGTERM, SIGINT, SIGHUP].map { number in
         proxy.stop()
         for front in fronts { front.stop() }
         for watch in watches { watch.stop() }
+        github?.stop()
         exit(0)
     }
     source.resume()

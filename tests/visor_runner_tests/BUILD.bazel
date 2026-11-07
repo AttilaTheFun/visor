@@ -8,5 +8,7 @@ swift_test(
     deps = [
         "//libraries/visor_runner",
         "//libraries/visor_server_posix:visor_posix_c",
+        "@swiftpkg_swift_certificates//:X509",
+        "@swiftpkg_swift_crypto//:Crypto",
     ],
 )
