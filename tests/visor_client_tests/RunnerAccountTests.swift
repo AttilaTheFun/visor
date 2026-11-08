@@ -113,6 +113,11 @@ final class RunnerAccountTests: XCTestCase {
         await settle()
         let account = try XCTUnwrap(RunnerAccounts.all.first)
         XCTAssertEqual(store.servers.count, 3)
+        // The sidebar's grouping: the hand-added computer apart, the
+        // Runner's under it.
+        XCTAssertEqual(store.runners.map(\.id), [account.id])
+        XCTAssertEqual(store.ownServers.map(\.record.address), ["http://laptop:7433"])
+        XCTAssertEqual(store.servers(of: account).count, 2)
 
         store.signOut(of: account)
         await settle()
@@ -126,9 +131,11 @@ final class RunnerAccountTests: XCTestCase {
         _ = await store.signInToRunner(url: "https://mini.tail.ts.net:7445", username: "logan", password: "the right password")
         await settle()
         XCTAssertEqual(RunnerAccounts.all.count, 1, "the same Runner and name: the same account")
+        XCTAssertTrue(account.isSignedIn)
         store.remove(account)
         await settle()
         XCTAssertTrue(RunnerAccounts.all.isEmpty)
+        XCTAssertTrue(store.runners.isEmpty)
         XCTAssertEqual(store.servers.map(\.record.address), ["http://laptop:7433"])
     }
 

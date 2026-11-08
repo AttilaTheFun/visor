@@ -10,7 +10,19 @@ extension VisorStore {
     func startRunners() {
         AgentServerAuthenticators.register(RunnerAuthenticator())
         RunnerAccounts.load()
+        runners = RunnerAccounts.all
         for account in RunnerAccounts.all { runnerChanged(account) }
+    }
+
+    /// The computers of no Runner signed in to: those added by hand, and
+    /// the fork's account's.
+    public var ownServers: [AgentServerConnection] {
+        servers.filter { server in server.record.account.map { id in !runners.contains { $0.id == id } } ?? true }
+    }
+
+    /// A Runner's computers, as it lists them.
+    public func servers(of account: RunnerAccount) -> [AgentServerConnection] {
+        servers.filter { $0.record.account == account.id }
     }
 
     /// Signs in to a Runner at `url` as `username`, and adds its servers;
@@ -26,6 +38,7 @@ extension VisorStore {
             return "\(error)"
         }
         RunnerAccounts.add(account)
+        runners = RunnerAccounts.all
         runnerChanged(account)
         return nil
     }
@@ -39,6 +52,7 @@ extension VisorStore {
     public func remove(_ account: RunnerAccount) {
         account.signOut()
         RunnerAccounts.remove(account.id)
+        runners = RunnerAccounts.all
         for server in servers where server.record.account == account.id { remove(server) }
     }
 

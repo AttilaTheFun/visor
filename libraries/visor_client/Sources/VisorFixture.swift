@@ -15,9 +15,11 @@ public enum VisorFixture {
     /// Whether the app is showing the canned computer.
     @MainActor public static var active: Bool { VisorHost.settings?.get(key: "fixture") == "snapshot" }
     /// The screen to open on: sessions, chat, question, goal, inspector,
-    /// models, search, connect, new-session or commands (the chat with "/"
-    /// in its composer, its slash commands offered) ("" for the app's own
-    /// first screen); also earlier
+    /// models, search, connect, runner (Add Computer's sign-in to a
+    /// Runner), runner-accounts (the canned computer a Runner's, with a
+    /// second Runner signed out of), new-session or commands (the chat
+    /// with "/" in its composer, its slash commands offered) ("" for the
+    /// app's own first screen); also earlier
     /// (a page of earlier rows goes in), learns-earlier (the chat, told
     /// ten seconds on that there are rows before it), arrivals (the
     /// chat, with rows coming in twelve and twenty-six seconds on) and
@@ -49,6 +51,27 @@ public enum VisorFixture {
 
     static let record = AgentServerRecord(id: serverID, name: "Snapshot Mac", address: "snapshot.local", everConnected: true,
                                           provider: FixtureAgentServerProvider.name)
+
+    /// On the runner-accounts screen, the Runners: one signed in, whose
+    /// computer the canned one is, and one signed out of.
+    @MainActor static var runners: [RunnerAccount] {
+        guard screen == "runner-accounts" else { return [] }
+        return [RunnerAccount(fixture: RunnerAccount.Kept(id: "fixture-runner", url: "https://mini.example.ts.net:7445", username: "logan",
+                                                          fingerprint: nil, expires: nil), session: "fixture"),
+                RunnerAccount(fixture: RunnerAccount.Kept(id: "fixture-studio", url: "https://studio.example.ts.net:7445", username: "logan",
+                                                          fingerprint: nil, expires: nil), session: "")]
+    }
+
+    /// The canned computer's record: the signed-in Runner's on the
+    /// runner-accounts screen.
+    @MainActor static var runnerRecord: AgentServerRecord {
+        var record = record
+        if screen == "runner-accounts" {
+            record.fromAccount = true
+            record.account = "fixture-runner"
+        }
+        return record
+    }
 
     /// A small picture, the same bytes every run: four coloured blocks.
     static let picture = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABACAIAAABqVuVZAAAAfklEQVR42u3QAQkAIAwAsIcyi2gVe5jJBta5NS4MlmAx+i2lnVlKCBIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRL0cVDuWmJlLYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIECRIkSJAgQYIE/Rv0AH3IYA5oDZ+mAAAAAElFTkSuQmCC"

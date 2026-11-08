@@ -1074,7 +1074,9 @@ For screenshot tests, the client can show a canned computer instead of
 real ones (`libraries/visor_client/Sources/VisorFixture.swift`). The setting
 `fixture` = `snapshot` turns it on; `fixture.screen` opens a screen:
 `sessions`, `chat`, `question`, `goal`, `inspector`, `models`, `search`,
-`connect` or `new-session` (the New Session sheet over the sessions)
+`connect`, `runner` (Add Computer's sign-in to a Runner), `runner-accounts`
+(the canned computer a Runner's, its section after it, and a second Runner
+signed out of) or `new-session` (the New Session sheet over the sessions)
 (`earlier` is `goal` with a page of earlier rows that loads as its spinner
 row shows). On Apple
 these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so

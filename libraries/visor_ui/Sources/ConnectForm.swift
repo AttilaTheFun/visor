@@ -5,6 +5,8 @@
 // a name on a network (HTTPS at the root), the URL a proxy, a tunnel or
 // a port gives (`ServerAddress`), or `user@host` for the computer's own
 // SSH (`SSHAddress`), with this device's key shown to authorize there.
+// Or a Visor Runner's sign-in (RunnerSignInForm), which brings all its
+// computers at once.
 
 import SwiftUI
 import VisorClient
@@ -14,7 +16,10 @@ import VisorServices
 
 @MainActor
 struct ConnectForm: View {
+    @Environment(VisorStore.self) private var store
     let connect: (AgentServerRecord) -> Void
+    /// The Runner's sign-in is shown in the code's place.
+    @State private var runner = VisorFixture.screen == "runner"
     @State private var entry = ""
     @State private var password = ""
     @State private var authentication = PasswordAuthenticator.name
@@ -24,6 +29,19 @@ struct ConnectForm: View {
     private var ssh: SSHAddress? { code == nil ? SSHAddress(entry) : nil }
 
     var body: some View {
+        if runner {
+            VStack(spacing: 0) {
+                RunnerSignInForm { store.addingServer = false }
+                Button("Use a Connection Code Instead") { runner = false }
+                    .padding()
+                    .accessibilityIdentifier("use-connection-code")
+            }
+        } else {
+            codeForm
+        }
+    }
+
+    private var codeForm: some View {
         Form {
             Section {
                 TitledField(title: "Connection code") {
@@ -59,6 +77,12 @@ struct ConnectForm: View {
                 Button("Connect", action: submit)
                     .disabled(entry.trimmed.isEmpty)
                     .accessibilityIdentifier("connect")
+            }
+            Section {
+                Button("Sign In to a Runner…") { runner = true }
+                    .accessibilityIdentifier("runner")
+            } footer: {
+                Text("A Visor Runner brings every computer it serves, with one name and password.")
             }
         }
         .insetGroupedForm()
