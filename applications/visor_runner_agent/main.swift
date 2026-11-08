@@ -82,14 +82,25 @@ let signIn: RunnerAPIServer? = config.apiPort.flatMap { port in
                         sessions: RunnerSessions(secrets: secrets),
                         servers: { RunnerServerInfo.listed(in: RunnerConfig.read(data) ?? RunnerConfig()) })
     do {
-        let identity = try RunnerIdentity.kept(in: secrets, names: RunnerIdentity.names(given: config.apiNames))
-        guard let started = try RunnerAPIServer(port: UInt16(port), api: api, identity: identity,
-                                                reach: { RunnerCommand.reach($0, folder: data, secrets: secrets) }) else {
+        let reach: @Sendable (String) -> RunnerAPIServer.Reach? = { RunnerCommand.reach($0, folder: data, secrets: secrets) }
+        let made: RunnerAPIServer?
+        let over: String
+        if let file = config.apiCertificateFile, let keyFile = config.apiKeyFile {
+            // The tailnet's (or another a client trusts as any website's).
+            made = try RunnerAPIServer(port: UInt16(port), api: api, chain: try String(contentsOfFile: file, encoding: .utf8),
+                                       key: try String(contentsOfFile: keyFile, encoding: .utf8), reach: reach)
+            over = file
+        } else {
+            let identity = try RunnerIdentity.kept(in: secrets, names: RunnerIdentity.names(given: config.apiNames))
+            made = try RunnerAPIServer(port: UInt16(port), api: api, identity: identity, reach: reach)
+            over = "this Runner's own certificate, SHA-256 \((try? identity.fingerprint) ?? "?")"
+        }
+        guard let started = made else {
             log("port \(port) can't be had for the sign-in")
             return nil
         }
         started.start()
-        log("clients sign in at port \(port), over TLS (certificate SHA-256 \((try? identity.fingerprint) ?? "?"))")
+        log("clients sign in at port \(port), over TLS with \(over)")
         return started
     } catch {
         log("the sign-in's certificate couldn't be made: \(error)")

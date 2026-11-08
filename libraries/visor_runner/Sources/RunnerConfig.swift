@@ -24,6 +24,12 @@ public struct RunnerConfig: Codable, Equatable, Sendable {
     /// Names its certificate is for besides `localhost`, loopback and the
     /// Mac's own (RunnerIdentity): an address or a name clients reach it by.
     public var apiNames: [String] = []
+    /// A certificate chain and its key for the sign-in, as files (`api
+    /// certificate --file`): the tailnet's from `tailscale cert`, which a
+    /// client trusts as any website's, in place of the Runner's own. Read at
+    /// the agent's start; the key never goes in the Runner's secrets.
+    public var apiCertificateFile: String?
+    public var apiKeyFile: String?
     /// Where the Runner reaches each server it passes clients' requests on
     /// to (`server reach`): its name, then `host:port`. The server's
     /// password is a secret (RunnerAPIServer.passwordSecret).
@@ -50,6 +56,8 @@ public struct RunnerConfig: Codable, Equatable, Sendable {
         user = try c.decodeIfPresent(String.self, forKey: .user)
         apiPort = try c.decodeIfPresent(Int.self, forKey: .apiPort)
         apiNames = try c.decodeIfPresent([String].self, forKey: .apiNames) ?? []
+        apiCertificateFile = try c.decodeIfPresent(String.self, forKey: .apiCertificateFile)
+        apiKeyFile = try c.decodeIfPresent(String.self, forKey: .apiKeyFile)
         reaches = try c.decodeIfPresent([String: String].self, forKey: .reaches) ?? [:]
     }
 

@@ -90,9 +90,14 @@ public struct RunnerCommand {
                    none, from the agent's next start. Over TLS with this
                    Runner's own certificate, for localhost, loopback, this
                    Mac's name and each --name.
-          api certificate
-                   That certificate's SHA-256 fingerprint, which a client shows
-                   the first time it signs in, and the certificate.
+          api certificate [--file <chain.pem> --key <key.pem> | --own]
+                   The certificate clients sign in over. Without arguments:
+                   this Runner's own (its SHA-256 fingerprint, which a client
+                   shows the first time it signs in, and the certificate), or
+                   the files in use. --file: a chain and its key as files,
+                   read at the agent's start (the tailnet's from `tailscale
+                   cert`, which clients trust as any website's); --own: this
+                   Runner's own again.
 
         The data folder is Visor's (~/Library/Application Support/Visor) unless
         given: runner.json and runner-secrets.json there.
@@ -122,7 +127,7 @@ public struct RunnerCommand {
             case ("user", "set"): try setUser(Array(arguments.dropFirst(2)), in: &config)
             case ("user", "remove"): try removeUser(in: &config)
             case ("api", "port"): try setAPIPort(Array(arguments.dropFirst(2)), in: &config)
-            case ("api", "certificate"): try printAPICertificate(config: config)
+            case ("api", "certificate"): try setOrPrintAPICertificate(Array(arguments.dropFirst(2)), in: &config)
             case ("help", _), ("-h", _), ("--help", _): output(Self.usage)
             default: throw Problem("unknown command \(arguments.joined(separator: " "))\n\n\(Self.usage)")
             }
