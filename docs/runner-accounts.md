@@ -200,7 +200,10 @@ path), not a need.
    session: through the version between, a server's password is its token
    for the Runner, and servers need no change. A request goes on a
    connection of its own (a body of 64 MiB at most); the answer comes back as
-   it comes. A WebSocket is refused (501) until its part, so a client polls.
+   it comes. A WebSocket's upgrade goes on as it came (its key and version,
+   with the server's password), and once it has, the client's HTTP handlers
+   come off and the two connections are joined byte for byte
+   (RunnerAPIServer.Glue): the server's own 101, then every frame, each way.
 5. The client's accounts: Settings › Accounts, the sidebar's grouping, the
    records of an account's servers, trust on first use; the fork's
    `VisorAccount` as one such account. This ships as the version between.

@@ -8,8 +8,9 @@ import NIOPosix
 // reaches as `<id>` (runner.json's `reaches`) as `/<path>`, once the
 // client's session is checked, with the server's own password in place of
 // the client's bearer. Each request goes on a connection of its own; the
-// answer comes back as it comes. A WebSocket through the Runner is the
-// next part: until then a client's channel is refused and it polls.
+// answer comes back as it comes. A WebSocket's upgrade goes on as it came
+// (its key and its version), and once it has, the two connections are
+// joined byte for byte: the server's own 101, then every frame, each way.
 
 extension RunnerAPIServer {
     /// Where a server is, and its password.
@@ -110,7 +111,7 @@ extension RunnerAPIServer.Handler {
             return
         }
         if head.headers["upgrade"].contains(where: { $0.lowercased() == "websocket" }) {
-            respond(context, RunnerAPI.json(501, ["error": "A WebSocket through the Runner comes later: poll"]))
+            tunnel(context, path: path, head: head, reach: reach)
             return
         }
         let length = body?.readableBytes ?? 0
@@ -136,6 +137,59 @@ extension RunnerAPIServer.Handler {
                     channel.write(HTTPClientRequestPart.head(sent), promise: nil)
                     if let body { channel.write(HTTPClientRequestPart.body(.byteBuffer(body)), promise: nil) }
                     channel.writeAndFlush(HTTPClientRequestPart.end(nil), promise: nil)
+                }
+            }
+    }
+
+    /// A WebSocket's upgrade, on to the server as it came (but its bearer
+    /// and Host), on a connection of its own; then the client's HTTP
+    /// handlers come off and the two connections are joined.
+    func tunnel(_ context: ChannelHandlerContext, path: String, head: HTTPRequestHead, reach: RunnerAPIServer.Reach) {
+        let dropped: Set<String> = ["host", "authorization", "proxy-authorization", "proxy-connection", "content-length", "transfer-encoding"]
+        var lines = ["GET \(path) HTTP/1.1", "Host: \(reach.host):\(reach.port)", "Authorization: Bearer \(reach.password)"]
+        lines += head.headers.filter { !dropped.contains($0.name.lowercased()) }.map { "\($0.name): \($0.value)" }
+        let request = Data((lines.joined(separator: "\r\n") + "\r\n\r\n").utf8)
+        let (clientSide, serverSide) = RunnerAPIServer.Glue.pair()
+        let ends = NIOLoopBound((client: clientSide, server: serverSide), eventLoop: context.eventLoop)
+        let bound = NIOLoopBound(context, eventLoop: context.eventLoop)
+        let handler = NIOLoopBound(self, eventLoop: context.eventLoop)
+        ClientBootstrap(group: context.eventLoop)
+            .connectTimeout(.seconds(10))
+            .channelInitializer { channel in
+                channel.eventLoop.makeCompletedFuture { try channel.pipeline.syncOperations.addHandler(ends.value.server) }
+            }
+            .connect(host: reach.host, port: reach.port)
+            .whenComplete { result in
+                let context = bound.value
+                switch result {
+                case .failure:
+                    handler.value.respond(context, RunnerAPI.json(502, ["error": "The server can't be reached"]))
+                case .success(let channel):
+                    var buffer = channel.allocator.buffer(capacity: request.count)
+                    buffer.writeBytes(request)
+                    channel.writeAndFlush(buffer, promise: nil)
+                    do {
+                        let pipeline = context.pipeline.syncOperations
+                        // The HTTP handlers off but the decoder, then the glue
+                        // on (no encoder before it, so the server's bytes go
+                        // out as they are), then the decoder off, handing what
+                        // it read past the upgrade on to the glue.
+                        // Each removal checked: a handler left behind would
+                        // be handed the WebSocket's bytes.
+                        let removed = [RunnerAPIServer.Names.handler, RunnerAPIServer.Names.errors, RunnerAPIServer.Names.encoder]
+                            .map { pipeline.removeHandler(name: $0) }
+                        try pipeline.addHandler(ends.value.client)
+                        let decoder = pipeline.removeHandler(name: RunnerAPIServer.Names.decoder)
+                        for removal in removed + [decoder] {
+                            removal.whenFailure { _ in
+                                channel.close(promise: nil)
+                                bound.value.close(promise: nil)
+                            }
+                        }
+                    } catch {
+                        channel.close(promise: nil)
+                        context.close(promise: nil)
+                    }
                 }
             }
     }
