@@ -379,16 +379,22 @@ extension VisorServer {
                 reply.error = "Nothing to send."
                 return reply
             }
-            // Marked as another agent's, so it is not taken for the user's:
-            // who sent it (session and computer, by name and id), who it is
-            // for, and exactly how to answer.
+            // Who sent it (session and computer, by name and id), for the
+            // inbox, or for the header of a turn that is never taken for
+            // the user's (VisorServer+Mail.swift). A message carried here
+            // keeps the relay's id, as its sender's outbox has it.
             let from = computer ?? RelayEndpoint(server: id, serverName: hostName, session: caller, sessionName: name)
-            let marked = Self.agentMessageHeader(from: from, to: RelayEndpoint(server: id, serverName: hostName, session: target.info.id,
-                                                                               sessionName: target.displayName)) + "\n\n" + text
-            let busy = target.info.busy
-            deliver(marked, to: target)
+            let messageID = envelope.messageID ?? UUID().uuidString.lowercased()
+            let inbox = target.takesMail
+            let busy = mail(text, from: from, to: target, messageID: messageID, here: computer == nil)
             let to = "“\(target.displayName)” (\(target.info.id)) on \(hostName)"
-            reply.text = busy ? "Queued for \(to): it is working and takes it when its turn ends." : "Sent to \(to)."
+            if inbox {
+                reply.text = "Delivered to the inbox of \(to), message id \(messageID): its agent is told it has mail"
+                    + (busy ? " when its turn ends." : ".")
+            } else {
+                reply.text = busy ? "Queued for \(to): it is working and takes it when its turn ends." : "Sent to \(to)."
+            }
+            reply.messageID = messageID
             reply.busy = busy
         case "read":
             guard let target = others.first(where: { $0.info.id == envelope.session }) else {

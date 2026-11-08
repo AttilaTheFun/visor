@@ -58,6 +58,7 @@ extension VisorServer {
         record.updated = Date().timeIntervalSince1970
         relayOutbox[receipt.message] = record
         keepRelayOutbox()
+        noteMailOutcome(record)
         tellRelayWaiters(record)
         return true
     }
@@ -71,6 +72,7 @@ extension VisorServer {
                 relayOutbox[key]?.status = .expired
                 relayOutbox[key]?.updated = now
                 changed = true
+                if let expired = relayOutbox[key] { noteMailOutcome(expired) }
             } else if record.status != .waiting, now - record.updated > Self.relayLifetime {
                 relayOutbox[key] = nil
                 changed = true

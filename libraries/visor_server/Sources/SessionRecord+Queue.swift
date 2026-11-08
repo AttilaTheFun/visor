@@ -78,11 +78,18 @@ extension SessionRecord {
     /// over one at a time, each as it was written, so a slash command
     /// (`/goal clear`) stays a command rather than being run into the words
     /// around it.
+    ///
+    /// A mail notice counts what is unread when its turn comes, and goes
+    /// only if any is: messages that came while it waited are in its count,
+    /// and ones read meanwhile are not.
     func takeNextQueued() -> (text: String, images: [String])? {
-        guard !info.queued.isEmpty else { return nil }
-        let text = info.queued.removeFirst()
-        let images = queuedImages.isEmpty ? [] : queuedImages.removeFirst()
-        return (text, images)
+        while !info.queued.isEmpty {
+            let text = info.queued.removeFirst()
+            let images = queuedImages.isEmpty ? [] : queuedImages.removeFirst()
+            guard Mailbox.isNotice(text) else { return (text, images) }
+            if mailbox.unread > 0 { return (Mailbox.notice(unread: mailbox.unread), images) }
+        }
+        return nil
     }
 
     /// Drops one queued message and its files, or all of them.

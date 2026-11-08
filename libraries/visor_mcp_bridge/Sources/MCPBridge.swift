@@ -143,11 +143,17 @@ actor MCPBridge {
         if mode == "send" || mode == "read", session == nil || session == .string("") {
             return respond(id, Self.text("\(name) needs `session` and `server`: a session id and its computer's server id, from list_sessions.", error: true))
         }
-        var fields: [String: JSONValue] = ["mode": .string(mode)]
+        // "mail": this MCP server has read_inbox, so the server puts what
+        // other sessions send this one in its inbox.
+        var fields: [String: JSONValue] = ["mode": .string(mode), "version": .string("mail")]
         fields["session"] = session
         fields["server"] = given("server", "server_id")
         fields["messageID"] = given("message_id", "messageID")
         fields["text"] = given("text", "message")
+        // read_inbox's read messages too: said to the server as `text`.
+        if mode == "inbox", let unreadOnly = arguments["unread_only"], unreadOnly.bool == false || unreadOnly.string == "false" {
+            fields["text"] = .string("all")
+        }
         if let count = arguments["count"] {
             // As JavaScript's Math.round(Number(count)): a number that isn't
             // one goes as null.
