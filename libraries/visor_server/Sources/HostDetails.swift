@@ -36,13 +36,22 @@ public struct HostDetails: Sendable {
     /// cannot (an agent in a container resolves no `.local` names); nil
     /// where it cannot be.
     public var resolve: @Sendable (String) -> String?
+    /// In a container, the folders its computer shares with it, each at its
+    /// own path (the Mac's ~/Developer at /Users/<name>/Developer): a
+    /// session moved here works under one of them, or it would land on the
+    /// container's own disk, which nothing else sees (VisorServer+
+    /// MigrationArrival). Nil where the server's disk is its computer's own,
+    /// or the container's shares can't be told.
+    public var sharedFolders: @Sendable () -> [String]?
 
     public init(name: String, system: String = "", inContainer: Bool = false, version: String = "", dataDirectory: URL,
                 containerPrograms: URL? = nil,
                 addresses: @escaping @Sendable () -> [String] = { [] },
                 networkAddresses: (@Sendable () -> [NetworkAddress])? = nil,
                 localNetworkName: @escaping @Sendable () -> String? = { nil },
-                resolve: @escaping @Sendable (String) -> String? = { _ in nil }) {
+                resolve: @escaping @Sendable (String) -> String? = { _ in nil },
+                sharedFolders: @escaping @Sendable () -> [String]? = { nil }) {
+        self.sharedFolders = sharedFolders
         self.localNetworkName = localNetworkName
         self.resolve = resolve
         self.name = name

@@ -9,19 +9,25 @@ import VisorProtocol
 
 extension VisorServer {
     /// What this server will do with the session offered (`offer`): where
-    /// it runs here — the same place under this home folder — and for each
-    /// project whether it is here already, is cloned, copied, or made.
+    /// it runs here — the same place under this home folder, or in a
+    /// container the same folder its computer shares (`place`) — and for
+    /// each project whether it is here already, is cloned, copied, or made.
+    /// A session whose folder a container has no place for is refused.
     func migrationPlan(_ body: Envelope) async -> Envelope {
         ageMigrations()
         guard let offer = body.offer, let harness = harnesses.harness(for: offer.session.agent) else {
             return .error("This server does not run that kind of session.")
         }
         let home = SessionCatalog.home.path
-        let here = { (path: String) -> String in Self.path(path, from: offer.home, to: home) }
+        let shared = ServerPlatform.current.host.sharedFolders()
+        let here = { (path: String) -> String? in Self.place(path, from: offer.home, to: home, shared: shared) }
+        guard let cwd = here(offer.session.cwd) else { return .error(Self.notShared(offer.session.cwd, shared: shared ?? [])) }
         let most = offer.projects.dropFirst().map(\.mentions).max() ?? 0
         var steps: [MigrationStep] = []
         for (index, project) in offer.projects.enumerated() {
-            let path = here(project.path)
+            // A project with no place here (outside what a container's
+            // computer shares with it) stays behind.
+            guard let path = here(project.path) else { continue }
             var step = await Self.step(for: project, at: path)
             // The session's own folder always; the others it works in
             // most, unless the user says not.
@@ -29,7 +35,7 @@ extension VisorServer {
             steps.append(step)
         }
         let id = UUID().uuidString.lowercased()
-        let plan = MigrationPlan(id: id, cwd: here(offer.session.cwd), agentInstalled: harness.available, steps: steps)
+        let plan = MigrationPlan(id: id, cwd: cwd, agentInstalled: harness.available, steps: steps)
         let folder = Self.migrationsFolder.appendingPathComponent("in-" + id, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         migrationsIn[id] = IncomingMigration(offer: offer, plan: plan, folder: folder, created: Date())
@@ -154,6 +160,9 @@ extension VisorServer {
             let expanded = (chosen as NSString).expandingTildeInPath
             guard expanded.hasPrefix("/") else { return .error("\(chosen) is not a folder's full path.") }
             plan.cwd = expanded.count > 1 && expanded.hasSuffix("/") ? String(expanded.dropLast()) : expanded
+            if let shared = ServerPlatform.current.host.sharedFolders(), Self.place(plan.cwd, from: "", to: "", shared: shared) == nil {
+                return .error(Self.notShared(plan.cwd, shared: shared))
+            }
         }
         let files = FileManager.default
         let chosen = Set((body.steps ?? []).map(\.path))
@@ -230,6 +239,26 @@ extension VisorServer {
         guard !from.isEmpty else { return path }
         if path == from { return to }
         return path.hasPrefix(from + "/") ? to + path.dropFirst(from.count) : path
+    }
+
+    /// Where `path` goes here. Where this computer is a container with
+    /// folders of its computer's (`shared`, each at its own path), a path
+    /// under one is that same folder, whatever the home folders; one that is
+    /// under none, even as this home folder's, has no place: nil. Elsewhere,
+    /// the same place under this home folder.
+    static func place(_ path: String, from: String, to: String, shared: [String]?) -> String? {
+        let mapped = Self.path(path, from: from, to: to)
+        guard let shared else { return mapped }
+        let under = { (path: String) in shared.contains { path == $0 || path.hasPrefix($0 + "/") } }
+        if under(path) { return path }
+        return under(mapped) ? mapped : nil
+    }
+
+    /// Why a session can't move here into `path`.
+    static func notShared(_ path: String, shared: [String]) -> String {
+        let folders = shared.isEmpty ? "none of its computer's folders" : "only " + shared.joined(separator: ", ")
+        return "This server runs in a container that sees \(folders) of its computer's. A session here works in one of them, "
+            + "or it would be on the container's own disk, which nothing else sees; \(path) is not in one."
     }
 
     /// A session's id as clients make them: 24 letters and digits.
