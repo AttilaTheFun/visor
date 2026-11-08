@@ -51,8 +51,12 @@ extension VisorServer {
         let all = ask.text == "all"
         let now = Date().timeIntervalSince1970
         let read = caller.mailbox.read(unreadOnly: !all, count: max(1, min(ask.rows ?? 10, 50)), at: now)
-        for message in read.messages where read.newlyRead.contains(message.id) && isThisServer(message.from.server) {
-            session(message.from.session)?.mailbox.update(sent: message.id, to: .read, at: now)
+        for message in read.messages where read.newlyRead.contains(message.id) {
+            if isThisServer(message.from.server) {
+                session(message.from.session)?.mailbox.update(sent: message.id, to: .read, at: now)
+            } else {
+                sendReadReceipt(for: message, at: now)
+            }
         }
         if !read.newlyRead.isEmpty { saveArchive() }
         guard !read.messages.isEmpty else {
@@ -111,6 +115,34 @@ extension VisorServer {
         if source.mailbox.update(sent: record.message.id, to: state, problem: state == .failed ? record.result : nil, at: record.updated) {
             saveArchive()
         }
+    }
+
+    /// Word to a message's sender on another server that it was read, as a
+    /// relay message of its own (`receipt`), carried as any other. Only to
+    /// a server reported at 0.47 or later, which knows one.
+    func sendReadReceipt(for message: MailMessage, at now: Double) {
+        guard let server = reportedServers().first(where: { $0.server.id == message.from.server })?.server,
+              Self.knowsReceipts(server.version) else { return }
+        enqueueRelay(RelayMessage(id: UUID().uuidString.lowercased(), kind: .receipt, from: message.to, to: message.from,
+                                  text: message.id, created: now, expires: now + Self.relayLifetime))
+    }
+
+    /// A read receipt carried here: the message it names read, in the
+    /// outbox of the session that sent it.
+    func takeReadReceipt(_ receipt: RelayMessage) -> RelayReceipt {
+        guard let sender = session(receipt.to.session) else {
+            return RelayReceipt(message: receipt.id, outcome: .failed, text: "No session \(receipt.to.session) here.")
+        }
+        if sender.mailbox.update(sent: receipt.text, to: .read, at: receipt.created) { saveArchive() }
+        return RelayReceipt(message: receipt.id, outcome: .sent, text: "")
+    }
+
+    /// Whether a server of this version (MAJOR.MINOR.BUILD) takes read
+    /// receipts: 0.47 and later.
+    static func knowsReceipts(_ version: String?) -> Bool {
+        let parts = (version ?? "").split(separator: ".").compactMap { Int($0.prefix { $0.isNumber }) }
+        guard parts.count >= 2 else { return false }
+        return parts[0] > 0 || parts[1] >= 47
     }
 
     private static func describe(_ message: MailMessage) -> String {

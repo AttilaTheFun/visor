@@ -47,10 +47,10 @@ final class RelayMessagingTests: ServerTestCase {
     }
 
     /// What a client connected to both says: both servers, with their sessions.
-    private func report(client: String = "phone", servers: [VisorServer]? = nil) -> DirectoryReport {
+    private func report(client: String = "phone", servers: [VisorServer]? = nil, version: String? = nil) -> DirectoryReport {
         let servers = servers ?? [here!, there!]
         return DirectoryReport(client: client, clientName: "My iPhone", servers: servers.map { server in
-            DirectoryServer(id: server.id, name: server === here ? "Mini" : "Laptop",
+            DirectoryServer(id: server.id, name: server === here ? "Mini" : "Laptop", version: version,
                             sessions: server.sessions.map { DirectorySession(id: $0.info.id, name: $0.displayName, agent: "Claude", busy: $0.info.busy) })
         })
     }
@@ -151,6 +151,56 @@ final class RelayMessagingTests: ServerTestCase {
         XCTAssertEqual(here.sessions.first?.mailbox.outbox.map(\.state), [.delivered])
         XCTAssertEqual(here.sessions.first?.mailbox.outbox.first?.id, mail.id, "one id at both ends")
         XCTAssertTrue(exchange(from: here, to: there).isEmpty, "nothing left to carry")
+    }
+
+    /// Read on its server, a message is said read in its sender's outbox on
+    /// the other: a read receipt carried back as any message is. Not to a
+    /// server reported as older than 0.47, which knows no receipt.
+    func testAMessageReadThereIsReadInItsSendersOutbox() async throws {
+        for (version, receipts) in [("0.47.1", [RelayReceipt.Outcome.sent]), ("0.46.17", [])] {
+            here.sessions = [record("A", "Mini work")]
+            there.sessions = [record("B", "Laptop work")]
+            for server in [here!, there!] {
+                _ = post(server, "/api/relay", { var e = Envelope(type: "relay"); e.report = report(version: version); return e }())
+            }
+            let sent = Task { await ask("send", about: "B", text: "Read me") }
+            try await Task.sleep(nanoseconds: 50_000_000)
+            exchange(from: here, to: there)
+            _ = await sent.value
+            XCTAssertEqual(here.sessions.first?.mailbox.outbox.map(\.state), [.delivered], version)
+
+            var read = Envelope(type: "agent")
+            read.token = there.agentToken
+            read.client = "B"
+            read.mode = "inbox"
+            read.id = "r2"
+            let inbox = await withCheckedContinuation { done in there.answerAgent(read) { done.resume(returning: $0) } }
+            XCTAssertTrue(inbox.text?.contains("Read me") == true, inbox.text ?? "")
+
+            var back = Envelope(type: "relay")
+            back.report = report(version: version)
+            let carried = post(there, "/api/relay", back).reply?.relayed ?? []
+            XCTAssertEqual(carried.map(\.kind), receipts.isEmpty ? [] : [.receipt], version)
+            for receipt in carried {
+                var delivered = Envelope(type: "relay")
+                delivered.relayed = [receipt]
+                let taken = try XCTUnwrap(post(here, "/api/relay/deliver", delivered).reply?.receipt)
+                XCTAssertEqual(taken.outcome, .sent)
+                var answered = Envelope(type: "relay")
+                answered.receipt = taken
+                XCTAssertEqual(post(there, "/api/relay/receipt", answered).status, 200)
+            }
+            XCTAssertEqual(here.sessions.first?.mailbox.outbox.map(\.state), receipts.isEmpty ? [.delivered] : [.read], version)
+        }
+    }
+
+    func testAServersVersionSaysWhetherItTakesReceipts() {
+        XCTAssertTrue(VisorServer.knowsReceipts("0.47.0"))
+        XCTAssertTrue(VisorServer.knowsReceipts("0.48.3"))
+        XCTAssertTrue(VisorServer.knowsReceipts("1.0.0"))
+        XCTAssertFalse(VisorServer.knowsReceipts("0.46.17"))
+        XCTAssertFalse(VisorServer.knowsReceipts(nil))
+        XCTAssertFalse(VisorServer.knowsReceipts(""))
     }
 
     func testACarriedMessageIsTakenOnceHoweverOftenItComes() throws {

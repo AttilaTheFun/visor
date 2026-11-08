@@ -38,8 +38,10 @@ extension VisorServer {
         return receipt
     }
 
-    /// The message sent or read here, as an agent of this server would.
+    /// The message sent or read here, as an agent of this server would; a
+    /// read receipt into its sender's outbox.
     private func perform(_ message: RelayMessage) -> RelayReceipt {
+        if message.kind == .receipt { return takeReadReceipt(message) }
         var ask = Envelope(type: "agent")
         ask.mode = message.kind.rawValue
         ask.session = message.to.session
