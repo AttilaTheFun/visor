@@ -80,10 +80,15 @@ public struct RunnerCommand {
                    read from standard input (12 characters or more), kept as a
                    scrypt hash only. Sessions from before end.
           user remove
-          api port <number> | off
+          api port <number> [--name <address or name>]… | off
                    Where clients sign in (GET/POST /runner/v1/sign-in,
                    /runner/v1/sign-out, GET /runner/v1/servers): its port, or
-                   none, from the agent's next start. Plain HTTP for now.
+                   none, from the agent's next start. Over TLS with this
+                   Runner's own certificate, for localhost, loopback, this
+                   Mac's name and each --name.
+          api certificate
+                   That certificate's SHA-256 fingerprint, which a client shows
+                   the first time it signs in, and the certificate.
 
         The data folder is Visor's (~/Library/Application Support/Visor) unless
         given: runner.json and runner-secrets.json there.
@@ -112,6 +117,7 @@ public struct RunnerCommand {
             case ("user", "set"): try setUser(Array(arguments.dropFirst(2)), in: &config)
             case ("user", "remove"): try removeUser(in: &config)
             case ("api", "port"): try setAPIPort(Array(arguments.dropFirst(2)), in: &config)
+            case ("api", "certificate"): try printAPICertificate(config: config)
             case ("help", _), ("-h", _), ("--help", _): output(Self.usage)
             default: throw Problem("unknown command \(arguments.joined(separator: " "))\n\n\(Self.usage)")
             }
