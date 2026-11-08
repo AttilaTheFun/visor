@@ -193,7 +193,14 @@ path), not a need.
    it needs trying on a Mac, where Tailscale's app keeps that API apart.
 4. The reverse proxy by path, HTTP and WebSocket, with the per-server
    token; the Mac's server and a container's behind it, and the watch over
-   them.
+   them. Built first, HTTP: `/runner/v1/servers/<id>/<path>` goes on to
+   the server `server reach <id> --at <host>:<port>` names, as `/<path>`,
+   for a live session only, with the server's own password (read from
+   standard input, kept in the Runner's secrets) in place of the client's
+   session: through the version between, a server's password is its token
+   for the Runner, and servers need no change. A request goes on a
+   connection of its own (a body of 64 MiB at most); the answer comes back as
+   it comes. A WebSocket is refused (501) until its part, so a client polls.
 5. The client's accounts: Settings › Accounts, the sidebar's grouping, the
    records of an account's servers, trust on first use; the fork's
    `VisorAccount` as one such account. This ships as the version between.

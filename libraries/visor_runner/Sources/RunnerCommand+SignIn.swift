@@ -22,6 +22,31 @@ extension RunnerCommand {
         output("\(name) signs in to this Runner with that password; no session from before stays")
     }
 
+    /// Where a server the Runner serves is, for its signed-in clients'
+    /// requests, and its password (standard input), which the Runner passes
+    /// on in place of theirs.
+    func setReach(_ arguments: [String], in config: inout RunnerConfig) throws {
+        let usage = "server reach <name> --at <host>:<port> (its password on standard input)"
+        guard arguments.count == 3, arguments[1] == "--at", let colon = arguments[2].lastIndex(of: ":"),
+              let port = Int(arguments[2][arguments[2].index(after: colon)...]), (1...65535).contains(port),
+              !arguments[2][..<colon].isEmpty else { throw Problem(usage) }
+        let name = arguments[0]
+        guard config.servers.contains(name) else { throw Problem("no Visor server \(name): server add it first") }
+        guard let password = input(), !password.isEmpty else { throw Problem("\(usage): its password") }
+        secrets.set(RunnerAPIServer.passwordSecret(name), password)
+        config.reaches[name] = arguments[2]
+        try config.write(folder)
+        output("Signed-in clients reach \(name) at \(arguments[2]) through this Runner")
+    }
+
+    /// Where a server is reached, as runner.json and the secrets have it now.
+    public static func reach(_ name: String, folder: URL, secrets: RunnerSecrets) -> RunnerAPIServer.Reach? {
+        guard let address = RunnerConfig.read(folder)?.reaches[name], let colon = address.lastIndex(of: ":"),
+              let port = Int(address[address.index(after: colon)...]),
+              let password = secrets.value(RunnerAPIServer.passwordSecret(name)) else { return nil }
+        return RunnerAPIServer.Reach(host: String(address[..<colon]), port: port, password: password)
+    }
+
     /// No user: no one signs in, and every session ends.
     func removeUser(in config: inout RunnerConfig) throws {
         if let old = config.user { RunnerSessions(secrets: secrets).endAll(of: old) }
