@@ -43,7 +43,7 @@ extension VisorStore {
         let signedIn = VisorAccounts.current?.isSignedIn ?? false
         accountSignedIn = signedIn
         guard signedIn else {
-            for server in servers where server.record.fromAccount { remove(server) }
+            for server in servers where server.record.fromAccount && server.record.account == nil { remove(server) }
             return
         }
         Task { await refreshAccountServers() }
@@ -63,7 +63,7 @@ extension VisorStore {
             // The account's names stand over what each server calls itself.
             if !record.name.isEmpty { record.renamed = true }
             let match: (AgentServerConnection) -> Bool = { held in
-                held.record.fromAccount && (held.record.address == record.address
+                held.record.fromAccount && held.record.account == nil && (held.record.address == record.address
                     || (!record.serverID.isEmpty && held.record.serverID == record.serverID))
             }
             if let held = servers.first(where: match) {
@@ -80,6 +80,6 @@ extension VisorStore {
                 kept.insert(added.id)
             }
         }
-        for server in servers where server.record.fromAccount && !kept.contains(server.id) { remove(server) }
+        for server in servers where server.record.fromAccount && server.record.account == nil && !kept.contains(server.id) { remove(server) }
     }
 }

@@ -594,8 +594,9 @@ public final class AgentServerConnection: Identifiable {
             changed = true
             if !identity.keepMessages { forgetKeptMessages() }
         }
-        // Standing alone: the paths learned before it said so go too.
-        if isolated {
+        // Standing alone, or reached through a Runner: the paths learned
+        // before go too, and the server's own are never taken.
+        if isolated || record.account != nil {
             if !record.paths.isEmpty { record.paths = []; changed = true }
             if changed { onRecordChange?() }
             return

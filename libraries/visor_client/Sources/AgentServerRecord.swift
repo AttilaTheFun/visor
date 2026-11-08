@@ -52,6 +52,11 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
     /// One of the app's account's servers (`VisorAccount`): added when it
     /// signs in, gone when it signs out, not added or forgotten by hand.
     public var fromAccount: Bool
+    /// The Runner account it is one of (RunnerAccount's id), nil for any
+    /// other: its address is the Runner's path for it, and the server's
+    /// own addresses (`hello`) are never learned, so the client never goes
+    /// around the Runner (docs/runner-accounts.md).
+    public var account: String?
 
     public init(id: String = AgentServerRecord.newID(), name: String, address: String, secret: String = "", everConnected: Bool = false,
                 provider: String = VisorAgentServerProvider.name, renamed: Bool = false, serverID: String = "", paths: [String] = [],
@@ -168,6 +173,7 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
             "standalone": .bool(standalone), "keepMessages": .bool(keepMessages), "fromAccount": .bool(fromAccount),
             "lastPath": .string(lastPath)]
         if let relay { fields["relay"] = .bool(relay) }
+        if let account { fields["account"] = .string(account) }
         return .object(fields)
     }
 
@@ -185,5 +191,6 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
                   standalone: json["standalone"].bool ?? false, keepMessages: json["keepMessages"].bool ?? true,
                   relay: json["relay"].bool, fromAccount: json["fromAccount"].bool ?? false,
                   lastPath: json["lastPath"].string ?? "")
+        account = json["account"].string
     }
 }
