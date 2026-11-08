@@ -312,14 +312,23 @@ public struct VisorRootView: View {
     /// One section per computer, headed by its name and whether it is
     /// answering: its sessions, the latest activity first; its projects'
     /// archives; and last, the computer's settings, where it is edited or
-    /// removed. The last section adds a computer. Search narrows the rows
-    /// in every section at once.
+    /// removed. A Runner's computers come together, after those added by
+    /// hand, followed by its own section (sign out, sign in, remove). The
+    /// last section adds a computer. Search narrows the rows in every
+    /// section at once.
     private var outline: some View {
         // On a phone the selection is what shows: a session's chat, or the
         // list again once Back clears it.
         List(selection: $selection) {
-            ForEach(store.servers) { host in
+            ForEach(store.ownServers) { host in
                 HostSection(host: host) { host in hostRows(host) }
+            }
+            // Each Runner's computers, then the Runner itself.
+            ForEach(store.runners) { account in
+                ForEach(store.servers(of: account)) { host in
+                    HostSection(host: host) { host in hostRows(host) }
+                }
+                RunnerAccountSection(account: account)
             }
             // What was said, as well as what the sessions are called.
             if searching, !messageHits.isEmpty {

@@ -226,4 +226,16 @@ path), not a need.
 5. The client's accounts: Settings › Accounts, the sidebar's grouping, the
    records of an account's servers, trust on first use; the fork's
    `VisorAccount` as one such account. This ships as the version between.
+   Built first (5a): `RunnerAccount` and `RunnerAccounts`, the records of an
+   account's servers (`account`, never learning hello's paths) and the
+   Runner's session as their bearer. Then the views (5b): Add Computer's
+   Sign In to a Runner… (RunnerSignInForm), and in the sidebar each Runner's
+   computers together, after those added by hand, followed by the Runner's
+   own section (Sign Out, or Sign In… again, and Remove Runner); the client
+   has no Settings screen of its own, so the sidebar is where accounts are,
+   as the fork's is. Proof screens `runner` and `runner-accounts`. Where a
+   host's socket sends no headers (`VisorSocketService.sendsHeaders`: the
+   web's and Android's bridge), a Runner's computer's channel carries the
+   session as `runner_session` instead. Left: trust on first use for a
+   Runner's own certificate (5c).
 6. The version after: the direct way removed.

@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import VisorProtocol
 import VisorServices
 
@@ -9,7 +10,8 @@ import VisorServices
 /// `<url>/runner/v1/servers/<id>` with the session as its bearer, and not
 /// added or forgotten on its own; signed out, they go.
 @MainActor
-public final class RunnerAccount: VisorAccount {
+@Observable
+public final class RunnerAccount: VisorAccount, Identifiable {
     /// What is kept of it, but its session (a secret of its own).
     public struct Kept: Equatable, Sendable {
         public var id: String
@@ -44,16 +46,36 @@ public final class RunnerAccount: VisorAccount {
     }
 
     public private(set) var kept: Kept
-    public var id: String { kept.id }
+    /// Its id, which never changes: held apart from `kept`, so it is read
+    /// from anywhere (`Identifiable`).
+    public let id: String
     public var url: String { kept.url }
+
+    /// Its session, as the secrets keep it: held here too, so the views
+    /// see it come and go.
+    private var token: String
 
     init(kept: Kept) {
         self.kept = kept
+        id = kept.id
+        token = VisorHost.settings?.secret(key: Self.secretKey(kept.id)) ?? ""
+    }
+
+    /// The fixture's: its session held, and nothing of the device's read.
+    init(fixture kept: Kept, session: String) {
+        self.kept = kept
+        id = kept.id
+        token = session
     }
 
     /// Where the session is kept with the device's secrets.
-    var secretKey: String { "runner-session." + kept.id }
-    private var token: String { VisorHost.settings?.secret(key: secretKey) ?? "" }
+    var secretKey: String { Self.secretKey(kept.id) }
+    static func secretKey(_ id: String) -> String { "runner-session." + id }
+
+    private func keep(session: String) {
+        token = session
+        VisorHost.settings?.setSecret(key: secretKey, value: session)
+    }
 
     /// "logan on mini.tail.ts.net".
     public var title: String { "\(kept.username) on \(Self.host(of: kept.url))" }
@@ -61,6 +83,12 @@ public final class RunnerAccount: VisorAccount {
     public var isSignedIn: Bool {
         !token.isEmpty && (kept.expires ?? .infinity) > Date().timeIntervalSince1970
     }
+
+    /// The name signed in with.
+    public var username: String { kept.username }
+
+    /// When its session ends, where the Runner said.
+    public var expires: Date? { kept.expires.map(Date.init(timeIntervalSince1970:)) }
 
     /// A Runner asks for its password: the views do, and call
     /// `signIn(password:)`.
@@ -83,14 +111,14 @@ public final class RunnerAccount: VisorAccount {
         guard let answer = parseJSON(text), let session = answer["token"].string, !session.isEmpty else {
             throw AgentServerError.message("The Runner didn't give a session.")
         }
-        VisorHost.settings?.setSecret(key: secretKey, value: session)
+        keep(session: session)
         kept.expires = answer["expires"].double
         RunnerAccounts.save()
     }
 
     public func signOut() {
         let session = token
-        VisorHost.settings?.setSecret(key: secretKey, value: "")
+        keep(session: "")
         kept.expires = nil
         RunnerAccounts.save()
         guard !session.isEmpty, let http = VisorHost.http else { return }
@@ -105,7 +133,7 @@ public final class RunnerAccount: VisorAccount {
             text = try await http.request(method: "GET", url: kept.url + "/runner/v1/servers", body: "", headers: try headers())
         } catch {
             if http.status(of: error) == 401 {
-                VisorHost.settings?.setSecret(key: secretKey, value: "")
+                keep(session: "")
                 throw AgentServerError.needsAuthentication
             }
             throw error

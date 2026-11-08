@@ -31,6 +31,9 @@ public final class NativeVisorSocketService: VisorSocketService {
         session = URLSession(configuration: configuration)
     }
 
+    /// URLSession puts them on the opening request.
+    public var sendsHeaders: Bool { true }
+
     public func open(url: String) -> Int32 { open(url: url, headers: [:]) }
 
     public func open(url: String, headers: [String: String]) -> Int32 {
