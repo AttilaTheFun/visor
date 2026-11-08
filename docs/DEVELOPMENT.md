@@ -956,7 +956,10 @@ front paths, `visor-server front`).
     token says which kind it is (the repository secret
     APPLICATIONS_CI_CODE names the server). The draft is CI's
     (tools/ci/propose_release.sh, the run's token): no agent makes a draft
-    or a tag. The agent image of that version follows (`agent-image`, on
+    or a tag. The builds, as the server signed them, are attached to the
+    draft (`Visor-<version>-ios.ipa`, `-macos.zip` and `builds.json`:
+    tools/ci/attach_release.sh), which is what Applications lists
+    (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent image of that version follows (`agent-image`, on
     the release Mac). `adhoc`, on a branch other than main, builds and
     publishes its AdHoc build.
   - **Released**: Logan's Release in Reviews publishes a proposed
@@ -964,8 +967,10 @@ front paths, `visor-server front`).
     main and that a `verify` run of it passed and kept its proof
     (tools/ci/verified_run.sh), then Applications Server promotes its
     Alphas, as tested, to Production (BuildVariant restamped, signed again;
-    nothing is rebuilt) and makes Visor.app's notarized disk image, which
-    `release-dmg` attaches to the release with that proof
+    nothing is rebuilt) and makes Visor.app's notarized disk image.
+    `release-assets` attaches the Production builds to the release in place
+    of the Alphas, under the same names, with the disk image
+    (`Visor-<version>-macos.dmg`) and builds.json, then that proof
     (tools/ci/release_proof.sh). A pre-release is never released: its
     commit is proposed as a release, which verifies it (releases:
     docs/RELEASE_PROCESS.md in AttilaTheFun/reviews).

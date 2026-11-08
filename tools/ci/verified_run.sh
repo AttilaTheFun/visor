@@ -3,7 +3,7 @@
 # the newest of CI's runs by hand of that commit (ci.yml, workflow_dispatch,
 # `run: verify` or `release`) whose `verify` job passed and that still keeps
 # its `proof` artifact. The release job asks it before anything is
-# promoted, and hands the run on to release-dmg, which attaches that proof
+# promoted, and hands the run on to release-assets, which attaches that proof
 # to the release (tools/ci/release_proof.sh --run). Only curl and Python:
 # the runners' image has no gh.
 #
