@@ -8,7 +8,8 @@ import NIOHTTP1
 // event loop (scrypt takes a while), a refused sign-in after a second.
 
 extension RunnerAPIServer {
-    final class Handler: ChannelInboundHandler {
+    /// Removable: a WebSocket's upgrade takes it off its pipeline.
+    final class Handler: ChannelInboundHandler, RemovableChannelHandler {
         typealias InboundIn = HTTPServerRequestPart
         typealias OutboundOut = HTTPServerResponsePart
 

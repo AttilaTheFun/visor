@@ -54,6 +54,14 @@ public final class RunnerAPIServer: Sendable {
         group.shutdownGracefully { _ in }
     }
 
+    /// The names of the client's HTTP handlers.
+    enum Names {
+        static let encoder = "http-encoder"
+        static let decoder = "http-decoder"
+        static let errors = "http-errors"
+        static let handler = "runner-api"
+    }
+
     /// A client's connection: TLS, then its requests.
     private func adopt(_ socket: Int32) {
         let context = self.context
@@ -64,8 +72,14 @@ public final class RunnerAPIServer: Sendable {
                 channel.eventLoop.makeCompletedFuture {
                     let operations = channel.pipeline.syncOperations
                     try operations.addHandler(NIOSSLServerHandler(context: context))
-                    try operations.configureHTTPServerPipeline(withErrorHandling: true)
-                    try operations.addHandler(Handler(api: api, reach: reach))
+                    // By name, so a WebSocket's upgrade can take the HTTP
+                    // handlers off again (RunnerAPIServer+Proxy.swift); the
+                    // decoder hands on what it read past the request.
+                    try operations.addHandler(HTTPResponseEncoder(), name: Names.encoder)
+                    try operations.addHandler(ByteToMessageHandler(HTTPRequestDecoder(leftOverBytesStrategy: .forwardBytes)),
+                                              name: Names.decoder)
+                    try operations.addHandler(HTTPServerProtocolErrorHandler(), name: Names.errors)
+                    try operations.addHandler(Handler(api: api, reach: reach), name: Names.handler)
                 }
             }
             .withConnectedSocket(socket)

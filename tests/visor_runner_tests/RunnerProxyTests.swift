@@ -35,6 +35,19 @@ final class RunnerProxyTests: XCTestCase {
                     if client < 0 { return }
                     if let request = MCPProxy.read(client) {
                         heard.withLock { $0.append((request.path, request.header("authorization"), String(decoding: request.body, as: UTF8.self))) }
+                        if request.header("upgrade")?.lowercased() == "websocket" {
+                            // Its own 101, then whatever comes, back with a word.
+                            MCPProxy.send(client, Data(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                                + "Sec-WebSocket-Accept: \(request.header("sec-websocket-key") ?? "")\r\n\r\n").utf8))
+                            var buffer = [UInt8](repeating: 0, count: 4096)
+                            while true {
+                                let count = buffer.withUnsafeMutableBytes { Foundation.read(client, $0.baseAddress, $0.count) }
+                                if count <= 0 { break }
+                                MCPProxy.send(client, Data("echo:".utf8) + Data(buffer[0..<count]))
+                            }
+                            close(client)
+                            continue
+                        }
                         let body = Data(#"{"sessions":[]}"#.utf8)
                         MCPProxy.send(client, Data("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n".utf8) + body)
                     }
@@ -117,8 +130,42 @@ final class RunnerProxyTests: XCTestCase {
 
         XCTAssertEqual(try curl(trust + bearer + [base + "/servers/nowhere/api/sessions"]).status, "404")
         XCTAssertEqual(try curl(trust + bearer + [base + "/servers/gone/api/sessions"]).status, "502")
-        let upgrade = try curl(trust + bearer + ["-H", "Connection: Upgrade", "-H", "Upgrade: websocket", base + "/servers/mini/api/channel"])
-        XCTAssertEqual(upgrade.status, "501")
         XCTAssertEqual(standIn.heard.withLock { $0.count }, 2, "nothing more reached the server")
+
+        // A WebSocket: its upgrade goes on with the server's password, the
+        // server's own 101 comes back, then bytes go each way as they are.
+        let script = """
+        import socket, ssl, sys
+        context = ssl.create_default_context(cafile=sys.argv[1])
+        context.check_hostname = False
+        with socket.create_connection(("127.0.0.1", int(sys.argv[2]))) as raw:
+            with context.wrap_socket(raw) as s:
+                s.sendall(("GET /runner/v1/servers/mini/api/channel HTTP/1.1\\r\\nHost: runner\\r\\nConnection: Upgrade\\r\\n"
+                           "Upgrade: websocket\\r\\nSec-WebSocket-Version: 13\\r\\nSec-WebSocket-Key: dGhlIGtleQ==\\r\\n"
+                           "Authorization: Bearer " + sys.argv[3] + "\\r\\n\\r\\n").encode())
+                answer = b""
+                while b"\\r\\n\\r\\n" not in answer:
+                    answer += s.recv(4096)
+                head, _, rest = answer.partition(b"\\r\\n\\r\\n")
+                print(head.split(b"\\r\\n")[0].decode())
+                print([line.decode() for line in head.split(b"\\r\\n") if line.lower().startswith(b"sec-websocket-accept")][0])
+                s.sendall(b"frame-one")
+                got = rest
+                while len(got) < len(b"echo:frame-one"):
+                    got += s.recv(4096)
+                print(got.decode())
+        """
+        let python = Process()
+        python.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        python.arguments = ["python3", "-I", "-c", script, pem.path, String(port), token]
+        let out = Pipe()
+        python.standardOutput = out
+        try python.run()
+        let said = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        python.waitUntilExit()
+        XCTAssertEqual(said, "HTTP/1.1 101 Switching Protocols\nSec-WebSocket-Accept: dGhlIGtleQ==\necho:frame-one\n")
+        let upgrade = standIn.heard.withLock { $0.last }
+        XCTAssertEqual(upgrade?.path, "/api/channel")
+        XCTAssertEqual(upgrade?.authorization, "Bearer the-servers-password", "the server's password, never the session")
     }
 }
