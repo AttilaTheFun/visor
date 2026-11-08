@@ -429,6 +429,12 @@ these are checked early rather than assumed:
 - A container sees no folder of the Mac's, so a move into one always takes
   the project with it: the client copies it in, or the agent clones it
   there from GitHub. A move out of one does the same the other way.
+- A container whose Mac shares folders with it (the co-tenant, which
+  mounts the mini's ~/Developer at /Users/logan/Developer) takes a session
+  only in one of them (`HostDetails.sharedFolders`, from the writable
+  virtiofs and 9p mounts): a path in one stays where it is, and a session
+  whose folder is in none is refused, rather than landing on the
+  container's own disk, where nothing else sees it (Logan, 8 Nov 2026).
 
 ## Phases
 

@@ -231,6 +231,41 @@ final class MigrationTests: ServerTestCase {
         XCTAssertTrue(offered.message?.contains("no conversation to move yet") == true, offered.message ?? "")
     }
 
+    /// In a container its computer shares folders with (the co-tenant, the
+    /// Mac's ~/Developer at the same path), a path in one stays where it is,
+    /// not moved under the container's own home folder; one in none has no
+    /// place. Elsewhere, paths move from home to home as before.
+    func testInAContainerAPathInASharedFolderStaysWhereItIs() {
+        let shared = ["/Users/logan/Developer"]
+        XCTAssertEqual(VisorServer.place("/Users/logan/Developer/x", from: "/Users/logan", to: "/root", shared: shared), "/Users/logan/Developer/x")
+        XCTAssertEqual(VisorServer.place("/Users/logan/Developer", from: "/Users/logan", to: "/root", shared: shared), "/Users/logan/Developer")
+        XCTAssertNil(VisorServer.place("/Users/logan/Projects/x", from: "/Users/logan", to: "/root", shared: shared))
+        XCTAssertNil(VisorServer.place("/Users/logan/Developers", from: "/Users/logan", to: "/root", shared: shared))
+        XCTAssertEqual(VisorServer.place("/Users/a/Developer/x", from: "/Users/a", to: "/home/b", shared: ["/home/b/Developer"]),
+                       "/home/b/Developer/x", "shared under this home folder")
+        XCTAssertEqual(VisorServer.place("/Users/a/Developer/x", from: "/Users/a", to: "/home/b", shared: nil), "/home/b/Developer/x")
+    }
+
+    func testAContainerTakesOnlyASessionInAFolderItsComputerShares() async throws {
+        let saved = ServerPlatform.current.host
+        defer { ServerPlatform.current.host = saved }
+        ServerPlatform.current.host = HostDetails(name: "co-tenant", system: "linux", inContainer: true, dataDirectory: home,
+                                                  sharedFolders: { ["/Users/logan/Developer"] })
+        func plan(cwd: String) async -> Envelope {
+            let info = SessionInfo(id: "S", agent: .claude, cwd: cwd, title: "Moving", created: 0)
+            var planning = Envelope(type: "migration")
+            planning.offer = MigrationOffer(token: "t", from: "MacBook", session: info, resumeID: conversation, home: "/Users/logan",
+                                            files: [], projects: [])
+            return await server.migrationPlan(planning)
+        }
+        let outside = await plan(cwd: "/Users/logan/Projects/x")
+        XCTAssertNil(outside.plan)
+        XCTAssertTrue(outside.message?.contains("/Users/logan/Projects/x is not in one") == true, outside.message ?? "")
+        let inside = await plan(cwd: "/Users/logan/Developer/applications")
+        XCTAssertEqual(try XCTUnwrap(inside.plan, inside.message ?? "no plan").cwd, "/Users/logan/Developer/applications",
+                       "the shared folder, not /root/Developer/applications")
+    }
+
     func testPathsMoveFromOneHomeToTheOther() {
         XCTAssertEqual(VisorServer.path("/Users/a/Developer/x", from: "/Users/a", to: "/home/b"), "/home/b/Developer/x")
         XCTAssertEqual(VisorServer.path("/Users/a", from: "/Users/a", to: "/home/b"), "/home/b")
