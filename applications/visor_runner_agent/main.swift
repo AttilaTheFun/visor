@@ -81,13 +81,19 @@ let signIn: RunnerAPIServer? = config.apiPort.flatMap { port in
     let api = RunnerAPI(auths: [RunnerPasswordAuth(user: { RunnerConfig.read(data)?.user }, secrets: secrets)],
                         sessions: RunnerSessions(secrets: secrets),
                         servers: { RunnerServerInfo.listed(in: RunnerConfig.read(data) ?? RunnerConfig()) })
-    guard let started = RunnerAPIServer(port: UInt16(port), api: api) else {
-        log("port \(port) can't be had for the sign-in")
+    do {
+        let identity = try RunnerIdentity.kept(in: secrets, names: RunnerIdentity.names(given: config.apiNames))
+        guard let started = try RunnerAPIServer(port: UInt16(port), api: api, identity: identity) else {
+            log("port \(port) can't be had for the sign-in")
+            return nil
+        }
+        started.start()
+        log("clients sign in at port \(port), over TLS (certificate SHA-256 \((try? identity.fingerprint) ?? "?"))")
+        return started
+    } catch {
+        log("the sign-in's certificate couldn't be made: \(error)")
         return nil
     }
-    started.start()
-    log("clients sign in at port \(port)")
-    return started
 }
 // Their servers, started again when they stop answering (those with a
 // command for it).

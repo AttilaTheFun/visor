@@ -1,18 +1,30 @@
 import CVisorPOSIX
 import Foundation
+import NIOCore
+import NIOHTTP1
+import NIOPosix
+import NIOSSL
 
 /// The Runner's side for clients (RunnerAPI) on a port of its own
-/// (runner.json's `apiPort`), every interface, plain HTTP for now: HTTPS,
-/// with the tailnet's certificate or the Runner's own, is step 3 of
-/// docs/runner-accounts.md. A refused sign-in is answered after a second,
-/// so a password isn't guessed quickly.
+/// (runner.json's `apiPort`), every interface, over TLS with the Runner's
+/// own certificate (RunnerIdentity), which a client pins by its
+/// fingerprint: a password never crosses a network in the clear. The
+/// tailnet's certificate in its place is docs/runner-accounts.md's next
+/// part of step 3.
 public final class RunnerAPIServer: Sendable {
     public let port: UInt16
     private let listener: Int32
     private let api: RunnerAPI
+    private let context: NIOSSLContext
+    private let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)
 
     /// Nil when the port can't be had.
-    public init?(port: UInt16, api: RunnerAPI) {
+    public init?(port: UInt16, api: RunnerAPI, identity: RunnerIdentity) throws {
+        var configuration = TLSConfiguration.makeServerConfiguration(
+            certificateChain: [.certificate(try NIOSSLCertificate(bytes: Array(try identity.pem.utf8), format: .pem))],
+            privateKey: .privateKey(try NIOSSLPrivateKey(bytes: Array(identity.keyPEM.utf8), format: .pem)))
+        configuration.applicationProtocols = ["http/1.1"]
+        context = try NIOSSLContext(configuration: configuration)
         visor_ignore_broken_pipes()
         let listener = visor_listen(port, 1)
         guard listener >= 0 else { return nil }
@@ -26,10 +38,7 @@ public final class RunnerAPIServer: Sendable {
             while true {
                 let client = visor_accept(listener)
                 if client < 0 { return }
-                Thread.detachNewThread { [self] in
-                    answer(client)
-                    close(client)
-                }
+                adopt(client)
             }
         }
     }
@@ -37,15 +46,23 @@ public final class RunnerAPIServer: Sendable {
     public func stop() {
         visor_shutdown(listener)
         close(listener)
+        group.shutdownGracefully { _ in }
     }
 
-    private func answer(_ client: Int32) {
-        guard let request = MCPProxy.read(client) else { return }
-        let answer = api.answer(method: request.method, path: request.path, authorization: request.header("authorization"), body: request.body)
-        if answer.status == 401, request.method == "POST" { Thread.sleep(forTimeInterval: 1) }
-        let reason = [200: "OK", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found"][answer.status] ?? "Error"
-        let head = "HTTP/1.1 \(answer.status) \(reason)\r\nContent-Type: application/json\r\nContent-Length: \(answer.body.count)\r\n"
-            + "Cache-Control: no-store\r\nConnection: close\r\n\r\n"
-        MCPProxy.send(client, Data(head.utf8) + answer.body)
+    /// A client's connection: TLS, then its requests.
+    private func adopt(_ socket: Int32) {
+        let context = self.context
+        let api = self.api
+        ClientBootstrap(group: group)
+            .channelInitializer { channel in
+                channel.eventLoop.makeCompletedFuture {
+                    let operations = channel.pipeline.syncOperations
+                    try operations.addHandler(NIOSSLServerHandler(context: context))
+                    try operations.configureHTTPServerPipeline(withErrorHandling: true)
+                    try operations.addHandler(Handler(api: api))
+                }
+            }
+            .withConnectedSocket(socket)
+            .whenFailure { _ in }
     }
 }
