@@ -1,5 +1,5 @@
 #!/bin/bash
-# The iPhone's part of the proof (.github/workflows/proof.yml), on one of
+# The iPhone's part of the proof (ci.yml's verify), on one of
 # GitHub's own Macs (`xcode-27`): the app and its probe (tests/ios_probe),
 # built on Linux by the proof's build job for Apple silicon's simulator,
 # run as OS Server runs them on an iOS lease, which is rules_apple's runner

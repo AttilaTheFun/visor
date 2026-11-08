@@ -1,5 +1,5 @@
 #!/bin/bash
-# The Mac's part of the proof (.github/workflows/proof.yml), on one of
+# The Mac's part of the proof (ci.yml's verify), on one of
 # GitHub's own Macs (`xcode-27`, a desktop session whose shell may picture
 # the screen): Visor.app (applications/visor_mac), built on Linux by the
 # proof's build job and signed ad hoc there, opened on the screenshot
