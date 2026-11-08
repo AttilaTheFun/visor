@@ -341,7 +341,6 @@
     "https://bcr.bazel.build/modules/rules_shell/0.8.0/MODULE.bazel": "f6a89f1d6a669a26f28fe814503857055d76306b79cfc11d12399af08d0b80ae",
     "https://bcr.bazel.build/modules/rules_shell/0.8.0/source.json": "eb53cc815bc503c6683c5fe12d943f98883f81fc22f51403ec8a95610cba4195",
     "https://bcr.bazel.build/modules/rules_swift/1.16.0/MODULE.bazel": "4a09f199545a60d09895e8281362b1ff3bb08bbde69c6fc87aff5b92fcc916ca",
-    "https://bcr.bazel.build/modules/rules_swift/2.1.1/MODULE.bazel": "494900a80f944fc7aa61500c2073d9729dff0b764f0e89b824eb746959bc1046",
     "https://bcr.bazel.build/modules/rules_swift/3.1.2/MODULE.bazel": "72c8f5cf9d26427cee6c76c8e3853eb46ce6b0412a081b2b6db6e8ad56267400",
     "https://bcr.bazel.build/modules/rules_swift/3.5.0/MODULE.bazel": "e71b6024213df1cb5ed2f327b273f6f4a406611db1e2444f09a37a837eee941d",
     "https://bcr.bazel.build/modules/rules_swift/3.6.0/MODULE.bazel": "277f4239428c80cef0106eceed62e20d7617dfbf837bea0fddb23f82793e5ffc",
@@ -359,7 +358,6 @@
     "https://bcr.bazel.build/modules/stardoc/0.7.2/MODULE.bazel": "fc152419aa2ea0f51c29583fab1e8c99ddefd5b3778421845606ee628629e0e5",
     "https://bcr.bazel.build/modules/stardoc/0.8.0/MODULE.bazel": "bbad4298d7ba185684f5fcd71b049c95b0575d1248891fd80b8d7077d647c9d8",
     "https://bcr.bazel.build/modules/stardoc/0.8.0/source.json": "7321db37080ee8a445dc60e8516a98ab3a27884d1457b892485d73759ccb7f4d",
-    "https://bcr.bazel.build/modules/swift_argument_parser/1.3.1.1/MODULE.bazel": "5e463fbfba7b1701d957555ed45097d7f984211330106ccd1352c6e0af0dcf91",
     "https://bcr.bazel.build/modules/swift_argument_parser/1.3.1.2/MODULE.bazel": "75aab2373a4bbe2a1260b9bf2a1ebbdbf872d3bd36f80bff058dccd82e89422f",
     "https://bcr.bazel.build/modules/swift_argument_parser/1.7.0/MODULE.bazel": "40d4e44950e44973dcf8590bcee637591de196b5dbe3696d07eb342b74d53672",
     "https://bcr.bazel.build/modules/swift_argument_parser/1.7.0/source.json": "b9b952cba0c748083b9b891e6ac46d347c92d37e8a92ead96d2a54b966bacd87",
@@ -495,8 +493,6 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/buildifier_prebuilt/8.2.1.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/buildozer/8.5.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/cgrindel_bazel_starlib/0.30.0/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/flatbuffers/25.12.19.isomer.1/MODULE.bazel": "b953029a55da14b25c9c1aa4796b069a6a25ab42df76ea3a75c0a1f227730a80",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/flatbuffers/25.12.19.isomer.1/source.json": "ae1924e81fb5cee741898582cd57839d2cd43834ad4c03af58d5480c47e7fa61",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/gawk/5.3.2.bcr.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/gawk/5.3.2.bcr.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/gazelle/0.32.0/MODULE.bazel": "not found",
@@ -516,8 +512,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/googletest/1.17.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.5.0.isomer.1/MODULE.bazel": "810c4b066de392138bd72d0a3d5704394d8b2f97561eac6174481ccbbff3b8e0",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.5.0.isomer.1/source.json": "79cad4cd634f452af553b1d8150364b55c37d0dff22a4764797c543fa1ec5512",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.44.2/MODULE.bazel": "e39e6612da6999afd377b3bebae0330b3bf53243ccbae7168dce2a17dfb224d8",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.44.2/source.json": "beffac64a3ff0a87bdebe554d66bb5de6b2c563f0b3770c06f219362c21880e0",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.45.2/MODULE.bazel": "57a8eec6b9accf976eec78c109f332a0299087a8eff849b54a5e46a8381fa817",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.45.2/source.json": "d635aa21756218ad3e24da1108b5e4a35c4d6967aa2f58bc8e40db2476bc3dfa",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.4.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jsoncpp/1.9.5/MODULE.bazel": "not found",
@@ -694,7 +690,6 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_shell/0.6.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_shell/0.8.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/1.16.0/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/2.1.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/3.1.2/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/3.5.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/3.6.0/MODULE.bazel": "not found",
@@ -714,7 +709,6 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/stardoc/0.7.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/stardoc/0.7.2/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/stardoc/0.8.0/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/swift_argument_parser/1.3.1.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/swift_argument_parser/1.3.1.2/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/swift_argument_parser/1.7.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/tar.bzl/0.10.4/MODULE.bazel": "not found",
@@ -856,7 +850,7 @@
     "@@aspect_rules_ts+//ts:extensions.bzl%ext": {
       "general": {
         "bzlTransitiveDigest": "39Imx8fj/wmgCRC4TUG38yih5rg7z9GUkCWi0sDE+LA=",
-        "usagesDigest": "rO6YxVw8eiSYalo0b2MtVpGGOUG7sy7/mQhTq64ciZc=",
+        "usagesDigest": "E/O4FbQKQXLSxnv1+248TKRwrUruk5Ks/LiGFaydQlM=",
         "recordedInputs": [
           "REPO_MAPPING:aspect_rules_ts+,aspect_rules_ts aspect_rules_ts+",
           "REPO_MAPPING:aspect_rules_ts+,bazel_tools bazel_tools"
@@ -914,7 +908,7 @@
     "@@isomer+//tools/android:extensions.bzl%android_tools": {
       "os:linux,arch:aarch64": {
         "bzlTransitiveDigest": "k+KVmZZM9GG6V3/GKQ8lZd6Nm/Rcjal0sh2SCGktwe8=",
-        "usagesDigest": "8z3ZfYG8ADpEJH4SEJwPnSZlJexK7Q0LdBPfogKzdEg=",
+        "usagesDigest": "1a1fAn+ypPx+WwJ/s3TGnuteaS7d7Wnmi/a2n2FIWek=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -1058,7 +1052,7 @@
     "@@isomer+//tools/wasm:extensions.bzl%wasm_tools": {
       "general": {
         "bzlTransitiveDigest": "4sWkWFiytNpozmcCtTYcMkDIhtiS5kjbFGlOVWEzFp8=",
-        "usagesDigest": "rZImr3imTCWMDaZnH3RFH/hKmI94W0R7U2rlALzDn6g=",
+        "usagesDigest": "oPf/ef4i8d0jZpgT49L3Az3quU1fyxk68NVAVrkH10I=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -1277,12 +1271,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "B2aTY3dA0RubUZkTqFdg+fxS3ocQQeeog6AzCPaqDXY=",
-        "usagesDigest": "viZeZsIaM7jwvNVT9Hwc+ZHCwJt9RN73Ww5h56cNAAM=",
+        "usagesDigest": "8ONkCrhU3XPF6m6xqgyWh7kBVNoxbpabBI7cCWv/ZMk=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 79af4ee474e0b713c1537abd97fbba3372c6b8694197f331d6fe63fdf2a0df99"
+          "FILE:@@//third_party/swift_packages/Package.resolved b8c0ab08389207df0ea44b4f80724fcd2d2d3b763132acdedfaf6122260c4cf2"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1308,6 +1302,7 @@
                 "swiftpkg_swift_nio",
                 "swiftpkg_swift_nio_ssh",
                 "swiftpkg_swift_nio_ssl",
+                "swiftpkg_swift_protobuf",
                 "swiftpkg_swift_sql",
                 "swiftpkg_swift_syntax",
                 "swiftpkg_swift_system",
@@ -1319,7 +1314,7 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_isomer",
-              "commit": "9eb0696adc284854f55e8691f4e819a01cfb3c31",
+              "commit": "9c26f2d8dd7893abe9ab80c006cedb56c963daf7",
               "remote": "https://github.com/AttilaTheFun/isomer.git",
               "env": {},
               "env_inherit": [],
@@ -1339,12 +1334,6 @@
               "target_deps": {
                 "Foundation": [
                   "@isomer//foundation/internationalization"
-                ],
-                "IsomerSwiftUI": [
-                  "@isomer//shared/renderers:flatbuffers_swift"
-                ],
-                "SwiftUI": [
-                  "@isomer//shared/renderers:flatbuffers_swift"
                 ]
               },
               "module_aliases": {},
@@ -1666,6 +1655,39 @@
               "publicly_expose_all_targets": false,
               "replace_scm_with_registry": false,
               "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_protobuf": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_protobuf",
+              "commit": "3d537cb81aef272a03cb3be815439e9bf0eb3bd3",
+              "remote": "https://github.com/apple/swift-protobuf.git",
+              "version": "1.39.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "init_submodules": false,
+              "make_files_read_only": false,
+              "recursive_init_submodules": true,
+              "patch_args": [
+                "-p0"
+              ],
+              "patch_cmds": [],
+              "patch_cmds_win": [],
+              "patch_tool": "",
+              "patches": [],
+              "publicly_expose_all_targets": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {
+                "SwiftProtobuf": [
+                  "@isomer//foundation:for_swift_packages"
+                ]
+              },
               "module_aliases": {},
               "dep_module_aliases": "",
               "bazel_target_mods": "",
