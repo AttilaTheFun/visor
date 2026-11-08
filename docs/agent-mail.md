@@ -9,8 +9,8 @@ in the transcript and the agent can be notified."
 
 ## Decided (Logan, 7 Nov)
 
-- **Channels where the agent has them** (Claude Code); for an agent that
-  hasn't, a notice turn. Either way the agent is told only how many
+- **A notice turn for every agent** (channels were the plan for Claude,
+  dropped on 8 Nov: "Telling the agent"). The agent is told only how many
   messages are unread ("You have 4 unread messages"), never their text, so
   as not to fill its context: it reads them with `read_inbox`.
 - **The boxes keep their messages for the session's lifetime**, as its
@@ -54,47 +54,23 @@ in the transcript and the agent can be notified."
 
 ## Telling the agent
 
-- **Claude: a channel notification.** Visor's MCP server
-  (`visor-agent-host mcp`) declares Claude Code's channel capability
-  (`experimental: {"claude/channel": {}}`) and, when the agent's inbox gets
-  a message, sends `notifications/claude/channel` with the unread count
-  alone ("You have 4 unread messages; read them with read_inbox"). Claude Code takes a channel message as a meta
-  prompt for its next turn (`origin: channel`, not the user's), starting one
-  if the session is idle. The server tells the MCP server over the
-  WebSocket it already holds (a subscription per session).
-  - It needs Claude Code launched with `--channels visor`, and channels
-    allowed by managed settings (`channelsEnabled: true`, and Visor's
-    channel allowed, `allowedChannelPlugins`). In a container Visor writes
-    those in its image's `/etc/claude-code/managed-settings.json`. On a Mac
-    they are an administrator's: Visor says so in Settings, and until then
-    falls back to the notice below. The fork's organisation decides its own.
-  - **To verify first**, in a throwaway session: that a channel message
-    wakes an idle stream-json session, how it lands in the session's file
-    (Visor shows it as the mail row, not a user row), and whether
-    `--dangerously-load-development-channels` asks for a confirmation
-    headless.
-  - **Found in Claude Code 2.1.318** (8 Nov 2026, from the build itself; not
-    yet run): `--channels <servers…>` names the MCP servers whose channel
-    notifications register the session. The server must declare
-    `claude/channel`. Channels are off unless managed settings say
-    `channelsEnabled: true` ("channels not enabled by org policy"), and a
-    server not on `allowedChannelPlugins` is refused ("not on your org's
-    approved channels list"). `--dangerously-load-development-channels`, the
-    way around the allowlist, "shows a confirmation dialog at startup": not
-    for a headless session, so the managed settings are the only road.
-    Channels aren't offered on third-party providers. Running the check needs
-    those settings where the throwaway session runs. On a Mac they're an
-    administrator's (Logan's); in the co-tenant they would apply to every
-    agent in it. So the check waits for Logan to say where to set them.
-- **Codex, and Claude without channels: a notice turn.** Codex's app server
-  takes input only as the user's (`turn/start`, `turn/steer`). Visor starts
-  a turn whose whole input is one line, `[Visor: you have 4 unread messages
-  in your inbox; read them with read_inbox]`, queued while the agent works,
-  as today's messages are. The messages themselves stay in the inbox.
-  Visor knows the notice by its form and shows it as the mail row, not as
-  the person's.
+- **Every agent: a notice turn.** Visor starts a turn whose whole input is
+  one line, `[Visor: you have 4 unread messages in your inbox; read them
+  with read_inbox]`, queued while the agent works, as other messages are.
+  The messages themselves stay in the inbox. Visor knows the notice by its
+  form and shows it as the mail row, not as the person's. An agent may also
+  look at its inbox when it likes (`read_inbox`).
 - **Messages arriving together are one notice**: one waiting while the
   agent works counts what is unread when its turn comes.
+- **No channel** (Logan, 8 Nov 2026). Claude Code's channel notification
+  (`notifications/claude/channel`, a meta prompt rather than the user's
+  turn) was the plan for Claude. It is dropped: Codex has no such thing, and
+  Claude Code 2.1.318 takes a channel only with `--channels <server>`, managed
+  settings saying `channelsEnabled: true` and the server on
+  `allowedChannelPlugins` (its one way around them,
+  `--dangerously-load-development-channels`, asks for a confirmation at
+  startup, so not headless). It isn't worth managed settings on every Mac
+  and container for one agent of two.
 
 ## The MCP tools
 
@@ -122,7 +98,7 @@ in the transcript and the agent can be notified."
 
 ## Steps
 
-1. This design, and the channel checks above in a throwaway session.
+1. This design.
 2. The boxes in the server's store, `read_inbox`, `read_outbox`, and
    same-server delivery into them; the notice turn for every agent. Built:
    a message carried from another server goes into the inbox too, and a
@@ -134,10 +110,10 @@ in the transcript and the agent can be notified."
    sender's server takes `sent` and `queued` as delivered, so the receipt's
    outcomes are as before; a read receipt is a relay message of its own
    (`kind: receipt`), sent only to a server reported at 0.47 or later.
-4. Claude's channel: Visor's MCP server's capability and notification,
-   `--channels`, and the container image's managed settings.
+4. ~~Claude's channel~~: dropped (Logan, 8 Nov 2026; "Telling the agent").
 5. The client: the mail row in the chat, and the inspector's Inbox and
-   Outbox.
+   Outbox. Built: the inspector's boxes (#281) and the mail row (#282, on
+   AgentUI 0.47.0's MailRow).
 
 ## Later
 
