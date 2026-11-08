@@ -10,6 +10,12 @@ extension TranscriptMessage {
     /// `id`: the id to show it under (the transcript's display id), when
     /// not the row's own.
     init(_ entry: TranscriptEntry, host: String = "", id: String? = nil) {
+        // Mail the server handed the agent as a turn: a row of its own,
+        // never the person's bubble.
+        if entry.role == .user, entry.images.isEmpty, let mail = MailTurn.row(for: entry.text) {
+            self.init(id: id ?? entry.id, role: .tool, text: mail, toolName: "mail")
+            return
+        }
         let role: TranscriptMessage.Role
         switch entry.role {
         case .user: role = .user
