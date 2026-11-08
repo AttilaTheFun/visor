@@ -366,7 +366,16 @@ receipt is kept; the agent that asked is answered with it (a send waits up
 to 8 seconds, a read 20), or told the message waits, with its id for
 `message_status` (`waiting`, `sent`, `queued`, `read`, `failed`, or
 `expired` after a day uncarried). A message carried from another server is
-headed the same way, its sender's computer being that server.
+headed the same way, its sender's computer being that server, and goes
+into the inbox with the relay's id, as the sender's outbox has it.
+
+When a message from another server is read (`read_inbox`), its server sends
+a read receipt back the same way: a `RelayMessage` of `kind` `receipt`
+(since 0.47), from the reader to the sender, `text` the id of the message
+read. The sender's server marks that message `read` in the sender's outbox
+and answers `sent`. A server sends receipts only to a server reported at
+0.47 or later; a client from before 0.47 doesn't know the kind and leaves it
+uncarried.
 
 A client takes part with each server unless its user turned that off for
 that computer (`AgentServerRecord.relay`; on by default, and a fork may

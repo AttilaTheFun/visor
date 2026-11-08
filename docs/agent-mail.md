@@ -117,7 +117,10 @@ in the transcript and the agent can be notified."
    it was delivered (or failed, or expired). An agent an earlier launch
    left running may have no `read_inbox`: it is handed messages as turns
    until its MCP server says `version` `"mail"` or its agent is made again.
-3. The relay's `delivered` and read receipts across servers.
+3. The relay's `delivered` and read receipts across servers. Built: the
+   sender's server takes `sent` and `queued` as delivered, so the receipt's
+   outcomes are as before; a read receipt is a relay message of its own
+   (`kind: receipt`), sent only to a server reported at 0.47 or later.
 4. Claude's channel: Visor's MCP server's capability and notification,
    `--channels`, and the container image's managed settings.
 5. The client: the mail row in the chat, and the inspector's Inbox and
