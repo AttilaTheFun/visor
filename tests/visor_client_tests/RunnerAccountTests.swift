@@ -139,6 +139,25 @@ final class RunnerAccountTests: XCTestCase {
         XCTAssertEqual(store.servers.map(\.record.address), ["http://laptop:7433"])
     }
 
+    func testTheChannelCarriesTheSessionWhereTheSocketSendsNoHeaders() {
+        var record = AgentServerRecord(name: "Mini", address: "https://mini.tail.ts.net:7445/runner/v1/servers/mini",
+                                       authentication: RunnerAuthenticator.name, fromAccount: true)
+        record.account = "acct-1"
+        let socket = "wss://mini.tail.ts.net:7445/runner/v1/servers/mini/"
+        let headers = ["Authorization": "Bearer ab+c/d="]
+        // A browser's or Android's socket: on the URL, escaped.
+        XCTAssertEqual(VisorAgentServer.channelURL(socket, record: record, headers: headers, sendsHeaders: false),
+                       socket + "?runner_session=ab%2Bc/d%3D")
+        XCTAssertEqual(VisorAgentServer.channelURL(socket + "?x=1", record: record, headers: headers, sendsHeaders: false),
+                       socket + "?x=1&runner_session=ab%2Bc/d%3D")
+        // URLSession's: in the header alone.
+        XCTAssertEqual(VisorAgentServer.channelURL(socket, record: record, headers: headers, sendsHeaders: true), socket)
+        // A computer of no Runner: never.
+        let mine = AgentServerRecord(name: "Laptop", address: "http://laptop:7433", secret: "pw")
+        XCTAssertEqual(VisorAgentServer.channelURL("ws://laptop:7433/", record: mine, headers: ["Authorization": "Bearer pw"], sendsHeaders: false),
+                       "ws://laptop:7433/")
+    }
+
     func testARecordKeepsItsAccount() throws {
         var record = AgentServerRecord(name: "Mini", address: "https://runner.example/runner/v1/servers/mini", fromAccount: true)
         record.account = "acct-1"

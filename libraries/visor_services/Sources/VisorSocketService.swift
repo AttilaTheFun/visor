@@ -9,6 +9,10 @@ public protocol VisorSocketService {
     /// authenticator gives; a front that checks them sees them). A host
     /// that cannot send them (a browser) opens without.
     func open(url: String, headers: [String: String]) -> Int32
+    /// Whether `open(url:headers:)` sends the headers. A browser's
+    /// WebSocket, and the bridge's to Android's, cannot: what a front
+    /// needs (a Runner's session) then goes on the URL.
+    var sendsHeaders: Bool { get }
     func send(id: Int32, text: String)
     func disconnect(id: Int32)
     func next(id: Int32) async throws -> String
@@ -23,5 +27,6 @@ public protocol VisorSocketService {
 
 public extension VisorSocketService {
     var dropsInBackground: Bool { false }
+    var sendsHeaders: Bool { false }
     func open(url: String, headers: [String: String]) -> Int32 { open(url: url) }
 }

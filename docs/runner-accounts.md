@@ -230,7 +230,9 @@ path), not a need.
    computers together, after those added by hand, followed by the Runner's
    own section (Sign Out, or Sign In… again, and Remove Runner); the client
    has no Settings screen of its own, so the sidebar is where accounts are,
-   as the fork's is. Proof screens `runner` and `runner-accounts`. Left:
-   Android's and the web's channel with `runner_session`, and trust on first
-   use for a Runner's own certificate (5c).
+   as the fork's is. Proof screens `runner` and `runner-accounts`. Where a
+   host's socket sends no headers (`VisorSocketService.sendsHeaders`: the
+   web's and Android's bridge), a Runner's computer's channel carries the
+   session as `runner_session` instead. Left: trust on first use for a
+   Runner's own certificate (5c).
 6. The version after: the direct way removed.

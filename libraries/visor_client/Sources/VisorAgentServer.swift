@@ -176,7 +176,8 @@ public final class VisorAgentServer: AgentServer {
             poll(address, onEvent: onEvent)
             return
         }
-        let id = socket.open(url: address.socket, headers: socketHeaders)
+        let id = socket.open(url: Self.channelURL(address.socket, record: record, headers: socketHeaders, sendsHeaders: socket.sendsHeaders),
+                             headers: socketHeaders)
         guard id >= 0 else {
             Task { onEvent(.closed("Bad address")) }
             return
@@ -376,6 +377,19 @@ public final class VisorAgentServer: AgentServer {
         guard let address else { throw AgentServerError.message("Bad address") }
         let headers = try await AgentServerAuthenticators.authenticator(for: record).headers(for: record)
         return try await http.request(method: method, url: address.api + path, body: body, headers: headers)
+    }
+
+    /// The channel's URL. Where the host's socket sends no headers (the web,
+    /// Android) and the computer is a Runner's, the Runner's session goes on
+    /// it as `runner_session`, which the Runner takes off before the request
+    /// goes on to the server (docs/runner-accounts.md, step 4).
+    static func channelURL(_ url: String, record: AgentServerRecord, headers: [String: String], sendsHeaders: Bool) -> String {
+        guard !sendsHeaders, record.authentication == RunnerAuthenticator.name,
+              let bearer = headers.first(where: { $0.key.lowercased() == "authorization" })?.value,
+              bearer.lowercased().hasPrefix("bearer ") else { return url }
+        let session = String(bearer.dropFirst(7))
+        guard !session.isEmpty else { return url }
+        return url + (url.contains("?") ? "&" : "?") + "runner_session=" + escape(session)
     }
 
     static func escape(_ text: String) -> String {
