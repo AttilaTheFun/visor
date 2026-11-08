@@ -152,6 +152,19 @@ path), not a need.
 - **The relay** is unchanged: the client reports every server it is
   connected to and carries messages between them.
 
+- **Found in the client** (8 Nov 2026, for step 5):
+  - A record's address may carry a path (`ServerAddress`: `https://<runner>/runner/v1/servers/<id>`),
+    REST at its `…/api`, the channel at its `…/`: no new routing.
+  - `hello` hands back the server's own addresses, which a record learns
+    (`learnPaths`): an account's record must not, or the client goes
+    around the Runner.
+  - No platform checks a server's certificate itself today: pinning is
+    a URLSession delegate on Apple's, a trust manager on Android's (the
+    pin across the bridge), and impossible in a browser, where the web
+    client needs a certificate the browser trusts (the tailnet's, step 3).
+  - `VisorAccounts.current` is one account and `fromAccount` a Bool: both
+    become a list of accounts and an account's id.
+
 ## The version between (one version)
 
 - A Runner's servers answer both ways: through the Runner by sign-in, and
@@ -203,7 +216,10 @@ path), not a need.
    it comes. A WebSocket's upgrade goes on as it came (its key and version,
    with the server's password), and once it has, the client's HTTP handlers
    come off and the two connections are joined byte for byte
-   (RunnerAPIServer.Glue): the server's own 101, then every frame, each way.
+   (RunnerAPIServer.Glue): the server's own 101, then every frame, each way. A session may come as
+   the `runner_session` query parameter instead of `Authorization` (Android's
+   and the web's WebSocket handshakes send no headers); the Runner takes it out
+   of the path before the request goes on.
 5. The client's accounts: Settings › Accounts, the sidebar's grouping, the
    records of an account's servers, trust on first use; the fork's
    `VisorAccount` as one such account. This ships as the version between.
