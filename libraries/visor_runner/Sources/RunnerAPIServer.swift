@@ -20,13 +20,24 @@ public final class RunnerAPIServer: Sendable {
     private let group = MultiThreadedEventLoopGroup(numberOfThreads: 2)
 
     /// Nil when the port can't be had.
+    /// With the Runner's own certificate (RunnerIdentity).
+    public convenience init?(port: UInt16, api: RunnerAPI, identity: RunnerIdentity,
+                             reach: @escaping @Sendable (String) -> Reach? = { _ in nil }) throws {
+        try self.init(port: port, api: api, chain: try identity.pem, key: identity.keyPEM, reach: reach)
+    }
+
+    /// With a certificate chain and its key as PEM: the Runner's own, or one
+    /// a client trusts as any website's (the tailnet's, from `tailscale
+    /// cert`: its leaf, then the authority that signed it).
     /// `reach`: where a server the Runner passes requests on to is, and its
     /// password (runner.json's `reaches`, the secrets'), at each request.
-    public init?(port: UInt16, api: RunnerAPI, identity: RunnerIdentity,
+    public init?(port: UInt16, api: RunnerAPI, chain: String, key: String,
                  reach: @escaping @Sendable (String) -> Reach? = { _ in nil }) throws {
+        let certificates = try NIOSSLCertificate.fromPEMBytes(Array(chain.utf8))
+        guard !certificates.isEmpty else { throw RunnerAPIServer.NoCertificate() }
         var configuration = TLSConfiguration.makeServerConfiguration(
-            certificateChain: [.certificate(try NIOSSLCertificate(bytes: Array(try identity.pem.utf8), format: .pem))],
-            privateKey: .privateKey(try NIOSSLPrivateKey(bytes: Array(identity.keyPEM.utf8), format: .pem)))
+            certificateChain: certificates.map { .certificate($0) },
+            privateKey: .privateKey(try NIOSSLPrivateKey(bytes: Array(key.utf8), format: .pem)))
         configuration.applicationProtocols = ["http/1.1"]
         context = try NIOSSLContext(configuration: configuration)
         visor_ignore_broken_pipes()
@@ -52,6 +63,11 @@ public final class RunnerAPIServer: Sendable {
         visor_shutdown(listener)
         close(listener)
         group.shutdownGracefully { _ in }
+    }
+
+    /// A chain with no certificate in it.
+    public struct NoCertificate: Error, CustomStringConvertible {
+        public var description: String { "no certificate in the chain given" }
     }
 
     /// The names of the client's HTTP handlers.

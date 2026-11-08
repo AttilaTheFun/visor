@@ -202,8 +202,11 @@ path), not a need.
    when its names change or within a month of its end) and the sign-in over
    TLS with it alone; no plain HTTP. `api certificate` prints its SHA-256
    fingerprint, which the client shows at its first sign-in (step 5). The
-   tailnet's certificate in its place, from Tailscale's local API, is next:
-   it needs trying on a Mac, where Tailscale's app keeps that API apart.
+   tailnet's certificate in its place: first as files (`api certificate
+   --file <chain> --key <key>`, as `tailscale cert <name>` writes them, read
+   at the agent's start; the key stays in its file), tried on a real Mac on
+   the tailnet; renewed from Tailscale's local API after (a Let's Encrypt
+   certificate lasts 90 days), once the files are proven.
 4. The reverse proxy by path, HTTP and WebSocket, with the per-server
    token; the Mac's server and a container's behind it, and the watch over
    them. Built first, HTTP: `/runner/v1/servers/<id>/<path>` goes on to

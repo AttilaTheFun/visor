@@ -86,11 +86,38 @@ extension RunnerCommand {
             ?? "No sign-in from the agent's next start")
     }
 
-    /// The certificate clients sign in over, made the first time: its
-    /// fingerprint, which a client shows at its first sign-in for the
-    /// person to compare, and the certificate itself.
-    func printAPICertificate(config: RunnerConfig) throws {
-        let identity = try RunnerIdentity.kept(in: secrets, names: RunnerIdentity.names(given: config.apiNames))
-        output("SHA-256 \(try identity.fingerprint)\n" + (try identity.pem))
+    /// The certificate clients sign in over. No arguments: the one in use,
+    /// the Runner's own (made the first time: its fingerprint, which a client
+    /// shows at its first sign-in for the person to compare, and the
+    /// certificate) or the files named. `--file <chain> --key <key>`: those
+    /// files from the agent's next start (the tailnet's, from `tailscale
+    /// cert`); `--own`: the Runner's own again.
+    func setOrPrintAPICertificate(_ arguments: [String], in config: inout RunnerConfig) throws {
+        let usage = "api certificate [--file <chain.pem> --key <key.pem> | --own]"
+        switch arguments.count {
+        case 0:
+            if let file = config.apiCertificateFile {
+                output("From \(file) (key \(config.apiKeyFile ?? "?")), read at the agent's start")
+                return
+            }
+            let identity = try RunnerIdentity.kept(in: secrets, names: RunnerIdentity.names(given: config.apiNames))
+            output("SHA-256 \(try identity.fingerprint)\n" + (try identity.pem))
+        case 1 where arguments[0] == "--own":
+            config.apiCertificateFile = nil
+            config.apiKeyFile = nil
+            try config.write(folder)
+            output("Clients sign in over this Runner's own certificate from the agent's next start")
+        case 4 where arguments[0] == "--file" && arguments[2] == "--key":
+            let chain = (try? String(contentsOfFile: arguments[1], encoding: .utf8)) ?? ""
+            let key = (try? String(contentsOfFile: arguments[3], encoding: .utf8)) ?? ""
+            guard chain.contains("-----BEGIN CERTIFICATE-----") else { throw Problem("\(arguments[1]): no certificate in it") }
+            guard key.contains("PRIVATE KEY-----") else { throw Problem("\(arguments[3]): no private key in it") }
+            config.apiCertificateFile = arguments[1]
+            config.apiKeyFile = arguments[3]
+            try config.write(folder)
+            output("Clients sign in over \(arguments[1]) from the agent's next start")
+        default:
+            throw Problem(usage)
+        }
     }
 }
