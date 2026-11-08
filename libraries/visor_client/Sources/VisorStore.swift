@@ -71,6 +71,7 @@ public final class VisorStore {
         }
         for server in servers { observe(server); server.connect() }
         startAccount()
+        startRunners()
         listenForNotifications()
         courier.start()
         AgentServerAuthenticators.whenSignedIn { [weak self] id, serving in self?.signedIn(id, serving: serving) }
