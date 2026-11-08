@@ -73,6 +73,19 @@ in the transcript and the agent can be notified."
     (Visor shows it as the mail row, not a user row), and whether
     `--dangerously-load-development-channels` asks for a confirmation
     headless.
+  - **Found in Claude Code 2.1.318** (8 Nov 2026, from the build itself; not
+    yet run): `--channels <servers…>` names the MCP servers whose channel
+    notifications register the session. The server must declare
+    `claude/channel`. Channels are off unless managed settings say
+    `channelsEnabled: true` ("channels not enabled by org policy"), and a
+    server not on `allowedChannelPlugins` is refused ("not on your org's
+    approved channels list"). `--dangerously-load-development-channels`, the
+    way around the allowlist, "shows a confirmation dialog at startup": not
+    for a headless session, so the managed settings are the only road.
+    Channels aren't offered on third-party providers. Running the check needs
+    those settings where the throwaway session runs. On a Mac they're an
+    administrator's (Logan's); in the co-tenant they would apply to every
+    agent in it. So the check waits for Logan to say where to set them.
 - **Codex, and Claude without channels: a notice turn.** Codex's app server
   takes input only as the user's (`turn/start`, `turn/steer`). Visor starts
   a turn whose whole input is one line, `[Visor: you have 4 unread messages
