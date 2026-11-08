@@ -117,7 +117,8 @@ final class RunnerAccountTests: XCTestCase {
         store.signOut(of: account)
         await settle()
         XCTAssertFalse(account.isSignedIn)
-        XCTAssertEqual(store.servers.map(\.record.name), ["Laptop"], "the hand-added computer stays")
+        // By its address: connected, a computer takes its server's own name.
+        XCTAssertEqual(store.servers.map(\.record.address), ["http://laptop:7433"], "the hand-added computer stays")
         XCTAssertEqual(VisorHost.settings?.secret(key: account.secretKey), "")
         XCTAssertTrue(http.requests.contains { $0.url.hasSuffix("/runner/v1/sign-out") && $0.headers["Authorization"] == "Bearer session-1" })
         XCTAssertEqual(RunnerAccounts.all.count, 1, "signed out, the account is kept to sign in to again")
@@ -128,7 +129,7 @@ final class RunnerAccountTests: XCTestCase {
         store.remove(account)
         await settle()
         XCTAssertTrue(RunnerAccounts.all.isEmpty)
-        XCTAssertEqual(store.servers.map(\.record.name), ["Laptop"])
+        XCTAssertEqual(store.servers.map(\.record.address), ["http://laptop:7433"])
     }
 
     func testARecordKeepsItsAccount() throws {
