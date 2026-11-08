@@ -42,6 +42,27 @@ export DOCKER_CONFIG="$work/docker"
 printf '%s' "${GHCR_TOKEN:?a token that writes packages}" \
   | "$work/crane" auth login ghcr.io --username "${GHCR_USER:?the registry user}" --password-stdin
 
+# The Mac's room, before anything is built: every image no container uses
+# goes (Apple's container keeps each build's, and its intermediates, for
+# good: twice a release filled the mini's disk). The running co-tenant's
+# image and the builder's own stay, being in use; so does what this build
+# makes, until the next release's build clears it. An image pulled ahead and
+# not yet run goes too. Then, when the disk is low all the same, the
+# builder's cache (its own container's disk), which `container` 1.6 can only
+# delete whole: the next build makes a fresh, empty builder. Neither ever
+# fails a release; what each did is in the log. The release Mac's runner
+# runs one job at a time, so no build is running now.
+echo "Before: $(container system df 2>&1 | tr '\n' ' ')"
+container image prune --all 2>&1 || echo "::warning::the unused images weren't pruned"
+# A disk whose room can't be read counts as roomy: nothing more is deleted.
+free_kb="$(df -k / 2>/dev/null | awk 'NR == 2 { print $4 }')" || true
+free_gb=$(( ${free_kb:-1073741824} / 1024 / 1024 ))
+if [ "$free_gb" -lt "${VISOR_MIN_FREE_GB:-150}" ]; then
+  echo "Only ${free_gb} GB free: the builder's cache goes too"
+  { container builder stop && container builder delete; } 2>&1 || echo "::warning::the builder's cache wasn't cleared"
+fi
+echo "After: $(container system df 2>&1 | tr '\n' ' ')"
+
 # One target, built and pushed as its repository's version, MAJOR.MINOR and
 # latest.
 publish() {
