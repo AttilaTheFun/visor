@@ -30,10 +30,19 @@ extension VisorServer {
         guard envelope.token == agentToken, let caller = session(envelope.client) else {
             return reply(agentReply(envelope))
         }
+        // Visor's MCP server since 0.47 says so with every ask: this
+        // session's agent has read_inbox, so messages go to its inbox.
+        if envelope.version == "mail", !caller.takesMail { caller.takesMail = true }
         switch envelope.mode {
         case "sessions": reply(listSessions(for: envelope, caller: caller))
         case "send", "read": route(envelope, from: caller, reply: reply)
-        case "status": reply(relayStatus(envelope))
+        case "inbox": reply(readInbox(envelope, caller: caller))
+        case "outbox": reply(readOutbox(envelope, caller: caller))
+        // A message sent elsewhere: the relay knows most of it; one sent
+        // here, the outbox.
+        case "status":
+            let relayed = envelope.messageID.map { relayOutbox[$0] != nil } ?? false
+            reply(relayed ? relayStatus(envelope) : mailStatus(envelope, caller: caller) ?? relayStatus(envelope))
         case "mcp_tools", "mcp_call": Task { reply(await answerProxied(envelope, caller: caller)) }
         default: reply(agentReply(envelope))
         }
@@ -122,6 +131,13 @@ extension VisorServer {
                                    to: RelayEndpoint(server: server.id, serverName: server.name, session: session.id, sessionName: session.name),
                                    text: text, rows: max(1, min(ask.rows ?? 10, 50)), created: now, expires: now + Self.relayLifetime)
         enqueueRelay(message)
+        // A message (not a read) waits in the sender's outbox too, until
+        // the relay knows what became of it (noteMailOutcome).
+        if kind == .send {
+            caller.mailbox.send(MailMessage(id: message.id, from: message.from, to: message.to, text: text, sent: now,
+                                            state: .waiting, changed: now))
+            saveArchive()
+        }
         awaitRelay(message.id, for: kind == .read ? Self.relayReadWait : Self.relaySendWait) { [weak self] record in
             guard let self else { return }
             reply(self.agentResult(record, to: ask, asStatus: false))

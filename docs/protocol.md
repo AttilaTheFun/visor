@@ -284,18 +284,36 @@ workspace-write sandbox.
 
 Every Claude and Codex session the menu bar app starts gets the same MCP
 server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`), with
-four tools: `list_sessions`, `send_message(session, server, text)`,
-`read_messages(session, server, count)` and `message_status(message_id)`:
+six tools: `list_sessions`, `send_message(session, server, text)`,
+`read_messages(session, server, count)`, `message_status(message_id)`,
+`read_inbox(unread_only, count)` and `read_outbox(count)`:
 a session is always named with its computer's server id (the server also
 takes the session id alone, for scripts from before 0.31).
 Each call is a WebSocket connection from the script to the app carrying
-`{"type":"agent","token":<agent token>,"client":<calling session>,"mode":"sessions"|"send"|"read"|"status","session":<other session>,"server":<its server's id or name>,"messageID":…,"text":…,"rows":<count>,"id":…}`,
+`{"type":"agent","token":<agent token>,"client":<calling session>,"mode":"sessions"|"send"|"read"|"status"|"inbox"|"outbox","session":<other session>,"server":<its server's id or name>,"messageID":…,"text":…,"rows":<count>,"version":"mail","id":…}`,
 answered with `{"type":"agent_result","id":…,"text":…,"messageID":…}` or `…,"error":…}`.
-A session is never offered itself, nor ended or archived ones. A message is
-delivered as a new turn of its own (queued while the other session works,
-and never joined to other queued messages), headed with who sent it and who
-it is for, each by name, id and computer:
-`[Message from the Visor session "<title>" (<id>) on <computer> (server <server id>), to this session "<title>" (<id>) on <computer> — not from the user. To answer, use send_message with session <id> and server <server id>.]`.
+`version` `"mail"` (since 0.47) says the agent's MCP server has `read_inbox`;
+for `inbox`, `text` `"all"` asks for the read messages too.
+A session is never offered itself, nor ended or archived ones.
+
+Every session has an inbox and an outbox (docs/agent-mail.md), kept with the
+session in the server's store for as long as the session is kept. A message
+goes into the other session's inbox and a copy into the sender's outbox, by
+one message id (the relay's, between servers); its state there is `waiting`,
+`delivered`, `read`, `failed` or `expired`. The other agent is not handed the
+message as a turn of the user's: it is told, in a turn whose whole input is
+one line, how many messages are unread, never their words —
+`[Visor: you have <n> unread message(s) in your inbox; read them with read_inbox]` —
+queued while it works. One such notice waits at a time, and it counts what is
+unread when its turn comes (none: it goes as nothing). `read_inbox` gives the
+messages oldest first, each headed with who sent it and who it is for, by
+name, id and computer:
+`[Message from the Visor session "<title>" (<id>) on <computer> (server <server id>), to this session "<title>" (<id>) on <computer> — not from the user. To answer, use send_message with session <id> and server <server id>.]`;
+those unread are marked read, and a sender on the same server sees it in its
+outbox. A session whose agent may not have `read_inbox` (one an earlier
+launch left running under its host, until it asks with `version` `"mail"` or
+its agent is made again) is handed the message as before: a new turn of its
+own, headed as above, queued while it works.
 Node must be on the PATH (as it already is for approvals).
 
 ## Proxied MCP servers

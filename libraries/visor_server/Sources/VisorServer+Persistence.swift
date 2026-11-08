@@ -118,6 +118,10 @@ extension VisorServer {
             record.watchedSubagents = Set(item.watchedSubagents ?? [])
             record.closedSubagents = Set(item.closedSubagents ?? [])
             record.mcpSwitched = item.mcpSwitched ?? [:]
+            record.mailbox = item.mailbox ?? Mailbox()
+            // An agent left running under its host has the MCP server of the
+            // launch that started it, which may have no read_inbox.
+            record.takesMail = item.host == nil
             // The outbox, lined up with its words (a file from before it was
             // kept has words and no files).
             let files = item.queuedImages ?? []

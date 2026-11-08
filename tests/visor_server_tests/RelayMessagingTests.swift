@@ -141,10 +141,15 @@ final class RelayMessagingTests: ServerTestCase {
         XCTAssertNil(answer.error)
         XCTAssertEqual(answer.text, "Queued for “Laptop work” (B) on Laptop: it is working and takes it when its turn ends.")
 
-        let queued = try XCTUnwrap(there.sessions.first?.info.queued.first)
-        XCTAssertTrue(queued.contains("“Mini work” (A) on \(here.hostName)"), queued)
-        XCTAssertTrue(queued.contains("send_message with session A and server \(here.id)"), queued)
-        XCTAssertTrue(queued.hasSuffix("Is the client done?"))
+        // In B's inbox, and B told it has mail, never the words; A's
+        // outbox knows it got there, by the same id.
+        let b = try XCTUnwrap(there.sessions.first)
+        XCTAssertEqual(b.info.queued, ["[Visor: you have 1 unread message in your inbox; read them with read_inbox]"])
+        let mail = try XCTUnwrap(b.mailbox.inbox.first)
+        XCTAssertEqual(mail.text, "Is the client done?")
+        XCTAssertEqual(mail.from, RelayEndpoint(server: here.id, serverName: here.hostName, session: "A", sessionName: "Mini work"))
+        XCTAssertEqual(here.sessions.first?.mailbox.outbox.map(\.state), [.delivered])
+        XCTAssertEqual(here.sessions.first?.mailbox.outbox.first?.id, mail.id, "one id at both ends")
         XCTAssertTrue(exchange(from: here, to: there).isEmpty, "nothing left to carry")
     }
 

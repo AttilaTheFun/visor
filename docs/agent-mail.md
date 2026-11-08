@@ -111,7 +111,12 @@ in the transcript and the agent can be notified."
 
 1. This design, and the channel checks above in a throwaway session.
 2. The boxes in the server's store, `read_inbox`, `read_outbox`, and
-   same-server delivery into them; the notice turn for every agent.
+   same-server delivery into them; the notice turn for every agent. Built:
+   a message carried from another server goes into the inbox too, and a
+   message sent to one waits in the outbox until the relay's receipt says
+   it was delivered (or failed, or expired). An agent an earlier launch
+   left running may have no `read_inbox`: it is handed messages as turns
+   until its MCP server says `version` `"mail"` or its agent is made again.
 3. The relay's `delivered` and read receipts across servers.
 4. Claude's channel: Visor's MCP server's capability and notification,
    `--channels`, and the container image's managed settings.

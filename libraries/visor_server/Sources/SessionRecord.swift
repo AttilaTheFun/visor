@@ -119,6 +119,14 @@ public final class SessionRecord {
     var closedSubagents: Set<String> = []
     /// The MCP servers it switched from their default: on or off.
     var mcpSwitched: [String: Bool] = [:]
+    /// What other sessions sent it and what it sent them
+    /// (docs/agent-mail.md), kept with it.
+    var mailbox = Mailbox()
+    /// Whether its agent has read_inbox, so a message to it goes to its
+    /// inbox: one this launch starts does; one an earlier launch left
+    /// running under its host may not, until it asks something with the
+    /// new MCP server (VisorServer+AgentAsks.swift) or is made again.
+    var takesMail = true
     /// Whether `info.background` is what runs in the agent's background
     /// now. Claude Code says its list whenever it changes, and a process of
     /// its starts with nothing there and says nothing until that changes,
@@ -245,7 +253,8 @@ public final class SessionRecord {
                              otherBranch: otherBranch, branchKept: branchKept ? true : nil, fork: pendingFork,
                              watchedSubagents: watchedSubagents.isEmpty ? nil : watchedSubagents.sorted(),
                              closedSubagents: closedSubagents.isEmpty ? nil : closedSubagents.sorted(),
-                             mcpSwitched: mcpSwitched.isEmpty ? nil : mcpSwitched)
+                             mcpSwitched: mcpSwitched.isEmpty ? nil : mcpSwitched,
+                             mailbox: mailbox.isEmpty ? nil : mailbox)
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or
@@ -320,6 +329,8 @@ public final class SessionRecord {
     func replaceProcess(_ replacement: AgentProcess) {
         stopListening()
         process = replacement
+        // A new agent, with the MCP server this launch gives it.
+        takesMail = true
         if let pendingFork { _ = replacement.fork(at: pendingFork.at) }
         // A new process starts with nothing in the background.
         backgroundEnded()

@@ -94,12 +94,14 @@ final class MCPBridgeTests: ServerTestCase {
         let (bridge, _, said) = self.bridge(approvals: true, server: server)
         await bridge.handle(#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#)
         let names = await said.answer(3)?["result"]["tools"].array?.compactMap { $0["name"].string }
-        XCTAssertEqual(names, ["approve", "list_sessions", "send_message", "read_messages", "message_status", "github__search"])
+        XCTAssertEqual(names, ["approve", "list_sessions", "send_message", "read_messages", "message_status", "read_inbox", "read_outbox",
+                               "github__search"])
 
         let (plain, _, plainSaid) = self.bridge()
         await plain.handle(#"{"jsonrpc":"2.0","id":4,"method":"tools/list"}"#)
         let plainNames = await plainSaid.answer(4)?["result"]["tools"].array?.compactMap { $0["name"].string }
-        XCTAssertEqual(plainNames, ["list_sessions", "send_message", "read_messages", "message_status"], "no approve unless asked for")
+        XCTAssertEqual(plainNames, ["list_sessions", "send_message", "read_messages", "message_status", "read_inbox", "read_outbox"],
+                       "no approve unless asked for")
     }
 
     func testASessionToolGoesToTheServerUnderTheNamesAnAgentReachesFor() async {

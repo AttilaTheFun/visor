@@ -55,7 +55,7 @@ const tools = [
   },
   {
     name: "send_message",
-    description: "Sends a message to another Visor session, named by its session id and its computer's server id (both from list_sessions), as a new turn for that agent. It is headed with this session's name, id and computer, so the other agent knows exactly who sent it and how to answer, and that it is not from the user. If the session is working, the message waits for its turn to end. A session on another computer is reached through a Visor client connected to both: the answer says whether it was taken, or that it waits for such a client (kept for a day), with a message id for message_status.",
+    description: "Sends a message to another Visor session, named by its session id and its computer's server id (both from list_sessions). It goes into that session's inbox, with this session's name, id and computer, so the other agent knows exactly who sent it and how to answer, and that it is not from the user; that agent is told it has mail and reads it with read_inbox. A copy stays in this session's outbox (read_outbox). A session on another computer is reached through a Visor client connected to both: the answer says whether it was taken, or that it waits for such a client (kept for a day). The answer gives a message id for message_status.",
     inputSchema: {
       type: "object",
       properties: {
@@ -81,13 +81,34 @@ const tools = [
   },
   {
     name: "message_status",
-    description: "Tells what became of a message (or read) sent to a session on another computer: waiting for a Visor client connected to both computers, sent, queued while that agent works, read (with what it found), not taken, or expired after a day.",
+    description: "Tells what became of a message (or read) this session sent: in the other session's inbox unread, read, waiting for a Visor client connected to both computers, not taken, or expired after a day; for a read of another computer's session, what it found.",
     inputSchema: {
       type: "object",
       properties: {
         message_id: { type: "string", description: "The message id send_message or read_messages gave." },
       },
       required: ["message_id"],
+    },
+  },
+  {
+    name: "read_inbox",
+    description: "Reads the messages other Visor sessions sent this one, oldest first, each with its message id, who sent it (session and computer, by name and id) and how to answer. Those read are marked read, and their senders can see it. Visor tells this session when it has unread messages, with how many.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        unread_only: { type: "boolean", description: "Only the unread messages (the default); false for the latest ones, read or not." },
+        count: { type: "number", description: "How many messages, 1 to 50. Defaults to 10." },
+      },
+    },
+  },
+  {
+    name: "read_outbox",
+    description: "Lists the messages this session sent to other Visor sessions, oldest first, and what became of each: in their inbox unread, read, waiting to be carried to another computer, not taken, or expired.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        count: { type: "number", description: "How many messages, 1 to 50. Defaults to 10." },
+      },
     },
   },
 ];
@@ -173,7 +194,8 @@ function handle(line) {
     });
   } else if (method === "tools/call" && params?.name !== "approve") {
     const args = params?.arguments || {};
-    const mode = { list_sessions: "sessions", send_message: "send", read_messages: "read", message_status: "status" }[params?.name];
+    const mode = { list_sessions: "sessions", send_message: "send", read_messages: "read", message_status: "status",
+                   read_inbox: "inbox", read_outbox: "outbox" }[params?.name];
     if (!mode) {
       send({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: `No tool ${params?.name}` }] } });
       return;
@@ -187,7 +209,12 @@ function handle(line) {
       send({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: `${params.name} needs \`session\` and \`server\`: a session id and its computer's server id, from list_sessions.` }] } });
       return;
     }
-    call({ mode, session, server, messageID: args.message_id ?? args.messageID, text: args.text ?? args.message,
+    // "mail": this MCP server has read_inbox, so the server puts what
+    // other sessions send this one in its inbox. read_inbox's read
+    // messages too are said to the server as `text`.
+    const all = mode === "inbox" && (args.unread_only === false || args.unread_only === "false");
+    call({ mode, version: "mail", session, server, messageID: args.message_id ?? args.messageID,
+           text: all ? "all" : args.text ?? args.message,
            rows: args.count === undefined ? undefined : Math.round(Number(args.count)) })
       .then(({ ok, text }) => send({ jsonrpc: "2.0", id, result: { isError: !ok, content: [{ type: "text", text }] } }));
   } else if (method === "tools/call") {

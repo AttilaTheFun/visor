@@ -45,6 +45,8 @@ extension VisorServer {
         ask.session = message.to.session
         ask.text = message.text
         ask.rows = message.rows
+        // The inbox keeps the relay's id, as the sender's outbox does.
+        ask.messageID = message.id
         let reply = answer(ask, from: message.from.session, named: message.from.sessionName, on: message.from)
         if let error = reply.error { return RelayReceipt(message: message.id, outcome: .failed, text: error) }
         let outcome: RelayReceipt.Outcome = message.kind == .read ? .read : reply.busy == true ? .queued : .sent
