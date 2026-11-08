@@ -154,6 +154,42 @@ final class RunnerSignInTests: XCTestCase {
         XCTAssertEqual(listed.body, #"{"servers":[{"id":"mini","kind":"mac","name":"mini"}]}"#)
     }
 
+    /// A chain and its key from files (`api certificate --file`, as
+    /// `tailscale cert` writes them) are what the sign-in serves: a client
+    /// trusting that chain alone signs in.
+    func testTheSignInServesACertificateFromFiles() throws {
+        XCTAssertEqual(run(["user", "set", "logan"], input: ["a long enough password"]), 0)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // A chain the Runner didn't make: an identity kept elsewhere, as files.
+        let other = try RunnerIdentity.kept(in: MemorySecrets(), names: RunnerIdentity.names(given: []))
+        let chain = folder.appendingPathComponent("mini.tail.ts.net.crt")
+        let key = folder.appendingPathComponent("mini.tail.ts.net.key")
+        try other.pem.write(to: chain, atomically: true, encoding: .utf8)
+        try other.keyPEM.write(to: key, atomically: true, encoding: .utf8)
+        XCTAssertEqual(run(["api", "certificate", "--file", chain.path, "--key", key.path]), 0)
+        XCTAssertEqual(RunnerConfig.read(folder)?.apiCertificateFile, chain.path)
+        XCTAssertNil(secrets.value(RunnerIdentity.keySecret), "the key stays in its file")
+        XCTAssertEqual(run(["api", "certificate", "--file", key.path, "--key", key.path]), 2, "a key isn't a chain")
+
+        var listening: RunnerAPIServer?
+        var port: UInt16 = 0
+        for _ in 0..<20 where listening == nil {
+            port = UInt16.random(in: 20000...45000)
+            listening = try RunnerAPIServer(port: port, api: api, chain: try String(contentsOf: chain, encoding: .utf8),
+                                            key: try String(contentsOf: key, encoding: .utf8))
+        }
+        let server = try XCTUnwrap(listening)
+        server.start()
+        defer { server.stop() }
+        let signed = try curl(["--cacert", chain.path, "-X", "POST", "-H", "Content-Type: application/json",
+                               "-d", #"{"username":"logan","password":"a long enough password"}"#,
+                               "https://127.0.0.1:\(port)/runner/v1/sign-in"])
+        XCTAssertEqual(signed.status, "200", signed.body)
+
+        XCTAssertEqual(run(["api", "certificate", "--own"]), 0)
+        XCTAssertNil(RunnerConfig.read(folder)?.apiCertificateFile)
+    }
+
     /// The Runner's certificate: made once and kept, the same fingerprint
     /// each time it is asked for, for its names; made again when they change.
     func testTheCertificateIsKeptForItsNames() throws {

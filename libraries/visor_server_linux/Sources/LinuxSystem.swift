@@ -60,7 +60,8 @@ public struct LinuxSystem: CommandLineSystem {
             files: PollingFileWatching(),
             tools: LinuxTools(),
             host: HostDetails(name: ProcessInfo.processInfo.hostName, system: "linux", inContainer: Self.inContainer, dataDirectory: data,
-                              addresses: { POSIXAddresses.all() }, resolve: { POSIXResolver.ipv4($0) }),
+                              addresses: { POSIXAddresses.all() }, resolve: { POSIXResolver.ipv4($0) },
+                              sharedFolders: { Self.inContainer ? LinuxMounts.shared() : nil }),
             lifecycle: lifecycle,
             agentHosts: POSIXAgentHosting.beside(executable),
             log: log

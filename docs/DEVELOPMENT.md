@@ -600,7 +600,9 @@ conversation names most, by `ProjectSurvey`), the other for a plan
 (VisorServer+MigrationArrival.swift: each project here already, cloned
 from its remote when it has nothing the remote does not, copied when it
 does or has no remote, or made), and carries the files across a piece at
-a time. Paths under one home folder land under the other's. The new
+a time. Paths under one home folder land under the other's; in a
+container its computer shares folders with (`HostDetails.sharedFolders`),
+a path in one stays where it is, and a session in none is refused. The new
 session resumes the same conversation; the old one is left for the user
 to remove.
 
