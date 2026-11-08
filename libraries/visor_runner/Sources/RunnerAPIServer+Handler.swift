@@ -12,16 +12,26 @@ extension RunnerAPIServer {
         typealias InboundIn = HTTPServerRequestPart
         typealias OutboundOut = HTTPServerResponsePart
 
-        /// No request to the Runner's side has a body larger than this.
+        /// No request to the Runner's own side has a body larger than this;
+        /// one for a server (a file sent to it) up to the second.
         static let bodyLimit = 64 << 10
+        static let proxiedLimit = 64 << 20
 
         let api: RunnerAPI
+        let reach: @Sendable (String) -> RunnerAPIServer.Reach?
         private var head: HTTPRequestHead?
         private var body: ByteBuffer?
         private var tooLong = false
 
-        init(api: RunnerAPI) {
+        init(api: RunnerAPI, reach: @escaping @Sendable (String) -> RunnerAPIServer.Reach?) {
             self.api = api
+            self.reach = reach
+        }
+
+        func clearRequest() {
+            head = nil
+            body = nil
+            tooLong = false
         }
 
         func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -33,11 +43,16 @@ extension RunnerAPIServer {
             case .body(var buffer):
                 var held = body ?? context.channel.allocator.buffer(capacity: buffer.readableBytes)
                 held.writeBuffer(&buffer)
-                if held.readableBytes > Self.bodyLimit { tooLong = true } else { body = held }
+                let limit = head.flatMap { RunnerAPIServer.proxied($0.uri) } == nil ? Self.bodyLimit : Self.proxiedLimit
+                if held.readableBytes > limit { tooLong = true } else { body = held }
             case .end:
                 guard let head else { return }
                 if tooLong {
-                    respond(context, RunnerAPI.json(400, ["error": "Too long"]))
+                    respond(context, RunnerAPI.json(413, ["error": "Too long"]))
+                    return
+                }
+                if let target = RunnerAPIServer.proxied(head.uri) {
+                    proxy(context, server: target.server, path: target.path, head: head, body: body)
                     return
                 }
                 let request = (method: head.method.rawValue, path: head.uri, authorization: head.headers["authorization"].first,
@@ -66,8 +81,7 @@ extension RunnerAPIServer {
             buffer.writeBytes(answer.body)
             context.write(wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
             context.writeAndFlush(wrapOutboundOut(.end(nil)), promise: nil)
-            head = nil
-            body = nil
+            clearRequest()
         }
     }
 }

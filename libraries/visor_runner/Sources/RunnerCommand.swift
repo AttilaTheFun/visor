@@ -46,6 +46,10 @@ public struct RunnerCommand {
                    Prints the body of the server's `PUT /api/push-proxy`: this
                    Runner's push proxy (http://<address>:<port>), with the
                    server's token. For a server with no APNs key of its own.
+          server reach <name> --at <host>:<port>
+                   Where signed-in clients' requests for that server go
+                   (/runner/v1/servers/<name>/…), with its password, read from
+                   standard input and kept here only, in place of theirs.
           server remove <name>
           apns set --key-id <id> --team-id <id>
                    The APNs key the push proxy signs with: the .p8's text read
@@ -114,6 +118,7 @@ public struct RunnerCommand {
             case ("github-proxy", "ca"): try printGitHubProxyCA()
             case ("github-proxy", "app"): try setGitHubProxyApp(Array(arguments.dropFirst(2)), in: &config)
             case ("github-proxy", "server"): try githubProxyBody(Array(arguments.dropFirst(2)), config: config)
+            case ("server", "reach"): try setReach(Array(arguments.dropFirst(2)), in: &config)
             case ("user", "set"): try setUser(Array(arguments.dropFirst(2)), in: &config)
             case ("user", "remove"): try removeUser(in: &config)
             case ("api", "port"): try setAPIPort(Array(arguments.dropFirst(2)), in: &config)
@@ -279,7 +284,9 @@ public struct RunnerCommand {
     private func removeServer(_ arguments: [String], in config: inout RunnerConfig) throws {
         guard let name = arguments.first, config.servers.contains(name) else { throw Problem("no Visor server \(arguments.first ?? "")") }
         secrets.set(ProxyTokens.key(server: name), nil)
+        secrets.set(RunnerAPIServer.passwordSecret(name), nil)
         config.servers.removeAll { $0 == name }
+        config.reaches[name] = nil
         try config.write(folder)
         output("\(name) removed: its token no longer gets through")
     }

@@ -48,6 +48,11 @@ public struct RunnerAPI: Sendable {
         }
     }
 
+    /// The user whose live session an `Authorization` header carries.
+    public func user(for authorization: String?, now: Date = Date()) -> String? {
+        Self.bearer(authorization).flatMap { sessions.user(for: $0, now: now) }
+    }
+
     /// Whether this is a request of the Runner's side for clients.
     public static func handles(_ path: String) -> Bool { path.hasPrefix("/runner/v1/") }
 

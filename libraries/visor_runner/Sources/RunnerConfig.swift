@@ -24,6 +24,10 @@ public struct RunnerConfig: Codable, Equatable, Sendable {
     /// Names its certificate is for besides `localhost`, loopback and the
     /// Mac's own (RunnerIdentity): an address or a name clients reach it by.
     public var apiNames: [String] = []
+    /// Where the Runner reaches each server it passes clients' requests on
+    /// to (`server reach`): its name, then `host:port`. The server's
+    /// password is a secret (RunnerAPIServer.passwordSecret).
+    public var reaches: [String: String] = [:]
 
     public init(mcpPort: Int = 7439, endpoints: [MCPProxy.Endpoint] = [], servers: [String] = [], fronts: [ClientProxy.Front] = [],
                 githubProxyPort: Int? = nil) {
@@ -46,6 +50,7 @@ public struct RunnerConfig: Codable, Equatable, Sendable {
         user = try c.decodeIfPresent(String.self, forKey: .user)
         apiPort = try c.decodeIfPresent(Int.self, forKey: .apiPort)
         apiNames = try c.decodeIfPresent([String].self, forKey: .apiNames) ?? []
+        reaches = try c.decodeIfPresent([String: String].self, forKey: .reaches) ?? [:]
     }
 
     static func file(_ folder: URL) -> URL { folder.appendingPathComponent("runner.json") }

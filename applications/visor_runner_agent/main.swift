@@ -83,7 +83,8 @@ let signIn: RunnerAPIServer? = config.apiPort.flatMap { port in
                         servers: { RunnerServerInfo.listed(in: RunnerConfig.read(data) ?? RunnerConfig()) })
     do {
         let identity = try RunnerIdentity.kept(in: secrets, names: RunnerIdentity.names(given: config.apiNames))
-        guard let started = try RunnerAPIServer(port: UInt16(port), api: api, identity: identity) else {
+        guard let started = try RunnerAPIServer(port: UInt16(port), api: api, identity: identity,
+                                                reach: { RunnerCommand.reach($0, folder: data, secrets: secrets) }) else {
             log("port \(port) can't be had for the sign-in")
             return nil
         }
