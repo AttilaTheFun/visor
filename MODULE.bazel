@@ -153,7 +153,7 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.41.2")
+bazel_dep(name = "isomer", version = "0.42.1")
 
 # isomer's Foundation (swift-foundation, a package of isomer's own
 # rules_swift_package_manager graph) and Visor's SwiftNIO both build
@@ -164,15 +164,11 @@ override_repo(isomer_swift_deps, swiftpkg_swift_collections = "swiftpkg_swift_co
 
 # isomer's Android cross-compile toolchains. The extension insists on a
 # root-level android.sdk tag even when only the NDK's cc toolchains are used.
-bazel_dep(name = "hermetic_android_toolchains", version = "0.5.0")
-# Any Linux takes Google's x86_64 SDK and NDK tools: an arm64 Linux (a
-# container on a Mac) runs them under Rosetta, with x86_64 glibc beside its
-# own (tools/containers/visor-agent).
-single_version_override(
-    module_name = "hermetic_android_toolchains",
-    patch_strip = 1,
-    patches = ["//third_party/patches:hermetic_android_toolchains_linux_any_cpu.patch"],
-)
+# The project registry's 0.5.0.isomer.1, which isomer asks for since 0.42: any
+# Linux takes Google's x86_64 SDK and NDK tools (an arm64 Linux, a container
+# on a Mac, runs them under Rosetta, with x86_64 glibc beside its own:
+# tools/containers/visor-agent), with no override of Visor's own.
+bazel_dep(name = "hermetic_android_toolchains", version = "0.5.0.isomer.1")
 
 # A dev dependency (0.5.0 reads the root module's tags alone, and reports
 # its repositories so): each root declares its own.
