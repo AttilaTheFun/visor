@@ -98,12 +98,14 @@ else
     said="made"
 fi
 echo "Draft $tag $said: $(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["html_url"])' "$work/made.json")"
-# The draft as GitHub keeps it: its tag and kind as asked (a draft's edit
+# The draft as GitHub keeps it, read back by its id (the list of releases
+# can lag a new one): its tag, commit and kind as asked (a draft's edit
 # has been seen to lose its tag).
-releases > "$work/releases.json"
+made="$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["id"])' "$work/made.json")"
+github "$api/releases/$made" > "$work/kept.json"
 python3 -I -c 'import json, sys
+r = json.load(open(sys.argv[1]))
 tag, sha, prerelease = sys.argv[2], sys.argv[3], sys.argv[4] == "true"
-for r in json.load(open(sys.argv[1])):
-    if r["draft"] and r["tag_name"] == tag and r["target_commitish"] == sha and r["prerelease"] == prerelease: print(r["id"])' \
-    "$work/releases.json" "$tag" "$GITHUB_SHA" "$prerelease" > "$work/kept"
-[ -s "$work/kept" ] || { echo "::error::the draft of $tag isn't as asked: look at the repository's releases"; exit 1; }
+sys.exit(0 if r["draft"] and r["tag_name"] == tag and r["target_commitish"] == sha and r["prerelease"] == prerelease else 1)' \
+    "$work/kept.json" "$tag" "$GITHUB_SHA" "$prerelease" \
+    || { echo "::error::the draft of $tag isn't as asked: look at the repository's releases"; exit 1; }
