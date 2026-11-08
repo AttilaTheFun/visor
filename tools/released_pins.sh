@@ -7,8 +7,21 @@
 # and Reviews holds a release until it passes.
 cd "$(dirname "$0")/.." || exit 1
 status=0
+# One exception: isomer by the revision of a release's tag (`revision:
+# "v0.44.2"`). Its own dependencies (swift-foundation, swift-syntax) are by
+# revision and branch, so SwiftPM refuses to take it by version; the tag is
+# a released version all the same (isomer's README, "Upgrading isomer").
 for manifest in $(git ls-files 'Package.swift' '*/Package.swift'); do
-  if grep -n -E '(revision|branch):[[:space:]]*"|\.package\([[:space:]]*path:' "$manifest"; then
+  if awk '
+    /\.package\(/ { url = "" }
+    /url:[[:space:]]*"/ { url = $0 }
+    /\.package\([[:space:]]*path:/ { print FILENAME ":" FNR ": " $0; bad = 1; next }
+    /branch:[[:space:]]*"/ { print FILENAME ":" FNR ": " $0; bad = 1; next }
+    /revision:[[:space:]]*"/ {
+      if (url ~ /AttilaTheFun\/isomer(\.git)?"/ && $0 ~ /revision:[[:space:]]*"v[0-9]+\.[0-9]+\.[0-9]+"/) next
+      print FILENAME ":" FNR ": " $0; bad = 1
+    }
+    END { exit bad ? 0 : 1 }' "$manifest"; then
     echo "$manifest: a package pinned to a revision or branch, not a released version" >&2
     status=1
   fi
