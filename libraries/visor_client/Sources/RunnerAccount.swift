@@ -46,7 +46,9 @@ public final class RunnerAccount: VisorAccount, Identifiable {
     }
 
     public private(set) var kept: Kept
-    public var id: String { kept.id }
+    /// Its id, which never changes: held apart from `kept`, so it is read
+    /// from anywhere (`Identifiable`).
+    public let id: String
     public var url: String { kept.url }
 
     /// Its session, as the secrets keep it: held here too, so the views
@@ -55,12 +57,14 @@ public final class RunnerAccount: VisorAccount, Identifiable {
 
     init(kept: Kept) {
         self.kept = kept
+        id = kept.id
         token = VisorHost.settings?.secret(key: Self.secretKey(kept.id)) ?? ""
     }
 
     /// The fixture's: its session held, and nothing of the device's read.
     init(fixture kept: Kept, session: String) {
         self.kept = kept
+        id = kept.id
         token = session
     }
 
