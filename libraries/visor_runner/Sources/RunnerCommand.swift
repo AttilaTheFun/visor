@@ -75,6 +75,15 @@ public struct RunnerCommand {
                    key read from standard input, kept here only. One token for
                    every agent, which none of them sees. Without it GitHub's
                    hosts are tunnels too.
+          user set <name>
+                   The Runner's one user (docs/runner-accounts.md): its password
+                   read from standard input (12 characters or more), kept as a
+                   scrypt hash only. Sessions from before end.
+          user remove
+          api port <number> | off
+                   Where clients sign in (GET/POST /runner/v1/sign-in,
+                   /runner/v1/sign-out, GET /runner/v1/servers): its port, or
+                   none, from the agent's next start. Plain HTTP for now.
 
         The data folder is Visor's (~/Library/Application Support/Visor) unless
         given: runner.json and runner-secrets.json there.
@@ -100,6 +109,9 @@ public struct RunnerCommand {
             case ("github-proxy", "ca"): try printGitHubProxyCA()
             case ("github-proxy", "app"): try setGitHubProxyApp(Array(arguments.dropFirst(2)), in: &config)
             case ("github-proxy", "server"): try githubProxyBody(Array(arguments.dropFirst(2)), config: config)
+            case ("user", "set"): try setUser(Array(arguments.dropFirst(2)), in: &config)
+            case ("user", "remove"): try removeUser(in: &config)
+            case ("api", "port"): try setAPIPort(Array(arguments.dropFirst(2)), in: &config)
             case ("help", _), ("-h", _), ("--help", _): output(Self.usage)
             default: throw Problem("unknown command \(arguments.joined(separator: " "))\n\n\(Self.usage)")
             }
@@ -144,6 +156,9 @@ public struct RunnerCommand {
         } else {
             lines.append("Pushes: no APNs key (apns set)")
         }
+        lines.append(config.user.map { "Sign-in: \($0)" + (secrets.value(RunnerPasswordAuth.secret) == nil ? " (no password: user set)" : "") }
+            ?? "Sign-in: no user (user set)")
+        lines.append(config.apiPort.map { "Clients sign in at port \($0)" } ?? "No sign-in port (api port)")
         output(lines.joined(separator: "\n"))
     }
 

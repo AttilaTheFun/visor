@@ -16,6 +16,11 @@ public struct RunnerConfig: Codable, Equatable, Sendable {
     /// GitHub's hosts are tunnels too.
     public var githubAppID: String?
     public var githubInstallation: String?
+    /// The Runner's one user (docs/runner-accounts.md), its password's hash
+    /// a secret (RunnerPasswordAuth), and the port its side for clients
+    /// (RunnerAPI) listens on (none: off).
+    public var user: String?
+    public var apiPort: Int?
 
     public init(mcpPort: Int = 7439, endpoints: [MCPProxy.Endpoint] = [], servers: [String] = [], fronts: [ClientProxy.Front] = [],
                 githubProxyPort: Int? = nil) {
@@ -35,6 +40,8 @@ public struct RunnerConfig: Codable, Equatable, Sendable {
         githubProxyPort = try c.decodeIfPresent(Int.self, forKey: .githubProxyPort)
         githubAppID = try c.decodeIfPresent(String.self, forKey: .githubAppID)
         githubInstallation = try c.decodeIfPresent(String.self, forKey: .githubInstallation)
+        user = try c.decodeIfPresent(String.self, forKey: .user)
+        apiPort = try c.decodeIfPresent(Int.self, forKey: .apiPort)
     }
 
     static func file(_ folder: URL) -> URL { folder.appendingPathComponent("runner.json") }
