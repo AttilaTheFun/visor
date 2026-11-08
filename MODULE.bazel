@@ -93,7 +93,7 @@ register_toolchains(
     "@rules_applecross//toolchain:apple_bundling_on_macos",
 )
 bazel_dep(name = "rules_xcodeproj", version = "4.1.0")
-bazel_dep(name = "rules_swift_package_manager", version = "1.25.0")
+bazel_dep(name = "rules_swift_package_manager", version = "1.25.0.isomer.1")
 
 # The chat, composer and navigation views: the agent_ui package, pinned by
 # revision in third_party/swift_packages.
@@ -105,18 +105,23 @@ swift_deps.from_package(
     resolved = "//third_party/swift_packages:Package.resolved",
     swift = "//third_party/swift_packages:Package.swift",
 )
+# Isomer's Swift is a Swift package of the same graph (since 0.43: its
+# README, "Upgrading isomer"), listed in third_party/swift_packages by its
+# release's tag; the isomer module is handed to the generated repositories,
+# so `@isomer//` resolves in them.
+inject_repo(swift_deps, "isomer")
 # AgentUI's targets are told where SwiftUI and Foundation come from: isomer's
 # labels, which are Apple's own on Apple platforms (nothing to link), and
 # Isomer's on the web and Android and in a compiled feature.
 swift_deps.configure_package(
     name = "agent_ui",
     target_deps = {
-        "AgentUI": ["@@isomer+//:swift_ui", "@@isomer+//:foundation"],
-        "InboxUI": ["@@isomer+//:swift_ui", "@@isomer+//:foundation"],
-        "MessagesCore": ["@@isomer+//:swift_ui", "@@isomer+//:foundation"],
-        "MessagesUI": ["@@isomer+//:swift_ui", "@@isomer+//:foundation"],
-        "MarkdownViews": ["@@isomer+//:swift_ui", "@@isomer+//:foundation"],
-        "NavigationUI": ["@@isomer+//:swift_ui", "@@isomer+//:foundation"],
+        "AgentUI": ["@isomer//:swift_ui", "@isomer//:foundation"],
+        "InboxUI": ["@isomer//:swift_ui", "@isomer//:foundation"],
+        "MessagesCore": ["@isomer//:swift_ui", "@isomer//:foundation"],
+        "MessagesUI": ["@isomer//:swift_ui", "@isomer//:foundation"],
+        "MarkdownViews": ["@isomer//:swift_ui", "@isomer//:foundation"],
+        "NavigationUI": ["@isomer//:swift_ui", "@isomer//:foundation"],
     },
 )
 # swift-nio's and swift-crypto's manifests add their privacy manifests only
@@ -153,14 +158,8 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.42.1")
+bazel_dep(name = "isomer", version = "0.45.2")
 
-# isomer's Foundation (swift-foundation, a package of isomer's own
-# rules_swift_package_manager graph) and Visor's SwiftNIO both build
-# swift-collections: isomer's graph takes Visor's, so one copy of its
-# modules is linked.
-isomer_swift_deps = use_extension("@isomer//third_party/swift_packages:extensions.bzl", "swift_deps")
-override_repo(isomer_swift_deps, swiftpkg_swift_collections = "swiftpkg_swift_collections")
 
 # isomer's Android cross-compile toolchains. The extension insists on a
 # root-level android.sdk tag even when only the NDK's cc toolchains are used.
