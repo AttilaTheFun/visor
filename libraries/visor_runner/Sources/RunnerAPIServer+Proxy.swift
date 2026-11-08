@@ -41,6 +41,26 @@ extension RunnerAPIServer {
         return (server, String(rest[slash...]))
     }
 
+    /// The query parameter a session may come in instead of `Authorization`:
+    /// a WebSocket's handshake can't carry headers on every platform
+    /// (Android's, the web's), so a client puts its session on the
+    /// channel's URL.
+    static let sessionParameter = "runner_session"
+
+    /// A path's session from its query, if it has one, and the path without
+    /// it, as it goes on to the server.
+    static func session(in path: String) -> (token: String?, path: String) {
+        guard let question = path.firstIndex(of: "?") else { return (nil, path) }
+        var token: String?
+        let kept = path[path.index(after: question)...].split(separator: "&").filter { pair in
+            guard pair.hasPrefix(sessionParameter + "=") else { return true }
+            token = String(pair.dropFirst(sessionParameter.count + 1)).removingPercentEncoding
+            return false
+        }
+        let base = String(path[..<question])
+        return (token, kept.isEmpty ? base : base + "?" + kept.joined(separator: "&"))
+    }
+
     /// The headers a request goes on with: its own, but those of the hop
     /// and the client's bearer; the server's password, the server as Host.
     static func forwardedHeaders(_ given: HTTPHeaders, reach: Reach, length: Int) -> HTTPHeaders {
@@ -101,8 +121,13 @@ extension RunnerAPIServer {
 extension RunnerAPIServer.Handler {
     /// A request for a server, on its way: its session checked, the server
     /// found, then sent on.
-    func proxy(_ context: ChannelHandlerContext, server: String, path: String, head: HTTPRequestHead, body: ByteBuffer?) {
-        guard api.user(for: head.headers["authorization"].first) != nil else {
+    func proxy(_ context: ChannelHandlerContext, server: String, path given: String, head: HTTPRequestHead, body: ByteBuffer?) {
+        // The session from `Authorization`, else from the query (a
+        // WebSocket's handshake on a platform that sends no headers); the
+        // query's goes no further either way.
+        let (queried, path) = RunnerAPIServer.session(in: given)
+        let authorization = head.headers["authorization"].first ?? queried.map { "Bearer \($0)" }
+        guard api.user(for: authorization) != nil else {
             respond(context, RunnerAPI.refused)
             return
         }

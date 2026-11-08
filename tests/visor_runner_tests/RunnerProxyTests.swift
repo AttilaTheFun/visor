@@ -76,6 +76,15 @@ final class RunnerProxyTests: XCTestCase {
         return RunnerCommand(folder: folder, secrets: secrets, input: { lines.popFirst() }, output: { _ in }).run(arguments)
     }
 
+    func testTheSessionComesOutOfTheQuery() {
+        XCTAssertEqual(RunnerAPIServer.session(in: "/").token, nil)
+        XCTAssertEqual(RunnerAPIServer.session(in: "/?runner_session=abc").token, "abc")
+        XCTAssertEqual(RunnerAPIServer.session(in: "/?runner_session=abc").path, "/")
+        XCTAssertEqual(RunnerAPIServer.session(in: "/api/x?a=1&runner_session=t%2Bu&b=2").token, "t+u")
+        XCTAssertEqual(RunnerAPIServer.session(in: "/api/x?a=1&runner_session=t%2Bu&b=2").path, "/api/x?a=1&b=2")
+        XCTAssertEqual(RunnerAPIServer.session(in: "/api/x?runner_sessionx=1").path, "/api/x?runner_sessionx=1", "only the parameter itself")
+    }
+
     func testASignedInClientReachesTheServerWithItsPassword() throws {
         let standIn = try XCTUnwrap(StandIn())
         defer { standIn.stop() }
@@ -127,6 +136,15 @@ final class RunnerProxyTests: XCTestCase {
         XCTAssertEqual(heard.map(\.authorization), ["Bearer the-servers-password", "Bearer the-servers-password"],
                        "the server's password, never the client's session")
         XCTAssertEqual(heard.last?.body, #"{"text":"hi"}"#)
+
+        // The session in the query, as a channel's URL carries it where the
+        // handshake sends no headers: it goes no further.
+        let queried = try curl(trust + [base + "/servers/mini/api/sessions?archived=1&runner_session=\(token)"])
+        XCTAssertEqual(queried.status, "200")
+        XCTAssertEqual(standIn.heard.withLock { $0.last?.path }, "/api/sessions?archived=1")
+        XCTAssertEqual(standIn.heard.withLock { $0.last?.authorization }, "Bearer the-servers-password")
+        XCTAssertEqual(try curl(trust + [base + "/servers/mini/api/sessions?runner_session=made-up"]).status, "401")
+        _ = standIn.heard.withLock { $0.removeLast() }
 
         XCTAssertEqual(try curl(trust + bearer + [base + "/servers/nowhere/api/sessions"]).status, "404")
         XCTAssertEqual(try curl(trust + bearer + [base + "/servers/gone/api/sessions"]).status, "502")
