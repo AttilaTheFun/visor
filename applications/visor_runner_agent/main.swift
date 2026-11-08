@@ -75,6 +75,20 @@ let github: GitHubProxy? = config.githubProxyPort.flatMap { port in
     log("the GitHub proxy listens on port \(port)")
     return started
 }
+// Where clients sign in (docs/runner-accounts.md), where a port is set: the
+// user and the servers as runner.json has them at each request.
+let signIn: RunnerAPIServer? = config.apiPort.flatMap { port in
+    let api = RunnerAPI(auths: [RunnerPasswordAuth(user: { RunnerConfig.read(data)?.user }, secrets: secrets)],
+                        sessions: RunnerSessions(secrets: secrets),
+                        servers: { RunnerServerInfo.listed(in: RunnerConfig.read(data) ?? RunnerConfig()) })
+    guard let started = RunnerAPIServer(port: UInt16(port), api: api) else {
+        log("port \(port) can't be had for the sign-in")
+        return nil
+    }
+    started.start()
+    log("clients sign in at port \(port)")
+    return started
+}
 // Their servers, started again when they stop answering (those with a
 // command for it).
 let watches = config.fronts.compactMap { ServerWatch(front: $0, log: log) }
@@ -91,6 +105,7 @@ let sources = [SIGTERM, SIGINT, SIGHUP].map { number in
         for front in fronts { front.stop() }
         for watch in watches { watch.stop() }
         github?.stop()
+        signIn?.stop()
         exit(0)
     }
     source.resume()

@@ -174,7 +174,14 @@ path), not a need.
 
 1. This design.
 2. The Runner's sign-in, its user and sessions, and `GET /runner/v1/servers`,
-   with tests; nothing proxied yet.
+   with tests; nothing proxied yet. Built: `visor-runner-agent user set <name>` (the
+   password from standard input, 12 characters at least, kept as a scrypt
+   hash) and `api port <n>`; `RunnerAuth` with the password provider first;
+   `RunnerSessions` (a month each, kept by their tokens' SHA-256, ended by
+   signing out or a new password); `RunnerAPI` and its listener, plain HTTP
+   until step 3. A server's `id` is the Runner's name for it, and its `kind`
+   `container` where it has a front; `state` and `version` come with the
+   watch over each server (step 4).
 3. HTTPS: the tailnet certificate, the LAN's own certificate and its
    fingerprint.
 4. The reverse proxy by path, HTTP and WebSocket, with the per-server
