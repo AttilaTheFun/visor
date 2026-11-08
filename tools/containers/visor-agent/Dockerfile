@@ -74,6 +74,21 @@ COPY --from=docker.io/library/node:22-bookworm-slim /usr/local/bin/node /usr/loc
 COPY --from=docker.io/library/node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 RUN npm install -g @anthropic-ai/claude-code @openai/codex && npm cache clean --force
+ARG TARGETARCH
+# GitHub's CLI, pinned and checked like bazelisk: CI's scripts (a draft
+# release, a run's artifacts) and the agents' own use, its token the GitHub
+# proxy's (docs/github-proxy.md) where a session goes through it.
+ARG GH_VERSION=2.103.3
+RUN case "${TARGETARCH:-arm64}" in \
+      arm64) sum=ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63 ;; \
+      amd64) sum=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d ;; \
+      *) echo "no gh for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL -o /tmp/gh.tar.gz "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${TARGETARCH:-arm64}.tar.gz" \
+ && echo "$sum  /tmp/gh.tar.gz" | sha256sum -c - \
+ && tar -xzf /tmp/gh.tar.gz -C /tmp \
+ && install -m 755 "/tmp/gh_${GH_VERSION}_linux_${TARGETARCH:-arm64}/bin/gh" /usr/local/bin/gh \
+ && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${TARGETARCH:-arm64}"
 COPY --from=openrouter /usr/local/bin/openrouter /usr/local/bin/openrouter
 COPY --from=visor /usr/local/bin/visor-server /usr/local/bin/visor-agent-host /usr/local/bin/
 RUN git config --system --add safe.directory '*'
@@ -132,6 +147,20 @@ RUN case "${TARGETARCH:-arm64}" in \
 # convenience links in the repository, where they would replace the Mac's
 # own builds' links with ones to paths only the container has.
 RUN printf '%s\n' 'startup --output_user_root=/var/cache/bazel' 'build --experimental_convenience_symlinks=ignore' > /etc/bazel.bazelrc
+# GitHub's CLI, pinned and checked like bazelisk: CI's scripts (a draft
+# release, a run's artifacts) and the agents' own use, its token the GitHub
+# proxy's (docs/github-proxy.md) where a session goes through it.
+ARG GH_VERSION=2.103.3
+RUN case "${TARGETARCH:-arm64}" in \
+      arm64) sum=ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63 ;; \
+      amd64) sum=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d ;; \
+      *) echo "no gh for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL -o /tmp/gh.tar.gz "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${TARGETARCH:-arm64}.tar.gz" \
+ && echo "$sum  /tmp/gh.tar.gz" | sha256sum -c - \
+ && tar -xzf /tmp/gh.tar.gz -C /tmp \
+ && install -m 755 "/tmp/gh_${GH_VERSION}_linux_${TARGETARCH:-arm64}/bin/gh" /usr/local/bin/gh \
+ && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${TARGETARCH:-arm64}"
 RUN npm install -g @anthropic-ai/claude-code @openai/codex && npm cache clean --force
 COPY --from=openrouter /usr/local/bin/openrouter /usr/local/bin/openrouter
 # The server finds the agents' host beside it.
