@@ -140,8 +140,6 @@
     "https://bcr.bazel.build/modules/googletest/1.15.2/MODULE.bazel": "6de1edc1d26cafb0ea1a6ab3f4d4192d91a312fd2d360b63adaa213cd00b2108",
     "https://bcr.bazel.build/modules/googletest/1.17.0/MODULE.bazel": "dbec758171594a705933a29fcf69293d2468c49ec1f2ebca65c36f504d72df46",
     "https://bcr.bazel.build/modules/googletest/1.17.0/source.json": "38e4454b25fc30f15439c0378e57909ab1fd0a443158aa35aec685da727cd713",
-    "https://bcr.bazel.build/modules/hermetic_android_toolchains/0.5.0/MODULE.bazel": "bb0ae66eae66a3844911e3279130d5a0af7e27c23a4b31ec6008811a2054f1d2",
-    "https://bcr.bazel.build/modules/hermetic_android_toolchains/0.5.0/source.json": "7278cbb25b7cc99fc41a4084f6e004e4b6d0e2fb3b3ee73a314b85f1904ef17b",
     "https://bcr.bazel.build/modules/jq.bzl/0.1.0/MODULE.bazel": "2ce69b1af49952cd4121a9c3055faa679e748ce774c7f1fda9657f936cae902f",
     "https://bcr.bazel.build/modules/jq.bzl/0.4.0/MODULE.bazel": "a7b39b37589f2b0dad53fd6c1ccaabbdb290330caa920d7ef3e6aad068cd4ab2",
     "https://bcr.bazel.build/modules/jq.bzl/0.4.0/source.json": "52ec7530c4618e03f634b30ff719814a68d7d39c235938b7aa2abbfe1eb1c52c",
@@ -523,9 +521,10 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/googletest/1.14.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/googletest/1.15.2/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/googletest/1.17.0/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.5.0/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.41.2/MODULE.bazel": "dd2c501709a563b2c4b9cb570a7fb7452eaf9357b0a572341edd7d8acb218f6c",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.41.2/source.json": "f68eb4eef88f810bfc01a1bba9f5b7abceca169770807731812fd6dce173fbd4",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.5.0.isomer.1/MODULE.bazel": "810c4b066de392138bd72d0a3d5704394d8b2f97561eac6174481ccbbff3b8e0",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.5.0.isomer.1/source.json": "79cad4cd634f452af553b1d8150364b55c37d0dff22a4764797c543fa1ec5512",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.42.1/MODULE.bazel": "0d40ecff231c3793b251a038b5f7f69109394f2475b714031685f4a0ca2bca8b",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.42.1/source.json": "500e85e72df0356a0ffb90628980a51ff1d2ba1531b1d07531312a59c69bb5b2",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.4.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jsoncpp/1.9.5/MODULE.bazel": "not found",
@@ -865,7 +864,7 @@
     "@@aspect_rules_ts+//ts:extensions.bzl%ext": {
       "general": {
         "bzlTransitiveDigest": "39Imx8fj/wmgCRC4TUG38yih5rg7z9GUkCWi0sDE+LA=",
-        "usagesDigest": "/kmW/5wX7GpytkdRBziCpZVRSEPlNSjsaq5GgglYmkk=",
+        "usagesDigest": "gzrOzpcJjLEv/hhdGp8hszVPEOEPA2YZztA3Hz4hUUM=",
         "recordedInputs": [
           "REPO_MAPPING:aspect_rules_ts+,aspect_rules_ts aspect_rules_ts+",
           "REPO_MAPPING:aspect_rules_ts+,bazel_tools bazel_tools"
@@ -923,7 +922,7 @@
     "@@isomer+//third_party/swift_packages:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "vKNV07khOtIoKLQYXtMr+puCBOoK+tI/THDOnw20Dag=",
-        "usagesDigest": "v4vw98mF/4eFwRLQVOJu22QA3LvzqijVltcNKKtOVXg=",
+        "usagesDigest": "yPi99LJRuQ2kK2qtmUadZvwOuLb0hgUf3GR36zLRDOs=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,rules_swift_package_manager rules_swift_package_manager+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
@@ -1054,7 +1053,7 @@
     "@@isomer+//tools/android:extensions.bzl%android_tools": {
       "os:linux,arch:aarch64": {
         "bzlTransitiveDigest": "k+KVmZZM9GG6V3/GKQ8lZd6Nm/Rcjal0sh2SCGktwe8=",
-        "usagesDigest": "NzCGIl5RJuVOzEV0HNJrZAPIr28D5ZtQiVG50irNEBM=",
+        "usagesDigest": "ngIlMJmJZvlpxw4ph3sW3VmyLnkYgQlrdMtbHPcLeqs=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -1198,7 +1197,7 @@
     "@@isomer+//tools/wasm:extensions.bzl%wasm_tools": {
       "general": {
         "bzlTransitiveDigest": "4sWkWFiytNpozmcCtTYcMkDIhtiS5kjbFGlOVWEzFp8=",
-        "usagesDigest": "X4O7J1sBVWAzFNcbsiftlV0OHggR82a6W8mCtcHk0E4=",
+        "usagesDigest": "nCkR0d+mT96rxD3Lh+qim0R0kF5t/rkgIfsWlWWaIBM=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
