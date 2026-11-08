@@ -1,3 +1,5 @@
+import VisorProtocol
+
 /// A session's inbox and outbox (docs/agent-mail.md): what it was sent and
 /// what it sent, kept with the session for as long as it is kept, and
 /// deleted with it. Each box keeps its newest `kept` messages: a box past

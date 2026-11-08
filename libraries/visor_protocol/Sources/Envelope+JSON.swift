@@ -100,6 +100,8 @@ extension Envelope {
         e.commands = value["commands"].array?.compactMap { item in
             item["name"].string.map { SlashCommand(name: $0, description: item["description"].string ?? "", argumentHint: item["argumentHint"].string ?? "") }
         }
+        e.inbox = value["inbox"].array?.compactMap(MailMessage.init(json:))
+        e.outbox = value["outbox"].array?.compactMap(MailMessage.init(json:))
         return e
     }
 
@@ -174,6 +176,8 @@ extension Envelope {
         if let commands {
             o["commands"] = .array(commands.map { .object(["name": .string($0.name), "description": .string($0.description), "argumentHint": .string($0.argumentHint)]) })
         }
+        if let inbox { o["inbox"] = .array(inbox.map(\.json)) }
+        if let outbox { o["outbox"] = .array(outbox.map(\.json)) }
         return .object(o)
     }
 }

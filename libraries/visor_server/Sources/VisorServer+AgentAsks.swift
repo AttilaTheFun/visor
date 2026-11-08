@@ -137,6 +137,7 @@ extension VisorServer {
             caller.mailbox.send(MailMessage(id: message.id, from: message.from, to: message.to, text: text, sent: now,
                                             state: .waiting, changed: now))
             saveArchive()
+            broadcastSessionsSoon()
         }
         awaitRelay(message.id, for: kind == .read ? Self.relayReadWait : Self.relaySendWait) { [weak self] record in
             guard let self else { return }

@@ -146,6 +146,9 @@ public struct Envelope: Codable, Sendable {
     public var resumable: [ResumableSession]?
     /// The slash commands a session's agent takes (`commands`).
     public var commands: [SlashCommand]?
+    /// A session's inbox and outbox (`mail`), oldest first.
+    public var inbox: [MailMessage]?
+    public var outbox: [MailMessage]?
     /// `hello`: the server's own addresses, as clients read them.
     public var addresses: [String]?
     /// An agent's request about a session on another server: that server,

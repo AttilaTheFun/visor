@@ -91,6 +91,9 @@ public protocol AgentServer: AnyObject {
     func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope
     /// The slash commands the session's agent takes.
     func commands(for session: String) async throws -> [SlashCommand]
+    /// The session's inbox and outbox, oldest first: what other sessions
+    /// sent it and what it sent them. Empty from a server before 0.47.
+    func mail(for session: String) async throws -> (inbox: [MailMessage], outbox: [MailMessage])
     /// One of the session's subagents' conversation, as rows.
     func subagentTranscript(of session: String, agent: String) async throws -> [TranscriptEntry]
     /// How an agent's account stands now: read afresh where the server
@@ -241,6 +244,7 @@ public extension AgentServer {
     }
     var managesSessions: Bool { true }
     func subagentTranscript(of session: String, agent: String) async throws -> [TranscriptEntry] { [] }
+    func mail(for session: String) async throws -> (inbox: [MailMessage], outbox: [MailMessage]) { ([], []) }
     func account(of agent: AgentKind) async throws -> AgentAccount? { nil }
     func verifyChannel() async -> Bool { true }
     func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool { false }

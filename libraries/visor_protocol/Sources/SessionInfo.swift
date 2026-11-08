@@ -108,6 +108,11 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// The MCP servers its computer passes on to agents, and whether this
     /// session has each (on unless switched off; `mcp`).
     public var mcp: [MCPSwitch] = []
+    /// How many messages from other sessions wait unread in its inbox, and
+    /// when either of its boxes last changed (seconds since 1970): what
+    /// tells an inspector showing them to read them again (`mail`).
+    public var unreadMail: Int = 0
+    public var mailChanged: Double?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -173,5 +178,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         side = try c.decodeIfPresent([SideQuestion].self, forKey: .side) ?? []
         subagents = try c.decodeIfPresent([SubagentInfo].self, forKey: .subagents) ?? []
         mcp = try c.decodeIfPresent([MCPSwitch].self, forKey: .mcp) ?? []
+        unreadMail = try c.decodeIfPresent(Int.self, forKey: .unreadMail) ?? 0
+        mailChanged = try c.decodeIfPresent(Double.self, forKey: .mailChanged)
     }
 }

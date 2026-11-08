@@ -144,6 +144,45 @@ final class AgentMessagingTests: ServerTestCase {
         XCTAssertEqual(b.mailbox.inbox.map(\.text), ["And now?"])
     }
 
+    private func mail(_ id: String) async -> HTTPResponse {
+        let request = HTTPRequest(method: "GET", path: "/api/sessions/\(id)/mail", headers: ["authorization": "Bearer pw"], body: "")
+        return await withCheckedContinuation { done in server.route(request) { done.resume(returning: $0) } }
+    }
+
+    /// A client reads a session's boxes (`GET /sessions/<id>/mail`), and
+    /// its info says how many wait unread and when they changed.
+    func testAClientReadsTheBoxesAndTheUnreadCount() async throws {
+        server.password = "pw"
+        let a = record("A", "Server work")
+        let b = record("B", "Client work")
+        server.sessions = [a, b]
+        XCTAssertEqual(b.info.unreadMail, 0)
+        XCTAssertNil(b.info.mailChanged)
+        _ = ask("send", from: "A", about: "B", text: "Look at this")
+        XCTAssertEqual(b.info.unreadMail, 1)
+        XCTAssertNotNil(b.info.mailChanged)
+        XCTAssertNotNil(a.info.mailChanged, "the sender's outbox changed too")
+
+        let answer = await mail("B")
+        XCTAssertEqual(answer.status, 200)
+        let boxes = try XCTUnwrap(Envelope.decode(answer.body))
+        XCTAssertEqual(boxes.type, "mail")
+        XCTAssertEqual(boxes.inbox?.map(\.text), ["Look at this"])
+        XCTAssertEqual(boxes.inbox?.first?.from.sessionName, "Server work")
+        XCTAssertEqual(boxes.inbox?.first?.state, .delivered)
+        XCTAssertEqual(boxes.outbox, [])
+        let outbox = await mail("A")
+        let sent = try XCTUnwrap(Envelope.decode(outbox.body))
+        XCTAssertEqual(sent.outbox, boxes.inbox, "one message at both ends")
+        let none = await mail("Z")
+        XCTAssertEqual(none.status, 404)
+
+        // Its info carries the count to clients.
+        let info = try XCTUnwrap(SessionInfo(json: b.info.json))
+        XCTAssertEqual(info.unreadMail, 1)
+        XCTAssertEqual(info.mailChanged, b.info.mailChanged)
+    }
+
     /// The boxes are kept with the session, through a launch.
     func testTheBoxesAreKeptWithTheSession() throws {
         let a = record("A", "Server work")

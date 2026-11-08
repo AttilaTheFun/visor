@@ -71,6 +71,7 @@ struct SessionInspector: View {
                     }
                 }
                 SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)
+                SessionMailSection(host: host, session: session)
                 if !session.archived {
                     Section {
                         AgentStateButtons(host: host, session: session)
