@@ -114,31 +114,69 @@ final class RunnerSignInTests: XCTestCase {
         XCTAssertEqual(signIn("logan", "another long password").status, 401, "no user: no one signs in")
     }
 
-    /// Over the wire, as a client signs in: curl to the Runner's port.
-    func testAClientSignsInOverHTTP() throws {
+    /// Over the wire, as a client signs in: curl to the Runner's port, over
+    /// TLS with the Runner's own certificate, which curl is shown to have met.
+    func testAClientSignsInOverTLS() throws {
         XCTAssertEqual(run(["server", "add", "mini", "--host", "127.0.0.1"]), 0)
         XCTAssertEqual(run(["user", "set", "logan"], input: ["a long enough password"]), 0)
+        let identity = try RunnerIdentity.kept(in: secrets, names: RunnerIdentity.names(given: []))
         var listening: RunnerAPIServer?
         var port: UInt16 = 0
         for _ in 0..<20 where listening == nil {
             port = UInt16.random(in: 20000...45000)
-            listening = RunnerAPIServer(port: port, api: api)
+            listening = try RunnerAPIServer(port: port, api: api, identity: identity)
         }
         let server = try XCTUnwrap(listening)
         server.start()
         defer { server.stop() }
-        let base = "http://127.0.0.1:\(port)/runner/v1"
+        let base = "https://127.0.0.1:\(port)/runner/v1"
+        // The certificate the person compares, as a file, for curl to trust
+        // and nothing else.
+        let pem = folder.appendingPathComponent("runner.pem")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try identity.pem.write(to: pem, atomically: true, encoding: .utf8)
 
-        let refused = try curl(["-X", "POST", "-H", "Content-Type: application/json", "-d", #"{"username":"logan","password":"wrong"}"#,
-                                base + "/sign-in"])
+        let plain = try curl(["http://127.0.0.1:\(port)/runner/v1/sign-in"])
+        XCTAssertNotEqual(plain.status, "200", "no plain HTTP")
+        let untrusted = try curl([base + "/sign-in"])
+        XCTAssertEqual(untrusted.status, "000", "a certificate no one has trusted is refused")
+
+        let trust = ["--cacert", pem.path]
+        let refused = try curl(trust + ["-X", "POST", "-H", "Content-Type: application/json",
+                                        "-d", #"{"username":"logan","password":"wrong"}"#, base + "/sign-in"])
         XCTAssertEqual(refused.status, "401")
-        let signed = try curl(["-X", "POST", "-H", "Content-Type: application/json",
-                               "-d", #"{"username":"logan","password":"a long enough password"}"#, base + "/sign-in"])
-        XCTAssertEqual(signed.status, "200")
+        let signed = try curl(trust + ["-X", "POST", "-H", "Content-Type: application/json",
+                                       "-d", #"{"username":"logan","password":"a long enough password"}"#, base + "/sign-in"])
+        XCTAssertEqual(signed.status, "200", signed.body)
         let token = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(signed.body.utf8)) as? [String: Any])?["token"] as? String)
-        let listed = try curl(["-H", "Authorization: Bearer \(token)", base + "/servers"])
+        let listed = try curl(trust + ["-H", "Authorization: Bearer \(token)", base + "/servers"])
         XCTAssertEqual(listed.status, "200")
         XCTAssertEqual(listed.body, #"{"servers":[{"id":"mini","kind":"mac","name":"mini"}]}"#)
+    }
+
+    /// The Runner's certificate: made once and kept, the same fingerprint
+    /// each time it is asked for, for its names; made again when they change.
+    func testTheCertificateIsKeptForItsNames() throws {
+        let names = RunnerIdentity.names(given: ["192.168.1.20", "mini.local"], host: "Logans-Mac-mini")
+        XCTAssertEqual(names, ["localhost", "127.0.0.1", "::1", "Logans-Mac-mini", "192.168.1.20", "mini.local"])
+        let first = try RunnerIdentity.kept(in: secrets, names: names)
+        let fingerprint = try first.fingerprint
+        XCTAssertEqual(fingerprint.split(separator: ":").count, 32)
+        XCTAssertEqual(try RunnerIdentity.kept(in: secrets, names: names).fingerprint, fingerprint, "kept")
+        XCTAssertEqual(RunnerIdentity.names(of: first.certificate), Set(names))
+        XCTAssertNotEqual(try RunnerIdentity.kept(in: secrets, names: names + ["mini.tail.ts.net"]).fingerprint, fingerprint,
+                          "a new name: a new certificate, which a client confirms again")
+        let before = try RunnerIdentity.kept(in: secrets, names: names).fingerprint
+        let soon = Date().addingTimeInterval(380 * 24 * 3600)
+        XCTAssertNotEqual(try RunnerIdentity.kept(in: secrets, names: names, now: soon).fingerprint, before,
+                          "made again within a month of its end")
+
+        XCTAssertEqual(run(["api", "port", "7445", "--name", "192.168.1.20"]), 0)
+        XCTAssertEqual(RunnerConfig.read(folder)?.apiNames, ["192.168.1.20"])
+        XCTAssertEqual(run(["api", "certificate"]), 0)
+        XCTAssertTrue(said.last?.hasPrefix("SHA-256 ") == true)
+        XCTAssertTrue(said.last?.contains("-----BEGIN CERTIFICATE-----") == true)
+        XCTAssertNil(said.last?.range(of: "PRIVATE KEY"), "never the key")
     }
 
     func testTheCommandsCheckWhatTheyAreGiven() {

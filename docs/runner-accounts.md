@@ -183,7 +183,14 @@ path), not a need.
    `container` where it has a front; `state` and `version` come with the
    watch over each server (step 4).
 3. HTTPS: the tailnet certificate, the LAN's own certificate and its
-   fingerprint.
+   fingerprint. Built first: the Runner's own certificate
+   (`RunnerIdentity`: self-signed P-256 for `localhost`, loopback, the
+   Mac's name and each `api port --name`, kept in its secrets, made again
+   when its names change or within a month of its end) and the sign-in over
+   TLS with it alone; no plain HTTP. `api certificate` prints its SHA-256
+   fingerprint, which the client shows at its first sign-in (step 5). The
+   tailnet's certificate in its place, from Tailscale's local API, is next:
+   it needs trying on a Mac, where Tailscale's app keeps that API apart.
 4. The reverse proxy by path, HTTP and WebSocket, with the per-server
    token; the Mac's server and a container's behind it, and the watch over
    them.
