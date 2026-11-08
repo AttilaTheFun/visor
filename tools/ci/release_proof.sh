@@ -1,6 +1,6 @@
 #!/bin/bash
 # A release's proof attached to its GitHub release when the owner publishes
-# it (ci.yml's release-dmg job): the proof of its commit that Reviews
+# it (ci.yml's release-assets job): the proof of its commit that Reviews
 # showed, the `proof` artifact of the run that verified it
 # (tools/ci/verified_run.sh, the release job's), or else the newest run's
 # by hand that kept one; its proof.json and each screen as

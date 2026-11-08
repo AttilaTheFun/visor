@@ -34,7 +34,8 @@ name: CI
 # - Logan's Release in Reviews publishes a proposed release's draft, which
 #   makes its tag: `release` checks the commit is on main and was verified,
 #   then has Applications Server promote its Alphas to Production;
-#   release-dmg attaches the Mac's disk image and the proof to the release.
+#   release-assets attaches the Production builds (the Mac's disk image
+#   among them) and the proof to the release.
 #
 # The policy's verify leases a Mac; Visor's runs on GitHub's own runners
 # instead, free for a public repository, leaving OS Server's Mac slots to
@@ -450,8 +451,10 @@ jobs:
   # Visor.app is given Visor's Linux programs. The server signs each again
   # with its bundle id's own identity and profile as it publishes it
   # (tools/ci/publish_from_ci.sh), and notarizes the Mac's. Then the draft
-  # release (tools/ci/propose_release.sh). The job's OIDC token says what
-  # it is; no key, profile or password here.
+  # release (tools/ci/propose_release.sh), with the builds as the server
+  # signed them attached (tools/ci/attach_release.sh): what Applications
+  # lists (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The job's
+  # OIDC token says what it is; no key, profile or password here.
   alpha:
     needs: [verify, pins, linux-programs]
     if: >-
@@ -512,8 +515,8 @@ jobs:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
         run: |
           set -o pipefail
-          tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" .ci/packages/*.ipa .ci/packages/visor_mac.zip \
-            | tee "$RUNNER_TEMP/published.txt"
+          tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" --download "$RUNNER_TEMP/assets" \
+            .ci/packages/*.ipa .ci/packages/visor_mac.zip | tee "$RUNNER_TEMP/published.txt"
       # Untrusted text reaches the shell through env, never ${{ }} in run.
       - name: The draft release
         env:
@@ -521,6 +524,13 @@ jobs:
           KIND: ${{ inputs.run }}
           VERSION: ${{ steps.version.outputs.version }}
         run: tools/ci/propose_release.sh "$KIND" "$VERSION" "$RUNNER_TEMP/published.txt"
+      # The Alphas on the draft: Visor-<version>-ios.ipa, -macos.zip and
+      # builds.json, which Applications reads.
+      - name: The builds on the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: tools/ci/attach_release.sh "v$VERSION" "$RUNNER_TEMP/assets"
 
   # Visor's images (tools/containers/visor-agent/Dockerfile) of the
   # proposal's version, built on the release Mac (Apple's container) and
@@ -601,9 +611,9 @@ jobs:
   # docs/CI.md, "Production by promotion"). The token's v* tag, released by
   # a releaser, is the permission. An Alpha that isn't its app's newest is
   # kept a week, so a release is made within a week of its proposal (or
-  # while its Alphas are still the newest). The Mac's promoted Visor.app
-  # comes with its disk image, which the server makes as it promotes it,
-  # handed to release-dmg.
+  # while its Alphas are still the newest). The promoted builds, the Mac's
+  # disk image among them (which the server makes as it promotes Visor.app),
+  # are handed to release-assets.
   release:
     if: github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v')
     runs-on: [self-hosted, visor-jit-small]
@@ -641,20 +651,23 @@ jobs:
       - name: Promote
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/promote_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" --dmg-dir "$RUNNER_TEMP/dmg"
+        run: tools/ci/promote_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" --download "$RUNNER_TEMP/assets"
       - uses: actions/upload-artifact@v4
         with:
-          name: release-dmg
-          path: ${{ runner.temp }}/dmg/*.dmg
+          name: release-assets
+          path: ${{ runner.temp }}/assets
           if-no-files-found: error
           retention-days: 7
 
-  # The release's notarized Visor.app disk image among its files on GitHub,
-  # beside the source archives (Logan, 5 Nov 2026), and the proof that
-  # verified it (tools/ci/release_proof.sh), for the next release's to be
-  # compared with. On GitHub's own runner, so that the job reaching
-  # Applications Server (release) keeps a read-only token.
-  release-dmg:
+  # The release's Production builds among its files on GitHub, in place of
+  # its Alphas under the same names (AttilaTheFun/applications'
+  # docs/RELEASE_ASSETS.md): Visor-<version>-ios.ipa, -macos.zip, the
+  # notarized -macos.dmg (Logan, 5 Nov 2026) and builds.json, which
+  # Applications reads. Then the proof that verified it
+  # (tools/ci/release_proof.sh), for the next release's to be compared
+  # with. On GitHub's own runner, so that the job reaching Applications
+  # Server (release) keeps a read-only token.
+  release-assets:
     needs: release
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -665,9 +678,9 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
-          name: release-dmg
-          path: ${{ runner.temp }}/dmg
-      - run: gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP"/dmg/*.dmg --repo "$GITHUB_REPOSITORY" --clobber
+          name: release-assets
+          path: ${{ runner.temp }}/assets
+      - run: tools/ci/attach_release.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/assets"
         env:
           GH_TOKEN: ${{ github.token }}
       - run: tools/ci/release_proof.sh "$GITHUB_REF_NAME" --run "$VERIFIED"

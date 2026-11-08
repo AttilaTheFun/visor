@@ -21,6 +21,12 @@
 /tools/sign_mac_app.sh @AttilaTheFun
 /tools/signing/ @AttilaTheFun
 /tools/store_notary_credentials.sh @AttilaTheFun
+# What publishes builds and attaches them to releases (from
+# AttilaTheFun/applications, docs/RELEASE_ASSETS.md).
+/tools/ci/attach_release.sh @AttilaTheFun
+/tools/ci/promote_from_ci.sh @AttilaTheFun
+/tools/ci/publish_from_ci.sh @AttilaTheFun
+/tools/ci/release_assets.sh @AttilaTheFun
 
 # The license.
 LICENSE @AttilaTheFun
