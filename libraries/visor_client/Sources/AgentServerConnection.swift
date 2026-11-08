@@ -246,6 +246,11 @@ public final class AgentServerConnection: Identifiable {
         try await server.commands(for: sessionID)
     }
 
+    /// The session's inbox and outbox, as its server keeps them.
+    public func mail(for sessionID: String) async throws -> (inbox: [MailMessage], outbox: [MailMessage]) {
+        try await server.mail(for: sessionID)
+    }
+
     /// The server's connection codes, as it shows them itself: what this
     /// device shows to add the server on another.
     public func connectionCodes() async throws -> ConnectionCodes {

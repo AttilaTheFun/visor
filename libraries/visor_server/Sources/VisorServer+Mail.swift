@@ -30,6 +30,7 @@ extension VisorServer {
             deliver(Self.agentMessageHeader(from: sender, to: to) + "\n\n" + text, to: target)
         }
         saveArchive()
+        broadcastSessionsSoon()
         return busy
     }
 
@@ -58,7 +59,10 @@ extension VisorServer {
                 sendReadReceipt(for: message, at: now)
             }
         }
-        if !read.newlyRead.isEmpty { saveArchive() }
+        if !read.newlyRead.isEmpty {
+            saveArchive()
+            broadcastSessionsSoon()
+        }
         guard !read.messages.isEmpty else {
             reply.text = all ? "Your inbox is empty." : "No unread messages."
             return reply
@@ -114,6 +118,7 @@ extension VisorServer {
         guard let state else { return }
         if source.mailbox.update(sent: record.message.id, to: state, problem: state == .failed ? record.result : nil, at: record.updated) {
             saveArchive()
+            broadcastSessionsSoon()
         }
     }
 
@@ -133,7 +138,10 @@ extension VisorServer {
         guard let sender = session(receipt.to.session) else {
             return RelayReceipt(message: receipt.id, outcome: .failed, text: "No session \(receipt.to.session) here.")
         }
-        if sender.mailbox.update(sent: receipt.text, to: .read, at: receipt.created) { saveArchive() }
+        if sender.mailbox.update(sent: receipt.text, to: .read, at: receipt.created) {
+            saveArchive()
+            broadcastSessionsSoon()
+        }
         return RelayReceipt(message: receipt.id, outcome: .sent, text: "")
     }
 

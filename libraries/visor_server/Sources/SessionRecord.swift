@@ -120,8 +120,16 @@ public final class SessionRecord {
     /// The MCP servers it switched from their default: on or off.
     var mcpSwitched: [String: Bool] = [:]
     /// What other sessions sent it and what it sent them
-    /// (docs/agent-mail.md), kept with it.
-    var mailbox = Mailbox()
+    /// (docs/agent-mail.md), kept with it. Its unread count and when it
+    /// changed go out with the session's info, for clients to read it again.
+    var mailbox = Mailbox() {
+        didSet {
+            guard mailbox != oldValue else { return }
+            info.unreadMail = mailbox.unread
+            info.mailChanged = Date().timeIntervalSince1970
+            onInfoChanged?()
+        }
+    }
     /// Whether its agent has read_inbox, so a message to it goes to its
     /// inbox: one this launch starts does; one an earlier launch left
     /// running under its host may not, until it asks something with the

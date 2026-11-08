@@ -76,6 +76,15 @@ extension VisorServer {
             e.commands = commands(for: record)
             return respond(.json(e.encoded()))
         }
+        // Its inbox and outbox (docs/agent-mail.md), for the inspector.
+        if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "mail", authorized(request) {
+            guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
+            var e = Envelope(type: "mail")
+            e.session = record.info.id
+            e.inbox = record.mailbox.inbox
+            e.outbox = record.mailbox.outbox
+            return respond(.json(e.encoded()))
+        }
         if request.method == "GET", parts.count == 3, parts[0] == "sessions", parts[2] == "state", authorized(request) {
             guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
             return answerState(of: record, since: Self.query(request.path)["since"].flatMap(Int.init), respond: respond)

@@ -31,6 +31,8 @@ extension SessionInfo {
         if !side.isEmpty { o["side"] = .array(side.map(\.json)) }
         if !subagents.isEmpty { o["subagents"] = .array(subagents.map(\.json)) }
         if !mcp.isEmpty { o["mcp"] = .array(mcp.map(\.json)) }
+        if unreadMail > 0 { o["unreadMail"] = .number(Double(unreadMail)) }
+        if let mailChanged { o["mailChanged"] = .number(mailChanged) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -66,6 +68,8 @@ extension SessionInfo {
         side = json["side"].array?.compactMap(SideQuestion.init(json:)) ?? []
         subagents = json["subagents"].array?.compactMap(SubagentInfo.init(json:)) ?? []
         mcp = json["mcp"].array?.compactMap(MCPSwitch.init(json:)) ?? []
+        unreadMail = json["unreadMail"].int ?? 0
+        mailChanged = json["mailChanged"].double
         preview = json["preview"].string
         updated = json["updated"].double
     }

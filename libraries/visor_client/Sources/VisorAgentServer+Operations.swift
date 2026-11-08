@@ -100,6 +100,12 @@ extension VisorAgentServer {
         try await call("GET", "/sessions/\(session)/commands").commands ?? []
     }
 
+    /// A server before 0.47 has no such route: no mail, not an error.
+    public func mail(for session: String) async throws -> (inbox: [MailMessage], outbox: [MailMessage]) {
+        guard let boxes = try? await call("GET", "/sessions/\(session)/mail") else { return ([], []) }
+        return (boxes.inbox ?? [], boxes.outbox ?? [])
+    }
+
     public func subagentTranscript(of session: String, agent: String) async throws -> [TranscriptEntry] {
         try await call("GET", "/sessions/\(session)/subagents/\(Self.escape(agent))").entries ?? []
     }
