@@ -49,10 +49,10 @@ name: CI
 # Runners, by label: visor-jit (12 GB) for a build, visor-jit-small (2 GB)
 # for a job that only runs a script; release-mac for the agent image
 # (Apple's container); GitHub's own for the headful proofs alone (the
-# iPhone's, the Mac's, the emulator's), and until they run elsewhere, the
-# Mac's XCTest bundles (test) and the proof's comparison (verify, whose
-# diff draws with CoreGraphics). Every other job runs in a container
-# (Logan, 8 Nov 2026).
+# iPhone's, the Mac's, the emulator's), and until they are Isomer tests,
+# the Mac's XCTest bundles (test). Every other job runs in a container
+# (Logan, 8 Nov 2026), verify too: it makes the proof, and Reviews compares
+# it.
 on:
   pull_request:
   push:
