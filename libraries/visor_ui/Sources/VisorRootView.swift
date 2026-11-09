@@ -121,11 +121,6 @@ public struct VisorRootView: View {
             sidebar
         } detail: {
             detailView
-                // The detail's least width: on a Mac, AppKit loops its layout
-                // and throws when Settings opens beside a detail given less
-                // than it can shrink to (NavigationUI's settingsInspector);
-                // the window's minimum fits the sidebar, this and Settings.
-                .navigationSplitViewColumnWidth(min: 440, ideal: 640)
                 .settingsInspector(isPresented: settingsPresented, attachedTo: .detail) {
                     VisorSettingsView(computer: $settingsComputer)
                 }
@@ -530,8 +525,14 @@ public struct VisorRootView: View {
         NavigationStack(path: boundSubPath) {
             detailRoot
                 // The detail takes the window's slack, so the sidebar opens at
-                // its own width instead of stretching to its maximum.
-                .navigationSplitViewColumnWidth(min: 320, ideal: 720)
+                // its own width instead of stretching to its maximum. Its one
+                // width, on the stack's root content, never on the stack too:
+                // two minimums for one column left AppKit's update-constraints
+                // pass taking a new minimum each round until it threw
+                // (Applications, 9 Nov 2026). The least it lays out in beside
+                // Settings; the Mac window's minimum fits the sidebar, this
+                // and Settings (VisorMacApp).
+                .navigationSplitViewColumnWidth(min: 440, ideal: 720)
                 .navigationDestination(for: SubSessionRoute.self) { route in
                     if let which = selection?.session, let host = store.server(for: which.serverID) { subPage(route, host: host) }
                 }
