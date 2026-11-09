@@ -158,7 +158,7 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.45.2")
+bazel_dep(name = "isomer", version = "0.47.2")
 
 
 # isomer's Android cross-compile toolchains. The extension insists on a
