@@ -172,7 +172,6 @@ extension VisorServer {
         let key = ObjectIdentifier(client)
         connections[key] = client
         clientCount = connections.count
-        Self.log("a client connected (\(clientCount) now)")
         client.onMessage = { [weak self, weak client] envelope in
             guard let self, let client else { return }
             self.handle(envelope, from: client)
@@ -181,7 +180,7 @@ extension VisorServer {
             guard let self else { return }
             let gone = self.connections.removeValue(forKey: key)
             self.clientCount = self.connections.count
-            Self.log("a client left (\(self.clientCount) now)")
+            if let gone { self.logLeaving(gone) }
             for session in self.sessions { session.subscribers.remove(key) }
             if let gone { self.withdrawApprovals(askedBy: gone) }
         }

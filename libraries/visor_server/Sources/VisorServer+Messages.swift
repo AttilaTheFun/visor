@@ -9,6 +9,7 @@ import VisorProtocol
 extension VisorServer {
     func handle(_ envelope: Envelope, from client: ClientConnection) {
         // The permission shim: one request per connection, answered later.
+        if envelope.type == "approval_request" || envelope.type == "agent" { client.agent = true }
         if envelope.type == "approval_request" {
             guard envelope.token == agentToken, let record = session(envelope.session), let id = envelope.id else {
                 client.sendLast(.error("Not an agent of this host"))
@@ -32,11 +33,14 @@ extension VisorServer {
             guard envelope.type == "login" else { client.send(.error("Log in first")); return }
             let token = envelope.token ?? ""
             let byPassword = !password.isEmpty && (envelope.password ?? "") == password
+            client.clientID = envelope.client
             guard client.trusted || settings.asksNothing || byPassword || (!token.isEmpty && tokens.contains(token)) else {
+                Self.log("\(describe(client)) was refused: wrong password or token")
                 client.sendLast(.error("Wrong password"))
                 return
             }
             client.authenticated = true
+            Self.log("\(describe(client)) signed in (\(signedIn) signed in now)")
             var welcome = Envelope.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs())
             // Whether a session can start in a container here: New
             // Session offers it only then.
