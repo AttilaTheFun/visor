@@ -46,9 +46,9 @@ name: CI
 # 2026: "scope visor down to just ios, macos and android"): their jobs
 # are verify's, skipped (`if: false`), their scripts run by hand.
 #
-# Runners, by label: visor-jit (12 GB) for a build, visor-jit-small (2 GB)
-# for a job that only runs a script; release-mac for the agent image
-# (Apple's container); GitHub's own for the headful proofs alone (the
+# Runners, by label: visor-jit (12 GB) for a build (the agent image's too,
+# with buildah), visor-jit-small (2 GB) for a job that only runs a script;
+# GitHub's own for the headful proofs alone (the
 # iPhone's, the Mac's, the emulator's), and until they are Isomer tests,
 # the Mac's XCTest bundles (test). Every other job runs in a container
 # (Logan, 8 Nov 2026), verify too: it makes the proof, and Reviews compares
@@ -557,8 +557,9 @@ jobs:
         run: tools/ci/attach_release.sh "v$VERSION" "$RUNNER_TEMP/assets"
 
   # Visor's images (tools/containers/visor-agent/Dockerfile) of the
-  # proposal's version, built on the release Mac (Apple's container) and
-  # pushed to GitHub's registry as that version, its MAJOR.MINOR and latest:
+  # proposal's version, built with buildah in a visor-jit container, as every
+  # job but the headful proofs (Logan, 8 Nov 2026), and pushed to GitHub's
+  # registry as that version, its MAJOR.MINOR and latest:
   # the runtime target as ghcr.io/attilathefun/visor, which a Visor server of
   # that version makes sessions' containers from, and the build target, with
   # the toolchains, as ghcr.io/attilathefun/visor-agent, CI's containers' and
@@ -566,7 +567,7 @@ jobs:
   agent-image:
     needs: alpha
     if: ${{ !cancelled() && needs.alpha.result == 'success' }}
-    runs-on: [self-hosted, release-mac]
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
     permissions:
       contents: read
