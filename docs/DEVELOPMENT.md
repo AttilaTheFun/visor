@@ -959,8 +959,8 @@ front paths, `visor-server front`).
     or a tag. The builds, as the server signed them, are attached to the
     draft (`Visor-<version>-ios.ipa`, `-macos.zip` and `builds.json`:
     tools/ci/attach_release.sh), which is what Applications lists
-    (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent image of that version follows (`agent-image`, on
-    the release Mac). `adhoc`, on a branch other than main, builds and
+    (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent image of that version follows (`agent-image`, in
+    a visor-jit container, built with buildah). `adhoc`, on a branch other than main, builds and
     publishes its AdHoc build.
   - **Released**: Logan's Release in Reviews publishes a proposed
     release's draft, which makes its tag. `release` checks the commit is on
