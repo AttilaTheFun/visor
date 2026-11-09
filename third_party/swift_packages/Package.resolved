@@ -41,8 +41,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/isomer.git",
       "state" : {
-        "branch" : "v0.47.2",
-        "revision" : "24e9782130ac6ea646b40262979515ea885ddd75"
+        "branch" : "v0.48.1",
+        "revision" : "50fb92ff8fcd421c0c1675d198c599be00a6dfec"
       }
     },
     {
