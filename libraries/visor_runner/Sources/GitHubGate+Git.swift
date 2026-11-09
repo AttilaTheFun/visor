@@ -2,7 +2,8 @@ import Foundation
 
 // GitHubGate's git rules (docs/github-gate-rules.md, §3.3): fetch and clone
 // pass for an allowed repository, and for any other anonymously, with no
-// token (Logan, 9 Nov 2026: a public dependency's clone); a push's command list is read before any
+// token (Logan, 9 Nov 2026: a public dependency's clone), as do a release's
+// asset and a ref's archive downloaded; a push's command list is read before any
 // of its pack goes on, and the whole push is refused if any command is.
 // Only branches, never main, master or (checked by the proxy against
 // GitHub) the default branch; no deletes; no signed pushes. A forced update
@@ -14,6 +15,19 @@ extension GitHubGate {
         guard segments.count >= 3 else { return refused }
         let name = segments[1].hasSuffix(".git") ? String(segments[1].dropLast(4)) : segments[1]
         let rest = Array(segments.dropFirst(2))
+        // A download, of a release's asset or of an archive of a ref
+        // (`/<owner>/<name>/releases/download/<tag>/<file>`,
+        // `/<owner>/<name>/archive/…`): what Bazel and SwiftPM fetch.
+        // Anonymously outside the allowed repositories, with the token for
+        // theirs; GitHub redirects it to its download hosts, which are
+        // tunnels (Logan, 9 Nov 2026).
+        if ["GET", "HEAD"].contains(request.method), Self.isDownload(rest) {
+            if let outside = outside(segments[0], name) { return .anonymous(repository: outside) }
+            switch self.repository(segments[0], name) {
+            case .success(let allowed): return .allow(repository: allowed)
+            case .failure(let refusal): return .refuse(refusal.reason)
+            }
+        }
         // Outside the allowed repositories: a fetch or a clone alone, and an
         // LFS download, with no token; anything else, as for any repository
         // not allowed, refused.
@@ -51,6 +65,15 @@ extension GitHubGate {
         default:
             return refused
         }
+    }
+
+    /// Whether what follows a repository's path is a download: a release's
+    /// asset (`releases/download/<tag>/<file>`) or an archive of a ref
+    /// (`archive/<ref>.tar.gz`, `archive/refs/tags/<tag>.zip`).
+    static func isDownload(_ rest: [String]) -> Bool {
+        if rest.count >= 4, rest[0] == "releases", rest[1] == "download" { return true }
+        if rest.count >= 2, rest[0] == "archive" { return true }
+        return false
     }
 
     /// A push, by its command list: `bytes` are the request's body as far as
