@@ -66,7 +66,10 @@ struct VisorMacApp: App {
         WindowGroup {
             VisorRootView()
                 .environment(store)
-                .frame(minWidth: 720, minHeight: 480)
+                // The sidebar (240), the detail's least (440) and Settings'
+                // inspector (280) side by side, with room: less, and AppKit
+                // throws as Settings opens (NavigationUI's settingsInspector).
+                .frame(minWidth: 980, minHeight: 480)
                 // visor://connect?code=… — a connection code from a QR
                 // code or a link adds that computer; visor://sign-in shows
                 // a computer's settings.

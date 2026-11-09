@@ -31,6 +31,9 @@ struct AgentScreen: View {
     @State private var previewFile: URL?
     /// The attach source open (files, the photo library, the camera).
     @State private var attachSource: AttachSource?
+    /// Settings (VisorRootView's): it and the session's inspector take
+    /// turns at the trailing side.
+    @Environment(\.settingsPresented) private var settingsPresented
     @State private var showInspector = false
     /// A fork or branch whose ✕ was tapped, while the person confirms.
     @State private var ending: SubSession?
@@ -132,6 +135,9 @@ struct AgentScreen: View {
                                  end: { showInspector = false; host.end(sessionID); ended.run() })
             }
         }
+        // The trailing side is Settings' or the session's, never both.
+        .onChange(of: settingsPresented.wrappedValue) { _, open in if open { showInspector = false } }
+        .onChange(of: showInspector) { _, open in if open { settingsPresented.wrappedValue = false } }
         .navigationTitle(sessionTitle)
         .toolbarTitleDisplayMode(.inline)
         // The draft is kept as it is typed, and taken up again when the

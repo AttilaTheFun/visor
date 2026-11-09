@@ -176,7 +176,7 @@ let clientProducts: [Product] = [
     .library(name: "VisorServices", targets: ["VisorServices"]),
 ]
 let clientPackages: [Package.Dependency] = [
-    .package(url: "https://github.com/AttilaTheFun/agent_ui.git", exact: "0.47.0"),
+    .package(url: "https://github.com/AttilaTheFun/agent_ui.git", exact: "0.48.0"),
     .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.0"),
 ]
 #else
