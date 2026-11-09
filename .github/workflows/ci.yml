@@ -491,6 +491,14 @@ jobs:
             "" | *.0) echo "::error::Applications Server gave no build version (the plist says \"$version\")"; exit 1 ;;
           esac
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      # Logan's line rule (8 Nov 2026): no proposal on a line already
+      # published as a production release, so a release ends its line
+      # (tools/ci/check_version_line.sh, AttilaTheFun/applications').
+      - name: A line not yet released
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: tools/ci/check_version_line.sh "$VERSION"
       # The line's released agent image (MAJOR.MINOR), named, unused in the
       # job's own container.
       - name: Build
