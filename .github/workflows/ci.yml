@@ -20,8 +20,10 @@ name: CI
 #     GitHub's own xcode-27 Macs), the command-line server's tests on Linux
 #     (linux), blue Visor's web client (blue-web), and the proof: the
 #     iPhone's, Visor.app's and blue Visor on Android's screens, on GitHub's
-#     own runners, compared with the previous release's. Its last job, `verify`, keeps the `proof`
-#     artifact, and its success is the commit's tests passing. Run on a
+#     own runners. Its last job, `verify`, keeps them as the `proof`
+#     artifact (proof.zip, AttilaTheFun/reviews' format 2, which Reviews
+#     compares with the prior release's), and its success is the commit's
+#     tests passing. Run on a
 #     branch pushed at an earlier commit, it bisects a regression;
 #   - `prerelease`: no tests or proof. The commit's version is asked of
 #     Applications Server, its apps built and published as Alphas, and a
@@ -365,37 +367,32 @@ jobs:
           path: ${{ runner.temp }}/blue-ios
           if-no-files-found: ignore
 
-  # The proof, from what the platforms pictured, each screen compared with
-  # the previous release's (tools/ci/proof_compare.sh: CoreGraphics' diff,
-  # so on a Mac), kept as the `proof` artifact Reviews reads. It passes only
-  # when the Mac's tests, Linux's, the web client and every platform's part
-  # did: its success is the commit verified, which a release's alpha and the
-  # release job ask for.
+  # The proof, from what the platforms pictured: each screen an item under
+  # a stable id, in proof.zip (tools/ci/proof_make.sh; AttilaTheFun/reviews'
+  # docs/PROOF_FORMAT.md, format 2), kept as the `proof` artifact. Nothing is
+  # compared here: Reviews compares it with the prior release's, item by item
+  # (Logan, 8 Nov 2026), so it runs in a container. It passes only when the
+  # Mac's tests, Linux's, the web client and every platform's part did: its
+  # success is the commit verified, which a release's alpha and the release
+  # job ask for.
   verify:
     needs: [build-tests, test, linux, blue-web, build-apple, build-android, proof-ios, proof-mac, proof-android]
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release') }}
-    runs-on: xcode-27
+    runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-        with:
-          # The history and the tags: the previous release is what the
-          # screens are compared with.
-          fetch-depth: 0
-          fetch-tags: true
       - uses: actions/download-artifact@v4
         with:
           pattern: part-*
           path: ${{ runner.temp }}/parts
-      - run: tools/ci/proof_compare.sh "$RUNNER_TEMP/parts" "$RUNNER_TEMP/proof" full
-        env:
-          # The previous release's own proof, from its release or its run.
-          GITHUB_TOKEN: ${{ github.token }}
+      - run: tools/ci/proof_make.sh "$RUNNER_TEMP/parts" "$RUNNER_TEMP/proof"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: proof
-          path: ${{ runner.temp }}/proof
+          path: ${{ runner.temp }}/proof/proof.zip
+          if-no-files-found: error
           retention-days: 90
       - if: needs.test.result != 'success' || needs.linux.result != 'success' || needs.blue-web.result != 'success' || needs.proof-ios.result != 'success' || needs.proof-mac.result != 'success' || needs.proof-android.result != 'success'
         run: |
@@ -528,8 +525,21 @@ jobs:
           KIND: ${{ inputs.run }}
           VERSION: ${{ steps.version.outputs.version }}
         run: tools/ci/propose_release.sh "$KIND" "$VERSION" "$RUNNER_TEMP/published.txt"
+      # A release's proposal: the proof verify made of this commit, saying
+      # the version, among the assets, so the draft and the release keep it
+      # (AttilaTheFun/reviews' docs/PROOF_FORMAT.md).
+      - uses: actions/download-artifact@v4
+        if: inputs.run == 'release'
+        with:
+          name: proof
+          path: ${{ runner.temp }}/proof
+      - name: The proof among the assets
+        if: inputs.run == 'release'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: tools/ci/proof_version.sh "$RUNNER_TEMP/proof/proof.zip" "$VERSION" "$RUNNER_TEMP/assets/proof.zip"
       # The Alphas on the draft: Visor-<version>-ios.ipa, -macos.zip and
-      # builds.json, which Applications reads.
+      # builds.json, which Applications reads (and a release's proof.zip).
       - name: The builds on the draft
         env:
           GH_TOKEN: ${{ github.token }}
