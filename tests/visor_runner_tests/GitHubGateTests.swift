@@ -80,6 +80,30 @@ final class GitHubGateTests: XCTestCase {
         refused(rest("GET", "/repos/not%20a/repo"), "not a repository")
     }
 
+    /// A release's asset and a ref's archive, as Bazel and SwiftPM download
+    /// them: anonymously outside the allowed repositories, with the token for
+    /// theirs, and never written to (Logan, 9 Nov 2026).
+    func testReleaseAssetsAndArchivesAreDownloadedAnonymouslyOutside() {
+        let web = { (method: String, target: String) in
+            self.gate.decide(GateRequest(method: method, host: "github.com", target: target))
+        }
+        let platforms = GateDecision.anonymous(repository: "bazelbuild/platforms")
+        XCTAssertEqual(web("GET", "/bazelbuild/platforms/releases/download/1.1.0/platforms-1.1.0.tar.gz"), platforms)
+        XCTAssertEqual(web("HEAD", "/bazelbuild/platforms/releases/download/1.1.0/platforms-1.1.0.tar.gz"), platforms)
+        XCTAssertEqual(web("GET", "/bazelbuild/platforms/archive/refs/tags/1.1.0.tar.gz"), platforms)
+        XCTAssertEqual(web("GET", "/bazelbuild/platforms/archive/0123abc.zip"), platforms)
+        // An allowed repository's: with the token.
+        XCTAssertEqual(web("GET", "/AttilaTheFun/visor/releases/download/v0.47.1/builds.json"), .allow(repository: "AttilaTheFun/visor"))
+        XCTAssertEqual(web("GET", "/AttilaTheFun/visor/archive/refs/tags/v0.47.1.tar.gz"), .allow(repository: "AttilaTheFun/visor"))
+        // Never an upload or a write to them, and no other web page.
+        refused(web("POST", "/bazelbuild/platforms/releases/download/1.1.0/platforms-1.1.0.tar.gz"), "")
+        refused(web("PUT", "/AttilaTheFun/visor/releases/download/v0.47.1/builds.json"), "")
+        refused(web("GET", "/bazelbuild/platforms/releases/download/1.1.0"), "")
+        refused(web("GET", "/bazelbuild/platforms/releases"), "")
+        refused(web("GET", "/bazelbuild/platforms/settings"), "")
+        refused(web("GET", "/not%20a/repo/archive/x.zip"), "")
+    }
+
     func testAPathCantClimbOutOfItsRepository() {
         refused(rest("GET", "/repos/AttilaTheFun/x/../../repos/someone/else"), "no plain path")
         refused(rest("GET", "/repos/AttilaTheFun/x/%2e%2e/y"), "no plain path")
