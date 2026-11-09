@@ -101,6 +101,9 @@ final class GitHubInterceptor: Sendable {
         switch decision {
         case .refuse(let reason):
             return .refuse(reason)
+        case .anonymous(let named):
+            // No token at all: none is asked for, and none goes on.
+            return .forward(repository: named, token: "", rewrite: nil)
         case .allow(let named):
             repository = named ?? caller.repository
         case .check(let check):

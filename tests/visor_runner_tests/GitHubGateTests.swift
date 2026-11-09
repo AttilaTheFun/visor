@@ -48,7 +48,36 @@ final class GitHubGateTests: XCTestCase {
         XCTAssertFalse(rules.allows("someone/else"))
         XCTAssertFalse(rules.allows("not a repo"))
         passes(rest("GET", "/repos/attilathefun/OSS/pulls/3/comments"))
-        refused(rest("GET", "/repos/someone/else/pulls"), "not among the repositories")
+        XCTAssertEqual(rest("GET", "/repos/attilathefun/OSS/pulls/3"), .allow(repository: "attilathefun/OSS"))
+        // Outside them, a read goes on anonymously; a write never does.
+        XCTAssertEqual(rest("GET", "/repos/someone/else/pulls"), .anonymous(repository: "someone/else"))
+        refused(rest("POST", "/repos/someone/else/issues/1/comments", #"{"body":"x"}"#), "not among the repositories")
+    }
+
+    /// Logan, 9 Nov 2026: a public repository outside the allowed ones is read
+    /// with no token (a clone of an open-source dependency, its REST reads),
+    /// and nothing else of it goes through.
+    func testOutsideTheAllowedRepositoriesOnlyReadsGoOnAndWithNoToken() {
+        let git = { (method: String, target: String, body: String?) in
+            self.gate.decide(GateRequest(method: method, host: "github.com", target: target, body: body.map { Data($0.utf8) }))
+        }
+        let outside = GateDecision.anonymous(repository: "swiftlang/swift-foundation")
+        // A clone and a fetch: refs, then the pack.
+        XCTAssertEqual(git("GET", "/swiftlang/swift-foundation.git/info/refs?service=git-upload-pack", nil), outside)
+        XCTAssertEqual(git("POST", "/swiftlang/swift-foundation.git/git-upload-pack", "0000"), outside)
+        XCTAssertEqual(git("POST", "/swiftlang/swift-foundation.git/info/lfs/objects/batch", #"{"operation":"download"}"#), outside)
+        // Its REST reads.
+        XCTAssertEqual(rest("GET", "/repos/swiftlang/swift-foundation/tags"), outside)
+        XCTAssertEqual(rest("HEAD", "/repos/swiftlang/swift-foundation"), outside)
+        // Never a push, the push side of git, an LFS upload, or a REST write.
+        refused(git("GET", "/swiftlang/swift-foundation.git/info/refs?service=git-receive-pack", nil), "not among")
+        refused(git("POST", "/swiftlang/swift-foundation.git/git-receive-pack", "0000"), "not among")
+        refused(git("POST", "/swiftlang/swift-foundation.git/info/lfs/objects/batch", #"{"operation":"upload"}"#), "not among")
+        refused(rest("POST", "/repos/swiftlang/swift-foundation/issues", #"{"title":"x"}"#), "not among")
+        refused(rest("PATCH", "/repos/swiftlang/swift-foundation/pulls/1", #"{"title":"x"}"#), "not among")
+        refused(rest("DELETE", "/repos/swiftlang/swift-foundation"), "not among the writes")
+        // What names no repository is still no read.
+        refused(rest("GET", "/repos/not%20a/repo"), "not a repository")
     }
 
     func testAPathCantClimbOutOfItsRepository() {
@@ -109,13 +138,15 @@ final class GitHubGateTests: XCTestCase {
             ("PUT", "\(repo)/branches/main/protection", #"{"enforce_admins":false}"#),                     // 372
             ("PUT", "\(repo)/actions/secrets/X", #"{"encrypted_value":"x"}"#),                             // 373
             ("PATCH", repo, #"{"private":false}"#),                                                        // 374
-            ("GET", "/repos/someone/else/issues", nil),                                                    // 376
             ("POST", "/repos/someone/else/issues", #"{"title":"x"}"#),                                     // 377
         ]
         for (method, path, body) in cases {
             if case .refuse = rest(method, path, body) { continue }
             XCTFail("not refused: \(method) \(path) \(body ?? "")")
         }
+        // gh_mcp's 376 refused a read outside the allowed repositories; the
+        // proxy reads it anonymously, with no token (Logan, 9 Nov 2026).
+        XCTAssertEqual(rest("GET", "/repos/someone/else/issues"), .anonymous(repository: "someone/else"))
     }
 
     func testWhatAgentsDoIsAllowed() {
@@ -219,7 +250,8 @@ final class GitHubGateTests: XCTestCase {
     func testFetchesPassAndAPushIsCheckedByItsCommands() {
         passes(gate.decide(GateRequest(method: "GET", host: "github.com", target: "/AttilaTheFun/oss.git/info/refs?service=git-upload-pack")))
         passes(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/oss/git-upload-pack")))
-        refused(gate.decide(GateRequest(method: "GET", host: "github.com", target: "/someone/else.git/info/refs?service=git-upload-pack")), "not among")
+        XCTAssertEqual(gate.decide(GateRequest(method: "GET", host: "github.com", target: "/someone/else.git/info/refs?service=git-upload-pack")),
+                       .anonymous(repository: "someone/else"), "outside the allowed ones: anonymously")
         refused(gate.decide(GateRequest(method: "GET", host: "github.com", target: "/login")), "only a repository's git")
         let zero = String(repeating: "0", count: 40)
         let other = String(repeating: "b", count: 40)

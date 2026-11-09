@@ -146,9 +146,25 @@ final class GitHubInterceptorTests: XCTestCase {
                                  "https://api.github.com/graphql"])
         XCTAssertEqual(graphQL.status, "200", graphQL.body)
         XCTAssertTrue(graphQL.body.contains("\"type\":\"FORBIDDEN\""), graphQL.body)
-        let other = try agent(["https://api.github.com/repos/someone/else/pulls"])
+        let other = try agent(["-X", "POST", "-H", "Content-Type: application/json", "--data", #"{"body":"x"}"#,
+                               "https://api.github.com/repos/someone/else/issues/3/comments"])
         XCTAssertEqual(other.status, "403", other.body)
+        XCTAssertTrue(other.body.contains("not among the repositories"), other.body)
         XCTAssertEqual(github.requests, [], "nothing refused reached GitHub")
+    }
+
+    /// Logan, 9 Nov 2026: a read of a repository outside the allowed ones
+    /// goes on with no authorization at all: neither the session's token nor
+    /// the client's placeholder reaches GitHub.
+    func testAReadOutsideTheAllowedRepositoriesGoesOnWithNoToken() throws {
+        let (body, status) = try agent(["https://api.github.com/repos/swiftlang/swift-foundation/tags"])
+        XCTAssertEqual(status, "200", body)
+        XCTAssertEqual(github.requests, ["GET /repos/swiftlang/swift-foundation/tags "], "no authorization header")
+        XCTAssertFalse(body.contains("ghs_fixedtoken"))
+        XCTAssertFalse(body.contains("placeholder"))
+        // An allowed one's read after it still has the token.
+        _ = try agent(["https://api.github.com/repos/AttilaTheFun/oss/pulls/3"])
+        XCTAssertEqual(github.requests.last, "GET /repos/AttilaTheFun/oss/pulls/3 Bearer ghs_fixedtoken")
     }
 
     func testAnAllowedWriteGoesOnWithItsBody() throws {

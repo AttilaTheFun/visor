@@ -59,6 +59,15 @@ public struct GitHubGate: Sendable {
         return .success(repository)
     }
 
+    /// `owner/name`, from a path's two segments, if it names a repository
+    /// that isn't among the allowed ones: what an anonymous read is of. Nil
+    /// for an allowed one, or for what names no repository.
+    func outside(_ owner: String, _ name: String) -> String? {
+        let repository = owner + "/" + name
+        guard Self.isOwner(owner), Self.isName(name), !rules.allows(repository) else { return nil }
+        return repository
+    }
+
     struct Refusal: Error, Equatable {
         let reason: String
         init(_ reason: String) { self.reason = reason }
