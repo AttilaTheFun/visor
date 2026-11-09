@@ -222,6 +222,12 @@ Runner knows which session is calling.
   AttilaTheFun/oss: <text>" (Rules:109).
 - **[R2]** `repo` is allowed, else Refused "<repo> is not among the
   repositories gh_mcp allows (<patterns, comma-separated>)" (Rules:111-113).
+  The proxy departs from gh_mcp here (Logan, 9 Nov 2026): a *read* of a
+  repository not allowed (git's `info/refs?service=git-upload-pack` and
+  `git-upload-pack`, an LFS download, a REST GET or HEAD under
+  `/repos/<owner>/<name>`) goes on anonymously, with no token
+  (`GateDecision.anonymous`); every other request of one is Refused as R2
+  says.
 - **[T1-T7]** Arguments (Tools:56-106), each an Invalid:
   - not an object: "<tool>'s arguments are an object";
   - an unknown key: "<tool> takes no argument <key> (it takes …)";

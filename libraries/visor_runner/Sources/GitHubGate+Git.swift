@@ -1,7 +1,8 @@
 import Foundation
 
 // GitHubGate's git rules (docs/github-gate-rules.md, §3.3): fetch and clone
-// pass for an allowed repository; a push's command list is read before any
+// pass for an allowed repository, and for any other anonymously, with no
+// token (Logan, 9 Nov 2026: a public dependency's clone); a push's command list is read before any
 // of its pack goes on, and the whole push is refused if any command is.
 // Only branches, never main, master or (checked by the proxy against
 // GitHub) the default branch; no deletes; no signed pushes. A forced update
@@ -12,12 +13,28 @@ extension GitHubGate {
         let refused = GateDecision.refuse("github.com: only a repository's git (fetch, clone, push) goes through Visor's proxy")
         guard segments.count >= 3 else { return refused }
         let name = segments[1].hasSuffix(".git") ? String(segments[1].dropLast(4)) : segments[1]
+        let rest = Array(segments.dropFirst(2))
+        // Outside the allowed repositories: a fetch or a clone alone, and an
+        // LFS download, with no token; anything else, as for any repository
+        // not allowed, refused.
+        if let outside = outside(segments[0], name) {
+            switch (request.method, rest) {
+            case ("GET", ["info", "refs"]) where request.query == "service=git-upload-pack":
+                return .anonymous(repository: outside)
+            case ("POST", ["git-upload-pack"]):
+                return .anonymous(repository: outside)
+            case ("POST", ["info", "lfs", "objects", "batch"]):
+                guard let body = request.body, GateJSON.parse(body)?.object?["operation"]?.string == "download" else { break }
+                return .anonymous(repository: outside)
+            default:
+                break
+            }
+        }
         let repository: String
         switch self.repository(segments[0], name) {
         case .success(let allowed): repository = allowed
         case .failure(let refusal): return .refuse(refusal.reason)
         }
-        let rest = Array(segments.dropFirst(2))
         switch (request.method, rest) {
         case ("GET", ["info", "refs"]):
             guard let query = request.query, ["service=git-upload-pack", "service=git-receive-pack"].contains(query) else { return refused }

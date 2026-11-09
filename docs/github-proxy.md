@@ -20,6 +20,13 @@ there.
   merge a green pull request, re-run and dispatch workflows, draft releases.
 - They hold no GitHub credential. `GH_TOKEN` is a placeholder the proxy
   replaces; git has no credential helper of its own.
+- A repository outside the allowed ones (an open-source dependency,
+  `swiftlang/swift-foundation`, say) is read through the proxy with no token
+  at all, as anyone on the internet reads it: a clone or fetch
+  (`git-upload-pack`), an LFS download, and its REST GETs (Logan, 9 Nov 2026).
+  The client's placeholder is taken off and nothing is put in its place, so
+  a private repository of anyone else stays out of reach (GitHub answers 404).
+  Nothing else of it goes through: no push, no write, no GraphQL.
 - A refusal reads as GitHub's own errors do, in each client's form: REST `403
   {"message": "Refused: …"}`, GraphQL `{"errors": [{"type": "FORBIDDEN",
   "message": "Refused: …"}]}`, git `! [remote rejected] … (Refused: …)` or

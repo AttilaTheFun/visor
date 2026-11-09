@@ -180,9 +180,14 @@ extension GitHubInterceptor {
             }
             for name in ["authorization", "proxy-authorization", "proxy-connection"] { head.headers.remove(name: name) }
             head.headers.replaceOrAdd(name: "host", value: host)
-            head.headers.add(name: "authorization", value: host == "github.com"
-                ? "Basic " + Data("x-access-token:\(token)".utf8).base64EncodedString() : "Bearer " + token)
-            interceptor.log("\(caller.session) \(head.method.rawValue) \(host)\(Self.template(head.uri)) \(repository) forwarded")
+            // An anonymous read (no token) goes on with no authorization at
+            // all, the client's placeholder taken off as always.
+            if !token.isEmpty {
+                head.headers.add(name: "authorization", value: host == "github.com"
+                    ? "Basic " + Data("x-access-token:\(token)".utf8).base64EncodedString() : "Bearer " + token)
+            }
+            interceptor.log("\(caller.session) \(head.method.rawValue) \(host)\(Self.template(head.uri)) \(repository) "
+                + (token.isEmpty ? "forwarded anonymously" : "forwarded"))
             phase = .forwarding
             let handler = NIOLoopBound(self, eventLoop: context.eventLoop)
             let bound = NIOLoopBound(context, eventLoop: context.eventLoop)
@@ -235,7 +240,7 @@ extension GitHubInterceptor {
 
         /// The response has ended: the next request may come.
         func responded(status: HTTPResponseStatus) {
-            if status == .unauthorized {
+            if status == .unauthorized, !token.isEmpty {
                 // GitHub turned the token down: the next request asks again.
                 let tokens = interceptor.tokens
                 let session = caller.session

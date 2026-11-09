@@ -19,9 +19,11 @@ extension GitHubGate {
     }
 
     /// [P1]: a repository's own, an id's (the token's scope bounds it), and
-    /// the few global reads gh makes.
+    /// the few global reads gh makes; a repository's outside the allowed
+    /// ones, anonymously, with no token.
     private func decideRead(_ segments: [String], path: String) -> GateDecision {
         if segments.first == "repos", segments.count >= 3 {
+            if let outside = outside(segments[1], segments[2]) { return .anonymous(repository: outside) }
             switch repository(segments[1], segments[2]) {
             case .success(let repository): return .allow(repository: repository)
             case .failure(let refusal): return .refuse(refusal.reason)
