@@ -1193,22 +1193,24 @@ machines are left to CI and the agents (Logan, 5 Nov 2026):
   still by System UI's demo mode. Each of snapshots.py's screens is opened
   with its intent and cut below the status bar.
 
-`tools/ci/proof_compare.sh` then compares each screen (`ios-chat`,
-`ios-chat-landscape`, `mac-chat`, `android-chat`, …) with the same one in
-the previous release's proof (the newest `v*` tag before the commit, else
-the commit before), version over version (Logan, 5 Nov 2026). The base's
-proof comes from its GitHub release, which carries its `proof.json` and a
-`proof-<screen>.png` for each screen from the moment the owner publishes it
-(the workflow's release job, `tools/ci/release_proof.sh`), else from its
-run's `proof` artifact while GitHub keeps it (90 days;
-`tools/ci/base_proof_screens.sh`). The run's `proof` artifact holds
-`proof.json` (with each platform's device), `screens/`, `before/`,
-`diffs/` and each platform's logs. Reviews reads it from GitHub by commit:
-no release is made without a proof of its commit, and that proof is the
-one reviewed. To bisect a regression, prove an earlier commit after the
+`tools/ci/proof_make.sh` then makes the proof in AttilaTheFun/reviews'
+format 2 (docs/PROOF_FORMAT.md there): each screen an item under a stable id
+(`ios/phone/chat`, `ios/phone-landscape/chat`, `macos/window/chat`,
+`android/phone/chat`, …), with its SHA-256 and size, in `proof.zip` with its
+`proof.json`, the run's `proof` artifact. Nothing compares it in CI, so
+`verify` runs in a container: Reviews compares a release's proof with the
+prior release's, item by item (Logan, 8 Nov 2026), and shows what was added,
+removed, changed and unchanged. A release's proposal (`run: release`) puts
+the proof among the draft's assets, saying its version
+(`tools/ci/proof_version.sh`), so the release keeps it however long ago it
+was; at publishing, `tools/ci/release_proof.sh` checks it is of the tag's
+commit, or attaches the verified run's where the draft has none. A screen
+keeps its id from release to release: rename a fixture screen only on
+purpose, as Reviews then shows it removed and another added. No release is
+made without a proof of its commit, and that proof is the one reviewed. To bisect a regression, prove an earlier commit after the
 fact: push a branch at it and run the workflow on that branch. No
 pictures are kept in the tree for it (`tests/proof` went in 0.46): a
-release is compared with the release before. The lab's phones are for
+release is compared with the release before, in Reviews. The lab's phones are for
 what needs real hardware (a sensor, or a benchmark on a device).
 
 `tools/proof.sh` still makes the same screens and UI cases on your own
