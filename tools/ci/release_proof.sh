@@ -18,6 +18,9 @@
 # proof is of another commit.
 set -euo pipefail
 me="$(basename "$0")"
+# gh, in a container that may not have it (gh_ready.sh, beside this file).
+# shellcheck source=tools/ci/gh_ready.sh
+. "$(dirname "$0")/gh_ready.sh"
 tag="${1:?usage: tools/ci/release_proof.sh <tag> [--run <run id>]}"
 given=""
 if [ $# -gt 1 ]; then

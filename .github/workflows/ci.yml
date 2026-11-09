@@ -46,8 +46,11 @@ name: CI
 #
 # Runners, by label: visor-jit (12 GB) for a build, visor-jit-small (2 GB)
 # for a job that only runs a script; release-mac for the agent image
-# (Apple's container); GitHub's own for the Macs, the emulator and the
-# release's files.
+# (Apple's container); GitHub's own for the headful proofs alone (the
+# iPhone's, the Mac's, the emulator's), and until they run elsewhere, the
+# Mac's XCTest bundles (test) and the proof's comparison (verify, whose
+# diff draws with CoreGraphics). Every other job runs in a container
+# (Logan, 8 Nov 2026).
 on:
   pull_request:
   push:
@@ -410,10 +413,11 @@ jobs:
 
   # Ready to release: every dependency pinned to a released version
   # (tools/released_pins.sh). A release's alone: a pre-release may still pin
-  # a revision. On GitHub's own runner while the repository is public.
+  # a revision. In a container, as every job but the headful proofs
+  # (Logan, 8 Nov 2026).
   pins:
     if: github.event_name == 'workflow_dispatch' && inputs.run == 'release'
-    runs-on: ${{ (github.event.repository.private || vars.HOSTED_RUNNERS == 'off') && fromJSON('["self-hosted", "visor-jit-small"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -665,11 +669,12 @@ jobs:
   # notarized -macos.dmg (Logan, 5 Nov 2026) and builds.json, which
   # Applications reads. Then the proof that verified it
   # (tools/ci/release_proof.sh), for the next release's to be compared
-  # with. On GitHub's own runner, so that the job reaching Applications
-  # Server (release) keeps a read-only token.
+  # with. A job of its own, so that the one reaching Applications Server
+  # (release) keeps a read-only token; in a container, as every job but the
+  # headful proofs (Logan, 8 Nov 2026). gh as gh_ready.sh installs it.
   release-assets:
     needs: release
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 10
     permissions:
       contents: write
