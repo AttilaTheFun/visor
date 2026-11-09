@@ -142,6 +142,39 @@ final class NetworkOfComputersTests: XCTestCase {
         XCTAssertEqual(host.path, "http://100.64.0.11:7433")
     }
 
+    /// Connected by a path that isn't the first (the first didn't answer):
+    /// a network change that leaves the paths as they were signs in again
+    /// by none of them; one that changes them does (9 Nov 2026: a Mac
+    /// re-logged in to a server four times a minute).
+    func testANetworkChangeThatChangesNothingKeepsTheConnection() async {
+        let network = ScriptedNetwork()
+        VisorHost.network = network
+        defer { VisorHost.network = nil }
+        network.local = ["192.168.1.49"]
+        let record = AgentServerRecord(name: "Mini", address: "http://192.168.1.49:7433", secret: "pw", provider: "scripted",
+                                       paths: ["http://127.0.0.1:7440", "http://100.64.0.11:7440"])
+        let server = scripted(record)
+        server.refused = ["http://127.0.0.1:7440"]
+        let host = AgentServerConnection(record: record)
+        host.connect()
+        await settle()
+        XCTAssertEqual(host.state, .connected)
+        XCTAssertEqual(host.path, "http://192.168.1.49:7433")
+        let signIns = server.signedInBy.count
+        host.networkChanged()
+        await settle()
+        host.networkChanged()
+        await settle()
+        XCTAssertEqual(server.signedInBy.count, signIns, "no sign-in again while the paths are as they were")
+        XCTAssertEqual(host.state, .connected)
+        // The LAN left: the tailnet's path now ranks before the LAN's, the
+        // paths change, and it is reached again.
+        network.local = []
+        host.networkChanged()
+        await settle()
+        XCTAssertGreaterThan(server.signedInBy.count, signIns, "a change that changes the paths is acted on")
+    }
+
     /// Every path refused: the wait, then the paths again from the start.
     func testEveryRoadRefusedMeansTheWait() async {
         let record = AgentServerRecord(name: "Mini", address: "http://a", secret: "pw", provider: "scripted", paths: ["http://b"])
