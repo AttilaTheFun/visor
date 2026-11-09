@@ -11,6 +11,13 @@ final class ClientConnection {
     /// Whether it came on a connection only this user could open (the
     /// socket file an SSH client reaches): its login needs no password.
     var trusted = false
+    /// The client id its login gave (a Visor client's own), for the log.
+    var clientID: String?
+    /// An agent's one request (the Visor MCP server's, the permission
+    /// shim's), not a client: the log leaves it out.
+    var agent = false
+    /// When it connected, for how long it stayed.
+    let since = Date()
     var onMessage: ((Envelope) -> Void)?
     var onClose: (() -> Void)?
 
