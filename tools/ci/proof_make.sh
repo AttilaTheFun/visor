@@ -9,8 +9,10 @@
 # <parts> holds a folder for each platform's part (tools/ci/proof_ios.sh's,
 # proof_mac.sh's and proof_android.sh's: screens/<platform>-<screen>.png),
 # named for it (ios, mac, android; or part-ios and so on, as the workflow's
-# artifacts download). Out comes <out>/proof.zip: proof.json at its top and
-# each screen at screens/<id>.png. Each screen is an item, its id stable from
+# artifacts download). Out come <out>/proof/, proof.json and each screen at
+# screens/<id>.png, which the run keeps as its `proof` artifact (GitHub zips
+# it, so its download is the same zip), and <out>/proof.zip, the same zipped,
+# the release's asset. Each screen is an item, its id stable from
 # release to release (rename a fixture screen only on purpose):
 #   ios-<screen>.png            ios/phone/<screen>
 #   ios-<screen>-landscape.png  ios/phone-landscape/<screen>
@@ -30,7 +32,7 @@ version="${3:-$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/stri
 commit="$(git -C "$ROOT" rev-parse HEAD)"
 
 python3 -I - "$parts" "$out" "$version" "$commit" "${GITHUB_REPOSITORY:-AttilaTheFun/visor}" "${GITHUB_RUN_ID:-}" << 'PY'
-import datetime, hashlib, json, os, re, struct, sys, zipfile
+import datetime, hashlib, json, os, re, shutil, struct, sys, zipfile
 parts, out, version, commit, repository, run = sys.argv[1:7]
 forms = {"ios": ("ios", "phone", "an iPhone"), "mac": ("macos", "window", "the Mac"), "android": ("android", "phone", "Android")}
 order = ["ios", "mac", "android"]
@@ -86,10 +88,17 @@ if duplicates:
 document = {"format": 2, "app": "Visor", "version": version, "repository": repository, "commit": commit,
             "run": int(run) if run else None,
             "made": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "items": items}
+text = json.dumps(document, indent=2) + "\n"
+folder = os.path.join(out, "proof")
+os.makedirs(folder, exist_ok=True)
+with open(os.path.join(folder, "proof.json"), "w") as f:
+    f.write(text)
 with zipfile.ZipFile(os.path.join(out, "proof.zip"), "w", zipfile.ZIP_STORED) as archive:
-    archive.writestr("proof.json", json.dumps(document, indent=2) + "\n")
+    archive.writestr("proof.json", text)
     for path, file in files:
         archive.write(path, file)
+        os.makedirs(os.path.dirname(os.path.join(folder, file)), exist_ok=True)
+        shutil.copyfile(path, os.path.join(folder, file))
 print(f"proof.zip: {len(items)} screens of {commit[:7]} ({version}): " + ", ".join(ids))
 summary = os.environ.get("GITHUB_STEP_SUMMARY")
 if summary:

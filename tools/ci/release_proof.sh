@@ -66,12 +66,10 @@ for candidate in $candidates; do
     break
 done
 [ -n "$run" ] || { echo "::error::$tag's commit (${commit:0:7}) has no proof GitHub keeps"; exit 1; }
-# The artifact is GitHub's zip around proof.zip.
-unzip -q "$work/artifact.zip" proof.zip -d "$work" ||
-    { echo "::error::run $run's proof is not a proof.zip of format 2: verify the commit again"; exit 1; }
-of="$(proved "$work/proof.zip")"
+# The artifact's download is the proof itself: proof.json at its top.
+of="$(proved "$work/artifact.zip")"
 [ "$of" = "$commit" ] || { echo "::error::run $run's proof is of ${of:-no commit of format 2}, not $tag's ${commit:0:7}"; exit 1; }
 mkdir -p "$work/assets"
-"$(dirname "$0")/proof_version.sh" "$work/proof.zip" "${tag#v}" "$work/assets/proof.zip"
+"$(dirname "$0")/proof_version.sh" "$work/artifact.zip" "${tag#v}" "$work/assets/proof.zip"
 gh release upload "$tag" "$work/assets/proof.zip" --repo "$GITHUB_REPOSITORY" --clobber
 echo "Attached run $run's proof of ${commit:0:7} to $tag as proof.zip"

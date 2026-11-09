@@ -391,7 +391,9 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: proof
-          path: ${{ runner.temp }}/proof/proof.zip
+          # proof.json and its files: GitHub zips them, so the artifact's
+          # download is the proof as the release keeps it (proof.zip).
+          path: ${{ runner.temp }}/proof/proof
           if-no-files-found: error
           retention-days: 90
       - if: needs.test.result != 'success' || needs.linux.result != 'success' || needs.blue-web.result != 'success' || needs.proof-ios.result != 'success' || needs.proof-mac.result != 'success' || needs.proof-android.result != 'success'
@@ -537,7 +539,7 @@ jobs:
         if: inputs.run == 'release'
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: tools/ci/proof_version.sh "$RUNNER_TEMP/proof/proof.zip" "$VERSION" "$RUNNER_TEMP/assets/proof.zip"
+        run: tools/ci/proof_version.sh "$RUNNER_TEMP/proof" "$VERSION" "$RUNNER_TEMP/assets/proof.zip"
       # The Alphas on the draft: Visor-<version>-ios.ipa, -macos.zip and
       # builds.json, which Applications reads (and a release's proof.zip).
       - name: The builds on the draft
