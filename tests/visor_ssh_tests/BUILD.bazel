@@ -16,7 +16,7 @@ swift_library(
 )
 
 # An .xctest bundle: built anywhere (on Linux too, with rules_applecross),
-# run on a Mac by `bazel test` or by OS Server (`oss machine xctest`).
+# run on a Mac by `bazel test` or by Shireworks (`oss machine xctest`).
 macos_unit_test(
     name = "visor_ssh_tests",
     minimum_os_version = "15.0",

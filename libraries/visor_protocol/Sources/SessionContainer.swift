@@ -1,5 +1,5 @@
 /// Where a session's agent runs when it is not on the computer itself: a
-/// Linux container leased from the oss server (OS Server) on the Visor
+/// Linux container leased from the oss server (Shireworks) on the Visor
 /// server's own computer. The session's folder is the computer's, mounted
 /// in the container at the same path, so the agent works on the same files
 /// and keeps the same log whichever side it runs on.

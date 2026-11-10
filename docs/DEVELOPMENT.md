@@ -723,12 +723,12 @@ the first copy to refresh signs out the other; openrouter's the same way,
 `<data>/containers/home/`, other files put into each container's home with
 the host's `put`, dotfiles too); the container makes its own SSH key (the
 host's `exec`). A container's builds reach a Bazel cache and a file server
-(an OS Server's cache, read-only, and its /files, for the SDK archive and
+(a Shireworks server's cache, read-only, and its /files, for the SDK archive and
 the ported tools) only through what is in that folder: a `.bazelrc`
 (`build --remote_cache=http://<host>:7490 --noremote_upload_local_results`)
 and a `.netrc` with each server's read token, put there by whoever runs
 the computer (`oss cache use` writes both into a home of its own). Visor
-itself knows no cache: until 0.43 it wrote them from the OS Servers it
+itself knows no cache: until 0.43 it wrote them from the Shireworks servers it
 knew (VisorServer+BuildCache).
 No Xcode is mounted: the Apple apps build in a container with
 rules_applecross (§4), and the Android app's x86_64 SDK and NDK tools run
@@ -755,7 +755,7 @@ disks kept, when the server finds its containers and whenever a session's
 turn ends, never mid-turn (VisorServer+ContainerUpgrades.swift); when that
 image can't be had, the container is made again from its own, and the new
 one isn't tried again until another is wanted. At start the server removes the host's containers of sessions it
-no longer has, and a session still in a container OS Server lent (0.43 and
+no longer has, and a session still in a container Shireworks lent (0.43 and
 before, `SessionContainer.socket`) runs on the computer from then on. An
 agent in a container reaches this server over the network (VISOR_URL:
 this computer's LAN address unless `visor-server containers callback
@@ -766,10 +766,10 @@ makes no convenience links in the mounted repository (/etc/bazel.bazelrc).
 **Machines.** Sessions — in containers or not — lease machines (macOS,
 Linux and Windows VMs, iOS simulators, Android emulators) through the MCP
 servers their Visor server passes on to them (docs/protocol.md, Proxied MCP
-servers): an OS Server's own MCP port, set as an endpoint with a key of the
+servers): a Shireworks server's own MCP port, set as an endpoint with a key of the
 server's (`<session>@<application>` is each lease's holder), whose tools
 the agent calls as `<endpoint>__oss_lease` and so on. Visor itself knows
-nothing of OS Server (0.44 dropped `visor machine` and OSSClient).
+nothing of Shireworks (0.44 dropped `visor machine` and OSSClient).
 
 **Visor Runner's MCP proxy.** A Visor server in a container (or any server
 that shouldn't hold the MCP servers' keys) sets its MCP servers to
@@ -859,7 +859,7 @@ front paths, `visor-server front`).
   git, like .bazelrc.user) with the lines `rewrite
   apple-sdks\.invalid/.* http://<oss host>:7490/files/sha256/<the SDK's sha256>`
   and `rewrite ported-tools\.invalid/sha256/(.*)
-  http://<oss host>:7490/files/sha256/$1`, for an OS Server that serves
+  http://<oss host>:7490/files/sha256/$1`, for a Shireworks server that serves
   them (a container's `.netrc`, from `<data>/containers/home/`, has the
   token). Without it (CI's Linux
   runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
@@ -878,10 +878,10 @@ front paths, `visor-server front`).
   CI's `build-tests` job builds the Mac's .xctest bundles
   (`macos_unit_test` under tests/) on Linux in its own container
   (tools/ci/mac_tests_build.sh: `tools/ci/build_mac_tests.sh <archive>
-  --config=apple_on_linux …`, OS Server's SDK archive and cache), and its
+  --config=apple_on_linux …`, Shireworks' SDK archive and cache), and its
   `test` job runs each with `xcrun xctest` on one of GitHub's own Macs
   (`xcode-27`, tools/ci/mac_tests_run.sh), which a public repository has
-  for free: OS Server's Mac slots and VMs are left to agents (Logan, 3 and
+  for free: Shireworks' Mac slots and VMs are left to agents (Logan, 3 and
   5 Nov 2026). A test whose server listens takes
   `ServerTestCase.freePort()`.
 - Try a server build against real agents without touching the installed
@@ -924,7 +924,7 @@ front paths, `visor-server front`).
   docs/CI_POLICY.md; Logan, 7 Nov 2026: automated CI only builds, and no
   test runs on its own). The header of ci.yml has it whole.
   - **A pull request** runs one job, `container`, main's required check:
-    in a Linux container OS Server makes for it (visor-jit, 12 GB, a runner
+    in a Linux container Shireworks makes for it (visor-jit, 12 GB, a runner
     of Visor's agent image), leasing nothing, the rules
     (tools/check_rules.py), every app and the Mac's test bundles, libraries
     and servers built on Linux (tools/ci/container_build.sh), and the
@@ -1166,7 +1166,7 @@ CI makes the proof in its `verify` run, only by hand: on main
 `release` run, which proposes a release once it passes. Its apps are built on Linux in containers of the
 repository's own (`visor-jit`, which a fork never reaches, with
 `tools/ci/container_build.sh` and `VISOR_CI_PACKAGE`) and run on GitHub's
-own runners, which a public repository has for free, so OS Server's
+own runners, which a public repository has for free, so Shireworks'
 machines are left to CI and the agents (Logan, 5 Nov 2026):
 
 - The iPhone (`tools/ci/proof_ios.sh`, on an `xcode-27` Mac): the app and
@@ -1179,7 +1179,7 @@ machines are left to CI and the agents (Logan, 5 Nov 2026):
   if it fails again. The
   probe runs as rules_apple's runner runs it (an XCTRunner app made from
   Xcode's, an `.xctestrun`, then `xcodebuild test-without-building`), as
-  OS Server ran it on a lease until 0.46. It takes the fixture's screens in
+  Shireworks ran it on a lease until 0.46. It takes the fixture's screens in
   each orientation (the probe's `testFixtureScreens` and
   `testFixtureScreensLandscape`) and, for a full proof, the UI cases
   (`tools/ios_ui_tests.sh`'s). The pictures come out of the runs' result

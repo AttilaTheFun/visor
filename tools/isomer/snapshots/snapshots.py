@@ -140,7 +140,7 @@ def bazel_output(target, *flags, suffix=""):
 IOS_LEASE = os.environ.get("VISOR_SNAPSHOT_IOS_LEASE", "")
 WEB_BASE = os.environ.get("VISOR_SNAPSHOT_WEB_BASE", "").rstrip("/")
 WEB_SITE = os.environ.get("VISOR_SNAPSHOT_WEB_SITE", "")
-OSS = os.environ.get("OSS", "/Applications/OS Server.app/Contents/Helpers/oss")
+OSS = os.environ.get("OSS", "/Applications/Shireworks.app/Contents/Helpers/oss")
 
 @functools.lru_cache(None)
 def web_site():
@@ -170,7 +170,7 @@ def _leases(listing, out):
 def lease_host():
     """The address the iOS lease's simulator reaches this Mac by, for the
     site web-mobile serves it. A simulator on this Mac shares its loopback;
-    one in OS Server's primary Mac VM (the lease names it as `primary`) has
+    one in Shireworks' primary Mac VM (the lease names it as `primary`) has
     the VM's own, and reaches this Mac on the VMs' network: the address of
     this Mac's side of the route to the VM (`route -n get` its
     `guestAddress`, then that interface's address from `ifconfig`), or what
@@ -227,7 +227,7 @@ def simulator():
     if _simulator:
         return _simulator
     if IOS_LEASE:
-        # OS Server holds its status bar still; light, as the harness's own.
+        # Shireworks holds its status bar still; light, as the harness's own.
         simctl("ui", "booted", "appearance", "light")
         _simulator = "booted"
         return _simulator

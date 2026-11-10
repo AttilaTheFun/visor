@@ -2,7 +2,7 @@
 # The iPhone's part of the proof (ci.yml's verify), on one of
 # GitHub's own Macs (`xcode-27`): the app and its probe (tests/ios_probe),
 # built on Linux by the proof's build job for Apple silicon's simulator,
-# run as OS Server runs them on an iOS lease, which is rules_apple's runner
+# run as Shireworks runs them on an iOS lease, which is rules_apple's runner
 # (apple/testing/default_runner/ios_xctestrun_runner.template.sh): an
 # XCTRunner app made from Xcode's with the probe in it, an .xctestrun, then
 # `xcodebuild test-without-building`. On an iPhone 17 of iOS 27.2 (the
@@ -104,7 +104,7 @@ runtime="${runtime%% *}"
 udid="$(xcrun simctl create "Visor proof" "$DEVICE" "$runtime")"
 xcrun simctl boot "$udid"
 xcrun simctl bootstatus "$udid" -b > /dev/null
-# The status bar as OS Server holds a lease's: 9:41 on a fixed day (an
+# The status bar as Shireworks holds a lease's: 9:41 on a fixed day (an
 # older simctl takes the time alone), full Wi-Fi and signal, a full
 # battery, no carrier. No keyboard suggestions over the keys: what they say
 # is learned and comes in late.
@@ -120,7 +120,7 @@ echo "::endgroup::"
 
 # A run's folder as rules_apple's runner makes its test folder: the probe
 # and its host unpacked, writable, the probe in an XCTRunner app of its
-# own, the .xctestrun beside them (as OS Server's XCTestFolder.prepare).
+# own, the .xctestrun beside them (as Shireworks' XCTestFolder.prepare).
 prepare() {
     local folder=$1
     mkdir -p "$folder/unpack"

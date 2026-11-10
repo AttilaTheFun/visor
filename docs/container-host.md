@@ -6,7 +6,7 @@ on the computer itself. It does not make containers on its own: it asks a
 likes. With none, Visor runs sessions on the computer only, and New
 Session offers no "In a Container".
 
-From 0.44. Up to 0.43 Visor leased its containers from the OS Server on
+From 0.44. Up to 0.43 Visor leased its containers from the Shireworks on
 its computer through OSSClient; this replaced that.
 
 ## Which host
@@ -31,7 +31,7 @@ ln -sf "/Applications/Visor Server.app/Contents/Helpers/visor-container-host" ~/
 (or build it: `bazel build -c opt
 //applications/visor_container_host:visor-container-host`).
  Hosts of other kinds are other programs that speak
-the same contract: OS Server's, which leases from a server and keeps every
+the same contract: Shireworks', which leases from a server and keeps every
 Mac's resources in one place, or a cloud's.
 
 ## The contract
@@ -92,7 +92,7 @@ Makes a container and starts it. Given:
   Apple's container mounts a new volume empty, so visor-container-host
   first runs the image once to copy them in.
 - `name` and `labels` are the host's to use or not; a host that keeps
-  accounts (OS Server) shows them.
+  accounts (Shireworks) shows them.
 
 Answers `{"id", "name", "image", "cpus", "memoryBytes"}`, the
 container's own `id` being what every other operation takes. It answers
@@ -211,7 +211,7 @@ again by hand.
 
 ## A host backed by a server
 
-A host that leases from a server (OS Server; a cloud) is a small program
+A host that leases from a server (Shireworks; a cloud) is a small program
 of its own that speaks this contract and talks to its server:
 - `create` leases a container;
 - `exec` runs the program through the server's own exec channel (OS
@@ -221,7 +221,7 @@ of its own that speaks this contract and talks to its server:
 - `ls` lists its leases with Visor's labels.
 
 Its configuration (the server, its key) is its own, never Visor's. OS
-Server's is `oss container-host` (OS Server 0.14): its containers are
+Server's is `oss container-host` (Shireworks 0.14): its containers are
 container leases held until released, found again by labels kept with
 them; it uses this computer's oss client settings, or the server and key
 its own arguments name. A session's folder is a mount, which needs the

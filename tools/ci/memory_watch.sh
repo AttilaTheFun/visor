@@ -1,5 +1,5 @@
 # How much memory a CI job in a Linux container used at most, for sizing
-# the container: OS Server's figure for a container counts the file cache
+# the container: Shireworks' figure for a container counts the file cache
 # too, which Linux fills up to the limit, so it is no measure of what a
 # build needs. Sourced, not run:
 #

@@ -508,7 +508,7 @@ final class ContainerTests: ServerTestCase {
         var info = SessionInfo(id: "h", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Here", created: 0)
         XCTAssertEqual(server.makeProcess(info, resume: nil).approvalEnvironment["GIT_AUTHOR_NAME"], "Here")
         info.container = SessionContainer(id: "c9", socket: "/tmp/fake-oss-c9.sock")
-        XCTAssertNil(server.placement(for: info), "OS Server's, from before container hosts: nothing to run it through")
+        XCTAssertNil(server.placement(for: info), "Shireworks', from before container hosts: nothing to run it through")
         info.container = SessionContainer(id: "c9")
         let placement = try XCTUnwrap(server.placement(for: info))
         let child = try AgentChildren.start(executable: "claude", arguments: ["-p"], directory: info.cwd,
@@ -622,7 +622,7 @@ final class ContainerTests: ServerTestCase {
     }
 
     /// The host's containers for sessions this server no longer has go,
-    /// with their disks; a session in a container OS Server lent (before
+    /// with their disks; a session in a container Shireworks lent (before
     /// container hosts) moves onto this computer.
     func testLeftoversGoAndOSServersContainersAreLeft() async throws {
         let host = try FakeHost(in: root)
@@ -639,8 +639,8 @@ final class ContainerTests: ServerTestCase {
         await server.checkContainers()
         XCTAssertTrue(host.calls.contains("rm gone --volumes"), "its session is gone")
         XCTAssertFalse(host.calls.contains { $0.hasPrefix("rm other") }, "another server's")
-        XCTAssertNil(record.info.container, "OS Server's container left; the session runs here")
-        XCTAssertTrue(record.notice?.contains("OS Server's") == true)
+        XCTAssertNil(record.info.container, "Shireworks' container left; the session runs here")
+        XCTAssertTrue(record.notice?.contains("Shireworks'") == true)
     }
 
     func testAContainerOnTheWire() throws {
