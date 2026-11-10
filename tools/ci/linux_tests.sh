@@ -1,29 +1,24 @@
 #!/bin/bash
 # The command-line server on Linux: built, its tests run, and the server
 # itself tried — run, a throwaway session over its WebSocket, restarted,
-# stopped (tools/probes/command_line_server.sh) — in a container leased
-# from OS Server, of Visor's agent image (Swift 6.4, node, aarch64); or,
-# already in a Linux container (verify's linux job, a visor-jit runner of
-# that image), right there, leasing nothing. Also
-# the client's host services on their own: a file that uses Foundation
-# without importing it fails here, as in Visor on Isomer (Package.swift's
+# stopped (tools/probes/command_line_server.sh) — in a Linux container of
+# Visor's agent image (Swift 6.4, node, aarch64): verify's linux job, a
+# visor-jit runner of that image, right there, leasing nothing. Also the
+# client's host services on their own: a file that uses Foundation without
+# importing it fails here, as in Visor on Isomer (Package.swift's
 # clientServices).
 #
 #   tools/ci/linux_tests.sh
 #
-#   VISOR_CI_IMAGE  the image (default: the released agent image, below)
+#   VISOR_CI_IMAGE  unused here; the image CI's runner is
 #
-# In either, the committed tree is unpacked apart from the checkout, so
-# SwiftPM's .build stays out of Bazel's tree. On a Mac the tree goes in on
-# the command's standard input (git archive) and everything runs where it
-# lands, through `oss machine run container --inside`, which holds a
-# five-minute lease renewed while it runs and releases it however it ends:
-# SIGTERM (the runner's cancel) releases it at once.
+# The committed tree is unpacked apart from the checkout, so SwiftPM's
+# .build stays out of Bazel's tree. Not on a Mac: Shireworks runs nothing in
+# a container from one (no standard input, no mounts), so lease a container
+# of the agent image and run it there.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 IMAGE="${VISOR_CI_IMAGE:-ghcr.io/attilathefun/visor-agent:0.43.20}"
-OSS="/Applications/OS Server.app/Contents/Helpers/oss"
-[ -x "$OSS" ] || OSS="$(command -v oss)"
 
 steps='set -e
 mkdir -p /tmp/visor && tar -x -C /tmp/visor && cd /tmp/visor
@@ -41,13 +36,13 @@ echo "::group::Try the server"
 tools/probes/command_line_server.sh
 echo "::endgroup::"'
 
-# The tree from a file, not a pipe: exec then makes oss this process, so the
-# runner's cancel reaches it, and it releases the container. The file is in
-# the job's own temporary folder, which the runner empties after the job.
+# The committed tree, apart from the checkout. The file is in the job's own
+# temporary folder, which the runner empties after the job.
+if [ "$(uname -s)" != Linux ]; then
+    echo "linux_tests: runs in a Linux container (CI's visor-jit, or a Shireworks container lease of the agent image): Shireworks has no way to run it in one from a Mac" >&2
+    exit 2
+fi
 tree="${RUNNER_TEMP:-$(mktemp -d)}/visor-tree.tar"
 git -C "$ROOT" archive --format=tar -o "$tree" HEAD
-if [ "$(uname -s)" = Linux ]; then
-    rm -rf /tmp/visor
-    exec sh -c "$steps" < "$tree"
-fi
-exec "$OSS" machine run container --image="$IMAGE" --cpus=6 --memory=8 --inside --workdir=/ -- sh -c "$steps" < "$tree"
+rm -rf /tmp/visor
+exec sh -c "$steps" < "$tree"
