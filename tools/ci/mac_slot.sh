@@ -1,12 +1,11 @@
 # Sourced by the CI scripts whose steps need a Mac (Xcode's xcresulttool,
 # swiftc for CoreGraphics, a server beside the iOS lease's simulator) but
-# run in a Linux container (the visor-jit runners): a slot of OS Server's
-# primary Mac VM (`oss machine lease mac`: a macOS user of its own there,
+# run in a Linux container (the visor-jit runners): a slot of Shireworks'
+# primary Mac VM (`shireworks.sh lease mac`: a macOS user of its own there,
 # ready in seconds), renewed while the script runs and released however it
-# ends. As reviews' tools/ci/mac_slot.sh. A slot has no SSH: its commands go
-# through `oss machine exec`, which hands them their arguments as they are,
-# and its files one at a time through upload and download, their paths
-# relative to its user's home.
+# ends. A slot has no SSH: its commands go through `shireworks.sh run`, which
+# hands them their arguments as they are, and its files one at a time
+# through put and get, their paths relative to its user's home.
 #
 #   . "$ROOT/tools/ci/mac_slot.sh"
 #   mac_slot_lease                       # the slot, its renewer started
@@ -15,14 +14,15 @@
 #   mac_slot_download <path> <file>      # a file, from the slot's <path>
 #   mac_slot_release                     # given back now (else on exit)
 #
-# The script that sources it gives OSS (the oss command line) and work (a
-# folder of its own), and calls mac_slot_release from its EXIT trap.
+# The script that sources it gives ROOT (the checkout, for
+# tools/ci/shireworks.sh) and work (a folder of its own), and calls
+# mac_slot_release from its EXIT trap.
 slot=""
 slot_renewer=""
 
 mac_slot_lease() {
-    "$OSS" machine lease mac --minutes=60 --wait --exports > "$work/slot"
-    slot="$(. "$work/slot"; printf '%s' "$OSS_ID")"
+    sh "$ROOT/tools/ci/shireworks.sh" lease mac --minutes=60 > "$work/slot"
+    slot="$(. "$work/slot"; printf '%s' "$SHIREWORKS_ID")"
     [ -n "$slot" ] || { echo "mac_slot: no slot came" >&2; return 1; }
     echo "Slot $slot"
     (
@@ -34,21 +34,21 @@ mac_slot_lease() {
             sleep 600 &
             wait $!
             kill -0 "$$" 2> /dev/null || break
-            "$OSS" machine renew "$slot" --minutes=60 > /dev/null || true
+            sh "$ROOT/tools/ci/shireworks.sh" renew "$slot" --minutes=60 > /dev/null || true
         done
     ) &
     slot_renewer=$!
 }
 
-mac_slot_upload() { "$OSS" machine upload "$slot" "$1" "$2" > /dev/null; }
-mac_slot_download() { "$OSS" machine download "$slot" "$1" "$2" > /dev/null; }
-mac_slot_exec() { "$OSS" machine exec "$slot" -- "$@"; }
+mac_slot_upload() { sh "$ROOT/tools/ci/shireworks.sh" put "$slot" "$1" "$2" > /dev/null; }
+mac_slot_download() { sh "$ROOT/tools/ci/shireworks.sh" get "$slot" "$1" "$2" > /dev/null; }
+mac_slot_exec() { sh "$ROOT/tools/ci/shireworks.sh" run "$slot" -- "$@"; }
 
 mac_slot_release() {
     if [ -n "$slot_renewer" ]; then kill "$slot_renewer" 2> /dev/null || true; wait "$slot_renewer" 2> /dev/null || true; slot_renewer=""; fi
-    [ -n "$slot" ] || slot="$(. "$work/slot" 2> /dev/null; printf '%s' "${OSS_ID:-}")"
+    [ -n "$slot" ] || slot="$(. "$work/slot" 2> /dev/null; printf '%s' "${SHIREWORKS_ID:-}")"
     if [ -n "$slot" ]; then
-        "$OSS" machine release "$slot" || echo "mac_slot: slot $slot was not released: oss machine release $slot" >&2
+        sh "$ROOT/tools/ci/shireworks.sh" release "$slot" || echo "mac_slot: slot $slot was not released: shireworks.sh release $slot" >&2
         slot=""
         rm -f "$work/slot"
     fi

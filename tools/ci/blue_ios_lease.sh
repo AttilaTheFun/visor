@@ -9,7 +9,7 @@
 #                       tools/isomer/snapshots/serve_site.py), on that VM's
 #                       loopback, which the simulators it runs share, and
 #                       opened in an iPhone 17 Pro lease's Mobile Safari
-#                       (`oss machine simctl openurl`, the lease's
+#                       (`shireworks.sh simctl <id> openurl`, the lease's
 #                       screenshots)
 #
 # then compared with tests/snapshots by snapshots.py, its run (report.html,
@@ -26,9 +26,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 me="$(basename "$0")"
-OSS="/Applications/OS Server.app/Contents/Helpers/oss"
-[ -x "$OSS" ] || OSS="$(command -v oss)"
-export OSS
+SW="$ROOT/tools/ci/shireworks.sh"
 
 usage() { echo "usage: tools/ci/blue_ios_lease.sh --image <agent image> --run <dir>" >&2; exit 2; }
 image=""
@@ -54,9 +52,9 @@ finished=""
 release() {
     if [ -n "$renewer" ]; then kill "$renewer" 2> /dev/null || true; wait "$renewer" 2> /dev/null || true; renewer=""; fi
     # A lease asked for as the script was stopped: its id, if it came.
-    [ -n "$lease" ] || lease="$(. "$work/lease" 2> /dev/null; printf '%s' "${OSS_ID:-}")"
+    [ -n "$lease" ] || lease="$(. "$work/lease" 2> /dev/null; printf '%s' "${SHIREWORKS_ID:-}")"
     if [ -n "$lease" ]; then
-        "$OSS" machine release "$lease" || echo "$me: lease $lease was not released: oss machine release $lease" >&2
+        sh "$SW" release "$lease" || echo "$me: lease $lease was not released: shireworks.sh release $lease" >&2
         lease=""
         rm -f "$work/lease"
     fi
@@ -95,8 +93,10 @@ run() {
 # the script's, in the subshell too).
 lease_ios() {
     echo "::group::An iOS lease ($1)"
-    run "$OSS" machine lease ios --device="$1" --minutes=60 --wait --exports > "$work/lease"
-    lease="$(. "$work/lease"; printf '%s' "$OSS_ID")"
+    # --device: the device type (shireworks.sh passes it on as the lease's
+    # `device` once it knows the option; asked of Shireworks, 10 Nov 2026).
+    run sh "$SW" lease ios --device="$1" --minutes=60 > "$work/lease"
+    lease="$(. "$work/lease"; printf '%s' "$SHIREWORKS_ID")"
     echo "Leased $lease"
     (
         trap 'kill $! 2> /dev/null; exit 0' TERM
@@ -104,7 +104,7 @@ lease_ios() {
             sleep 600 &
             wait $!
             kill -0 "$$" 2> /dev/null || break
-            "$OSS" machine renew "$lease" --minutes=60 > /dev/null || true
+            sh "$SW" renew "$lease" --minutes=60 > /dev/null || true
         done
     ) &
     renewer=$!
@@ -129,7 +129,7 @@ tar -C "$built" -cf "$work/blue-ios.tar" visor_web_site serve_site.py
 mac_slot_upload "$work/blue-ios.tar" blue-ios.tar
 mac_slot_exec /bin/bash -c 'cd && rm -rf blue-ios && mkdir blue-ios && tar -xf blue-ios.tar -C blue-ios && rm blue-ios.tar'
 port=$((20000 + RANDOM % 20000))
-"$OSS" machine exec "$slot" -- /usr/bin/python3 blue-ios/serve_site.py blue-ios/visor_web_site 127.0.0.1 "$port" &
+sh "$SW" run "$slot" -- /usr/bin/python3 blue-ios/serve_site.py blue-ios/visor_web_site 127.0.0.1 "$port" &
 server=$!
 up=""
 for _ in $(seq 1 30); do
