@@ -108,6 +108,9 @@ public final class AgentServerConnection: Identifiable {
     /// The paths to the server for this round of tries, the one that
     /// answered last time first; `pathIndex` is the one being tried.
     private var paths: [String] = []
+    /// The round's paths when it last signed in, in their order: a network
+    /// change that leaves them as they were changes nothing for it.
+    private var signedInFrom: [String] = []
     private var pathIndex = 0
     /// The path the last sign-in answered on, kept in the record so a
     /// launch starts with it.
@@ -403,6 +406,7 @@ public final class AgentServerConnection: Identifiable {
                 }
                 self.note("signed in after \(self.log.since(started)) ms; opening the channel")
                 self.path = path
+                self.signedInFrom = candidates
                 self.lastGoodPath = path
                 self.pathIndex = 0
                 if let name { self.record.takeServerName(name) }
@@ -558,8 +562,16 @@ public final class AgentServerConnection: Identifiable {
     /// now left) is connected again by the one that does.
     public func networkChanged() {
         guard wantsConnection else { return }
-        let best = pathsToTry().first
+        let ranked = pathsToTry()
+        let best = ranked.first
         if state == .connected, let path, path == best { return }
+        // The same paths, in the same order, as the round it signed in from:
+        // that round already chose among them, and the first answered later
+        // than this one or not at all (another computer's loopback, a dead
+        // forward). Signed in again at each change, a Mac whose networks
+        // speak several times a minute (its containers' bridges) re-logged
+        // in all afternoon and carried no messages (9 Nov 2026).
+        if state == .connected, !quiet, path != nil, ranked == signedInFrom { return }
         // Already on its way in by the path that fits best (the system's
         // first word at launch, as the first sign-in runs): left to finish.
         let trying = path ?? (signingIn != nil && paths.indices.contains(pathIndex) ? paths[pathIndex] : nil)
