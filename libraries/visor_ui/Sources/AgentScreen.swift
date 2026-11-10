@@ -156,7 +156,7 @@ struct AgentScreen: View {
         } message: {
             Text("Its agent stops, and it leaves Visor. The agent keeps its conversation on the computer, to resume there.")
         }
-        .navigationTitle(sessionTitle)
+        .visorTitle(sessionTitle)
         .toolbarTitleDisplayMode(.inline)
         // The draft is kept as it is typed, and taken up again when the
         // session is opened again (SavedDrafts).

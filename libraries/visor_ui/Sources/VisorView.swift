@@ -52,6 +52,7 @@ public struct VisorView: View {
         VisorRootView(settingsPresented: settingsPresented)
             .environment(store)
             .environment(\.visorShown, isShown)
+            .environment(\.visorEmbedded, true)
             .environment(\.settingsAbout, about ?? AnyView(EmptyView()))
     }
 
