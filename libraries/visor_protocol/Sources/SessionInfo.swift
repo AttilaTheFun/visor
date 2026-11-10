@@ -85,7 +85,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// The container its agent runs in, when it runs in one rather than on
     /// the computer itself; nil, on the computer.
     public var container: SessionContainer?
-    /// The machines it leases through the server from the server's oss.
+    /// The machines it leases through the server from the server's Shireworks.
     public var leases: [SessionLease] = []
     /// The system its agent runs on: "macos", "linux" or "windows" (in a
     /// container, "linux"); nil from a server of 0.37 or before.

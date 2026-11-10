@@ -352,7 +352,7 @@ extension VisorServer {
     /// or left it).
     func removeContainer(_ container: SessionContainer) {
         guard container.socket == nil else {
-            return Self.log("the container \(container.id) was Shireworks': `oss machine release \(container.id)` gives it back")
+            return Self.log("the container \(container.id) was Shireworks': releasing lease \(container.id) there gives it back")
         }
         guard let host = containerHost else { return }
         Task {

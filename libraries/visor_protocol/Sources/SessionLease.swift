@@ -1,7 +1,7 @@
-/// A machine a session leases through its server from the server's oss
+/// A machine a session leases through its server from the server's Shireworks
 /// (Shireworks): what the session's row shows at its foot.
 public struct SessionLease: Codable, Hashable, Sendable {
-    /// oss's id for the lease.
+    /// Shireworks' id for the lease.
     public var id: String
     /// What it is: "macos", "linux", "windows" (a VM), "ios" (a simulator),
     /// "android" (an emulator).

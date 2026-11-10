@@ -22,7 +22,7 @@ enum VisorMCPScript {
 // VISOR_APPROVALS ("1": offer `approve`; for Claude always, so that its
 // questions (AskUserQuestion) come to the user, and in manual mode every
 // tool call too), and VISOR_URL where the server is not this computer's
-// own (an agent in a container on oss: ws://host:port).
+// own (an agent in a container on Shireworks: ws://host:port).
 //
 // It also lists, beside its own, the tools of the MCP servers the computer
 // passes on to this session (`<endpoint>__<tool>`), each call passed on by

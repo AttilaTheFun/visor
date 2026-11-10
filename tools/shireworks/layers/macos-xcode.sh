@@ -1,9 +1,9 @@
 #!/bin/bash
-# The xcode_<version> layer on macOS, built from oss's vanilla base: that
+# The xcode_<version> layer on macOS, built from Shireworks' vanilla base: that
 # Xcode and its iOS simulator, with Homebrew (which brings Apple's Command
 # Line Tools, its own requirement) and through it Git and Bazelisk. Its
-# build copies the oss server Mac's Xcode (its version must match) to
-# /Applications first (tools/oss/README.md). No Chrome: blue's web checks
+# build copies the Shireworks server Mac's Xcode (its version must match) to
+# /Applications first (tools/shireworks/README.md). No Chrome: blue's web checks
 # run in a Linux container (tools/ci/container_blue_web.sh).
 #
 # What a command says is taken whole before its first line is: a reader
@@ -18,8 +18,8 @@ sudo xcodebuild -license accept
 sudo xcodebuild -runFirstLaunch
 about="$(xcodebuild -version)"
 version="$(first "$about")"
-if [ -n "${OSS_XCODE_VERSION:-}" ] && [[ "$version" != "Xcode ${OSS_XCODE_VERSION}"* ]]; then
-  echo "this is $version, not Xcode $OSS_XCODE_VERSION" >&2; exit 1
+if [ -n "${VISOR_XCODE_VERSION:-}" ] && [[ "$version" != "Xcode ${VISOR_XCODE_VERSION}"* ]]; then
+  echo "this is $version, not Xcode $VISOR_XCODE_VERSION" >&2; exit 1
 fi
 
 if [ ! -x /opt/homebrew/bin/brew ]; then
@@ -39,8 +39,8 @@ xcodebuild -downloadPlatform iOS
 runtimes="$(xcrun simctl list runtimes)"
 ios="$(printf '%s\n' "$runtimes" | grep -i '^iOS ' || true)"
 [ -n "$ios" ] || { echo "no iOS simulator runtime" >&2; exit 1; }
-if [ -n "${OSS_XCODE_VERSION:-}" ] && ! printf '%s\n' "$ios" | grep -q "^iOS ${OSS_XCODE_VERSION}"; then
-  echo "the iOS runtime is not ${OSS_XCODE_VERSION}: $ios" >&2; exit 1
+if [ -n "${VISOR_XCODE_VERSION:-}" ] && ! printf '%s\n' "$ios" | grep -q "^iOS ${VISOR_XCODE_VERSION}"; then
+  echo "the iOS runtime is not ${VISOR_XCODE_VERSION}: $ios" >&2; exit 1
 fi
 
 bazelisk="$(bazelisk version 2>/dev/null || true)"

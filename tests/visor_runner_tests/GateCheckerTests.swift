@@ -24,27 +24,27 @@ private struct FakeGitHub: GitHubReading {
 }
 
 final class GateCheckerTests: XCTestCase {
-    private let repo = "AttilaTheFun/oss"
+    private let repo = "AttilaTheFun/shireworks"
     private let head = String(repeating: "a", count: 40)
     private let older = String(repeating: "b", count: 40)
 
-    private func pull(state: String = "open", draft: Bool = false, base: String = "main", headRepo: String = "AttilaTheFun/oss",
+    private func pull(state: String = "open", draft: Bool = false, base: String = "main", headRepo: String = "AttilaTheFun/shireworks",
                       mergeable: String = "clean") -> String {
         """
         {"number":50,"state":"\(state)","merged":false,"draft":\(draft),"mergeable_state":"\(mergeable)",
          "head":{"sha":"\(head)","ref":"feature","repo":{"full_name":"\(headRepo)"}},
-         "base":{"ref":"\(base)","repo":{"full_name":"AttilaTheFun/oss"}}}
+         "base":{"ref":"\(base)","repo":{"full_name":"AttilaTheFun/shireworks"}}}
         """
     }
 
     private func green(_ extra: [String: (Int, String)] = [:], pull given: String? = nil, runs: String? = nil) -> FakeGitHub {
         var answers: [String: (Int, String)] = [
-            "/repos/AttilaTheFun/oss/pulls/50": (200, given ?? pull()),
-            "/repos/AttilaTheFun/oss": (200, #"{"default_branch":"main","allow_squash_merge":true,"allow_rebase_merge":false}"#),
-            "/repos/AttilaTheFun/oss/commits/\(head)/check-runs?per_page=100&page=1":
+            "/repos/AttilaTheFun/shireworks/pulls/50": (200, given ?? pull()),
+            "/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"main","allow_squash_merge":true,"allow_rebase_merge":false}"#),
+            "/repos/AttilaTheFun/shireworks/commits/\(head)/check-runs?per_page=100&page=1":
                 (200, runs ?? #"{"total_count":1,"check_runs":[{"name":"linux","status":"completed","conclusion":"success"}]}"#),
-            "/repos/AttilaTheFun/oss/commits/\(head)/status?per_page=100": (403, "{}"),
-            "/repos/AttilaTheFun/oss/pulls/50/files?per_page=100&page=1": (200, #"[{"filename":"Sources/main.swift"}]"#),
+            "/repos/AttilaTheFun/shireworks/commits/\(head)/status?per_page=100": (403, "{}"),
+            "/repos/AttilaTheFun/shireworks/pulls/50/files?per_page=100&page=1": (200, #"[{"filename":"Sources/main.swift"}]"#),
         ]
         answers.merge(extra) { _, new in new }
         return FakeGitHub(answers: answers)
@@ -69,17 +69,17 @@ final class GateCheckerTests: XCTestCase {
         let outcome = await merge(green())
         XCTAssertEqual(outcome, .pass(nil))
         // A readable status counts; a pending one holds the merge.
-        let success = await merge(green(["/repos/AttilaTheFun/oss/commits/\(head)/status?per_page=100": (200, #"{"statuses":[{"context":"ci/x","state":"success"}]}"#)]))
+        let success = await merge(green(["/repos/AttilaTheFun/shireworks/commits/\(head)/status?per_page=100": (200, #"{"statuses":[{"context":"ci/x","state":"success"}]}"#)]))
         XCTAssertEqual(success, .pass(nil))
-        let pending = await merge(green(["/repos/AttilaTheFun/oss/commits/\(head)/status?per_page=100": (200, #"{"statuses":[{"context":"ci/x","state":"pending"}]}"#)]))
+        let pending = await merge(green(["/repos/AttilaTheFun/shireworks/commits/\(head)/status?per_page=100": (200, #"{"statuses":[{"context":"ci/x","state":"pending"}]}"#)]))
         refused(pending, "ci/x is pending")
     }
 
     func testAMergeIsRefusedUnlessEveryGuardHolds() async {
         refused(await merge(green(pull: pull(draft: true, mergeable: "draft"))), "is a draft")
         refused(await merge(green(pull: pull(state: "closed"))), "is closed")
-        refused(await merge(green(pull: pull(base: "release"))), "not AttilaTheFun/oss's default branch main")
-        refused(await merge(green(pull: pull(headRepo: "someone/oss"))), "in someone/oss")
+        refused(await merge(green(pull: pull(base: "release"))), "not AttilaTheFun/shireworks's default branch main")
+        refused(await merge(green(pull: pull(headRepo: "someone/shireworks"))), "in someone/shireworks")
         refused(await merge(green(pull: pull(mergeable: "behind"))), "update its branch")
         for state in ["blocked", "dirty", "unstable"] { refused(await merge(green(pull: pull(mergeable: state))), "mergeable_state is \(state)") }
         refused(await merge(green(pull: pull(mergeable: "unknown"))), "still working out")
@@ -96,11 +96,11 @@ final class GateCheckerTests: XCTestCase {
     func testAnUpdatesPullRequestIsFromItsOwnRepository() async {
         let outcome = await check(green(), .updateBranch(repository: repo, number: 50))
         XCTAssertEqual(outcome, .pass(nil))
-        refused(await check(green(pull: pull(headRepo: "someone/oss")), .updateBranch(repository: repo, number: 50)), "in someone/oss")
+        refused(await check(green(pull: pull(headRepo: "someone/shireworks")), .updateBranch(repository: repo, number: 50)), "in someone/shireworks")
     }
 
     func testGhPrMergeIsPinnedToTheHeadItChecked() async {
-        let github = green(["graphql node": (200, #"{"data":{"node":{"__typename":"PullRequest","number":50,"repository":{"nameWithOwner":"AttilaTheFun/oss"}}}}"#)])
+        let github = green(["graphql node": (200, #"{"data":{"node":{"__typename":"PullRequest","number":50,"repository":{"nameWithOwner":"AttilaTheFun/shireworks"}}}}"#)])
         let outcome = await check(github, .graphQLMerge(pullRequestID: "PR_1", method: "squash", variable: "input", expectedHeadOid: nil))
         XCTAssertEqual(outcome, .pass(.variableField(variable: "input", field: "expectedHeadOid", value: .string(head))))
         refused(await check(github, .graphQLMerge(pullRequestID: "PR_1", method: "squash", variable: nil, expectedHeadOid: nil)), "variable")
@@ -135,9 +135,9 @@ final class GateCheckerTests: XCTestCase {
 
     private func owned(reviews: String) -> FakeGitHub {
         green([
-            "/repos/AttilaTheFun/oss/contents/.github/CODEOWNERS?ref=main": (200, "{\"content\":\"\(Data(guardrails.utf8).base64EncodedString())\"}"),
-            "/repos/AttilaTheFun/oss/pulls/50/files?per_page=100&page=1": (200, #"[{"filename":".github/workflows/ci.yml"},{"filename":"Sources/a.swift"}]"#),
-            "/repos/AttilaTheFun/oss/pulls/50/reviews?per_page=100&page=1": (200, reviews),
+            "/repos/AttilaTheFun/shireworks/contents/.github/CODEOWNERS?ref=main": (200, "{\"content\":\"\(Data(guardrails.utf8).base64EncodedString())\"}"),
+            "/repos/AttilaTheFun/shireworks/pulls/50/files?per_page=100&page=1": (200, #"[{"filename":".github/workflows/ci.yml"},{"filename":"Sources/a.swift"}]"#),
+            "/repos/AttilaTheFun/shireworks/pulls/50/reviews?per_page=100&page=1": (200, reviews),
         ])
     }
 
@@ -161,16 +161,16 @@ final class GateCheckerTests: XCTestCase {
 
     private func runs(_ run: String, extra: [String: (Int, String)] = [:]) -> FakeGitHub {
         var answers: [String: (Int, String)] = [
-            "/repos/AttilaTheFun/oss/actions/runs/77": (200, run),
-            "/repos/AttilaTheFun/oss/pulls?head=AttilaTheFun:feature&state=open&per_page=10": (200, "[{\"head\":{\"sha\":\"\(head)\"}}]"),
-            "/repos/AttilaTheFun/oss/git/ref/heads/feature": (200, "{\"object\":{\"sha\":\"\(head)\"}}"),
+            "/repos/AttilaTheFun/shireworks/actions/runs/77": (200, run),
+            "/repos/AttilaTheFun/shireworks/pulls?head=AttilaTheFun:feature&state=open&per_page=10": (200, "[{\"head\":{\"sha\":\"\(head)\"}}]"),
+            "/repos/AttilaTheFun/shireworks/git/ref/heads/feature": (200, "{\"object\":{\"sha\":\"\(head)\"}}"),
         ]
         answers.merge(extra) { _, new in new }
         return FakeGitHub(answers: answers)
     }
 
     private func run(event: String = "pull_request", status: String = "completed", conclusion: String = "failure",
-                     headRepo: String = "AttilaTheFun/oss", sha: String? = nil) -> String {
+                     headRepo: String = "AttilaTheFun/shireworks", sha: String? = nil) -> String {
         """
         {"id":77,"name":"CI","event":"\(event)","status":"\(status)","conclusion":"\(conclusion)","head_branch":"feature",
          "head_sha":"\(sha ?? head)","head_repository":{"full_name":"\(headRepo)"}}
@@ -194,10 +194,10 @@ final class GateCheckerTests: XCTestCase {
         refused(await check(runs(run(status: "queued")), rerun), "is queued, not completed")
         refused(await check(runs(run(event: "release")), rerun), "is a release run")
         refused(await check(runs(run(event: "schedule")), rerun), "is a schedule run")
-        refused(await check(runs(run(headRepo: "someone/oss")), rerun), "in someone/oss")
-        refused(await check(runs(run(), extra: ["/repos/AttilaTheFun/oss/pulls?head=AttilaTheFun:feature&state=open&per_page=10": (200, "[]")]), rerun),
+        refused(await check(runs(run(headRepo: "someone/shireworks")), rerun), "in someone/shireworks")
+        refused(await check(runs(run(), extra: ["/repos/AttilaTheFun/shireworks/pulls?head=AttilaTheFun:feature&state=open&per_page=10": (200, "[]")]), rerun),
                 "no pull request from feature is open")
-        refused(await check(runs(run(event: "push"), extra: ["/repos/AttilaTheFun/oss/git/ref/heads/feature": (404, "{}")]), rerun),
+        refused(await check(runs(run(event: "push"), extra: ["/repos/AttilaTheFun/shireworks/git/ref/heads/feature": (404, "{}")]), rerun),
                 "no longer a branch")
         refused(await check(runs(run(conclusion: "success")), rerun), "no job failed")
     }
@@ -211,9 +211,9 @@ final class GateCheckerTests: XCTestCase {
 
     func testADispatchIsOfAnActiveWorkflowOnABranch() async {
         let github = FakeGitHub(answers: [
-            "/repos/AttilaTheFun/oss/actions/workflows/12": (200, #"{"id":12,"name":"CI","state":"active"}"#),
-            "/repos/AttilaTheFun/oss/git/ref/heads/feature": (200, "{\"object\":{\"sha\":\"\(head)\"}}"),
-            "/repos/AttilaTheFun/oss/actions/workflows/13": (200, #"{"id":13,"name":"Old","state":"disabled_manually"}"#),
+            "/repos/AttilaTheFun/shireworks/actions/workflows/12": (200, #"{"id":12,"name":"CI","state":"active"}"#),
+            "/repos/AttilaTheFun/shireworks/git/ref/heads/feature": (200, "{\"object\":{\"sha\":\"\(head)\"}}"),
+            "/repos/AttilaTheFun/shireworks/actions/workflows/13": (200, #"{"id":13,"name":"Old","state":"disabled_manually"}"#),
         ])
         let dispatched = await check(github, .dispatch(repository: repo, workflow: 12, branch: "feature"))
         XCTAssertEqual(dispatched, .pass(nil))
@@ -225,8 +225,8 @@ final class GateCheckerTests: XCTestCase {
 
     func testOnlyADraftIsEditedAndItsTagKept() async {
         let github = FakeGitHub(answers: [
-            "/repos/AttilaTheFun/oss/releases/8": (200, #"{"id":8,"tag_name":"v1.0","draft":false}"#),
-            "/repos/AttilaTheFun/oss/releases/9": (200, #"{"id":9,"tag_name":"v1.1","draft":true}"#),
+            "/repos/AttilaTheFun/shireworks/releases/8": (200, #"{"id":8,"tag_name":"v1.0","draft":false}"#),
+            "/repos/AttilaTheFun/shireworks/releases/9": (200, #"{"id":9,"tag_name":"v1.1","draft":true}"#),
         ])
         refused(await check(github, .releaseEdit(repository: repo, release: 8)), "is published")
         let draft = await check(github, .releaseEdit(repository: repo, release: 9))
@@ -246,7 +246,7 @@ final class GateCheckerTests: XCTestCase {
     }
 
     func testAPushNeverReachesTheDefaultBranch() async {
-        let github = FakeGitHub(answers: ["/repos/AttilaTheFun/oss": (200, #"{"default_branch":"develop"}"#)])
+        let github = FakeGitHub(answers: ["/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"develop"}"#)])
         let feature = await check(github, .push(repository: repo, branches: ["feature"]))
         XCTAssertEqual(feature, .pass(nil))
         refused(await check(github, .push(repository: repo, branches: ["feature", "Develop"])), "default branch")

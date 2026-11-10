@@ -391,8 +391,8 @@ the default.
 - **The build image:** `visor-build`, the default with the Swift
   toolchain, Bazel, clang, the libraries Isomer's Linux apps link, NSS for
   headless Chromium, and x86_64 glibc for Android's tools: for CI and for
-  sessions that build. It is published to Shireworks' own registry (OS
-  Server's, Isomer's), which Logan's CI pulls from, not to ghcr.
+  sessions that build. It is published to Shireworks' own registry (Isomer's
+  too), which Logan's CI pulls from, not to ghcr.
 - **What is kept:** a container server's home and Bazel's output are
   volumes (above); a session's container in today's model keeps its
   agent's home in a volume of its own too, beside the logs it already
@@ -484,8 +484,8 @@ these are checked early rather than assumed:
   is still made by hand: Visor's agent image with `visor-server` in it
   (#151), its sessions marked as a container's (#170), its pairing code
   listing the front's paths (#171). The Runner making container servers
-  itself (#158) waits on the container runtime package taken out of OS
-  Server, which doesn't exist yet. GitHub's forward proxy isn't started.
+  itself (#158) waits on the container runtime package taken out of
+  Shireworks, which doesn't exist yet. GitHub's forward proxy isn't started.
 - **Phase 2:** begun. Visor.app is a target (applications/visor_mac,
   #187, #188). The iPhone app is `com.LoganShire.Visor`, with
   `BuildVariant` in its Info.plist and the app group (#189, #190), and its

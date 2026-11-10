@@ -6,17 +6,18 @@ on the computer itself. It does not make containers on its own: it asks a
 likes. With none, Visor runs sessions on the computer only, and New
 Session offers no "In a Container".
 
-From 0.44. Up to 0.43 Visor leased its containers from the Shireworks on
-its computer through OSSClient; this replaced that.
+From 0.44. Up to 0.43 Visor leased its containers from the Shireworks
+server on its computer, through Shireworks' Swift client; this replaced
+that.
 
 ## Which host
 
 In order, the first that is there:
 
 1. **Settings**: `containerHost` in `settings.json`, a command and the
-   arguments before each operation (`["/usr/local/bin/oss",
-   "container-host"]`), set with `visor-server containers host
-   <command…>` or the menu bar app's Containers.
+   arguments before each operation
+   (`["/usr/local/bin/visor-container-host"]`), set with `visor-server
+   containers host <command…>` or the menu bar app's Containers.
 2. **`visor-container-host` on the PATH.**
 
 Visor ships one: `visor-container-host`, in this repository
@@ -214,19 +215,12 @@ again by hand.
 A host that leases from a server (Shireworks; a cloud) is a small program
 of its own that speaks this contract and talks to its server:
 - `create` leases a container;
-- `exec` runs the program through the server's own exec channel (OS
-  Server's: its container socket on the server's Mac, or its API's
-  `oss-exec` upgrade from another computer);
+- `exec` runs the program through the server's own exec channel;
 - `rm` releases the lease;
 - `ls` lists its leases with Visor's labels.
 
-Its configuration (the server, its key) is its own, never Visor's. OS
-Server's is `oss container-host` (Shireworks 0.14): its containers are
-container leases held until released, found again by labels kept with
-them; it uses this computer's oss client settings, or the server and key
-its own arguments name. A session's folder is a mount, which needs the
-server's own Mac:
-
-```sh
-visor-server containers host /usr/local/bin/oss container-host --server=http://127.0.0.1:7480 --key-file=~/.config/oss/visor.key
-```
+Its configuration (the server, its key) is its own, never Visor's.
+Shireworks had one in its old command-line tool, gone in Shireworks 0.3;
+none takes its place. Containers leave Visor in
+its 0.50 line: Shireworks keeps a container of its own running, and a
+Visor server runs in it as on any other computer.

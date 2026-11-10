@@ -37,13 +37,13 @@ final class GitHubProxySetupTests: ServerTestCase {
                                         body: String(decoding: data, as: UTF8.self)))
     }
 
-    /// A checkout of AttilaTheFun/oss, its config as git writes it.
+    /// A checkout of AttilaTheFun/shireworks, its config as git writes it.
     private func checkout() throws -> String {
-        let folder = root.appendingPathComponent("oss/Sources", isDirectory: true)
+        let folder = root.appendingPathComponent("shireworks/Sources", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let config = root.appendingPathComponent("oss/.git/config")
+        let config = root.appendingPathComponent("shireworks/.git/config")
         try FileManager.default.createDirectory(at: config.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("[core]\n\tbare = false\n[remote \"origin\"]\n\turl = https://github.com/AttilaTheFun/oss.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n".utf8)
+        try Data("[core]\n\tbare = false\n[remote \"origin\"]\n\turl = https://github.com/AttilaTheFun/shireworks.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n".utf8)
             .write(to: config)
         return folder.path
     }
@@ -81,7 +81,7 @@ final class GitHubProxySetupTests: ServerTestCase {
     }
 
     func testACheckoutsRepositoryIsReadFromItsConfig() throws {
-        XCTAssertEqual(GitHubRepository.ofCheckout(folder: try checkout()), "AttilaTheFun/oss")
+        XCTAssertEqual(GitHubRepository.ofCheckout(folder: try checkout()), "AttilaTheFun/shireworks")
         XCTAssertNil(GitHubRepository.ofCheckout(folder: "/"))
     }
 }

@@ -88,7 +88,7 @@ public final class AgentServerConnection: Identifiable {
     /// Each provider's models, from the host.
     public internal(set) var catalogs: [AgentCatalog] = []
     /// The server can start a session whose agent runs in a container on
-    /// its oss, rather than on the computer.
+    /// its Shireworks, rather than on the computer.
     public internal(set) var containersAvailable = false
     /// The Visor Server it runs, as it said at sign-in ("0.31 (8)").
     public private(set) var serverVersion: String?

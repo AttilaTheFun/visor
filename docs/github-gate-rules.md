@@ -219,7 +219,7 @@ Runner knows which session is calling.
 - **[R1]** `repo` parses as `owner/name`: the owner is 1-39 characters of
   `[A-Za-z0-9-]`, the name 1-100 characters of `[A-Za-z0-9._-]` and not `.` or
   `..` (Rules:35-46, 79-86). Else Invalid "repo is owner/name, e.g.
-  AttilaTheFun/oss: <text>" (Rules:109).
+  AttilaTheFun/shireworks: <text>" (Rules:109).
 - **[R2]** `repo` is allowed, else Refused "<repo> is not among the
   repositories gh_mcp allows (<patterns, comma-separated>)" (Rules:111-113).
   The proxy departs from gh_mcp here (Logan, 9 Nov 2026): a *read* of a
@@ -950,7 +950,7 @@ The rest is MCP- or Mac-specific.
 | `checksAnswerRunsWhereStatusesAreForbidden` (510) | statuses 403 gives "1 passed" plus `statuses_note` | no (but M11's 403 tolerance: yes) |
 | `mergesWhenEverythingIsGreen` (560) | exactly one merge, body `{merge_method: squash, sha: head, commit_title: "One (#50)"}`, the answer names the merge SHA | **proxy** |
 | `mergeCountsReadableStatuses` (570) | a `success` status merges; a `pending` status is refused with "ci/x is pending" and no merge sent | **proxy** (M11) |
-| `mergeRefusesUnlessEveryGuardHolds` (581) | each refused with no merge sent: draft ("is a draft", even with mergeable_state `draft`); closed ("is closed"); base `release` ("not AttilaTheFun/oss's default branch main"); fork ("in someone/oss"); behind ("pr_update_branch"); blocked, dirty, unstable ("mergeable_state is …"); a check in_progress ("linux is in_progress"); failure ("linux concluded failure"); a re-run queued ("linux is queued"); no check runs ("no check runs"); rebase not allowed ("doesn't allow rebase") | **proxy** (M2, M3, M6, M8-M11) |
+| `mergeRefusesUnlessEveryGuardHolds` (581) | each refused with no merge sent: draft ("is a draft", even with mergeable_state `draft`); closed ("is closed"); base `release` ("not AttilaTheFun/shireworks's default branch main"); fork ("in someone/shireworks"); behind ("pr_update_branch"); blocked, dirty, unstable ("mergeable_state is …"); a check in_progress ("linux is in_progress"); failure ("linux concluded failure"); a re-run queued ("linux is queued"); no check runs ("no check runs"); rebase not allowed ("doesn't allow rebase") | **proxy** (M2, M3, M6, M8-M11) |
 | `mergeRefusedWhenTheHeadChanged` (622) | a 409 or 405 from the merge is Refused with GitHub's "modified" message; `sha` was sent | **proxy** (M13) |
 | `updateBranchSendsTheExpectedHead` (632) | `PUT …/50/update-branch` with exactly `{expected_head_sha: head}`; a fork's PR is refused with no PUT | **proxy** (W11, M3) |
 | `codeOwnersMatchAsGitHubDoes` (661) | with `guardrails`, **owned**: `.github/workflows/ci.yml`, `.github/CODEOWNERS`, `AGENTS.md`, `swift_ffi/AGENTS.md`, `LICENSE`, `tools/signing/sign.sh`, `tools/ci/publish_from_ci.sh`, `docs/a/b/secret.md`, `docs/secret.md`. **Free**: `Sources/main.swift`, `README.md`, `swift_ffi/LICENSE`, `tools/ci/container_build.sh`, `github/x`, `tools/signing/README.md` (an owner-less last rule wins), `AGENTS.md.bak`, `x/.github/y`. `* @someone` owns `a/b/c` | **proxy** (M12 matcher) |
@@ -959,7 +959,7 @@ The rest is MCP- or Mac-specific.
 | `rerunRunsAFailedPullRequestRunAtItsHead` (751) | POSTs only `…/77/rerun-failed-jobs` with no body; the PR lookup query is `head=AttilaTheFun:feature`, `state=open`; the answer has the run URL and "a merge waits for them to pass" | **proxy** (RR5, W13) |
 | `rerunFailedOnlyPicksThePath` (763) | `failed_only: false` on a success run POSTs `/rerun`; `true` POSTs `/rerun-failed-jobs` | **proxy** (path choice; RR8 only on failed-jobs) |
 | `rerunRunsAPushRunAtItsBranchTip` (776) | a push run reads `git/ref/heads/feature` and makes one POST | **proxy** (RR6) |
-| `rerunRefusedUnlessEveryGuardHolds` (785) | each refused with no POST: PR head moved ("only the head's runs"); branch tip moved for a push; in_progress or queued ("is … , not completed"); release or schedule ("is a release run" / "is a schedule run"); fork ("in someone/oss"); no open PR ("no pull request from feature is open"); branch gone ("no longer a branch"); success ("no job failed") | **proxy** (RR1-RR8) |
+| `rerunRefusedUnlessEveryGuardHolds` (785) | each refused with no POST: PR head moved ("only the head's runs"); branch tip moved for a push; in_progress or queued ("is … , not completed"); release or schedule ("is a release run" / "is a schedule run"); fork ("in someone/shireworks"); no open PR ("no pull request from feature is open"); branch gone ("no longer a branch"); success ("no job failed") | **proxy** (RR1-RR8) |
 | `cancelCancelsARunStillGoing` (813) | in_progress and queued POST `/cancel` with no body; "asynchronously" | **proxy** (W14) |
 | `cancelRefusedForAReleaseOrACompletedRun` (824) | release ("its publishing must finish") and completed ("already completed") refused with no POST | **proxy** (C1, C2) |
 | `rerunRunsADispatchedRunAtItsBranchTip` (838) | a workflow_dispatch run is re-run at its branch tip; refused once the branch moved | **proxy** (RR2, RR6, RR7) |

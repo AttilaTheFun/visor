@@ -3,7 +3,7 @@
 // The folder is picked from the computer's projects or browsed for; a
 // server that sets sessions up its own way offers its named choices in
 // place of folders, and asks for the first message the session starts with.
-// A server with oss offers a container in place of a folder: the agent
+// A server with Shireworks offers a container in place of a folder: the agent
 // runs there, a repository cloned into it.
 // Sessions start in auto mode (no permission prompts — nobody is at the
 // computer to answer them); the chat's model sheet switches to manual.

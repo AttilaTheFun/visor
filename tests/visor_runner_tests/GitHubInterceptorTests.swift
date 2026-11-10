@@ -125,20 +125,20 @@ final class GitHubInterceptorTests: XCTestCase {
     /// curl through the proxy as the session's agent, trusting the Runner's
     /// authority, with gh's placeholder token.
     private func agent(_ arguments: [String]) throws -> (body: String, status: String) {
-        try curl(["--proxy", "http://127.0.0.1:\(port)", "--proxy-user", "server-token:session-a@AttilaTheFun/oss",
+        try curl(["--proxy", "http://127.0.0.1:\(port)", "--proxy-user", "server-token:session-a@AttilaTheFun/shireworks",
                   "--cacert", caFile.path, "-H", "Authorization: token placeholder"] + arguments)
     }
 
     func testAReadGoesOnWithTheSessionsTokenWhichNeverComesBack() throws {
-        let (body, status) = try agent(["https://api.github.com/repos/AttilaTheFun/oss/pulls/3"])
+        let (body, status) = try agent(["https://api.github.com/repos/AttilaTheFun/shireworks/pulls/3"])
         XCTAssertEqual(status, "200", body)
-        XCTAssertEqual(github.requests, ["GET /repos/AttilaTheFun/oss/pulls/3 Bearer ghs_fixedtoken"], "the placeholder replaced")
+        XCTAssertEqual(github.requests, ["GET /repos/AttilaTheFun/shireworks/pulls/3 Bearer ghs_fixedtoken"], "the placeholder replaced")
         XCTAssertTrue(body.contains("Bearer " + String(repeating: "*", count: "ghs_fixedtoken".count)), "masked on its way back: \(body)")
         XCTAssertFalse(body.contains("ghs_fixedtoken"))
     }
 
     func testARefusalIsGitHubsOwnFormAndNeverReachesGitHub() throws {
-        let rest = try agent(["-X", "DELETE", "https://api.github.com/repos/AttilaTheFun/oss/git/refs/heads/x"])
+        let rest = try agent(["-X", "DELETE", "https://api.github.com/repos/AttilaTheFun/shireworks/git/refs/heads/x"])
         XCTAssertEqual(rest.status, "403", rest.body)
         XCTAssertTrue(rest.body.contains("\"message\":\"Refused:"), rest.body)
         let graphQL = try agent(["-X", "POST", "-H", "Content-Type: application/json", "--data",
@@ -163,15 +163,15 @@ final class GitHubInterceptorTests: XCTestCase {
         XCTAssertFalse(body.contains("ghs_fixedtoken"))
         XCTAssertFalse(body.contains("placeholder"))
         // An allowed one's read after it still has the token.
-        _ = try agent(["https://api.github.com/repos/AttilaTheFun/oss/pulls/3"])
-        XCTAssertEqual(github.requests.last, "GET /repos/AttilaTheFun/oss/pulls/3 Bearer ghs_fixedtoken")
+        _ = try agent(["https://api.github.com/repos/AttilaTheFun/shireworks/pulls/3"])
+        XCTAssertEqual(github.requests.last, "GET /repos/AttilaTheFun/shireworks/pulls/3 Bearer ghs_fixedtoken")
     }
 
     func testAnAllowedWriteGoesOnWithItsBody() throws {
         let (body, status) = try agent(["-X", "POST", "-H", "Content-Type: application/json", "--data", #"{"body":"Looks right"}"#,
-                                        "https://api.github.com/repos/AttilaTheFun/oss/issues/3/comments"])
+                                        "https://api.github.com/repos/AttilaTheFun/shireworks/issues/3/comments"])
         XCTAssertEqual(status, "200", body)
-        XCTAssertEqual(github.requests, ["POST /repos/AttilaTheFun/oss/issues/3/comments Bearer ghs_fixedtoken"])
+        XCTAssertEqual(github.requests, ["POST /repos/AttilaTheFun/shireworks/issues/3/comments Bearer ghs_fixedtoken"])
     }
 
     /// A push to main, refused as git reads a push's answer: report-status,
@@ -184,7 +184,7 @@ final class GitHubInterceptorTests: XCTestCase {
         try Data(body.utf8).write(to: file)
         defer { try? FileManager.default.removeItem(at: file) }
         let (answer, status) = try agent(["-X", "POST", "-H", "Content-Type: application/x-git-receive-pack-request",
-                                          "--data-binary", "@\(file.path)", "https://github.com/AttilaTheFun/oss.git/git-receive-pack"])
+                                          "--data-binary", "@\(file.path)", "https://github.com/AttilaTheFun/shireworks.git/git-receive-pack"])
         XCTAssertEqual(status, "200", answer)
         XCTAssertTrue(answer.contains("ng refs/heads/main Refused: main is never pushed"), answer)
         XCTAssertEqual(github.requests, [])
@@ -192,7 +192,7 @@ final class GitHubInterceptorTests: XCTestCase {
 
     func testOnlyAServersAgentsAreLetIn() throws {
         let (_, status) = try curl(["--proxy", "http://127.0.0.1:\(port)", "--proxy-user", "stranger:session-a", "--cacert", caFile.path,
-                                    "https://api.github.com/repos/AttilaTheFun/oss/pulls"])
+                                    "https://api.github.com/repos/AttilaTheFun/shireworks/pulls"])
         XCTAssertNotEqual(status, "200")
         XCTAssertEqual(github.requests, [])
     }

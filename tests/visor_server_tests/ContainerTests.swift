@@ -309,15 +309,15 @@ final class ContainerTests: ServerTestCase {
     /// The host is the one set, else visor-container-host on the PATH, else
     /// none: sessions run on this computer only.
     func testTheHostIsTheOneSetOrTheOneOnThePath() {
-        XCTAssertEqual(ContainerHost.found(setting: ShellCommand("/opt/oss", ["container-host"]), onPath: { _ in "/usr/local/bin/visor-container-host" }),
-                       ContainerHost(command: ShellCommand("/opt/oss", ["container-host"])))
+        XCTAssertEqual(ContainerHost.found(setting: ShellCommand("/opt/host", ["container-host"]), onPath: { _ in "/usr/local/bin/visor-container-host" }),
+                       ContainerHost(command: ShellCommand("/opt/host", ["container-host"])))
         XCTAssertEqual(ContainerHost.found(setting: nil, onPath: { $0 == "visor-container-host" ? "/usr/local/bin/visor-container-host" : nil }),
                        ContainerHost(command: ShellCommand("/usr/local/bin/visor-container-host")))
         XCTAssertNil(ContainerHost.found(setting: nil, onPath: { _ in nil }))
         // The agent's command line: the host's exec, which becomes it.
-        let host = ContainerHost(command: ShellCommand("/opt/oss", ["container-host"]))
+        let host = ContainerHost(command: ShellCommand("/opt/host", ["container-host"]))
         XCTAssertEqual(host.command(container: "c1", executable: "claude", arguments: ["-p"], directory: "/work", environmentFile: "/tmp/s.env"),
-                       ShellCommand("/opt/oss", ["container-host", "exec", "c1", "--interactive", "--workdir=/work", "--env-file=/tmp/s.env",
+                       ShellCommand("/opt/host", ["container-host", "exec", "c1", "--interactive", "--workdir=/work", "--env-file=/tmp/s.env",
                                                  "--", "claude", "-p"]))
     }
 
@@ -507,7 +507,7 @@ final class ContainerTests: ServerTestCase {
         defer { AgentChildren.detach = true }
         var info = SessionInfo(id: "h", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Here", created: 0)
         XCTAssertEqual(server.makeProcess(info, resume: nil).approvalEnvironment["GIT_AUTHOR_NAME"], "Here")
-        info.container = SessionContainer(id: "c9", socket: "/tmp/fake-oss-c9.sock")
+        info.container = SessionContainer(id: "c9", socket: "/tmp/fake-host-c9.sock")
         XCTAssertNil(server.placement(for: info), "Shireworks', from before container hosts: nothing to run it through")
         info.container = SessionContainer(id: "c9")
         let placement = try XCTUnwrap(server.placement(for: info))
@@ -633,7 +633,7 @@ final class ContainerTests: ServerTestCase {
         try host.set("listed.json", #"{"containers":[{"id":"gone","name":"x","labels":{"visor.server":"\#(server.id)","visor.session":"old"}},"#
                      + #"{"id":"other","name":"y","labels":{"visor.server":"another"}}]}"#)
         var info = SessionInfo(id: "o", agent: .claude, cwd: root.appendingPathComponent("work").path, title: "Old", created: 0)
-        info.container = SessionContainer(id: "lease1", socket: "/tmp/oss-lease1.sock")
+        info.container = SessionContainer(id: "lease1", socket: "/tmp/host-lease1.sock")
         let record = SessionRecord(info: info, process: server.makeProcess(info, resume: nil), entries: [])
         server.sessions = [record]
         await server.checkContainers()

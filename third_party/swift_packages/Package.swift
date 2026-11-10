@@ -2,7 +2,7 @@
 
 // The SwiftPM dependencies Visor consumes through rules_swift_package_manager:
 // AgentUI (the agent chat page and the navigation containers), swift-nio-ssh,
-// swift_sql (SQLite for the message cache, on every host), and oss's client. rspm reads
+// swift_sql (SQLite for the message cache, on every host). rspm reads
 // Package.resolved for the pinned graph and generates one `@swiftpkg_<name>`
 // repo per package.
 import PackageDescription

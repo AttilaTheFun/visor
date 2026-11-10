@@ -3,7 +3,7 @@
 # the session's agent): Claude Code with Visor's arguments added one at a
 # time, each given one message on a held-open stdin and 40 s to answer, to
 # find which of them keeps it from answering there.
-#   oss machine exec --socket=<the lease's socket> --env-file=<the session's .env> -- bash -s < tools/probes/claude_variants.sh
+#   <the container host> exec <the container> --env-file=<the session's .env> -- bash -s < tools/probes/claude_variants.sh
 # Each line: the variant, how long it took, and its result (or NO RESULT).
 message='{"type":"user","message":{"role":"user","content":"Reply with exactly the word CONTAINED and nothing else."}}'
 mcp='{"mcpServers":{"visor":{"command":"node","args":["/opt/visor/visor_mcp.js"],"env":{"VISOR_URL":"'"${VISOR_URL:-}"'","VISOR_TOKEN":"'"${VISOR_TOKEN:-}"'","VISOR_SESSION":"'"${VISOR_SESSION:-}"'","VISOR_APPROVALS":"1"}}}}'
