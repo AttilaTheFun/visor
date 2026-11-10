@@ -173,8 +173,9 @@ struct AgentScreen: View {
         }
         .onChange(of: shown) { _, shown in if shown { count() } else { uncount() } }
         // Let go of while shown all the same: taken up again, rather than
-        // left saying it is loading.
-        .onChange(of: transcript.loaded) { _, loaded in if !loaded { host.takeUp(sessionID) } }
+        // left saying it is loading. Not while the host hides it (a tab not
+        // selected keeps its views): there being let go of is the point.
+        .onChange(of: transcript.loaded) { _, loaded in if !loaded, counted { host.takeUp(sessionID) } }
         .onAppear {
             appeared = true
             count()
