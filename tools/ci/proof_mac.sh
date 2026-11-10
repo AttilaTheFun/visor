@@ -3,7 +3,8 @@
 # GitHub's own Macs (`xcode-27`, a desktop session whose shell may picture
 # the screen): Visor.app (applications/visor_mac), built on Linux by the
 # proof's build job and signed ad hoc there, opened on the screenshot
-# fixture in the light look, once for each of the fixture's screens, on a
+# fixture in the light look, once for each of the fixture's screens (each
+# failing if the app is still busy once it should have settled), on a
 # screen of 1920 by 1080 points (displayplacer; the runner's own is 1024 by
 # 768, too narrow for the sidebar, the chat and the inspector together:
 # Visor's split view looped until AppKit stopped it, visor#240). Each
@@ -27,7 +28,7 @@ me="$(basename "$0")"
 apps="$(cd "$1" && pwd)"
 mkdir -p "$2"
 out="$(cd "$2" && pwd)"
-SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands"
+SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands settings"
 SETTLE="${VISOR_SNAPSHOT_SETTLE:-8}"
 [ -f "$apps/visor_mac.zip" ] || { echo "$me: no visor_mac.zip in $apps" >&2; exit 1; }
 
@@ -113,6 +114,15 @@ for screen in $SCREENS; do
     settle="$SETTLE"
     [ "$screen" != search ] || settle=$((SETTLE * 3))
     sleep "$settle"
+    # Settled means still: an app whose main thread spins in layout or in
+    # SwiftUI's updates (Logan's MacBook, 9 Nov 2026: a closed loop in the
+    # chat column beside an inspector) fails its screen, pictured or not.
+    cpu="$(ps -o %cpu= -p "$pid" 2> /dev/null | tr -d ' ' || true)"
+    if [ -n "$cpu" ] && [ "${cpu%%.*}" -ge 50 ]; then
+        echo "::error::$screen: the app is busy at ${cpu}% CPU after ${settle} s, not settled"
+        status=1
+    fi
+    echo "$screen: ${cpu:-?}% CPU once settled"
     # In front again, should another window have come over it.
     open -a "$app"
     sleep 1

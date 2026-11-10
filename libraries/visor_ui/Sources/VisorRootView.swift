@@ -303,6 +303,10 @@ public struct VisorRootView: View {
             case "new-session":
                 composing = true
             case "settings":
+                // Beside a chat: the composer's row of pills next to the
+                // inspector is the Mac's case to check (NavigationUI's
+                // SettingsInspectorPlacement, 9 Nov 2026).
+                selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
                 settingsPresented.wrappedValue = true
             default:
                 break
