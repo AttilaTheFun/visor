@@ -18,6 +18,8 @@ public struct VisorRootView: View {
     @Environment(VisorStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.scenePhase) private var scenePhase
+    /// Whether the host shows Visor (EnvironmentValues+VisorShown).
+    @Environment(\.visorShown) private var shown
     /// The app has been in the background since it was last in front.
     @State private var wasInBackground = false
     @State private var columns: NavigationSplitViewVisibility = .all
@@ -86,6 +88,13 @@ public struct VisorRootView: View {
             if pane == .settings { givenSettings?.wrappedValue = false }
             pane = nil
         })
+    }
+
+    /// The session on screen, for notifications and for keeping it: none
+    /// while the host hides Visor.
+    private func noteViewing(_ value: ContentSelection?) {
+        let session = shown ? value?.session : nil
+        store.noteViewing(serverID: session?.serverID, sessionID: session?.sessionID)
     }
 
     /// Settings with its title and Done, where it is a sheet.
@@ -327,8 +336,15 @@ public struct VisorRootView: View {
             pendingPath = nil
             // Which session is on screen, so a notification about it, with
             // the app in front, is not shown over it.
-            store.noteViewing(serverID: value?.session?.serverID, sessionID: value?.session?.sessionID)
+            noteViewing(value)
         }
+        // A host's tab of Visor hidden: no session is on screen, so a
+        // notification about it is shown, and the session it showed is let
+        // go of (AgentServerConnection.release keeps the session viewed).
+        .onChange(of: shown) { _, _ in noteViewing(selection) }
+        // The same where the host's tab view tells only that: gone, and back.
+        .onDisappear { store.noteViewing(serverID: nil, sessionID: nil) }
+        .onAppear { noteViewing(selection) }
         // Back in front: a phone dropped every channel when the app left
         // it, so each server is tried or checked now rather than at its
         // next retry.
