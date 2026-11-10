@@ -40,7 +40,7 @@ let package = Package(
         // Info.plist names, tools/signing), and its updates told of.
         .package(
             url: "https://github.com/AttilaTheFun/update_kit.git",
-            revision: "0b94b5599a55a82e81b080c32017855e23127d20"
+            exact: "0.12.0"
         ),
     ]
 )
