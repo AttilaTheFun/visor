@@ -323,6 +323,11 @@ public struct VisorRootView: View {
                 composing = true
             case "settings-empty":
                 settingsPresented.wrappedValue = true
+            case "settings-docs":
+                // The other chat: no approval waiting, so its composer has the
+                // pills and no Deny and Allow.
+                selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))
+                settingsPresented.wrappedValue = true
             case "settings", "settings-split", "settings-plain":
                 // Beside a chat: the composer's row of pills next to the
                 // inspector is the Mac's case to check (NavigationUI's
