@@ -28,7 +28,7 @@ me="$(basename "$0")"
 apps="$(cd "$1" && pwd)"
 mkdir -p "$2"
 out="$(cd "$2" && pwd)"
-SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands settings settings-empty settings-split settings-plain settings-docs"
+SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands settings settings-empty settings-split settings-plain settings-docs settings-overlay settings-docs-overlay"
 SETTLE="${VISOR_SNAPSHOT_SETTLE:-8}"
 [ -f "$apps/visor_mac.zip" ] || { echo "$me: no visor_mac.zip in $apps" >&2; exit 1; }
 
@@ -84,8 +84,17 @@ JS
 
 status=0
 mkdir -p "$out/screens" "$out/logs"
+# The runner's scroll bars, as it has them, put back after a screen that
+# asks for overlay ones (`<screen>-overlay`: the same screen with scroll
+# bars only while scrolling, as a Mac with a trackpad has them).
+scrollbars="$(defaults read -g AppleShowScrollBars 2> /dev/null || true)"
+echo "The runner's scroll bars: ${scrollbars:-unset (Automatic)}"
 for screen in $SCREENS; do
     echo "::group::$screen"
+    case "$screen" in
+        *-overlay) defaults write -g AppleShowScrollBars WhenScrolling; fixture="${screen%-overlay}" ;;
+        *) fixture="$screen" ;;
+    esac
     # Each launch a first one, whatever the one before did (a crash left
     # its windows to be restored: Settings over every screen after it).
     rm -rf "$HOME/Library/Saved Application State/$identifier.savedState"
@@ -96,7 +105,7 @@ for screen in $SCREENS; do
     # in milliseconds): a picture caught it lit or not from run to run
     # (visor#244).
     open -n --stdout "$out/logs/$screen.log" --stderr "$out/logs/$screen.log" "$app" --args \
-        -visor.fixture snapshot -visor.fixture.screen "$screen" -visor.fixture.appearance light \
+        -visor.fixture snapshot -visor.fixture.screen "$fixture" -visor.fixture.appearance light \
         -ApplePersistenceIgnoreState YES \
         -NSTextInsertionPointBlinkPeriodOn 100000000 -NSTextInsertionPointBlinkPeriodOff 0.001
     pid=""
@@ -142,6 +151,10 @@ for screen in $SCREENS; do
     done
     kill -9 "$pid" 2> /dev/null || true
     pid=""
+    case "$screen" in
+        *-overlay)
+            if [ -n "$scrollbars" ]; then defaults write -g AppleShowScrollBars "$scrollbars"; else defaults delete -g AppleShowScrollBars 2> /dev/null || true; fi ;;
+    esac
     echo "::endgroup::"
 done
 count="$(find "$out/screens" -name 'mac-*.png' | wc -l | tr -d ' ')"
