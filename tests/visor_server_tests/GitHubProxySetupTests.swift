@@ -63,7 +63,7 @@ final class GitHubProxySetupTests: ServerTestCase {
     func testAnAgentOfASessionItIsOnForGoesThroughIt() throws {
         XCTAssertEqual(set(["url": "http://192.168.131.1:7441", "token": "tok", "authority": authority, "sessions": ["S"]]).status, 200)
         let environment = server.githubProxyEnvironment(for: SessionInfo(id: "S", agent: .claude, cwd: try checkout(), title: "S", created: 0))
-        XCTAssertEqual(environment["HTTPS_PROXY"], "http://tok:S%40AttilaTheFun%2Foss@192.168.131.1:7441")
+        XCTAssertEqual(environment["HTTPS_PROXY"], "http://tok:S%40AttilaTheFun%2Fshireworks@192.168.131.1:7441")
         XCTAssertEqual(environment["GH_TOKEN"], VisorServer.githubPlaceholderToken)
         let bundle = try XCTUnwrap(environment["SSL_CERT_FILE"])
         XCTAssertEqual(environment["GIT_SSL_CAINFO"], bundle)
