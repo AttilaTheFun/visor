@@ -55,8 +55,89 @@ public struct VisorRootView: View {
     @FocusState private var sidebarFocused: Bool
     /// Messages matching the search, from every computer connected.
     @State private var messageHits: [(host: AgentServerConnection, hit: SearchHit)] = []
+    /// The window's one trailing pane: Settings, or a session's details
+    /// (TrailingPane).
+    @State private var pane: TrailingPane?
+    /// Settings' open state when whoever shows this view keeps it (Shireworks,
+    /// hosting Visor as one of its tabs), kept in step with the pane.
+    private let givenSettings: Binding<Bool>?
+    /// The computer whose page Settings has open, by its id.
+    @State private var settingsComputer: String?
 
-    public init() {}
+    /// Visor, Settings and all. `settingsPresented` is for a host that opens
+    /// or closes Settings itself; without it the view keeps its own.
+    public init(settingsPresented: Binding<Bool>? = nil) {
+        givenSettings = settingsPresented
+    }
+
+    /// Whether Settings is open: the pane showing it. Opened, it takes the
+    /// pane from a session's details; closed, the pane closes.
+    private var settingsPresented: Binding<Bool> {
+        Binding(get: { pane == .settings }, set: { open in
+            if open { pane = .settings } else if pane == .settings { pane = nil }
+            givenSettings?.wrappedValue = open
+        })
+    }
+
+    /// Whether the pane is open, whatever it shows.
+    private var paneOpen: Binding<Bool> {
+        Binding(get: { pane != nil }, set: { open in
+            guard !open else { return }
+            if pane == .settings { givenSettings?.wrappedValue = false }
+            pane = nil
+        })
+    }
+
+    /// What the pane shows: Settings, or a session's details (in a sheet
+    /// on a phone, with Settings' title and Done there).
+    @ViewBuilder private var paneContent: some View {
+        switch pane {
+        case .settings:
+            if compact {
+                NavigationStack {
+                    VisorSettingsView(computer: $settingsComputer)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { settingsPresented.wrappedValue = false }
+                                    .accessibilityIdentifier("settings-done")
+                            }
+                        }
+                }
+            } else {
+                VisorSettingsView(computer: $settingsComputer)
+            }
+        case .session(let which):
+            if let host = store.server(for: which.serverID), let info = host.transcript(for: which.sessionID).info {
+                SessionInspector(host: host, session: info, compact: compact,
+                                 close: { pane = nil },
+                                 archive: { pane = nil; host.archive(which.sessionID) },
+                                 end: {
+                                     pane = nil
+                                     host.end(which.sessionID)
+                                     // The session's page goes: the selection's,
+                                     // or the page pushed over it.
+                                     if selection?.session == which { endSession.run() } else { popSubPage.run() }
+                                 })
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    /// The split view with the pane, where it isn't on the detail column.
+    @ViewBuilder private func paneOnSplitView(_ split: some View) -> some View {
+        if Compat.paneOnDetailColumn {
+            split
+        } else {
+            split.adaptiveInspector(isPresented: paneOpen, compact: compact) { paneContent }
+        }
+    }
+
+    /// Settings open at a computer's page.
+    private func openSettings(for host: AgentServerConnection) {
+        settingsComputer = host.id
+        settingsPresented.wrappedValue = true
+    }
 
     private var compact: Bool { sizeClass == .compact }
     private var searching: Bool { !search.trimmed.isEmpty }
@@ -98,12 +179,26 @@ public struct VisorRootView: View {
         // No preferred compact column: on a phone the list's selection says
         // what shows, as in Reviews. Bound, SwiftUI set it to the sidebar as
         // a page over the chat was popped, and Back went past the chat.
-        NavigationSplitView(columnVisibility: $columns) {
+        // The one trailing pane, at the platform's place: the detail column
+        // on a Mac (on the whole split view the detail kept its width and
+        // pushed the other columns out), the whole split view elsewhere (on
+        // an iPad the detail column's took its navigation title). Attached
+        // once: a second inspector beside it, even closed, looped AppKit's
+        // layout (TrailingPane).
+        paneOnSplitView(NavigationSplitView(columnVisibility: $columns) {
             sidebar
         } detail: {
-            detailView
+            if Compat.paneOnDetailColumn {
+                detailView.adaptiveInspector(isPresented: paneOpen, compact: compact) { paneContent }
+            } else {
+                detailView
+            }
         }
-        .navigationSplitViewStyle(.balanced)
+        .navigationSplitViewStyle(.balanced))
+        .environment(\.trailingPane, $pane)
+        .onChange(of: givenSettings?.wrappedValue ?? false) { _, open in
+            if open { pane = .settings } else if pane == .settings { pane = nil }
+        }
         .sheet(isPresented: $composing) {
             ComposeSessionSheet(store: store) { serverID, id in
                 selection = .session(SessionSelection(serverID: serverID, sessionID: id))
@@ -231,11 +326,12 @@ public struct VisorRootView: View {
             store.opening = nil
             selection = .session(SessionSelection(serverID: host.id, sessionID: target.session))
         }
-        // A sign-in link: its computer's settings, where it is signed in to.
+        // A sign-in link: its computer's page in Settings, where it is
+        // signed in to.
         .onChange(of: store.openingSettings) { _, address in
             guard let address, let host = store.server(named: address) else { return }
             store.openingSettings = nil
-            selection = .computer(serverID: host.id)
+            openSettings(for: host)
         }
         // Backing out on a phone is deselecting: the row is no longer
         // open, so it is no longer lit, and tapping it opens it again.
@@ -275,6 +371,11 @@ public struct VisorRootView: View {
                 search = VisorFixture.searchQuery
             case "new-session":
                 composing = true
+            case "settings":
+                // Beside a chat: the case a Mac's layout looped on with two
+                // inspectors (TrailingPane).
+                selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
+                settingsPresented.wrappedValue = true
             default:
                 break
             }
@@ -301,6 +402,8 @@ public struct VisorRootView: View {
         }
         .navigationTitle(compact ? "Sessions" : "")
         .toolbar {
+            // Settings, beside the sidebar's toggle (top leading on a phone).
+            SettingsInspectorButton(isPresented: settingsPresented)
             if !compact, let compose {
                 ToolbarItem(placement: .primaryAction) {
                     Button("New session", systemImage: "square.and.pencil", action: compose)
@@ -311,11 +414,10 @@ public struct VisorRootView: View {
 
     /// One section per computer, headed by its name and whether it is
     /// answering: its sessions, the latest activity first; its projects'
-    /// archives; and last, the computer's settings, where it is edited or
-    /// removed. A Runner's computers come together, after those added by
-    /// hand, followed by its own section (sign out, sign in, remove). The
-    /// last section adds a computer. Search narrows the rows in every
-    /// section at once.
+    /// archives. A Runner's computers come together, after those added by
+    /// hand. The last section adds a computer. Each computer's settings and
+    /// the accounts are in Settings (VisorSettingsView). Search narrows the
+    /// rows in every section at once.
     private var outline: some View {
         // On a phone the selection is what shows: a session's chat, or the
         // list again once Back clears it.
@@ -323,12 +425,11 @@ public struct VisorRootView: View {
             ForEach(store.ownServers) { host in
                 HostSection(host: host) { host in hostRows(host) }
             }
-            // Each Runner's computers, then the Runner itself.
+            // Each Runner's computers.
             ForEach(store.runners) { account in
                 ForEach(store.servers(of: account)) { host in
                     HostSection(host: host) { host in hostRows(host) }
                 }
-                RunnerAccountSection(account: account)
             }
             // What was said, as well as what the sessions are called.
             if searching, !messageHits.isEmpty {
@@ -341,7 +442,6 @@ public struct VisorRootView: View {
                     Text("Messages").noHeaderCase()
                 }
             }
-            if let account = VisorAccounts.current { AccountSection(account: account) }
             // Always last: where another computer comes from.
             Section {
                 Button { store.addingServer = true } label: {
@@ -381,7 +481,7 @@ public struct VisorRootView: View {
         messageHits = found
     }
 
-    /// A computer's rows: its sessions, its archives, its settings.
+    /// A computer's rows: its sessions and its archives.
     @ViewBuilder private func hostRows(_ host: AgentServerConnection) -> some View {
         let projects = entries(for: host)
         let cards = projects.flatMap { entry in entry.project.sessions.map { SessionCard(host: host, project: entry.project, session: $0) } }
@@ -419,15 +519,6 @@ public struct VisorRootView: View {
             .tag(ContentSelection.hostArchive(serverID: host.id))
             .accessibilityIdentifier("archived-" + host.record.name)
         }
-        let settings = ContentSelection.computer(serverID: host.id)
-        HStack(spacing: OutlineMetrics.gap) {
-            Image(systemName: "gearshape").foregroundStyle(.secondary)
-                .frame(width: OutlineMetrics.glyph, height: OutlineMetrics.glyph)
-            Text("Computer Settings")
-            Spacer()
-        }
-        .tag(settings)
-        .accessibilityIdentifier("computer-settings-" + host.record.name)
     }
 
     @ViewBuilder private func sessionMenu(_ card: SessionCard) -> some View {
@@ -461,7 +552,7 @@ public struct VisorRootView: View {
         Button { selection = .project(serverID: host.id, cwd: card.project.cwd) } label: {
             Label("Project Settings", systemImage: "folder")
         }
-        Button { selection = .computer(serverID: host.id) } label: {
+        Button { openSettings(for: host) } label: {
             Label("Computer Settings", systemImage: "desktopcomputer")
         }
         Divider()
@@ -506,8 +597,14 @@ public struct VisorRootView: View {
         NavigationStack(path: boundSubPath) {
             detailRoot
                 // The detail takes the window's slack, so the sidebar opens at
-                // its own width instead of stretching to its maximum.
-                .navigationSplitViewColumnWidth(min: 320, ideal: 720)
+                // its own width instead of stretching to its maximum. Its one
+                // width, on the stack's root content, never on the stack too:
+                // two minimums for one column left AppKit's update-constraints
+                // pass taking a new minimum each round until it threw
+                // (Applications, 9 Nov 2026). The least it lays out in beside
+                // Settings; the Mac window's minimum fits the sidebar, this
+                // and Settings (VisorMacApp).
+                .navigationSplitViewColumnWidth(min: 440, ideal: 720)
                 .navigationDestination(for: SubSessionRoute.self) { route in
                     if let which = selection?.session, let host = store.server(for: which.serverID) { subPage(route, host: host) }
                 }
@@ -524,17 +621,11 @@ public struct VisorRootView: View {
                 set: { path in if path.count < subPath.count { subPath = Array(subPath.prefix(path.count)) } })
     }
 
-    /// What is selected: a computer's or a project's settings, an archive,
-    /// a session's chat, or nothing.
+    /// What is selected: a project's settings, an archive, a session's chat,
+    /// or nothing.
     @ViewBuilder private var detailRoot: some View {
         Group {
-            if case .computer(let serverID) = selection, let host = store.server(for: serverID) {
-                ComputerSettingsView(host: host, forget: {
-                    selection = nil
-                    store.remove(host)
-                })
-                .id(serverID)
-            } else if case .project(let serverID, let cwd) = selection, let host = store.server(for: serverID),
+            if case .project(let serverID, let cwd) = selection, let host = store.server(for: serverID),
                       let project = host.projects.first(where: { $0.cwd == cwd }) {
                 ProjectSettingsView(host: host, project: project,
                                     rename: { nameDraft = project.alias ?? ""; renamingProject = ProjectTarget(host: host, project: project) },

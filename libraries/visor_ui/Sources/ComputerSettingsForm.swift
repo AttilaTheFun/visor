@@ -1,6 +1,6 @@
 // A computer's settings (a Visor server's): its address and password
 // (editable, reconnecting on save), its state in words, Reconnect, and
-// Forget, shown in the detail column from the sidebar.
+// Forget, a page of Settings (VisorSettingsView).
 
 import SwiftUI
 import VisorClient

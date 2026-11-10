@@ -1,7 +1,7 @@
 import SwiftUI
 import VisorClient
 
-/// The sidebar's account section, where the app has an account: who is
+/// The account section of Settings, where the app has an account: who is
 /// signed in, by what, and Sign Out (which takes its computers away).
 @MainActor
 struct AccountSection: View {

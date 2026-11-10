@@ -3,7 +3,8 @@
 # GitHub's own Macs (`xcode-27`, a desktop session whose shell may picture
 # the screen): Visor.app (applications/visor_mac), built on Linux by the
 # proof's build job and signed ad hoc there, opened on the screenshot
-# fixture in the light look, once for each of the fixture's screens, on a
+# fixture in the light look, once for each of the fixture's screens (each
+# failing if the app is still busy once it should have settled), on a
 # screen of 1920 by 1080 points (displayplacer; the runner's own is 1024 by
 # 768, too narrow for the sidebar, the chat and the inspector together:
 # Visor's split view looped until AppKit stopped it, visor#240). Each
@@ -27,7 +28,7 @@ me="$(basename "$0")"
 apps="$(cd "$1" && pwd)"
 mkdir -p "$2"
 out="$(cd "$2" && pwd)"
-SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands"
+SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands settings"
 SETTLE="${VISOR_SNAPSHOT_SETTLE:-8}"
 [ -f "$apps/visor_mac.zip" ] || { echo "$me: no visor_mac.zip in $apps" >&2; exit 1; }
 
@@ -83,8 +84,17 @@ JS
 
 status=0
 mkdir -p "$out/screens" "$out/logs"
+# The runner's scroll bars, as it has them, put back after a screen that
+# asks for overlay ones (`<screen>-overlay`: the same screen with scroll
+# bars only while scrolling, as a Mac with a trackpad has them).
+scrollbars="$(defaults read -g AppleShowScrollBars 2> /dev/null || true)"
+echo "The runner's scroll bars: ${scrollbars:-unset (Automatic)}"
 for screen in $SCREENS; do
     echo "::group::$screen"
+    case "$screen" in
+        *-overlay) defaults write -g AppleShowScrollBars WhenScrolling; fixture="${screen%-overlay}" ;;
+        *) fixture="$screen" ;;
+    esac
     # Each launch a first one, whatever the one before did (a crash left
     # its windows to be restored: Settings over every screen after it).
     rm -rf "$HOME/Library/Saved Application State/$identifier.savedState"
@@ -95,7 +105,7 @@ for screen in $SCREENS; do
     # in milliseconds): a picture caught it lit or not from run to run
     # (visor#244).
     open -n --stdout "$out/logs/$screen.log" --stderr "$out/logs/$screen.log" "$app" --args \
-        -visor.fixture snapshot -visor.fixture.screen "$screen" -visor.fixture.appearance light \
+        -visor.fixture snapshot -visor.fixture.screen "$fixture" -visor.fixture.appearance light \
         -ApplePersistenceIgnoreState YES \
         -NSTextInsertionPointBlinkPeriodOn 100000000 -NSTextInsertionPointBlinkPeriodOff 0.001
     pid=""
@@ -113,6 +123,15 @@ for screen in $SCREENS; do
     settle="$SETTLE"
     [ "$screen" != search ] || settle=$((SETTLE * 3))
     sleep "$settle"
+    # Settled means still: an app whose main thread spins in layout or in
+    # SwiftUI's updates (Logan's MacBook, 9 Nov 2026: a closed loop in the
+    # chat column beside an inspector) fails its screen, pictured or not.
+    cpu="$(ps -o %cpu= -p "$pid" 2> /dev/null | tr -d ' ' || true)"
+    if [ -n "$cpu" ] && [ "${cpu%%.*}" -ge 50 ]; then
+        echo "::error::$screen: the app is busy at ${cpu}% CPU after ${settle} s, not settled"
+        status=1
+    fi
+    echo "$screen: ${cpu:-?}% CPU once settled"
     # In front again, should another window have come over it.
     open -a "$app"
     sleep 1
@@ -132,6 +151,10 @@ for screen in $SCREENS; do
     done
     kill -9 "$pid" 2> /dev/null || true
     pid=""
+    case "$screen" in
+        *-overlay)
+            if [ -n "$scrollbars" ]; then defaults write -g AppleShowScrollBars "$scrollbars"; else defaults delete -g AppleShowScrollBars 2> /dev/null || true; fi ;;
+    esac
     echo "::endgroup::"
 done
 count="$(find "$out/screens" -name 'mac-*.png' | wc -l | tr -d ' ')"

@@ -31,7 +31,9 @@ struct AgentScreen: View {
     @State private var previewFile: URL?
     /// The attach source open (files, the photo library, the camera).
     @State private var attachSource: AttachSource?
-    @State private var showInspector = false
+    /// The window's one trailing pane (VisorRootView's): this session's
+    /// details open there, in Settings' place.
+    @Environment(\.trailingPane) private var trailingPane
     /// A fork or branch whose ✕ was tapped, while the person confirms.
     @State private var ending: SubSession?
     /// The composer has the keyboard: taken down before a command opens a
@@ -63,6 +65,15 @@ struct AgentScreen: View {
     /// The session as the computer lists it, through the transcript: told
     /// with the thread's own changes, not each time the list changes.
     private var info: SessionInfo? { transcript.info }
+
+    /// This session, as the trailing pane names it.
+    private var selection: SessionSelection { SessionSelection(serverID: host.id, sessionID: sessionID) }
+
+    /// This session's details in the window's trailing pane, or closed if
+    /// they are open (Settings, open there, gives way).
+    private func toggleDetails() {
+        trailingPane.wrappedValue = trailingPane.wrappedValue == .session(selection) ? nil : .session(selection)
+    }
 
     /// The composer's words before anything is typed: what the agent is
     /// waiting for, when it is not simply the next message.
@@ -107,7 +118,7 @@ struct AgentScreen: View {
         // phone.
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showInspector.toggle() } label: {
+                Button { toggleDetails() } label: {
                     Image(systemName: "info.circle")
                 }
                 .accessibilityLabel("Session details")
@@ -123,14 +134,6 @@ struct AgentScreen: View {
             Button("Cancel", role: .cancel) { ending = nil }
         } message: {
             Text("Its agent stops, and it leaves Visor. The agent keeps its conversation on the computer, to resume there.")
-        }
-        .adaptiveInspector(isPresented: $showInspector, compact: sizeClass == .compact) {
-            if let info {
-                SessionInspector(host: host, session: info, compact: sizeClass == .compact,
-                                 close: { showInspector = false },
-                                 archive: { showInspector = false; host.archive(sessionID) },
-                                 end: { showInspector = false; host.end(sessionID); ended.run() })
-            }
         }
         .navigationTitle(sessionTitle)
         .toolbarTitleDisplayMode(.inline)
@@ -159,7 +162,7 @@ struct AgentScreen: View {
                     var still = Transaction()
                     still.disablesAnimations = true
                     withTransaction(still) {
-                        if screen == "inspector" { showInspector = true } else { showModels = true }
+                        if screen == "inspector" { trailingPane.wrappedValue = .session(selection) } else { showModels = true }
                     }
                 }
             }
@@ -257,7 +260,9 @@ struct AgentScreen: View {
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval, host: host, sessionID: sessionID, answering: $answering)
-            } else if let info {
+            } else if let info, VisorFixture.screen != "settings-plain" {
+                // (The Mac proof's "settings-plain": the composer with none of
+                // these, beside Settings, to tell them from the rest.)
                 // Pictures, before anything else in the row: what you are
                 // about to say, then how it is being said.
                 // A phone asks where from; a Mac or a browser goes

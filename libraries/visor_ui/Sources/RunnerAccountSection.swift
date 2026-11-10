@@ -1,9 +1,8 @@
 import SwiftUI
 import VisorClient
 
-/// A Runner's section in the sidebar, after its computers: who is signed
-/// in to it, Sign Out (which takes its computers away) or Sign In again,
-/// and Remove, which forgets it.
+/// A Runner's section in Settings: who is signed in to it, Sign Out (which
+/// takes its computers away) or Sign In again, and Remove, which forgets it.
 @MainActor
 struct RunnerAccountSection: View {
     @Environment(VisorStore.self) private var store
