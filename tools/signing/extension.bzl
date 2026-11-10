@@ -14,7 +14,7 @@
 
 Set them for your builds in a `.bazelrc.user` at the workspace root (it is
 not checked in); CI's distribution builds set the update ones from the
-repository's variables:
+repository's secrets, and fail without them:
 
     common --repo_env=VISOR_TEAM_ID=<your team id>
     common --repo_env=VISOR_UPDATE_APP_GROUP=<group.…>
