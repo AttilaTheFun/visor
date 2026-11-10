@@ -26,9 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // The build this is, for Applications (UpdateKit). Only
         // written: Visor updates itself (the server's own update, which ends
         // its agents in order), which takes Applications' updates when it
-        // registers its handler. Without the app group (a development build:
-        // the release's signing gives it, from the Developer ID profile), the
-        // library logs why and does nothing.
+        // registers its handler. Without the app group in the Info.plist (a
+        // build from the public source; CI's distribution builds stamp it in,
+        // tools/signing) or its container, the library does nothing.
         AppUpdates.start(tellsOfUpdates: false)
         Self.followWindows()
     }

@@ -1,6 +1,7 @@
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 load("@rules_apple//apple:macos.bzl", "macos_application")
 load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/signing:defs.bzl", "update_infoplist")
 load("//tools/variant:defs.bzl", "variant_infoplist")
 
 package(default_visibility = ["//visibility:public"])
@@ -14,6 +15,14 @@ variant_infoplist(
     display_name = "Visor",
     url_scheme = "visor",
 )
+
+# The app group shared with Applications and Applications' bundle ids, for
+# UpdateKit (tools/signing; CI's distribution builds set them). Not yet in
+# the entitlements: outside the Mac App Store a `group.` group needs a
+# Developer ID profile that grants it, or macOS asks at launch, so the
+# entitlement waits on that profile. Until then UpdateKit finds no
+# container here and does nothing, as before.
+update_infoplist(name = "update_plist")
 
 # Visor on the Mac (docs/co-tenancy.md, "The app"): a menu bar app whose
 # window is Visor's macOS client, with the Mac's Visor server under it. It
@@ -70,6 +79,7 @@ macos_application(
     }),
     infoplists = [
         "Info.plist",
+        ":update_plist",
         ":variant_plist",
     ],
     minimum_os_version = "15.0",

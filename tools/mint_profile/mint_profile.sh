@@ -8,9 +8,11 @@
 #
 #   tools/mint_profile/mint_profile.sh <bundle id> <team id> [device UDID] [entitlements]
 # (the bundle id in applications/visor_ios/BUILD.bazel, the team in .bazelrc.user).
-# With an entitlements file (the app's own, e.g. applications/visor_ios/
-# app.entitlements), the App ID gets those capabilities (push) and the
-# profile carries them: what the wildcard profile cannot.
+# With an entitlements file (the app's own as built, e.g.
+# bazel-bin/applications/visor_ios/app_entitlements.entitlements, which has
+# the app group when .bazelrc.user sets one: tools/signing), the App ID gets
+# those capabilities (push, the group) and the profile carries them: what
+# the wildcard profile cannot.
 #
 # A new device needs both profiles re-minted: the app's explicit one (this
 # script with the app's bundle id and entitlements, the device plugged in),

@@ -4,6 +4,7 @@ load("@rules_apple//apple:ios.bzl", "ios_application", "ios_extension")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 load("@rules_xcodeproj//xcodeproj:defs.bzl", "xcode_provisioning_profile")
 load("@visor_signing//:signing.bzl", "TEAM_ID")
+load("//tools/signing:defs.bzl", "update_entitlements", "update_group_entitlement", "update_infoplist")
 load("//tools/variant:defs.bzl", "variant_infoplist")
 
 package(default_visibility = ["//visibility:public"])
@@ -25,6 +26,21 @@ variant_infoplist(
     url_scheme = "visor",
 )
 
+# The app group shared with Applications, for UpdateKit: the builder's own
+# (VISOR_UPDATE_APP_GROUP, tools/signing), which CI's distribution builds
+# set. With none, the app names no group and checks for no updates.
+update_infoplist(name = "update_plist")
+
+update_entitlements(
+    name = "app_entitlements",
+    template = "app.entitlements",
+)
+
+update_entitlements(
+    name = "app_simulator_entitlements",
+    template = "app.simulator.entitlements",
+)
+
 # The client on a phone: compiled Swift, real SwiftUI, the shared VisorUI
 # screens. The host sources are shared with the Mac client (a filegroup);
 # only the @main is guarded by os().
@@ -41,6 +57,7 @@ swift_library(
     deps = [
         "//:foundation",
         "@swiftpkg_update_kit//:UpdateKit",
+        "@swiftpkg_update_kit//:UpdateKitUI",
         "//libraries/visor_client",
         "//libraries/visor_protocol",
         "//libraries/visor_services",
@@ -86,7 +103,7 @@ xcode_provisioning_profile(
 # CI's device build (--config=ci_device, .bazelrc): CI holds no profile of
 # the team's, so it signs ad hoc (--ios_signing_cert_name=-) with this
 # placeholder, the app and its widget alike, which allows what their
-# entitlements ask for (push, the keychain group, the Applications group).
+# entitlements ask for (push, the keychain group, the app group if any).
 # Applications Server replaces both, the profiles and the signatures, with
 # each bundle id's own (AttilaTheFun/applications' docs/CI.md, "What the
 # server does with each build"). A plain plist: rules_applecross reads the
@@ -125,10 +142,7 @@ genrule(
 		<string>development</string>
 		<key>com.apple.developer.team-identifier</key>
 		<string>{team}</string>
-		<key>com.apple.security.application-groups</key>
-		<array>
-			<string>group.com.LoganShire.Applications</string>
-		</array>
+		{group}
 		<key>get-task-allow</key>
 		<true/>
 		<key>keychain-access-groups</key>
@@ -161,7 +175,10 @@ genrule(
 	<integer>1</integer>
 </dict>
 </plist>
-EOF""".format(team = TEAM_ID),
+EOF""".format(
+        team = TEAM_ID,
+        group = update_group_entitlement().replace("\n\t", "\n\t\t"),
+    ),
 )
 
 # The home screen's widget: the latest sessions, as the app keeps them in a
@@ -204,8 +221,8 @@ ios_application(
     app_icons = ["//artwork/app-icon:app_icon"],
     bundle_id = BUNDLE_ID,
     entitlements = select({
-        "@apple_support//constraints:device": "app.entitlements",
-        "//conditions:default": "app.simulator.entitlements",
+        "@apple_support//constraints:device": ":app_entitlements",
+        "//conditions:default": ":app_simulator_entitlements",
     }),
     extensions = [":visor_widget"],
     families = [
@@ -214,6 +231,7 @@ ios_application(
     ],
     infoplists = [
         "Info.plist",
+        ":update_plist",
         ":variant_plist",
     ],
     minimum_os_version = "18.0",
