@@ -34,6 +34,12 @@ the small release before it (isomer 0.50); this is the 0.50 line.
 - **Messages between computers stay client-carried** (the relay: each
   client reports the servers it holds and carries their messages). Proxies
   carry no messages.
+- **Agents are kept from the settings by where they run, not by a token**
+  (Logan, 10 Nov: "the goal is eventually all of my sessions will run
+  inside containers so the'll never be in an environment where they can
+  change the proxy settings"). What an agent must not change (the MCP
+  servers and their keys, where pushes go, who may sign in) is the proxy's,
+  outside the container; the server checks nothing.
 
 ## Today
 
@@ -181,7 +187,10 @@ restart, and the settings that are the server's own.
    use (step 5c).
 4. **The server without auth**: the password, codes, tokens for clients,
    TLS, the SSH socket and keys, and direct APNs removed; `X-Visor-User`
-   shown.
+   shown. No guard takes the agent token's place on the settings routes:
+   the settings that matter move to the proxy, and the server's own proxy
+   setting is given by what starts it (Shireworks, for its container), as
+   Logan decided.
 5. **The client without code-added computers**: records only from
    accounts; visor_ssh's transport and per-server path probing removed.
 6. **Containers out**: the container code, visor-container-host and the
@@ -192,14 +201,6 @@ Each step is its own pull request with its tests, on the 0.50 line.
 
 ## Open questions
 
-- **Agents and the person, without auth.** Today an agent's token is
-  refused on the settings routes (the MCP servers, the push and GitHub
-  proxies, restart, quit), so an agent can't act as the person. With no
-  auth an agent on the same loopback could call them. The smallest guard is
-  the proxy's own token on the requests it passes on (`X-Visor-Proxy`,
-  which the server already holds for what goes out), required on those
-  routes: not a person's credential, only proof the request came through
-  the proxy. To decide with Logan.
 - **Where Shireworks' primary container's port is told to the Runner**:
   Shireworks' API, or the Runner's own `server reach` as now.
 - **SSH at the proxy**: the Runner serving SSH itself, or a client's SSH
