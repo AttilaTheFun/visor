@@ -8,6 +8,19 @@ import SwiftUI
 import QuickLook
 #endif
 
+/// What differs by platform outside a view modifier.
+enum Compat {
+    /// Where the window's one trailing pane goes (VisorRootView): the
+    /// detail column on a Mac, the whole split view elsewhere.
+    static var paneOnDetailColumn: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
+}
+
 extension View {
     /// The inset-grouped form: iOS's default; the Mac's needs asking, and a
     /// width cap so the cells do not run edge to edge in a wide detail.

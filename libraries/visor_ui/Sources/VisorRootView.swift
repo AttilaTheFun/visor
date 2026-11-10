@@ -55,10 +55,12 @@ public struct VisorRootView: View {
     @FocusState private var sidebarFocused: Bool
     /// Messages matching the search, from every computer connected.
     @State private var messageHits: [(host: AgentServerConnection, hit: SearchHit)] = []
+    /// The window's one trailing pane: Settings, or a session's details
+    /// (TrailingPane).
+    @State private var pane: TrailingPane?
     /// Settings' open state when whoever shows this view keeps it (Shireworks,
-    /// hosting Visor as one of its tabs); else this view's own.
+    /// hosting Visor as one of its tabs), kept in step with the pane.
     private let givenSettings: Binding<Bool>?
-    @State private var ownSettings = false
     /// The computer whose page Settings has open, by its id.
     @State private var settingsComputer: String?
 
@@ -68,29 +70,66 @@ public struct VisorRootView: View {
         givenSettings = settingsPresented
     }
 
-    /// Whether Settings is open: the host's binding, or this view's own.
-    private var settingsPresented: Binding<Bool> { givenSettings ?? $ownSettings }
+    /// Whether Settings is open: the pane showing it. Opened, it takes the
+    /// pane from a session's details; closed, the pane closes.
+    private var settingsPresented: Binding<Bool> {
+        Binding(get: { pane == .settings }, set: { open in
+            if open { pane = .settings } else if pane == .settings { pane = nil }
+            givenSettings?.wrappedValue = open
+        })
+    }
 
-    /// The Mac proof's fixture screen "settings-split": Settings on the whole
-    /// split view (NavigationUI's one-call form) in place of the detail
-    /// column, to tell the placement from the content when Settings beside a
-    /// chat spins (9 Nov 2026).
-    private static var settingsOnSplitView: Bool { VisorFixture.screen == "settings-split" || settingsInStack }
-    /// "settings-stack": Settings on the stack's root content, where the
-    /// session's own inspector is (which the window grows for).
-    private static var settingsInStack: Bool { VisorFixture.screen == "settings-stack" }
+    /// Whether the pane is open, whatever it shows.
+    private var paneOpen: Binding<Bool> {
+        Binding(get: { pane != nil }, set: { open in
+            guard !open else { return }
+            if pane == .settings { givenSettings?.wrappedValue = false }
+            pane = nil
+        })
+    }
 
-    /// The split view with Settings: the platform's places (the detail
-    /// column on a Mac), or the whole split view for "settings-split".
-    @ViewBuilder private func withSettings(_ split: some View) -> some View {
-        if Self.settingsInStack {
-            split
-        } else if Self.settingsOnSplitView {
-            split.settingsInspector(isPresented: settingsPresented) { VisorSettingsView(computer: $settingsComputer) }
-        } else {
-            split.settingsInspector(isPresented: settingsPresented, attachedTo: .splitView) {
+    /// What the pane shows: Settings, or a session's details (in a sheet
+    /// on a phone, with Settings' title and Done there).
+    @ViewBuilder private var paneContent: some View {
+        switch pane {
+        case .settings:
+            if compact {
+                NavigationStack {
+                    VisorSettingsView(computer: $settingsComputer)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { settingsPresented.wrappedValue = false }
+                                    .accessibilityIdentifier("settings-done")
+                            }
+                        }
+                }
+            } else {
                 VisorSettingsView(computer: $settingsComputer)
             }
+        case .session(let which):
+            if let host = store.server(for: which.serverID), let info = host.transcript(for: which.sessionID).info {
+                SessionInspector(host: host, session: info, compact: compact,
+                                 close: { pane = nil },
+                                 archive: { pane = nil; host.archive(which.sessionID) },
+                                 end: {
+                                     pane = nil
+                                     host.end(which.sessionID)
+                                     // The session's page goes: the selection's,
+                                     // or the page pushed over it.
+                                     if selection?.session == which { endSession.run() } else { popSubPage.run() }
+                                 })
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    /// The split view with the pane, where it isn't on the detail column.
+    @ViewBuilder private func paneOnSplitView(_ split: some View) -> some View {
+        if Compat.paneOnDetailColumn {
+            split
+        } else {
+            split.adaptiveInspector(isPresented: paneOpen, compact: compact) { paneContent }
         }
     }
 
@@ -140,20 +179,26 @@ public struct VisorRootView: View {
         // No preferred compact column: on a phone the list's selection says
         // what shows, as in Reviews. Bound, SwiftUI set it to the sidebar as
         // a page over the chat was popped, and Back went past the chat.
-        withSettings(NavigationSplitView(columnVisibility: $columns) {
+        // The one trailing pane, at the platform's place: the detail column
+        // on a Mac (on the whole split view the detail kept its width and
+        // pushed the other columns out), the whole split view elsewhere (on
+        // an iPad the detail column's took its navigation title). Attached
+        // once: a second inspector beside it, even closed, looped AppKit's
+        // layout (TrailingPane).
+        paneOnSplitView(NavigationSplitView(columnVisibility: $columns) {
             sidebar
         } detail: {
-            if Self.settingsOnSplitView {
-                detailView
+            if Compat.paneOnDetailColumn {
+                detailView.adaptiveInspector(isPresented: paneOpen, compact: compact) { paneContent }
             } else {
                 detailView
-                    .settingsInspector(isPresented: settingsPresented, attachedTo: .detail) {
-                        VisorSettingsView(computer: $settingsComputer)
-                    }
             }
         }
         .navigationSplitViewStyle(.balanced))
-        .environment(\.settingsPresented, settingsPresented)
+        .environment(\.trailingPane, $pane)
+        .onChange(of: givenSettings?.wrappedValue ?? false) { _, open in
+            if open { pane = .settings } else if pane == .settings { pane = nil }
+        }
         .sheet(isPresented: $composing) {
             ComposeSessionSheet(store: store) { serverID, id in
                 selection = .session(SessionSelection(serverID: serverID, sessionID: id))
@@ -326,25 +371,9 @@ public struct VisorRootView: View {
                 search = VisorFixture.searchQuery
             case "new-session":
                 composing = true
-            case "settings-empty":
-                settingsPresented.wrappedValue = true
-            case "settings-later":
-                // As a click on Settings would: the chat open, Settings three
-                // seconds after the window has settled.
-                selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    settingsPresented.wrappedValue = true
-                }
-            case "settings-docs":
-                // The other chat: no approval waiting, so its composer has the
-                // pills and no Deny and Allow.
-                selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))
-                settingsPresented.wrappedValue = true
-            case "settings", "settings-split", "settings-plain", "settings-stack", "settings-stub", "settings-noinspector":
-                // Beside a chat: the composer's row of pills next to the
-                // inspector is the Mac's case to check (NavigationUI's
-                // SettingsInspectorPlacement, 9 Nov 2026).
+            case "settings":
+                // Beside a chat: the case a Mac's layout looped on with two
+                // inspectors (TrailingPane).
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
                 settingsPresented.wrappedValue = true
             default:
@@ -566,7 +595,7 @@ public struct VisorRootView: View {
         // Back from a page over the chat past the chat to the list on a
         // collapsed phone.
         NavigationStack(path: boundSubPath) {
-            stackRoot
+            detailRoot
                 // The detail takes the window's slack, so the sidebar opens at
                 // its own width instead of stretching to its maximum. Its one
                 // width, on the stack's root content, never on the stack too:
@@ -579,18 +608,6 @@ public struct VisorRootView: View {
                 .navigationDestination(for: SubSessionRoute.self) { route in
                     if let which = selection?.session, let host = store.server(for: which.serverID) { subPage(route, host: host) }
                 }
-        }
-    }
-
-    /// The stack's root: what is selected, with Settings on it for the Mac
-    /// proof's "settings-stack".
-    @ViewBuilder private var stackRoot: some View {
-        if Self.settingsInStack {
-            detailRoot.inspector(isPresented: settingsPresented) {
-                VisorSettingsView(computer: $settingsComputer).inspectorColumnWidth(min: 280, ideal: 320, max: 420)
-            }
-        } else {
-            detailRoot
         }
     }
 
@@ -608,23 +625,7 @@ public struct VisorRootView: View {
     /// or nothing.
     @ViewBuilder private var detailRoot: some View {
         Group {
-            if VisorFixture.screen == "settings-stub", selection?.session != nil {
-                // The Mac proof's stand-in for the chat: rows of text and a
-                // field, none of AgentUI, beside Settings.
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(0..<40, id: \.self) { index in
-                            Text("Row \(index): rows now sync in the background, and the banner matches the layout you sent.")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .padding()
-                }
-                .safeAreaInset(edge: .bottom) {
-                    TextField("Message", text: .constant("")).textFieldStyle(.roundedBorder).padding()
-                }
-                .navigationTitle("Stand-in")
-            } else if case .project(let serverID, let cwd) = selection, let host = store.server(for: serverID),
+            if case .project(let serverID, let cwd) = selection, let host = store.server(for: serverID),
                       let project = host.projects.first(where: { $0.cwd == cwd }) {
                 ProjectSettingsView(host: host, project: project,
                                     rename: { nameDraft = project.alias ?? ""; renamingProject = ProjectTarget(host: host, project: project) },

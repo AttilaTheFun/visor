@@ -31,10 +31,9 @@ struct AgentScreen: View {
     @State private var previewFile: URL?
     /// The attach source open (files, the photo library, the camera).
     @State private var attachSource: AttachSource?
-    /// Settings (VisorRootView's): it and the session's inspector take
-    /// turns at the trailing side.
-    @Environment(\.settingsPresented) private var settingsPresented
-    @State private var showInspector = false
+    /// The window's one trailing pane (VisorRootView's): this session's
+    /// details open there, in Settings' place.
+    @Environment(\.trailingPane) private var trailingPane
     /// A fork or branch whose ✕ was tapped, while the person confirms.
     @State private var ending: SubSession?
     /// The composer has the keyboard: taken down before a command opens a
@@ -66,6 +65,15 @@ struct AgentScreen: View {
     /// The session as the computer lists it, through the transcript: told
     /// with the thread's own changes, not each time the list changes.
     private var info: SessionInfo? { transcript.info }
+
+    /// This session, as the trailing pane names it.
+    private var selection: SessionSelection { SessionSelection(serverID: host.id, sessionID: sessionID) }
+
+    /// This session's details in the window's trailing pane, or closed if
+    /// they are open (Settings, open there, gives way).
+    private func toggleDetails() {
+        trailingPane.wrappedValue = trailingPane.wrappedValue == .session(selection) ? nil : .session(selection)
+    }
 
     /// The composer's words before anything is typed: what the agent is
     /// waiting for, when it is not simply the next message.
@@ -110,7 +118,7 @@ struct AgentScreen: View {
         // phone.
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showInspector.toggle() } label: {
+                Button { toggleDetails() } label: {
                     Image(systemName: "info.circle")
                 }
                 .accessibilityLabel("Session details")
@@ -127,21 +135,6 @@ struct AgentScreen: View {
         } message: {
             Text("Its agent stops, and it leaves Visor. The agent keeps its conversation on the computer, to resume there.")
         }
-        // (The Mac proof's "settings-noinspector": the chat without its own
-        // inspector attached, beside Settings.)
-        .unless(VisorFixture.screen == "settings-noinspector") { chat in
-            chat.adaptiveInspector(isPresented: $showInspector, compact: sizeClass == .compact) {
-                if let info {
-                    SessionInspector(host: host, session: info, compact: sizeClass == .compact,
-                                     close: { showInspector = false },
-                                     archive: { showInspector = false; host.archive(sessionID) },
-                                     end: { showInspector = false; host.end(sessionID); ended.run() })
-                }
-            }
-        }
-        // The trailing side is Settings' or the session's, never both.
-        .onChange(of: settingsPresented.wrappedValue) { _, open in if open { showInspector = false } }
-        .onChange(of: showInspector) { _, open in if open { settingsPresented.wrappedValue = false } }
         .navigationTitle(sessionTitle)
         .toolbarTitleDisplayMode(.inline)
         // The draft is kept as it is typed, and taken up again when the
@@ -169,7 +162,7 @@ struct AgentScreen: View {
                     var still = Transaction()
                     still.disablesAnimations = true
                     withTransaction(still) {
-                        if screen == "inspector" { showInspector = true } else { showModels = true }
+                        if screen == "inspector" { trailingPane.wrappedValue = .session(selection) } else { showModels = true }
                     }
                 }
             }
@@ -557,12 +550,5 @@ private struct DraftKeeper: View {
     var body: some View {
         Color.clear.frame(width: 0, height: 0)
             .onChange(of: draft) { _, now in SavedDrafts.keep(now, server: server, session: session) }
-    }
-}
-
-fileprivate extension View {
-    /// The view as it is when `skip`, else with `apply`'s modifiers.
-    @ViewBuilder func unless(_ skip: Bool, _ apply: (Self) -> some View) -> some View {
-        if skip { self } else { apply(self) }
     }
 }

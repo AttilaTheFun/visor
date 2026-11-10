@@ -1,9 +1,10 @@
 // Visor's Settings, the app's own (Logan, 9 Nov 2026: every standalone app
 // has one, from a Settings button in the navigation bar, and no tab bar):
 // the computers, each one's settings a page of its own; the accounts, the
-// fork's and each Runner's; and About. NavigationUI's settingsInspector
-// shows it beside the detail in two columns and as a sheet in one; the Mac's
-// server keeps its own settings in the menu bar app.
+// fork's and each Runner's; and About. The window's one trailing pane
+// (VisorRootView, TrailingPane) shows it beside the detail in two columns
+// and as a sheet in one; the Mac's server keeps its own settings in the
+// menu bar app.
 
 import NavigationUI
 import SwiftUI
@@ -18,7 +19,7 @@ struct VisorSettingsView: View {
     @Binding var computer: String?
 
     var body: some View {
-        // In one column NavigationUI's sheet is a stack already; an inspector
+        // In one column the pane's sheet is a stack already; an inspector
         // isn't, so the computers' pages have one of their own there.
         if sizeClass == .compact {
             list
