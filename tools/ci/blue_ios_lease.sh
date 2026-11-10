@@ -93,8 +93,7 @@ run() {
 # the script's, in the subshell too).
 lease_ios() {
     echo "::group::An iOS lease ($1)"
-    # --device: the device type (shireworks.sh passes it on as the lease's
-    # `device` once it knows the option; asked of Shireworks, 10 Nov 2026).
+    # --device: the device type, passed on as the lease's `device`.
     run sh "$SW" lease ios --device="$1" --minutes=60 > "$work/lease"
     lease="$(. "$work/lease"; printf '%s' "$SHIREWORKS_ID")"
     echo "Leased $lease"
