@@ -120,6 +120,28 @@ final class PushTests: ServerTestCase {
         XCTAssertFalse(APNsSender.forgets(status: 0, reason: nil))
     }
 
+    /// A device that muted a kind of push isn't sent it; the silent state
+    /// push still goes to it, and an older client's registration, with no
+    /// list, wants every kind.
+    func testAMutedKindIsNotSent() {
+        var phone = Envelope(type: "push")
+        phone.deviceToken = "ab12"; phone.platform = "ios"; phone.pushEnvironment = "sandbox"; phone.pushTopic = "com.example.app"
+        phone.pushMuted = [PushKind.turn.rawValue]
+        XCTAssertTrue(server.registerPush(phone))
+        var older = Envelope(type: "push")
+        older.deviceToken = "cd34"; older.platform = "ios"; older.pushEnvironment = "sandbox"; older.pushTopic = "com.example.app"
+        XCTAssertTrue(server.registerPush(older))
+        XCTAssertEqual(server.pushTargets(kind: PushKind.turn.rawValue).map(\.token), ["cd34"])
+        XCTAssertEqual(server.pushTargets(kind: PushKind.waiting.rawValue).map(\.token), ["ab12", "cd34"])
+        XCTAssertEqual(server.pushTargets(kind: nil).map(\.token), ["ab12", "cd34"], "the widget's silent push")
+        XCTAssertEqual(VisorServer.keptPushDevices().first { $0.token == "ab12" }?.muted, ["turn"], "kept with the device")
+
+        // Registering again with nothing muted unmutes it.
+        phone.pushMuted = []
+        XCTAssertTrue(server.registerPush(phone))
+        XCTAssertEqual(server.pushTargets(kind: PushKind.turn.rawValue).map(\.token).sorted(), ["ab12", "cd34"])
+    }
+
     func testDevicesAreKept() {
         var e = Envelope(type: "push")
         e.deviceToken = "ab12"; e.platform = "ios"; e.pushEnvironment = "sandbox"; e.pushTopic = "com.example.app"

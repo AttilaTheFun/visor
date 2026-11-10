@@ -106,6 +106,10 @@ public final class VisorStore {
         VisorNotificationHandler.shared.onToken = { [weak self] in
             Task { self?.servers.forEach { $0.registerForPush() } }
         }
+        // Notifications turned on or off in Settings: each computer told.
+        VisorPreferences.shared.onMutedChange = { [weak self] in
+            self?.servers.forEach { $0.registerForPush() }
+        }
         VisorNotificationHandler.shared.onOpen = { [weak self] target in
             Task { self?.opening = target }
         }

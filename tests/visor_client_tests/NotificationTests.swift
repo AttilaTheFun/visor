@@ -50,6 +50,36 @@ final class NotificationTests: XCTestCase {
         XCTAssertEqual(told.said.count, count)
     }
 
+    /// A kind muted in Settings isn't told by the device either, and the
+    /// muted kinds are kept as a list `push` sends in a fixed order.
+    func testAMutedKindIsNotTold() {
+        let told = Told()
+        VisorHost.notifications = told
+        let preferences = VisorPreferences.shared
+        defer {
+            VisorHost.notifications = nil
+            for kind in PushKind.allCases { preferences.setNotifies(kind, true) }
+        }
+        preferences.setNotifies(.turn, false)
+        preferences.setNotifies(.waiting, false)
+        XCTAssertEqual(preferences.mutedList, ["waiting", "turn"])
+        XCTAssertEqual(VisorPreferences.kinds("turn,nonsense,goal"), [.turn, .goal], "a kind it doesn't know is left out")
+
+        let host = AgentServerConnection(record: AgentServerRecord(id: "h", name: "Mac", address: "mac.local", secret: ""))
+        let busy = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "Sync", busy: true, created: 0)
+        var idle = busy
+        idle.busy = false
+        host.notifyChanges(from: [busy], to: [idle])
+        var waiting = idle
+        waiting.pendingApproval = ApprovalRequest(id: "a", tool: "Bash", summary: "ls")
+        host.notifyChanges(from: [idle], to: [waiting])
+        XCTAssertTrue(told.said.isEmpty, "muted: neither the turn nor the wait")
+
+        preferences.setNotifies(.turn, true)
+        host.notifyChanges(from: [busy], to: [idle])
+        XCTAssertEqual(told.said.map(\.title), ["Sync finished"])
+    }
+
     /// A turn that ends on what it began with — the user's message, the
     /// reply not read yet — says it is ready; one that ends on the
     /// agent's words says them, however soon they were listed.

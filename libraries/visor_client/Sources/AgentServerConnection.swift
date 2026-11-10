@@ -181,16 +181,19 @@ public final class AgentServerConnection: Identifiable {
     }
 
     /// Gives the server this device's push token, so it can say when a
-    /// turn ends or an agent waits, with the app closed. Again on each
-    /// connect: the server keeps the latest.
+    /// turn ends or an agent waits, with the app closed, and the kinds this
+    /// device has muted (VisorPreferences). Again on each connect, and when
+    /// they change: the server keeps the latest.
     public func registerForPush() {
         let handler = VisorNotificationHandler.shared
         guard state == .connected, let token = handler.token else { return }
         let (platform, environment, topic) = (handler.platform, handler.environment, handler.topic)
+        let muted = VisorPreferences.shared.mutedList
         Task { [weak self] in
             // Whether the server sends pushes: then it says what happened,
             // and this device does not say it too.
-            let pushes = try? await self?.server.registerPush(token: token, platform: platform, environment: environment, topic: topic)
+            let pushes = try? await self?.server.registerPush(token: token, platform: platform, environment: environment, topic: topic,
+                                                              muted: muted)
             self?.serverPushes = pushes ?? false
         }
     }
@@ -205,6 +208,7 @@ public final class AgentServerConnection: Identifiable {
     /// the first list after connecting says what is, not what happened.
     func notifyChanges(from before: [SessionInfo], to after: [SessionInfo]) {
         guard let notifications = VisorHost.notifications, !serverPushes else { return }
+        let preferences = VisorPreferences.shared
         for new in after {
             guard let old = before.first(where: { $0.id == new.id }), !new.archived, !new.ended else { continue }
             // What the session said as its turn began: the user's message.
@@ -214,7 +218,7 @@ public final class AgentServerConnection: Identifiable {
             // The server, the session and what it says: the id replaces an
             // older one, and says where to go when it is opened.
             let id = { (kind: String) in VisorNotificationID(computer: self.record.address, session: new.id, kind: kind).rawValue }
-            if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval {
+            if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval, preferences.notifies(.waiting) {
                 if let question = approval.questions?.first {
                     notifications.notify(id: id("approval"), title: "\(title) asks", body: question.question)
                 } else {
@@ -223,9 +227,11 @@ public final class AgentServerConnection: Identifiable {
                 }
             }
             if let goal = old.goal, new.goal == nil {
-                notifications.notify(id: id("goal"), title: "\(title): goal done", body: goal)
+                if preferences.notifies(.goal) { notifications.notify(id: id("goal"), title: "\(title): goal done", body: goal) }
             } else if old.busy, !new.busy {
-                notifications.notify(id: id("turn"), title: "\(title) finished", body: Self.finishedBody(new.preview, prompt: prompt))
+                if preferences.notifies(.turn) {
+                    notifications.notify(id: id("turn"), title: "\(title) finished", body: Self.finishedBody(new.preview, prompt: prompt))
+                }
             }
         }
     }

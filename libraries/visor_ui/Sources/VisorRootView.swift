@@ -146,6 +146,19 @@ public struct VisorRootView: View {
     /// are no computers); then the app's account's sign-in while no one is
     /// signed in (a fork's, or the fixture's); the computers otherwise.
     /// Adding a computer is open to all three.
+    /// The look Settings › Appearance chose (VisorPreferences), unless a
+    /// screenshot fixture names its own; nil follows the device.
+    private var colorScheme: ColorScheme? {
+        let fixture = VisorFixture.appearance
+        if fixture == "dark" { return .dark }
+        if fixture == "light" { return .light }
+        switch VisorPreferences.shared.appearance {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
     public var body: some View {
         // What the open session's screen calls when the session is ended
         // there: held across passes, so the screen compares equal.
@@ -153,8 +166,9 @@ public struct VisorRootView: View {
         openSelection.run = { open($0) }
         popSubPage.run = { if !subPath.isEmpty { subPath.removeLast() } }
         return root
-            // Screenshots: one look, whatever the device's.
-            .preferredColorScheme(VisorFixture.appearance == "dark" ? .dark : VisorFixture.appearance == "light" ? .light : nil)
+            // Settings › Appearance; screenshots: one look, whatever the
+            // device's.
+            .preferredColorScheme(colorScheme)
             .sheet(isPresented: Binding(get: { store.addingServer }, set: { store.addingServer = $0 })) {
                 AddAgentServerSheet { record in
                     store.add(record)

@@ -41,7 +41,7 @@ extension VisorServer {
         let topic = envelope.pushTopic ?? ""
         if Self.apnsPlatforms.contains(platform), !token.allSatisfy(\.isHexDigit) || topic.isEmpty { return false }
         let device = PushDevice(token: token, platform: platform, environment: envelope.pushEnvironment ?? "",
-                                topic: topic, registered: Date().timeIntervalSince1970)
+                                topic: topic, registered: Date().timeIntervalSince1970, muted: envelope.pushMuted)
         pushDevices.removeAll { $0.token == token }
         pushDevices.append(device)
         keepPushDevices()
@@ -158,7 +158,7 @@ extension VisorServer {
     /// push, which shows nothing and lets the device update its widget.
     func pushStatus(_ title: String, session: String, status: String) {
         onStatusPush?(session, status)
-        deliver(collapse: session + "/status", data: pushData(session: session, title: title, status: status)) { device, jwt, collapse, data in
+        deliver(collapse: session + "/status", kind: nil, data: pushData(session: session, title: title, status: status)) { device, jwt, collapse, data in
             APNsSender.statusRequest(to: device, jwt: jwt, collapse: collapse, data: data)
         }
     }
@@ -166,17 +166,23 @@ extension VisorServer {
     /// Says one thing to every device that asked, as a push.
     func push(_ title: String, _ body: String, session: String, kind: String, status: String? = nil) {
         onPush?(title, body, session, kind)
-        deliver(collapse: session + "/" + kind, data: pushData(session: session, title: title, status: status)) { device, jwt, collapse, data in
+        deliver(collapse: session + "/" + kind, kind: kind, data: pushData(session: session, title: title, status: status)) { device, jwt, collapse, data in
             APNsSender.request(to: device, jwt: jwt, title: title, body: body, collapse: collapse, data: data)
         }
     }
 
-    /// Sends one request per device, forgetting a device APNs says is gone:
-    /// signed here with this computer's key, or else unsigned through the
-    /// push proxy.
-    private func deliver(collapse: String, data: [String: String],
+    /// The devices a push of this kind goes to (nil: a silent one): those
+    /// APNs reaches that haven't muted it.
+    func pushTargets(kind: String?) -> [PushDevice] {
+        pushDevices.filter { Self.apnsPlatforms.contains($0.platform) && $0.wants(kind) }
+    }
+
+    /// Sends one request per device that wants it, forgetting a device APNs
+    /// says is gone: signed here with this computer's key, or else unsigned
+    /// through the push proxy.
+    private func deliver(collapse: String, kind: String?, data: [String: String],
                          request make: @escaping @Sendable (PushDevice, String, String, [String: String]) -> OutgoingRequest?) {
-        let devices = pushDevices.filter { Self.apnsPlatforms.contains($0.platform) }
+        let devices = pushTargets(kind: kind)
         guard !devices.isEmpty else { return }
         let jwt: String
         let proxy: (url: String, token: String)?

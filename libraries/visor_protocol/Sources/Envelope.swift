@@ -189,6 +189,9 @@ public struct Envelope: Codable, Sendable {
     public var pushEnvironment: String?
     /// The app a push token is for: its bundle id.
     public var pushTopic: String?
+    /// The kinds of push this device doesn't want (`PushKind`'s raw values);
+    /// none, or an older client's absent list, is every kind.
+    public var pushMuted: [String]?
     /// Moving a session to another server (VisorServer+Migration.swift):
     /// the move it is part of (an offer's token where the session was, a
     /// plan's id where it goes), what the session's server offers, what

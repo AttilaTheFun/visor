@@ -168,12 +168,13 @@ extension VisorAgentServer {
 
     // MARK: Pushes and codes
 
-    public func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool {
+    public func registerPush(token: String, platform: String, environment: String, topic: String, muted: [String]) async throws -> Bool {
         var e = Envelope(type: "push")
         e.deviceToken = token
         e.platform = platform
         e.pushEnvironment = environment
         e.pushTopic = topic
+        e.pushMuted = muted
         // Whether the Mac sends pushes (it has an APNs key).
         return try await call("POST", "/push", e).exists ?? false
     }
