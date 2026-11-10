@@ -91,7 +91,7 @@ public struct VisorRootView: View {
     /// Settings with its title and Done, where it is a sheet.
     private var settingsSheet: some View {
         NavigationStack {
-            VisorSettingsView(computer: $settingsComputer)
+            VisorSettingsView(computer: $settingsComputer, inSheet: true)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { settingsPresented.wrappedValue = false }
