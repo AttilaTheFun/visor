@@ -11,7 +11,7 @@ import XCTest
 final class GitHubGateTests: XCTestCase {
     private let gate = GitHubGate()
     private let sha = String(repeating: "a", count: 40)
-    private let repo = "/repos/AttilaTheFun/oss"
+    private let repo = "/repos/AttilaTheFun/shireworks"
 
     private func rest(_ method: String, _ path: String, _ body: String? = nil) -> GateDecision {
         gate.decide(GateRequest(method: method, host: "api.github.com", target: path, body: body.map { Data($0.utf8) }))
@@ -47,8 +47,8 @@ final class GitHubGateTests: XCTestCase {
         XCTAssertFalse(rules.allows("other/two"))
         XCTAssertFalse(rules.allows("someone/else"))
         XCTAssertFalse(rules.allows("not a repo"))
-        passes(rest("GET", "/repos/attilathefun/OSS/pulls/3/comments"))
-        XCTAssertEqual(rest("GET", "/repos/attilathefun/OSS/pulls/3"), .allow(repository: "attilathefun/OSS"))
+        passes(rest("GET", "/repos/attilathefun/SHIREWORKS/pulls/3/comments"))
+        XCTAssertEqual(rest("GET", "/repos/attilathefun/SHIREWORKS/pulls/3"), .allow(repository: "attilathefun/SHIREWORKS"))
         // Outside them, a read goes on anonymously; a write never does.
         XCTAssertEqual(rest("GET", "/repos/someone/else/pulls"), .anonymous(repository: "someone/else"))
         refused(rest("POST", "/repos/someone/else/issues/1/comments", #"{"body":"x"}"#), "not among the repositories")
@@ -110,7 +110,7 @@ final class GitHubGateTests: XCTestCase {
         refused(rest("GET", "/repos/AttilaTheFun/x/a%2Fb"), "no plain path")
         refused(rest("GET", "/repos//AttilaTheFun/x"), "no plain path")
         refused(rest("GET", "/orgs/AttilaTheFun/members"), "outside")
-        passes(rest("GET", "/repos/AttilaTheFun/oss/contents/docs/my%20file.md?ref=main"))
+        passes(rest("GET", "/repos/AttilaTheFun/shireworks/contents/docs/my%20file.md?ref=main"))
         passes(rest("GET", "/rate_limit"))
         passes(rest("GET", "/repositories/123/pulls"))
     }
@@ -180,16 +180,16 @@ final class GitHubGateTests: XCTestCase {
         passes(rest("POST", "\(repo)/pulls/3/comments/7/replies", #"{"body":"Done"}"#))                   // 382
         XCTAssertEqual(rest("PUT", "\(repo)/pulls/3/merge",                                                 // 384-385
                             "{\"merge_method\":\"squash\",\"sha\":\"\(sha)\",\"commit_title\":\"t\",\"commit_message\":\"m\"}"),
-                       .check(.merge(repository: "AttilaTheFun/oss", number: 3, sha: sha, method: "squash")))
+                       .check(.merge(repository: "AttilaTheFun/shireworks", number: 3, sha: sha, method: "squash")))
         XCTAssertEqual(rest("PUT", "\(repo)/pulls/3/update-branch", "{\"expected_head_sha\":\"\(sha)\"}"),    // 386
-                       .check(.updateBranch(repository: "AttilaTheFun/oss", number: 3)))
+                       .check(.updateBranch(repository: "AttilaTheFun/shireworks", number: 3)))
         XCTAssertEqual(rest("POST", "\(repo)/actions/runs/1/rerun-failed-jobs"),                            // 387
-                       .check(.rerun(repository: "AttilaTheFun/oss", run: 1, failedOnly: true)))
+                       .check(.rerun(repository: "AttilaTheFun/shireworks", run: 1, failedOnly: true)))
         XCTAssertEqual(rest("POST", "\(repo)/actions/runs/1/rerun", "{}"),                                  // 388
-                       .check(.rerun(repository: "AttilaTheFun/oss", run: 1, failedOnly: false)))
-        XCTAssertEqual(rest("POST", "\(repo)/actions/runs/1/cancel"), .check(.cancel(repository: "AttilaTheFun/oss", run: 1))) // 389
+                       .check(.rerun(repository: "AttilaTheFun/shireworks", run: 1, failedOnly: false)))
+        XCTAssertEqual(rest("POST", "\(repo)/actions/runs/1/cancel"), .check(.cancel(repository: "AttilaTheFun/shireworks", run: 1))) // 389
         XCTAssertEqual(rest("POST", "\(repo)/actions/workflows/12/dispatches", #"{"ref":"main","inputs":{"kind":"quick"}}"#), // 390
-                       .check(.dispatch(repository: "AttilaTheFun/oss", workflow: 12, branch: "main")))
+                       .check(.dispatch(repository: "AttilaTheFun/shireworks", workflow: 12, branch: "main")))
         // 371, now allowed: gh workflow run sends it, and GitHub answers the run.
         passes(rest("POST", "\(repo)/actions/workflows/12/dispatches", #"{"ref":"main","return_run_details":true}"#))
     }
@@ -197,7 +197,7 @@ final class GitHubGateTests: XCTestCase {
     func testReleasesAreDraftsOnly() {
         passes(rest("POST", "\(repo)/releases", #"{"tag_name":"v1.1","target_commitish":"main","name":"1.1","body":"","draft":true}"#))
         refused(rest("POST", "\(repo)/releases", #"{"tag_name":"v1.1"}"#), "a draft only")
-        XCTAssertEqual(rest("PATCH", "\(repo)/releases/9", #"{"body":"new"}"#), .check(.releaseEdit(repository: "AttilaTheFun/oss", release: 9)))
+        XCTAssertEqual(rest("PATCH", "\(repo)/releases/9", #"{"body":"new"}"#), .check(.releaseEdit(repository: "AttilaTheFun/shireworks", release: 9)))
         refused(rest("PATCH", "\(repo)/releases/9", #"{"body":"new","prerelease":true}"#), "never sends prerelease")
     }
 
@@ -218,7 +218,7 @@ final class GitHubGateTests: XCTestCase {
     // MARK: GraphQL (§3.2)
 
     func testQueriesPassAndGhsWritesAreCheckedByTheirNodes() {
-        passes(graphQL("query PullRequestStatus { repository(owner: \"AttilaTheFun\", name: \"oss\") { pullRequests(first: 5) { nodes { number } } } }"))
+        passes(graphQL("query PullRequestStatus { repository(owner: \"AttilaTheFun\", name: \"shireworks\") { pullRequests(first: 5) { nodes { number } } } }"))
         passes(graphQL("{ viewer { login } }"))
         // gh pr ready, as githubv4 writes it.
         XCTAssertEqual(graphQL("mutation PullRequestReadyForReview($input:MarkPullRequestReadyForReviewInput!){markPullRequestReadyForReview(input: $input){clientMutationId}}",
@@ -266,22 +266,22 @@ final class GitHubGateTests: XCTestCase {
         return bytes + Array("0000".utf8)
     }
 
-    private func push(_ lines: [String], repository: String = "AttilaTheFun/oss") -> GateDecision {
+    private func push(_ lines: [String], repository: String = "AttilaTheFun/shireworks") -> GateDecision {
         let body = Data(pushList(lines) + Array("PACK".utf8))
         return gate.decide(GateRequest(method: "POST", host: "github.com", target: "/\(repository).git/git-receive-pack", body: body))
     }
 
     func testFetchesPassAndAPushIsCheckedByItsCommands() {
-        passes(gate.decide(GateRequest(method: "GET", host: "github.com", target: "/AttilaTheFun/oss.git/info/refs?service=git-upload-pack")))
-        passes(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/oss/git-upload-pack")))
+        passes(gate.decide(GateRequest(method: "GET", host: "github.com", target: "/AttilaTheFun/shireworks.git/info/refs?service=git-upload-pack")))
+        passes(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/shireworks/git-upload-pack")))
         XCTAssertEqual(gate.decide(GateRequest(method: "GET", host: "github.com", target: "/someone/else.git/info/refs?service=git-upload-pack")),
                        .anonymous(repository: "someone/else"), "outside the allowed ones: anonymously")
         refused(gate.decide(GateRequest(method: "GET", host: "github.com", target: "/login")), "only a repository's git")
         let zero = String(repeating: "0", count: 40)
         let other = String(repeating: "b", count: 40)
-        XCTAssertEqual(push(["\(zero) \(sha) refs/heads/feature/x"]), .check(.push(repository: "AttilaTheFun/oss", branches: ["feature/x"])))
+        XCTAssertEqual(push(["\(zero) \(sha) refs/heads/feature/x"]), .check(.push(repository: "AttilaTheFun/shireworks", branches: ["feature/x"])))
         // A forced update of one's own branch: Logan's choice ([G3f]).
-        XCTAssertEqual(push(["\(other) \(sha) refs/heads/fix"]), .check(.push(repository: "AttilaTheFun/oss", branches: ["fix"])))
+        XCTAssertEqual(push(["\(other) \(sha) refs/heads/fix"]), .check(.push(repository: "AttilaTheFun/shireworks", branches: ["fix"])))
         refused(push(["\(other) \(sha) refs/heads/main"]), "never pushed")
         refused(push(["\(other) \(sha) refs/heads/Master"]), "never pushed")
         refused(push(["\(zero) \(sha) refs/tags/v1.0"]), "never tags")
@@ -291,8 +291,8 @@ final class GitHubGateTests: XCTestCase {
         refused(push(["\(zero) \(sha) refs/heads/x.lock"]), "not a branch name")
         refused(push(["\(zero) \(sha) refs/heads/feature"], repository: "someone/else"), "not among")
         // git's probe, a flush alone.
-        passes(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/oss.git/git-receive-pack", body: Data("0000".utf8))))
-        refused(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/oss.git/git-receive-pack",
+        passes(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/shireworks.git/git-receive-pack", body: Data("0000".utf8))))
+        refused(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/shireworks.git/git-receive-pack",
                                         body: Data(pushList(["push-cert"])))), "signed pushes")
     }
 
@@ -304,10 +304,10 @@ final class GitHubGateTests: XCTestCase {
     }
 
     func testUploadsAndLFSWrites() {
-        refused(gate.decide(GateRequest(method: "POST", host: "uploads.github.com", target: "/repos/AttilaTheFun/oss/releases/1/assets?name=x")))
-        passes(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/oss.git/info/lfs/objects/batch",
+        refused(gate.decide(GateRequest(method: "POST", host: "uploads.github.com", target: "/repos/AttilaTheFun/shireworks/releases/1/assets?name=x")))
+        passes(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/shireworks.git/info/lfs/objects/batch",
                                        body: Data(#"{"operation":"download","objects":[]}"#.utf8))))
-        refused(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/oss.git/info/lfs/objects/batch",
+        refused(gate.decide(GateRequest(method: "POST", host: "github.com", target: "/AttilaTheFun/shireworks.git/info/lfs/objects/batch",
                                         body: Data(#"{"operation":"upload","objects":[]}"#.utf8))), "uploads")
     }
 }

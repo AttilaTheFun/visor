@@ -58,7 +58,7 @@ final class GitHubAppTokensTests: XCTestCase {
         let pem = key.pemRepresentation
         let tokens = GitHubAppTokens(appID: "123", installation: "456", key: { pem }, fetch: endpoint.fetch)
         let first = try await tokens.token(session: "a", repository: "AttilaTheFun/visor")
-        let second = try await tokens.token(session: "b", repository: "AttilaTheFun/oss")
+        let second = try await tokens.token(session: "b", repository: "AttilaTheFun/shireworks")
         XCTAssertEqual([first, second], ["ghs_minted1", "ghs_minted1"], "one token for every session and repository")
         let asked = try XCTUnwrap(endpoint.asked.withLock { $0.first })
         XCTAssertEqual(asked.httpMethod, "POST")

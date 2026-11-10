@@ -81,8 +81,8 @@ visor's CI (.github/workflows/ci.yml) builds blue on every pull request and
 every commit to main. Until the Mac Studio (Logan, 5 Nov 2026), Visor is
 iOS, macOS and Android, with Android the only client on Isomer: the web
 client is kept building but not run, and blue's iPhone snapshots are off.
-- `blue-web` (a Linux container of Visor's agent image leased from OS
-  Server, tools/ci/container_blue_web.sh --build-only): the web client
+- `blue-web` (a Linux container of Visor's agent image leased from
+  Shireworks, tools/ci/container_blue_web.sh --build-only): the web client
   built. Without `--build-only`, by hand, the script goes on to its tests,
   then the end-to-end test, the transcript layout and the composer
   checks in headless Chromium (Playwright's arm64 build, pinned).
@@ -166,8 +166,8 @@ flow takes it too.
   lease (`ANDROID_SERIAL` and the lab's adb from it), with references of
   their own.
 - `red-ios`, `web-desktop`, `macos`: red's app on the iPhone simulator, and
-  desktop Safari and the Mac app on a Mac leased from oss (`oss machine`,
-  with the computer's key or token), released when the run ends.
+  desktop Safari and the Mac app on a Mac leased from Shireworks
+  (tools/ci/shireworks.sh, with the computer's key or token), released when the run ends.
   Safari's site goes to the guest, and safaridriver's port comes back, over
   the run's SSH connection; the Mac app's window is cropped from the
   machine's own screenshot. The guest's look is dark, said outright.

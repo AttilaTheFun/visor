@@ -1,7 +1,7 @@
 import SwiftUI
 import VisorProtocol
 
-/// The machines a session leases from its server's oss, at the foot of its
+/// The machines a session leases from its server's Shireworks, at the foot of its
 /// row: each its kind's mark and name, faint until it is ready.
 @MainActor
 struct LeaseMarks: View {

@@ -24,13 +24,13 @@ extension VisorServer {
         process.effort = info.effort
         // Visor's own, and this computer's agents/<kind>.env for an agent
         // here: its paths and git sign-in are this computer's, so an agent
-        // in a container has only Visor's (and the oss server's sign-ins
+        // in a container has only Visor's (and Shireworks' sign-ins
         // for its image).
         // And, where the GitHub proxy is on for it, the way to GitHub.
         let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]
             .merging(githubProxyEnvironment(for: info)) { ours, _ in ours }
         process.approvalEnvironment = info.container == nil ? AgentEnvironmentFile.read(info.agent).merging(own) { _, ours in ours } : own
-        // An agent in a container on oss runs there.
+        // An agent in a container on Shireworks runs there.
         (process as? HostableProcess)?.container = placement(for: info)
         return process
     }

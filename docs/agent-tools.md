@@ -1,6 +1,6 @@
 # Agent tools (design)
 
-> Superseded (0.44): agents reach GitHub and Shireworks through MCP servers Visor Server proxies (docs/protocol.md, Proxied MCP servers), and containers come from a container host (docs/container-host.md). Visor no longer has `visor machine` or OSSClient. Kept for the reasoning.
+> Superseded (0.44): agents reach GitHub and Shireworks through MCP servers Visor Server proxies (docs/protocol.md, Proxied MCP servers), and containers come from a container host (docs/container-host.md). Visor no longer has `visor machine` or Shireworks' Swift client. Kept for the reasoning.
 
 What Visor puts in a session's hands, and how it keeps them narrow.
 Status: proposed. Nothing here is built beyond what "Today" says.
@@ -27,8 +27,8 @@ makes tags, whatever a tool gets wrong.
 ## Today
 
 - `visor` is a Node script on every agent's path: on the computer, and
-  read-only at `/opt/visor` in containers. Its `visor machine` leases OS
-  Server machines through the server, in the session's name, with oss's
+  read-only at `/opt/visor` in containers. Its `visor machine` leases Shireworks
+  machines through the server, in the session's name, with Shireworks'
   token, which the session never sees. This is the pattern for every
   tool below.
 - Visor's MCP server (`visor-agent-host mcp`, libraries/visor_mcp_bridge;
@@ -42,7 +42,7 @@ makes tags, whatever a tool gets wrong.
 - Not yet narrow:
   - a session on the computer has the computer's own sign-ins (git,
     `gh`, `agent-token`, the shell's App Store Connect key);
-  - a container's `.netrc` holds oss's read token, read-only, for its
+  - a container's `.netrc` holds Shireworks' read token, read-only, for its
     Bazel cache and files.
 
 ## Pieces
@@ -50,7 +50,7 @@ makes tags, whatever a tool gets wrong.
 ### Injection
 
 The server writes its tools into one folder: `visor`, `gh`, `git-credential-visor`,
-`oss` and `apple`. It puts that folder first on the path of every agent
+`shireworks` and `apple`. It puts that folder first on the path of every agent
 it starts: on the computer, and at `/opt/visor` in a container. Each tool
 is a script the server writes from its own build, so a server's tools
 always match it. A tool takes the session's identity from its
@@ -62,7 +62,7 @@ else of value.
 | Credential | Used for | Kept |
 | --- | --- | --- |
 | Each agent's GitHub App key (Claude's, Codex's) | installation tokens, minted per operation | the server's data folder, mode 600 |
-| Shireworks servers' tokens | leasing, exec, storage | as now (`POST /api/oss`) |
+| Shireworks servers' tokens | leasing, exec, storage | the server's settings, as then |
 | The App Store Connect API key | bundle ids, capabilities, development profiles | the server's data folder |
 | Later: Linear's key, a project's run-time secrets | their tools | the same |
 
@@ -123,25 +123,25 @@ the computer become rare, without giving a container the computer.
   Pull requests are the session's agent's app's, as `agent-token`'s are
   today, which moves into Visor.
 
-### oss
+### shireworks
 
 The Shireworks client, scoped to the session, on plain Shireworks API. Small
 calls (lease, renew, release, list) the server forwards as it does every
-Shireworks call, holding oss's token and making the session the holder.
+Shireworks call, holding Shireworks' token and making the session the holder.
 Bytes don't go through the server: for a stream (exec, xctest, an upload,
 a stored object, an install), the server asks Shireworks for a grant
 (`/v1/grants`: one verb on one lease or object, signed, minutes long) and
 hands the tool its URL, and the tool streams to Shireworks directly, a
 chunked body in and chunked lines out. A grant is all the tool holds.
 
-- `oss machine …`: lease, renew, release, exec (stdin streamed in, the
+- `shireworks machine …`: lease, renew, release, exec (stdin streamed in, the
   output streamed back, the exit status), upload, download, screenshot,
   simctl, adb.
-- `oss machine xctest <ios lease> <bundle>`: tests on a leased simulator,
+- `shireworks machine xctest <ios lease> <bundle>`: tests on a leased simulator,
   their output streamed back.
-- `oss storage put <file> [--ttl …]`, `get`, `ls`, `renew`, `rm`: the
+- `shireworks storage put <file> [--ttl …]`, `get`, `ls`, `renew`, `rm`: the
   session's own file store (`/v1/storage/…`), objects kept while a lease
-  on them is renewed. `oss machine install <lease> <object>`: what an
+  on them is renewed. `shireworks machine install <lease> <object>`: what an
   agent built, installed for testing without publishing it. Only CI
   publishes.
 
@@ -180,8 +180,8 @@ A container reaches only what an allowlist names:
 - Apple's and swift.org's downloads;
 - the agent's own model API.
 
-With nothing else reachable, the tools are the only way to act. OS
-Server enforces the allowlist, as a lease option, since it runs the
+With nothing else reachable, the tools are the only way to act. Shireworks
+enforces the allowlist, as a lease option, since it runs the
 container; Visor gives the list for each session:
 
 - the container is on an internal network, host-only, with no route out;
@@ -209,7 +209,7 @@ what only the computer can do, by `visor request` where possible.
 2. `gh` and `git-credential-visor`, with the agent apps' keys in the
    server. `agent-token` retires.
 3. `visor ask`, `notify` and `request`.
-4. `oss`: small calls forwarded, streams by grant; storage and xctest as
+4. `shireworks`: small calls forwarded, streams by grant; storage and xctest as
    Shireworks ships them.
 5. `apple`.
 6. The container network allowlist, with Shireworks.

@@ -79,10 +79,6 @@ concurrency:
 permissions:
   contents: read
   actions: read
-# Whom the jobs' Shireworks leases are for (Shireworks' API 12): with the
-# runner's `ci` key (~/.config/oss/key), each lease is `<job>-<run>@ci`.
-env:
-  OSS_CLIENT_ID: ${{ github.job }}-${{ github.run_id }}
 # Every step in bash with pipefail (GitHub's `bash --noprofile --norc -eo
 # pipefail {0}`): its default, `bash -e {0}`, takes a pipe's last status, so
 # a failing command piped into tee or grep would pass.
@@ -332,8 +328,8 @@ jobs:
           path: review
           if-no-files-found: ignore
 
-  # The command-line server on Windows, in a Windows VM leased from OS
-  # Server (tools/ci/windows_vm_tests.sh). Off until the Mac Studio (a
+  # The command-line server on Windows, in a Windows VM leased from
+  # Shireworks (tools/ci/windows_vm_tests.sh). Off until the Mac Studio (a
   # 16 GB VM). To bring it back: verify's `if`, and in verify's needs.
   windows:
     if: false

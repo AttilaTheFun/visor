@@ -21,25 +21,26 @@ Targets:
                from the lease); its own references, the phone's screen size;
                held in portrait, however the phone lies
   android-lab-landscape  the same, held in landscape (references of its own)
-  web-desktop  the web client in desktop Safari, on a Mac leased from oss
-               (`oss machine`, with the computer's key or token), driven
-               by safaridriver there
+  web-desktop  the web client in desktop Safari, on a Mac leased from
+               Shireworks (tools/ci/shireworks.sh, with SHIREWORKS_SERVERS
+               and a key or token), driven by safaridriver there
   macos        the macOS app, on the same lease, its window cropped from the
                machine's screenshot
 
-In CI (tools/ci/blue_ios_lease.sh) web-mobile runs on an iOS lease of OS
-Server's, the web site built on Linux: VISOR_SNAPSHOT_IOS_LEASE names the
-lease it drives (`oss machine simctl`, its screenshots), and
+In CI (tools/ci/blue_ios_lease.sh) web-mobile runs on an iOS lease of
+Shireworks', the web site built on Linux: VISOR_SNAPSHOT_IOS_LEASE names the
+lease it drives (`shireworks.sh simctl`, its screenshots), and
 VISOR_SNAPSHOT_WEB_BASE where the lease's simulator reaches the site,
-served on a Mac slot beside it (serve_site.py); VISOR_SNAPSHOT_WEB_SITE
-names a site built elsewhere for this harness to serve itself.
+served on a Mac slot beside it (serve_site.py), which a lease needs;
+VISOR_SNAPSHOT_WEB_SITE names a site built elsewhere for this harness to
+serve itself.
 
 Nothing here touches this Mac's own screen: Safari and the Mac app run on the
 leased Mac, the iOS targets in the simulator, Android in the emulator or the lab's
 phone (never a person's own). Exit status is
 1 when anything changed or failed, so a merge can be held on it.
 """
-import argparse, atexit, functools, http.server, json, os, plistlib, re, shlex, shutil, socket, subprocess, sys, threading, time, urllib.request, zipfile
+import argparse, atexit, functools, http.server, json, os, plistlib, re, shlex, shutil, socket, subprocess, sys, tempfile, threading, time, urllib.request, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
@@ -140,7 +141,8 @@ def bazel_output(target, *flags, suffix=""):
 IOS_LEASE = os.environ.get("VISOR_SNAPSHOT_IOS_LEASE", "")
 WEB_BASE = os.environ.get("VISOR_SNAPSHOT_WEB_BASE", "").rstrip("/")
 WEB_SITE = os.environ.get("VISOR_SNAPSHOT_WEB_SITE", "")
-OSS = os.environ.get("OSS", "/Applications/Shireworks.app/Contents/Helpers/oss")
+# Shireworks' REST API, through the script every repository's CI copies.
+SHIREWORKS = ["sh", os.path.join(ROOT, "tools", "ci", "shireworks.sh")]
 
 @functools.lru_cache(None)
 def web_site():
@@ -153,64 +155,15 @@ def web_site():
 def web_url(base, screen):
     return f"{base}/?fixture=snapshot&screen={screen}&t={int(time.time() * 1000)}"
 
-def _leases(listing, out):
-    """Every lease (a dict with an `id`) anywhere in `oss machine list
-    --json`'s answer, whatever it nests them in."""
-    if isinstance(listing, dict):
-        if "id" in listing:
-            out.append(listing)
-        for value in listing.values():
-            _leases(value, out)
-    elif isinstance(listing, list):
-        for value in listing:
-            _leases(value, out)
-    return out
-
-@functools.lru_cache(None)
-def lease_host():
-    """The address the iOS lease's simulator reaches this Mac by, for the
-    site web-mobile serves it. A simulator on this Mac shares its loopback;
-    one in Shireworks' primary Mac VM (the lease names it as `primary`) has
-    the VM's own, and reaches this Mac on the VMs' network: the address of
-    this Mac's side of the route to the VM (`route -n get` its
-    `guestAddress`, then that interface's address from `ifconfig`), or what
-    the lease says it is (`hostAddress`). Only that address is bound, so
-    nothing else on the network sees the site."""
-    if not IOS_LEASE:
-        return "127.0.0.1"
-    leases = _leases(json.loads(sh([OSS, "machine", "list", "--json"]).stdout), [])
-    ours = next((l for l in leases if l.get("id") == IOS_LEASE), {})
-    if ours.get("hostAddress"):
-        return ours["hostAddress"]
-    primary = ours.get("primary")
-    if not primary:
-        return "127.0.0.1"
-    if isinstance(primary, dict):
-        guest = primary.get("guestAddress") or next((l.get("guestAddress") for l in leases if l.get("id") == primary.get("id")), None)
-    else:
-        guest = next((l.get("guestAddress") for l in leases if l.get("id") == primary), None)
-    if not guest:
-        sys.exit(f"snapshots: lease {IOS_LEASE} is in primary {primary}, whose guestAddress oss machine list does not give")
-    route = sh(["route", "-n", "get", guest]).stdout
-    interface = next((line.split(":", 1)[1].strip() for line in route.splitlines() if line.strip().startswith("interface:")), "")
-    # The interface's IPv4 address, as ifconfig says it (ipconfig getifaddr
-    # answers nothing for vmnet's bridge, bridge100).
-    shown = sh(["ifconfig", interface], check=False).stdout if interface else ""
-    address = next((line.split()[1] for line in shown.splitlines() if line.strip().startswith("inet ") and len(line.split()) > 1), "")
-    if not address:
-        sys.exit(f"snapshots: no address of this Mac on the route to {guest} (interface {interface or 'none'})")
-    log(f"web-mobile serves on {address}, this Mac's side of the network to primary {guest}")
-    return address
-
 # --- the iOS simulator (the harness's own, booted once per run)
 
 _simulator = None
 
 def simctl(*arguments):
-    """`xcrun simctl` on the harness's simulator, or `oss machine simctl` on
-    CI's lease (its booted simulator)."""
+    """`xcrun simctl` on the harness's simulator, or `shireworks.sh simctl`
+    on CI's lease (its booted simulator)."""
     if IOS_LEASE:
-        return sh([OSS, "machine", "simctl", IOS_LEASE, *arguments])
+        return sh(SHIREWORKS + ["simctl", IOS_LEASE, *arguments])
     return sh(["xcrun", "simctl", *arguments])
 
 def screenshot(udid, out):
@@ -218,7 +171,7 @@ def screenshot(udid, out):
     unmasked, the island shows or not with whatever the system is doing. A
     lease's screenshots are masked already."""
     if IOS_LEASE:
-        sh([OSS, "machine", "screenshot", IOS_LEASE, out])
+        sh(SHIREWORKS + ["screenshot", IOS_LEASE, out])
     else:
         sh(["xcrun", "simctl", "io", udid, "screenshot", "--mask=black", out])
 
@@ -263,10 +216,11 @@ class WebMobile:
         if WEB_BASE:
             # Served already, where the lease's simulator reaches it.
             self.base = WEB_BASE
+        elif IOS_LEASE:
+            sys.exit("snapshots: an iOS lease needs VISOR_SNAPSHOT_WEB_BASE, where its simulator reaches the site (serve_site.py on a Mac slot beside it)")
         else:
-            host = lease_host()
-            self.server = serve(web_site(), host, 8791)
-            self.base = "http://localhost:8791" if host == "127.0.0.1" else f"http://{host}:8791"
+            self.server = serve(web_site(), "127.0.0.1", 8791)
+            self.base = "http://localhost:8791"
         # One load to warm Safari up: the first load of a fresh site (the
         # wasm compiled, the modules fetched) outlasts the settle and came
         # out blank.
@@ -473,23 +427,25 @@ class AndroidLabLandscape(AndroidLab):
         # landscape the picture is the check.
         return []
 
-# --- a Mac leased from oss (desktop Safari and the Mac app): through `oss
-# machine`, with this computer's key or token; one lease for the run,
-# released when it ends
-
-def machine():
-    return ["oss", "machine"]
+# --- a Mac leased from Shireworks (desktop Safari and the Mac app): through
+# tools/ci/shireworks.sh, with this computer's SHIREWORKS_SERVERS and key or
+# token; one lease for the run, its SSH by a key of the run's own, released
+# when it ends
 
 @functools.lru_cache(None)
 def mac_lease():
-    # oss's own lease JSON leaves the host to its client: its exports say it.
-    exports = sh(machine() + ["lease", "macos", "--exports"]).stdout
+    keys = tempfile.mkdtemp(prefix="visor-snapshots-key-")
+    atexit.register(lambda: shutil.rmtree(keys, ignore_errors=True))
+    key = os.path.join(keys, "key")
+    sh(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "visor-snapshots", "-f", key])
+    exports = sh(SHIREWORKS + ["lease", "macos", "--minutes=60", f"--key={key}.pub"]).stdout
     values = dict(line[len("export "):].split("=", 1) for line in exports.splitlines() if line.startswith("export "))
-    values = {key: (shlex.split(value) or [""])[0] for key, value in values.items()}
-    lease = {"id": values["OSS_ID"], "host": values["OSS_HOST"], "sshPort": values["OSS_SSH_PORT"], "sshUser": values["OSS_SSH_USER"]}
-    atexit.register(lambda: sh(machine() + ["release", lease["id"]], check=False))
+    values = {name: (shlex.split(value) or [""])[0] for name, value in values.items()}
+    lease = {"id": values["SHIREWORKS_ID"], "host": values["SHIREWORKS_HOST"],
+             "sshPort": values["SHIREWORKS_SSH_PORT"], "sshUser": values["SHIREWORKS_SSH_USER"]}
+    atexit.register(lambda: sh(SHIREWORKS + ["release", lease["id"]], check=False))
     log("leased a Mac:", lease["id"])
-    mac = {"id": lease["id"], "target": f"{lease['sshUser']}@{lease['host']}", "port": str(lease["sshPort"])}
+    mac = {"id": lease["id"], "target": f"{lease['sshUser']}@{lease['host']}", "port": str(lease["sshPort"]), "key": key}
     # The dark look, said outright: the lease's image runs dark, and turning a
     # running session light takes System Events and a consent no one is there
     # to give; said here, a session started again stays dark too.
@@ -498,7 +454,7 @@ def mac_lease():
 
 def guest_ssh(mac, *options):
     return ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-            "-o", "LogLevel=ERROR", "-p", mac["port"], *options, mac["target"]]
+            "-o", "LogLevel=ERROR", "-o", "IdentitiesOnly=yes", "-i", mac["key"], "-p", mac["port"], *options, mac["target"]]
 
 def guest(command, check=True):
     """A command in the leased Mac (its login session's, with `as_user`)."""
@@ -508,7 +464,7 @@ def as_user(command):
     return f"sudo -n launchctl asuser $(id -u) {command}"
 
 class WebDesktop:
-    describe = {"app": "Visor Isomer", "device": "Safari, macOS (an oss lease)", "orientation": ""}
+    describe = {"app": "Visor Isomer", "device": "Safari, macOS (a Shireworks lease)", "orientation": ""}
 
     """Desktop Safari on a leased Mac, through safaridriver (WebDriver): a fixed
     window size and a screenshot of the page alone, without Safari's chrome.
@@ -562,7 +518,7 @@ out.join('\\n');"""
 
 class MacOS:
     # Red Visor's Mac app.
-    describe = {"app": "Visor", "device": "macOS (an oss lease)", "orientation": ""}
+    describe = {"app": "Visor", "device": "macOS (a Shireworks lease)", "orientation": ""}
 
     """The Mac app on a leased Mac: the machine's screenshot (its own, taken
     from outside the guest, so no permission in it), cropped to the app's
@@ -579,7 +535,7 @@ class MacOS:
         guest("pkill -x Visor; rm -rf ~/Applications/Visor.app; mkdir -p ~/Applications", check=False)
         subprocess.run(guest_ssh(mac) + ["cat > /tmp/windows.js"], input=WINDOWS_JS.encode(), check=True)
         subprocess.run(["scp", "-rq", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-                        "-o", "LogLevel=ERROR", "-P", mac["port"], self.app, f"{mac['target']}:Applications/Visor.app"], check=True)
+                        "-o", "LogLevel=ERROR", "-o", "IdentitiesOnly=yes", "-i", mac["key"], "-P", mac["port"], self.app, f"{mac['target']}:Applications/Visor.app"], check=True)
     def capture(self, screen, out):
         # A fresh window each time: no restored frame or state.
         guest("pkill -x Visor; sleep 1; rm -rf ~/Library/Saved\\ Application\\ State/com.LoganShire.VisorClient.macOS.savedState; "
@@ -596,7 +552,7 @@ class MacOS:
         # screenshot's in pixels is the screen's scale.
         points = next(int(float(row[4])) for row in rows if row[0] == "Window Server")
         whole = out + ".screen.png"
-        sh(machine() + ["screenshot", mac_lease()["id"], whole])
+        sh(SHIREWORKS + ["screenshot", mac_lease()["id"], whole])
         pixels = int(sh(["sips", "-g", "pixelWidth", whole]).stdout.split()[-1])
         scale = pixels // points
         sh(["sips", "--cropToHeightWidth", str(height * scale), str(width * scale),

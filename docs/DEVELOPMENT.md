@@ -727,7 +727,7 @@ host's `exec`). A container's builds reach a Bazel cache and a file server
 the ported tools) only through what is in that folder: a `.bazelrc`
 (`build --remote_cache=http://<host>:7490 --noremote_upload_local_results`)
 and a `.netrc` with each server's read token, put there by whoever runs
-the computer (`oss cache use` writes both into a home of its own). Visor
+the computer. Visor
 itself knows no cache: until 0.43 it wrote them from the Shireworks servers it
 knew (VisorServer+BuildCache).
 No Xcode is mounted: the Apple apps build in a container with
@@ -768,8 +768,11 @@ Linux and Windows VMs, iOS simulators, Android emulators) through the MCP
 servers their Visor server passes on to them (docs/protocol.md, Proxied MCP
 servers): a Shireworks server's own MCP port, set as an endpoint with a key of the
 server's (`<session>@<application>` is each lease's holder), whose tools
-the agent calls as `<endpoint>__oss_lease` and so on. Visor itself knows
-nothing of Shireworks (0.44 dropped `visor machine` and OSSClient).
+the agent calls as `<endpoint>__lease` and so on (Shireworks' `/shireworks`
+MCP path; its first path, still the sessions' until they move, prefixes
+each tool with the old name). Visor itself knows
+nothing of Shireworks (0.44 dropped `visor machine` and Shireworks' Swift
+client).
 
 **Visor Runner's MCP proxy.** A Visor server in a container (or any server
 that shouldn't hold the MCP servers' keys) sets its MCP servers to
@@ -857,9 +860,9 @@ front paths, `visor-server front`).
   `apple-sdks-27.2.tar.gz` or the tools' archives (named by their hashes),
   or `common:linux --downloader_config=.bazel_downloader.user` (ignored by
   git, like .bazelrc.user) with the lines `rewrite
-  apple-sdks\.invalid/.* http://<oss host>:7490/files/sha256/<the SDK's sha256>`
+  apple-sdks\.invalid/.* http://<Shireworks host>:7490/files/sha256/<the SDK's sha256>`
   and `rewrite ported-tools\.invalid/sha256/(.*)
-  http://<oss host>:7490/files/sha256/$1`, for a Shireworks server that serves
+  http://<Shireworks host>:7490/files/sha256/$1`, for a Shireworks server that serves
   them (a container's `.netrc`, from `<data>/containers/home/`, has the
   token). Without it (CI's Linux
   runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
@@ -928,8 +931,8 @@ front paths, `visor-server front`).
     of Visor's agent image), leasing nothing, the rules
     (tools/check_rules.py), every app and the Mac's test bundles, libraries
     and servers built on Linux (tools/ci/container_build.sh), and the
-    command-line server built with SwiftPM. Its Bazel reads OS
-    Server's cache and never writes it. A diff of documentation alone checks
+    command-line server built with SwiftPM. Its Bazel reads Shireworks'
+    cache and never writes it. A diff of documentation alone checks
     the rules and stops there; a newer push cancels the run before. A fork's
     pull request runs nothing.
   - **Each commit on main** runs `populate`, the cache's one writer: the

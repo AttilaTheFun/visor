@@ -25,8 +25,8 @@ final class RunnerFilesTests: XCTestCase {
         XCTAssertEqual(command.value("proxy-server Builds token"), "t1")
         command.set("mcp gh API_KEY", nil)
         XCTAssertNil(agent.value("mcp gh API_KEY"))
-        command.set("mcp oss API_KEY", "")
-        XCTAssertNil(agent.value("mcp oss API_KEY"), "empty is none")
+        command.set("mcp shireworks API_KEY", "")
+        XCTAssertNil(agent.value("mcp shireworks API_KEY"), "empty is none")
         let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber
         XCTAssertEqual(mode?.intValue, 0o600)
     }

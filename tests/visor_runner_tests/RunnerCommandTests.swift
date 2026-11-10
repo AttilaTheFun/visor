@@ -42,7 +42,7 @@ final class RunnerCommandTests: XCTestCase {
         XCTAssertEqual(run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp"]), 0)
         XCTAssertNil(secrets.value(ProxyTokens.secretKey(endpoint: "gh", header: "API_KEY")))
         // A secret with no value given changes nothing.
-        XCTAssertEqual(run(["endpoint", "set", "oss", "http://oss.example:7480/mcp", "--secret", "API_KEY"]), 2)
+        XCTAssertEqual(run(["endpoint", "set", "shireworks", "http://shireworks.example:7480/mcp", "--secret", "API_KEY"]), 2)
         XCTAssertEqual(RunnerConfig.read(folder)?.endpoints.map(\.name), ["gh"])
         XCTAssertEqual(run(["endpoint", "set", "x", "https://example.com/mcp"]), 2, "plain HTTP only")
     }

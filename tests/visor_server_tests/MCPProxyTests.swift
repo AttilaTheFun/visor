@@ -130,7 +130,7 @@ final class MCPProxyTests: ServerTestCase {
     func testARemoteNamesItsGitHubRepository() {
         XCTAssertEqual(GitHubRepository.name(ofRemote: "https://github.com/AttilaTheFun/visor.git"), "AttilaTheFun/visor")
         XCTAssertEqual(GitHubRepository.name(ofRemote: "git@github.com:AttilaTheFun/agent_ui.git\n"), "AttilaTheFun/agent_ui")
-        XCTAssertEqual(GitHubRepository.name(ofRemote: "ssh://git@github.com/AttilaTheFun/oss"), "AttilaTheFun/oss")
+        XCTAssertEqual(GitHubRepository.name(ofRemote: "ssh://git@github.com/AttilaTheFun/shireworks"), "AttilaTheFun/shireworks")
         XCTAssertNil(GitHubRepository.name(ofRemote: "https://gitlab.com/AttilaTheFun/visor.git"))
         XCTAssertNil(GitHubRepository.name(ofRemote: "https://github.com/AttilaTheFun"))
         XCTAssertNil(GitHubRepository.name(ofRemote: "https://github.com/AttilaTheFun/visor/tree/main"))
