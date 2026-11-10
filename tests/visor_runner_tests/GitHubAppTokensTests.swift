@@ -4,7 +4,7 @@
 // for again once GitHub turns it down. No agent, server or container holds
 // the key or the token.
 
-import CryptoExtras
+import _CryptoExtras
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking

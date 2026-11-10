@@ -3,7 +3,7 @@
 // alone; a Visor server added is given its settings, every MCP server at
 // the proxy with its own token, and no secret.
 
-import CryptoExtras
+import _CryptoExtras
 import Foundation
 import VisorRunner
 import XCTest

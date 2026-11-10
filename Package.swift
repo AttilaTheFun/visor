@@ -117,7 +117,7 @@ let system: [Target] = [
                            .product(name: "Crypto", package: "swift-crypto"), .product(name: "SwiftASN1", package: "swift-asn1"),
                            .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOPosix", package: "swift-nio"),
                            .product(name: "NIOHTTP1", package: "swift-nio"), .product(name: "NIOSSL", package: "swift-nio-ssl"),
-                           .product(name: "CryptoExtras", package: "swift-crypto")],
+                           .product(name: "_CryptoExtras", package: "swift-crypto")],
             path: "libraries/visor_runner/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorRunnerAgentMain", dependencies: ["VisorRunner"],
                       path: "applications/visor_runner_agent", exclude: ["BUILD.bazel"], swiftSettings: strict),
@@ -139,7 +139,7 @@ let tests: [Target] = [
                 dependencies: ["VisorRunner", "CVisorPOSIX", .product(name: "X509", package: "swift-certificates"),
                                .product(name: "Crypto", package: "swift-crypto"), .product(name: "NIOCore", package: "swift-nio"),
                                .product(name: "NIOPosix", package: "swift-nio"), .product(name: "NIOHTTP1", package: "swift-nio"),
-                               .product(name: "NIOSSL", package: "swift-nio-ssl"), .product(name: "CryptoExtras", package: "swift-crypto")],
+                               .product(name: "NIOSSL", package: "swift-nio-ssl"), .product(name: "_CryptoExtras", package: "swift-crypto")],
                 path: "tests/visor_runner_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The agents' host, built with the server: `swift build -c release` puts
@@ -152,7 +152,9 @@ let runnerPackages: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-certificates.git", from: "1.21.1"),
     // 3.x too: the client's SSH takes it, and an app that embeds the client
     // may hold it there (Apple's containerization 0.33 allows 3.x alone).
-    // The Runner's own builds resolve 4.x (Package.resolved).
+    // The Runner's own builds resolve 4.x (Package.resolved). The Runner
+    // takes `_CryptoExtras`, the name both have (4.x's re-exports its
+    // CryptoExtras): a package's every target must resolve, used or not.
     .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
     .package(url: "https://github.com/apple/swift-asn1.git", from: "1.7.3"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
