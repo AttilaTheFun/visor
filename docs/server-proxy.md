@@ -165,14 +165,26 @@ What the container's server needs of Shireworks:
   (tools/containers/visor-agent), the released line's: `visor-server` and
   `visor-agent-host` in /usr/local/bin, the agents' command lines, git,
   Bazelisk. Shireworks follows the line Visor releases.
-- **Its command**: `visor-server --port 7433`, listening on the container's
-  own interface, with its proxy's URL and token given at start (step 2's
-  setting: the Mac's address on the containers' network and the proxy's
-  port, the token from Visor.app's proxy). Started again when it stops;
-  its agents outlive a restart under their hosts, as on the Mac.
-- **One port forwarded**: the container's 7433 to a port on the Mac's
-  loopback alone (not the LAN), which the proxy is told (`server reach
-  <id> --at 127.0.0.1:<port>`, or from Shireworks' API: Open questions).
+- **Its command**: `visor-server run --port 7433`, listening on the
+  container's own interface. Started again when it stops, and made again
+  when `GET /api/health` (step 2: answered without credentials, only while
+  the server's own loop answers) does not answer; its agents outlive a
+  restart under their hosts, as on the Mac.
+- **Its proxy, given at start** (the contract with Shireworks,
+  docs/primary-container.md there): `SHIREWORKS_HOST_ADDRESS`, the Mac's
+  address on the containers' network (their gateway: 192.168.128.1 on the
+  MacBook, configurable, never hard-coded), with the proxy's port for the
+  URL; and the token, a secret Shireworks makes once and gives the
+  container as a file (`/run/secrets/visor`), its path in
+  `VISOR_PROXY_TOKEN_FILE`, never in the environment itself or a log. The
+  server presents it as `X-Visor-Proxy` on what goes out.
+- **One port forwarded, fixed**: the container's 7433 to a host port fixed
+  in Shireworks' settings (`hostPort`, the same at every start), on the
+  Mac's loopback alone. The proxy is set once to `127.0.0.1:<hostPort>`,
+  with the token Shireworks' Settings › Primary Container shows once to
+  copy (as a connection code is pasted today; a new secret remakes the
+  container). Shireworks' API lists the primary container and its ports
+  for anyone who checks; nothing needs to ask.
 - **Three volumes**, kept across restarts and new images
   (self-contained, no mounts of the Mac's folders): `/root`, the home (the
   server's data at ~/.local/share/visor, the agents' sign-ins,
@@ -247,11 +259,6 @@ Each step is its own pull request with its tests, on the 0.50 line.
 
 ## Open questions
 
-- **Where Shireworks' primary container's port is told to the proxy**:
-  Shireworks' API (the primary container and its forwarded ports), or the
-  proxy's own `server reach` as now; and how the container's server is
-  given the proxy's token (Shireworks' secret for the container, or the
-  proxy writing it to the container's volume). To agree with Shireworks.
 - **SSH at the proxy**: the Runner serving SSH itself, or a client's SSH
   tunnel to the Mac's own sshd reaching the Runner on loopback (no SSH code
   of Visor's at all).
