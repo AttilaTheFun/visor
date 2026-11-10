@@ -1,5 +1,5 @@
 #!/bin/bash
-# A macOS VM leased from OS Server (xcode_27_2: Xcode 27.2 and its iOS
+# A macOS VM leased from Shireworks (xcode_27_2: Xcode 27.2 and its iOS
 # simulator) for one script, which sources this file rather than run it:
 # tools/ci/mac_vm_screenshots.sh (the site's pictures). CI's Mac tests run
 # on GitHub's own Macs instead (tools/ci/mac_tests_run.sh).
@@ -7,9 +7,9 @@
 # renewed while it runs, released however it ends (a kill nothing can trap
 # leaves it an hour at most). The checkout's tree goes in; Bazel is the
 # image's own bazelisk (Homebrew's, on the VM's PATH), not the runner's,
-# which on a Linux runner couldn't run there. Bazel there reads OS Server's
+# which on a Linux runner couldn't run there. Bazel there reads Shireworks'
 # cache, as every lease's does.
-# As oss's tools/ci/mac_vm.sh, with Visor's folder, node where a script asks
+# As Shireworks' tools/ci/mac_vm.sh, with Visor's folder, node where a script asks
 # for it (the VM image has none) and what comes back out.
 #
 #   ROOT=<the checkout>
@@ -37,13 +37,12 @@
 #   run <command…>              a long command, in the background, waited for
 #   mac_vm_release              the VM given back now, before the script ends
 #
-# $OSS is OS Server's command line, $lease the VM's id, $work/key its SSH
-# key. A script sets finished=1 before its last exit: macOS's bash (3.2)
+# $SW is tools/ci/shireworks.sh (Shireworks' API), $lease the VM's id,
+# $work/key its SSH key. A script sets finished=1 before its last exit: macOS's bash (3.2)
 # runs the EXIT trap with $? 0 when an unset variable stops the script
 # (set -eu), so an end before that is a failure, whatever it says.
 
-OSS="/Applications/OS Server.app/Contents/Helpers/oss"
-[ -x "$OSS" ] || OSS="$(command -v oss)"
+SW="$ROOT/tools/ci/shireworks.sh"
 NODE_VERSION="v22.23.4"
 NODE_SHA256="c9e1dbc748b33ed2d14f42445191ecaf14c56259c7a9a26d0042c49ec2b66428"
 
@@ -70,9 +69,9 @@ mac_vm_release() {
         renewer=""
     fi
     # A lease asked for as the script was stopped: its id, if it came.
-    [ -n "$lease" ] || lease="$(. "$work/lease" 2> /dev/null; printf '%s' "${OSS_ID:-}")"
+    [ -n "$lease" ] || lease="$(. "$work/lease" 2> /dev/null; printf '%s' "${SHIREWORKS_ID:-}")"
     if [ -n "$lease" ]; then
-        "$OSS" machine release "$lease" || echo "$me: lease $lease was not released: oss machine release $lease" >&2
+        sh "$SW" release "$lease" || echo "$me: lease $lease was not released: shireworks.sh release $lease" >&2
         lease=""
         rm -f "$work/lease"
     fi
@@ -99,7 +98,12 @@ run() {
     child=""
     return "$status"
 }
-vm() { "$OSS" machine ssh "$lease" --identity="$work/key" -- "$@"; }
+# The VM over SSH: the lease's port, user and host (shireworks.sh's
+# SHIREWORKS_SSH_*), with the key the lease was given.
+vm_at() { printf '%s@%s' "$SHIREWORKS_SSH_USER" "$SHIREWORKS_HOST"; }
+vm() { ssh -i "$work/key" -p "$SHIREWORKS_SSH_PORT" -o UserKnownHostsFile="$work/known_hosts" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$(vm_at)" "$@"; }
+vm_put() { scp -r -i "$work/key" -P "$SHIREWORKS_SSH_PORT" -o UserKnownHostsFile="$work/known_hosts" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$1" "$(vm_at):$2"; }
+vm_get() { scp -r -i "$work/key" -P "$SHIREWORKS_SSH_PORT" -o UserKnownHostsFile="$work/known_hosts" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$(vm_at):$1" "$2"; }
 # ssh hands the VM's shell one line, so each argument is quoted for it.
 in_vm() { vm bash ci/in_vm.sh "$(printf '%q ' "$@")"; }
 
@@ -144,8 +148,9 @@ EOF
 mac_vm_lease() {
     # A key of the run's own for the VM's SSH, gone with the run.
     ssh-keygen -q -t ed25519 -N '' -C "$key_comment" -f "$work/key"
-    run "$OSS" machine lease macos --config=xcode_27_2 --minutes=60 --wait --key="$work/key.pub" --exports > "$work/lease"
-    lease="$(. "$work/lease"; printf '%s' "$OSS_ID")"
+    run sh "$SW" lease macos --config=xcode_27_2 --minutes=60 --key="$work/key.pub" > "$work/lease"
+    . "$work/lease"
+    lease="$SHIREWORKS_ID"
     echo "Leased $lease"
     # Renewed every ten minutes; told to stop, it stops its sleep too.
     (
@@ -157,7 +162,7 @@ mac_vm_lease() {
             sleep 600 &
             wait $!
             kill -0 "$$" 2> /dev/null || break
-            "$OSS" machine renew "$lease" --minutes=60 > /dev/null || true
+            sh "$SW" renew "$lease" --minutes=60 > /dev/null || true
         done
     ) &
     renewer=$!
@@ -179,7 +184,7 @@ mac_vm_node() {
 
 # A file or folder of the VM's (under ~/ci), copied out to <here>; scp makes
 # a folder there (one already there would get it inside).
-mac_vm_fetch() { run "$OSS" machine download "$lease" --identity="$work/key" "ci/$1" "$2"; }
+mac_vm_fetch() { run vm_get "ci/$1" "$2"; }
 
 # The checkout's tracked files as they stand, Bazel, and the steps, into
 # ~/ci there. As they stand: the committed tree with what the job changed
@@ -192,7 +197,7 @@ mac_vm_copy_tree() {
     local tree
     tree="$(git -C "$ROOT" -c user.name=CI -c user.email=ci@localhost stash create)"
     git -C "$ROOT" archive --format=tar.gz -o "$work/vm/tree.tar.gz" "${tree:-HEAD}"
-    run "$OSS" machine upload "$lease" --identity="$work/key" "$work/vm" ci
+    run vm_put "$work/vm" ci
     run in_vm unpack
 }
 
@@ -201,6 +206,6 @@ mac_vm_copy_tree() {
 mac_vm_copy_tests() {
     [ -f "$work/vm/in_vm.sh" ] || mac_vm_steps < /dev/null
     cp "${1:?mac_vm_copy_tests takes an archive of tests}" "$work/vm/tests.tar.gz"
-    run "$OSS" machine upload "$lease" --identity="$work/key" "$work/vm" ci
+    run vm_put "$work/vm" ci
     run in_vm unpack
 }

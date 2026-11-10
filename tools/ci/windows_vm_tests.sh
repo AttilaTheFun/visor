@@ -1,5 +1,5 @@
 #!/bin/bash
-# The command-line server on Windows, in a Windows VM leased from OS Server
+# The command-line server on Windows, in a Windows VM leased from Shireworks
 # (swift-6.3.2: Swift and MSVC's build tools): built with SwiftPM in MSVC's
 # environment, then tried — run, a throwaway session over its WebSocket,
 # stopped through its REST side (tools/probes/server.mjs, with node brought
@@ -12,8 +12,7 @@
 # most). The committed tree goes in (git archive).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-OSS="/Applications/OS Server.app/Contents/Helpers/oss"
-[ -x "$OSS" ] || OSS="$(command -v oss)"
+SW="$ROOT/tools/ci/shireworks.sh"
 CONFIG="swift-6.3.2"
 NODE_VERSION="v22.23.4"
 NODE_SHA256="a8b8cd79cbbb3062435f449591d98dd63730bbbf30ce2d7cc3a6376c236cb111"
@@ -32,9 +31,9 @@ release() {
         renewer=""
     fi
     # A lease asked for as the script was stopped: its id, if it came.
-    [ -n "$lease" ] || lease="$(. "$work/lease" 2> /dev/null; printf '%s' "${OSS_ID:-}")"
+    [ -n "$lease" ] || lease="$(. "$work/lease" 2> /dev/null; printf '%s' "${SHIREWORKS_ID:-}")"
     if [ -n "$lease" ]; then
-        "$OSS" machine release "$lease" || echo "windows_vm_tests.sh: lease $lease was not released: oss machine release $lease" >&2
+        sh "$SW" release "$lease" || echo "windows_vm_tests.sh: lease $lease was not released: shireworks.sh release $lease" >&2
         lease=""
         rm -f "$work/lease"
     fi
@@ -63,8 +62,13 @@ run() {
     child=""
     return "$status"
 }
-# A PowerShell command in the VM, over SSH.
-ps() { "$OSS" machine ssh "$lease" --identity="$work/key" -- "$1"; }
+# A PowerShell command in the VM, over SSH: the lease's port, user and host
+# (shireworks.sh's SHIREWORKS_SSH_*), with the key the lease was given.
+ssh_to() { printf '%s@%s' "$SHIREWORKS_SSH_USER" "$SHIREWORKS_HOST"; }
+ps() {
+    ssh -i "$work/key" -p "$SHIREWORKS_SSH_PORT" -o UserKnownHostsFile="$work/known_hosts" -o StrictHostKeyChecking=accept-new \
+        -o BatchMode=yes "$(ssh_to)" "$1"
+}
 
 # node for the VM, from nodejs.org, checked, kept on the runner between runs.
 cache="${RUNNER_TOOL_CACHE:-$HOME/Library/Caches}/visor-ci"
@@ -104,8 +108,9 @@ printf '%s\r\n' '@echo off' \
 
 echo "::group::A Windows VM ($CONFIG)"
 ssh-keygen -q -t ed25519 -N '' -C visor-ci -f "$work/key"
-run "$OSS" machine lease windows --config="$CONFIG" --minutes=60 --wait --key="$work/key.pub" --exports > "$work/lease"
-lease="$(. "$work/lease"; printf '%s' "$OSS_ID")"
+run sh "$SW" lease windows --config="$CONFIG" --minutes=60 --key="$work/key.pub" > "$work/lease"
+. "$work/lease"
+lease="$SHIREWORKS_ID"
 echo "Leased $lease"
 (
     trap 'kill $! 2> /dev/null; exit 0' TERM
@@ -116,12 +121,13 @@ echo "Leased $lease"
         sleep 600 &
         wait $!
         kill -0 "$$" 2> /dev/null || break
-        "$OSS" machine renew "$lease" --minutes=60 > /dev/null || true
+        sh "$SW" renew "$lease" --minutes=60 > /dev/null || true
     done
 ) &
 renewer=$!
 for _ in $(seq 1 30); do ps 'exit 0' 2> /dev/null && break; sleep 5; done
-run "$OSS" machine upload "$lease" --identity="$work/key" "$work/vm" ci
+run scp -r -i "$work/key" -P "$SHIREWORKS_SSH_PORT" -o UserKnownHostsFile="$work/known_hosts" -o StrictHostKeyChecking=accept-new \
+    -o BatchMode=yes "$work/vm" "$(ssh_to):ci"
 run ps 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\runner\ci\unpack.ps1; exit $LASTEXITCODE'
 echo "::endgroup::"
 
