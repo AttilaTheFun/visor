@@ -1,5 +1,5 @@
 /// A machine a session leases through its server from the server's oss
-/// (OS Server): what the session's row shows at its foot.
+/// (Shireworks): what the session's row shows at its foot.
 public struct SessionLease: Codable, Hashable, Sendable {
     /// oss's id for the lease.
     public var id: String

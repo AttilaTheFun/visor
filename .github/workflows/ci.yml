@@ -5,10 +5,10 @@ name: CI
 # Automated CI only builds: no test runs on its own (Logan, 7 Nov 2026).
 #
 # - A pull request runs one job, `container`, the required check: in one of
-#   OS Server's single-use Linux containers (visor-jit, a runner of Visor's
+#   Shireworks' single-use Linux containers (visor-jit, a runner of Visor's
 #   agent image), leasing nothing, it checks the rules, builds every app,
 #   the Mac's test bundles, libraries and servers on Linux, and builds the
-#   command-line server with SwiftPM. Its Bazel reads OS Server's cache and
+#   command-line server with SwiftPM. Its Bazel reads Shireworks' cache and
 #   never writes it. A pull request of documentation alone checks the rules
 #   and stops there. A newer push cancels its run. A fork's pull request
 #   runs nothing here: no self-hosted runner ever runs a fork's code.
@@ -40,7 +40,7 @@ name: CI
 #   among them) and the proof to the release.
 #
 # The policy's verify leases a Mac; Visor's runs on GitHub's own runners
-# instead, free for a public repository, leaving OS Server's Mac slots to
+# instead, free for a public repository, leaving Shireworks' Mac slots to
 # the agents (Logan, 5 Nov 2026). The command-line server on Windows and
 # blue Visor on the iPhone stay off until the Mac Studio (Logan, 5 Nov
 # 2026: "scope visor down to just ios, macos and android"): their jobs
@@ -79,7 +79,7 @@ concurrency:
 permissions:
   contents: read
   actions: read
-# Whom the jobs' OS Server leases are for (OS Server's API 12): with the
+# Whom the jobs' Shireworks leases are for (Shireworks' API 12): with the
 # runner's `ci` key (~/.config/oss/key), each lease is `<job>-<run>@ci`.
 env:
   OSS_CLIENT_ID: ${{ github.job }}-${{ github.run_id }}
@@ -142,7 +142,7 @@ jobs:
 
   # ---- main ----------------------------------------------------------------
 
-  # The cache's one writer (OS Server's `ci.populate` grants this job the
+  # The cache's one writer (Shireworks' `ci.populate` grants this job the
   # write): what a pull request's container job builds, for main's merged
   # tree, so the next pull request's build is mostly cache hits. No tests,
   # nothing published.
@@ -425,7 +425,7 @@ jobs:
   # Visor's own Linux programs (tools/linux_programs.sh: visor-server, also
   # the agents' host, linked fully static), which alpha and adhoc seal into
   # Visor.app for the containers it makes: built in a container of Visor's
-  # agent image leased from OS Server (tools/ci/linux_programs.sh) and
+  # agent image leased from Shireworks (tools/ci/linux_programs.sh) and
   # handed over as a tar. It needs no version, so it runs beside verify.
   linux-programs:
     if: >-

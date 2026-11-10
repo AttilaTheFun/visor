@@ -20,7 +20,7 @@
 #   Shireworks' registry as visor-build once that is there.
 # The container sees the session's folder at the same path and Visor's
 # tools at /opt/visor (read-only, from the server); no Xcode: Apple apps
-# build with rules_applecross from the SDK archive an OS Server serves, and
+# build with rules_applecross from the SDK archive a Shireworks server serves, and
 # Android's x86_64 build tools run under Rosetta on an arm64 Mac. Its sign-ins live with the Visor server,
 # never in the image (ContainerSignIns):
 #   <Visor's data>/containers/agent.env   CLAUDE_CODE_OAUTH_TOKEN=… (`claude setup-token`)

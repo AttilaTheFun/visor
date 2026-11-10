@@ -1,11 +1,11 @@
 #!/bin/bash
 # Visor's tests that need a Mac (the server's Apple side, the client, its
 # views and SSH, each an .xctest bundle: macos_unit_test), built on Linux in
-# the job's own container (CI's build-tests job, visor-jit: OS Server's
+# the job's own container (CI's build-tests job, visor-jit: Shireworks'
 # read-only Bazel cache in its ~/.bazelrc and the cache's read token in its
-# ~/.netrc, which opens OS Server's files too), for one of GitHub's own Macs
+# ~/.netrc, which opens Shireworks' files too), for one of GitHub's own Macs
 # to run (tools/ci/mac_tests_run.sh, the test job). Bazel fetches the SDK
-# archive (container_build.sh's) and the ported tools from OS Server's
+# archive (container_build.sh's) and the ported tools from Shireworks'
 # files, by SHA-256, through the downloader config written here, at the
 # address Shireworks' API gives (tools/ci/shireworks.sh files-url).
 #

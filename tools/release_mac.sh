@@ -15,9 +15,9 @@
 # Visor Server carries Visor's own Linux programs for the containers it makes
 # (docs/co-tenancy.md, "Container images"), in Contents/Resources/Linux,
 # signed with it: tools/linux_programs.sh's, as the tar that
-# tools/ci/linux_programs.sh makes in a container of an OS Server. CI's build
+# tools/ci/linux_programs.sh makes in a container of a Shireworks server. CI's build
 # job is given the linux-programs job's (VISOR_LINUX_PROGRAMS, the tar), as
-# the release Mac has no OS Server of its own; without it, they're built here
+# the release Mac has no Shireworks of its own; without it, they're built here
 # in a container leased from this Mac's.
 #
 #   tools/release_mac.sh <version>               # the .dmgs in dist/

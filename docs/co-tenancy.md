@@ -141,13 +141,13 @@ Logan (1 November): Visor.app is the Visor Runner and Visor for macOS in one.
     taking commands on a socket, stopped on TERM. A container outlives the
     agent and the app;
   - **the network's owner**, one long-lived process for the network all of
-    Visor's containers are on (192.168.131.0/24, apart from OS Server's and
+    Visor's containers are on (192.168.131.0/24, apart from Shireworks' and
     `container`'s), so that no container's going takes its neighbours'
     network with it.
 
   What runs the containers (the helper, the network, an image pulled and
   unpacked, the kernel and init filesystem) is a Swift package of its own,
-  shared with OS Server, behind the Runner's `ContainerBackend`.
+  shared with Shireworks, behind the Runner's `ContainerBackend`.
 
 ## Credentials
 
@@ -201,7 +201,7 @@ Logan (1 November): Visor.app is the Visor Runner and Visor for macOS in one.
 
 ## MCP servers
 
-- The MCP servers (GitHub's, OS Server's, …) are set in the Runner: each a
+- The MCP servers (GitHub's, Shireworks', …) are set in the Runner: each a
   name, a URL and headers, a secret one's value kept by the Runner.
 - The Runner listens for its servers' MCP requests and passes each on to
   the endpoint, adding the secret headers, and the answer back as it comes
@@ -345,7 +345,7 @@ setup script, run in it as root by the Runner:
 
 ### Health
 
-These checks are the Runner's, not OS Server's: OS Server's own leased
+These checks are the Runner's, not Shireworks': Shireworks' own leased
 containers are short leases and need nothing special.
 
 - While it runs, the Runner asks each container server every 30 seconds
@@ -404,9 +404,9 @@ the default.
   remaking a container for a new image; Settings' image and its sign-in;
   `visor-build` on Shireworks once its registry is there.
 
-## OS Server
+## Shireworks
 
-The Runner calls nothing of OS Server's for its containers. OS Server, on
+The Runner calls nothing of Shireworks' for its containers. Shireworks, on
 the same Mac, sees their VMs among the Mac's processes and counts their
 memory against its budget for what it lends.
 
@@ -501,7 +501,7 @@ these are checked early rather than assumed:
 
 ## Sessions running today
 
-- Sessions in OS Server containers (0.43) run on the Mac from 0.44 on, with
+- Sessions in Shireworks containers (0.43) run on the Mac from 0.44 on, with
   a notice. Move into a Container then puts them in a 0.44 container.
 - Once phase 1 is out, such a session moves to a container server with
   Migrate…. The old one is kept until the new one has answered.
