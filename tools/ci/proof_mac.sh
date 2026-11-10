@@ -61,7 +61,7 @@ fi
 screen_size="$(osascript -l JavaScript -e 'ObjC.import("AppKit"); const f = $.NSScreen.mainScreen.frame; `${f.size.width} by ${f.size.height}`')"
 printf 'macOS %s, a screen %s points\n' "$(sw_vers -productVersion)" "$screen_size" | tee "$out/device.txt"
 # No "quit unexpectedly" dialog over the screens after a crash (a crash is
-# the screen's failure, and its log says so), as OS Server's guests have.
+# the screen's failure, and its log says so), as Shireworks' guests have.
 defaults write com.apple.CrashReporter DialogType -string none
 
 # The windows of a process on the screen, from CGWindowList (owners and

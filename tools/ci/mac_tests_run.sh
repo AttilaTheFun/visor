@@ -1,7 +1,7 @@
 #!/bin/bash
 # Visor's tests that need a Mac, built on Linux (tools/ci/mac_tests_build.sh,
 # CI's build-tests job), run on one of GitHub's own Macs (`xcode-27`, the
-# test job), which a public repository has for free, leaving OS Server's
+# test job), which a public repository has for free, leaving Shireworks'
 # Mac slots to the agents (Logan, 5 Nov 2026): each bundle by Xcode's
 # `xctest` (`xcrun xctest`, as for any macOS logic test), a bundle at a
 # time, stopped after 15 minutes, with Xcode 27.2 (the SDK they are built

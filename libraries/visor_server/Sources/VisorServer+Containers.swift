@@ -111,7 +111,7 @@ extension VisorServer {
 
     /// The containers this server's host keeps for sessions it no longer
     /// has, removed with their disks; and a session still in a container
-    /// OS Server lent before container hosts (0.43 and before) moved onto
+    /// Shireworks lent before container hosts (0.43 and before) moved onto
     /// this computer, its agent started again here.
     private func sweepContainers(_ host: ContainerHost) async {
         let kept = Set(sessions.compactMap(\.info.container?.id))
@@ -121,11 +121,11 @@ extension VisorServer {
         }
         for record in sessions where record.info.container?.socket != nil {
             record.info.container = nil
-            broadcast(record.apply(.notice("Its container was OS Server's, from before container hosts: it runs on this computer now "
+            broadcast(record.apply(.notice("Its container was Shireworks', from before container hosts: it runs on this computer now "
                                            + "(Move into a Container makes it a new one).")), session: record)
             record.placed()
             rebuild(record) {}
-            Self.log("session moved out of its OS Server container: \(record.info.title) (\(record.info.id))")
+            Self.log("session moved out of its Shireworks container: \(record.info.title) (\(record.info.id))")
         }
         saveArchive()
         broadcastSessions()
@@ -352,7 +352,7 @@ extension VisorServer {
     /// or left it).
     func removeContainer(_ container: SessionContainer) {
         guard container.socket == nil else {
-            return Self.log("the container \(container.id) was OS Server's: `oss machine release \(container.id)` gives it back")
+            return Self.log("the container \(container.id) was Shireworks': `oss machine release \(container.id)` gives it back")
         }
         guard let host = containerHost else { return }
         Task {

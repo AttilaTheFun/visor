@@ -5,7 +5,7 @@ name: Screenshots
 # it for a version's dossier): it leases a VM, which a pull request's CI
 # never does (docs/CI_POLICY.md in AttilaTheFun/reviews), so a change to the
 # Mac's screenshot tool is tried by running this on its branch. In a macOS
-# VM leased from OS Server, from a runner OS Server makes for the job
+# VM leased from Shireworks, from a runner Shireworks makes for the job
 # (visor-jit-small, a Linux container that only leases): everything Mac,
 # the build too, happens in the VM (tools/ci/mac_vm_screenshots.sh).
 on:

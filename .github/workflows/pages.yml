@@ -36,7 +36,7 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
-  # On OS Server's single-use runners (visor-jit, a Linux container): the
+  # On Shireworks' single-use runners (visor-jit, a Linux container): the
   # release's asset fetched with curl, and the site packed into the
   # `github-pages` artifact deploy-pages takes, with GNU tar as
   # upload-pages-artifact packs it (links followed). BSD tar's `-cLf`, from

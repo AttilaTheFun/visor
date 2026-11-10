@@ -1,8 +1,8 @@
 # Visor's machine layers for oss
 
-oss (OS Server, [AttilaTheFun/oss](https://github.com/AttilaTheFun/oss))
+oss (Shireworks, [AttilaTheFun/oss](https://github.com/AttilaTheFun/oss))
 makes vanilla machines; what Visor's sessions need on top of them, when
-they lease them (through an OS Server's MCP tools their Visor server passes
+they lease them (through a Shireworks server's MCP tools their Visor server passes
 on, or `oss machine lease …`), is here, built on the oss server's Mac with
 oss's own commands. (The image Visor's sessions' containers are made from
 is tools/containers: the container host makes each one.)

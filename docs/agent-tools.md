@@ -1,6 +1,6 @@
 # Agent tools (design)
 
-> Superseded (0.44): agents reach GitHub and OS Server through MCP servers Visor Server proxies (docs/protocol.md, Proxied MCP servers), and containers come from a container host (docs/container-host.md). Visor no longer has `visor machine` or OSSClient. Kept for the reasoning.
+> Superseded (0.44): agents reach GitHub and Shireworks through MCP servers Visor Server proxies (docs/protocol.md, Proxied MCP servers), and containers come from a container host (docs/container-host.md). Visor no longer has `visor machine` or OSSClient. Kept for the reasoning.
 
 What Visor puts in a session's hands, and how it keeps them narrow.
 Status: proposed. Nothing here is built beyond what "Today" says.
@@ -62,7 +62,7 @@ else of value.
 | Credential | Used for | Kept |
 | --- | --- | --- |
 | Each agent's GitHub App key (Claude's, Codex's) | installation tokens, minted per operation | the server's data folder, mode 600 |
-| OS Servers' tokens | leasing, exec, storage | as now (`POST /api/oss`) |
+| Shireworks servers' tokens | leasing, exec, storage | as now (`POST /api/oss`) |
 | The App Store Connect API key | bundle ids, capabilities, development profiles | the server's data folder |
 | Later: Linear's key, a project's run-time secrets | their tools | the same |
 
@@ -125,13 +125,13 @@ the computer become rare, without giving a container the computer.
 
 ### oss
 
-The OS Server client, scoped to the session, on plain OS Server API. Small
+The Shireworks client, scoped to the session, on plain Shireworks API. Small
 calls (lease, renew, release, list) the server forwards as it does every
-OS Server call, holding oss's token and making the session the holder.
+Shireworks call, holding oss's token and making the session the holder.
 Bytes don't go through the server: for a stream (exec, xctest, an upload,
-a stored object, an install), the server asks OS Server for a grant
+a stored object, an install), the server asks Shireworks for a grant
 (`/v1/grants`: one verb on one lease or object, signed, minutes long) and
-hands the tool its URL, and the tool streams to OS Server directly, a
+hands the tool its URL, and the tool streams to Shireworks directly, a
 chunked body in and chunked lines out. A grant is all the tool holds.
 
 - `oss machine …`: lease, renew, release, exec (stdin streamed in, the
@@ -145,8 +145,8 @@ chunked body in and chunked lines out. A grant is all the tool holds.
   agent built, installed for testing without publishing it. Only CI
   publishes.
 
-OS Server's side (storage, xctest, install from storage, grants, lease
-kinds) is OS Server's design, `/v1/storage/…`, `/v1/machines/{id}/…` and
+Shireworks' side (storage, xctest, install from storage, grants, lease
+kinds) is Shireworks' design, `/v1/storage/…`, `/v1/machines/{id}/…` and
 `/v1/grants`. This side forwards the small calls and asks for the grants.
 
 ### apple
@@ -174,7 +174,7 @@ CI, never a tool.
 A container reaches only what an allowlist names:
 
 - the session's Visor server;
-- OS Server (its cache and files, read-only, on its own address);
+- Shireworks (its cache and files, read-only, on its own address);
 - GitHub;
 - the Bazel and Swift package registries;
 - Apple's and swift.org's downloads;
@@ -188,7 +188,7 @@ container; Visor gives the list for each session:
 - a proxy on the host's side of it (HTTP, and CONNECT for HTTPS) knows
   the lease by its address, so the container holds nothing for it, and
   lets through only that lease's list;
-- the container's `HTTP_PROXY`/`HTTPS_PROXY` name it. OS Server's cache
+- the container's `HTTP_PROXY`/`HTTPS_PROXY` name it. Shireworks' cache
   and files and the Visor server are reached at the host's address;
 - what ignores a proxy, or isn't HTTP (git over SSH, raw sockets), has no
   way out, so git goes over HTTPS with `git-credential-visor`.
@@ -210,9 +210,9 @@ what only the computer can do, by `visor request` where possible.
    server. `agent-token` retires.
 3. `visor ask`, `notify` and `request`.
 4. `oss`: small calls forwarded, streams by grant; storage and xctest as
-   OS Server ships them.
+   Shireworks ships them.
 5. `apple`.
-6. The container network allowlist, with OS Server.
+6. The container network allowlist, with Shireworks.
 7. Linear and project secrets.
 
 ## Open questions

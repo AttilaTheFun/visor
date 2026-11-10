@@ -14,7 +14,7 @@
 # CI's agent-image job runs it in a visor-jit container, as every job but the
 # headful proofs (Logan, 8 Nov 2026); until 0.48 it ran on the mini with
 # Apple's container. buildah comes from the distribution's packages when the
-# image has none, and builds as the container's root, which an OS Server
+# image has none, and builds as the container's root, which a Shireworks server
 # container's VM makes a root of its own. A package the registry hasn't had
 # before is private until its owner makes it public, once.
 #
@@ -48,7 +48,7 @@ if [ "$publish" = 1 ]; then
 fi
 
 # One target, built, then pushed as its repository's version, MAJOR.MINOR and
-# latest. The kernel's overlay storage (an OS Server container is a VM, its
+# latest. The kernel's overlay storage (a Shireworks server container is a VM, its
 # disk ext4), and chroot isolation, which needs no user namespace;
 # VISOR_BUILDAH_STORAGE=vfs where overlay can't be had (slower, and every
 # layer a whole copy on the disk).

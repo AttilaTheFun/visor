@@ -4,7 +4,7 @@
 # then pictured on an iOS lease as tools/isomer/snapshots/snapshots.py
 # pictures it on a Mac:
 #
-#   web-mobile          the web site served on a Mac slot of OS Server's
+#   web-mobile          the web site served on a Mac slot of Shireworks'
 #                       primary Mac VM (tools/ci/mac_slot.sh,
 #                       tools/isomer/snapshots/serve_site.py), on that VM's
 #                       loopback, which the simulators it runs share, and
