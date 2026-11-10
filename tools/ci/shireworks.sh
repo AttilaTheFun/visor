@@ -14,7 +14,7 @@
 #
 #   shireworks.sh lease <platform> [--config=…] [--minutes=N] [--label=…] [--kind=…]
 #                 [--key=<public key file>] [--image=…] [--cpus=N] [--memory=GB] [--disk=GB]
-#                 [--rosetta] [--no-wait] [--json]
+#                 [--rosetta] [--device="iPhone 17 Pro"] [--runtime=…] [--no-wait] [--json]
 #                                  a machine, once it's ready (waiting for room as long as it
 #                                  takes, unless --no-wait): its SHIREWORKS_* exports, or JSON
 #   shireworks.sh release <id>
@@ -28,6 +28,11 @@
 #   shireworks.sh adb <id> <arguments…>        an Android lease's emulator
 #   shireworks.sh install <id> <sha256>        a stored app, on an iOS lease
 #   shireworks.sh screenshot <id> <file.png> [--window=…]
+#   shireworks.sh xctest <id> --tests=<file | object> [--host=<file | object>] [--ui] [--gui]
+#                 [--only-testing=Class[/method]]… [--junit=<file.xml>] [--result=<file.xcresult.zip>]
+#                                  tests on an iOS lease's simulator or a Mac slot (a file here
+#                                  is stored first; else a stored object's sha256 or name): xcodebuild's output as it comes, its JUnit and
+#                                  zipped result bundle saved if asked; exits with its status
 #   shireworks.sh storage-put <file> [--name=…] [--ttl=…]   its JSON (sha256 and all)
 #   shireworks.sh cache-token     the Bazel cache's read token (for .netrc: never log it)
 #   shireworks.sh files-url <sha256>                        a served file's URL
@@ -150,7 +155,7 @@ def lease(arguments):
     body = {"platform": platform}
     if os.environ.get("SHIREWORKS_TOKEN") and not grant and "OSS-Holder" in headers:
         body["holder"] = headers["OSS-Holder"]
-    for name in ("config", "label", "kind"):
+    for name in ("config", "label", "kind", "device", "runtime"):
         if option(arguments, name):
             body[name] = option(arguments, name)
     if option(arguments, "minutes"):
@@ -266,6 +271,13 @@ def run(arguments):
         body["gui"] = True
     # No time limit: a command may be quiet for long; the server ends it if this goes.
     answer = request("POST", lease_path(lease) + "/run", body, timeout=None)
+    sys.exit(exit_code(streamed(answer)))
+
+def exit_code(status):
+    return status if 0 <= status <= 255 else 1
+
+def streamed(answer):
+    """The answer's text to stdout as it comes, without its last line: the status it gives."""
     out = sys.stdout.buffer
     pending = b""
     while True:
@@ -283,8 +295,43 @@ def run(arguments):
         out.write(pending)
         out.flush()
         die("the command's status never came (the connection ended first)", 255)
-    status = int(found.group(1))
-    sys.exit(status if 0 <= status <= 255 else 1)
+    return int(found.group(1))
+
+def stored(given):
+    """A stored object: a file here is stored first (its sha256); else as given, a stored object's sha256 or name."""
+    if not os.path.isfile(given):
+        return given
+    return store(given, {"name": os.path.basename(given)})["object"]["sha256"]
+
+def xctest(arguments):
+    (lease,) = positional(arguments, 1, "xctest <id> --tests=<file | sha256> [--host=…] [--ui] [--gui] [--only-testing=…]… "
+                                         "[--junit=<file>] [--result=<file>]")
+    if not option(arguments, "tests"):
+        die("xctest: --tests=<the test bundle, zipped, or its stored object's sha256>", 2)
+    body = {"tests": stored(option(arguments, "tests"))}
+    if option(arguments, "host"):
+        body["host"] = stored(option(arguments, "host"))
+    if flag(arguments, "ui"):
+        body["ui"] = True
+    if flag(arguments, "gui"):
+        body["gui"] = True
+    only = [a.split("=", 1)[1] for a in arguments if a.startswith("--only-testing=")]
+    if only:
+        body["onlyTesting"] = only
+    answer = request("POST", lease_path(lease) + "/xctest/run", body, timeout=None)
+    run = answer.getheader("Shireworks-XCTest-Run") or ""
+    status = streamed(answer)
+    # Its results, whatever the tests said (a failed run has them too).
+    for name, what in (("junit", "junit"), ("result", "result")):
+        target = option(arguments, name)
+        if not target:
+            continue
+        try:
+            save(request("GET", f"{lease_path(lease)}/xctest/{run}/{what}", timeout=3600), target)
+        except (Refused, Unanswered) as error:
+            sys.stderr.write(f"{me}: no {what} from run {run}: {error}\n")
+            status = status or 1
+    sys.exit(exit_code(status))
 
 def put(arguments):
     lease, file, path = positional(arguments, 3, "put <id> <file> <path> [--mode=755]")
@@ -334,6 +381,10 @@ def screenshot(arguments):
 def storage_put(arguments):
     (file,) = positional(arguments, 1, "storage-put <file> [--name=…] [--ttl=…]")
     query = {k: option(arguments, k) for k in ("name", "ttl") if option(arguments, k)}
+    print(json.dumps(store(file, query), indent=2))
+
+def store(file, query):
+    """The file in the store (its hash alone if it's there already): the store's answer."""
     digest = hashlib.sha256()
     with open(file, "rb") as body:
         for block in iter(lambda: body.read(1 << 20), b""):
@@ -343,14 +394,13 @@ def storage_put(arguments):
     # Stored already: its hash alone.
     try:
         request("HEAD", f"/v1/storage/objects/{sha256}").read()
-        print(json.dumps(call_put(query, b"", dict(sent, **{"Content-Length": "0"})), indent=2))
-        return
+        return call_put(query, b"", dict(sent, **{"Content-Length": "0"}))
     except Refused as error:
         if error.status != 404 and error.code != "noObject":
             raise
     with open(file, "rb") as body:
         size = os.fstat(body.fileno()).st_size
-        print(json.dumps(call_put(query, body, dict(sent, **{"Content-Length": str(size)})), indent=2))
+        return call_put(query, body, dict(sent, **{"Content-Length": str(size)}))
 
 def call_put(query, body, sent):
     return json.loads(request("PUT", "/v1/storage/objects", body, query, sent, timeout=3600).read())
@@ -368,7 +418,7 @@ def capabilities(arguments):
     print(json.dumps(call("GET", "/v1/capabilities"), indent=2))
 
 commands = {"lease": lease, "release": release, "renew": renew, "run": run, "put": put, "get": get,
-            "simctl": device("simctl"), "adb": device("adb"), "install": install, "screenshot": screenshot,
+            "simctl": device("simctl"), "adb": device("adb"), "install": install, "screenshot": screenshot, "xctest": xctest,
             "storage-put": storage_put, "cache-token": cache_token, "files-url": files_url, "capabilities": capabilities}
 
 if len(sys.argv) < 2 or sys.argv[1] not in commands:
