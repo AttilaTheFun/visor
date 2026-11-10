@@ -554,6 +554,14 @@ public struct VisorRootView: View {
         // collapsed phone.
         NavigationStack(path: boundSubPath) {
             detailRoot
+                // The column's minimum size, said here rather than measured
+                // from what is in it: a chat's measured minimum didn't settle
+                // with an inspector beside it, and the split view took a new
+                // one each update-constraints pass until AppKit threw (the
+                // Mac proof's settings screens, 10 Nov 2026; Applications'
+                // crash the day before). A flexible frame's minimum is its
+                // own, whatever its content measures.
+                .frame(minWidth: 440, maxWidth: .infinity, minHeight: 320, maxHeight: .infinity)
                 // The detail takes the window's slack, so the sidebar opens at
                 // its own width instead of stretching to its maximum. Its one
                 // width, on the stack's root content, never on the stack too:
