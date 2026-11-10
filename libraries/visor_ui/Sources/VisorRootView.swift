@@ -341,7 +341,7 @@ public struct VisorRootView: View {
                 // pills and no Deny and Allow.
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))
                 settingsPresented.wrappedValue = true
-            case "settings", "settings-split", "settings-plain", "settings-stack":
+            case "settings", "settings-split", "settings-plain", "settings-stack", "settings-stub":
                 // Beside a chat: the composer's row of pills next to the
                 // inspector is the Mac's case to check (NavigationUI's
                 // SettingsInspectorPlacement, 9 Nov 2026).
@@ -608,7 +608,23 @@ public struct VisorRootView: View {
     /// or nothing.
     @ViewBuilder private var detailRoot: some View {
         Group {
-            if case .project(let serverID, let cwd) = selection, let host = store.server(for: serverID),
+            if VisorFixture.screen == "settings-stub", selection?.session != nil {
+                // The Mac proof's stand-in for the chat: rows of text and a
+                // field, none of AgentUI, beside Settings.
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(0..<40, id: \.self) { index in
+                            Text("Row \(index): rows now sync in the background, and the banner matches the layout you sent.")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding()
+                }
+                .safeAreaInset(edge: .bottom) {
+                    TextField("Message", text: .constant("")).textFieldStyle(.roundedBorder).padding()
+                }
+                .navigationTitle("Stand-in")
+            } else if case .project(let serverID, let cwd) = selection, let host = store.server(for: serverID),
                       let project = host.projects.first(where: { $0.cwd == cwd }) {
                 ProjectSettingsView(host: host, project: project,
                                     rename: { nameDraft = project.alias ?? ""; renamingProject = ProjectTarget(host: host, project: project) },
