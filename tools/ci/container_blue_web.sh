@@ -1,11 +1,10 @@
 #!/bin/bash
 # Blue Visor's web client (the client on Isomer: docs/isomer.md) in a Linux
-# container (CI's own, visor-jit; or, run on a Mac, one leased from its OS
-# Server with `oss machine run container --inside`, of the agent image named): built optimized, its tests
+# container (CI's own, visor-jit, of the agent image named): built optimized, its tests
 # run, then checked in headless Chromium — the end-to-end test against the
 # stand-in server on its three roads, the transcript's layout, and the
 # composer typed into. Chromium is Playwright's arm64 build at a pinned
-# release (Chrome for Testing has no arm64 Linux), kept in Bazel's volume.
+# release (Chrome for Testing has no arm64 Linux), fetched for the run.
 # Without ffmpeg the end-to-end review keeps its screens and makes no
 # recording. Run with `bazel run //tools/ci:container_blue_web`.
 #
@@ -14,12 +13,6 @@
 # --build-only builds the site and runs nothing, neither its tests nor
 # Chromium: CI's run until the Mac Studio (Logan, 5 Nov 2026: Visor is
 # iOS, macOS and Android for now; the web is kept building, not run).
-#
-#   OSS_FILES_HOST   the name the container reaches this Mac's OS Server by
-#                    (default: this Mac's tailnet name, from Tailscale)
-#   VISOR_CI_VOLUME  Bazel's tree and Chromium, kept between runs (default:
-#                    visor-web-ci, `:keep`). One run at a time uses it
-#                    (ci.yml's concurrency).
 #
 # The review (tools/isomer/e2e/run.py --review) is written to the folder
 # given, in the checkout, for the run's `blue-web-review` artifact. The
@@ -34,21 +27,15 @@ case "${3:-}" in
     --build-only) RUNS=0 ;;
     *) echo "usage: container_blue_web.sh <image> <review folder> [--build-only]" >&2; exit 2 ;;
 esac
-VOLUME="${VISOR_CI_VOLUME:-visor-web-ci}"
 PLAYWRIGHT="1.64.1"
 
-# Already in a Linux container (CI's visor-jit, its Bazel reading OS
-# Server's cache): run here, IMAGE unused, Chromium fetched for the run. On
-# a Mac: in a container of IMAGE leased from its OS Server.
-here=""
-[ "$(uname -s)" = Linux ] && here=1
-if [ -z "$here" ]; then
-    OSS="/Applications/OS Server.app/Contents/Helpers/oss"
-    [ -x "$OSS" ] || OSS="$(command -v oss)"
-    host="${OSS_FILES_HOST:-}"
-    if [ -z "$host" ]; then
-        host="$(/Applications/Tailscale.app/Contents/MacOS/Tailscale status --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
-    fi
+# In a Linux container (CI's visor-jit, its Bazel reading Shireworks'
+# cache): run here, IMAGE unused, Chromium fetched for the run. Not on a
+# Mac: Shireworks runs nothing in a container from one (no mounts, no
+# volumes), so lease a container of the agent image and run it there.
+if [ "$(uname -s)" != Linux ]; then
+    echo "container_blue_web: runs in a Linux container (CI's visor-jit, or a Shireworks container lease of the agent image): Shireworks has no way to run it in one from a Mac" >&2
+    exit 2
 fi
 
 steps='
@@ -84,16 +71,10 @@ exit $failed
 
 cd "$ROOT"
 mkdir -p "$REVIEW"
-if [ -n "$here" ]; then
-    # And how much memory it took (tools/ci/memory_watch.sh).
-    . "$ROOT/tools/ci/memory_watch.sh"
-    memory_watch_start
-    status=0
-    bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT" "$RUNS" || status=$?
-    memory_watch_report "container_blue_web"
-    exit "$status"
-fi
-exec "$OSS" machine run container --image="$IMAGE" --cpus=6 --memory=12 \
-    --mount="$ROOT:$ROOT" --volume="$VOLUME:/var/cache/bazel:64:keep" \
-    --inside --cache="$host" -- \
-    bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT" "$RUNS"
+# And how much memory it took (tools/ci/memory_watch.sh).
+. "$ROOT/tools/ci/memory_watch.sh"
+memory_watch_start
+status=0
+bash -c "$steps" container_blue_web "$ROOT" "$REVIEW" "$PLAYWRIGHT" "$RUNS" || status=$?
+memory_watch_report "container_blue_web"
+exit "$status"
