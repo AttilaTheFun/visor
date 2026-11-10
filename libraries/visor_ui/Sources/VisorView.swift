@@ -26,21 +26,33 @@ import UIKit
 @MainActor
 public struct VisorView: View {
     private let settingsPresented: Binding<Bool>?
+    private let isShown: Bool
     @State private var store: VisorStore
+    /// An About section the host gives (EnvironmentValues+SettingsAbout);
+    /// without one, Settings has none: the version Visor would show is the
+    /// host's, not its own.
+    @Environment(\.settingsAbout) private var about
 
+    /// `isShown`: false while the host's tab of Visor is not the selected
+    /// one, so a session's screen left there lets its session go (SwiftUI
+    /// keeps a hidden tab's views and calls no onDisappear on them).
     /// `keychainService` and `keychainGroup`: where the computers are kept,
     /// for the first view made (later ones show the same store). By default
     /// the host's bundle id with `.visor`, in its default group, apart from
     /// the host's own items; Visor's own (`com.LoganShire.Visor`, its
     /// `<team>.com.LoganShire.Visor.shared` group) to share Visor's.
-    public init(settingsPresented: Binding<Bool>? = nil, keychainService: String? = nil, keychainGroup: String? = nil) {
+    public init(settingsPresented: Binding<Bool>? = nil, isShown: Bool = true, keychainService: String? = nil,
+                keychainGroup: String? = nil) {
         self.settingsPresented = settingsPresented
+        self.isShown = isShown
         _store = State(initialValue: Self.store(keychainService: keychainService, keychainGroup: keychainGroup))
     }
 
     public var body: some View {
         VisorRootView(settingsPresented: settingsPresented)
             .environment(store)
+            .environment(\.visorShown, isShown)
+            .environment(\.settingsAbout, about ?? AnyView(EmptyView()))
     }
 
     private static var made: VisorStore?

@@ -34,6 +34,13 @@ struct AgentScreen: View {
     /// The window's one trailing pane (VisorRootView's): this session's
     /// details open there, in Settings' place.
     @Environment(\.trailingPane) private var trailingPane
+    /// Whether the host shows Visor (EnvironmentValues+VisorShown).
+    @Environment(\.visorShown) private var shown
+    /// The screen has appeared, and is counted among the session's screens
+    /// (AgentServerConnection.subscribe): counted only while it has
+    /// appeared and the host shows it, once.
+    @State private var appeared = false
+    @State private var counted = false
     /// A fork or branch whose ✕ was tapped, while the person confirms.
     @State private var ending: SubSession?
     /// The composer has the keyboard: taken down before a command opens a
@@ -71,6 +78,20 @@ struct AgentScreen: View {
 
     /// This session's details in the window's trailing pane, or closed if
     /// they are open (Settings, open there, gives way).
+    /// Counted as on screen: the session's sync and state go on.
+    private func count() {
+        guard appeared, shown, !counted else { return }
+        counted = true
+        host.subscribe(sessionID)
+    }
+
+    /// No longer on screen: a little later the session is let go of.
+    private func uncount() {
+        guard counted else { return }
+        counted = false
+        host.leave(sessionID)
+    }
+
     private func toggleDetails() {
         trailingPane.wrappedValue = trailingPane.wrappedValue == .session(selection) ? nil : .session(selection)
     }
@@ -143,14 +164,20 @@ struct AgentScreen: View {
         // Kept by a view of its own that reads the draft: read here (an
         // onChange of it), each keystroke evaluated the whole screen again.
         .background(DraftKeeper(draft: $draft, server: host.record.id, session: sessionID))
-        // Left: a little later its rows go from memory (the cache keeps them)
-        // and its sync stops, unless it is opened again first.
-        .onDisappear { host.leave(sessionID) }
+        // Left, or hidden by the host (a tab not selected): a little later
+        // its rows go from memory (the cache keeps them) and its sync stops,
+        // unless it is shown again first.
+        .onDisappear {
+            appeared = false
+            uncount()
+        }
+        .onChange(of: shown) { _, shown in if shown { count() } else { uncount() } }
         // Let go of while shown all the same: taken up again, rather than
         // left saying it is loading.
         .onChange(of: transcript.loaded) { _, loaded in if !loaded { host.takeUp(sessionID) } }
         .onAppear {
-            host.subscribe(sessionID)
+            appeared = true
+            count()
             // Screenshot tests: the inspector or the model picker, open —
             // once the screen has arrived and the thread has settled on
             // its last row (its second scroll comes 0.3 s after the rows),
