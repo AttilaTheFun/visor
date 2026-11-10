@@ -323,6 +323,14 @@ public struct VisorRootView: View {
                 composing = true
             case "settings-empty":
                 settingsPresented.wrappedValue = true
+            case "settings-later":
+                // As a click on Settings would: the chat open, Settings three
+                // seconds after the window has settled.
+                selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    settingsPresented.wrappedValue = true
+                }
             case "settings-docs":
                 // The other chat: no approval waiting, so its composer has the
                 // pills and no Deny and Allow.
