@@ -50,15 +50,15 @@ here=""
 [ "$(uname -s)" = Linux ] && here=1
 
 host="${OSS_FILES_HOST:-}"
+files=""
 if [ -n "$here" ]; then
-    # The job's own OS Server, the first of OSS_SERVERS, by name.
-    if [ -z "$host" ]; then
-        host="${OSS_SERVERS:-}"
-        host="${host%%[ ,]*}"
-        host="${host#*://}"
-        host="${host%%[:/]*}"
-    fi
-    [ -n "$host" ] || { echo "container_build: no host for OS Server's files (OSS_SERVERS): set OSS_FILES_HOST" >&2; exit 1; }
+    # The job's own Shireworks' files, at the address its API gives
+    # (tools/ci/shireworks.sh, copied from AttilaTheFun/shireworks, with the
+    # job's SHIREWORKS_GRANT or SHIREWORKS_SERVERS): every file's, by its
+    # SHA-256 after this.
+    files="$(sh "$ROOT/tools/ci/shireworks.sh" files-url "$SDK_SHA256")" \
+        || { echo "container_build: Shireworks didn't say where its files are (SHIREWORKS_GRANT or SHIREWORKS_SERVERS)" >&2; exit 1; }
+    files="${files%"$SDK_SHA256"}"
 else
     # The command line inside OS Server, or on the path.
     OSS="/Applications/OS Server.app/Contents/Helpers/oss"
@@ -80,9 +80,10 @@ fi
 
 # MODULE.bazel's placeholders, to this Mac's OS Server.
 mkdir -p "$ROOT/.ci"
+[ -n "$files" ] || files="http://$host:7490/files/sha256/"
 cat > "$ROOT/.ci/downloader.cfg" <<EOF
-rewrite apple-sdks\.invalid/.* http://$host:7490/files/sha256/$SDK_SHA256
-rewrite ported-tools\.invalid/sha256/(.*) http://$host:7490/files/sha256/\$1
+rewrite apple-sdks\.invalid/.* $files$SDK_SHA256
+rewrite ported-tools\.invalid/sha256/(.*) $files\$1
 EOF
 
 # In the container: the apps, then (CI's run) the Mac's own targets, each
