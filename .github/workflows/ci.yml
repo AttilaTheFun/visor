@@ -499,6 +499,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: tools/ci/check_version_line.sh "$VERSION"
+      # The app group shared with Applications, and Applications' bundle ids
+      # on a Mac (UpdateKit; tools/signing), from the repository's secrets,
+      # so neither the public source nor a log names them. Without them the
+      # builds name no group and check for no updates.
+      - name: Update settings
+        env:
+          UPDATE_APP_GROUP: ${{ secrets.VISOR_UPDATE_APP_GROUP }}
+          UPDATE_APPLICATIONS_BUNDLE_IDS: ${{ secrets.VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS }}
+        run: |
+          [ -n "$UPDATE_APP_GROUP" ] || echo "::warning::No VISOR_UPDATE_APP_GROUP secret: these builds check for no updates"
+          printf 'common --repo_env=VISOR_UPDATE_APP_GROUP=%s\ncommon --repo_env=VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS=%s\n' \
+            "$UPDATE_APP_GROUP" "$UPDATE_APPLICATIONS_BUNDLE_IDS" >> .bazelrc.user
       # The line's released agent image (MAJOR.MINOR), named, unused in the
       # job's own container.
       - name: Build
@@ -599,6 +611,18 @@ jobs:
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
         run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_container_host/Info.plist
+      # The app group shared with Applications, and Applications' bundle ids
+      # on a Mac (UpdateKit; tools/signing), from the repository's secrets,
+      # so neither the public source nor a log names them. Without them the
+      # builds name no group and check for no updates.
+      - name: Update settings
+        env:
+          UPDATE_APP_GROUP: ${{ secrets.VISOR_UPDATE_APP_GROUP }}
+          UPDATE_APPLICATIONS_BUNDLE_IDS: ${{ secrets.VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS }}
+        run: |
+          [ -n "$UPDATE_APP_GROUP" ] || echo "::warning::No VISOR_UPDATE_APP_GROUP secret: these builds check for no updates"
+          printf 'common --repo_env=VISOR_UPDATE_APP_GROUP=%s\ncommon --repo_env=VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS=%s\n' \
+            "$UPDATE_APP_GROUP" "$UPDATE_APPLICATIONS_BUNDLE_IDS" >> .bazelrc.user
       - name: Build
         env:
           VISOR_CI_PACKAGE: .ci/packages

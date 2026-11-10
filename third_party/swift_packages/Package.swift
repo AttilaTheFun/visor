@@ -36,12 +36,11 @@ let package = Package(
         ),
         // UpdateKit (ApplicationUpdates until it left the applications
         // repository, 7 Nov 2026): the build this app is, written at launch to
-        // the database it shares with Applications (the
-        // group.com.LoganShire.Applications container), and its updates
-        // told of.
+        // the database it shares with Applications (in the app group its
+        // Info.plist names, tools/signing), and its updates told of.
         .package(
             url: "https://github.com/AttilaTheFun/update_kit.git",
-            exact: "0.11.0"
+            revision: "0b94b5599a55a82e81b080c32017855e23127d20"
         ),
     ]
 )

@@ -70,8 +70,9 @@ Logan (1 November): Visor.app is the Visor Runner and Visor for macOS in one.
   (internal), `Beta` (TestFlight, later) or `Production` (the App Store).
   Applications Server releases the highest BUILD of a MAJOR.MINOR whose
   variant is Production.
-- **The app group** `group.com.LoganShire.Applications`, which Logan's apps
-  share (Reviews too).
+- **The app group** the apps share with Applications (Reviews too), for
+  UpdateKit: never in the source, but stamped in by CI's distribution builds
+  from the repository's secrets (tools/signing).
 - **Today's apps fold into it:**
   - Visor Server.app (applications/visor_menubar, `com.LoganShire.VisorServer.macOS`)
     and Visor for macOS (applications/visor_macos,
