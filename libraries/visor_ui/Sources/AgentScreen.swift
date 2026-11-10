@@ -127,12 +127,16 @@ struct AgentScreen: View {
         } message: {
             Text("Its agent stops, and it leaves Visor. The agent keeps its conversation on the computer, to resume there.")
         }
-        .adaptiveInspector(isPresented: $showInspector, compact: sizeClass == .compact) {
-            if let info {
-                SessionInspector(host: host, session: info, compact: sizeClass == .compact,
-                                 close: { showInspector = false },
-                                 archive: { showInspector = false; host.archive(sessionID) },
-                                 end: { showInspector = false; host.end(sessionID); ended.run() })
+        // (The Mac proof's "settings-noinspector": the chat without its own
+        // inspector attached, beside Settings.)
+        .unless(VisorFixture.screen == "settings-noinspector") { chat in
+            chat.adaptiveInspector(isPresented: $showInspector, compact: sizeClass == .compact) {
+                if let info {
+                    SessionInspector(host: host, session: info, compact: sizeClass == .compact,
+                                     close: { showInspector = false },
+                                     archive: { showInspector = false; host.archive(sessionID) },
+                                     end: { showInspector = false; host.end(sessionID); ended.run() })
+                }
             }
         }
         // The trailing side is Settings' or the session's, never both.
@@ -553,5 +557,12 @@ private struct DraftKeeper: View {
     var body: some View {
         Color.clear.frame(width: 0, height: 0)
             .onChange(of: draft) { _, now in SavedDrafts.keep(now, server: server, session: session) }
+    }
+}
+
+fileprivate extension View {
+    /// The view as it is when `skip`, else with `apply`'s modifiers.
+    @ViewBuilder func unless(_ skip: Bool, _ apply: (Self) -> some View) -> some View {
+        if skip { self } else { apply(self) }
     }
 }

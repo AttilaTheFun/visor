@@ -28,7 +28,7 @@ me="$(basename "$0")"
 apps="$(cd "$1" && pwd)"
 mkdir -p "$2"
 out="$(cd "$2" && pwd)"
-SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands settings settings-empty settings-split settings-later settings-docs settings-stack settings-stub"
+SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands settings settings-empty settings-split settings-later settings-docs settings-stack settings-stub settings-noinspector"
 SETTLE="${VISOR_SNAPSHOT_SETTLE:-8}"
 [ -f "$apps/visor_mac.zip" ] || { echo "$me: no visor_mac.zip in $apps" >&2; exit 1; }
 

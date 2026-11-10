@@ -341,7 +341,7 @@ public struct VisorRootView: View {
                 // pills and no Deny and Allow.
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))
                 settingsPresented.wrappedValue = true
-            case "settings", "settings-split", "settings-plain", "settings-stack", "settings-stub":
+            case "settings", "settings-split", "settings-plain", "settings-stack", "settings-stub", "settings-noinspector":
                 // Beside a chat: the composer's row of pills next to the
                 // inspector is the Mac's case to check (NavigationUI's
                 // SettingsInspectorPlacement, 9 Nov 2026).
