@@ -75,12 +75,17 @@ public struct VisorRootView: View {
     /// split view (NavigationUI's one-call form) in place of the detail
     /// column, to tell the placement from the content when Settings beside a
     /// chat spins (9 Nov 2026).
-    private static var settingsOnSplitView: Bool { VisorFixture.screen == "settings-split" }
+    private static var settingsOnSplitView: Bool { VisorFixture.screen == "settings-split" || settingsInStack }
+    /// "settings-stack": Settings on the stack's root content, where the
+    /// session's own inspector is (which the window grows for).
+    private static var settingsInStack: Bool { VisorFixture.screen == "settings-stack" }
 
     /// The split view with Settings: the platform's places (the detail
     /// column on a Mac), or the whole split view for "settings-split".
     @ViewBuilder private func withSettings(_ split: some View) -> some View {
-        if Self.settingsOnSplitView {
+        if Self.settingsInStack {
+            split
+        } else if Self.settingsOnSplitView {
             split.settingsInspector(isPresented: settingsPresented) { VisorSettingsView(computer: $settingsComputer) }
         } else {
             split.settingsInspector(isPresented: settingsPresented, attachedTo: .splitView) {
@@ -336,7 +341,7 @@ public struct VisorRootView: View {
                 // pills and no Deny and Allow.
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))
                 settingsPresented.wrappedValue = true
-            case "settings", "settings-split", "settings-plain":
+            case "settings", "settings-split", "settings-plain", "settings-stack":
                 // Beside a chat: the composer's row of pills next to the
                 // inspector is the Mac's case to check (NavigationUI's
                 // SettingsInspectorPlacement, 9 Nov 2026).
@@ -561,7 +566,7 @@ public struct VisorRootView: View {
         // Back from a page over the chat past the chat to the list on a
         // collapsed phone.
         NavigationStack(path: boundSubPath) {
-            detailRoot
+            stackRoot
                 // The detail takes the window's slack, so the sidebar opens at
                 // its own width instead of stretching to its maximum. Its one
                 // width, on the stack's root content, never on the stack too:
@@ -574,6 +579,18 @@ public struct VisorRootView: View {
                 .navigationDestination(for: SubSessionRoute.self) { route in
                     if let which = selection?.session, let host = store.server(for: which.serverID) { subPage(route, host: host) }
                 }
+        }
+    }
+
+    /// The stack's root: what is selected, with Settings on it for the Mac
+    /// proof's "settings-stack".
+    @ViewBuilder private var stackRoot: some View {
+        if Self.settingsInStack {
+            detailRoot.inspector(isPresented: settingsPresented) {
+                VisorSettingsView(computer: $settingsComputer).inspectorColumnWidth(min: 280, ideal: 320, max: 420)
+            }
+        } else {
+            detailRoot
         }
     }
 
