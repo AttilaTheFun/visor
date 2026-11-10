@@ -35,9 +35,9 @@ request's commits. A rule that matters and can be checked goes there too.
   (re-resolve with `swift package resolve`, delete `.build`), swift_sql in
   the root Package.swift too (the SwiftPM server). Versions are
   `MAJOR.MINOR.BUILD` (from 0.38; no point releases): the plists and
-  MODULE.bazel say `0.47.0`, CI stamps each build's own (`0.47.N`, build
+  MODULE.bazel say `0.48.0`, CI stamps each build's own (`0.48.N`, build
   number 1; Android's versionCode MAJOR×1,000,000 + MINOR×1,000 + BUILD),
-  and a release is tagged `v0.47.N`, the build it releases.
+  and a release is tagged `v0.48.N`, the build it releases.
   A branch in development may pin a revision of something not yet
   released; a release may not: CI's `pins` job (tools/released_pins.sh)
   fails on main's commits until every pin is a released version, and
