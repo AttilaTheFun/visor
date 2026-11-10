@@ -6,7 +6,8 @@
 // messages in a folder of its own. Every one shows the one store, with
 // Settings as its own inspector (VisorRootView), whose being open a host may
 // hold. A host shares Visor.app's computers by naming Visor's keychain
-// service, with the keychain group that holds them in its entitlements.
+// service and the keychain group that holds them (one of its own
+// `keychain-access-groups`); or keeps its own, by default.
 // Pushes and the home screen's widget are the Visor app's: a host gets the
 // notifications the device makes itself (for a computer that sends no
 // pushes), once it allows them.
@@ -27,12 +28,14 @@ public struct VisorView: View {
     private let settingsPresented: Binding<Bool>?
     @State private var store: VisorStore
 
-    /// `keychainService`: where the computers are kept, for the first view
-    /// made (later ones show the same store); by default the host's bundle
-    /// id with `.visor`, apart from the host's own items.
-    public init(settingsPresented: Binding<Bool>? = nil, keychainService: String? = nil) {
+    /// `keychainService` and `keychainGroup`: where the computers are kept,
+    /// for the first view made (later ones show the same store). By default
+    /// the host's bundle id with `.visor`, in its default group, apart from
+    /// the host's own items; Visor's own (`com.LoganShire.Visor`, its
+    /// `<team>.com.LoganShire.Visor.shared` group) to share Visor's.
+    public init(settingsPresented: Binding<Bool>? = nil, keychainService: String? = nil, keychainGroup: String? = nil) {
         self.settingsPresented = settingsPresented
-        _store = State(initialValue: Self.store(keychainService: keychainService))
+        _store = State(initialValue: Self.store(keychainService: keychainService, keychainGroup: keychainGroup))
     }
 
     public var body: some View {
@@ -43,14 +46,15 @@ public struct VisorView: View {
     private static var made: VisorStore?
 
     /// The one store, its services installed and its cache opened first.
-    private static func store(keychainService: String?) -> VisorStore {
+    private static func store(keychainService: String?, keychainGroup: String?) -> VisorStore {
         if let made { return made }
         let host = Bundle.main.bundleIdentifier ?? "Visor"
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(host, isDirectory: true).appendingPathComponent("Visor", isDirectory: true)
         AgentServerConnection.cache = .open(named: "messages", in: folder)
         installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(),
-                             settings: NativeVisorSettingsService(keychainService: keychainService ?? host + ".visor"),
+                             settings: NativeVisorSettingsService(keychainService: keychainService ?? host + ".visor",
+                                                                  keychainGroup: keychainGroup),
                              notifications: NativeVisorNotificationService(), ssh: NativeVisorSSHService(),
                              network: NativeVisorNetworkService(), dictation: NativeVisorDictationService(),
                              deviceName: deviceName, appVersion: appVersion, platformName: platformName)

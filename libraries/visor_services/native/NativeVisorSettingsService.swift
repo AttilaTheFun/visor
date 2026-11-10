@@ -17,9 +17,15 @@ public final class NativeVisorSettingsService: VisorSettingsService {
     /// unless the app says otherwise (Visor on the Mac keeps the one the
     /// client had before it was merged into it).
     private let keychainService: String
+    /// The keychain access group secrets are kept in (`<team>.<group>`, one
+    /// of the app's `keychain-access-groups`), for apps that share them; nil
+    /// for the app's default group. On the Mac a group is the data
+    /// protection keychain's, not the login keychain's.
+    private let keychainGroup: String?
 
-    public init(keychainService: String? = nil) {
+    public init(keychainService: String? = nil, keychainGroup: String? = nil) {
         self.keychainService = keychainService ?? Bundle.main.bundleIdentifier ?? "Visor"
+        self.keychainGroup = keychainGroup
     }
 
     public func get(key: String) -> String {
@@ -76,9 +82,14 @@ public final class NativeVisorSettingsService: VisorSettingsService {
     private static let logger = Logger(subsystem: "com.LoganShire.VisorClient", category: "keychain")
 
     private func query(_ key: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: keychainService,
-         kSecAttrAccount as String: key]
+        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: keychainService,
+                                    kSecAttrAccount as String: key]
+        if let keychainGroup {
+            query[kSecAttrAccessGroup as String] = keychainGroup
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+        return query
     }
     #else
     /// Secrets with the settings, under a name of their own.

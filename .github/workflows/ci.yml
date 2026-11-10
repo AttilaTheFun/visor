@@ -194,6 +194,18 @@ jobs:
           name: test-logs
           path: ${{ runner.temp }}/test-logs
 
+  # Visor's client as another app takes it (Package.swift's VisorUI, which
+  # Shireworks' Visor tab embeds), built with SwiftPM for macOS and iOS: on
+  # Visor's own resolution, and in a stand-in host with swift-crypto 3.x
+  # (tools/ci/client_package.sh). Nothing else builds it so.
+  client-package:
+    if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/ci/client_package.sh "$RUNNER_TEMP/client-package"
+
   # The proof's apps: the iPhone app and its probe for Apple silicon's
   # simulator, and Visor.app (signed ad hoc, as a build on Linux is).
   build-apple:
@@ -376,7 +388,7 @@ jobs:
   # success is the commit verified, which a release's alpha and the release
   # job ask for.
   verify:
-    needs: [build-tests, test, linux, blue-web, build-apple, build-android, proof-ios, proof-mac, proof-android]
+    needs: [build-tests, test, linux, blue-web, client-package, build-apple, build-android, proof-ios, proof-mac, proof-android]
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release') }}
     runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 20
@@ -396,14 +408,15 @@ jobs:
           path: ${{ runner.temp }}/proof/proof
           if-no-files-found: error
           retention-days: 90
-      - if: needs.test.result != 'success' || needs.linux.result != 'success' || needs.blue-web.result != 'success' || needs.proof-ios.result != 'success' || needs.proof-mac.result != 'success' || needs.proof-android.result != 'success'
+      - if: needs.test.result != 'success' || needs.linux.result != 'success' || needs.blue-web.result != 'success' || needs.client-package.result != 'success' || needs.proof-ios.result != 'success' || needs.proof-mac.result != 'success' || needs.proof-android.result != 'success'
         run: |
-          echo "::error::Not verified: the Mac's tests $TESTS, Linux's $LINUX, the web client $WEB, iPhone $IOS, Mac $MAC, Android $ANDROID"
+          echo "::error::Not verified: the Mac's tests $TESTS, Linux's $LINUX, the web client $WEB, the client package $CLIENT, iPhone $IOS, Mac $MAC, Android $ANDROID"
           exit 1
         env:
           TESTS: ${{ needs.test.result }}
           LINUX: ${{ needs.linux.result }}
           WEB: ${{ needs.blue-web.result }}
+          CLIENT: ${{ needs.client-package.result }}
           IOS: ${{ needs.proof-ios.result }}
           MAC: ${{ needs.proof-mac.result }}
           ANDROID: ${{ needs.proof-android.result }}
