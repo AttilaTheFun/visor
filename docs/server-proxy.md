@@ -171,13 +171,14 @@ What the container's server needs of Shireworks:
   the server's own loop answers) does not answer; its agents outlive a
   restart under their hosts, as on the Mac.
 - **Its proxy, given at start** (the contract with Shireworks,
-  docs/primary-container.md there): `SHIREWORKS_HOST_ADDRESS`, the Mac's
-  address on the containers' network (their gateway: 192.168.128.1 on the
-  MacBook, configurable, never hard-coded), with the proxy's port for the
-  URL; and the token, a secret Shireworks makes once and gives the
-  container as a file (`/run/secrets/visor`), its path in
-  `VISOR_PROXY_TOKEN_FILE`, never in the environment itself or a log. The
-  server presents it as `X-Visor-Proxy` on what goes out.
+  docs/primary-container.md there): `VISOR_PROXY_URL`, made by Shireworks
+  from `SHIREWORKS_HOST_ADDRESS`, the Mac's address on the containers'
+  network (their gateway: 192.168.128.1 on the MacBook, configurable, never
+  hard-coded), and the proxy's port (`http://{host}:<port>`); and the token,
+  a secret Shireworks makes once and gives the container as a file
+  (`/run/secrets/visor-proxy`), its path in `VISOR_PROXY_TOKEN_FILE`, never
+  in the environment itself or a log. The server presents it as
+  `X-Visor-Proxy` on what goes out.
 - **One port forwarded, fixed**: the container's 7433 to a host port fixed
   in Shireworks' settings (`hostPort`, the same at every start), on the
   Mac's loopback alone. The proxy is set once to `127.0.0.1:<hostPort>`,
