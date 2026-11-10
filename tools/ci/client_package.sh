@@ -58,7 +58,8 @@ EOF
 
 echo "::group::A host with swift-crypto 3 (macOS)"
 xcrun swift build --package-path "$host" --scratch-path "$WORK/host-mac"
-grep -A4 '"swift-crypto"' "$host/Package.resolved" | grep '"version"'
+# Which swift-crypto it took (the manifest pins 3.15.1 exactly): said, not checked.
+xcrun swift package --package-path "$host" --scratch-path "$WORK/host-mac" show-dependencies 2>/dev/null | grep swift-crypto || true
 echo "::endgroup::"
 
 echo "::group::A host with swift-crypto 3 (iOS)"
