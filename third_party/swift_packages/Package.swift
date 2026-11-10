@@ -18,7 +18,7 @@ let package = Package(
         .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.48.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            exact: "0.50.0"
+            revision: "c7f3c1f767d05a7250e74893628b66bc63254555"
         ),
         // SSH as a road to a server: the client's own SSH connection, a
         // port forwarded to the server on its loopback (SSHAgentServer).
