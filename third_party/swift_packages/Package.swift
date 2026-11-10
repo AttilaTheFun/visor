@@ -15,7 +15,12 @@ let package = Package(
         // its release's tag: its own dependencies are by revision and branch,
         // so SwiftPM won't take it by version (tools/released_pins.sh allows
         // this one).
-        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.48.1"),
+        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.49.1"),
+        // Unused here, and by isomer 0.49.1's targets too, but its MODULE.bazel
+        // still imports swiftpkg_grpc_swift_protobuf from this graph, which a
+        // package nothing uses would leave out. Named so it resolves, at the
+        // version 0.48.1 brought, until isomer drops the import.
+        .package(url: "https://github.com/grpc/grpc-swift-protobuf.git", exact: "2.5.0"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
             exact: "0.50.0"
