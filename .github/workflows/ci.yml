@@ -129,9 +129,13 @@ jobs:
         run: bazel shutdown || true
       # The command-line server with SwiftPM, and the client's host services
       # on their own (a file that uses Foundation without importing it fails
-      # here, as in Visor on Isomer). Its tests are verify's (linux).
+      # here, as in Visor on Isomer). Its tests are verify's (linux). The
+      # server alone: the client the package declares for apps that embed it
+      # builds only against Apple's SwiftUI (Package.swift).
       - name: The command-line server on Linux
         if: steps.changes.outputs.code == 'true'
+        env:
+          VISOR_SERVER_ONLY: "1"
         run: |
           swift build --product visor-server
           swift build --target VisorServices

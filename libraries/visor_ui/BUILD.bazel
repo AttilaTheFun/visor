@@ -13,6 +13,7 @@ swift_library(
         "//:foundation",
         "//:pasteboard",
         "//:swift_ui",
+        "//libraries/message_cache",
         "//libraries/visor_client",
         "//libraries/visor_protocol",
         "//libraries/visor_services",

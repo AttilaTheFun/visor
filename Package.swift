@@ -11,25 +11,39 @@
 // Windows's (libraries/visor_server_windows). The Mac's apps and the iOS
 // app are Bazel's (MODULE.bazel); this builds none of them.
 //
-// Resolved on a Mac, it also offers Visor's client as libraries, for an app
-// that has a Visor of its own (Shireworks' Visor tab: issues#4): VisorClient,
-// VisorUI and VisorServices, for iOS and macOS on Apple's SwiftUI. The
-// client on Isomer (the web, Android) stays Bazel's.
+// It also offers Visor's client as libraries, for an app that has a Visor
+// of its own (Shireworks' Visor tab: issues#4): VisorClient, VisorUI (with
+// VisorView, the whole of it in one view) and VisorServices, for iOS and
+// macOS on Apple's SwiftUI. They are declared on every host, as an app's
+// Apple builds may resolve packages on Linux (rules_applecross), and built
+// only for Apple's platforms. The client on Isomer (the web, Android) stays
+// Bazel's.
 
 import PackageDescription
+
+/// Visor's own server builds leave the client out, which builds only against
+/// Apple's SwiftUI: CI's Linux SwiftPM steps and the agent image set
+/// VISOR_SERVER_ONLY=1, since `swift test` and `--target` build what the
+/// package declares. Windows leaves it out always.
+let serverOnly = Context.environment["VISOR_SERVER_ONLY"] != nil
+#if os(Windows)
+let withClient = false
+#else
+let withClient = !serverOnly
+#endif
 
 /// Swift 6, and a warning is an error, as in the Bazel build (STRICT_SWIFT)
 /// — except on Windows, whose SDK module warns about itself ("wchar_t …
 /// broken by a context change") in everything that imports Foundation.
 ///
-/// Resolved on a Mac, the language mode alone: a product built with unsafe
-/// flags can't be another package's dependency (the client libraries below),
-/// and the Mac's builds are Bazel's, which holds them to STRICT_SWIFT.
-#if os(macOS)
-let strict: [SwiftSetting] = [.swiftLanguageMode(.v6)]
-#else
-let strict: [SwiftSetting] = [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-as-errors"], .when(platforms: [.linux]))]
-#endif
+/// Where the client is declared, the language mode alone: a product built
+/// with unsafe flags can't be another package's dependency (the client
+/// libraries below), and the apps' builds are Bazel's, which holds them to
+/// STRICT_SWIFT. Visor's own Linux builds (VISOR_SERVER_ONLY) keep warnings
+/// as errors.
+let strict: [SwiftSetting] = withClient
+    ? [.swiftLanguageMode(.v6)]
+    : [.swiftLanguageMode(.v6), .unsafeFlags(["-warnings-as-errors"], .when(platforms: [.linux]))]
 
 /// The client's host services, built on their own here, on Linux's CI
 /// (`swift build --target VisorServices`): a file that uses Foundation
@@ -136,20 +150,22 @@ let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["Vis
 /// third_party/swift_packages pins.
 let runnerPackages: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-certificates.git", from: "1.21.1"),
-    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
+    // 3.x too: the client's SSH takes it, and an app that embeds the client
+    // may hold it there (Apple's containerization 0.33 allows 3.x alone).
+    // The Runner's own builds resolve 4.x (Package.resolved).
+    .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
     .package(url: "https://github.com/apple/swift-asn1.git", from: "1.7.3"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
     .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.6"),
 ]
 #endif
 
-#if os(macOS)
 /// Visor's client for Apple's platforms, as libraries: what the Bazel build
 /// compiles for the iPhone and the Mac (visor_client, visor_ui and
 /// visor_services with its native services), on AgentUI, at the versions
-/// third_party/swift_packages pins. Only where the package is resolved on a
-/// Mac: Linux and Windows don't fetch AgentUI or SwiftNIO for the server.
-let client: [Target] = [
+/// third_party/swift_packages pins. Declared on every host but Windows,
+/// unless VISOR_SERVER_ONLY (above); built only for Apple's platforms.
+let client: [Target] = !withClient ? [] : [
     .target(name: "VisorSSH",
             dependencies: [.product(name: "NIOSSH", package: "swift-nio-ssh"), .product(name: "NIOCore", package: "swift-nio"),
                            .product(name: "NIOPosix", package: "swift-nio"), .product(name: "Crypto", package: "swift-crypto")],
@@ -159,32 +175,27 @@ let client: [Target] = [
     .target(name: "VisorClient", dependencies: ["MessageCache", "VisorProtocol", "VisorServices"],
             path: "libraries/visor_client/Sources", swiftSettings: strict),
     .target(name: "VisorUI",
-            dependencies: ["VisorCamera", "VisorPasteboard", "VisorClient", "VisorProtocol", "VisorServices",
+            dependencies: ["VisorCamera", "VisorPasteboard", "VisorClient", "VisorProtocol", "VisorServices", "MessageCache",
                            .product(name: "AgentUI", package: "agent_ui"), .product(name: "NavigationUI", package: "agent_ui")],
             path: "libraries/visor_ui/Sources", swiftSettings: strict),
 ]
 /// The client's host services with their native ones (the sockets, HTTP,
 /// settings, notifications, SSH), as Bazel compiles them for Apple's
-/// platforms: one module, both folders.
-let services: [Target] = [
+/// platforms: one module, both folders. Without the client, the shared
+/// folder alone (clientServices, above).
+let services: [Target] = !withClient ? clientServices : [
     .target(name: "VisorServices", dependencies: ["VisorSSH"], path: "libraries/visor_services",
             exclude: ["BUILD.bazel"], sources: ["Sources", "native"], swiftSettings: strict),
 ]
-let clientProducts: [Product] = [
+let clientProducts: [Product] = !withClient ? [] : [
     .library(name: "VisorClient", targets: ["VisorClient"]),
     .library(name: "VisorUI", targets: ["VisorUI"]),
     .library(name: "VisorServices", targets: ["VisorServices"]),
 ]
-let clientPackages: [Package.Dependency] = [
+let clientPackages: [Package.Dependency] = !withClient ? [] : [
     .package(url: "https://github.com/AttilaTheFun/agent_ui.git", exact: "0.50.0"),
     .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.0"),
 ]
-#else
-let client: [Target] = []
-let services = clientServices
-let clientProducts: [Product] = []
-let clientPackages: [Package.Dependency] = []
-#endif
 
 let package = Package(
     name: "visor",
