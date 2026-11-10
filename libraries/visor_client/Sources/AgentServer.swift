@@ -140,10 +140,11 @@ public protocol AgentServer: AnyObject {
 
     // MARK: Where the server has them
 
-    /// Gives the server this device's push token. Whether the server sends
+    /// Gives the server this device's push token, and the kinds of push it
+    /// doesn't want (`PushKind`'s raw values). Whether the server sends
     /// pushes: then it says what happened, and the device does not say it
     /// too. A server without pushes answers false.
-    func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool
+    func registerPush(token: String, platform: String, environment: String, topic: String, muted: [String]) async throws -> Bool
     /// The server's connection codes, as the server itself shows them: the
     /// one its QR code carries, and one leading with each kind of path, so
     /// a device that has the server can hand it on to another.
@@ -247,7 +248,7 @@ public extension AgentServer {
     func mail(for session: String) async throws -> (inbox: [MailMessage], outbox: [MailMessage]) { ([], []) }
     func account(of agent: AgentKind) async throws -> AgentAccount? { nil }
     func verifyChannel() async -> Bool { true }
-    func registerPush(token: String, platform: String, environment: String, topic: String) async throws -> Bool { false }
+    func registerPush(token: String, platform: String, environment: String, topic: String, muted: [String]) async throws -> Bool { false }
     func connectionCodes() async throws -> ConnectionCodes { throw AgentServerError.unsupported }
     var relays: Bool { false }
     func relay(_ report: DirectoryReport) async throws -> [RelayMessage] { throw AgentServerError.unsupported }
