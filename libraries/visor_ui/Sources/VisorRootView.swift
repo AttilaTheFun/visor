@@ -88,21 +88,26 @@ public struct VisorRootView: View {
         })
     }
 
+    /// Settings with its title and Done, where it is a sheet.
+    private var settingsSheet: some View {
+        NavigationStack {
+            VisorSettingsView(computer: $settingsComputer)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { settingsPresented.wrappedValue = false }
+                            .accessibilityIdentifier("settings-done")
+                    }
+                }
+        }
+    }
+
     /// What the pane shows: Settings, or a session's details (in a sheet
     /// on a phone, with Settings' title and Done there).
     @ViewBuilder private var paneContent: some View {
         switch pane {
         case .settings:
             if compact {
-                NavigationStack {
-                    VisorSettingsView(computer: $settingsComputer)
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { settingsPresented.wrappedValue = false }
-                                    .accessibilityIdentifier("settings-done")
-                            }
-                        }
-                }
+                settingsSheet
             } else {
                 VisorSettingsView(computer: $settingsComputer)
             }
@@ -181,7 +186,12 @@ public struct VisorRootView: View {
 
     @ViewBuilder private var root: some View {
         if VisorFixture.screen == "onboarding" || VisorOnboardings.current.isNeeded(store) {
+            // No split view yet, so no pane: Settings is a sheet, opened by
+            // the onboarding's own Settings button (the trailing pane in its
+            // environment), as every tab of a host has its gear.
             VisorOnboardings.current.view(store)
+                .environment(\.trailingPane, $pane)
+                .sheet(isPresented: settingsPresented) { settingsSheet }
         } else if let account = VisorAccounts.current, !store.accountSignedIn {
             AccountSignInView(account: account)
         } else {
