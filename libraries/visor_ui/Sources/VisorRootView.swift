@@ -71,6 +71,24 @@ public struct VisorRootView: View {
     /// Whether Settings is open: the host's binding, or this view's own.
     private var settingsPresented: Binding<Bool> { givenSettings ?? $ownSettings }
 
+    /// The Mac proof's fixture screen "settings-split": Settings on the whole
+    /// split view (NavigationUI's one-call form) in place of the detail
+    /// column, to tell the placement from the content when Settings beside a
+    /// chat spins (9 Nov 2026).
+    private static var settingsOnSplitView: Bool { VisorFixture.screen == "settings-split" }
+
+    /// The split view with Settings: the platform's places (the detail
+    /// column on a Mac), or the whole split view for "settings-split".
+    @ViewBuilder private func withSettings(_ split: some View) -> some View {
+        if Self.settingsOnSplitView {
+            split.settingsInspector(isPresented: settingsPresented) { VisorSettingsView(computer: $settingsComputer) }
+        } else {
+            split.settingsInspector(isPresented: settingsPresented, attachedTo: .splitView) {
+                VisorSettingsView(computer: $settingsComputer)
+            }
+        }
+    }
+
     /// Settings open at a computer's page.
     private func openSettings(for host: AgentServerConnection) {
         settingsComputer = host.id
@@ -117,18 +135,19 @@ public struct VisorRootView: View {
         // No preferred compact column: on a phone the list's selection says
         // what shows, as in Reviews. Bound, SwiftUI set it to the sidebar as
         // a page over the chat was popped, and Back went past the chat.
-        NavigationSplitView(columnVisibility: $columns) {
+        withSettings(NavigationSplitView(columnVisibility: $columns) {
             sidebar
         } detail: {
-            detailView
-                .settingsInspector(isPresented: settingsPresented, attachedTo: .detail) {
-                    VisorSettingsView(computer: $settingsComputer)
-                }
+            if Self.settingsOnSplitView {
+                detailView
+            } else {
+                detailView
+                    .settingsInspector(isPresented: settingsPresented, attachedTo: .detail) {
+                        VisorSettingsView(computer: $settingsComputer)
+                    }
+            }
         }
-        .navigationSplitViewStyle(.balanced)
-        .settingsInspector(isPresented: settingsPresented, attachedTo: .splitView) {
-            VisorSettingsView(computer: $settingsComputer)
-        }
+        .navigationSplitViewStyle(.balanced))
         .environment(\.settingsPresented, settingsPresented)
         .sheet(isPresented: $composing) {
             ComposeSessionSheet(store: store) { serverID, id in
@@ -302,7 +321,9 @@ public struct VisorRootView: View {
                 search = VisorFixture.searchQuery
             case "new-session":
                 composing = true
-            case "settings":
+            case "settings-empty":
+                settingsPresented.wrappedValue = true
+            case "settings", "settings-split", "settings-plain":
                 // Beside a chat: the composer's row of pills next to the
                 // inspector is the Mac's case to check (NavigationUI's
                 // SettingsInspectorPlacement, 9 Nov 2026).

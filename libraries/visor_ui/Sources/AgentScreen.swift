@@ -263,7 +263,9 @@ struct AgentScreen: View {
         ) {
             if let approval = transcript.pendingApproval {
                 ApprovalControls(request: approval, host: host, sessionID: sessionID, answering: $answering)
-            } else if let info {
+            } else if let info, VisorFixture.screen != "settings-plain" {
+                // (The Mac proof's "settings-plain": the composer with none of
+                // these, beside Settings, to tell them from the rest.)
                 // Pictures, before anything else in the row: what you are
                 // about to say, then how it is being said.
                 // A phone asks where from; a Mac or a browser goes
