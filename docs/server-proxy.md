@@ -290,8 +290,12 @@ Agreed with Shireworks the same evening.
     `lo0`, and an `rdr` rule there sends it to multipass-client's listener.
     The original destination comes from pf's state (`DIOCNATLOOK`), as
     transparent proxies on macOS do.
-  - **DNS:** the system resolver pointed at 127.0.0.1.
-  - It's installed in the VM's image, with the root it needs for pf.
+  - **DNS:** `/etc/resolver` pointed at 127.0.0.1.
+  - It's a root launchd daemon in the VM's image, for pf, started before any
+    agent.
+  - Shireworks spikes the vsock relay and the pf redirect in a VM first. If
+    they don't hold, the fallback is NAT to the host only, with the system's
+    and HTTP(S) proxy settings.
 - **Native agents on the Mac** keep the explicit `HTTP(S)_PROXY` and the CA
   bundle: a Network Extension packet tunnel would route the whole Mac, since
   macOS has no per-app VPN without device management.

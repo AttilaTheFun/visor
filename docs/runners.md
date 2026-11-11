@@ -109,11 +109,16 @@ Logan, 11 Nov:
   below.
 - **In the primary macOS VM:** a Shireworks macOS VM agent runner, for work
   that needs macOS and Xcode. Xcode comes from the VM's image.
-  - It's the container runner's twin. It says hello as `kind: vm` with labels
-    `macos`, `xcode`; starts wrapped agents in the VM; keeps its sessions' data
-    there; and serves the same MCP for reports.
-  - The VM has no network of its own. multipass-client runs in the guest over
-    a vsock relay (server-proxy.md, "Containers: no network").
+  - It's the container runner's twin, on the same contract: pairing, hello
+    as `kind: macos-vm` with labels `macos`, `xcode`, `shireworks`, starts,
+    the reports MCP, archive, Migrate… and Backup….
+  - It's enabled where Shireworks has its primary macOS VM. Its sessions run
+    as a slot user of that VM, their data on Sessions shared into the VM by
+    name.
+  - The VM has no network of its own. A macOS `multipass-client` runs in the
+    guest over a vsock relay (server-proxy.md, "In a macOS VM"), if
+    Shireworks' spike holds. If not, the fallback is NAT to the host only,
+    with the system's and HTTP(S) proxy settings.
   - It comes after the container runner.
 
 ## The parts
