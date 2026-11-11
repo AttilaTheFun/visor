@@ -256,8 +256,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/update_kit.git",
       "state" : {
-        "revision" : "0b94b5599a55a82e81b080c32017855e23127d20",
-        "version" : "0.12.0"
+        "revision" : "ccd706e0543f595c229d990da8e2716992ff5374",
+        "version" : "0.13.0"
       }
     }
   ],
