@@ -1,5 +1,6 @@
 import Foundation
 import VisorServer
+import VisorSystem
 import XCTest
 
 final class ToolPathTests: ServerTestCase {

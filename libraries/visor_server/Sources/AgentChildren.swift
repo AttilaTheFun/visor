@@ -1,4 +1,5 @@
 import Foundation
+import VisorSystem
 
 /// Where an agent is started: under a host of its own (HostedChild), so it
 /// outlives the server — unless detaching is turned off

@@ -4,6 +4,7 @@
 // every system; the system carries only the bytes.
 
 import Foundation
+import VisorSystem
 
 @MainActor
 final class WebSocketConnection {

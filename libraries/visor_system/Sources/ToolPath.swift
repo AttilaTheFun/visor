@@ -1,6 +1,5 @@
 import Foundation
 import Synchronization
-import VisorProtocol
 
 /// Where the agents' command-line tools live: on the server's own PATH
 /// first, so a wrapper put there is the tool. A server started by the
@@ -16,7 +15,7 @@ public enum ToolPath {
     /// server's PATH, in one of the usual directories, or where the system
     /// last found it.
     public static func resolve(_ name: String) -> String? {
-        let tools = ServerPlatform.current.tools
+        let tools = SystemPlatform.current.tools
         for directory in tools.searchPath(ProcessInfo.processInfo.environment) + tools.directories {
             for file in tools.fileNames(for: name) {
                 let path = (directory as NSString).appendingPathComponent(file)
@@ -32,7 +31,7 @@ public enum ToolPath {
     @concurrent
     public static func locate(_ names: [String]) async {
         for name in names where resolve(name) == nil {
-            let found = await ServerPlatform.current.tools.ask(for: name)
+            let found = await SystemPlatform.current.tools.ask(for: name)
             asked.withLock { $0[name] = found }
         }
     }
@@ -50,7 +49,7 @@ public enum ToolPath {
     /// directories on its search path and any trace of a surrounding
     /// Claude Code session removed (a nested session refuses to start).
     public static func environment() -> [String: String] {
-        var env = ServerPlatform.current.tools.environment(ProcessInfo.processInfo.environment)
+        var env = SystemPlatform.current.tools.environment(ProcessInfo.processInfo.environment)
         for key in env.keys where key == "CLAUDECODE" || key.hasPrefix("CLAUDE_CODE_") { env.removeValue(forKey: key) }
         return env
     }

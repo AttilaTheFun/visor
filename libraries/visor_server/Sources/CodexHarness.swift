@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import VisorProtocol
+import VisorSystem
 
 /// Codex through its app-server: one long-lived daemon per session, a
 /// thread started or resumed by id, each message a turn, a turn

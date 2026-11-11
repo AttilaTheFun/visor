@@ -17,6 +17,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     /// Where backups go unless the request names a folder: beside the

@@ -6,6 +6,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     /// What this server will do with the session offered (`offer`): where

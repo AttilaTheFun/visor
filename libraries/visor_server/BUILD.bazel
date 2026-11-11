@@ -15,11 +15,14 @@ swift_library(
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorServer",
+    # VisorSystem's `package` members are its to use.
+    package_name = "visor",
     deps = [
         "//:foundation",
         "//libraries/agent_host_wire",
         "//libraries/claude_transcript",
         "//libraries/message_cache",
         "//libraries/visor_protocol",
+        "//libraries/visor_system",
     ],
 )

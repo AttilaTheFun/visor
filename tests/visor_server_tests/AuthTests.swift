@@ -13,6 +13,7 @@ import Darwin
 import VisorProtocol
 @testable import VisorServer
 import Synchronization
+import VisorSystem
 import XCTest
 
 @MainActor

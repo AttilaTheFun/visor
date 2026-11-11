@@ -1,5 +1,6 @@
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 /// What a line of Claude Code's output says, as far as the server cares:
 /// read off the main actor, so a long line (a tool's whole result) costs

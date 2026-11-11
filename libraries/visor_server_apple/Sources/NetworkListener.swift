@@ -2,6 +2,7 @@ import Darwin
 import Network
 import Security
 import VisorServer
+import VisorSystem
 
 /// A Network framework listener, on the main queue: connections are taken
 /// as they arrive, in order.

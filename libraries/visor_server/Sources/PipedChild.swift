@@ -4,6 +4,7 @@
 // read comes back as a stream, in order.
 
 import Foundation
+import VisorSystem
 
 /// An agent on pipes: JSON lines in on its standard input, bytes out on
 /// its output and its errors, and how it ended.

@@ -8,6 +8,7 @@
 // and the hosts' sockets must outlive the server.
 
 import Foundation
+import VisorSystem
 
 extension VisorServer {
     /// VISOR_RUNTIME_DIR, when it is set: the sockets' folder.

@@ -1,6 +1,7 @@
 import Foundation
 import VisorServer
 import VisorServerApple
+import VisorSystem
 
 /// A Mac's platform for the tests: secrets in memory, and what the server
 /// keeps in a scratch folder rather than the installed server's.

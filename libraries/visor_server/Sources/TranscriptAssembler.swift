@@ -7,6 +7,7 @@
 import ClaudeTranscript
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 struct TranscriptAssembler {
     /// The assistant message being assembled, as ordered segments.

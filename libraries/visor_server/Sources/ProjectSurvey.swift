@@ -6,6 +6,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 enum ProjectSurvey {
     /// The session's folder (its repository, when it is in one) first,

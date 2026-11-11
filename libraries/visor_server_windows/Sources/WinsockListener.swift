@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import VisorServer
+import VisorSystem
 import WinSDK
 
 /// A listening socket, accepted on by a thread of its own.

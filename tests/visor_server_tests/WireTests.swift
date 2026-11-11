@@ -5,6 +5,7 @@
 import Foundation
 import VisorProtocol
 @testable import VisorServer
+import VisorSystem
 import XCTest
 
 /// A connection's bytes in memory: what the server sent, and a way to say

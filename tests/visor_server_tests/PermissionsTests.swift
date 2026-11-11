@@ -7,6 +7,7 @@
 import Foundation
 import VisorProtocol
 @testable import VisorServer
+import VisorSystem
 import XCTest
 
 @MainActor

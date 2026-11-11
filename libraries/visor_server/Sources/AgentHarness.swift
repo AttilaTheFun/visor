@@ -7,6 +7,7 @@
 import Foundation
 import Synchronization
 import VisorProtocol
+import VisorSystem
 
 public protocol AgentHarness: AnyObject, Sendable {
     /// Which kind of session this serves.

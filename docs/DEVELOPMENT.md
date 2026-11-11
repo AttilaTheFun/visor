@@ -616,7 +616,11 @@ directory, relaunching, the path in — is a protocol (`LoopbackListening`,
 `ProcessSignals`, `SecretStore`, `HTTPFetching`, `PushSigning`,
 `ImageMeasuring`, `FileWatching`, `ToolLocating`, `HostDetails`,
 `ServerLifecycle`, `ServerExposure`), gathered in a `ServerPlatform` the
-binary sets as `ServerPlatform.current` before anything else. HTTP and the WebSocket
+binary sets as `ServerPlatform.current` before anything else. Those the
+code below the server shares (`libraries/visor_system`: the tools,
+processes, host, pictures, file watching, agents' hosts and the log) are
+its `SystemPlatform`, which setting `ServerPlatform.current` installs as
+`SystemPlatform.current`; that library holds to the same rule. HTTP and the WebSocket
 (RFC 6455, with its own SHA-1) are read and written by the server over
 the plain bytes a `ByteStream` carries, so every system speaks them the
 same way. The platforms:

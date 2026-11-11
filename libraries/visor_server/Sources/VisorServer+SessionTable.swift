@@ -4,6 +4,7 @@ import ClaudeTranscript
 import MessageCache
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     /// Every session as a markdown table: the computer, each project (its

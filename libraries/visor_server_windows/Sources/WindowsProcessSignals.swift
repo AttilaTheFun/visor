@@ -1,5 +1,6 @@
 import Foundation
 import VisorServer
+import VisorSystem
 import WinSDK
 
 /// Processes by id, as Windows has them. There are no signals: ending one

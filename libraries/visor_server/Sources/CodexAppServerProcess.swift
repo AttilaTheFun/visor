@@ -8,6 +8,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 @MainActor
 public final class CodexAppServerProcess: AgentProcess, HostableProcess {

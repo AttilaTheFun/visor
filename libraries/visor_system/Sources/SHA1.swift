@@ -2,8 +2,8 @@ import Foundation
 
 /// SHA-1, for the WebSocket handshake's accept key (RFC 6455 names it) and
 /// nothing else.
-enum SHA1 {
-    static func hash(_ data: Data) -> [UInt8] {
+package enum SHA1 {
+    package static func hash(_ data: Data) -> [UInt8] {
         var h: [UInt32] = [0x6745_2301, 0xEFCD_AB89, 0x98BA_DCFE, 0x1032_5476, 0xC3D2_E1F0]
         let message = Digest.padded(data)
         var w = [UInt32](repeating: 0, count: 80)

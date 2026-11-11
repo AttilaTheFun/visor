@@ -18,7 +18,9 @@ Checked in every file git tracks (third_party/ aside):
 - no Foundation networking or UserDefaults in visor_client or visor_ui,
   which build on Isomer as they do on Apple's platforms;
 - no conditional compilation or platform check in the server library
-  (libraries/visor_server): what differs is its ServerPlatform's.
+  (libraries/visor_server) or the system library below it
+  (libraries/visor_system): what differs is their ServerPlatform's or
+  SystemPlatform's.
 With --commits, the pull request's commits carry no attribution lines.
 
 Exits 1 when anything breaks a rule, saying what. Standard library only.
@@ -37,6 +39,10 @@ ROOT = Path(__file__).resolve().parent.parent
 # (JavaScript, Kotlin) that are used only from the main thread the runtime
 # runs on, and that its bridge generator makes non-Sendable.
 UNCHECKED_ALLOWED = {"libraries/visor_services_ffi/Sources/Bridges.swift": 3}
+
+# The libraries with no conditional compilation and no platform checks, and
+# where what differs between systems goes instead.
+PLATFORM_FREE = {"libraries/visor_server/": "ServerPlatform", "libraries/visor_system/": "SystemPlatform"}
 
 SIGNING_FILES = re.compile(r"\.(mobileprovision|provisionprofile|p12|pfx|p8|cer|certSigningRequest)$", re.I)
 PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\"\\n+]*[A-Za-z0-9+/=]{64,}")
@@ -112,10 +118,12 @@ def check_swift(name, text):
         for found in NETWORKING.finditer(body):
             problem(f"{name}:{line_of(body, found.start())}",
                     f"no {found.group(1)} in visor_client or visor_ui: the host is reached through visor_services")
-    if name.startswith("libraries/visor_server/"):
+    for library, platform in PLATFORM_FREE.items():
+        if not name.startswith(library):
+            continue
         for found in re.finditer(r"^\s*#(if|elseif)\b|#(available|unavailable)\b", body, re.M):
             problem(f"{name}:{line_of(body, found.start())}",
-                    "no conditional compilation or platform check in the server library: a ServerPlatform member")
+                    f"no conditional compilation or platform check in {library.rstrip('/')}: a {platform} member")
 
 
 def check_commits(span):

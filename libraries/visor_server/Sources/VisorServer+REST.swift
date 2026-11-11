@@ -5,6 +5,7 @@ import ClaudeTranscript
 import MessageCache
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     func transcriptJSON(_ record: SessionRecord, since: Int?, after: String? = nil) -> HTTPResponse {

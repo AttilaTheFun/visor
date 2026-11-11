@@ -1,0 +1,25 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# What the server and the agents' code below it share: the agents' tools
+# and how a command is run, processes by id, this computer and its folders,
+# pictures' sizes, the bytes of a connection and the agents' hosts. Nothing
+# in it is particular to a system: what is, is given by the binary that runs
+# it, as a SystemPlatform (ServerPlatform.current installs one). Below
+# visor_server, and never a dependency of the client (visor_client,
+# visor_ui, visor_services), which builds for Isomer too.
+swift_library(
+    name = "visor_system",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorSystem",
+    # Its `package` members are the repository's other modules' to use.
+    package_name = "visor",
+    deps = [
+        "//:foundation",
+        "//libraries/claude_transcript",
+        "//libraries/visor_protocol",
+    ],
+)

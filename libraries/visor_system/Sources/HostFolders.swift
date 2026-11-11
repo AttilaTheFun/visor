@@ -1,14 +1,12 @@
-import ClaudeTranscript
 import Foundation
 import Synchronization
-import VisorProtocol
 
 /// The host's folders: the server's data and sockets, and the client's
 /// picker's.
-enum HostFolders {
+package enum HostFolders {
     /// The data folder, when something other than the platform's is wanted
     /// (tests, a staging server): sessions.json, the hosts' log and the rest.
-    static var dataRoot: URL? {
+    package static var dataRoot: URL? {
         get { root.withLock { $0 } }
         set { root.withLock { $0 = newValue } }
     }
@@ -16,35 +14,35 @@ enum HostFolders {
 
     /// The data folder: `dataRoot`, else the platform's, made if it isn't
     /// there yet.
-    static var dataFolder: URL {
-        let base = dataRoot ?? ServerPlatform.current.host.dataDirectory
+    package static var dataFolder: URL {
+        let base = dataRoot ?? SystemPlatform.current.host.dataDirectory
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
 
     /// VISOR_RUNTIME_DIR, when it is set: the sockets' folder
     /// (VisorServer+RuntimeDirectory).
-    static func runtimeDirectory(in environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
+    package static func runtimeDirectory(in environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
         guard let given = environment["VISOR_RUNTIME_DIR"]?.trimmingCharacters(in: .whitespaces), !given.isEmpty else { return nil }
         return URL(fileURLWithPath: given, isDirectory: true)
     }
 
     /// Where the picker starts, and where a session given no folder (or
     /// "~") works: $VISOR_HOME_FOLDER when it is set, else the user's home.
-    static func home(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
+    package static func home(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
         if let set = environment["VISOR_HOME_FOLDER"], !set.isEmpty { return (set as NSString).expandingTildeInPath }
         return ("~" as NSString).expandingTildeInPath
     }
 
     /// A folder as the host names it: "" and "~" are the home folder;
     /// another path has its "~" expanded.
-    static func resolve(_ path: String, environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
+    package static func resolve(_ path: String, environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
         if path.isEmpty || path == "~" { return home(environment) }
         return (path as NSString).expandingTildeInPath
     }
 
     /// The subfolders of `path` (hidden ones skipped), sorted.
-    static func list(_ path: String) -> [String] {
+    package static func list(_ path: String) -> [String] {
         let resolved = resolve(path)
         let entries = (try? FileManager.default.contentsOfDirectory(atPath: resolved)) ?? []
         return entries.filter { name in
@@ -56,13 +54,13 @@ enum HostFolders {
 
     /// Whether the path is still a folder here. A project the user moved or
     /// renamed answers false, which is what the client shows an error for.
-    static func exists(_ path: String) -> Bool {
+    package static func exists(_ path: String) -> Bool {
         var isDirectory: ObjCBool = false
         let there = FileManager.default.fileExists(atPath: resolve(path), isDirectory: &isDirectory)
         return there && isDirectory.boolValue
     }
 
-    static func make(_ path: String) -> Bool {
+    package static func make(_ path: String) -> Bool {
         (try? FileManager.default.createDirectory(atPath: resolve(path), withIntermediateDirectories: true)) != nil
     }
 }

@@ -7,6 +7,7 @@ import Synchronization
 import VisorProtocol
 import VisorServer
 import VisorServerApple
+import VisorSystem
 
 struct SettingsPane: View {
     var server: VisorServer

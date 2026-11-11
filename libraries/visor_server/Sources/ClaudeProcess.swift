@@ -12,6 +12,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 @MainActor
 public final class ClaudeProcess: AgentProcess, HostableProcess {

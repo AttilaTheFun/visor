@@ -6,6 +6,7 @@
 import Foundation
 import VisorProtocol
 @testable import VisorServer
+import VisorSystem
 import XCTest
 
 /// An agent that does nothing: the question comes from its shim.

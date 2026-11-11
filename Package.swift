@@ -69,17 +69,21 @@ let shared: [Target] = [
         swiftSettings: strict
     ),
     .target(name: "AgentHostWire", path: "libraries/agent_host_wire/Sources", swiftSettings: strict),
+    // What the server and the agents' code below it share (the tools,
+    // processes, folders, this computer), with a SystemPlatform of its own.
+    .target(name: "VisorSystem", dependencies: ["ClaudeTranscript", "VisorProtocol"],
+            path: "libraries/visor_system/Sources", swiftSettings: strict),
     .target(name: "VisorServer",
-            dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire"],
+            dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire", "VisorSystem"],
             path: "libraries/visor_server/Sources", swiftSettings: strict),
-    .target(name: "VisorServerCLI", dependencies: ["VisorServer", "VisorProtocol"],
+    .target(name: "VisorServerCLI", dependencies: ["VisorServer", "VisorProtocol", "VisorSystem"],
             path: "libraries/visor_server_cli/Sources", swiftSettings: strict),
 ]
 
 #if os(Windows)
 /// Windows: Winsock, the Win32 process calls.
 let system: [Target] = [
-    .target(name: "VisorServerWindows", dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI"],
+    .target(name: "VisorServerWindows", dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI", "VisorSystem"],
             path: "libraries/visor_server_windows/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerWindows"],
                       path: "applications/visor_server_windows", swiftSettings: strict),
@@ -98,9 +102,10 @@ let system: [Target] = [
             path: "libraries/visor_mcp_bridge/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorAgentHostMain", dependencies: ["VisorAgentHost", "VisorMCPBridge"],
                       path: "applications/visor_agent_host", exclude: ["BUILD.bazel"], swiftSettings: strict),
-    .target(name: "VisorServerPOSIX", dependencies: ["CVisorPOSIX", "VisorServer"],
+    .target(name: "VisorServerPOSIX", dependencies: ["CVisorPOSIX", "VisorServer", "VisorSystem"],
             path: "libraries/visor_server_posix/Sources", swiftSettings: strict),
-    .target(name: "VisorServerLinux", dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI", "VisorServerPOSIX"],
+    .target(name: "VisorServerLinux",
+            dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI", "VisorServerPOSIX", "VisorSystem"],
             path: "libraries/visor_server_linux/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge"],
                       path: "applications/visor_server_linux", swiftSettings: strict),
@@ -123,7 +128,7 @@ let system: [Target] = [
 let tests: [Target] = [
     .testTarget(name: "VisorServerTests",
                 dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux",
-                               "VisorServerPOSIX", "VisorMCPBridge"],
+                               "VisorServerPOSIX", "VisorMCPBridge", "VisorSystem"],
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
     // Here rather than on a Mac: nothing in them is Apple's.
     .testTarget(name: "MessageCacheTests", dependencies: ["MessageCache", "VisorProtocol"],

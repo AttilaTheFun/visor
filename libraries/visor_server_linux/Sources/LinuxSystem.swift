@@ -3,6 +3,7 @@ import Foundation
 import VisorServer
 import VisorServerCLI
 import VisorServerPOSIX
+import VisorSystem
 
 /// The command-line server on Linux: the XDG data directory, a daemon
 /// started as a new session, the stop signals, and its own binary replaced

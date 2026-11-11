@@ -2,6 +2,7 @@ import Foundation
 import VisorServer
 import VisorServerCLI
 import VisorServerLinux
+import VisorSystem
 
 /// Linux's platform for the tests: secrets in memory, and what the server
 /// keeps in a scratch folder.
