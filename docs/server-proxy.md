@@ -281,6 +281,17 @@ Agreed with Shireworks the same evening.
   - `/mcp/<name>`: the MCP servers, reached as paths.
 - **Images:** visor-agent (Visor's image build) carries `multipass-client`
   and nftables; Shireworks' `dev` image does too.
+- **In a macOS VM** (the primary macOS VM's agent runner, after the
+  container's), the same `multipass-client` for macOS, with these
+  differences:
+  - **The relay:** a vsock port to the host (Virtualization's virtio socket),
+    which Shireworks forwards to the relay listener with the same PROXY header.
+  - **The redirect:** pf, not nftables. A route sends outgoing traffic to
+    `lo0`, and an `rdr` rule there sends it to multipass-client's listener.
+    The original destination comes from pf's state (`DIOCNATLOOK`), as
+    transparent proxies on macOS do.
+  - **DNS:** the system resolver pointed at 127.0.0.1.
+  - It's installed in the VM's image, with the root it needs for pf.
 - **Native agents on the Mac** keep the explicit `HTTP(S)_PROXY` and the CA
   bundle: a Network Extension packet tunnel would route the whole Mac, since
   macOS has no per-app VPN without device management.

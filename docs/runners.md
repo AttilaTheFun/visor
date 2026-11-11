@@ -101,13 +101,28 @@ alone, with no Shireworks and no MultiPass:
 - Runners in containers (Shireworks') and agent jobs are additions on top,
   for those who have them.
 
+## Three places a session runs
+
+Logan, 11 Nov:
+- **Natively on the Mac:** Visor.app's native runner.
+- **In the primary Linux container:** Shireworks' container agent runner,
+  below.
+- **In the primary macOS VM:** a Shireworks macOS VM agent runner, for work
+  that needs macOS and Xcode. Xcode comes from the VM's image.
+  - It's the container runner's twin. It says hello as `kind: vm` with labels
+    `macos`, `xcode`; starts wrapped agents in the VM; keeps its sessions' data
+    there; and serves the same MCP for reports.
+  - The VM has no network of its own. multipass-client runs in the guest over
+    a vsock relay (server-proxy.md, "Containers: no network").
+  - It comes after the container runner.
+
 ## The parts
 
 | Part | Where | What it does |
 |---|---|---|
 | **Server** | Visor.app (menu bar app and client), the nested `visor-server`; on Linux, alone | The session registry and its cached state; relays clients to agents; the start queue; the runners it knows. Plain HTTP on a native port with no auth of its own, reached only through MultiPass. Owns no process and no session's data. |
 | **Wrapped agent** | `visor-agent-host`, wrapping `claude` or `codex`, wherever it runs | One session's brain: runs the agent, reads its output into Visor's transcript, asks for approvals, keeps going if the server goes away. Dials the server and advertises itself. |
-| **Runner** | Visor.app's own (native, the MacBook); Shireworks' agent runner (in the mini's primary container) | Takes starts from the server's queue and launches wrapped agents. Owns its sessions' data on the Sessions volume and knows where each is. Serves an MCP its agents report to. Plain HTTP, no auth of its own. |
+| **Runner** | Visor.app's own (native, on the Mac); Shireworks' container agent runner (in its primary Linux container); Shireworks' macOS VM agent runner (in its primary macOS VM, with Xcode) | Takes starts from the server's queue and launches wrapped agents. Owns its sessions' data and knows where each is. Serves an MCP its agents report to. Plain HTTP, no auth of its own. |
 | **Client** | Visor on the Mac, iPhone, Android, the web; Shireworks' Visor tab | Shows every session, wherever it runs, and the runners. Steers a session through the server. |
 | **MultiPass** | Each Mac | The only authenticated way in, for clients, agents and containers: path switching, sign-in, and the credentials it adds when it proxies. One port a container reaches, mapped to the host. |
 
