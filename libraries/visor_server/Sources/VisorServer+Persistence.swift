@@ -105,6 +105,8 @@ extension VisorServer {
                 Self.log("session \(info.id) left its container \(container.id), Apple's, from before Shireworks ran them: its agent runs on this computer now (`container delete --force \(container.id)` removes the old one)")
                 info.container = nil
             }
+            // A contained session always auto-approves (VisorServer+Permissions).
+            info = withPermissions(info)
             let record = SessionRecord(info: info, process: makeProcess(info, resume: item.resumeID), entries: entries,
                                        shownPrompts: item.shownPrompts ?? [], notice: item.notice)
             record.refreshResume()

@@ -35,10 +35,16 @@ struct ClaudeManagedPolicy: Equatable {
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
-    /// The mode an auto-approving session starts Claude in: bypassing
-    /// permissions, or Claude's own auto mode where the policy disables
-    /// bypassing and not auto. Where it disables both, bypassing is still
-    /// asked for: Claude starts in another mode, says so, and the session
-    /// becomes manual.
-    var autoApproveMode: String { bypassDisabled && !autoDisabled ? "auto" : "bypassPermissions" }
+    /// The mode an auto-approving session starts Claude in (Logan, 11 Nov:
+    /// "native sessions use the builtin auto approve / manual approval and
+    /// only container sessions would dangerously skip"). In a container,
+    /// bypassing permissions, the container being the boundary; or Claude's
+    /// own auto mode where the policy disables bypassing and not auto. On
+    /// the computer itself, Claude's auto mode, never bypassing. Where the
+    /// policy disables what is asked for, Claude starts in another mode,
+    /// says so, and the session becomes manual.
+    func autoApproveMode(contained: Bool) -> String {
+        guard contained else { return "auto" }
+        return bypassDisabled && !autoDisabled ? "auto" : "bypassPermissions"
+    }
 }

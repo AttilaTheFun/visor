@@ -15,7 +15,8 @@ extension VisorServer {
         // Put its history where the folder looks now, so both the agent
         // and a terminal can resume it from there.
         if let resume { harness.adoptHistory(id: resume, cwd: info.cwd) }
-        let process = harness.makeProcess(cwd: info.cwd, skipPermissions: info.skipPermissions, resume: resume)
+        // A contained session's agent always auto-approves (VisorServer+Permissions).
+        let process = harness.makeProcess(cwd: info.cwd, skipPermissions: withPermissions(info).skipPermissions, resume: resume)
         // No model chosen is the default the session shows (this computer's
         // agent's own), said explicitly: the same agent signed in another
         // way (a container's long-lived token) may take another model for

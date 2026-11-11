@@ -256,7 +256,9 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         var params: [String: Any] = [
             "cwd": HostFolders.resolve(cwd),
             "approvalPolicy": "never",
-            "sandbox": skipPermissions ? "danger-full-access" : "workspace-write",
+            // Full access only in a container, the container being the
+            // boundary; on the computer itself, Codex's own sandbox.
+            "sandbox": skipPermissions && (container != nil || ServerPlatform.current.host.inContainer) ? "danger-full-access" : "workspace-write",
         ]
         if let model, !model.isEmpty { params["model"] = model }
         return params
