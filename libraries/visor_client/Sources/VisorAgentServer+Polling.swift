@@ -61,13 +61,11 @@ extension VisorAgentServer {
                     guard answer.type == "welcome" else { throw AgentServerError.message("not a welcome") }
                     if !welcomed {
                         welcomed = true
-                        onEvent(.welcome(name: answer.host ?? "", sessions: answer.sessions ?? [], catalogs: answer.catalogs ?? [],
-                                         containers: answer.container == true))
+                        onEvent(.welcome(name: answer.host ?? "", sessions: answer.sessions ?? [], catalogs: answer.catalogs ?? []))
                         onEvent(.transport(live: false))
                     } else if answer.revision != revision {
-                        // The whole list as a welcome carries it: no
-                        // container flag is no containers.
-                        onEvent(.sessions(answer.sessions ?? [], containers: answer.container == true))
+                        // The whole list as a welcome carries it.
+                        onEvent(.sessions(answer.sessions ?? []))
                         onEvent(.catalogs(answer.catalogs ?? []))
                     }
                     revision = answer.revision

@@ -3,12 +3,11 @@
 # (tools/containers/publish_agent_image.sh):
 #
 # - runtime: ghcr.io/attilathefun/visor:<version>, :<MAJOR.MINOR> and
-#   :latest, the image a Visor server makes a session's container from
-#   unless its `containers image` setting names another. What an agent
-#   works with and nothing to build with: Ubuntu, Claude Code, Codex and
-#   openrouter (OpenRouter's models), Node, git, ssh, tmux, ripgrep, Python.
-#   Visor mounts its own Linux programs at /opt/visor/bin in every container
-#   it makes, so any image will do; this one carries them too
+#   :latest, the image a Visor server of 0.44 to 0.49 made a session's
+#   container from (sessions in containers of their own were removed in
+#   0.50). What an agent works with and nothing to build with: Ubuntu,
+#   Claude Code, Codex and openrouter (OpenRouter's models), Node, git,
+#   ssh, tmux, ripgrep, Python, and Visor's own Linux programs
 #   (visor-server, visor-agent-host, this image's commit's), for anyone
 #   running it on its own.
 # - build (the last, so the default): ghcr.io/attilathefun/visor-agent, the
@@ -18,21 +17,12 @@
 #   (SDL, GL, GTK, WebKitGTK), NSS for headless Chromium, x86_64 glibc for
 #   Android's tools. CI's containers and the co-tenant run it; it moves to
 #   Shireworks' registry as visor-build once that is there.
-# The container sees the session's folder at the same path and Visor's
-# tools at /opt/visor (read-only, from the server); no Xcode: Apple apps
-# build with rules_applecross from the SDK archive a Shireworks server serves, and
-# Android's x86_64 build tools run under Rosetta on an arm64 Mac. Its sign-ins live with the Visor server,
-# never in the image (ContainerSignIns):
-#   <Visor's data>/containers/agent.env   CLAUDE_CODE_OAUTH_TOKEN=… (`claude setup-token`)
-#   <Visor's data>/containers/codex/      Codex's home in every container, mounted: its own
-#                                         sign-in, made once (never a copy of the Mac's):
-#     container run -it --rm --mount type=bind,source="<Visor's data>/containers/codex",target=/root/.codex \
-#       ghcr.io/attilathefun/visor-agent:<version> codex login --device-auth
-#   <Visor's data>/containers/openrouter/ openrouter's home in every container, mounted: its key
-#                                         (or OPENROUTER_API_KEY in agent.env), set once:
-#     container run -it --rm --mount type=bind,source="<Visor's data>/containers/openrouter",target=/root/.openrouter \
-#       ghcr.io/attilathefun/visor-agent:<version> openrouter auth login
-#   <Visor's data>/containers/home/       other files, copied into each container's home
+# No Xcode: Apple apps build with rules_applecross from the SDK archive a
+# Shireworks server serves, and Android's x86_64 build tools run under
+# Rosetta on an arm64 Mac. No sign-in is ever in the image: a Visor server
+# running in a container of it (the co-tenant, Shireworks' primary
+# container) gives its agents theirs from its data folder
+# (agents/<kind>.env), as on any computer.
 
 # The Swift programs below are built with the Swift runtime and Foundation
 # linked in (--static-swift-stdlib; SwiftPM's native build system, as its

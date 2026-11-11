@@ -104,9 +104,6 @@ let system: [Target] = [
             path: "libraries/visor_server_linux/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge"],
                       path: "applications/visor_server_linux", swiftSettings: strict),
-    // Visor's container host over Apple's container: a Mac's, Bazel's
-    // there; built and tested here too, with a script for the tool.
-    .target(name: "VisorContainerHost", path: "libraries/visor_container_host/Sources", swiftSettings: strict),
     // Visor Runner's MCP proxy and its commands; its agent built here too,
     // for a Mac without Bazel's output for it (`swift build -c release
     // --product visor-runner-agent`).
@@ -128,8 +125,6 @@ let tests: [Target] = [
                 dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux",
                                "VisorServerPOSIX", "VisorMCPBridge"],
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
-    .testTarget(name: "VisorContainerHostTests", dependencies: ["VisorContainerHost"],
-                path: "tests/visor_container_host_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
     // Here rather than on a Mac: nothing in them is Apple's.
     .testTarget(name: "MessageCacheTests", dependencies: ["MessageCache", "VisorProtocol"],
                 path: "tests/message_cache_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),

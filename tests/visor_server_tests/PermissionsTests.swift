@@ -72,12 +72,4 @@ final class PermissionsTests: ServerTestCase {
         let contained = CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil)
         XCTAssertEqual(contained.threadParams()["sandbox"] as? String, "danger-full-access")
     }
-
-    func testASessionInAContainerOfTheServersOwnSkipsThem() {
-        host(inContainer: false)
-        var saved = SessionInfo(id: "d", agent: .claude, cwd: "/tmp", title: "Saved", skipPermissions: false, created: 0)
-        XCTAssertFalse(server.withPermissions(saved).skipPermissions)
-        saved.container = SessionContainer(id: "c1", image: "visor-agent")
-        XCTAssertTrue(server.withPermissions(saved).skipPermissions)
-    }
 }

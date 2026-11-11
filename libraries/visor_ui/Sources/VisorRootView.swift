@@ -36,8 +36,6 @@ public struct VisorRootView: View {
     @State private var popSubPage = ViewAction()
     @State private var composing = false
     @State private var renamingSession: SessionTarget?
-    /// The session moving into a container, its size being chosen.
-    @State private var sizingContainer: SessionTarget?
     @State private var renamingProject: ProjectTarget?
     @State private var deletingSession: SessionTarget?
     /// A session being moved to another computer.
@@ -236,9 +234,6 @@ public struct VisorRootView: View {
             ComposeSessionSheet(store: store) { serverID, id in
                 selection = .session(SessionSelection(serverID: serverID, sessionID: id))
             }
-        }
-        .itemSheet($sizingContainer) { target in
-            ContainerSizeSheet(host: target.host, session: target.session) { sizingContainer = nil }
         }
         .itemSheet($migrating) { migration in
             MigrationSheet(migration: migration) { id in
@@ -568,9 +563,6 @@ public struct VisorRootView: View {
         }
         Button { host.archive(session.id) } label: { Label("Archive", systemImage: "archivebox") }
         AgentStateButtons(host: host, session: session)
-        if !session.archived {
-            ContainerButton(host: host, session: session) { sizingContainer = SessionTarget(host: host, session: session) }
-        }
         // To another computer connected now; this one keeps the session
         // until the user removes it.
         let others = store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }

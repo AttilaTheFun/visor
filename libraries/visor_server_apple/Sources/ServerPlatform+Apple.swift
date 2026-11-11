@@ -29,9 +29,6 @@ extension ServerPlatform {
             files: DispatchFileWatching(),
             tools: MacTools(),
             host: HostDetails(name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName, system: "macos", version: bundleVersion, dataDirectory: data,
-                              // Visor's Linux programs for its containers, in
-                              // the app's Resources where a release put them.
-                              containerPrograms: Bundle.main.resourceURL?.appendingPathComponent("Linux", isDirectory: true),
                               addresses: { NetworkAddresses.all().map(\.address) },
                               networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } },
                               localNetworkName: { LocalNetworkName.current() }, resolve: { POSIXResolver.ipv4($0) }),

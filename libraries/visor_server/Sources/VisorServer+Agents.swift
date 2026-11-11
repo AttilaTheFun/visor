@@ -19,20 +19,15 @@ extension VisorServer {
         let process = harness.makeProcess(cwd: info.cwd, skipPermissions: withPermissions(info).skipPermissions, resume: resume)
         // No model chosen is the default the session shows (this computer's
         // agent's own), said explicitly: the same agent signed in another
-        // way (a container's long-lived token) may take another model for
-        // its default.
+        // way may take another model for its default.
         process.model = info.model ?? harness.catalog().defaultModel
         process.effort = info.effort
-        // Visor's own, and this computer's agents/<kind>.env for an agent
-        // here: its paths and git sign-in are this computer's, so an agent
-        // in a container has only Visor's (and Shireworks' sign-ins
-        // for its image).
-        // And, where the GitHub proxy is on for it, the way to GitHub.
+        // Visor's own, and this computer's agents/<kind>.env: its paths and
+        // git sign-in. And, where the GitHub proxy is on for it, the way to
+        // GitHub.
         let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]
             .merging(githubProxyEnvironment(for: info)) { ours, _ in ours }
-        process.approvalEnvironment = info.container == nil ? AgentEnvironmentFile.read(info.agent).merging(own) { _, ours in ours } : own
-        // An agent in a container on Shireworks runs there.
-        (process as? HostableProcess)?.container = placement(for: info)
+        process.approvalEnvironment = AgentEnvironmentFile.read(info.agent).merging(own) { _, ours in ours }
         return process
     }
 
@@ -354,8 +349,6 @@ extension VisorServer {
         // Nothing to say is nothing sent.
         broadcast(record.apply(event), session: record)
         noteSubagents(after: event, of: record)
-        noteContainer(after: event, of: record)
-        noteContainerUpgrade(after: event, of: record)
         // Nil once the agent has gone.
         if case .memory(nil) = event { noteAgentWent(record) }
         switch event {

@@ -1,7 +1,6 @@
 // A server that runs in a container itself (a co-tenant container) says so
 // of every session: the client marks them with the container's box rather
-// than the penguin. One in a container the server made for it says
-// `container` as before.
+// than the penguin.
 
 import Foundation
 import VisorProtocol
@@ -20,9 +19,8 @@ final class InContainerPlaceTests: ServerTestCase {
         ServerPlatform.current.host = host
     }
 
-    private func record(container: SessionContainer? = nil) -> SessionRecord {
-        var info = SessionInfo(id: "S", agent: .claude, cwd: "/root/work", title: "S", created: 0)
-        info.container = container
+    private func record() -> SessionRecord {
+        let info = SessionInfo(id: "S", agent: .claude, cwd: "/root/work", title: "S", created: 0)
         return SessionRecord(info: info, process: ClaudeProcess(cwd: "/root/work", skipPermissions: true, resume: nil))
     }
 
@@ -34,9 +32,6 @@ final class InContainerPlaceTests: ServerTestCase {
         XCTAssertEqual(session.info.system, "linux")
         let read = try XCTUnwrap(SessionInfo(json: session.info.json))
         XCTAssertEqual(read.inContainer, true, "as a client reads it")
-        // One the server made a container for is that container's.
-        let contained = record(container: SessionContainer(id: "c1", image: "visor-agent"))
-        XCTAssertNil(contained.info.inContainer)
     }
 
     func testAServerOnAComputerSaysNothing() throws {

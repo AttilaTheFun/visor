@@ -105,7 +105,7 @@ The server does all of it itself:
 - **Containers** (+Containers, +ContainerChecks, +ContainerRegistry,
   +ContainerUpgrades, ContainerHost…, docs/container-host.md): a session's
   agent in a container from a container host, moving in and out, sign-ins
-  copied in, the network checked.
+  copied in, the network checked. Removed in 0.50 (step 7's first half).
 - **Fronts** (`visor-server front`, settings' `frontPaths`): the Runner's
   port for a container's server, and the mini's socat forwarders.
 
@@ -368,7 +368,9 @@ settings that aren't where it is or who may reach it.
    where requests go removed; `X-Visor-User` shown.
 7. **Containers out**: the container code, visor-container-host and the
    fronts removed, with Shireworks' primary container running Visor's
-   server in place (its own work, in Shireworks: Containers, above).
+   server in place (its own work, in Shireworks: Containers, above). The
+   container sessions and visor-container-host are out (0.50); the fronts
+   are still in.
 
 Each step is its own pull request with its tests, on the 0.50 line; step 2
 in MultiPass's repository, and Shireworks' server and app on the same

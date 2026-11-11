@@ -1,6 +1,6 @@
 # Agent tools (design)
 
-> Superseded (0.44): agents reach GitHub and Shireworks through MCP servers Visor Server proxies (docs/protocol.md, Proxied MCP servers), and containers come from a container host (docs/container-host.md). Visor no longer has `visor machine` or Shireworks' Swift client. Kept for the reasoning.
+> Superseded (0.44): agents reach GitHub and Shireworks through MCP servers Visor Server proxies (docs/protocol.md, Proxied MCP servers), and containers came from a container host (0.44 to 0.49; sessions in containers of their own were removed in 0.50). Visor no longer has `visor machine` or Shireworks' Swift client. Kept for the reasoning.
 
 What Visor puts in a session's hands, and how it keeps them narrow.
 Status: proposed. Nothing here is built beyond what "Today" says.

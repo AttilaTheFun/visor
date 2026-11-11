@@ -64,29 +64,10 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// server's own children. On unless turned off; VISOR_DETACH_AGENT_HOST
     /// (0 or 1) overrides it (VisorServer.detachesAgents).
     public var detachAgents = true
-    /// The image sessions' containers are made from; empty for Visor's own
-    /// (`VisorServer.defaultContainerImage`, this version's).
-    public var containerImage = ""
-    /// How to sign in to the registry `containerImage` is in, when it is a
-    /// private one: a command, and its arguments, that prints the password
-    /// (`aws ecr get-login-password --region us-east-1` gives ECR's, good
-    /// for 12 hours), run each time a container is made from it; empty for
-    /// none.
-    public var containerSignIn: [String] = []
-    /// The user that password is for (ECR's is `AWS`).
-    public var containerSignInUser = ""
-    /// How an agent in a container reaches this server (Visor's tools for
-    /// it): a ws:// address; empty for this computer's LAN address, at the
-    /// server's port.
-    public var containerCallback = ""
     /// The MCP servers passed on to the sessions' agents (MCPProxy): each a
     /// name, an address and headers, a secret one's value kept with the
     /// server's secrets (MCPEndpoint.secretKey).
     public var mcpEndpoints: [MCPEndpoint] = []
-    /// The container host sessions' containers come from
-    /// (docs/container-host.md): its program and the arguments before each
-    /// operation; empty for `visor-container-host` on the PATH, if it is.
-    public var containerHost: [String] = []
     /// Where pushes go when this computer has no APNs key of its own: a
     /// proxy that holds the key and signs them (Visor Runner's,
     /// docs/co-tenancy.md), at `<pushProxy>/apns/…`. Empty for none. Its
@@ -105,8 +86,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             frontPaths, clientsKeepMessages, detachAgents, containerImage, containerCallback, mcpEndpoints, containerHost,
-             pushProxy, containerSignIn, containerSignInUser, githubProxy, githubProxySessions
+             frontPaths, clientsKeepMessages, detachAgents, mcpEndpoints, pushProxy, githubProxy, githubProxySessions
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -123,12 +103,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         if !frontPaths.isEmpty { try c.encode(frontPaths, forKey: .frontPaths) }
         try c.encode(clientsKeepMessages, forKey: .clientsKeepMessages)
         try c.encode(detachAgents, forKey: .detachAgents)
-        if !containerImage.isEmpty { try c.encode(containerImage, forKey: .containerImage) }
-        if !containerCallback.isEmpty { try c.encode(containerCallback, forKey: .containerCallback) }
         if !mcpEndpoints.isEmpty { try c.encode(mcpEndpoints, forKey: .mcpEndpoints) }
-        if !containerHost.isEmpty { try c.encode(containerHost, forKey: .containerHost) }
-        if !containerSignIn.isEmpty { try c.encode(containerSignIn, forKey: .containerSignIn) }
-        if !containerSignInUser.isEmpty { try c.encode(containerSignInUser, forKey: .containerSignInUser) }
         if !pushProxy.isEmpty { try c.encode(pushProxy, forKey: .pushProxy) }
         if !githubProxy.isEmpty { try c.encode(githubProxy, forKey: .githubProxy) }
         if !githubProxySessions.isEmpty { try c.encode(githubProxySessions, forKey: .githubProxySessions) }
@@ -140,7 +115,10 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     }
 
     // Decoded field by field: a file from before a field reads as the
-    // default, not as unreadable.
+    // default, not as unreadable. One from before 0.50 may still have the
+    // containers' settings (containerImage, containerHost, containerCallback,
+    // containerSignIn, containerSignInUser): passed over, as any key not
+    // read here is.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         // A file from before the paths: "reachable from the network" was
@@ -158,12 +136,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         serverID = try c.decodeIfPresent(String.self, forKey: .serverID) ?? ""
         authentication = try c.decodeIfPresent(String.self, forKey: .authentication) ?? "password"
         detachAgents = try c.decodeIfPresent(Bool.self, forKey: .detachAgents) ?? true
-        containerImage = try c.decodeIfPresent(String.self, forKey: .containerImage) ?? ""
-        containerCallback = try c.decodeIfPresent(String.self, forKey: .containerCallback) ?? ""
         mcpEndpoints = try c.decodeIfPresent([MCPEndpoint].self, forKey: .mcpEndpoints) ?? []
-        containerHost = try c.decodeIfPresent([String].self, forKey: .containerHost) ?? []
-        containerSignIn = try c.decodeIfPresent([String].self, forKey: .containerSignIn) ?? []
-        containerSignInUser = try c.decodeIfPresent(String.self, forKey: .containerSignInUser) ?? ""
         pushProxy = try c.decodeIfPresent(String.self, forKey: .pushProxy) ?? ""
         githubProxy = try c.decodeIfPresent(String.self, forKey: .githubProxy) ?? ""
         githubProxySessions = try c.decodeIfPresent([String].self, forKey: .githubProxySessions) ?? []

@@ -1,6 +1,6 @@
 // visor-server on Linux: the command-line server, given Linux's system.
 // Also the agents' host, when run by that name (visor-agent-host, a link
-// to this program): Visor's Linux programs for containers are one program
+// to this program): Visor's Linux programs are one program
 // (tools/linux_programs.sh), so the Swift runtime and Foundation, linked
 // in, are carried once.
 

@@ -498,7 +498,7 @@ jobs:
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
         run: |
-          tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_container_host/Info.plist
+          tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist
           version="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           case "$version" in
             "" | *.0) echo "::error::Applications Server gave no build version (the plist says \"$version\")"; exit 1 ;;
@@ -626,7 +626,7 @@ jobs:
       - name: Version
         env:
           APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_container_host/Info.plist
+        run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist
       # The app group shared with Applications, and Applications' bundle ids
       # on a Mac (UpdateKit; tools/signing), from the repository's secrets,
       # so neither the public source nor a log names them. A build published

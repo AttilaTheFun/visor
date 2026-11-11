@@ -2,7 +2,7 @@
 // sessions to use the builtin auto approve / manual approval and only
 // container sessions would dangerously skip since they can only touch the
 // mounted volumes"). In a container — this server's own (VISOR_IN_CONTAINER,
-// or one found: HostDetails.inContainer) or the session's — a session's
+// or one found: HostDetails.inContainer), its agents with it — a session's
 // agent always skips them (Claude Code's bypassPermissions, Codex's
 // danger-full-access with no approvals): a client can't make it ask. On the
 // computer itself the session chooses: auto-approving, which is Claude
@@ -13,9 +13,11 @@ import Foundation
 import VisorProtocol
 
 extension VisorServer {
-    /// Whether the agent of `info` runs in a container.
+    /// Whether the agent of `info` runs in a container: this server's own,
+    /// as every agent here does (sessions in containers of their own were
+    /// removed in 0.50).
     func runsContained(_ info: SessionInfo) -> Bool {
-        ServerPlatform.current.host.inContainer || info.container != nil
+        ServerPlatform.current.host.inContainer
     }
 
     /// `info` with its permissions as they are here: a contained session's
