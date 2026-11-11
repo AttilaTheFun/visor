@@ -71,11 +71,9 @@ extension VisorServer {
     }
 
     /// What an agent of `info`'s is started with to go to GitHub through the
-    /// proxy: nothing when the proxy is off, isn't on for the session, or
-    /// the agent runs in a container of its own (whose trust is the
-    /// container's).
+    /// proxy: nothing when the proxy is off or isn't on for the session.
     func githubProxyEnvironment(for info: SessionInfo) -> [String: String] {
-        guard info.container == nil, !settings.githubProxy.isEmpty,
+        guard !settings.githubProxy.isEmpty,
               settings.githubProxySessions.contains("*") || settings.githubProxySessions.contains(info.id),
               let token = Self.secrets.get(Self.githubProxyTokenKey), !token.isEmpty,
               var proxy = URLComponents(string: settings.githubProxy),

@@ -215,24 +215,6 @@ public final class VisorServer {
     /// app is restarted against a file it understands.
     var storeIsReadable = true
 
-    /// Why sessions cannot run in containers here, as last found
-    /// (`checkContainers`); nil when they can.
-    var containerProblem: String? = "not looked for yet"
-    /// The most the container host says a container may have (its
-    /// `health`), as last found.
-    var containerLimits: ContainerHost.Limits?
-    /// Whether the container host's leftovers were looked for this run.
-    var containersSwept = false
-    /// When each session's container was last checked, to be made again
-    /// if it was gone or had no network: not twice in a few minutes
-    /// (VisorServer+ContainerChecks.swift).
-    var containersRemade: [String: ContinuousClock.Instant] = [:]
-    /// The sessions whose containers are being made again from another
-    /// image now, and the image each failed to be made from (not tried
-    /// again until another is wanted: VisorServer+ContainerUpgrades.swift).
-    var containersUpgrading: Set<String> = []
-    var containerUpgradeFailed: [String: String] = [:]
-
     /// The last write of the sessions failed; cleared by the next that works.
     var savingFailed = false
 

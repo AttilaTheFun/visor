@@ -66,4 +66,15 @@ final class LocalNetworkNameTests: ServerTestCase {
         server.settings.lan = true
         XCTAssertEqual(server.httpPaths, ["http://192.168.1.20:\(server.port)", "http://127.0.0.1:\(server.port)"])
     }
+
+    /// A bridge to the computer's own containers or VMs is none of the
+    /// addresses a server gives: it is the same address on every computer.
+    func testABridgeIsNotOneOfTheServersAddresses() {
+        for bridge in ["bridge100", "bridge0", "docker0", "br-1a2b3c", "virbr0", "cni0", "lxcbr0"] {
+            XCTAssertTrue(NetworkInterfaces.isBridge(bridge), bridge)
+        }
+        for network in ["en0", "en1", "utun4", "eth0", "wlan0", "tailscale0"] {
+            XCTAssertFalse(NetworkInterfaces.isBridge(network), network)
+        }
+    }
 }

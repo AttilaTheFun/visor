@@ -655,115 +655,28 @@ front's paths (Visor Runner's on the computer: its loopback, LAN and VPN)
 for clients in place of the container's own; `visor-server keep-messages
 off` asks clients to keep its sessions' messages in memory only; `run` and
 `start` take the same as options (`--password`, `--auth`, `--lan`, `--vpn`,
-`--ssh`, `--address`, `--standalone`, `--front`, `--keep-messages`,
-`--container-host`, `--container-image`), for a
+`--ssh`, `--address`, `--standalone`, `--front`, `--keep-messages`), for a
 server set up wholly by its command line; it serves no TLS
 (a proxy does). The Windows server
 is built and tried in CI (a throwaway session over its WebSocket); it has
 not been run against real agents.
 
-**Containers.** A session's agent may run in a Linux container on its
-Visor server's own computer rather than on it directly, made by the
-server's **container host** (docs/container-host.md): the program set
-(`visor-server containers host <command…>`, the menu bar app's Containers,
-settings' `containerHost`), else `visor-container-host` on the PATH (Visor's
-own, applications/visor_container_host, over Apple's `container`, carried
-in Visor Server's Contents/Helpers to be linked there); with neither,
-sessions run on the computer only and New Session offers no containers
-(`containersAvailable`, from the
-host's `health`). VisorServer+Containers.swift asks the host to `create`
-one from Visor's image (tools/containers/visor-agent's runtime target,
-published by CI's agent-image job as `ghcr.io/attilathefun/visor:<version>`,
-`:<MAJOR.MINOR>` and `:latest`: Claude Code, Codex, openrouter, Node, git,
-ssh, tmux, no toolchains; its build target, with them, is
-`ghcr.io/attilathefun/visor-agent`, CI's and the co-tenant's; a server asks
-for its own version's, `visor-server containers image <ref>` for another,
-any image at all, from a private registry too: `visor-server containers
-sign-in <user> <command…>`, or Settings → Containers, names a command that
-prints its password, run before each container is made from it and given to
-the host's `login`, VisorServer+ContainerRegistry.swift) with the size the
-session asked for
-(ContainerSize: 6 cores, 16 GB of memory and 128 GB of disk unless asked
-otherwise, fitted to the host's `limits`, else what the computer has; the disk is a volume,
-`visor-<session>-build` at /var/cache/bazel, where the image keeps Bazel's
-output, and the agent's home another, `visor-<session>-home` at /root, 32 GB
-always: its tools' settings and caches and its SSH key outlast the
-container; a new one starts with what the image has there, copied in by the
-host, docs/container-host.md), with Rosetta for x86_64 programs, labelled with the session and
-this server (`visor.session`, `visor.server`). It sees: the session's folder
-at the same path (so its files, git and the agent's own log are the
-computer's), the agent's log folder for that folder (Claude's
-`~/.claude/projects/<folder>`, Codex's `~/.codex/sessions`, openrouter's
-`~/.openrouter/sessions`), the pictures attached to sessions
-(`<data>/images`, AgentImages) read-only at the same path, since the agent
-is given that path, and, where the computer has them
-(`HostDetails.containerPrograms`: the app's `Contents/Resources/Linux`,
-which alpha and adhoc fill in Visor.app from CI's linux-programs job,
-tools/ci/linux_programs.sh and mac_app_linux_programs.sh, or `linux/` beside the
-command-line server), Visor's own Linux programs
-read-only at `/opt/visor/bin`: `visor-server`, also the agents' host as
-`visor-agent-host`, linked fully static (Swift's Static Linux SDK, musl:
-`tools/linux_programs.sh <folder>`, on Linux with Swift 6.4.0), so they run
-in any image. An agent in a container made with them has
-`/opt/visor/bin/visor-agent-host mcp` for its MCP server, so its image
-needs no Node; one made without them (`SessionContainer.programs` nil)
-has Visor's MCP script read-only at `/opt/visor` (ContainerTools) instead,
-for the image's Node. Never both: under a read-only `/opt/visor` the
-runtime can't make `/opt/visor/bin` to mount the programs on (Apple's
-container: "mount failed with errno 30"). The agents' sign-ins for containers are the server's own,
-never the image's (ContainerSignIns: `<data>/containers/agent.env` with
-CLAUDE_CODE_OAUTH_TOKEN; Codex's home for every container,
-`<data>/containers/codex`, mounted at `/root/.codex` with the computer's
-sessions folder in it, signed in once on its own — `container run -it --rm
---mount type=bind,source=<that folder>,target=/root/.codex
-ghcr.io/attilathefun/visor-agent:<version> codex login --device-auth` —
-never a copy of the computer's, since Codex rotates its refresh token and
-the first copy to refresh signs out the other; openrouter's the same way,
-`<data>/containers/openrouter` at `/root/.openrouter`; and
-`<data>/containers/home/`, other files put into each container's home with
-the host's `put`, dotfiles too); the container makes its own SSH key (the
-host's `exec`). A container's builds reach a Bazel cache and a file server
-(a Shireworks server's cache, read-only, and its /files, for the SDK archive and
-the ported tools) only through what is in that folder: a `.bazelrc`
-(`build --remote_cache=http://<host>:7490 --noremote_upload_local_results`)
-and a `.netrc` with each server's read token, put there by whoever runs
-the computer. Visor
-itself knows no cache: until 0.43 it wrote them from the Shireworks servers it
-knew (VisorServer+BuildCache).
-No Xcode is mounted: the Apple apps build in a container with
-rules_applecross (§4), and the Android app's x86_64 SDK and NDK tools run
-under Rosetta. The agent runs under its host like any other (HostedChild),
-as the container host's `exec <id> --interactive --workdir=… --env-file=…
--- <agent>`, which becomes the agent, its variables in a file only this
-user reads (`hosts/<session>.env`, never on a command line): a restart of
-this server leaves it working, and this server picks it up the native way.
-A session starts in a container with `container: true` and a folder, and
-moves into or out of one with `contain` (its agent made again on the other
-side, the container it leaves removed with its disk; not while it works).
-Ending the session removes its container. When a turn of an agent in a
-container fails on the network (EAI_AGAIN and the like), or the agent ends
-with a failing status (`claude exited with status 1`: the host's `exec`
-of a container that is gone; VisorServer+ContainerChecks.swift), the host
-is asked whether it still lists the container and what its `network` says;
-a container that is gone or has no network is made again with its disk
-kept, the agent started again there, and the session says so — not twice
-in five minutes. A container made from another image than the one the
-server would make it from now (`wantedContainerImage`: the one set, else
-its own version's, so every update of the server), or without Visor's own
-Linux programs where the computer has them, is made again from it, its
-disks kept, when the server finds its containers and whenever a session's
-turn ends, never mid-turn (VisorServer+ContainerUpgrades.swift); when that
-image can't be had, the container is made again from its own, and the new
-one isn't tried again until another is wanted. At start the server removes the host's containers of sessions it
-no longer has, and a session still in a container Shireworks lent (0.43 and
-before, `SessionContainer.socket`) runs on the computer from then on. An
-agent in a container reaches this server over the network (VISOR_URL:
-this computer's LAN address unless `visor-server containers callback
-<ws-url>` says otherwise), so containers need “Reachable from the network”.
-Bazel in the image keeps its output on the container's disk for builds and
-makes no convenience links in the mounted repository (/etc/bazel.bazelrc).
+**Containers.** Sessions in containers of their own (New Session ›
+Runs › In a Container, Move into / out of a Container, the server's
+container host and `visor-container-host`, the `containers` command and
+settings) were removed in 0.50. A server of 0.50 answers `start` with
+`container: true`, and `contain`, with an error (REST: 410), never says
+containers are on offer, and passes over the containers' settings in an
+older settings file; a session saved while it ran in one (`info.container`)
+comes back running on the computer, its container left to whoever made it
+(`container delete --force <id>` removes an Apple one). The protocol keeps
+`SessionContainer`, `ContainerSize` and the `container`/`containerSize`
+fields, so older clients and files still decode. A server that itself runs
+in a container (`HostDetails.inContainer`, VISOR_IN_CONTAINER=1, a
+co-tenant or Shireworks' primary container) is another thing, and stays:
+its sessions say `inContainer`.
 
-**Machines.** Sessions — in containers or not — lease machines (macOS,
+**Machines.** Sessions lease machines (macOS,
 Linux and Windows VMs, iOS simulators, Android emulators) through the MCP
 servers their Visor server passes on to them (docs/protocol.md, Proxied MCP
 servers): a Shireworks server's own MCP port, set as an endpoint with a key of the

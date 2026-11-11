@@ -240,7 +240,7 @@ extension VisorServer {
         }
         let when = Self.backupStamp(Date(timeIntervalSince1970: made))
         var notice = "Restored from a backup made on \(offer.from.isEmpty ? "this computer" : offer.from) (\(when))."
-        if offer.session.container != nil { notice += " It ran in a container: Move into a Container puts it in one again." }
+        if offer.session.container != nil { notice += " It ran in a container of its own, which Visor no longer makes: it runs on this computer now." }
         guard startCarried(offer, id: offer.session.id, cwd: cwd, notice: notice) != nil else {
             result.outcome = "Not restored: the session could not be started here."
             return result

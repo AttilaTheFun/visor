@@ -316,20 +316,13 @@ public final class SessionRecord {
         self.pendingFork = nil
     }
 
-    /// What its agent runs on, for its row: this computer's system, or
-    /// Linux in a container.
-    func placed() {
-        info.system = Self.system(of: info)
-        info.inContainer = Self.inContainer(info)
-    }
-
     /// In a container this server didn't make for it: the server's own.
     static func inContainer(_ info: SessionInfo) -> Bool? {
-        info.container == nil && ServerPlatform.current.host.inContainer ? true : nil
+        ServerPlatform.current.host.inContainer ? true : nil
     }
 
     static func system(of info: SessionInfo) -> String? {
-        let system = info.container != nil ? "linux" : ServerPlatform.current.host.system
+        let system = ServerPlatform.current.host.system
         return system.isEmpty ? nil : system
     }
 

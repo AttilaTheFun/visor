@@ -25,8 +25,8 @@ struct ServerOptions: Sendable {
     var resume: String?
     /// Settings to keep before it runs: `--auth`, `--lan`, `--vpn`,
     /// `--ssh`, `--address`, `--standalone`, `--front`, `--keep-messages`,
-    /// `--container-host`, `--container-image`, as the commands of those names keep them (the flag
-    /// without its dashes, and its value).
+    /// as the commands of those names keep them (the flag without its
+    /// dashes, and its value).
     var settings: [(String, String)] = []
     /// The password to set before it runs.
     var password: String?
@@ -72,8 +72,7 @@ struct ServerOptions: Sendable {
             case "--mcp": mcp = Self.names(value)
             case "--sessions-dir": sessionsDir = try Self.folder(value, for: flag)
             case "--sources-dir": sourcesDir = try Self.folder(value, for: flag)
-            case "--auth", "--lan", "--vpn", "--ssh", "--address", "--standalone", "--front", "--keep-messages",
-                 "--container-host", "--container-image":
+            case "--auth", "--lan", "--vpn", "--ssh", "--address", "--standalone", "--front", "--keep-messages":
                 settings.append((String(flag.dropFirst(2)), value))
             default: throw .usage("unknown option \(flag)")
             }

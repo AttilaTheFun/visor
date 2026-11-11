@@ -27,8 +27,6 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
     public var model: String?
     public var effort: String?
     public var approvalEnvironment: [String: String] = [:]
-    /// Where its agent runs when that is a container here.
-    var container: ContainerPlacement?
 
     private let cwd: String
     /// The running app server. One that was stopped is no longer this, and
@@ -258,29 +256,21 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
             "approvalPolicy": "never",
             // Full access only in a container, the container being the
             // boundary; on the computer itself, Codex's own sandbox.
-            "sandbox": skipPermissions && (container != nil || ServerPlatform.current.host.inContainer) ? "danger-full-access" : "workspace-write",
+            "sandbox": skipPermissions && ServerPlatform.current.host.inContainer ? "danger-full-access" : "workspace-write",
         ]
         if let model, !model.isEmpty { params["model"] = model }
         return params
     }
 
     func spawn() throws -> any AgentChild {
-        // In a container: codex by its name on the container's path.
-        let executable: String
-        if container != nil {
-            executable = "codex"
-        } else {
-            guard let found = ToolPath.resolve("codex") else { throw AgentProcessError.toolMissing("codex") }
-            executable = found
-        }
-        let environment = container.map { approvalEnvironment.merging(["VISOR_URL": $0.serverURL]) { _, ours in ours } }
-            ?? ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
+        guard let executable = ToolPath.resolve("codex") else { throw AgentProcessError.toolMissing("codex") }
+        let environment = ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
         // Visor's MCP server: the other sessions.
         let child = try AgentChildren.start(executable: executable,
-                                            arguments: ["app-server"] + Self.questionArguments + VisorMCP.codexArguments(approvalEnvironment, container: container),
+                                            arguments: ["app-server"] + Self.questionArguments + VisorMCP.codexArguments(approvalEnvironment),
                                             directory: HostFolders.resolve(cwd),
                                             environment: environment,
-                                            session: approvalEnvironment["VISOR_SESSION"], container: container)
+                                            session: approvalEnvironment["VISOR_SESSION"])
         self.child = child
         follow(child)
         Task {

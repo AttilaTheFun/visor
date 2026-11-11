@@ -31,29 +31,13 @@ extension VisorServer {
         if parts.first == "backups", authorized(request) {
             return routeBackups(request, parts: parts, respond: respond)
         }
-        // A session whose agent runs in a container: answered once its
-        // container is made.
+        // Sessions in containers of their own are gone (0.50): starting
+        // one, or moving a session into or out of one, is refused.
         if request.method == "POST", parts == ["sessions"], authorized(request), Envelope.decodeBody(request.body).container == true {
-            var e = Envelope.decodeBody(request.body)
-            e.type = "start"
-            return startInContainer(e, from: nil) { result in
-                switch result {
-                case .success(let record): respond(.json(Envelope.sessions([record.info]).encoded()))
-                case .failure(let failure): respond(HTTPResponse(502, Envelope.error(failure.message).encoded()))
-                }
-            }
+            return respond(HTTPResponse(410, Envelope.error(Self.containerSessionsRemoved).encoded()))
         }
-        // Into its container or out of it: answered once it has moved.
         if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "contain", authorized(request) {
-            guard let record = session(parts[1]) else { return respond(HTTPResponse(404, "{\"error\":\"no such session\"}")) }
-            let body = Envelope.decodeBody(request.body)
-            guard let into = body.container else { return respond(HTTPResponse(400, "{\"error\":\"container?\"}")) }
-            return contain(record, into: into, size: body.containerSize) { result in
-                switch result {
-                case .success: respond(.json(Envelope.sessions([record.info]).encoded()))
-                case .failure(let failure): respond(HTTPResponse(409, Envelope.error(failure.message).encoded()))
-                }
-            }
+            return respond(HTTPResponse(410, Envelope.error(Self.containerSessionsRemoved).encoded()))
         }
         if request.method == "GET", parts.count == 1, parts[0] == "account", authorized(request) {
             guard let agent = Self.query(request.path)["agent"].flatMap(AgentKind.init(wire:)) else {
@@ -195,7 +179,6 @@ extension VisorServer {
         var e = Envelope.hello(host: hostName, login: "", token: issueToken())
         e.id = id
         e.version = Self.version
-        if containersAvailable { e.container = true }
         if !settings.clientsKeepMessages { e.keepMessages = false }
         if isStandalone {
             // Reached only where the client found it: nothing more to learn.

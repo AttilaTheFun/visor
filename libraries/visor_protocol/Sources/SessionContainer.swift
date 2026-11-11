@@ -1,8 +1,8 @@
-/// Where a session's agent runs when it is not on the computer itself: a
-/// Linux container leased from Shireworks on the Visor
-/// server's own computer. The session's folder is the computer's, mounted
-/// in the container at the same path, so the agent works on the same files
-/// and keeps the same log whichever side it runs on.
+/// Where a session's agent ran when it was not on the computer itself: a
+/// Linux container on the Visor server's own computer, the session's folder
+/// mounted in it at the same path. Gone in 0.50: still read, from a server
+/// or a file of 0.49 or before, so they decode; a server of 0.50 or later
+/// runs such a session on the computer, and sets it on none.
 public struct SessionContainer: Codable, Hashable, Sendable {
     /// The container's lease from Shireworks.
     public var id: String

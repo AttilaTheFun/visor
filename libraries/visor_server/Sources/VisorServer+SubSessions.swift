@@ -8,7 +8,7 @@ import VisorProtocol
 
 extension VisorServer {
     /// `fork`: a fork or branch of `parent`, on the parent's folder,
-    /// computer or container, agent, model and permissions, its
+    /// computer, agent, model and permissions, its
     /// conversation the parent's (up to `at`). Its agent makes its own
     /// copy when it starts, with the prompt when there is one (a fork's),
     /// else with the first thing the person says (a branch's).
@@ -44,9 +44,6 @@ extension VisorServer {
                                created: Date().timeIntervalSince1970)
         info.parent = parent.info.id
         info.origin = origin
-        // Its agent runs where the parent's does: in a container, the same
-        // one, which holds the parent's conversation.
-        info.container = parent.info.container
         let past = Self.rows(parent.entries, throughTurnOf: envelope.at)
         let record = SessionRecord(info: info, process: makeProcess(info, resume: from), entries: past)
         guard record.startFork(PendingFork(from: from, at: point)) else {

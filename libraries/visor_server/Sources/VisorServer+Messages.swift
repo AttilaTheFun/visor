@@ -7,6 +7,10 @@ import Foundation
 import VisorProtocol
 
 extension VisorServer {
+    /// What a client that asks for a session in a container of its own, or
+    /// to move one into or out of one, is told: those are gone (0.50).
+    static let containerSessionsRemoved = "Sessions in containers of their own were removed in Visor 0.50: sessions run on the computer."
+
     func handle(_ envelope: Envelope, from client: ClientConnection) {
         // The permission shim: one request per connection, answered later.
         if envelope.type == "approval_request" || envelope.type == "agent" { client.agent = true }
@@ -41,11 +45,7 @@ extension VisorServer {
             }
             client.authenticated = true
             Self.log("\(describe(client)) signed in (\(signedIn) signed in now)")
-            var welcome = Envelope.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs())
-            // Whether a session can start in a container here: New
-            // Session offers it only then.
-            welcome.container = containersAvailable
-            client.send(welcome)
+            client.send(Envelope.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs()))
             return
         }
         perform(envelope, from: client)
@@ -95,11 +95,11 @@ extension VisorServer {
     }
 
     private func performStart(_ envelope: Envelope, from client: ClientConnection?) {
-        // Its agent in a container here: the container made first.
+        // Sessions in containers of their own are gone (0.50): a client
+        // that still asks for one is told so.
         if envelope.container == true {
-            return startInContainer(envelope, from: client) { result in
-                if case .failure(let failure) = result { client?.send(.error(failure.message)) }
-            }
+            client?.send(.error(Self.containerSessionsRemoved))
+            return
         }
         guard let agent = envelope.agent else { return }
         let id = envelope.id ?? UUID().uuidString
@@ -297,13 +297,10 @@ extension VisorServer {
     /// A running agent restarted. A stopped one is started (what a client
     /// of 0.34 or before, which offers only Restart, means by it); one
     /// starting or stopping is left to get there.
-    /// Into its container, or out of it: what fails is said to the client
-    /// that asked.
+    /// Into a container, or out of one: gone (0.50), and the client that
+    /// asked is told so.
     private func performContain(_ envelope: Envelope, from client: ClientConnection?) {
-        guard let record = session(envelope.session), let into = envelope.container else { return }
-        contain(record, into: into, size: envelope.containerSize) { result in
-            if case .failure(let failure) = result { client?.send(.error(failure.message)) }
-        }
+        client?.send(.error(Self.containerSessionsRemoved))
     }
 
     private func performRestartAgent(_ envelope: Envelope) {
@@ -342,12 +339,6 @@ extension VisorServer {
         guard let record = session(envelope.session) else { return }
         record.process.stop()
         record.markEnded()
-        // Its container goes with it, unless a fork or branch of it, or the
-        // session it was made from, still runs there.
-        if let container = record.info.container,
-           !sessions.contains(where: { $0 !== record && $0.info.container?.id == container.id }) {
-            removeContainer(container)
-        }
         sessions.removeAll { $0 === record }
         mcpProxy.forget(session: record.info.id)
         dropWaiters(for: record.info.id)

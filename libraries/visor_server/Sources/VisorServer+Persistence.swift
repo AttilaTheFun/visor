@@ -98,11 +98,10 @@ extension VisorServer {
                 let rebuilt = harnesses.harness(for: info.agent)?.transcript(id: resume, cwd: info.cwd, limit: SessionRecord.servedRows) ?? []
                 if !rebuilt.isEmpty { entries = rebuilt }
             }
-            // A container from before Shireworks ran them (Apple's container):
-            // the session runs on this computer from now on, and moves into
-            // a container again as any other.
-            if let container = info.container, container.socket == nil {
-                Self.log("session \(info.id) left its container \(container.id), Apple's, from before Shireworks ran them: its agent runs on this computer now (`container delete --force \(container.id)` removes the old one)")
+            // A session that ran in a container of its own (gone in 0.50):
+            // its agent runs on this computer from now on.
+            if let container = info.container {
+                Self.log("session \(info.id) left its container \(container.id), which Visor no longer makes: its agent runs on this computer now")
                 info.container = nil
             }
             // A contained session always auto-approves (VisorServer+Permissions).

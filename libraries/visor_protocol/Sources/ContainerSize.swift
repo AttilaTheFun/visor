@@ -1,6 +1,7 @@
 /// What a session's container is given of its computer: processor cores,
-/// memory, and the disk its builds keep their output on. A session that
-/// builds something heavy (a Swift toolchain) is given more.
+/// memory, and the disk its builds keep their output on. Sessions in
+/// containers of their own are gone in 0.50: read still, from a client or a
+/// file of 0.49 or before, and never made.
 public struct ContainerSize: Codable, Hashable, Sendable {
     public var cpus: Int
     public var memoryBytes: Int64
