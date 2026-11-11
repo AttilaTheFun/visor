@@ -1,5 +1,5 @@
 import Crypto
-import CryptoExtras
+import _CryptoExtras
 import Foundation
 
 /// The Runner's user's password as its secrets keep it (docs/runner-accounts.md):

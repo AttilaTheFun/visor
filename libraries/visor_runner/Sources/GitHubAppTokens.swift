@@ -1,4 +1,4 @@
-import CryptoExtras
+import _CryptoExtras
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking

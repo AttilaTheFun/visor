@@ -43,7 +43,7 @@ struct SubagentScreen: View {
         } attachments: {
             EmptyView()
         }
-        .navigationTitle(title)
+        .visorTitle(title)
         .toolbarTitleDisplayMode(.inline)
         // Read again every two seconds while it works, and once after.
         .task(id: running) {

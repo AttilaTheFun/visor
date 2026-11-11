@@ -24,13 +24,41 @@ struct VisorSettingsView: View {
     /// The computer whose page is open, by its id (a sign-in link opens one).
     @Binding var computer: String?
 
+    /// Whether Settings is in a sheet, its stack the sheet's (a phone's
+    /// pane, the onboarding's): there a computer's page is pushed. Beside
+    /// the detail (an inspector) it is not: a push from an inspector on the
+    /// split view's detail column went to the detail column's stack, the
+    /// computer's page over the session (Shireworks' VM check, 10 Nov), so
+    /// there the page takes Settings' place, with a way back.
+    var inSheet = false
+
     var body: some View {
-        // In one column the pane's sheet is a stack already; an inspector
-        // isn't, so the computers' pages have one of their own there.
-        if sizeClass == .compact {
-            list
+        if inSheet || sizeClass == .compact {
+            list.navigationDestination(item: $computer) { id in page(id) }
         } else {
-            NavigationStack { list }
+            NavigationStack {
+                if let id = computer {
+                    page(id)
+                        .toolbar {
+                            ToolbarItem(placement: .navigation) {
+                                Button { computer = nil } label: { Label("Settings", systemImage: "chevron.backward") }
+                                    .accessibilityIdentifier("settings-back")
+                            }
+                        }
+                } else {
+                    list
+                }
+            }
+        }
+    }
+
+    /// A computer's page: its settings, and forgetting it.
+    @ViewBuilder private func page(_ id: String) -> some View {
+        if let host = store.server(for: id) {
+            ComputerSettingsView(host: host, forget: {
+                computer = nil
+                store.remove(host)
+            })
         }
     }
 
@@ -101,13 +129,5 @@ struct VisorSettingsView: View {
             }
         }
         .navigationTitle("Settings")
-        .navigationDestination(item: $computer) { id in
-            if let host = store.server(for: id) {
-                ComputerSettingsView(host: host, forget: {
-                    computer = nil
-                    store.remove(host)
-                })
-            }
-        }
     }
 }

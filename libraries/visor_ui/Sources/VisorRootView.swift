@@ -18,6 +18,8 @@ public struct VisorRootView: View {
     @Environment(VisorStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.scenePhase) private var scenePhase
+    /// Whether the host shows Visor (EnvironmentValues+VisorShown).
+    @Environment(\.visorShown) private var shown
     /// The app has been in the background since it was last in front.
     @State private var wasInBackground = false
     @State private var columns: NavigationSplitViewVisibility = .all
@@ -88,21 +90,33 @@ public struct VisorRootView: View {
         })
     }
 
+    /// The session on screen, for notifications and for keeping it: none
+    /// while the host hides Visor.
+    private func noteViewing(_ value: ContentSelection?) {
+        let session = shown ? value?.session : nil
+        store.noteViewing(serverID: session?.serverID, sessionID: session?.sessionID)
+    }
+
+    /// Settings with its title and Done, where it is a sheet.
+    private var settingsSheet: some View {
+        NavigationStack {
+            VisorSettingsView(computer: $settingsComputer, inSheet: true)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { settingsPresented.wrappedValue = false }
+                            .accessibilityIdentifier("settings-done")
+                    }
+                }
+        }
+    }
+
     /// What the pane shows: Settings, or a session's details (in a sheet
     /// on a phone, with Settings' title and Done there).
     @ViewBuilder private var paneContent: some View {
         switch pane {
         case .settings:
             if compact {
-                NavigationStack {
-                    VisorSettingsView(computer: $settingsComputer)
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { settingsPresented.wrappedValue = false }
-                                    .accessibilityIdentifier("settings-done")
-                            }
-                        }
-                }
+                settingsSheet
             } else {
                 VisorSettingsView(computer: $settingsComputer)
             }
@@ -181,7 +195,12 @@ public struct VisorRootView: View {
 
     @ViewBuilder private var root: some View {
         if VisorFixture.screen == "onboarding" || VisorOnboardings.current.isNeeded(store) {
+            // No split view yet, so no pane: Settings is a sheet, opened by
+            // the onboarding's own Settings button (the trailing pane in its
+            // environment), as every tab of a host has its gear.
             VisorOnboardings.current.view(store)
+                .environment(\.trailingPane, $pane)
+                .sheet(isPresented: settingsPresented) { settingsSheet }
         } else if let account = VisorAccounts.current, !store.accountSignedIn {
             AccountSignInView(account: account)
         } else {
@@ -317,8 +336,15 @@ public struct VisorRootView: View {
             pendingPath = nil
             // Which session is on screen, so a notification about it, with
             // the app in front, is not shown over it.
-            store.noteViewing(serverID: value?.session?.serverID, sessionID: value?.session?.sessionID)
+            noteViewing(value)
         }
+        // A host's tab of Visor hidden: no session is on screen, so a
+        // notification about it is shown, and the session it showed is let
+        // go of (AgentServerConnection.release keeps the session viewed).
+        .onChange(of: shown) { _, _ in noteViewing(selection) }
+        // The same where the host's tab view tells only that: gone, and back.
+        .onDisappear { store.noteViewing(serverID: nil, sessionID: nil) }
+        .onAppear { noteViewing(selection) }
         // Back in front: a phone dropped every channel when the app left
         // it, so each server is tried or checked now rather than at its
         // next retry.

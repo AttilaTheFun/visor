@@ -19,6 +19,17 @@ enum Compat {
         false
         #endif
     }
+
+    /// Whether a host's TabView puts its tab picker in the toolbar's centre,
+    /// where a screen's inline title goes: on a Mac. On the iPhone and iPad
+    /// its tab bar is at the bottom.
+    static var tabPickerInToolbar: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
 }
 
 extension View {

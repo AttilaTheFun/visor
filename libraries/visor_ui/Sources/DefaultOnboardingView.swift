@@ -1,3 +1,4 @@
+import NavigationUI
 import SwiftUI
 import VisorClient
 
@@ -7,6 +8,9 @@ import VisorClient
 @MainActor
 struct DefaultOnboardingView: View {
     @Environment(VisorStore.self) private var store
+    /// The window's trailing pane: Settings opens there (a sheet, while the
+    /// onboarding shows), from the same button as the sidebar's.
+    @Environment(\.trailingPane) private var pane
 
     static let releases = URL(string: "https://github.com/AttilaTheFun/visor/releases/latest")!
     static let readme = URL(string: "https://github.com/AttilaTheFun/visor#readme")!
@@ -45,6 +49,10 @@ struct DefaultOnboardingView: View {
             }
             .insetGroupedForm()
             .navigationTitle("Welcome to Visor")
+            .toolbar {
+                SettingsInspectorButton(isPresented: Binding(get: { pane.wrappedValue == .settings },
+                                                             set: { pane.wrappedValue = $0 ? .settings : nil }))
+            }
         }
     }
 }
