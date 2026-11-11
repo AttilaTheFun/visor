@@ -1,6 +1,7 @@
 // The turn's status from its events: thinking comes and goes, a tool runs
 // until its result, the task list stands as last written, the end clears.
 
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

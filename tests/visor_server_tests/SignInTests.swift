@@ -3,6 +3,7 @@
 // markup), and the code the user sends written to it.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

@@ -2,6 +2,7 @@
 // the server remembers the words as sent, and the same words sent again
 // are a new message, not the one already written.
 
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

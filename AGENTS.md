@@ -75,7 +75,9 @@ request's commits. A rule that matters and can be checked goes there too.
   below it (the tools, processes, folders and this computer the server and
   the agents' code share): its `SystemPlatform` is the part of
   `ServerPlatform` it needs, installed whenever `ServerPlatform.current`
-  is set.
+  is set. And for libraries/visor_agent, between the two (the agents'
+  processes), which takes what it needs of the system from that
+  `SystemPlatform` too.
 - Apple-only SwiftUI (swipe actions, context menus, item sheets,
   SecureField) goes through libraries/visor_ui/Sources/Compat.swift.
   Views that touch the @MainActor models are marked @MainActor. AgentUI's

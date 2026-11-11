@@ -4,6 +4,7 @@
 // it.
 
 import Foundation
+import VisorAgent
 import VisorProtocol
 
 extension VisorServer {

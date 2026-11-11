@@ -5,6 +5,7 @@
 // goal while the agent works toward it stops the turn and goes first.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

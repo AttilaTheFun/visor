@@ -4,6 +4,7 @@
 // it; a client too far behind for the rows held takes the latest whole.
 
 import MessageCache
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

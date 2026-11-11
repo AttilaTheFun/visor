@@ -3,6 +3,7 @@
 // acknowledgement over REST; and the API under whatever path a front
 // mounted it.
 
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

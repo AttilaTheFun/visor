@@ -175,11 +175,11 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         for answer in waiting { answer.resume(throwing: AgentProcessError.declined("Claude stopped before it answered.")) }
     }
 
-    var hostedChild: HostedChild? { running() as? HostedChild }
-    var carried: [String: String] { [:] }
+    package var hostedChild: HostedChild? { running() as? HostedChild }
+    package var carried: [String: String] { [:] }
 
     /// An agent left running by an earlier launch: heard from here on.
-    func adopt(_ child: any AgentChild, carried: [String: String]) {
+    package func adopt(_ child: any AgentChild, carried: [String: String]) {
         self.child = child
         follow(child)
     }
@@ -262,7 +262,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         if let mcp { args += ["--mcp-config", mcp] }
         // Manual: edits are accepted, everything else asks the user.
         let mode = Self.permissionMode(skip: skipPermissions, tool: tool, policy: tool == "claude" ? .current : ClaudeManagedPolicy(),
-                                       contained: ServerPlatform.current.host.inContainer)
+                                       contained: SystemPlatform.current.host.inContainer)
         askedMode = mode
         args += ["--permission-mode", mode]
         if mcp != nil, prompt { args += ["--permission-prompt-tool", "mcp__visor__approve"] }

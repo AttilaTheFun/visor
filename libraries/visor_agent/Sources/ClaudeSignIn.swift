@@ -8,12 +8,12 @@ import Foundation
 import VisorSystem
 
 @MainActor
-final class ClaudeSignIn {
+package final class ClaudeSignIn {
     /// The page to sign in at, once the command has said it.
-    private(set) var url: String?
+    package private(set) var url: String?
     /// Told the page, once; and how it ended: signed in, or why not.
-    var onURL: (String) -> Void = { _ in }
-    var onEnd: (_ signedIn: Bool, _ said: String) -> Void = { _, _ in }
+    package var onURL: (String) -> Void = { _ in }
+    package var onEnd: (_ signedIn: Bool, _ said: String) -> Void = { _, _ in }
 
     private let process = Process()
     private let input = Pipe()
@@ -28,8 +28,8 @@ final class ClaudeSignIn {
     /// in the agents' environment. Its attempt to open a browser on this
     /// computer is turned into nothing (`BROWSER`): the page goes to the
     /// user instead.
-    init(claude: String, arguments: [String], environment: [String: String]) throws {
-        let command = ServerPlatform.current.tools.command(claude, ["auth", "login"] + arguments)
+    package init(claude: String, arguments: [String], environment: [String: String]) throws {
+        let command = SystemPlatform.current.tools.command(claude, ["auth", "login"] + arguments)
         process.executableURL = URL(fileURLWithPath: command.executable)
         process.arguments = command.arguments
         var environment = environment
@@ -58,14 +58,14 @@ final class ClaudeSignIn {
     }
 
     /// The code the sign-in page showed, as the user sent it.
-    func submit(_ code: String) {
+    package func submit(_ code: String) {
         let line = code.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
         try? input.fileHandleForWriting.write(contentsOf: Data(line.utf8))
     }
 
-    func cancel() {
+    package func cancel() {
         guard !ended, process.isRunning else { return }
-        ServerPlatform.current.processes.terminate(process.processIdentifier)
+        SystemPlatform.current.processes.terminate(process.processIdentifier)
     }
 
     private func read(_ text: String) {

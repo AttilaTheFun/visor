@@ -1,6 +1,7 @@
 import ClaudeTranscript
 import MessageCache
 import Foundation
+import VisorAgent
 import VisorProtocol
 
 /// What the menu bar app keeps of a session on disk — every session, live

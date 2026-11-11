@@ -4,6 +4,7 @@
 // away; and an ended agent takes its host with it.
 
 import Foundation
+@testable import VisorAgent
 @testable import VisorServer
 import VisorServerPOSIX
 import XCTest

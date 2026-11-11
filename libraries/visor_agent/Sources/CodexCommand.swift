@@ -4,7 +4,7 @@ import VisorProtocol
 /// interface takes it: its app-server takes them as requests, not as
 /// words of a turn, so they are made here. Anything else starting with a
 /// slash goes to the agent as typed.
-enum CodexCommand: Equatable {
+package enum CodexCommand: Equatable {
     /// `/goal`: where the goal stands.
     case showGoal
     /// `/goal <objective>`: Codex works toward it, turn after turn, until
@@ -40,7 +40,7 @@ enum CodexCommand: Equatable {
     }
 
     /// What the composer offers when "/" is typed in a Codex session.
-    static let offered: [SlashCommand] = [
+    package static let offered: [SlashCommand] = [
         SlashCommand(name: "goal", description: "Set a goal Codex works toward until it is met; alone, where it stands",
                      argumentHint: "[<objective>|pause|resume|clear]"),
         SlashCommand(name: "compact", description: "Summarize the conversation to free up context"),

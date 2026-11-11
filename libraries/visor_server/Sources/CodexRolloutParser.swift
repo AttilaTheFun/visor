@@ -1,5 +1,6 @@
 import ClaudeTranscript
 import Foundation
+import VisorAgent
 import VisorProtocol
 import VisorSystem
 

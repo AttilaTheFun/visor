@@ -10,12 +10,13 @@ swift_library(
     data = ["//applications/visor_agent_host:visor-agent-host"],
     srcs = glob(["*.swift", "apple/*.swift"]),
     module_name = "VisorServerTests",
-    # VisorSystem's `package` members are its to use.
+    # VisorSystem's and VisorAgent's `package` members are its to use.
     package_name = "visor",
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//libraries/claude_transcript",
         "//libraries/message_cache",
+        "//libraries/visor_agent",
         "//libraries/visor_mcp_bridge",
         "//libraries/visor_protocol",
         "//libraries/visor_server",

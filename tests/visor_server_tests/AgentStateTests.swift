@@ -5,6 +5,7 @@
 // agent stays stopped through a launch of the server.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

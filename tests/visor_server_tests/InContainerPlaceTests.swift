@@ -3,6 +3,7 @@
 // than the penguin.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import VisorSystem

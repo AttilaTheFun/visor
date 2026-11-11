@@ -3,6 +3,7 @@
 // kept per agent on the server, which sends it with the catalogs.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

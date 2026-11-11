@@ -5,7 +5,7 @@ import Foundation
 /// On the server's own pipes (PipedChild), or under a host of its own that
 /// outlives the server (HostedChild).
 @MainActor
-protocol AgentChild: AnyObject {
+package protocol AgentChild: AnyObject {
     var output: AsyncStream<Data> { get }
     var errors: AsyncStream<Data> { get }
     /// What was done to the agent that its session is told (the host's

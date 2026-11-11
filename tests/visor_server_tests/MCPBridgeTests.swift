@@ -5,6 +5,7 @@
 
 import Foundation
 import Synchronization
+@testable import VisorAgent
 @testable import VisorMCPBridge
 import VisorProtocol
 @testable import VisorServer

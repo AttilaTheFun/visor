@@ -2,6 +2,7 @@
 // run, else what the same agent listed last (kept on disk), from
 // `GET /api/sessions/<id>/commands`.
 
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

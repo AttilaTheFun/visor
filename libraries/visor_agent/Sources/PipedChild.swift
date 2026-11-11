@@ -25,7 +25,7 @@ final class PipedChild: AgentChild {
 
     init(executable: String, arguments: [String], directory: String, environment: [String: String]) throws {
         let process = Process()
-        let command = ServerPlatform.current.tools.command(executable, arguments)
+        let command = SystemPlatform.current.tools.command(executable, arguments)
         process.executableURL = URL(fileURLWithPath: command.executable)
         process.arguments = command.arguments
         process.currentDirectoryURL = URL(fileURLWithPath: directory)
@@ -69,7 +69,7 @@ final class PipedChild: AgentChild {
             try await Task.sleep(for: grace)
             if process.isRunning { process.terminate() }
             try await Task.sleep(for: .seconds(1))
-            if process.isRunning { ServerPlatform.current.processes.kill(process.processIdentifier) }
+            if process.isRunning { SystemPlatform.current.processes.kill(process.processIdentifier) }
         }
         _ = await exit.value
         force.cancel()

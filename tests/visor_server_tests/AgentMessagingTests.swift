@@ -2,6 +2,7 @@
 // lists the other sessions, messages one (marked as from it, queued while
 // the other works) and reads what it said. Nobody else can.
 
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

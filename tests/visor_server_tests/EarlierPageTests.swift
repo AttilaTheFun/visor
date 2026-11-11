@@ -4,6 +4,7 @@
 // page and not one it has already.
 
 import MessageCache
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest
