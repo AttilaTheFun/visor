@@ -293,9 +293,17 @@ Agreed with Shireworks the same evening.
   - **DNS:** `/etc/resolver` pointed at 127.0.0.1.
   - It's a root launchd daemon in the VM's image, for pf, started before any
     agent.
-  - Shireworks spikes the vsock relay and the pf redirect in a VM first. If
-    they don't hold, the fallback is NAT to the host only, with the system's
-    and HTTP(S) proxy settings.
+  - **Its network card stays, host-only.** Shireworks drives its macOS VMs
+    over the network (SSH for provisioning, exec, files and slot users; VNC
+    for the screen). So the primary macOS VM keeps a card on a host-only
+    network that reaches only the host. pf redirects every outbound flow to
+    the relay except the host's own address, so egress still goes only
+    through MultiPass, and SSH and VNC keep working.
+  - **Later:** moving Shireworks' control onto vsock too (a guest daemon
+    bridging to sshd and Screen Sharing) would make the VM fully networkless.
+  - Shireworks spikes vsock, the pf redirect and host-only vmnet in a VM first.
+    If they don't hold, the fallback is NAT to the host only, with the
+    system's and HTTP(S) proxy settings.
 - **Native agents on the Mac** keep the explicit `HTTP(S)_PROXY` and the CA
   bundle: a Network Extension packet tunnel would route the whole Mac, since
   macOS has no per-app VPN without device management.

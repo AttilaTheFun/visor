@@ -115,9 +115,9 @@ Logan, 11 Nov:
   - It's enabled where Shireworks has its primary macOS VM. Its sessions run
     as a slot user of that VM, their data on Sessions shared into the VM by
     name.
-  - The VM has no network of its own. A macOS `multipass-client` runs in the
-    guest over a vsock relay (server-proxy.md, "In a macOS VM"), if
-    Shireworks' spike holds. If not, the fallback is NAT to the host only,
+  - The VM's only way out is a macOS `multipass-client` over a vsock relay. Its
+    network card stays, host-only, for Shireworks' SSH and VNC (server-proxy.md,
+    "In a macOS VM"), if Shireworks' spike holds. If not, the fallback is NAT to the host only,
     with the system's and HTTP(S) proxy settings.
   - It comes after the container runner.
 
