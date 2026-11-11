@@ -1,57 +1,61 @@
-# A plain server behind a proxy (design, Visor 0.50)
+# MultiPass, and a plain server behind it (design, Visor 0.50)
 
-Logan, 10 Nov 2026: Visor's server becomes a plain HTTP server on one port,
-with no authentication of its own, unreachable except through a proxy. The
-proxy does everything that depends on where a client is and who it is:
-HTTPS, SSH, the choice of localhost, the LAN or the tailnet, and signing in.
-Containers, the GitHub proxy and remote access leave Visor. Visor 0.49 is
-the small release before it (isomer 0.50); this is the 0.50 line.
+Logan, 10 and 11 Nov 2026: everything about who a client is, where it
+comes from, and what credentials a request carries leaves Visor (and
+Shireworks) for a standalone app, **MultiPass**. Visor's server becomes a
+plain HTTP server on one port, with no authentication of its own, reached
+only through MultiPass. Visor 0.49 is the small release before it (isomer
+0.50, Shireworks' Visor tab); this is the 0.50 line.
 
-## Decided (Logan, 10 Nov)
+## Decided (Logan, 10–11 Nov)
 
-- **The server has no auth.** It listens where only its proxy reaches it,
-  and trusts what comes. The proxy authenticates: it can mint auth codes a
-  client sends as headers, and at work it uses Okta.
-- **Remote clients always come through a proxy**, which terminates HTTPS,
-  serves SSH, and switches between localhost, the LAN and the tailnet. The
-  server knows none of that.
-- **Visor.app is a client again**, with a menu bar proxy in it: the proxy
-  for this Mac's server, and the one that adds auth to MCP calls.
-- **Three programs in Visor.app, and a client alone in Shireworks** (Logan,
-  10 Nov: "the shireworks visor tab should just be client only and we're
-  just running an instance of the visor server in its primary container (if
-  it has one) and independently Visor.app has the notarized native mac
-  client, visor server swift binary and native mac visor proxy swift
-  binary. the proxy can proxy to and from both the container server and
-  native server"). Visor.app, notarized, carries the native client, the
-  `visor-server` binary and the proxy's binary, each its own process.
-  Shireworks.app embeds the client alone (VisorUI's VisorView, its own
-  computers added by hand) and runs no proxy and no server of its own; a
-  Visor server runs in Shireworks' primary container, and Visor.app's proxy
-  fronts it beside the Mac's own.
-- **The server serves Visor's MCP itself** (sending messages, asking the
-  person), on Linux as on the Mac, and passes the agents' other MCP servers
-  (Shireworks', any configured) on to the proxy generically.
-- **Agents use the server's MCP proxy**, in their own environment: on the
-  computer, or in a container.
-- **The GitHub proxy is optional and external**, provided by Shireworks.
-  Without it, a session runs where its real GitHub sign-in is.
-- **Containers leave Visor.** Shireworks keeps a "primary container"
-  always on and restarted (not leased); a Visor server in it is a server
-  like any other, behind the proxy, by port forwarding Shireworks sets up.
-  At work the same place is taken by the in-house sandboxes (abox,
-  sandcastle).
-- **Pushes:** clients register their device tokens with the server, and the
-  server's calls to APNs go out through the proxy, which holds the APNs key.
+- **MultiPass is its own repository** (AttilaTheFun/multipass, private,
+  Visor's to build: most of its code is Visor's Runner today). A Swift
+  menu bar Mac app with a settings window, and the one way into both
+  products:
+  - **Inbound paths:** it switches between localhost, the LAN and the
+    tailnet for Visor's clients and Shireworks' alike, and terminates
+    HTTPS (and SSH, where a client has no open port).
+  - **Outbound, like Charles:** a request it isn't configured for passes
+    through unmodified; a configured URL is rerouted, or has its
+    credentials added (GitHub's token, the MCP servers' keys).
+- **Sign-in is MultiPass's.** A client adds a MultiPass by copying its
+  connection code (its paths and a password; at work Okta in the
+  password's place), and that one sign-in reaches every server behind it,
+  Visor's and Shireworks' alike. Logan: "one sign in could authenticate
+  both shireworks and visor which is cleaner. That also better matches the
+  okta model of the enterprise deployment."
+- **Servers advertise themselves through it**, as a server in abox does
+  through sandcastle at work. Added in Shireworks, a MultiPass gives all of
+  its servers (Shireworks' and each Visor server); added in Visor, only the
+  Visor servers. Several servers behind one MultiPass is the normal case:
+  shireworks_server, a visor_server in Shireworks' primary container, the
+  Mac's own visor_server, the Mac mini's.
+- **Pushes:** a server keeps its clients' device tokens (uploaded through
+  MultiPass), and sends its pushes through MultiPass, which holds the APNs
+  key and signs them: no key where an agent in a container could read it.
+- **Visor and Shireworks have the same shape:** the GUI app a pure client
+  (of Visor's servers; of shireworks_server and GitHub), and a notarized
+  server binary nested in the Mac app, which also installs and runs on its
+  own on Linux (abox at work; a leased Linux server running containers and
+  Ubuntu VMs).
+- **A server is told where it is by its environment or its arguments:**
+  `VISOR_PORT` (where it listens) and `VISOR_PROXY` (where its requests out
+  go: MultiPass), and Shireworks' server the same. No setting of either is
+  made over the server's API.
+- **Shireworks' primary container has Visor's server baked into its
+  image**, configured to send its MCP requests (Shireworks' and Visor's)
+  and GitHub's through the port MultiPass listens on, and listening on the
+  port MultiPass forwards to.
 - **Messages between computers stay client-carried** (the relay: each
-  client reports the servers it holds and carries their messages). Proxies
-  carry no messages.
+  client reports the servers it holds and carries their messages).
+  MultiPass carries no messages between servers.
 - **Agents are kept from the settings by where they run, not by a token**
   (Logan, 10 Nov: "the goal is eventually all of my sessions will run
   inside containers so the'll never be in an environment where they can
-  change the proxy settings"). What an agent must not change (the MCP
-  servers and their keys, where pushes go, who may sign in) is the proxy's,
-  outside the container; the server checks nothing.
+  change the proxy settings"). What an agent must not change (credentials,
+  where requests go, who may sign in) is MultiPass's, outside the
+  container; the server checks nothing.
 
 ## Today
 
@@ -82,184 +86,186 @@ The server does all of it itself:
 - **Fronts** (`visor-server front`, settings' `frontPaths`): the Runner's
   port for a container's server, and the mini's socat forwarders.
 
-The Runner (libraries/visor_runner, docs/runner-accounts.md) is already
-most of a proxy: a sign-in with sessions (RunnerAuth, RunnerSessions), each
-server it runs reverse-proxied by path (`/runner/v1/servers/<id>/…`, HTTP
-and WebSocket), its own certificate (RunnerIdentity), the MCP and APNs
-proxies with a token per server (`X-Visor-Proxy`), and a watch that starts
-a server again (ServerWatch). What it lacks is being the only way in.
+The Runner (libraries/visor_runner, applications/visor_runner_agent,
+docs/runner-accounts.md) is already most of MultiPass: a sign-in with
+sessions (RunnerAuth, RunnerSessions), each server reverse-proxied by path
+(`/runner/v1/servers/<id>/…`, HTTP and WebSocket), its own certificate
+(RunnerIdentity, RunnerCA), the MCP, GitHub and APNs proxies with a token
+per server (`X-Visor-Proxy`), and a watch that starts a server again
+(ServerWatch). It moves to the new repository whole, and Visor keeps none
+of it.
 
 ## The server's contract
 
-What a server needs, whoever its proxy is (Visor's Runner, Shireworks' for
-a container, abox or sandcastle at work):
+What a server needs, whatever runs MultiPass's part (MultiPass on a Mac,
+sandcastle at work):
 
-- **One port, HTTP.** The REST side under `/api` and the live channel (a
-  WebSocket) at `/`, as FrontDoor has them now. No TLS, no password, no
-  connection codes. It listens on the address it is given: loopback on a
-  Mac, the container's own interface in a container, never every interface
-  unless told.
-- **Its proxy's URL and token**, set once (`visor-server proxy <url>`, the
-  token on standard input), for what goes out:
-  - `<proxy>/mcp/<name>`: an MCP server passed on to the agents; the proxy
-    adds its credentials.
-  - `<proxy>/apns/<APNs host>/3/device/<token>`: a push, unsigned; the
-    proxy signs it.
-  
-  Each with `X-Visor-Proxy: <token>`, as now. A server with no proxy set
+- **One port, HTTP, from `VISOR_PORT`** (`--port`; 7433 by default). The
+  REST side under `/api` and the live channel (a WebSocket) at `/`, as
+  FrontDoor has them. No TLS, no password, no connection codes. It listens
+  on the address it is given (`VISOR_LISTEN`, loopback by default; the
+  container's own interface in a container).
+- **`GET /api/health`**, answered without credentials and only while the
+  server's own loop answers: a keep-alive asks it, so a hung server is made
+  again, not only an ended one.
+- **Its proxy, from `VISOR_PROXY`**: MultiPass's URL as the server reaches
+  it, for everything it sends out:
+  - advertising itself (`POST <proxy>/multipass/v1/servers`: its id, kind
+    `visor`, name, version, and the address MultiPass reaches it at), again
+    when any of it changes and at each start;
+  - its agents' MCP servers (`<proxy>/mcp/<name>`) and GitHub (the agents'
+    `HTTPS_PROXY` at MultiPass), credentials added there;
+  - its pushes (`<proxy>/apns/…`), unsigned, signed there.
+
+  With them its token for MultiPass, from a file (`VISOR_PROXY_TOKEN_FILE`,
+  e.g. `/run/secrets/visor-proxy`), never the environment itself or a log,
+  sent as `X-Visor-Proxy`. A server without `VISOR_PROXY` advertises nothing,
   sends no pushes and passes no MCP servers on; Visor's own MCP still works.
-- **What a request may carry from the proxy** (optional; a server works
-  without them): `X-Visor-User`, the signed-in person's name, for the
-  server to show; and the client's own address, for the log.
+- **What a request may carry from MultiPass** (optional): `X-Visor-User`,
+  the signed-in person's name, for the server to show.
 - **Agents** reach it on the same port, as now: Visor's MCP script with the
   session's token, which says which session calls (an identity, not a
   credential).
+- **Device tokens**: a client's `POST /api/push` (its token, platform,
+  environment, app, the kinds it mutes) arrives through MultiPass and is
+  kept by the server, as now.
 
-That is all of it. No path, no network, no certificate and no person is
-the server's business.
+## MultiPass
 
-## The proxy's job
+Its own repository's design says the rest; what Visor relies on:
 
-Visor's own proxy is the Runner's program (libraries/visor_runner; today
-`visor-runner-agent`), a binary in Visor.app's bundle that the menu bar
-app starts and keeps up, as it does the Mac's `visor-server` (today the
-server runs in the app's own process). Nothing of it is in Shireworks.app.
-The fork's proxy is its sandboxes' front. Each:
+- **A connection code**: its paths (localhost, LAN, tailnet, each an
+  `https://` address, or SSH) and a password (the fork: Okta's sign-in in
+  the password's place). A client adds a MultiPass by it, signs in once,
+  and is given a session (a bearer, `Authorization`, or `multipass_session`
+  as a query parameter where a WebSocket can send no header).
+- **Its servers**: `GET /multipass/v1/servers`, each `id`, `kind`
+  (`visor`, `shireworks`), `name`, `version` and state; each one's API and
+  channel at `/multipass/v1/servers/<id>/…`, passed on with the person
+  checked and nothing of theirs forwarded but `X-Visor-User`. A client
+  takes the kinds it shows.
+- **Advertising**: `POST /multipass/v1/servers` from a server with its
+  token; a server not heard from is shown as away, and a token is given to
+  each server when it is added to MultiPass's settings (by hand, or by
+  Shireworks for its primary container).
+- **Outbound**: `/mcp/<name>`, the agents' GitHub proxy, `/apns/…`, and any
+  URL its settings name: rerouted, or with credentials added; anything else
+  passed through unmodified.
+- **Holds the credentials**: the APNs key, GitHub's tokens, the MCP
+  servers' keys. Never a server, never an agent.
 
-- **Reaches its servers**, both ways: this Mac's on loopback, and the one
-  in Shireworks' primary container at the port Shireworks forwards to the
-  Mac's loopback (Containers, below); a Linux or Windows server elsewhere
-  by whatever path its owner gives (an SSH tunnel the proxy holds, a
-  forwarded port). And each server reaches it, for its MCP servers and
-  pushes: the Mac's on loopback, the container's at the Mac's address on
-  Shireworks' containers' network, where the proxy listens for servers
-  alone (each with its own token, `X-Visor-Proxy`).
-- **Lets clients in**: HTTPS with its own certificate (the tailnet's from
-  Tailscale, else its own, pinned on first use: runner-accounts.md step 5c),
-  on localhost, the LAN and the tailnet, and over SSH for a client with no
-  open port. The client keeps one account per proxy and picks the path; a
-  proxy's addresses are the paths, not a server's.
-- **Signs people in**: RunnerAuth's providers (a password; OpenID Connect,
-  which is Okta at work; GitHub), a session per client, and the auth codes
-  it mints, sent as a header (`Authorization: Bearer`, or `runner_session`
-  where a WebSocket can send no header).
-- **Lists and fronts its servers**: `GET /runner/v1/servers`, and each one's
-  API and channel at `/runner/v1/servers/<id>/…`, passed on with the person
-  checked and nothing of theirs forwarded but `X-Visor-User`.
-- **Holds the credentials**: the APNs key, the MCP servers' keys, never a
-  server.
-- **Keeps its servers up** (ServerWatch).
+## Visor's client
+
+- **A MultiPass is an account**: Add Computer's Sign In takes a MultiPass
+  connection code (runner-accounts.md's model, its Runner now MultiPass),
+  and the account's Visor servers appear, each a computer under it, its
+  address MultiPass's `…/servers/<id>` path. Shireworks' Visor tab
+  (VisorView) the same, its own accounts.
+- **No code-added computers and no paths of a server's own**: a computer
+  is a MultiPass's server, the path MultiPass's (the client picks among a
+  MultiPass's addresses, as it does a computer's today).
+- **The relay** is unchanged: the client reports every server it is
+  connected to and carries messages between them.
 
 ## Containers
 
 Visor has no container code. Shireworks keeps a primary container per
 computer that asks for one: always on, started again when it stops, not
-leased. A Visor server runs in it as on any Linux computer, and Visor.app's
-proxy fronts it beside the Mac's own. A session is on the Mac or in that
-container by which server it was started on; there is no moving between
-them.
-
-What the container's server needs of Shireworks:
+leased. Visor's server is baked into its image and runs in it as on any
+Linux computer, behind MultiPass beside the Mac's own. A session is on the
+Mac or in that container by which server it was started on; there is no
+moving between them. The contract with Shireworks (its
+docs/primary-container.md, shireworks#220):
 
 - **The image**: Visor's agent image, `ghcr.io/attilathefun/visor-agent:<MAJOR.MINOR>`
   (tools/containers/visor-agent), the released line's: `visor-server` and
   `visor-agent-host` in /usr/local/bin, the agents' command lines, git,
-  Bazelisk. Shireworks follows the line Visor releases.
-- **Its command**: `visor-server run --port 7433`, listening on the
-  container's own interface. Started again when it stops, and made again
-  when `GET /api/health` (step 2: answered without credentials, only while
-  the server's own loop answers) does not answer; its agents outlive a
-  restart under their hosts, as on the Mac.
-- **Its proxy, given at start** (the contract with Shireworks,
-  docs/primary-container.md there): `VISOR_PROXY_URL`, made by Shireworks
-  from `SHIREWORKS_HOST_ADDRESS`, the Mac's address on the containers'
+  Bazelisk.
+- **Its command**: `visor-server run`, with `VISOR_PORT=7433` and
+  `VISOR_LISTEN` the container's interface; started again when it stops,
+  and made again when `GET /api/health` doesn't answer. Its agents outlive
+  a restart under their hosts, as on the Mac.
+- **Its proxy**: `VISOR_PROXY=http://{host}:<MultiPass's port>`, `{host}`
+  being `SHIREWORKS_HOST_ADDRESS`, the Mac's address on the containers'
   network (their gateway: 192.168.128.1 on the MacBook, configurable, never
-  hard-coded), and the proxy's port (`http://{host}:<port>`); and the token,
-  a secret Shireworks makes once and gives the container as a file
-  (`/run/secrets/visor-proxy`), its path in `VISOR_PROXY_TOKEN_FILE`, never
-  in the environment itself or a log. The server presents it as
-  `X-Visor-Proxy` on what goes out.
+  hard-coded); and `VISOR_PROXY_TOKEN_FILE=/run/secrets/visor-proxy`, a
+  secret Shireworks makes once and shows once to set in MultiPass.
 - **One port forwarded, fixed**: the container's 7433 to a host port fixed
-  in Shireworks' settings (`hostPort`, the same at every start), on the
-  Mac's loopback alone. The proxy is set once to `127.0.0.1:<hostPort>`,
-  with the token Shireworks' Settings › Primary Container shows once to
-  copy (as a connection code is pasted today; a new secret remakes the
-  container). Shireworks' API lists the primary container and its ports
-  for anyone who checks; nothing needs to ask.
-- **Three volumes**, kept across restarts and new images
-  (self-contained, no mounts of the Mac's folders): `/root`, the home (the
-  server's data at ~/.local/share/visor, the agents' sign-ins,
-  conversations and memory); `/workspaces`, the cloned source; and
-  `/var/cache/bazel`.
-- **The way out**: the internet, and the Mac's address on the containers'
-  network for the proxy (its MCP servers, pushes); GitHub through
-  Shireworks' GitHub proxy where it has one, else the agents' own sign-in.
-
-Agents in the container run beside their server and reach it on loopback,
-their MCP through it to the proxy as any server's.
+  in Shireworks' settings (`hostPort`), on the Mac's loopback alone, where
+  MultiPass reaches the server (the address it advertises).
+- **Three volumes**, kept across restarts and new images (no mounts of the
+  Mac's folders): `/root`, the home (the server's data at
+  ~/.local/share/visor, the agents' sign-ins, conversations and memory);
+  `/workspaces`, the cloned source; and `/var/cache/bazel`.
+- **Size**: as the co-tenant, 6 to 8 CPUs and 16 to 24 GB; disk about
+  20 GB for /root, 50 GB and more for /workspaces, up to 128 GB of Bazel's.
 
 ## What goes, and from where
 
 | Goes | Where it is | Taken by |
 |---|---|---|
-| Password, connection codes, client tokens, `/codes` | +Access, +Identity, ConnectionCodes (protocol, client) | the proxy's sign-in |
-| TLS, every-interface listening, LAN/VPN addresses in `hello` | +Listening, TLSIdentity, +Reaching | the proxy's listeners |
-| The SSH socket and device keys | +Listening's socket file, +SSHKeys, `/ssh/keys`; libraries/visor_ssh in the client | the proxy's SSH |
-| Direct APNs (the key, signing) | APNsKey, PushSigning, APNsSender's signing, `/push/key` | the proxy's `/apns/` |
+| The Runner: sign-in, sessions, reverse proxy by path, its certificate, the MCP, GitHub and APNs proxies, the server watch | libraries/visor_runner, applications/visor_runner_agent, tests/visor_runner_tests | MultiPass's repository |
+| GitHubGate and its rules | libraries/visor_runner, docs/github-gate-rules.md, docs/github-proxy.md | MultiPass's outbound rules |
+| Password, connection codes, client tokens, `/codes` | +Access, +Identity, ConnectionCodes (protocol, client) | MultiPass's sign-in |
+| TLS, every-interface listening, LAN/VPN addresses in `hello` | +Listening, TLSIdentity, +Reaching | MultiPass's paths |
+| The SSH socket and device keys | +Listening's socket file, +SSHKeys, `/ssh/keys`; libraries/visor_ssh in the client | MultiPass's SSH |
+| Direct APNs (the key, signing) | APNsKey, PushSigning, APNsSender's signing, `/push/key` | MultiPass's `/apns/` |
+| The MCP servers' and push proxy's settings over REST | +MCPProxy's `PUT /mcp`, +PushProxy, +GitHubProxy | MultiPass's settings; the server's `VISOR_PROXY` |
 | Container sessions, the host, moving in and out, container checks and upgrades | +Containers, +ContainerChecks, +ContainerRegistry, +ContainerUpgrades, Container*, applications/visor_container_host, docs/container-host.md | Shireworks' primary container |
-| Fronts and front paths | `visor-server front`, `frontPaths`, the Runner's per-server port | the proxy's path per server |
-| The GitHub proxy's setup | +GitHubProxy, `/github-proxy`; GitHubGate and its rules in libraries/visor_runner | Shireworks |
-| The Mac's server in Visor.app's own process | applications/visor_mac (VisorServer linked in) | the bundled `visor-server`, started by the app |
-| Code-added computers in the client | AgentServerRecord's password and paths, Add Computer's code | an account per proxy (runner-accounts.md, "the version after") |
+| Fronts and front paths | `visor-server front`, `frontPaths` | MultiPass's path per server |
+| The Mac's server in Visor.app's own process | applications/visor_mac (VisorServer linked in) | the nested `visor-server`, started by Visor.app |
+| Code-added computers in the client | AgentServerRecord's password and paths, Add Computer's code | a MultiPass account |
 
 What stays: sessions and agents, transcripts, the relay and mail, Visor's
-MCP and the MCP servers passed on, push device tokens, migration between
-servers (client-carried, as the relay is), the agent hosts that outlive a
-restart, and the settings that are the server's own.
+MCP, push device tokens, migration between servers (client-carried, as the
+relay is), the agent hosts that outlive a restart, and the server's own
+settings that aren't where it is or who may reach it.
 
 ## Versions
 
 - **0.49** (the small release): nothing of this.
-- **0.50**: the server takes the contract and the Runner is the only way in;
-  a 0.50 client reaches servers only through a proxy account. A 0.49 client
-  can't reach a 0.50 server directly, so 0.50's release notes say to sign
-  in to the Runner first: every client since 0.47 has Runner accounts
-  (runner-accounts.md step 5), which the version between was for.
-- A server run without a proxy (the Linux `visor-server` on its own, for
-  development) listens on loopback alone, and a client on the same computer
-  reaches it there.
+- **0.50**: the server takes the contract, MultiPass is the only way in,
+  and a 0.50 client reaches servers only through a MultiPass account. A
+  0.49 client can't reach a 0.50 server; the release notes say to install
+  MultiPass and sign in to it first.
+- A server run without MultiPass (the Linux `visor-server` on its own, for
+  development) listens on loopback alone, and a client on the same
+  computer reaches it there.
 
 ## Steps (0.50)
 
 1. This design.
-2. **The server's proxy setting** (`visor-server proxy`), pushes and MCP
-   through it alone, and listening on the given address; the password and
-   codes still there. Tests.
-3. **Three programs in Visor.app**: the Mac's `visor-server` and the
-   proxy's binary in the bundle, started and kept up by the menu bar app,
-   the server out of the app's own process.
-4. **The proxy as the only way in**: Visor.app's client signs in to its
-   own proxy at loopback (runner-accounts.md), the proxy fronts this Mac's
-   server and the container's (and listens for the container's server on
-   the containers' network), its listeners for the LAN and the tailnet,
-   and pinning on first use (step 5c).
-5. **The server without auth**: the password, codes, tokens for clients,
-   TLS, the SSH socket and keys, and direct APNs removed; `X-Visor-User`
-   shown. No guard takes the agent token's place on the settings routes:
-   the settings that matter move to the proxy, and the server's own proxy
-   setting is given by what starts it (Shireworks, for its container), as
-   Logan decided.
-6. **The client without code-added computers**: records only from
-   accounts; visor_ssh's transport and per-server path probing removed.
+2. **MultiPass's repository**, from the Runner: libraries/visor_runner and
+   its agent moved there with their tests, as a menu bar app with a
+   settings window (paths, servers, outbound rules, credentials), its
+   connection code and sign-in, `/multipass/v1/servers` and advertising.
+   Its own design in its repository.
+3. **The server's environment**: `VISOR_PORT`, `VISOR_LISTEN`,
+   `VISOR_PROXY` and `VISOR_PROXY_TOKEN_FILE`; advertising itself; pushes,
+   MCP and GitHub through `VISOR_PROXY` alone; `GET /api/health`. Tests.
+4. **Visor.app: the client and the nested server**: `visor-server` in the
+   bundle, started and kept up by the app, the server out of its process;
+   the Runner's parts out of Visor.
+5. **The client's MultiPass accounts**: Add Computer's Sign In takes a
+   MultiPass code; records only from accounts; visor_ssh's transport and
+   per-server path probing removed.
+6. **The server without auth**: the password, codes, tokens for clients,
+   TLS, the SSH socket and keys, direct APNs, and the settings routes for
+   where requests go removed; `X-Visor-User` shown.
 7. **Containers out**: the container code, visor-container-host and the
    fronts removed, with Shireworks' primary container running Visor's
-   server in place (its own work, in Shireworks: Containers, above), and
-   the GitHub proxy's setup with it.
+   server in place (its own work, in Shireworks: Containers, above).
 
-Each step is its own pull request with its tests, on the 0.50 line.
+Each step is its own pull request with its tests, on the 0.50 line; step 2
+in MultiPass's repository, and Shireworks' server and app on the same
+shape in Shireworks'.
 
 ## Open questions
 
-- **SSH at the proxy**: the Runner serving SSH itself, or a client's SSH
-  tunnel to the Mac's own sshd reaching the Runner on loopback (no SSH code
-  of Visor's at all).
+- **The Mac mini's server**: advertised to the MacBook's MultiPass over the
+  tailnet, or a MultiPass of the mini's own that a client adds as a second
+  account.
+- **SSH at MultiPass**: serving SSH itself, or a client's SSH tunnel to the
+  Mac's own sshd reaching MultiPass on loopback (no SSH code at all).
+- **MultiPass's port** for servers (the one `VISOR_PROXY` names), and the
+  shape of its outbound rules' settings: in MultiPass's design.
