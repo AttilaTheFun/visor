@@ -84,9 +84,21 @@ agents either because they don't care as much about the purity of the machine
 or their build process is more complex and requires tools that can't work on
 linux."
 
-So **Visor.app's native runner is a first-class, supported part of Visor**,
-not a step on the way to containers. Visor works out of the box with it
-alone, with no Shireworks and no MultiPass:
+And, in his words: "it's not that it's the default. you can use Visor.app
+without Shireworks.app and then you'd be limited to native sessions, or some
+custom deployment you create like the enterprise deployment with abox and
+sandcastle."
+
+So **no placement is Visor's default.** A session runs wherever the user's
+paired runners are:
+- **Visor.app alone** brings its native runner, and only native sessions.
+- **Shireworks** adds its container and macOS VM runners.
+- **A custom deployment** brings runners of its own, for example an
+  enterprise one on abox and sandcastle.
+
+Visor.app's native runner is a first-class, supported part of Visor, not a
+step on the way to containers. Visor works out of the box with it alone, with
+no Shireworks and no MultiPass:
 - **Visor.app on its own:** the server, the native runner and the client in
   one app. The Mac's own client reaches the server on loopback. New Session
   starts a native session at once, in a folder the user picks, as today.
@@ -101,9 +113,36 @@ alone, with no Shireworks and no MultiPass:
 - Runners in containers (Shireworks') and agent jobs are additions on top,
   for those who have them.
 
+## The runner protocol, for anyone's runner
+
+The runner protocol is a documented, stable interface that anyone's runner
+implements, not a private contract between Visor and Shireworks. It covers:
+- pairing;
+- the runner's hello and its starts;
+- the queue;
+- the wrapped agent's dial-in and hello;
+- the reports;
+- session data, archiving, Migrate… and Backup….
+
+- **Versioned.** Both hellos say `protocol: 2`.
+  - A server answers with the version it speaks and refuses one it can't.
+  - Within a version, what's added is optional, and a reader ignores fields
+    it doesn't know and reads unknown values as defaults (visor_protocol's
+    types do).
+  - A change that isn't compatible is a new version, and the server speaks the
+    old one for a release.
+- **Written down** in docs/protocol.md (from step 2 on, alongside the types in
+  visor_protocol), as the client protocol is.
+- **Implementations, as references:**
+  - Visor.app's native runner (this repository);
+  - Shireworks' container and macOS VM runners (AttilaTheFun/shireworks).
+
+  A custom runner needs only the protocol, MultiPass for the way in, and a
+  wrapped agent (`visor-agent-host`, which ships with Visor) for its sessions.
+
 ## Three places a session runs
 
-Logan, 11 Nov:
+Logan, 11 Nov. The runners Visor and Shireworks bring:
 - **Natively on the Mac:** Visor.app's native runner.
 - **In the primary Linux container:** Shireworks' container agent runner,
   below.
