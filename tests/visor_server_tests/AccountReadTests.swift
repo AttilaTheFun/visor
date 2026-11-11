@@ -3,6 +3,7 @@
 // no session runs. A stand-in `codex` answers the app-server's reads.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

@@ -9,36 +9,37 @@ import ClaudeTranscript
 import Foundation
 import MessageCache
 import VisorProtocol
+import VisorSystem
 
 
-actor SessionIndexer {
+package actor SessionIndexer {
     /// What a session looks like once the cache is up to date with its file.
-    struct Loaded: Sendable {
-        let rows: [TranscriptEntry]
-        let more: Bool
+    package struct Loaded: Sendable {
+        package let rows: [TranscriptEntry]
+        package let more: Bool
         /// The row the first of `rows` follows ("" when it is the first of
         /// all; nil when not known).
-        var follows: String? = nil
-        let prompts: [String]
-        let abandoned: Set<String>
-        let abandonedPrompts: Int
+        package var follows: String? = nil
+        package let prompts: [String]
+        package let abandoned: Set<String>
+        package let abandonedPrompts: Int
         /// Where the conversation stands (the prompt its latest turn began
         /// with), and its newest message.
-        let head: String?
-        let leaf: String?
+        package let head: String?
+        package let leaf: String?
         /// The file's newest message is on another branch: that branch's
         /// latest prompt ("" when it has none), or nil.
-        let elsewhere: String?
+        package let elsewhere: String?
     }
 
     /// A line of the conversation as it was written, with the rows it
     /// produced or changed.
-    struct Line: Sendable {
-        let uuid: String?
-        let isPrompt: Bool
-        let isMessage: Bool
-        let record: ClaudeRecord?
-        let rows: [TranscriptEntry]
+    package struct Line: Sendable {
+        package let uuid: String?
+        package let isPrompt: Bool
+        package let isMessage: Bool
+        package let record: ClaudeRecord?
+        package let rows: [TranscriptEntry]
     }
 
     /// What the indexer says, in order: the session as it stands once the
@@ -46,14 +47,14 @@ actor SessionIndexer {
     /// conversation's lines, and when the file's newest message comes to be
     /// on another branch (that branch's latest prompt) or back on this one
     /// (nil).
-    enum Event: Sendable {
+    package enum Event: Sendable {
         case loaded(Loaded)
         case lines([Line])
         case elsewhere(String?)
     }
 
-    let sessionID: String
-    let url: URL
+    package let sessionID: String
+    package let url: URL
     private let store: MessageCache
     private let window: Int
     private var assembler = TranscriptAssembler()
@@ -74,7 +75,7 @@ actor SessionIndexer {
     /// file it read is read again, once.
     static let reading = 2
 
-    init(store: MessageCache, sessionID: String, url: URL, window: Int, format: AgentLog.Format = .claude, head: String? = nil) {
+    package init(store: MessageCache, sessionID: String, url: URL, window: Int, format: AgentLog.Format = .claude, head: String? = nil) {
         self.head = head
         parser = format.parser()
         self.store = store
@@ -86,7 +87,7 @@ actor SessionIndexer {
 
     /// Catches the cache up with the file, says what to show, then follows
     /// the file for as long as anyone listens.
-    nonisolated func events() -> AsyncStream<Event> {
+    package nonisolated func events() -> AsyncStream<Event> {
         AsyncStream { continuation in
             let indexing = Task { await self.index(into: continuation) }
             continuation.onTermination = { _ in indexing.cancel() }
@@ -96,7 +97,7 @@ actor SessionIndexer {
     private func index(into continuation: AsyncStream<Event>.Continuation) async {
         catchUp()
         continuation.yield(.loaded(loaded()))
-        for await batch in FileTail.batches(of: url, startingAt: state.bytes, watching: ServerPlatform.current.files) {
+        for await batch in FileTail.batches(of: url, startingAt: state.bytes, watching: SystemPlatform.current.files) {
             let was = otherBranch
             let taken = take(parser.lines(in: batch.data), endingAt: batch.position)
             if !taken.isEmpty { continuation.yield(.lines(taken)) }
@@ -134,7 +135,7 @@ actor SessionIndexer {
             parser.resume(after: store.nodes(in: sessionID).last?.key)
         } else {
             state = SourceState(path: url.path, identity: identity, bytes: 0, nextSeq: 0)
-            do { try store.resetSource(sessionID, state: state) } catch { ServerPlatform.current.log("index: reset \(self.sessionID): \(String(describing: error))") }
+            do { try store.resetSource(sessionID, state: state) } catch { SystemPlatform.current.log("index: reset \(self.sessionID): \(String(describing: error))") }
         }
         guard facts.size > state.bytes, let handle = try? FileHandle(forReadingFrom: url) else { return }
         defer { try? handle.close() }
@@ -164,14 +165,14 @@ actor SessionIndexer {
             }
             state.bytes += UInt64(last - data.startIndex + 1)
             do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch {
-                ServerPlatform.current.log("index: ingest \(self.sessionID): \(String(describing: error))")
+                SystemPlatform.current.log("index: ingest \(self.sessionID): \(String(describing: error))")
             }
             lineCount += lineRecords.count
             rowCount += rowRecords.count
             carried = Data(data[(last + 1)...])
             if piece.isEmpty { break }
         }
-        ServerPlatform.current.log("index: caught up \(self.sessionID): \(lineCount) lines, \(rowCount) rows, \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+        SystemPlatform.current.log("index: caught up \(self.sessionID): \(lineCount) lines, \(rowCount) rows, \(Int(Date().timeIntervalSince(started) * 1000)) ms")
     }
 
     /// The branch, from the tree the cache holds, and the rows to show.
@@ -190,7 +191,7 @@ actor SessionIndexer {
            let row = store.messages(in: sessionID, limit: 1, before: seq + 1).messages.last {
             newestPrompt = (other, row.text)
         }
-        do { try store.removeMessages(in: sessionID, sourceKeys: shape.abandoned) } catch { ServerPlatform.current.log("index: drop \(self.sessionID): \(String(describing: error))") }
+        do { try store.removeMessages(in: sessionID, sourceKeys: shape.abandoned) } catch { SystemPlatform.current.log("index: drop \(self.sessionID): \(String(describing: error))") }
         // One more than the window: the row before it, which a client
         // that keeps it carries its history on from.
         let page = store.messages(in: sessionID, limit: window + 1)
@@ -248,14 +249,14 @@ actor SessionIndexer {
             taken.append(Line(uuid: line.uuid, isPrompt: line.isPrompt, isMessage: line.isMessage, record: line.record, rows: rows))
         }
         state.bytes = position
-        do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { ServerPlatform.current.log("index: follow \(self.sessionID): \(String(describing: error))") }
+        do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { SystemPlatform.current.log("index: follow \(self.sessionID): \(String(describing: error))") }
         return taken
     }
 
     // MARK: Paging
 
     /// The rows before one, oldest first, and whether there are more.
-    func earlier(before rowID: String, limit: Int) -> (rows: [TranscriptEntry], more: Bool) {
+    package func earlier(before rowID: String, limit: Int) -> (rows: [TranscriptEntry], more: Bool) {
         guard let position = store.seq(of: rowID, in: sessionID) else { return ([], false) }
         let page = store.messages(in: sessionID, limit: limit, before: position)
         return (page.messages, page.more)

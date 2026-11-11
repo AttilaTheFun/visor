@@ -73,9 +73,10 @@ let shared: [Target] = [
     // processes, folders, this computer), with a SystemPlatform of its own.
     .target(name: "VisorSystem", dependencies: ["ClaudeTranscript", "VisorProtocol"],
             path: "libraries/visor_system/Sources", swiftSettings: strict),
-    // The agents' code, between the two: for now the process layer that
-    // starts, talks to and stops Claude Code and Codex.
-    .target(name: "VisorAgent", dependencies: ["AgentHostWire", "VisorProtocol", "VisorSystem"],
+    // The agents' code, between the two: the process layer that starts,
+    // talks to and stops Claude Code and Codex, and the harnesses, logs,
+    // transcripts and catalogs of their sessions.
+    .target(name: "VisorAgent", dependencies: ["AgentHostWire", "ClaudeTranscript", "MessageCache", "VisorProtocol", "VisorSystem"],
             path: "libraries/visor_agent/Sources", swiftSettings: strict),
     .target(name: "VisorServer",
             dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire", "VisorSystem", "VisorAgent"],

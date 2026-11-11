@@ -8,6 +8,7 @@ import ClaudeTranscript
 import Foundation
 import MessageCache
 import Observation
+import VisorAgent
 import VisorProtocol
 import VisorSystem
 

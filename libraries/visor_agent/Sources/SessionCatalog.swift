@@ -10,7 +10,7 @@ import Foundation
 import VisorProtocol
 import VisorSystem
 
-enum SessionCatalog {
+package enum SessionCatalog {
     /// The newest sessions of `agent` started in `cwd` (or anywhere when empty).
     static func resumable(agent: AgentKind, cwd: String) -> [ResumableSession] {
         let wanted = cwd.isEmpty ? nil : (cwd as NSString).expandingTildeInPath
@@ -23,7 +23,7 @@ enum SessionCatalog {
 
     /// The user's home, where the agents keep their stores: Claude's
     /// files' own, which a test can move.
-    static var home: URL { ClaudeSessionFiles.home }
+    package static var home: URL { ClaudeSessionFiles.home }
 
     /// Puts a session's history where its folder looks for it.
     ///

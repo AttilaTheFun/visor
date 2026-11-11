@@ -3,10 +3,12 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 package(default_visibility = ["//visibility:public"])
 
-# The agents' code, below the server: for now its process layer, the code
-# that starts Claude Code and Codex, talks to them and stops them (their
+# The agents' code, below the server: its process layer, the code that
+# starts Claude Code and Codex, talks to them and stops them (their
 # arguments and environment, their MCP server, their output read line by
-# line, and the children they run as, on pipes or under an agent host).
+# line, and the children they run as, on pipes or under an agent host);
+# and the harnesses, the agents' logs read into transcripts, and the
+# catalogs of their sessions and models.
 # Nothing in it is particular to a system: what is, it takes from
 # SystemPlatform.current (visor_system). Never a dependency of the client
 # (visor_client, visor_ui, visor_services), which builds for Isomer too.
@@ -21,6 +23,8 @@ swift_library(
     deps = [
         "//:foundation",
         "//libraries/agent_host_wire",
+        "//libraries/claude_transcript",
+        "//libraries/message_cache",
         "//libraries/visor_protocol",
         "//libraries/visor_system",
     ],
