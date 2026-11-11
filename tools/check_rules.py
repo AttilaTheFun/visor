@@ -18,8 +18,8 @@ Checked in every file git tracks (third_party/ aside):
 - no Foundation networking or UserDefaults in visor_client or visor_ui,
   which build on Isomer as they do on Apple's platforms;
 - no conditional compilation or platform check in the server library
-  (libraries/visor_server) or the system library below it
-  (libraries/visor_system): what differs is their ServerPlatform's or
+  (libraries/visor_server) or the libraries below it (libraries/visor_agent,
+  libraries/visor_system): what differs is their ServerPlatform's or
   SystemPlatform's.
 With --commits, the pull request's commits carry no attribution lines.
 
@@ -42,7 +42,8 @@ UNCHECKED_ALLOWED = {"libraries/visor_services_ffi/Sources/Bridges.swift": 3}
 
 # The libraries with no conditional compilation and no platform checks, and
 # where what differs between systems goes instead.
-PLATFORM_FREE = {"libraries/visor_server/": "ServerPlatform", "libraries/visor_system/": "SystemPlatform"}
+PLATFORM_FREE = {"libraries/visor_server/": "ServerPlatform", "libraries/visor_agent/": "SystemPlatform",
+                 "libraries/visor_system/": "SystemPlatform"}
 
 SIGNING_FILES = re.compile(r"\.(mobileprovision|provisionprofile|p12|pfx|p8|cer|certSigningRequest)$", re.I)
 PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\"\\n+]*[A-Za-z0-9+/=]{64,}")

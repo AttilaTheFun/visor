@@ -74,6 +74,10 @@ progress.
   this computer and its folders, pictures' sizes, a connection's bytes,
   the agents' hosts. Its `SystemPlatform` is the part of the server's
   `ServerPlatform` it needs, installed with it.
+- **libraries/visor_agent** — the agents' code, between the two: so far
+  the process layer that starts Claude Code and Codex, talks to them and
+  stops them (their arguments, environment and MCP server, their output,
+  their children on pipes or under an agent host).
 - **libraries/visor_server_apple**, **…_posix** — the Mac's platform (the
   Network framework, the keychain, CryptoKit, ImageIO) and what macOS and
   Linux share (signals and sockets, through a small C shim).

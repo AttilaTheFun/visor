@@ -4,6 +4,7 @@
 // what is queued for it goes over; a turn that ends in time is left alone.
 
 import Foundation
+@testable import VisorAgent
 @testable import VisorServer
 import XCTest
 

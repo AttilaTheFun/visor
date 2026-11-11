@@ -4,6 +4,7 @@
 // hosts' log stays beside the data. Unset, nothing moves.
 
 import Foundation
+@testable import VisorAgent
 @testable import VisorServer
 import VisorServerPOSIX
 import XCTest

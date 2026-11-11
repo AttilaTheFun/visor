@@ -4,7 +4,12 @@
 /// an id of its own. Until the copy says its id, the session shows the
 /// parent's conversation and follows no file: the parent's file is the
 /// parent's.
-struct PendingFork: Codable, Hashable, Sendable {
-    var from: String
-    var at: String?
+package struct PendingFork: Codable, Hashable, Sendable {
+    package var from: String
+    package var at: String?
+
+    package init(from: String, at: String? = nil) {
+        self.from = from
+        self.at = at
+    }
 }

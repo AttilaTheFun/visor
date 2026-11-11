@@ -73,8 +73,12 @@ let shared: [Target] = [
     // processes, folders, this computer), with a SystemPlatform of its own.
     .target(name: "VisorSystem", dependencies: ["ClaudeTranscript", "VisorProtocol"],
             path: "libraries/visor_system/Sources", swiftSettings: strict),
+    // The agents' code, between the two: for now the process layer that
+    // starts, talks to and stops Claude Code and Codex.
+    .target(name: "VisorAgent", dependencies: ["AgentHostWire", "VisorProtocol", "VisorSystem"],
+            path: "libraries/visor_agent/Sources", swiftSettings: strict),
     .target(name: "VisorServer",
-            dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire", "VisorSystem"],
+            dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire", "VisorSystem", "VisorAgent"],
             path: "libraries/visor_server/Sources", swiftSettings: strict),
     .target(name: "VisorServerCLI", dependencies: ["VisorServer", "VisorProtocol", "VisorSystem"],
             path: "libraries/visor_server_cli/Sources", swiftSettings: strict),
@@ -128,7 +132,7 @@ let system: [Target] = [
 let tests: [Target] = [
     .testTarget(name: "VisorServerTests",
                 dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux",
-                               "VisorServerPOSIX", "VisorMCPBridge", "VisorSystem"],
+                               "VisorServerPOSIX", "VisorMCPBridge", "VisorSystem", "VisorAgent"],
                 path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
     // Here rather than on a Mac: nothing in them is Apple's.
     .testTarget(name: "MessageCacheTests", dependencies: ["MessageCache", "VisorProtocol"],

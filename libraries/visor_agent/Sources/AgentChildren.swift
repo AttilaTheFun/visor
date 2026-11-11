@@ -7,13 +7,13 @@ import VisorSystem
 /// (PipedChild). Never the one in place of the other: an agent that is to
 /// be detached and cannot be is not started, and says why.
 @MainActor
-enum AgentChildren {
+package enum AgentChildren {
     /// Whether agents run under hosts, as the server was set (on unless
     /// turned off).
-    static var detach = true
+    package static var detach = true
     /// The most memory a session's agent and what it runs may use, in
     /// bytes (0: no limit): the host's memory guard holds it to this.
-    static var memoryLimit: UInt64 = defaultMemoryLimit
+    package static var memoryLimit: UInt64 = defaultMemoryLimit
 
     /// Half the computer's memory: room for the rest of it, and for the
     /// other sessions, when one runs away.
@@ -34,8 +34,8 @@ enum AgentChildren {
     private static var checked: (program: String, problem: String?)?
 
     /// What stops agents running under hosts here; nil when nothing does.
-    static func hostProblem() -> String? {
-        guard let hosting = ServerPlatform.current.agentHosts else { return "this system has no agent host" }
+    package static func hostProblem() -> String? {
+        guard let hosting = SystemPlatform.current.agentHosts else { return "this system has no agent host" }
         if let checked, checked.program == hosting.program { return checked.problem }
         let problem = hosting.problem()
         checked = (hosting.program, problem)
@@ -43,7 +43,7 @@ enum AgentChildren {
     }
 
     /// What an agent that cannot be detached says.
-    static func undetachable(_ problem: String) -> String {
+    package static func undetachable(_ problem: String) -> String {
         "Visor could not start this agent apart from the server: \(problem). Turn off “Run agents apart from the server” in Visor "
             + "Server's settings, or set VISOR_DETACH_AGENT_HOST=0, to run agents as the server's own children."
     }
@@ -52,10 +52,10 @@ enum AgentChildren {
     /// hosted, when agents are detached.
     static func start(executable: String, arguments: [String], directory: String, environment: [String: String],
                       session: String?) throws -> any AgentChild {
-        let command = ServerPlatform.current.tools.command(executable, arguments)
+        let command = SystemPlatform.current.tools.command(executable, arguments)
         if detach, let session {
             if let problem = hostProblem() { throw AgentProcessError.spawnFailed(undetachable(problem)) }
-            guard let hosting = ServerPlatform.current.agentHosts else { throw AgentProcessError.spawnFailed(undetachable("this system has no agent host")) }
+            guard let hosting = SystemPlatform.current.agentHosts else { throw AgentProcessError.spawnFailed(undetachable("this system has no agent host")) }
             return try HostedChild.start(executable: command.executable, arguments: command.arguments, directory: directory,
                                          environment: environment, session: session, in: folder, socketsIn: socketFolder(),
                                          memoryLimit: memoryLimit,

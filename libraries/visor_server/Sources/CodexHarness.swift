@@ -1,5 +1,6 @@
 import Foundation
 import Synchronization
+import VisorAgent
 import VisorProtocol
 import VisorSystem
 

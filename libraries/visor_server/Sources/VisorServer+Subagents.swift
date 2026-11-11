@@ -6,6 +6,7 @@
 // with as a session of its own.
 
 import Foundation
+import VisorAgent
 import VisorProtocol
 
 extension VisorServer {

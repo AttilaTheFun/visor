@@ -5,6 +5,7 @@
 // to each again and is sent what it missed. A plain quit still ends them.
 
 import Foundation
+import VisorAgent
 import VisorProtocol
 
 extension VisorServer {

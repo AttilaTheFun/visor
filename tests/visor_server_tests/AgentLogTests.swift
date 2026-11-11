@@ -3,6 +3,7 @@
 // line after the last — and assembled the way Claude's are.
 
 import ClaudeTranscript
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

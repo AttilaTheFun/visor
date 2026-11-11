@@ -19,7 +19,7 @@ enum VisorMCP {
     static var script: String? {
         written.withLock { path in
             if let path { return path }
-            let directory = ServerPlatform.current.host.dataDirectory
+            let directory = SystemPlatform.current.host.dataDirectory
             let file = directory.appendingPathComponent("visor_mcp.js", isDirectory: false)
             let source = Data(VisorMCPScript.source.utf8)
             if (try? Data(contentsOf: file)) != source {
@@ -36,7 +36,7 @@ enum VisorMCP {
     /// as `mcp`; with no agent host here, Node and the script, when both
     /// are here.
     static func launch(_ environment: [String: String],
-                       agentHost: String? = ServerPlatform.current.agentHosts?.program) -> (command: String, arguments: [String])? {
+                       agentHost: String? = SystemPlatform.current.agentHosts?.program) -> (command: String, arguments: [String])? {
         guard !environment.isEmpty else { return nil }
         if let agentHost, FileManager.default.isExecutableFile(atPath: agentHost) { return (agentHost, ["mcp"]) }
         guard let script, let node = ToolPath.resolve("node") else { return nil }
@@ -73,6 +73,15 @@ enum VisorMCP {
         return ["-c", "mcp_servers.visor.command=\(toml(launch.command))",
                 "-c", "mcp_servers.visor.args=[\(launch.arguments.map(toml).joined(separator: ", "))]",
                 "-c", "mcp_servers.visor.env={\(env)}"]
+    }
+
+    /// A proxied tool (MCPProxy's) as a session's row shows a call of it:
+    /// "gh: pr_create" for Claude's `mcp__visor__gh__pr_create` or Codex's
+    /// `gh__pr_create`; nil for any other tool.
+    static func shownName(_ tool: String) -> String? {
+        let name = tool.hasPrefix("mcp__visor__") ? String(tool.dropFirst("mcp__visor__".count)) : tool
+        guard let split = name.range(of: "__"), split.lowerBound > name.startIndex else { return nil }
+        return name[..<split.lowerBound] + ": " + name[split.upperBound...]
     }
 
     /// A TOML basic string.

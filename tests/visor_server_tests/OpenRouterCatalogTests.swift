@@ -2,6 +2,7 @@
 // what Visor lists and resumes, its config's model is the default offered,
 // and nothing about its key is Visor's.
 
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

@@ -1,9 +1,9 @@
 /// A Codex thread's goal, as its app-server tells it: what Codex works
 /// toward until it is met, and where that stands.
-struct CodexGoal: Sendable, Equatable {
-    var objective: String
+package struct CodexGoal: Sendable, Equatable {
+    package var objective: String
     /// active, paused, blocked, usageLimited, budgetLimited or complete.
-    var status: String
+    package var status: String
     var tokensUsed: Int
     var timeUsedSeconds: Int
 
@@ -15,7 +15,7 @@ struct CodexGoal: Sendable, Equatable {
     }
 
     /// A goal as the app-server's JSON has it.
-    init?(_ json: Any?) {
+    package init?(_ json: Any?) {
         guard let object = json as? [String: Any], let objective = object["objective"] as? String else { return nil }
         self.init(objective: objective, status: object["status"] as? String ?? "active",
                   tokensUsed: object["tokensUsed"] as? Int ?? 0, timeUsedSeconds: object["timeUsedSeconds"] as? Int ?? 0)

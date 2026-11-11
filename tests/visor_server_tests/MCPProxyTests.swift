@@ -6,6 +6,7 @@
 
 import Foundation
 import Synchronization
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest
@@ -185,9 +186,9 @@ final class MCPProxyTests: ServerTestCase {
     }
 
     func testAProxiedCallIsShownByItsServerAndName() {
-        XCTAssertEqual(MCPProxy.shownName("mcp__visor__gh__pr_create"), "gh: pr_create")
-        XCTAssertEqual(MCPProxy.shownName("gh__pr_create"), "gh: pr_create", "as Codex names it")
-        XCTAssertNil(MCPProxy.shownName("mcp__visor__send_message"), "Visor's own")
+        XCTAssertEqual(VisorMCP.shownName("mcp__visor__gh__pr_create"), "gh: pr_create")
+        XCTAssertEqual(VisorMCP.shownName("gh__pr_create"), "gh: pr_create", "as Codex names it")
+        XCTAssertNil(VisorMCP.shownName("mcp__visor__send_message"), "Visor's own")
         XCTAssertEqual(ClaudeOutput.label(name: "mcp__visor__gh__pr_create", input: ["title": "Sub-sessions"]), "gh: pr_create — Sub-sessions")
     }
 

@@ -3,6 +3,7 @@
 // streamed one is not shown again when it completes.
 
 import Foundation
+@testable import VisorAgent
 @testable import VisorServer
 import XCTest
 

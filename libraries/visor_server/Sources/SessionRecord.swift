@@ -6,6 +6,7 @@
 import ClaudeTranscript
 import Foundation
 import MessageCache
+import VisorAgent
 import VisorProtocol
 
 /// One agent session on the host: its process, its transcript, who watches it.

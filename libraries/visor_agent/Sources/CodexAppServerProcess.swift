@@ -78,15 +78,15 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         return child
     }
 
-    var hostedChild: HostedChild? { running() as? HostedChild }
+    package var hostedChild: HostedChild? { running() as? HostedChild }
     /// The turn in flight, which an interrupt names.
-    var carried: [String: String] { turnID.map { ["turn": $0] } ?? [:] }
+    package var carried: [String: String] { turnID.map { ["turn": $0] } ?? [:] }
 
     /// An app server left running by an earlier launch: already started,
     /// its thread already resumed, so only heard from here on. Its
     /// requests are numbered apart from the earlier launch's, whose
     /// answers may still come.
-    func adopt(_ child: any AgentChild, carried: [String: String]) {
+    package func adopt(_ child: any AgentChild, carried: [String: String]) {
         self.child = child
         turnID = carried["turn"]
         nextRequestID = Int.random(in: 1_000_000...1_000_000_000)
@@ -257,7 +257,7 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
             "approvalPolicy": "never",
             // Full access only in a container, the container being the
             // boundary; on the computer itself, Codex's own sandbox.
-            "sandbox": skipPermissions && ServerPlatform.current.host.inContainer ? "danger-full-access" : "workspace-write",
+            "sandbox": skipPermissions && SystemPlatform.current.host.inContainer ? "danger-full-access" : "workspace-write",
         ]
         if let model, !model.isEmpty { params["model"] = model }
         return params

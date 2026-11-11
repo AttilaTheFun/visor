@@ -1,0 +1,27 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# The agents' code, below the server: for now its process layer, the code
+# that starts Claude Code and Codex, talks to them and stops them (their
+# arguments and environment, their MCP server, their output read line by
+# line, and the children they run as, on pipes or under an agent host).
+# Nothing in it is particular to a system: what is, it takes from
+# SystemPlatform.current (visor_system). Never a dependency of the client
+# (visor_client, visor_ui, visor_services), which builds for Isomer too.
+swift_library(
+    name = "visor_agent",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorAgent",
+    # Its `package` members are the repository's other modules' to use, and
+    # VisorSystem's are its.
+    package_name = "visor",
+    deps = [
+        "//:foundation",
+        "//libraries/agent_host_wire",
+        "//libraries/visor_protocol",
+        "//libraries/visor_system",
+    ],
+)

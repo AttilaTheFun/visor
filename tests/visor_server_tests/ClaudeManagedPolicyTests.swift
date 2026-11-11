@@ -5,6 +5,7 @@
 // An unmanaged computer is as before.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

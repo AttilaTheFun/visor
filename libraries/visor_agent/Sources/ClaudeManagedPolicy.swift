@@ -1,4 +1,5 @@
 import Foundation
+import VisorSystem
 
 /// What an administrator's managed settings for Claude Code allow of its
 /// permission modes, read where Claude Code reads them (the system's
@@ -11,7 +12,7 @@ struct ClaudeManagedPolicy: Equatable {
     var autoDisabled = false
 
     /// The policy on this computer.
-    static var current: ClaudeManagedPolicy { read(ServerPlatform.current.tools.claudeManagedSettings) }
+    static var current: ClaudeManagedPolicy { read(SystemPlatform.current.tools.claudeManagedSettings) }
 
     /// The policy the files at `paths` set, together; none where there
     /// are none (an unmanaged computer).

@@ -5,6 +5,7 @@
 // its own, after the copy of the conversation it started from.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

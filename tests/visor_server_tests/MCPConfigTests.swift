@@ -3,6 +3,7 @@
 // own variables only, never the sign-ins agents/<kind>.env gives the agent.
 
 import Foundation
+@testable import VisorAgent
 @testable import VisorServer
 import XCTest
 

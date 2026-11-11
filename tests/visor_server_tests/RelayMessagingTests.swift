@@ -5,6 +5,7 @@
 // by the test over their REST sides; neither learns the other's address
 // or password.
 
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

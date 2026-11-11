@@ -5,6 +5,7 @@
 // with full access), whatever a client asks.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import VisorSystem

@@ -6,6 +6,7 @@
 import ClaudeTranscript
 import Foundation
 import Synchronization
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

@@ -2,6 +2,7 @@
 // or moved since a revision, each with the row it follows, and the rows
 // removed since. The whole is only for a client whose generation differs.
 
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

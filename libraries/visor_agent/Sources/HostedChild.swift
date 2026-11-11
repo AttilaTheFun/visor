@@ -11,28 +11,28 @@ import Foundation
 import VisorSystem
 
 @MainActor
-final class HostedChild: AgentChild {
+package final class HostedChild: AgentChild {
     /// The host's socket, which a later server connects to.
-    let socket: String
-    let output: AsyncStream<Data>
+    package let socket: String
+    package let output: AsyncStream<Data>
     private let said: AsyncStream<Data>.Continuation
-    let errors: AsyncStream<Data>
+    package let errors: AsyncStream<Data>
     private let erred: AsyncStream<Data>.Continuation
-    let notices: AsyncStream<String>
+    package let notices: AsyncStream<String>
     private let noticed: AsyncStream<String>.Continuation
-    let exit: Task<AgentExit, Never>
+    package let exit: Task<AgentExit, Never>
     private let exited: AsyncStream<AgentExit>.Continuation
 
     /// The agent's process id, once the host has said it; the host's.
-    private(set) var pid: Int32 = 0
+    package private(set) var pid: Int32 = 0
     private(set) var hostPID: Int32 = 0
-    private(set) var isRunning = true
+    package private(set) var isRunning = true
     /// The number of the next line not yet heard: where a later server
     /// picks up.
-    private(set) var nextLine: UInt64 = 0
+    package private(set) var nextLine: UInt64 = 0
     /// The host no longer had all the lines asked for: more was said
     /// while no server was here than it keeps.
-    private(set) var missedLines = false
+    package private(set) var missedLines = false
     /// How much memory the agent and what it runs use, as the host last
     /// said.
     private(set) var memory: UInt64 = 0
@@ -106,7 +106,7 @@ final class HostedChild: AgentChild {
 
     /// The host left at `socket` by an earlier server, if it still answers
     /// and speaks this server's wire: sent the lines from `line` on.
-    static func attach(socket: String, from line: UInt64, hosting: any AgentHosting) async -> HostedChild? {
+    package static func attach(socket: String, from line: UInt64, hosting: any AgentHosting) async -> HostedChild? {
         guard let stream = await hosting.connect(socket) else { return nil }
         let child = HostedChild(socket: socket)
         child.stream = stream
@@ -152,16 +152,16 @@ final class HostedChild: AgentChild {
 
     // MARK: The agent
 
-    func write(_ object: [String: Any]) {
+    package func write(_ object: [String: Any]) {
         guard isRunning, let data = try? JSONSerialization.data(withJSONObject: object) else { return }
         send(.input(data + Data([0x0A])))
     }
 
-    func closeInput() {
+    package func closeInput() {
         if isRunning { send(.closeInput) }
     }
 
-    func end(grace: Duration) async {
+    package func end(grace: Duration) async {
         closeInput()
         let force = Task {
             try await Task.sleep(for: grace)
@@ -171,7 +171,7 @@ final class HostedChild: AgentChild {
             // A host that does not answer is ended itself.
             try await Task.sleep(for: .seconds(2))
             if isRunning {
-                if hostPID > 0 { ServerPlatform.current.processes.kill(hostPID) }
+                if hostPID > 0 { SystemPlatform.current.processes.kill(hostPID) }
                 ended(AgentExit(status: -1, signaled: true))
             }
         }
@@ -181,14 +181,14 @@ final class HostedChild: AgentChild {
 
     /// Lets the agent go on without this server, which is going: the next
     /// one picks it up.
-    func detach() {
+    package func detach() {
         detached = true
         stream?.close()
         stream = nil
     }
 
     /// The most memory the agent and what it runs may use (0: no limit).
-    func limit(_ bytes: UInt64) {
+    package func limit(_ bytes: UInt64) {
         if isRunning { send(.limit(bytes)) }
     }
 

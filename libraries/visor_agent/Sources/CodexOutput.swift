@@ -4,7 +4,7 @@ import VisorSystem
 
 /// What a line from the app server says, as far as the server cares: read
 /// off the main actor.
-enum CodexOutput: Sendable {
+package enum CodexOutput: Sendable {
     /// The answer to a request of ours: the thread or turn it names, or
     /// what went wrong.
     case reply(id: Int, thread: String?, turn: String?, error: String?, goal: CodexGoal??)
@@ -51,7 +51,7 @@ enum CodexOutput: Sendable {
         return (id, AgentQuestion(question: text, header: item["header"] as? String ?? "", options: options))
     }
 
-    static func parse(_ line: String) -> [CodexOutput] {
+    package static func parse(_ line: String) -> [CodexOutput] {
         JSON.object(line).map(parse(object:)) ?? []
     }
 
@@ -106,7 +106,7 @@ enum CodexOutput: Sendable {
             case "mcpToolCall":
                 let name = item["tool"] as? String ?? "tool"
                 // A proxied MCP server's tool, by its server and its own name.
-                if item["server"] as? String == "visor", let shown = MCPProxy.shownName(name) {
+                if item["server"] as? String == "visor", let shown = VisorMCP.shownName(name) {
                     let summary = short(JSON.summary(item["arguments"]))
                     return [.toolStarted(id: id, name: name, label: summary.isEmpty ? shown : shown + " — " + summary)]
                 }
@@ -171,7 +171,7 @@ enum CodexOutput: Sendable {
     }
 
     /// A subagent by the last part of its path ("/root/arithmetic").
-    static func subagentName(_ path: String) -> String {
+    package static func subagentName(_ path: String) -> String {
         path.split(separator: "/").last.map(String.init) ?? path
     }
 

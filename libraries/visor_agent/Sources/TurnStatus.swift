@@ -6,15 +6,17 @@
 import Foundation
 import VisorProtocol
 
-struct TurnStatus: Equatable {
-    private(set) var items: [StatusItem] = []
+package struct TurnStatus: Equatable {
+    package private(set) var items: [StatusItem] = []
 
-    mutating func thinking(_ on: Bool) {
+    package init() {}
+
+    package mutating func thinking(_ on: Bool) {
         items.removeAll { $0.kind == .thinking }
         if on { items.append(StatusItem(id: "thinking", kind: .thinking, label: "Thinking…", running: true)) }
     }
 
-    mutating func started(id: String, name: String, label: String, tasks: [TaskItem]?) {
+    package mutating func started(id: String, name: String, label: String, tasks: [TaskItem]?) {
         thinking(false)
         if let tasks {
             // The list as it stands replaces the last one written.
@@ -30,15 +32,15 @@ struct TurnStatus: Equatable {
         }
     }
 
-    mutating func finished(id: String) {
+    package mutating func finished(id: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].running = false
     }
 
-    mutating func clear() { items = [] }
+    package mutating func clear() { items = [] }
 
     /// A tool's kind, by the names the agents use.
-    static func kind(of name: String) -> StatusItem.Kind {
+    package static func kind(of name: String) -> StatusItem.Kind {
         switch name {
         case "Bash", "bash", "shell", "Shell", "commandExecution": .shell
         case "Monitor", "TaskOutput": .monitor

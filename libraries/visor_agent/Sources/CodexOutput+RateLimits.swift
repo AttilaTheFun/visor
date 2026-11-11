@@ -6,7 +6,7 @@ import Foundation
 import VisorProtocol
 
 extension CodexOutput {
-    struct RateLimits: Sendable, Equatable {
+    package struct RateLimits: Sendable, Equatable {
         struct Window: Sendable, Equatable {
             let usedPercent: Double
             let minutes: Int?
@@ -39,7 +39,7 @@ extension CodexOutput {
             return merged
         }
 
-        var limits: [UsageLimit] {
+        package var limits: [UsageLimit] {
             var limits = [primary, secondary].compactMap { $0 }.map { window in
                 UsageLimit(name: Self.name(minutes: window.minutes), used: window.usedPercent / 100, resets: window.resetsAt)
             }

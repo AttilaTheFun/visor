@@ -65,15 +65,6 @@ final class MCPProxy {
         return made
     }
 
-    /// A proxied tool as a session's row shows a call of it: "gh: pr_create"
-    /// for Claude's `mcp__visor__gh__pr_create` or Codex's `gh__pr_create`;
-    /// nil for any other tool.
-    nonisolated static func shownName(_ tool: String) -> String? {
-        let name = tool.hasPrefix("mcp__visor__") ? String(tool.dropFirst("mcp__visor__".count)) : tool
-        guard let split = name.range(of: "__"), split.lowerBound > name.startIndex else { return nil }
-        return name[..<split.lowerBound] + ": " + name[split.upperBound...]
-    }
-
     /// A session's connections let go: it ended.
     func forget(session: String) {
         connections = connections.filter { !$0.key.hasSuffix("\u{0}" + session) }

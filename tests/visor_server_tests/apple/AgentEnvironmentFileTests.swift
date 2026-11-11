@@ -1,4 +1,5 @@
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 import XCTest
 @testable import VisorServer
