@@ -28,7 +28,8 @@ document["version"] = version
 with zipfile.ZipFile(target, "w", zipfile.ZIP_STORED) as made:
     made.writestr("proof.json", json.dumps(document, indent=2) + "\n")
     for name in names:
-        if name != "proof.json":
+        # The comparison (proof-diff.json) goes beside proof.zip, not in it.
+        if name not in ("proof.json", "proof-diff.json"):
             made.writestr(name, read(name))
 print(f"proof.zip of {document['commit'][:7]} says {version}")
 PY
