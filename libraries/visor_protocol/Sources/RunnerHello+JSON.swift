@@ -1,6 +1,6 @@
 extension RunnerHello {
     public var json: JSONValue {
-        .object(["type": .string("runner"), "id": .string(id), "name": .string(name), "kind": .string(kind.rawValue),
+        .object(["type": .string("runner"), "protocol": .number(Double(protocolVersion)), "id": .string(id), "name": .string(name), "kind": .string(kind.rawValue),
                  "agents": .array(agents.map { .string($0.rawValue) }), "capacity": .number(Double(capacity)),
                  "running": .number(Double(running)), "labels": .array(labels.map(JSONValue.string))])
     }
@@ -12,6 +12,7 @@ extension RunnerHello {
               let kind = json["kind"].string.flatMap(Kind.init(rawValue:)), let capacity = json["capacity"].int else { return nil }
         self.init(id: id, name: json["name"].string ?? id, kind: kind,
                   agents: (json["agents"].array ?? []).compactMap { $0.string.flatMap(AgentKind.init(rawValue:)) },
-                  capacity: capacity, running: json["running"].int ?? 0, labels: (json["labels"].array ?? []).compactMap(\.string))
+                  capacity: capacity, running: json["running"].int ?? 0, labels: (json["labels"].array ?? []).compactMap(\.string),
+                  protocolVersion: json["protocol"].int ?? Self.protocolVersion)
     }
 }

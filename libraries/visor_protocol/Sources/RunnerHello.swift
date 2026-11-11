@@ -13,6 +13,11 @@ public struct RunnerHello: Codable, Hashable, Sendable {
         case macosVM = "macos-vm"
     }
 
+    /// The runner protocol's version this side speaks (docs/runners.md, "The
+    /// runner protocol").
+    public static let protocolVersion = 2
+
+    public var protocolVersion: Int
     public var id: String
     public var name: String
     public var kind: Kind
@@ -25,7 +30,9 @@ public struct RunnerHello: Codable, Hashable, Sendable {
     /// What a queue entry may ask of it: `macbook`, `container`, `shireworks`.
     public var labels: [String]
 
-    public init(id: String, name: String, kind: Kind, agents: [AgentKind], capacity: Int, running: Int = 0, labels: [String] = []) {
+    public init(id: String, name: String, kind: Kind, agents: [AgentKind], capacity: Int, running: Int = 0, labels: [String] = [],
+                protocolVersion: Int = Self.protocolVersion) {
+        self.protocolVersion = protocolVersion
         self.id = id
         self.name = name
         self.kind = kind

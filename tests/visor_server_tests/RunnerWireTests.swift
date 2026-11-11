@@ -16,6 +16,7 @@ final class RunnerWireTests: XCTestCase {
         let hello = AgentHello(session: "abc", agent: .claude, cwd: "/Volumes/Sessions/Claude/abc", title: "Issue 12",
                                runner: "shireworks-mini", links: ["https://github.com/AttilaTheFun/visor/issues/12"], place: .container)
         XCTAssertEqual(AgentHello(json: reread(hello.json)), hello)
+        XCTAssertEqual(hello.json["protocol"].int, 2, "the runner protocol's version, said in every hello")
         XCTAssertNil(AgentHello(json: reread(RunnerHello(id: "r", name: "r", kind: .native, agents: [.claude], capacity: 1).json)),
                      "a runner's hello is not an agent's")
         XCTAssertNil(AgentHello(json: .object(["type": .string("agent"), "session": .string("")])), "a session is needed")
@@ -25,6 +26,7 @@ final class RunnerWireTests: XCTestCase {
         let hello = RunnerHello(id: "macbook", name: "MacBook", kind: .native, agents: [.claude, .codex], capacity: 3, running: 1,
                                 labels: ["macbook"])
         XCTAssertEqual(RunnerHello(json: reread(hello.json)), hello)
+        XCTAssertEqual(RunnerHello(json: reread(hello.json))?.protocolVersion, 2)
         var json = hello.json
         if case .object(var object) = json {
             object["agents"] = .array([.string("claude"), .string("someday")])

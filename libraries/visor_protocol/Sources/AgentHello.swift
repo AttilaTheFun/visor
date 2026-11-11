@@ -4,6 +4,11 @@
 
 /// A wrapped agent saying which session it is, on dialing in.
 public struct AgentHello: Codable, Hashable, Sendable {
+    /// The runner protocol's version this side speaks (docs/runners.md, "The
+    /// runner protocol").
+    public static let protocolVersion = 2
+
+    public var protocolVersion: Int
     /// The session's id, its creator's: the same through reconnects, moves
     /// and archiving.
     public var session: String
@@ -18,7 +23,8 @@ public struct AgentHello: Codable, Hashable, Sendable {
     public var place: AgentPlace
 
     public init(session: String, agent: AgentKind, cwd: String, title: String, runner: String, links: [String] = [],
-                place: AgentPlace) {
+                place: AgentPlace, protocolVersion: Int = Self.protocolVersion) {
+        self.protocolVersion = protocolVersion
         self.session = session
         self.agent = agent
         self.cwd = cwd
