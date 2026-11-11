@@ -10,7 +10,7 @@ public struct RunnerHello: Codable, Hashable, Sendable {
     public enum Kind: String, Codable, Hashable, Sendable {
         case native
         case container
-        case vm
+        case macosVM = "macos-vm"
     }
 
     public var id: String

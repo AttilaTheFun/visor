@@ -7,5 +7,5 @@ public enum AgentPlace: String, Codable, Hashable, Sendable {
     case native
     case container
     /// A macOS VM (Shireworks' primary macOS VM), as boxed in as a container.
-    case vm
+    case macosVM = "macos-vm"
 }
