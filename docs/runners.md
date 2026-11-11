@@ -58,8 +58,9 @@ The sections below have been brought into line with it.
   - Shireworks' agent runner is enabled only where Shireworks has a primary
     container, so container sessions run in the mini's primary container and
     native ones on the MacBook.
-  - In the medium term, native sessions are avoided where possible on the
-    pure MacBook.
+  - In the medium term, native sessions are avoided where possible on
+    Logan's own pure MacBook. That's his choice for his machine, not
+    Visor's: see "The native runner" below.
 - **Progress and done:** a wrapped agent reports to the runner that started it
   over that runner's MCP: agent → wrapper → MultiPass → Shireworks' agent
   runner. It reports progress from time to time, and says complete or blocked.
@@ -75,6 +76,30 @@ The sections below have been brought into line with it.
   are started by hand only. Picking up and implementing issues automatically,
   with a cap on concurrent agent and CI jobs, comes when the Mac Studio
   arrives.
+
+## The native runner, and Visor on its own
+
+Logan, 11 Nov: "I think 3rd parties may still want to use the native visor
+agents either because they don't care as much about the purity of the machine
+or their build process is more complex and requires tools that can't work on
+linux."
+
+So **Visor.app's native runner is a first-class, supported part of Visor**,
+not a step on the way to containers. Visor works out of the box with it
+alone, with no Shireworks and no MultiPass:
+- **Visor.app on its own:** the server, the native runner and the client in
+  one app. The Mac's own client reaches the server on loopback. New Session
+  starts a native session at once, in a folder the user picks, as today.
+- **Permissions:** Claude Code's own approval modes, auto or manual, the
+  session's choice (#341). There's no bypass on the computer itself.
+- **The network:** with no MultiPass, agents use the Mac's network as they do
+  today. With MultiPass installed, the native runner gives its agents
+  `HTTP(S)_PROXY` and the CA bundle pointing at it, for the egress log,
+  credentials and GitHub's rules.
+- **Reaching it from elsewhere** (a phone, another Mac) needs MultiPass, the
+  only authenticated way in. Without it, Visor is a single-Mac app.
+- Runners in containers (Shireworks') and agent jobs are additions on top,
+  for those who have them.
 
 ## The parts
 
