@@ -151,38 +151,84 @@ why.
   archived when it reaches a terminal state. Any session can be archived by
   hand.
 - **Where its conversation lives.** For a native runner, on the Mac's disk, as
-  today. A container's disk goes when the job ends, so on its end the wrapper
-  uploads the conversation's files to the server. They're the same files a
-  Migrate… carries today, conversation and memory, and the server keeps them
-  with the archived session.
+  today. For Shireworks' container runner, on the Sessions volume, which
+  outlives the container (Agent jobs, below). For a runner with no volume that
+  lasts, the wrapper uploads the conversation's files to the server at its end.
+  They're the same files a Migrate… carries today, conversation and memory.
 - **Unarchiving.** Unarchive is a start entry with `resume`. Any matching
   runner takes it, gets the files from the server, and the agent goes on in
   the same conversation, under the same session id.
 
 ## Agent jobs (with Shireworks)
 
-- **A job.** A Shireworks CI job, for example on an issue being opened, runs
-  in a container. Its step is `visor-agent-host job --agent claude
-  --repository <owner/name> --issue <url> --prompt-file <file>`, with
-  `VISOR_DIAL` and the job's agent token. The wrapper makes a session id, dials
-  the server, says hello with the issue in `links` and `archiveWhen:
-  terminal`, and runs the agent in the job's checkout.
-- **Watching and steering.** The session shows in Visor at once, among all the
-  others, marked as a job with its issue. A client can steer it as any other.
-- **The end.** The job ends when the session reaches a terminal state. The
-  agent declares merged or blocked, or the pull request is merged. Then the
-  wrapper uploads the conversation, the session is archived, and the
-  container goes.
-- **Who mints the job's token.** Shireworks asks the server, through
-  MultiPass, for an agent token of a new session id, with its runner token. A
-  job is then a runner's start, made by the runner itself rather than from the
-  queue.
-- **Shireworks' container agent runner.** A runner like any other (`kind:
-  container`, labels `container`, `shireworks`). It takes queued starts and
-  makes a container of Visor's agent image for each. The container's command
-  is `visor-agent-host` with the start, and the container's egress goes through
-  MultiPass. Agent jobs are the same containers, started by CI rather than the
-  queue.
+Shireworks' side, agreed with it on 11 Nov:
+
+- **The container agent runner** is a part of the Shireworks server, not a
+  process in a container.
+  - It dials the Visor server through MultiPass, as the native runner does,
+    and says hello as `kind: container`.
+  - Its hello advertises its images, how many agent sessions it can run now
+    (from Shireworks' memory budget, like CI's admission) and the volumes it
+    shares.
+  - It takes a start only when it has room. For each start it leases a
+    container of kind `agent`, linked to the session and its issue, so
+    Shireworks' and Monitor's lists show what it's for.
+  - The container's command is `visor-agent-host dial`. The runner only makes
+    and ends containers; everything about the agent goes over the dial
+    connection.
+- **Triggering:** one queue, in the Visor server, fed by:
+  - a small Actions workflow in each opted-in repository, on `issues:
+    labeled` with a label such as `agent`, which posts "start a session for
+    owner/repo#N" to the queue through MultiPass and ends;
+  - Visor's own UI and MCP tool, to queue an issue by hand;
+  - later, perhaps, the server polling GitHub itself.
+
+  The agent never runs inside the Actions job. A job's lifetime and cancel
+  are GitHub's, it can't be unarchived, and an idle steered session would
+  hold a CI slot. Only the label applied by Logan, or an issue he opened,
+  triggers a session. An issue's text is untrusted input, and the egress
+  allowlist is what limits the damage.
+- **The lease:**
+  - Visor's agent image, pinned by tag and digest.
+  - CPUs, memory and disk: 4 / 8 GB / 40 GB by default, set per repository.
+  - Two volumes by name:
+    - Sessions at `Sessions/<Claude|Codex>/<session id>`, the session's
+      state, which stays after archiving;
+    - Sources at `Sources/<session id>/<repository>`, a fresh clone (#345),
+      so an unarchived session resumes on its own branch.
+  - Bazel's output stays on the container's disk.
+- **Egress:** host-only, through MultiPass. That covers DNS, the HTTP(S)
+  proxy with the repository's allowlist (GitHub, the package registries it
+  declares), MCP, and Shireworks' cache and API on the host. Nothing else.
+- **No secrets at rest:**
+  - `/run/secrets/visor-host`, the container's dial token, is its only
+    secret file.
+  - The agent's model sign-in comes over the dial connection.
+  - GitHub goes through MultiPass as logan-shire-agent[bot], so no GitHub
+    token enters the container.
+- **The lifecycle,** kept by the Visor server from GitHub's state:
+  - Queued, then running: the runner leases the container, and the agent
+    starts, tied to the issue.
+  - A pull request opened: linked to the session.
+  - Merged, or blocked: the agent says it's blocked through an MCP tool, with
+    a reason, or says it's done. The server archives the session and comments
+    on the issue, and the runner releases the container.
+  - The Sessions folder stays. The Sources clone is marked disposable in
+    Shireworks' cleanup and removed after some days.
+  - Unarchive: a new lease with the same two folders, and the agent resumes
+    its own conversation (`--resume`).
+  - Steering, throughout, through the server as with any session.
+- **Who builds what:**
+  - Shireworks: the runner (its dial client, admission, the `agent` lease
+    kind and its links), per-session Sources in cleanup, and host-only
+    egress.
+  - Visor: the queue, the dial protocol's start and stop, the workflow
+    template and the lifecycle.
+
+Because a container session's state stays on the Sessions volume, the wrapper
+needn't upload its conversation at the end for containers that Shireworks
+runs. The server keeps uploaded files only for a runner without a shared
+volume.
 
 ## Permissions
 
@@ -262,10 +308,13 @@ these. 4's containers and 8 need 2e.
   harness in the server and makes the wrapper a pipe for the agent's input and
   output. That makes the server less dumb, and a server restart less
   invisible.
-- **Archived conversations on the server.** Is the server's store the place
-  for an ended container session's files, or a Shireworks volume (Sessions)
-  the runner writes to?
+- **Merging.** May an agent merge its own pull request? Today main needs a
+  code owner's review: Logan in Reviews, or a reviewing agent with merge
+  rights. "Merged" as a job's end depends on it.
+- **Opting in.** Which repositories get the workflow, and how many agent
+  sessions at once (Shireworks would start at 2)?
 - **One server per person.** Is the mini a runner of the MacBook's server, or
   does it keep a server of its own for its own clients?
-- **Who declares a job done.** The agent, through a tool the wrapper gives it,
-  or the job, by watching the issue or pull request?
+- **Who declares a job done.** As outlined, the agent says blocked or done
+  through a tool, and the server watches GitHub for the merge. Or should the
+  server alone decide, from GitHub's state?
