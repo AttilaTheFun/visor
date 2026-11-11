@@ -242,9 +242,14 @@ xctest() {
         case "$test" in "$target" | "$target"/*) only+=("-only-testing:$test") ;; *) only+=("-only-testing:$target/$test") ;; esac
     done
     local result=0
+    # A failed test is tried up to three times: GitHub's simulators are
+    # slow some days, and on 11 Nov four release runs each failed a
+    # different probe (a 0.5 s timing, a UI query timing out, "Failed to
+    # terminate com.LoganShire.Visor") that passed on the run before. A
+    # failure that repeats three times is still the proof's.
     xcodebuild test-without-building -xctestrun "$folder/tests.xctestrun" -destination "id=$udid" \
         -resultBundlePath "$folder/result.xcresult" -derivedDataPath "$folder/derived_data" \
-        -collect-test-diagnostics never -retry-tests-on-failure -test-iterations 2 \
+        -collect-test-diagnostics never -retry-tests-on-failure -test-iterations 3 \
         "${only[@]}" > "$out/logs/$name.log" 2>&1 || result=$?
     grep -E '^(Test Suite|Test Case .*(passed|failed)|.*error:|\*\* TEST)' "$out/logs/$name.log" | tail -40 || true
     if [ "$result" -ne 0 ]; then
