@@ -236,6 +236,78 @@ The MCP servers, GitHub and APNs are cases of it, not paths of their own.
   `HTTPS_PROXY` still goes out directly. Hard once Shireworks gives a
   limited container a network that routes only to MultiPass.
 
+### Containers: no network, multipass-client
+
+Logan, 11 Nov: a container has **no network** at all, only one socket relayed
+to MultiPass on the host. MultiPass is its universal proxy (DNS, HTTP and
+HTTPS, MCP, the agents' dial-in), logs every host, and filters egress later.
+Agreed with Shireworks the same evening.
+
+- **Inside: `multipass-client`**, MultiPass's helper, from the multipass
+  repository. It's a static Linux binary, and the container's command is
+  `multipass-client run -- <command…>`. It gives the container a dummy
+  interface as its only default route, then redirects every outgoing TCP
+  connection to its own listener on 127.0.0.1 with one nftables rule. The
+  kernel does the TCP: no userspace network stack.
+  - It reads each connection's original destination (`SO_ORIGINAL_DST`), maps
+    the address back to the name its fake-IP DNS gave out, and sends `CONNECT
+    name:port` over the relay. Then it splices the bytes.
+  - It answers DNS on 127.0.0.1:53 with fake IPs for the names it relays, and
+    asks MultiPass for real answers by DoH.
+  - It starts the relay in the background, and execs the workload once DNS
+    and the redirect answer.
+  - So every program works without proxy settings: Gradle and the JVM, Go
+    binaries, SSH remotes, Bazel's gRPC cache. UDP other than DNS, ICMP and
+    anything inbound don't; QUIC falls back to TCP.
+- **The relay is Shireworks'.** In the container it's a Unix socket,
+  `/run/multipass/relay.sock`, relayed from the host over vsock, as Apple's
+  Containerization relays sockets. On the host each container's socket is its
+  own, in Shireworks' folder. Shireworks forwards each stream to MultiPass's
+  relay listener on loopback.
+- **Who it is:** each stream starts with a PROXY protocol v2 header. Its TLV
+  0xE1 is the container's lease id, and its TLV 0xE2 is the relay's own token
+  (kept in Shireworks' Keychain). MultiPass's relay listener accepts nothing
+  without a valid 0xE2, and checks rules and logs by container. Nothing in a
+  container is a secret: `/run/secrets/visor-host` goes. An agent names its
+  session in its hello. MultiPass checks that the session belongs to the
+  container, which the runner told it when it started the agent.
+- **One HTTP/1.1 listener** in MultiPass for what comes over the relay,
+  dispatched by request:
+  - `CONNECT host:port`: tunnelled, or intercepted for a credentialed host;
+  - an absolute-form request: the plain-HTTP forward proxy;
+  - `POST /dns-query` (DoH, RFC 8484): MultiPass's resolver;
+  - `/visor/hosts` and `/visor/runners` with `Upgrade: websocket`: the
+    dial-ins, relayed to the Visor server;
+  - `/mcp/<name>`: the MCP servers, reached as paths.
+- **Images:** visor-agent (Visor's image build) carries `multipass-client`
+  and nftables; Shireworks' `dev` image does too.
+- **In a macOS VM** (the primary macOS VM's agent runner, after the
+  container's), the same `multipass-client` for macOS, with these
+  differences:
+  - **The relay:** a vsock port to the host (Virtualization's virtio socket),
+    which Shireworks forwards to the relay listener with the same PROXY header.
+  - **The redirect:** pf, not nftables. A route sends outgoing traffic to
+    `lo0`, and an `rdr` rule there sends it to multipass-client's listener.
+    The original destination comes from pf's state (`DIOCNATLOOK`), as
+    transparent proxies on macOS do.
+  - **DNS:** `/etc/resolver` pointed at 127.0.0.1.
+  - It's a root launchd daemon in the VM's image, for pf, started before any
+    agent.
+  - **Its network card stays, host-only.** Shireworks drives its macOS VMs
+    over the network (SSH for provisioning, exec, files and slot users; VNC
+    for the screen). So the primary macOS VM keeps a card on a host-only
+    network that reaches only the host. pf redirects every outbound flow to
+    the relay except the host's own address, so egress still goes only
+    through MultiPass, and SSH and VNC keep working.
+  - **Later:** moving Shireworks' control onto vsock too (a guest daemon
+    bridging to sshd and Screen Sharing) would make the VM fully networkless.
+  - Shireworks spikes vsock, the pf redirect and host-only vmnet in a VM first.
+    If they don't hold, the fallback is NAT to the host only, with the
+    system's and HTTP(S) proxy settings.
+- **Native agents on the Mac** keep the explicit `HTTP(S)_PROXY` and the CA
+  bundle: a Network Extension packet tunnel would route the whole Mac, since
+  macOS has no per-app VPN without device management.
+
 ### MCP, GitHub and APNs as cases of it
 
 - **An MCP server is a credentialed host**: the agent's MCP settings name
@@ -252,11 +324,10 @@ The MCP servers, GitHub and APNs are cases of it, not paths of their own.
 - **Agents on the Mac**: Visor's server gives them `HTTP(S)_PROXY` at
   `127.0.0.1:<port>` with their session's token, and the bundle, as it
   gives them the GitHub proxy today.
-- **Shireworks' containers**, CI's leases and the primary container alike,
-  once MultiPass is set up: their DNS at the gateway, `HTTP(S)_PROXY` at
-  the gateway's proxy port with the container's own token, the bundle in
-  `/run/secrets`. The primary container's Visor server gives its agents
-  the same.
+- **Shireworks' containers**, CI's leases and the primary container alike:
+  through `multipass-client` and the relay, with no network of their own and
+  no proxy settings (Containers: no network, above). The CA bundle for
+  intercepted hosts is in the image's trust store.
 
 ## Visor's client
 
