@@ -82,11 +82,14 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     }
 
     /// The mode a session's agent is started in: manual accepts edits and
-    /// asks for the rest; auto-approving bypasses permissions, or for
-    /// Claude under a policy that disables that, Claude's auto mode.
-    static func permissionMode(skip: Bool, tool: String, policy: ClaudeManagedPolicy) -> String {
+    /// asks for the rest; auto-approving is Claude's auto mode on the
+    /// computer itself and bypasses permissions only in a container
+    /// (ClaudeManagedPolicy.autoApproveMode). The OpenRouter CLI, with no
+    /// auto mode, bypasses in a container and asks otherwise.
+    static func permissionMode(skip: Bool, tool: String, policy: ClaudeManagedPolicy, contained: Bool) -> String {
         guard skip else { return "acceptEdits" }
-        return tool == "claude" ? policy.autoApproveMode : "bypassPermissions"
+        if tool == "claude" { return policy.autoApproveMode(contained: contained) }
+        return contained ? "bypassPermissions" : "acceptEdits"
     }
 
     /// Whether the agent started in another permission mode than the one
@@ -267,7 +270,9 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         if let mcp { args += ["--mcp-config", mcp] }
         // Manual: edits are accepted, everything else asks the user.
         // This computer's managed policy is not a container's.
-        let mode = Self.permissionMode(skip: skipPermissions, tool: tool, policy: tool == "claude" && container == nil ? .current : ClaudeManagedPolicy())
+        let contained = container != nil || ServerPlatform.current.host.inContainer
+        let mode = Self.permissionMode(skip: skipPermissions, tool: tool, policy: tool == "claude" && container == nil ? .current : ClaudeManagedPolicy(),
+                                       contained: contained)
         askedMode = mode
         args += ["--permission-mode", mode]
         if mcp != nil, prompt { args += ["--permission-prompt-tool", "mcp__visor__approve"] }

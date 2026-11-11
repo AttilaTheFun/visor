@@ -121,7 +121,8 @@ extension VisorServer {
         let siblings = sessions.filter { HostFolders.resolve($0.info.cwd) == resolvedCWD && $0.info.agent == agent }.count
         let title = given.isEmpty ? "\(agent.title) \(siblings + 1)" : String(given.prefix(60))
         let resume = (envelope.resume ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let info = SessionInfo(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skip, created: Date().timeIntervalSince1970)
+        let info = withPermissions(SessionInfo(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skip,
+                                               created: Date().timeIntervalSince1970))
         // A resumed session shows what was said before it moved here.
         let past = resume.isEmpty ? [] : (harnesses.harness(for: agent)?.transcript(id: resume, cwd: cwd, limit: SessionRecord.servedRows) ?? [])
         let record = SessionRecord(info: info, process: makeProcess(info, resume: resume.isEmpty ? nil : resume), entries: past)
@@ -192,8 +193,16 @@ extension VisorServer {
     }
 
     private func performPermissions(_ envelope: Envelope) {
-        guard let record = session(envelope.session), let skip = envelope.skipPermissions else { return }
-        guard record.info.skipPermissions != skip else { return }
+        guard let record = session(envelope.session), let asked = envelope.skipPermissions else { return }
+        // A contained session always auto-approves (VisorServer+Permissions):
+        // a client's ask for manual is refused, and told the session as it
+        // stays.
+        let skip = withPermissions({ var info = record.info; info.skipPermissions = asked; return info }()).skipPermissions
+        if asked != skip { Self.log("\(record.info.title): permission prompts stay skipped, in a container") }
+        guard record.info.skipPermissions != skip else {
+            broadcastSessions()
+            return
+        }
         record.setPermissions(skip: skip)
         // Claude's mode is a launch flag: the process restarts (resumed by
         // session id) once idle. Codex spawns per turn and just picks it up.
