@@ -35,6 +35,12 @@ extension ServerCommand {
             server.useProxy(proxy, token: options.proxyToken ?? "", mcp: options.mcp)
             log.write("pushes and \(options.mcp.isEmpty ? "no MCP servers" : "the MCP servers " + options.mcp.joined(separator: ", ")) go through \(proxy)")
         }
+        // A folder for each session, the repositories apart.
+        if let sessions = options.sessionsDir {
+            server.sessionFolders = SessionFolders(sessions: sessions, sources: options.sourcesDir)
+            log.write("each session works in a folder of its own under \(sessions)"
+                + (options.sourcesDir.map { ", the repositories of sessions moved here under \($0)" } ?? ""))
+        }
         system.onStop {
             Task { @MainActor in
                 log.write("stopping: ending the agents")

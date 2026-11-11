@@ -85,6 +85,13 @@ extension VisorServer {
                 files.append(MigrationFile(id: id, place: file.place, size: Self.wholeLines(of: file.url), packed: false))
             }
         }
+        // A Claude conversation's project memory with it (VisorServer+
+        // MigrationMemory).
+        if record.info.agent == .claude, let conversation = urls["conversation-0"],
+           let memory = await Self.packMemory(beside: conversation, into: folder) {
+            urls[memory.file.id] = memory.url
+            files.append(memory.file)
+        }
         guard files.contains(where: { !$0.packed }) else {
             return .failure(MigrationFailure(message: "The agent's own record of “\(record.info.title)” is not on this computer."))
         }

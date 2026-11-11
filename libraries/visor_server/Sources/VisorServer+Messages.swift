@@ -103,7 +103,16 @@ extension VisorServer {
         }
         guard let agent = envelope.agent else { return }
         let id = envelope.id ?? UUID().uuidString
-        let cwd = (envelope.cwd?.isEmpty == false ? envelope.cwd! : "~")
+        let resumed = !(envelope.resume ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        var cwd = (envelope.cwd?.isEmpty == false ? envelope.cwd! : "~")
+        // A new session's own folder, where the server keeps one per
+        // session, whatever folder was asked for. One that resumes a
+        // conversation keeps the folder it was given: the conversation is
+        // kept under it (a move here puts it under the folder it planned).
+        if let folders = sessionFolders, !resumed {
+            cwd = folders.folder(agent: agent, id: id)
+            try? FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+        }
         let skip = envelope.skipPermissions ?? true
         let given = (envelope.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         // Sessions live under their folder (the project), so the default

@@ -80,13 +80,18 @@ public struct ServerCommand {
                        Every interface (the LAN and a VPN), or this computer alone.
           --password-file <file>
                        The password, read from a file (a container's secret).
+          --sessions-dir <folder> [--sources-dir <folder>]
+                       A folder of its own for each session, new or moved
+                       here: <folder>/Claude/<id> (Codex/, OpenRouter/),
+                       whatever folder a client asks for; and where a moved
+                       session's repositories go, by name.
           --proxy <url> --proxy-token-file <file> --mcp <name>,…
                        The proxy its pushes go through (<url>/apns/…) and the
                        MCP servers of it its agents are given (<url>/mcp/<name>),
                        with its token for the proxy; kept from then on.
         Each also from the environment, the arguments winning: VISOR_PORT,
         VISOR_LISTEN, VISOR_PASSWORD_FILE, VISOR_FRONT, VISOR_PROXY,
-        VISOR_PROXY_TOKEN_FILE, VISOR_MCP. GET /api/health answers without
+        VISOR_PROXY_TOKEN_FILE, VISOR_MCP, VISOR_SESSIONS_DIR, VISOR_SOURCES_DIR. GET /api/health answers without
         credentials while the server does.
           --log <file> Where its lines go (start: visor-server.log in its folder).
         Settings for this server, kept as the command of the same name keeps
