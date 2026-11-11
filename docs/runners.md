@@ -295,9 +295,11 @@ Agreed with Shireworks on 11 Nov, then placed by Logan's answers:
     queues the start, with a cap on concurrent agent and CI jobs. The agent
     never runs inside an Actions job.
   - **Scope:** every repository that isn't archived.
-- **Egress:** host-only, through MultiPass. That covers DNS, the HTTP(S) proxy
-  with the repository's allowlist, MCP, and Shireworks' cache and API on the
-  host.
+- **Network:** none. The container's only way out is `multipass-client` over
+  its one relayed socket (server-proxy.md, "Containers: no network"). That
+  covers DNS, HTTP(S), MCP and the agent's dial-in. Shireworks' cache and API
+  are reached the same way. MultiPass logs every host, and filters by the
+  repository's allowlist later.
 - **No secrets at rest.** The agent's model sign-in comes over its own
   connection. GitHub goes through MultiPass as logan-shire-agent[bot], so no
   GitHub token is in the container.
