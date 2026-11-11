@@ -21,7 +21,7 @@ extension VisorServer {
             }
             let questions = envelope.questions?.isEmpty == false ? envelope.questions : nil
             let request = ApprovalRequest(id: id, tool: envelope.text ?? "tool", summary: envelope.prompt ?? "", questions: questions)
-            record.approvalWaiters[id] = client
+            approvalWaiters[record.info.id, default: [:]][id] = client
             record.setPendingApproval(request)
             broadcast(.approval(session: record.info.id, request), session: record)
             broadcastSessions()
@@ -215,7 +215,7 @@ extension VisorServer {
     private func performApprove(_ envelope: Envelope) {
         guard let record = session(envelope.session), let id = envelope.id, let allow = envelope.allow else { return }
         // A question the agent itself asked (Codex's): answered to it.
-        guard let waiter = record.approvalWaiters.removeValue(forKey: id) else {
+        guard let waiter = approvalWaiters[record.info.id]?.removeValue(forKey: id) else {
             guard let pending = record.info.pendingApproval, pending.id == id, pending.questions != nil else { return }
             record.process.answer(id, with: allow ? envelope.answers : nil)
             record.setPendingApproval(nil)
@@ -239,9 +239,9 @@ extension VisorServer {
     /// into nothing.
     func withdrawApprovals(askedBy client: ClientConnection) {
         for record in sessions {
-            let asked = record.approvalWaiters.filter { $0.value === client }.map(\.key)
+            let asked = (approvalWaiters[record.info.id] ?? [:]).filter { $0.value === client }.map(\.key)
             guard !asked.isEmpty else { continue }
-            for id in asked { record.approvalWaiters.removeValue(forKey: id) }
+            for id in asked { approvalWaiters[record.info.id]?.removeValue(forKey: id) }
             guard let pending = record.info.pendingApproval, asked.contains(pending.id) else { continue }
             record.setPendingApproval(nil)
             broadcast(.approval(session: record.info.id, nil), session: record)
@@ -340,6 +340,8 @@ extension VisorServer {
         record.process.stop()
         record.markEnded()
         sessions.removeAll { $0 === record }
+        // Its agent's shims waiting on approvals go with it.
+        for waiter in (approvalWaiters.removeValue(forKey: record.info.id) ?? [:]).values { waiter.close() }
         mcpProxy.forget(session: record.info.id)
         dropWaiters(for: record.info.id)
         Self.log("session ended: \(record.info.title)")

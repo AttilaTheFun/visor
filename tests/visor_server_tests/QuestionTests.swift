@@ -137,7 +137,7 @@ final class QuestionTests: ServerTestCase {
         XCTAssertNotNil(record.info.pendingApproval, "another connection's going withdraws nothing")
         server.withdrawApprovals(askedBy: shim)
         XCTAssertNil(record.info.pendingApproval)
-        XCTAssertTrue(record.approvalWaiters.isEmpty)
+        XCTAssertTrue(server.approvalWaiters[record.info.id, default: [:]].isEmpty)
     }
 
     /// A tool call that is not a question carries none, as before.

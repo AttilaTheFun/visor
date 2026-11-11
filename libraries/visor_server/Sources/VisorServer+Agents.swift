@@ -369,9 +369,8 @@ extension VisorServer {
         case .busy(let busy):
             // The turn's status lines, whole, whenever they change.
             if !busy { broadcast(.status(session: record.info.id, items: []), session: record) }
-            if !busy, !record.approvalWaiters.isEmpty {
-                for waiter in record.approvalWaiters.values { waiter.close() }
-                record.approvalWaiters.removeAll()
+            if !busy, let waiting = approvalWaiters.removeValue(forKey: record.info.id), !waiting.isEmpty {
+                for waiter in waiting.values { waiter.close() }
             }
             // The agent's own id appears with the first turn; the
             // transcript is written down whenever a turn ends.

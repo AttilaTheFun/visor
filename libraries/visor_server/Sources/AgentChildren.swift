@@ -20,12 +20,12 @@ enum AgentChildren {
 
     /// Where the hosts' log is, and their sockets unless VISOR_RUNTIME_DIR
     /// names another place for them.
-    static var folder: URL { VisorServer.storeURL.deletingLastPathComponent().appendingPathComponent("hosts", isDirectory: true) }
+    static var folder: URL { HostFolders.dataFolder.appendingPathComponent("hosts", isDirectory: true) }
 
     /// Where the hosts' sockets are: VISOR_RUNTIME_DIR's `hosts`, else
     /// beside their log.
     static func socketFolder(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
-        VisorServer.runtimeDirectory(in: environment)?.appendingPathComponent("hosts", isDirectory: true) ?? folder
+        HostFolders.runtimeDirectory(in: environment)?.appendingPathComponent("hosts", isDirectory: true) ?? folder
     }
 
     /// Why hosts cannot be started, as found the first time one was

@@ -11,8 +11,7 @@ import Foundation
 
 extension VisorServer {
     /// VISOR_RUNTIME_DIR, when it is set: the sockets' folder.
-    public static func runtimeDirectory(in environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
-        guard let given = environment["VISOR_RUNTIME_DIR"]?.trimmingCharacters(in: .whitespaces), !given.isEmpty else { return nil }
-        return URL(fileURLWithPath: given, isDirectory: true)
+    public nonisolated static func runtimeDirectory(in environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
+        HostFolders.runtimeDirectory(in: environment)
     }
 }
