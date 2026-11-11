@@ -160,9 +160,10 @@ Its own repository's design says the rest; what Visor relies on:
   checked and nothing of theirs forwarded but `X-Visor-User`. A client
   takes the kinds it shows.
 - **Advertising**: `POST /multipass/v1/servers` from a server with its
-  token; a server not heard from is shown as away, and a token is given to
-  each server when it is added to MultiPass's settings (by hand, or by
-  Shireworks for its primary container).
+  token; a server not heard from is shown as away. A server's token is made
+  where the server runs (by Shireworks for its primary container, shown
+  once; by hand for one run by hand) and set once in MultiPass's settings
+  by the person: nothing writes MultiPass's settings for them.
 - **Outbound**: `/mcp/<name>`, the agents' GitHub proxy, `/apns/…`, and any
   URL its settings name: rerouted, or with credentials added; anything else
   passed through unmodified.
