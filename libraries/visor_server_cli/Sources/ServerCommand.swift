@@ -63,6 +63,14 @@ public struct ServerCommand {
                    sessions' messages on their disk; `keep-messages off`
                    asks them to hold only the pages they show, in memory,
                    and to ask again for those they let go of.
+          move-folder --to <folder> [--from <folder>]… [--home <folder>] [--data <folder>] [--dry-run]
+                   Gives sessions another working directory, with the server
+                   stopped: each session's (or those in each --from folder),
+                   and its agent's conversation with it. Claude Code's
+                   projects are merged into the new folder's (their memory
+                   too, a clashing file renamed), its prompt history and
+                   ~/.claude.json follow, and Codex's rollouts are given the
+                   folder. --dry-run says what it would do.
           containers
                    Shows how sessions' containers are made on this computer
                    (docs/container-host.md). `containers host <command…>|-`
@@ -145,6 +153,7 @@ public struct ServerCommand {
             case "front": front(Array(rest))
             case "keep-messages": try keepMessages(rest.first)
             case "containers": try containers(rest)
+            case "move-folder": try moveFolder(rest)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")
             }
