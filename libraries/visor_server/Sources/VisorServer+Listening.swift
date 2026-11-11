@@ -44,10 +44,13 @@ extension VisorServer {
     }
 
     /// The socket file: `~/.visor/server.sock`, short enough for a socket
-    /// path anywhere, in a folder of this user's alone — or where a test
+    /// path anywhere, in a folder of this user's alone; in VISOR_RUNTIME_DIR
+    /// when that is set (a home that can't hold a socket) — or where a test
     /// or a staging server puts its own, away from the installed server's.
     public static var socketPath: String {
-        socketPathOverride ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".visor/server.sock", isDirectory: false).path
+        if let socketPathOverride { return socketPathOverride }
+        if let runtime = runtimeDirectory() { return runtime.appendingPathComponent("server.sock", isDirectory: false).path }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".visor/server.sock", isDirectory: false).path
     }
     public static var socketPathOverride: String?
 

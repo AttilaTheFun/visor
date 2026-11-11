@@ -62,11 +62,16 @@ final class HostedChild: AgentChild {
     // MARK: Starting, and picking up again
 
     /// Starts a host for the agent, which listens at a socket made for it
-    /// in `directory`; what is written before it answers waits.
+    /// in `sockets` (beside the hosts' log in `folder` unless told
+    /// otherwise); what is written before it answers waits.
     static func start(executable: String, arguments: [String], directory: String, environment: [String: String],
-                      session: String, in folder: URL, memoryLimit: UInt64, hosting: any AgentHosting) throws -> HostedChild {
+                      session: String, in folder: URL, socketsIn sockets: URL? = nil, memoryLimit: UInt64,
+                      hosting: any AgentHosting) throws -> HostedChild {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let child = HostedChild(socket: socketPath(for: session, in: folder))
+        let sockets = sockets ?? folder
+        try? FileManager.default.createDirectory(at: sockets, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
+        let child = HostedChild(socket: socketPath(for: session, in: sockets))
         let process = Process()
         process.executableURL = URL(fileURLWithPath: hosting.program)
         process.arguments = ["--socket", child.socket, "--directory", directory, "--memory-limit", String(memoryLimit), "--",
