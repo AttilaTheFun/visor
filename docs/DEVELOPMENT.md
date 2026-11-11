@@ -554,7 +554,8 @@ relauncher (`AppRelauncher`) keeps the running bundle aside (`Previous/` in
 the data directory) and watches the new one for two minutes: if it quits,
 crashes or never answers on its port, the previous build is put back and
 opened, carrying the same sessions, and `relaunch-rollback.txt` says why,
-which the server shows in its menu (`updateNotice`) once.
+which the server shows in its menu (`updateNotice`) once. Once the new build
+has stayed up, the one it replaced is removed (no backups left behind).
 
 **Agents apart from the server.** Unless turned off — Visor Server's
 "Run agents apart from the server" (`ServerSettings.detachAgents`, on by

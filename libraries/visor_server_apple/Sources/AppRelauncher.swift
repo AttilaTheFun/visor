@@ -115,6 +115,13 @@ public struct AppRelauncher: ServerLifecycle {
                          open: String, seconds: Int = watch, firstAnswer: Int = firstAnswer) -> String {
         let running = "pgrep -f \(quoted(destination + "/Contents/MacOS/")) >/dev/null"
         let answers = "curl -s -o /dev/null -m 3 -w '%{http_code}' http://127.0.0.1:\(Envelope.defaultPort)/api/hello | grep -qv '^000$'"
+        // The build it replaced, kept only while the new one might not stay
+        // up: gone once it has (no backups left on the computer; Logan, 7
+        // Nov). Its folder too, when nothing else is in it.
+        let removeReplaced = backup.map { backup in
+            let folder = (backup as NSString).deletingLastPathComponent
+            return "rm -rf \(quoted(backup)) && rmdir \(quoted(folder)) 2>/dev/null; echo \"$(date): the build it replaced is removed\""
+        } ?? ""
         let undo: String
         if let backup {
             let note = "Visor Server \(newVersion) did not stay up after the update ($why), so \(oldVersion) was put back."
@@ -151,6 +158,7 @@ public struct AppRelauncher: ServerLifecycle {
         \(undo)
         else
           echo "$(date): \(newVersion) stayed up"
+        \(removeReplaced)
         fi
         """
     }

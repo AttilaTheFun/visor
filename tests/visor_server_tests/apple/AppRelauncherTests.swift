@@ -73,6 +73,8 @@ final class AppRelauncherTests: ServerTestCase {
                                                                   newVersion: "0.31 (2)", oldVersion: "0.31 (1)", open: open, seconds: 4))
         XCTAssertTrue(output.contains("0.31 (2) stayed up"), output)
         XCTAssertEqual(try String(contentsOfFile: destination + "/name", encoding: .utf8), "new")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: backup), "the build it replaced is gone once the new one stays up")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Previous").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: VisorServer.rollbackNoteURL.path))
     }
 
