@@ -29,6 +29,12 @@ extension ServerCommand {
         try? Data("\(ProcessInfo.processInfo.processIdentifier) \(port)\n".utf8).write(to: pidFile)
 
         let server = VisorServer(port: port)
+        // The proxy given with the run: pushes and the named MCP servers
+        // through it, from now on.
+        if let proxy = options.proxy {
+            server.useProxy(proxy, token: options.proxyToken ?? "", mcp: options.mcp)
+            log.write("pushes and \(options.mcp.isEmpty ? "no MCP servers" : "the MCP servers " + options.mcp.joined(separator: ", ")) go through \(proxy)")
+        }
         system.onStop {
             Task { @MainActor in
                 log.write("stopping: ending the agents")

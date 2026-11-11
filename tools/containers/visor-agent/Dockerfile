@@ -147,6 +147,15 @@ RUN case "${TARGETARCH:-arm64}" in \
 # convenience links in the repository, where they would replace the Mac's
 # own builds' links with ones to paths only the container has.
 RUN printf '%s\n' 'startup --output_user_root=/var/cache/bazel' 'build --experimental_convenience_symlinks=ignore' > /etc/bazel.bazelrc
+# Every other build cache beside Bazel's output, on the cache volume, not in
+# the home: in Shireworks' primary container the home is a folder of the
+# Mac's, backed up with the agents' sign-ins and sessions (docs/server-proxy.md),
+# and a build must never fill it. bazelisk's downloads, SwiftPM's and every
+# XDG cache, npm's, Gradle's.
+ENV XDG_CACHE_HOME=/var/cache/bazel/xdg \
+    BAZELISK_HOME=/var/cache/bazel/bazelisk \
+    npm_config_cache=/var/cache/bazel/npm \
+    GRADLE_USER_HOME=/var/cache/bazel/gradle
 # GitHub's CLI, pinned and checked like bazelisk: CI's scripts (a draft
 # release, a run's artifacts) and the agents' own use, its token the GitHub
 # proxy's (docs/github-proxy.md) where a session goes through it.

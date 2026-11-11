@@ -134,6 +134,8 @@ extension VisorServer {
     }
 
     func route(_ request: HTTPRequest) -> HTTPResponse {
+        // Asked without credentials by what keeps the server running.
+        if Self.isHealthCheck(request) { return restHealth() }
         guard authorized(request) else { return refusal(request) }
         var path = request.path.split(separator: "?").first.map(String.init) ?? request.path
         path = Self.apiPath(path)
