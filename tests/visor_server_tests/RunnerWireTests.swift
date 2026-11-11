@@ -78,9 +78,17 @@ final class RunnerWireTests: XCTestCase {
     }
 
     func testAReportReadsBack() {
-        let report = AgentReport(session: "abc", kind: .blocked, text: "code review: the pull request touches .github/",
-                                 pullRequest: "https://github.com/AttilaTheFun/visor/pull/350", at: Date(timeIntervalSince1970: 1_800_000_000))
-        XCTAssertEqual(AgentReport(json: reread(report.json)), report)
+        let blocked = AgentReport(session: "abc", kind: .blocked, summary: "The pull request touches .github/",
+                                  pullRequest: "https://github.com/AttilaTheFun/visor/pull/350", reason: .codeReview,
+                                  at: Date(timeIntervalSince1970: 1_800_000_000))
+        XCTAssertEqual(AgentReport(json: reread(blocked.json)), blocked)
+        XCTAssertEqual(blocked.json["reason"].string, "code_review", "the MCP tool's word for it")
+        let complete = AgentReport(session: "abc", kind: .complete, summary: "Fixed and merged", pullRequest: "https://github.com/x/y/pull/1",
+                                   merged: true, at: Date(timeIntervalSince1970: 1_800_000_000))
+        XCTAssertEqual(AgentReport(json: reread(complete.json))?.merged, true)
+        let progress = AgentReport(session: "abc", kind: .progress, summary: "Running the tests", step: "tests",
+                                   at: Date(timeIntervalSince1970: 1_800_000_000))
+        XCTAssertEqual(AgentReport(json: reread(progress.json)), progress)
         XCTAssertNil(AgentReport(json: .object(["type": .string("report"), "session": .string("abc"), "kind": .string("shrug"),
                                                 "at": .number(0)])))
     }
