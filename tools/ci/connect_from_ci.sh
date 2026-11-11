@@ -18,6 +18,22 @@
 #   fingerprint, which the authority the server presents must match;
 # - APPLICATIONS_AUDIENCE: the audience the server takes, if not
 #   `applications-server` (`applications-server oidc`).
+# A fresh token of the job's, for the server's audience, from GitHub's
+# endpoint, in `token`. A token lasts minutes and a Mac build's signing and
+# notarizing can take longer, so a script that sends more than one request
+# asks again before each (publish_from_ci.sh). The request's token and the
+# job's are kept in files this job alone reads, never on a command line, and
+# the job's is masked in the log.
+ci_oidc_token() {
+  local audience="${APPLICATIONS_AUDIENCE:-applications-server}"
+  printf 'Authorization: bearer %s\n' "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" > "$work/request"
+  curl -sS --fail --max-time 30 -H @"$work/request" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$audience" -o "$work/token.json" \
+    || fail "GitHub gave no OIDC token"
+  token="$(sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p' "$work/token.json")"
+  [ -n "$token" ] || fail "GitHub's answer has no token"
+  echo "::add-mask::$token"
+}
+
 connect_from_ci() {
   local ci_code json ca addresses audience address host_port fingerprint
   [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ] \
@@ -32,45 +48,37 @@ connect_from_ci() {
   addresses="$(printf '%s' "$json" | sed -n 's/.*"addresses":\[\([^]]*\)\].*/\1/p' | tr ',' '\n' | tr -d '"')"
   [ -n "$ca" ] && [ -n "$addresses" ] || fail "APPLICATIONS_CI_CODE is not a CI code"
 
-  # The job's token, for the server's audience, from GitHub's endpoint. The
-  # request's token and the job's are kept in files this job alone reads,
-  # never on a command line, and the job's is masked in the log.
-  audience="${APPLICATIONS_AUDIENCE:-applications-server}"
-  printf 'Authorization: bearer %s\n' "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" > "$work/request"
-  curl -sS --fail --max-time 30 -H @"$work/request" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$audience" -o "$work/token.json" \
-    || fail "GitHub gave no OIDC token"
-  token="$(sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p' "$work/token.json")"
-  [ -n "$token" ] || fail "GitHub's answer has no token"
-  echo "::add-mask::$token"
+  ci_oidc_token
 
   # The first address that answers, and the certificate authority it
   # presents (the last certificate of its chain), held to the code's
   # fingerprint: from then on curl trusts that authority alone.
+  # The addresses are never printed (the logs name no host): an address is
+  # said by its place in the code's list.
   server=""
+  place=0
   for address in $addresses; do
+    place=$((place + 1))
     curl -sk --connect-timeout 5 --max-time 10 -o /dev/null "$address/api/hello" || continue
     host_port="${address#https://}"
     host_port="${host_port%%/*}"
-    # An address curl reaches may still give openssl nothing (a Mac's
-    # Local Network permission is the program's own: Homebrew's openssl
-    # finds no route to a LAN address that curl reaches): that address is
-    # passed over, with a word, not the script ended (set -e, pipefail).
-    openssl s_client -connect "$host_port" -showcerts </dev/null 2>/dev/null \
+    # An address openssl can't reach (macOS's local network privacy can
+    # let curl through and not openssl) is passed over for the next: under
+    # `set -e -o pipefail` its failure would end the script here.
+    if ! { openssl s_client -connect "$host_port" -showcerts </dev/null 2>/dev/null || true; } \
       | awk '/-----BEGIN CERTIFICATE-----/ { block = ""; inside = 1 }
              inside { block = block $0 "\n" }
              /-----END CERTIFICATE-----/ { inside = 0; last = block }
-             END { printf "%s", last }' > "$work/ca.pem" || true
-    fingerprint="$(openssl x509 -in "$work/ca.pem" -outform DER 2>/dev/null | openssl dgst -sha256 | sed 's/.*= *//' | tr 'A-F' 'a-f')" \
-      || fingerprint=""
-    if [ -z "$fingerprint" ] || [ ! -s "$work/ca.pem" ]; then
-      echo "$(basename "$0" .sh): $address answers, but openssl got no certificate from it; not used" >&2
+             END { printf "%s", last }' > "$work/ca.pem" || [ ! -s "$work/ca.pem" ]; then
+      echo "$(basename "$0" .sh): the code's address $place presents no certificate to openssl; not used" >&2
       continue
     fi
+    fingerprint="$( { openssl x509 -in "$work/ca.pem" -outform DER 2>/dev/null || true; } | openssl dgst -sha256 | sed 's/.*= *//' | tr 'A-F' 'a-f')"
     if [ "$fingerprint" = "$ca" ]; then
       server="$address"
       break
     fi
-    echo "$(basename "$0" .sh): $address presents another certificate authority than the code's; not used" >&2
+    echo "$(basename "$0" .sh): the code's address $place presents another certificate authority than the code's; not used" >&2
   done
-  [ -n "$server" ] || fail "Applications Server answers at none of its addresses ($(echo $addresses))"
+  [ -n "$server" ] || fail "Applications Server answers at none of the code's $place addresses"
 }
