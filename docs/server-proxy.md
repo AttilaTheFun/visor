@@ -7,6 +7,61 @@ plain HTTP server on one port, with no authentication of its own, reached
 only through MultiPass. Visor 0.49 is the small release before it (isomer
 0.50, Shireworks' Visor tab); this is the 0.50 line.
 
+## At a glance
+
+Every client reaches every server through MultiPass, which signs people in,
+picks the path (localhost, the LAN, the tailnet) and adds credentials to
+what goes out. Servers advertise themselves to it and send their MCP,
+GitHub and APNs requests through it.
+
+```mermaid
+flowchart BT
+    vc["visor_client"]
+    sc["shireworks_client"]
+    mp["<b>MultiPass</b><br/>auth · paths · proxy"]
+    vs["visor_server<br/>on the Mac, in Visor.app"]
+    subgraph primary["Shireworks' primary container"]
+        vsc["visor_server"]
+    end
+    ss["shireworks_server<br/>on the Mac, in Shireworks.app"]
+
+    vc --> mp
+    sc --> mp
+    mp <--> vs
+    mp <--> vsc
+    mp <--> ss
+
+    style primary stroke-dasharray: 6 4
+```
+
+Visor and Shireworks take the same shape: on a phone the app is its
+clients alone; on a Mac it also nests its notarized server, which runs on
+Linux by itself as well. Shireworks embeds Visor's client as its Visor tab.
+
+```mermaid
+flowchart LR
+    subgraph vmac["Visor.app · macOS"]
+        direction TB
+        vmac_c["visor_client"]
+        vmac_s["visor_server<br/>nested, notarized"]
+    end
+    subgraph vmob["Visor · iOS / Android"]
+        direction TB
+        vmob_c["visor_client"]
+    end
+    subgraph smac["Shireworks.app · macOS"]
+        direction TB
+        smac_v["visor_client"]
+        smac_c["shireworks_client"]
+        smac_s["shireworks_server<br/>nested, notarized"]
+    end
+    subgraph smob["Shireworks · iOS / Android"]
+        direction TB
+        smob_v["visor_client"]
+        smob_c["shireworks_client"]
+    end
+```
+
 ## Decided (Logan, 10–11 Nov)
 
 - **MultiPass is its own repository** (AttilaTheFun/multipass, private,
