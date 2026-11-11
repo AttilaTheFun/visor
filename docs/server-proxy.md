@@ -71,6 +71,14 @@ Linux by itself as well. Shireworks embeds Visor's client as its Visor tab.
   change the proxy settings"). What an agent must not change (credentials,
   where requests go, who may sign in) is MultiPass's, outside the
   container; the server checks nothing.
+- **MultiPass is the universal proxy for every agent and container**
+  (Logan, 11 Nov: "it could proxy DNS and HTTP and HTTPS. MCPs could just
+  be a subset of that as they're still HTTP / HTTPS apis"): their DNS and
+  their HTTP and HTTPS go through it, and the MCP servers are hosts it
+  adds credentials for. What it doesn't know passes through by default;
+  its settings can instead limit a container, and the agents in it, to a
+  set of hosts. It logs the hosts it proxies (Logan, 11 Nov). See
+  [Every agent's proxy](#every-agents-proxy).
 
 ## Today
 
@@ -170,6 +178,79 @@ Its own repository's design says the rest; what Visor relies on:
 - **Holds the credentials**: the APNs key, GitHub's tokens, the MCP
   servers' keys. Never a server, never an agent.
 
+## Every agent's proxy
+
+Logan, 11 Nov, after the MacBook's resolvers (the tailnet's, the ISP's)
+couldn't find `*.ubuntu.com` and CI's apt broke: MultiPass is the one
+proxy for every agent and every container, for DNS and for HTTP and HTTPS.
+The MCP servers, GitHub and APNs are cases of it, not paths of their own.
+
+### DNS
+
+- MultiPass answers DNS (UDP and TCP, port 53) at the Mac's address on
+  Shireworks' containers' network (their gateway, `SHIREWORKS_HOST_ADDRESS`)
+  and on loopback. macOS lets an ordinary user listen on port 53: no root.
+- **Split by name**: the tailnet's names (`*.ts.net`, its machines') go to
+  Tailscale's resolver, 100.100.100.100; everything else to the Mac's own
+  resolver first, then to fallbacks (1.1.1.1, 8.8.8.8) when it fails or
+  doesn't answer in time. The fallbacks are settings.
+- A container's resolver is the gateway's address, set by Shireworks.
+
+### HTTP and HTTPS out
+
+- **One proxy port.** Agents and containers are given `HTTP_PROXY` and
+  `HTTPS_PROXY` (with `NO_PROXY` for loopback and the containers'
+  network). Each caller has its own token in the proxy URL's userinfo,
+  as the agents' GitHub proxy has today: it says which server, container
+  or session is calling, and so which rules and credentials apply.
+- **HTTPS passes through by default**: a `CONNECT` tunnel, TLS end to end;
+  MultiPass sees the host and port and adds nothing.
+- **Credentialed hosts are intercepted**: github.com and api.github.com,
+  the MCP servers' hosts, any host the settings add a credential for.
+  MultiPass ends TLS with a certificate authority of its own, adds the
+  credential, and opens its own TLS upstream, as the Runner's GitHub proxy
+  does today (RunnerCA, GitHubInterceptor). The authority is
+  name-constrained to the intercepted hosts: leaked, it can't vouch for any
+  other.
+- **Trusting it** is a file: `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`,
+  `GIT_SSL_CAINFO` and `REQUESTS_CA_BUNDLE` name a bundle of the system's
+  roots and MultiPass's.
+- **Rules**, like Charles: pass through (the default), reroute a host or a
+  path to another upstream, add a credential. Plain HTTP is forwarded
+  under the same rules.
+- **The log**: every host proxied, with the caller (its token's server,
+  container or session), the time, and whether it passed, was rerouted,
+  was given a credential or was refused. Hosts, not contents: what goes
+  through a tunnel is never read.
+- **Limiting egress** (a setting per container, off by default): the
+  container, and so the agents in it, reaches only the hosts listed;
+  anything else is refused and logged. The log is how a list is made.
+  Soft at first, as the environment routes traffic: a program that ignores
+  `HTTPS_PROXY` still goes out directly. Hard once Shireworks gives a
+  limited container a network that routes only to MultiPass.
+
+### MCP, GitHub and APNs as cases of it
+
+- **An MCP server is a credentialed host**: the agent's MCP settings name
+  its real URL, and MultiPass adds the key on the way. Not every client
+  honours `HTTPS_PROXY` (Node's built-in `fetch` ignores it), so
+  `/mcp/<name>` stays, the same rule reached as a reverse path.
+- **GitHub**: GitHubGate's rules (docs/github-gate-rules.md) become the
+  github.com hosts' rules.
+- **APNs** stays a path (`/apns/…`): MultiPass signs the push either way,
+  and a path keeps HTTP/2 to Apple out of the interception.
+
+### Who it serves
+
+- **Agents on the Mac**: Visor's server gives them `HTTP(S)_PROXY` at
+  `127.0.0.1:<port>` with their session's token, and the bundle, as it
+  gives them the GitHub proxy today.
+- **Shireworks' containers**, CI's leases and the primary container alike,
+  once MultiPass is set up: their DNS at the gateway, `HTTP(S)_PROXY` at
+  the gateway's proxy port with the container's own token, the bundle in
+  `/run/secrets`. The primary container's Visor server gives its agents
+  the same.
+
 ## Visor's client
 
 - **A MultiPass is an account**: Add Computer's Sign In takes a MultiPass
@@ -205,7 +286,9 @@ docs/primary-container.md, shireworks#220):
   being `SHIREWORKS_HOST_ADDRESS`, the Mac's address on the containers'
   network (their gateway: 192.168.128.1 on the MacBook, configurable, never
   hard-coded); and `VISOR_PROXY_TOKEN_FILE=/run/secrets/visor-proxy`, a
-  secret Shireworks makes once and shows once to set in MultiPass.
+  secret Shireworks makes once and shows once to set in MultiPass. Its
+  DNS, `HTTP(S)_PROXY` and CA bundle are every container's (Every agent's
+  proxy, above).
 - **One port forwarded, fixed**: the container's 7433 to a host port fixed
   in Shireworks' settings (`hostPort`), on the Mac's loopback alone, where
   MultiPass reaches the server (the address it advertises).
@@ -259,11 +342,18 @@ settings that aren't where it is or who may reach it.
 ## Steps (0.50)
 
 1. This design.
-2. **MultiPass's repository**, from the Runner: libraries/visor_runner and
-   its agent moved there with their tests, as a menu bar app with a
-   settings window (paths, servers, outbound rules, credentials), its
-   connection code and sign-in, `/multipass/v1/servers` and advertising.
-   Its own design in its repository.
+2. **MultiPass's repository**, in four parts, its own design in its
+   repository:
+   - 2a. The Runner moved in: libraries/visor_runner and its agent, with
+     their tests.
+   - 2b. DNS: the split by name, the fallbacks, tests.
+   - 2c. The egress proxy, the Runner's GitHub proxy made general:
+     `CONNECT` passed through by default, name-constrained interception
+     for credentialed hosts, a token per caller, rules, the log, and
+     limiting a container to its hosts.
+   - 2d. The menu bar app and its settings window (paths, servers, rules,
+     credentials, DNS, the log), its connection code and sign-in,
+     `/multipass/v1/servers` and advertising.
 3. **The server's environment**: `VISOR_PORT`, `VISOR_LISTEN`,
    `VISOR_PROXY` and `VISOR_PROXY_TOKEN_FILE`; advertising itself; pushes,
    MCP and GitHub through `VISOR_PROXY` alone; `GET /api/health`. Tests.
