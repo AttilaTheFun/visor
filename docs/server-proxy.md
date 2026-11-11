@@ -209,6 +209,14 @@ docs/primary-container.md, shireworks#220):
 - **One port forwarded, fixed**: the container's 7433 to a host port fixed
   in Shireworks' settings (`hostPort`), on the Mac's loopback alone, where
   MultiPass reaches the server (the address it advertises).
+- **Until MultiPass (interim, Logan and Manager, 11 Nov)**: the primary
+  container comes first, so its server keeps a password of its own
+  (`VISOR_PASSWORD_FILE`, a secret Shireworks makes and shows once), and
+  the hostPort is forwarded on the Mac's loopback, the LAN and the tailnet,
+  which `VISOR_FRONT` lists for clients; a client adds it by its connection
+  code, as the Mac mini's co-tenant is added. Loopback and the tailnet are
+  fine as they are; the LAN is behind the password alone until MultiPass
+  takes the port back to loopback.
 - **Three volumes**, kept across restarts and new images (no mounts of the
   Mac's folders): `/root`, the home (the server's data at
   ~/.local/share/visor, the agents' sign-ins, conversations and memory);
