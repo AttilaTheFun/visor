@@ -246,15 +246,43 @@ Agreed with Shireworks on 11 Nov, then placed by Logan's answers:
     in its Keychain only to reach MultiPass.
   - Per-session `agent` leases, a container per job, come with automation
     once the Mac Studio arrives.
-- **Reporting:** over the runner's MCP (agent → wrapper → MultiPass → runner):
-  - `progress`, from time to time, with a line of what it's doing;
-  - `complete`, with the pull request;
-  - `blocked`, with why: for example code review, when the pull request
-    touches a code-owned file.
+- **Reporting: the runner's MCP** (Shireworks' proposal, agreed 11 Nov).
+  Agent → wrapper → MultiPass → runner. The session is never an argument:
+  MultiPass names the caller (the agent's token maps to its session), so an
+  agent reports only on itself.
+  - `task()` → `{session, repository, issue, branch, pull_request?, state}`:
+    what it's working on, useful after a resume too.
+  - `report_progress(summary, step?)`, from time to time. `summary` is a
+    sentence or two for Visor's list. `step` is free text (`tests`,
+    `review`). The runner keeps the last few.
+  - `report_complete(pull_request, summary, merged)`. `merged: true` when it
+    merged its own pull request; `false` when the pull request is open and
+    nothing is left for the agent.
+  - `report_blocked(reason, detail, pull_request?)`, the reason one of:
+    - `code_review`: the pull request touches code-owned files;
+    - `question`: it needs Logan's answer, and `detail` is the question;
+    - `failure`: CI or tooling it can't fix;
+    - `stuck`: the runner's own, never the agent's.
 
-  A runner may stop an agent that has said nothing for some time and mark it
-  blocked. The runner tells the Visor server each of these, and the server
-  shows them on the session.
+    Each blocked report also comments on the issue with the reason, as
+    logan-shire-agent[bot] through MultiPass.
+
+  The runner sends every report to the Visor server as it comes
+  (`AgentReport`), and the server shows it on the session.
+  - **Stuck:** after 45 minutes with no report and no output from the
+    wrapper (its keepalive doesn't count), the runner stops the agent and
+    reports it `blocked: stuck`. The 45 minutes is a setting in Shireworks'
+    Server Settings.
+  - **Resuming a blocked agent:** on blocked, the runner adds the label
+    `agent: blocked` to the issue. Logan resumes it by removing the label, or
+    by answering on the issue: a new comment from him after the block. The
+    runner checks each blocked session's issue every few minutes, through
+    MultiPass, and resumes the agent with that comment as its prompt, if there
+    is one. If Logan uses a Projects board instead, its "Ready" column takes
+    the label's place.
+  - **On the runner's side:** a complete report with `merged` archives the
+    session; a blocked report stops the agent and keeps its data; a resume
+    starts the same session again in the primary container with `--resume`.
 - **Merging:** an agent merges its own pull request when it touches no
   code-owned file, as agents do today. Otherwise it reports blocked on code
   review. Logan moves the issue back to a status the runner watches, and the
@@ -363,10 +391,7 @@ these. 4's containers and 8 need 2e.
 
 ## Open questions
 
-Logan answered the first round (above). Left for building:
-- **The report tools' names and shapes** (`progress`, `complete`, `blocked`), to
-  agree with Shireworks.
-- **How long counts as stuck** before a runner stops an agent and marks it
-  blocked: a setting of the runner's.
-- **Which issue status** the runner watches to resume an agent blocked on code
-  review.
+Logan answered the first round, and Shireworks proposed the runner's MCP.
+Left for Logan:
+- **Resuming a blocked agent:** the `agent: blocked` label (the default), or a
+  Projects board's "Ready" column?
