@@ -399,6 +399,16 @@ jobs:
           pattern: part-*
           path: ${{ runner.temp }}/parts
       - run: tools/ci/proof_make.sh "$RUNNER_TEMP/parts" "$RUNNER_TEMP/proof"
+      # The proof's comparison with the prior release's, made once and kept
+      # beside proof.json (proof-diff.json; AttilaTheFun/reviews'
+      # docs/PROOF_FORMAT.md): Reviews shows it at once. Never fails the job.
+      - name: The proof's comparison
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f "$RUNNER_TEMP/proof/proof/proof.json" ] || exit 0
+          python3 -I tools/ci/proof_diff.py make "$RUNNER_TEMP/proof/proof" || echo "::warning::the proof's comparison wasn't made"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -575,7 +585,9 @@ jobs:
         if: inputs.run == 'release'
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: tools/ci/proof_version.sh "$RUNNER_TEMP/proof" "$VERSION" "$RUNNER_TEMP/assets/proof.zip"
+        run: |
+          tools/ci/proof_version.sh "$RUNNER_TEMP/proof" "$VERSION" "$RUNNER_TEMP/assets/proof.zip"
+          if [ -f "$RUNNER_TEMP/proof/proof-diff.json" ]; then cp "$RUNNER_TEMP/proof/proof-diff.json" "$RUNNER_TEMP/assets/"; fi
       # The Alphas on the draft: Visor-<version>-ios.ipa, -macos.zip and
       # builds.json, which Applications reads (and a release's proof.zip).
       - name: The builds on the draft
