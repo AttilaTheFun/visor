@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 40 820 496" width="820" height="496" role="img" aria-label="Every client and server through MultiPass"><title>Every client and server through MultiPass</title><style>
+  svg { color: #1f2328; }
+  @media (prefers-color-scheme: dark) { svg { color: #e6edf3; } }
+  .box { fill: none; stroke: currentColor; stroke-width: 2; }
+  .frame { fill: none; stroke: currentColor; stroke-width: 2.5; }
+  .dash { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-dasharray: 7 5; }
+  .line { fill: none; stroke: currentColor; stroke-width: 1.75; }
+  .head { fill: currentColor; stroke: none; }
+  text { fill: currentColor; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+  .name { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 16px; font-weight: 600; }
+  .note { font-size: 12px; opacity: 0.7; }
+  .title { font-size: 19px; font-weight: 700; }
+  .label { font-size: 15px; font-weight: 600; }
+  .item { font-size: 15px; }
+</style><defs>
+  <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path class="head" d="M0,0 L10,5 L0,10 z"/>
+  </marker>
+  <marker id="tail" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path class="head" d="M10,0 L0,5 L10,10 z"/>
+  </marker>
+</defs><rect class="box" x="30" y="108" width="210" height="64" rx="8"/><text class="name" x="135.0" y="137.0" text-anchor="middle">visor_server</text><text class="note" x="135.0" y="155.0" text-anchor="middle">on the Mac, in Visor.app</text><rect class="dash" x="266" y="56" width="268" height="128" rx="10"/><text class="label" x="400" y="84" text-anchor="middle">Shireworks&#8217; primary container</text><rect class="box" x="310" y="104" width="180" height="56" rx="8"/><text class="name" x="400.0" y="138.0" text-anchor="middle">visor_server</text><rect class="box" x="560" y="108" width="230" height="64" rx="8"/><text class="name" x="675.0" y="137.0" text-anchor="middle">shireworks_server</text><text class="note" x="675.0" y="155.0" text-anchor="middle">on the Mac, in Shireworks.app</text><rect class="box" x="290" y="262" width="220" height="118" rx="8"/><text class="title" x="400" y="292" text-anchor="middle">MultiPass</text><circle class="head" cx="368" cy="315" r="3"/><text class="item" x="380" y="320">auth</text><circle class="head" cx="368" cy="337" r="3"/><text class="item" x="380" y="342">paths</text><circle class="head" cx="368" cy="359" r="3"/><text class="item" x="380" y="364">proxy</text><rect class="box" x="90" y="462" width="200" height="56" rx="8"/><text class="name" x="190.0" y="496.0" text-anchor="middle">visor_client</text><rect class="box" x="510" y="462" width="220" height="56" rx="8"/><text class="name" x="620.0" y="496.0" text-anchor="middle">shireworks_client</text><line class="line" x1="150" y1="178" x2="318" y2="256" marker-start="url(#tail)" marker-end="url(#tip)"/><line class="line" x1="400" y1="166" x2="400" y2="256" marker-start="url(#tail)" marker-end="url(#tip)"/><line class="line" x1="660" y1="178" x2="482" y2="256" marker-start="url(#tail)" marker-end="url(#tip)"/><line class="line" x1="200" y1="458" x2="330" y2="386" marker-end="url(#tip)"/><line class="line" x1="610" y1="458" x2="470" y2="386" marker-end="url(#tip)"/></svg>

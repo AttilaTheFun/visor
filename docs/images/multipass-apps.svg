@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 748 484" width="748" height="484" role="img" aria-label="Visor and Shireworks, on a Mac and on a phone"><title>Visor and Shireworks, on a Mac and on a phone</title><style>
+  svg { color: #1f2328; }
+  @media (prefers-color-scheme: dark) { svg { color: #e6edf3; } }
+  .box { fill: none; stroke: currentColor; stroke-width: 2; }
+  .frame { fill: none; stroke: currentColor; stroke-width: 2.5; }
+  .dash { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-dasharray: 7 5; }
+  .line { fill: none; stroke: currentColor; stroke-width: 1.75; }
+  .head { fill: currentColor; stroke: none; }
+  text { fill: currentColor; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+  .name { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 16px; font-weight: 600; }
+  .note { font-size: 12px; opacity: 0.7; }
+  .title { font-size: 19px; font-weight: 700; }
+  .label { font-size: 15px; font-weight: 600; }
+  .item { font-size: 15px; }
+</style><defs>
+  <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path class="head" d="M0,0 L10,5 L0,10 z"/>
+  </marker>
+  <marker id="tail" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path class="head" d="M10,0 L0,5 L10,10 z"/>
+  </marker>
+</defs><text class="label" x="24" y="32">Visor.app · macOS</text><rect class="frame" x="24" y="44" width="330" height="150" rx="10"/><rect class="box" x="40" y="60" width="298" height="48" rx="8"/><text class="name" x="189.0" y="90.0" text-anchor="middle">visor_client</text><rect class="box" x="40" y="120" width="298" height="58" rx="8"/><text class="name" x="189.0" y="146.0" text-anchor="middle">visor_server</text><text class="note" x="189.0" y="164.0" text-anchor="middle">nested, notarized</text><text class="label" x="394" y="32">Visor · iOS / Android</text><rect class="frame" x="394" y="44" width="330" height="80" rx="10"/><rect class="box" x="410" y="60" width="298" height="48" rx="8"/><text class="name" x="559.0" y="90.0" text-anchor="middle">visor_client</text><text class="label" x="24" y="238">Shireworks.app · macOS</text><rect class="frame" x="24" y="250" width="330" height="210" rx="10"/><rect class="box" x="40" y="266" width="298" height="48" rx="8"/><text class="name" x="189.0" y="296.0" text-anchor="middle">visor_client</text><rect class="box" x="40" y="326" width="298" height="48" rx="8"/><text class="name" x="189.0" y="356.0" text-anchor="middle">shireworks_client</text><rect class="box" x="40" y="386" width="298" height="58" rx="8"/><text class="name" x="189.0" y="412.0" text-anchor="middle">shireworks_server</text><text class="note" x="189.0" y="430.0" text-anchor="middle">nested, notarized</text><text class="label" x="394" y="238">Shireworks · iOS / Android</text><rect class="frame" x="394" y="250" width="330" height="140" rx="10"/><rect class="box" x="410" y="266" width="298" height="48" rx="8"/><text class="name" x="559.0" y="296.0" text-anchor="middle">visor_client</text><rect class="box" x="410" y="326" width="298" height="48" rx="8"/><text class="name" x="559.0" y="356.0" text-anchor="middle">shireworks_client</text></svg>

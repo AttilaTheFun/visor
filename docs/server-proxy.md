@@ -14,53 +14,13 @@ picks the path (localhost, the LAN, the tailnet) and adds credentials to
 what goes out. Servers advertise themselves to it and send their MCP,
 GitHub and APNs requests through it.
 
-```mermaid
-flowchart BT
-    vc["visor_client"]
-    sc["shireworks_client"]
-    mp["<b>MultiPass</b><br/>auth · paths · proxy"]
-    vs["visor_server<br/>on the Mac, in Visor.app"]
-    subgraph primary["Shireworks' primary container"]
-        vsc["visor_server"]
-    end
-    ss["shireworks_server<br/>on the Mac, in Shireworks.app"]
-
-    vc --> mp
-    sc --> mp
-    mp <--> vs
-    mp <--> vsc
-    mp <--> ss
-
-    style primary stroke-dasharray: 6 4
-```
+![Every client and server through MultiPass: the Mac's visor_server, the visor_server in Shireworks' primary container and shireworks_server each both ways with MultiPass (auth, paths, proxy); visor_client and shireworks_client into MultiPass](images/multipass-architecture.svg)
 
 Visor and Shireworks take the same shape: on a phone the app is its
 clients alone; on a Mac it also nests its notarized server, which runs on
 Linux by itself as well. Shireworks embeds Visor's client as its Visor tab.
 
-```mermaid
-flowchart LR
-    subgraph vmac["Visor.app · macOS"]
-        direction TB
-        vmac_c["visor_client"]
-        vmac_s["visor_server<br/>nested, notarized"]
-    end
-    subgraph vmob["Visor · iOS / Android"]
-        direction TB
-        vmob_c["visor_client"]
-    end
-    subgraph smac["Shireworks.app · macOS"]
-        direction TB
-        smac_v["visor_client"]
-        smac_c["shireworks_client"]
-        smac_s["shireworks_server<br/>nested, notarized"]
-    end
-    subgraph smob["Shireworks · iOS / Android"]
-        direction TB
-        smob_v["visor_client"]
-        smob_c["shireworks_client"]
-    end
-```
+![Visor.app on macOS: visor_client and visor_server, nested and notarized. Visor on iOS and Android: visor_client. Shireworks.app on macOS: visor_client, shireworks_client and shireworks_server, nested and notarized. Shireworks on iOS and Android: visor_client and shireworks_client](images/multipass-apps.svg)
 
 ## Decided (Logan, 10–11 Nov)
 
