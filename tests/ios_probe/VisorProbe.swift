@@ -485,18 +485,28 @@ final class VisorProbe: XCTestCase {
         field.typeText(words)
         let send = app.buttons["Send"].firstMatch
         XCTAssertTrue(send.waitForExistence(timeout: 5), "no send button")
+        // What asking the app costs on this machine: the slowest of three
+        // asks for a row that isn't there. A slow simulator answers one in
+        // more than the 0.5 s measured below (GitHub's took 0.7 to 1.5 s on
+        // 11 Nov), so the wait is taken net of it: a thread holding rows
+        // back for its 0.6 s still comes out late.
+        let cost = (0..<3).map { _ in
+            let asked = Date()
+            _ = app.staticTexts["No such row \(UUID().uuidString)"].exists
+            return Date().timeIntervalSince(asked)
+        }.max() ?? 0
         // Sent straight after the last key, as a person sends.
         send.tap()
         let sent = Date()
         let row = app.staticTexts[words]
         while !row.exists && Date().timeIntervalSince(sent) < 5 { }
         let waited = Date().timeIntervalSince(sent)
-        NSLog("VISOR_SEND_IN_THREAD %.3f", waited)
+        NSLog("VISOR_SEND_IN_THREAD %.3f (a query costs %.3f)", waited, cost)
         shot(app, "sent-in-thread")
         XCTAssertTrue(row.exists, "the sent message never went in the thread")
         // The thread held rows back for 0.6 s after typing stopped, and the
         // sent one with them.
-        XCTAssertLessThan(waited, 0.5, "the sent message went in the thread \(waited) s after the send")
+        XCTAssertLessThan(waited - cost, 0.5, "the sent message went in the thread \(waited) s after the send, a query costing \(cost) s")
         app.terminate()
     }
 
@@ -579,7 +589,9 @@ final class VisorProbe: XCTestCase {
         // The rows that waited for the drag went in below, counted on the
         // pill: the thread was not taken back to its end.
         let pill = app.buttons["new-rows-pill"]
-        XCTAssertTrue(pill.exists, "the thread was taken back to its end when the user let go")
+        // Waited for, not looked at once: a slow simulator puts the next
+        // row in, and so the pill, a moment later.
+        XCTAssertTrue(pill.waitForExistence(timeout: 5), "the thread was taken back to its end when the user let go")
         // Whatever is in view stays put while rows keep coming for seconds
         // more. (Which rows those are depends on how many had come in when
         // the drag began, which varies with how long the busy app keeps
@@ -632,7 +644,8 @@ final class VisorProbe: XCTestCase {
         // the first of the two rows for a moment before the second. In the
         // fixture the pill stays until tapped (`newRowsPillSeconds`).
         let two = app.buttons.matching(NSPredicate(format: "identifier == 'new-rows-pill' AND label CONTAINS '2 new messages'")).firstMatch
-        XCTAssertTrue(two.waitForExistence(timeout: 20), "no pill for the two rows that came in below")
+        // The rows come twelve seconds on; a slow simulator takes as long again.
+        XCTAssertTrue(two.waitForExistence(timeout: 40), "no pill for the two rows that came in below")
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         shot(app, "arrivals-pill")
         XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when rows came in below")
