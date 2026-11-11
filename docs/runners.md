@@ -116,29 +116,54 @@ no Shireworks and no MultiPass:
 ## The runner protocol, for anyone's runner
 
 The runner protocol is a documented, stable interface that anyone's runner
-implements, not a private contract between Visor and Shireworks. It covers:
-- pairing;
-- the runner's hello and its starts;
-- the queue;
-- the wrapped agent's dial-in and hello;
-- the reports;
-- session data, archiving, Migrate… and Backup….
+implements, not a private contract between Visor and Shireworks. Logan wants it
+modest: "the runner protocol should be fairly modest since the agent wrappers
++ actual visor server do most of the heavy lifting". A third party should be
+able to implement a runner in a few hundred lines. The session's logic, its
+transcripts and approvals, and talking to clients are the wrapper's
+(`visor-agent-host`) and the server's, never a runner's.
 
-- **Versioned.** Both hellos say `protocol: 2`.
-  - A server answers with the version it speaks and refuses one it can't.
-  - Within a version, what's added is optional, and a reader ignores fields
-    it doesn't know and reads unknown values as defaults (visor_protocol's
-    types do).
-  - A change that isn't compatible is a new version, and the server speaks the
-    old one for a release.
-- **Written down** in docs/protocol.md (from step 2 on, alongside the types in
-  visor_protocol), as the client protocol is.
-- **Implementations, as references:**
-  - Visor.app's native runner (this repository);
-  - Shireworks' container and macOS VM runners (AttilaTheFun/shireworks).
+**What a runner does, all of it:**
+1. **Pair:** once, with the code from Add Runner….
+2. **Hello:** `{type: "runner", protocol: 2, id, name, kind, agents,
+   capacity, labels}`, said again when its capacity changes.
+3. **Start:** take a start (`{session, agentToken, agent, …}`) and launch
+   `visor-agent-host` for it, given the session's id and how to dial in (the
+   dial URL and the agent token). Answer `started`, with where the session's
+   data lives, or `failed`, with why.
+4. **Its sessions:** the sessions it holds and where each one's data is, in its
+   hello and when they change.
+5. **On request:**
+   - archive a session: stop its wrapper if it runs, and keep its data;
+   - copy a session's data out, as one archive, for Migrate… and Backup…;
+   - start a session from data copied in (a Migrate…'s other end);
+   - delete a session's data.
 
-  A custom runner needs only the protocol, MultiPass for the way in, and a
-  wrapped agent (`visor-agent-host`, which ships with Visor) for its sessions.
+That's the whole protocol for a runner.
+
+**Optional, a runner's own:** an MCP its agents report to (Shireworks' agent
+runner, for agent jobs: progress, complete, blocked; below). A runner without
+one is complete: its agents' state reaches the server through the wrapper as
+always.
+
+**Versioned:**
+- Both hellos say `protocol: 2`. A server answers with the version it speaks,
+  and refuses one it can't.
+- Within a version, what's added is optional. A reader ignores fields it
+  doesn't know, and reads unknown values as defaults (visor_protocol's types
+  do).
+- An incompatible change is a new version, which the server speaks beside the
+  old one for a release.
+
+**Written down** in docs/protocol.md, as the client protocol is, beside its
+types in visor_protocol.
+
+**Implementations, as references:**
+- Visor.app's native runner (this repository);
+- Shireworks' container and macOS VM runners (AttilaTheFun/shireworks).
+
+A custom runner needs only this, MultiPass for the way in, and
+`visor-agent-host`, which ships with Visor.
 
 ## Three places a session runs
 
