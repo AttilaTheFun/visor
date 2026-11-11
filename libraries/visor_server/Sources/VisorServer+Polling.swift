@@ -20,8 +20,6 @@ extension VisorServer {
     func sessionsEnvelope() -> Envelope {
         var e = Envelope.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs())
         e.revision = sessionsRevision
-        // Whether a session can start in a container here.
-        e.container = containersAvailable
         return e
     }
 

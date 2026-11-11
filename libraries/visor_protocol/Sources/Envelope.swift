@@ -46,6 +46,8 @@ public struct Envelope: Codable, Sendable {
     /// changed since its catalog was sent.
     public var account: AgentAccount?
     /// start (in a container), contain: what the container is given.
+    /// From a client of 0.49 or before: a server of 0.50 or later makes no
+    /// containers, and refuses both.
     public var containerSize: ContainerSize?
     // settings: the session's model and effort (nil keeps the current one)
     public var model: String?
@@ -181,6 +183,8 @@ public struct Envelope: Codable, Sendable {
     /// computer rather than on the computer itself, its folder mounted
     /// there. `contain`: the session moves into its container (true) or out
     /// of it (false). `hello` and `sessions`: the server can run one.
+    /// Gone in 0.50: a server of 0.50 or later answers `start` with it, and
+    /// `contain`, with an error, and never says it can.
     public var container: Bool?
     /// A device's push token, hex (`push`), with its kind ("ios", "macos")
     /// and service ("sandbox", "production").
@@ -249,17 +253,8 @@ extension Envelope {
         var e = Envelope(type: "start"); e.id = id; e.agent = agent; e.cwd = cwd; e.title = title; e.skipPermissions = skipPermissions
         e.resume = resume; return e
     }
-    /// A session whose agent runs in a container on the server's computer,
-    /// working in `cwd` there (mounted in the container at the same path).
-    public static func startInContainer(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool,
-                                        size: ContainerSize? = nil) -> Envelope {
-        var e = start(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skipPermissions)
-        e.container = true
-        e.containerSize = size
-        return e
-    }
     /// A fork or a branch of `parent`, a session on the same server: the
-    /// same folder, computer or container, agent, model and permissions,
+    /// same folder, computer, agent, model and permissions,
     /// and its conversation so far (up to `at`, a message's id, for a
     /// branch). `text`, when given, is said to it first (a fork's prompt).
     /// With the `subagent` origin, its conversation is that of `subagent`,
@@ -293,13 +288,6 @@ extension Envelope {
     /// The person closes one of `session`'s subagents: its row and capsule go.
     public static func closeSubagent(session: String, id: String) -> Envelope {
         var e = Envelope(type: "closeSubagent"); e.session = session; e.id = id; return e
-    }
-    /// Moves a session's agent into a container on its computer (`true`) or
-    /// out of it onto the computer itself (`false`): the same folder and
-    /// conversation, its agent started again on the other side.
-    /// With a size, into a container given that much.
-    public static func contain(session: String, _ container: Bool, size: ContainerSize? = nil) -> Envelope {
-        var e = Envelope(type: "contain"); e.session = session; e.container = container; e.containerSize = size; return e
     }
     public static func send(session: String, text: String, images: [String] = []) -> Envelope {
         var e = Envelope(type: "send"); e.session = session; e.text = text

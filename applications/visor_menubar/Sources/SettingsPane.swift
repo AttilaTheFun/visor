@@ -24,13 +24,8 @@ struct SettingsPane: View {
     /// address that only Return applied was easy to leave unapplied.
     @FocusState private var editing: EditedField?
     enum EditedField: Hashable {
-        case publicAddress, tlsPath, tlsPassword, containerHost, containerImage, containerSignIn, containerSignInUser, containerCallback
+        case publicAddress, tlsPath, tlsPassword
     }
-    @State private var containerHost = ""
-    @State private var containerImage = ""
-    @State private var containerSignIn = ""
-    @State private var containerSignInUser = ""
-    @State private var containerCallback = ""
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
@@ -173,29 +168,6 @@ struct SettingsPane: View {
                 Text("Devices")
             }
             Section {
-                TextField("Container host (empty: \(VisorServer.containerHostName) on the PATH)", text: $containerHost)
-                    .focused($editing, equals: .containerHost)
-                    .onSubmit { apply(.containerHost) }
-                TextField("Image (empty: \(server.defaultContainerImage))", text: $containerImage)
-                    .focused($editing, equals: .containerImage)
-                    .onSubmit { apply(.containerImage) }
-                TextField("Its registry's sign-in: a command that prints the password (e.g. aws ecr get-login-password)", text: $containerSignIn)
-                    .focused($editing, equals: .containerSignIn)
-                    .onSubmit { apply(.containerSignIn) }
-                TextField("Its registry's user (ECR's: AWS)", text: $containerSignInUser)
-                    .focused($editing, equals: .containerSignInUser)
-                    .onSubmit { apply(.containerSignInUser) }
-                TextField("How containers reach this Mac (empty: its LAN address)", text: $containerCallback)
-                    .focused($editing, equals: .containerCallback)
-                    .onSubmit { apply(.containerCallback) }
-                Text(server.containersAvailable
-                     ? "Sessions can run their agent in a Linux container, made by the container host, which sees the session's folder and nothing else of the Mac. Any Linux image will do: Visor brings its own programs into it, and the image brings the agents' tools (Visor's own has Claude Code and Codex). A private registry's sign-in is run each time a container is made from it."
-                     : "Put a container host on the PATH (\(VisorServer.containerHostName), from Visor, over Apple's container) or set one here, and turn on “Reachable from the network”, to run sessions' agents in Linux containers.")
-                    .font(.caption).foregroundColor(.secondary)
-            } header: {
-                Text("Containers")
-            }
-            Section {
                 let current = server.apnsKey
                 Text(current.configured
                      ? "Key \(current.keyID) is set; \(server.pushDeviceCount) device\(server.pushDeviceCount == 1 ? "" : "s") asked for notifications."
@@ -237,11 +209,6 @@ struct SettingsPane: View {
         .onAppear {
             publicAddress = server.settings.publicAddress
             tlsPath = server.settings.tlsIdentityPath
-            containerHost = server.settings.containerHost.joined(separator: " ")
-            containerImage = server.settings.containerImage
-            containerSignIn = server.settings.containerSignIn.joined(separator: " ")
-            containerSignInUser = server.settings.containerSignInUser
-            containerCallback = server.settings.containerCallback
             keyID = server.apnsKey.keyID
             teamID = server.apnsKey.teamID
             draft = server.password.isEmpty ? VisorServer.generatePassword() : server.password
@@ -252,11 +219,6 @@ struct SettingsPane: View {
         .onDisappear {
             apply(.publicAddress)
             apply(.tlsPath)
-            apply(.containerHost)
-            apply(.containerImage)
-            apply(.containerSignIn)
-            apply(.containerSignInUser)
-            apply(.containerCallback)
         }
     }
 
@@ -269,28 +231,6 @@ struct SettingsPane: View {
             if server.settings.publicAddress != publicAddress { server.settings.publicAddress = publicAddress }
         case .tlsPath:
             if server.settings.tlsIdentityPath != tlsPath { server.settings.tlsIdentityPath = tlsPath }
-        case .containerHost:
-            let words = containerHost.split(separator: " ").map(String.init)
-            if server.settings.containerHost != words {
-                server.settings.containerHost = words
-                Task { await server.checkContainers() }
-            }
-        case .containerImage:
-            let image = containerImage.trimmingCharacters(in: .whitespaces)
-            if server.settings.containerImage != image {
-                server.settings.containerImage = image
-                // Sessions resting in containers of the old one: made again.
-                server.upgradeContainers()
-            }
-        case .containerSignIn:
-            let words = containerSignIn.split(separator: " ").map(String.init)
-            if server.settings.containerSignIn != words { server.settings.containerSignIn = words }
-        case .containerSignInUser:
-            let user = containerSignInUser.trimmingCharacters(in: .whitespaces)
-            if server.settings.containerSignInUser != user { server.settings.containerSignInUser = user }
-        case .containerCallback:
-            let address = containerCallback.trimmingCharacters(in: .whitespaces)
-            if server.settings.containerCallback != address { server.settings.containerCallback = address }
         case .tlsPassword:
             // The identity with its password, as Return always applied them.
             guard !tlsPassword.isEmpty else { return }

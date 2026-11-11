@@ -63,16 +63,6 @@ public struct ServerCommand {
                    sessions' messages on their disk; `keep-messages off`
                    asks them to hold only the pages they show, in memory,
                    and to ask again for those they let go of.
-          containers
-                   Shows how sessions' containers are made on this computer
-                   (docs/container-host.md). `containers host <command…>|-`
-                   is the container host that makes them (else
-                   visor-container-host on the PATH; with neither, sessions
-                   run on this computer only); `containers image <name>|-`
-                   is the image (Visor's visor-agent by default, built from
-                   tools/containers/visor-agent); `containers callback
-                   <ws://host:port>|-` is how they reach this server (this
-                   computer's LAN address by default).
 
         Options for run and start:
           --port <n>   The port, for the socket and the REST side alike (7433).
@@ -101,7 +91,6 @@ public struct ServerCommand {
           --address <url>|-          --standalone on|off
           --front <url>,…|-
           --keep-messages on|off
-          --container-host <command>|-  --container-image <name>|-
         In its environment:
           VISOR_RUNTIME_DIR=<folder>
                        Its sockets (the SSH socket, each agent host's) there,
@@ -149,7 +138,6 @@ public struct ServerCommand {
             case "standalone": try standalone(rest.first)
             case "front": front(Array(rest))
             case "keep-messages": try keepMessages(rest.first)
-            case "containers": try containers(rest)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")
             }

@@ -6,12 +6,7 @@
 // the real ones. Point the probes at it:
 //   VISOR_PORT=7533 VISOR_TOKEN=staging node tools/probes/order.mjs
 // Ended with Ctrl-C (or SIGTERM), which ends its agents first.
-//
-// For sessions in containers: VISOR_STAGING_CONTAINER_HOST=<its command>
-// (docs/container-host.md; else visor-container-host on the PATH), and
-// VISOR_STAGING_LAN=1 too, so it is reached on the LAN, as an agent in a
-// container reaches it for Visor's tools; VISOR_STAGING_IMAGE names the
-// image (Visor's latest unless given). tools/probes/container.mjs runs one.
+// VISOR_STAGING_LAN=1 has it reached on the LAN too.
 
 import Foundation
 import VisorServer
@@ -44,11 +39,6 @@ struct StagingServer {
         // children (VISOR_DETACH_AGENT_HOST=1, with a host there, says otherwise).
         if environment["VISOR_DETACH_AGENT_HOST"] != "1" { server.settings.detachAgents = false }
         if environment["VISOR_STAGING_LAN"] == "1" { server.settings.lan = true }
-        if let image = environment["VISOR_STAGING_IMAGE"], !image.isEmpty { server.settings.containerImage = image }
-        if let host = environment["VISOR_STAGING_CONTAINER_HOST"], !host.isEmpty {
-            server.settings.containerHost = host.split(separator: " ").map(String.init)
-            print("Sessions' containers come from \(host)")
-        }
         setlinebuf(stdout)
         print("Visor staging server: http://127.0.0.1:\(port) (the socket at /, the API at /api), password \(password)")
         print("Kept in \(root.path)")

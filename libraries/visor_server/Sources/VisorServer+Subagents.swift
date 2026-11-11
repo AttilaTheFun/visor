@@ -132,7 +132,6 @@ extension VisorServer {
                                created: Date().timeIntervalSince1970)
         info.parent = parent.info.id
         info.origin = .subagent
-        info.container = parent.info.container
         let past = harness.subagentTranscript(id: from, cwd: parent.info.cwd, subagent: agent)
         let record = SessionRecord(info: info, process: makeProcess(info, resume: resume), entries: past)
         record.refreshResume()

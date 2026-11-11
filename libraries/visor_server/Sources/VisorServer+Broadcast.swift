@@ -23,10 +23,7 @@ extension VisorServer {
     }
 
     func broadcastSessions() {
-        var envelope = Envelope.sessions(sessions.map(\.info))
-        // With whether containers are on offer, which changes too (the
-        // network turned on, the image built).
-        envelope.container = containersAvailable
+        let envelope = Envelope.sessions(sessions.map(\.info))
         for connection in connections.values where connection.authenticated { connection.send(envelope) }
         sessionsChanged()
         notifyPushes()

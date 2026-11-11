@@ -48,21 +48,10 @@ enum AgentChildren {
     }
 
     /// `session` is the Visor session the agent is for: an agent with one is
-    /// hosted, when agents are detached. With `container`, the agent runs
-    /// in that container (`executable` by its name on the container's
-    /// path), under a host here like any other: its variables, and the
-    /// sign-ins for containers, in a file only this user reads.
+    /// hosted, when agents are detached.
     static func start(executable: String, arguments: [String], directory: String, environment: [String: String],
-                      session: String?, container: ContainerPlacement? = nil) throws -> any AgentChild {
-        var command = ServerPlatform.current.tools.command(executable, arguments)
-        var environment = environment
-        if let container {
-            let file = try writeEnvironment(environment.merging(ContainerSignIns.environment()) { ours, _ in ours },
-                                            for: session ?? container.id)
-            command = container.exec.command(container: container.id, executable: executable, arguments: arguments, directory: directory,
-                                             environmentFile: file.path)
-            environment = ToolPath.environment()
-        }
+                      session: String?) throws -> any AgentChild {
+        let command = ServerPlatform.current.tools.command(executable, arguments)
         if detach, let session {
             if let problem = hostProblem() { throw AgentProcessError.spawnFailed(undetachable(problem)) }
             guard let hosting = ServerPlatform.current.agentHosts else { throw AgentProcessError.spawnFailed(undetachable("this system has no agent host")) }
@@ -72,18 +61,5 @@ enum AgentChildren {
                                          hosting: hosting)
         }
         return try PipedChild(executable: command.executable, arguments: command.arguments, directory: directory, environment: environment)
-    }
-
-    /// Writes an agent's variables for its container, readable by this
-    /// user alone: the file the container's tool reads them from.
-    private static func writeEnvironment(_ environment: [String: String], for session: String) throws -> URL {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let file = folder.appendingPathComponent(session + ".env", isDirectory: false)
-        let lines = environment.filter { !$0.value.contains("\n") }.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)\n" }.joined()
-        guard FileManager.default.createFile(atPath: file.path, contents: Data(lines.utf8), attributes: [.posixPermissions: 0o600]) else {
-            throw AgentProcessError.spawnFailed("Visor could not write the agent's variables for its container to \(file.path)")
-        }
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
-        return file
     }
 }

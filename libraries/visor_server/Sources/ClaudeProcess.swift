@@ -25,8 +25,6 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     public var model: String?
     public var effort: String?
     public var approvalEnvironment: [String: String] = [:]
-    /// Where its agent runs when that is a container here.
-    var container: ContainerPlacement?
     /// The running agent. One that was stopped is no longer this, and what
     /// it still says is not passed on.
     private var child: (any AgentChild)?
@@ -250,14 +248,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
     }
 
     private func spawn() throws -> any AgentChild {
-        // In a container: the agent by its name on the container's path.
-        let executable: String
-        if container != nil {
-            executable = tool
-        } else {
-            guard let found = ToolPath.resolve(tool) else { throw AgentProcessError.toolMissing(tool) }
-            executable = found
-        }
+        guard let executable = ToolPath.resolve(tool) else { throw AgentProcessError.toolMissing(tool) }
         var args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
         // Visor's MCP server: the other sessions, and the permission prompt
         // answered from the client. Claude Code offers its questions to the
@@ -266,13 +257,11 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         // questions come to it; manual, every tool call too. (The
         // OpenRouter CLI has it only in manual mode, as before.)
         let prompt = !skipPermissions || tool == "claude"
-        let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: prompt, container: container)
+        let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: prompt)
         if let mcp { args += ["--mcp-config", mcp] }
         // Manual: edits are accepted, everything else asks the user.
-        // This computer's managed policy is not a container's.
-        let contained = container != nil || ServerPlatform.current.host.inContainer
-        let mode = Self.permissionMode(skip: skipPermissions, tool: tool, policy: tool == "claude" && container == nil ? .current : ClaudeManagedPolicy(),
-                                       contained: contained)
+        let mode = Self.permissionMode(skip: skipPermissions, tool: tool, policy: tool == "claude" ? .current : ClaudeManagedPolicy(),
+                                       contained: ServerPlatform.current.host.inContainer)
         askedMode = mode
         args += ["--permission-mode", mode]
         if mcp != nil, prompt { args += ["--permission-prompt-tool", "mcp__visor__approve"] }
@@ -289,12 +278,9 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         }
         // The agent is told which session it is, so it can name itself
         // when it asks the server to restart (VISOR_SESSION).
-        // In a container the agent is root, which Claude Code refuses to
-        // bypass permissions as unless told it is in a sandbox (it is).
-        let environment = container.map { approvalEnvironment.merging(["VISOR_URL": $0.serverURL, "IS_SANDBOX": "1"]) { _, ours in ours } }
-            ?? ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
+        let environment = ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
         let child = try AgentChildren.start(executable: executable, arguments: args, directory: HostFolders.resolve(cwd),
-                                            environment: environment, session: approvalEnvironment["VISOR_SESSION"], container: container)
+                                            environment: environment, session: approvalEnvironment["VISOR_SESSION"])
         self.child = child
         follow(child)
         return child

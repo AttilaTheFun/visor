@@ -15,11 +15,12 @@ window is Visor's macOS client, with the Runner and the servers inside it as
 processes of their own. There are no beta bundle ids: a build says its
 variant in its Info.plist.
 
-Today one Mac runs one Visor Server, inside the menu bar app. A session can
-run its agent in a Linux container (0.44's container hosts,
-docs/container-host.md), but the server stays outside: the container sees
-the session's folder and nothing else, so what the server keeps — the
-pictures a client attaches, for one — is out of the agent's reach.
+Today one Mac runs one Visor Server, inside the menu bar app. From 0.44 to
+0.49 a session could run its agent in a Linux container of its own (0.44's
+container hosts; removed in 0.50), but the server stayed outside: the
+container saw the session's folder and nothing else, so what the server
+keeps — the pictures a client attaches, for one — was out of the agent's
+reach.
 
 This design makes each container a server of its own. One Mac runs any mix:
 two sessions on the Mac's own server, five in one container's server, one in
@@ -473,8 +474,8 @@ these are checked early rather than assumed:
 5. **Moving sessions.**
    - Moving between servers from the Runner.
    - Today's agent-in-a-container sessions (0.44) moved onto container
-     servers; then that way of running, and 0.44's container hosts
-     (docs/container-host.md), are retired.
+     servers; then that way of running, and 0.44's container hosts, are
+     retired (done in 0.50: a session saved in one runs on its computer).
 
 ## Where it stands (3 November)
 
@@ -502,7 +503,8 @@ these are checked early rather than assumed:
 ## Sessions running today
 
 - Sessions in Shireworks containers (0.43) run on the Mac from 0.44 on, with
-  a notice. Move into a Container then puts them in a 0.44 container.
+  a notice. Sessions in 0.44's containers run on their computer from 0.50
+  on, which has no Move into a Container.
 - Once phase 1 is out, such a session moves to a container server with
   Migrate…. The old one is kept until the new one has answered.
 - A server is updated only when its sessions aren't mid-turn.

@@ -3,8 +3,7 @@
 // sessions named (one first, then `*`); an agent of such a session started
 // with HTTPS_PROXY naming its server's token, the session and its
 // repository, gh's placeholder token, and the proxy's authority trusted
-// beside the system's own. A container's agent, or a session it isn't on
-// for, is started as before.
+// beside the system's own. A session it isn't on for is started as before.
 
 import Foundation
 import VisorProtocol
@@ -69,11 +68,8 @@ final class GitHubProxySetupTests: ServerTestCase {
         XCTAssertEqual(environment["GIT_SSL_CAINFO"], bundle)
         XCTAssertTrue(try String(contentsOfFile: bundle, encoding: .utf8).hasSuffix(authority), "the system's authorities, then the proxy's")
         XCTAssertEqual(try String(contentsOfFile: try XCTUnwrap(environment["NODE_EXTRA_CA_CERTS"]), encoding: .utf8), authority)
-        // Not a session it is on for, nor an agent in a container of its own.
+        // Not a session it is on for.
         XCTAssertEqual(server.githubProxyEnvironment(for: SessionInfo(id: "T", agent: .claude, cwd: "/tmp", title: "T", created: 0)), [:])
-        var contained = SessionInfo(id: "S", agent: .claude, cwd: "/tmp", title: "S", created: 0)
-        contained.container = SessionContainer(id: "c1", image: "visor")
-        XCTAssertEqual(server.githubProxyEnvironment(for: contained), [:])
         // Every session, once it is on for `*`; one in no checkout names none.
         XCTAssertEqual(set(["url": "http://192.168.131.1:7441", "sessions": ["*"]]).status, 200)
         XCTAssertEqual(server.githubProxyEnvironment(for: SessionInfo(id: "T", agent: .claude, cwd: root.path, title: "T", created: 0))["HTTPS_PROXY"],

@@ -82,18 +82,18 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// Where its agent is: nil from a server of 0.34 or before, whose
     /// agents are only ever restarted.
     public var agentState: AgentState?
-    /// The container its agent runs in, when it runs in one rather than on
-    /// the computer itself; nil, on the computer.
+    /// The container its agent ran in, from a server of 0.49 or before,
+    /// when it ran in one rather than on the computer itself; nil on the
+    /// computer, and always from a server of 0.50 or later.
     public var container: SessionContainer?
     /// The machines it leases through the server from the server's Shireworks.
     public var leases: [SessionLease] = []
-    /// The system its agent runs on: "macos", "linux" or "windows" (in a
-    /// container, "linux"); nil from a server of 0.37 or before.
+    /// The system its agent runs on: "macos", "linux" or "windows"; nil
+    /// from a server of 0.37 or before.
     public var system: String?
     /// Its agent runs in a container that the server didn't make for it:
     /// the server's own, which every session there shares (a co-tenant
-    /// container). `container` stays nil, as there is nothing to move into
-    /// or out of; nil from a server on a computer of its own.
+    /// container); nil from a server on a computer of its own.
     public var inContainer: Bool?
     /// The session it came from, when it is a fork or a branch of one: a
     /// client lists it under that session, not as one of its own.

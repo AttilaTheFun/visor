@@ -64,22 +64,12 @@ final class NewSessionFlowTests: XCTestCase {
         XCTAssertEqual(server.subscribed, [id])
     }
 
-    /// Whether a session can start in a container is the welcome's word,
-    /// and then the list's, as it changes; a list that does not say leaves
-    /// it as it was.
-    func testContainersOnOfferFollowTheServer() async {
-        let server = ScriptedServer()
-        let host = await connected(server)
-        XCTAssertFalse(host.containersAvailable)
-        server.deliver(.sessions([session("a")], containers: true))
-        XCTAssertTrue(host.containersAvailable, "the list says they are now")
-        server.deliver(.sessions([session("a")]))
-        XCTAssertTrue(host.containersAvailable, "a list that does not say changes nothing")
-        server.deliver(.sessions([session("a")], containers: false))
-        XCTAssertFalse(host.containersAvailable)
+    /// A list from a server of 0.49 or before that says containers are on
+    /// offer is read as any other list: the flag is passed over.
+    func testAnOldServersContainerFlagIsPassedOver() {
         let said = VisorAgentServer.translate(#"{"type":"sessions","sessions":[],"container":true}"#)
-        guard case .sessions(_, let containers)? = said else { return XCTFail("not a list: \(String(describing: said))") }
-        XCTAssertEqual(containers, true, "read off the wire")
+        guard case .sessions(let list)? = said else { return XCTFail("not a list: \(String(describing: said))") }
+        XCTAssertEqual(list, [])
     }
 
     /// Renamed, archived and removed here, for a server that keeps none of

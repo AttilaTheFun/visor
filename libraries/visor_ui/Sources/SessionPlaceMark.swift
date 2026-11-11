@@ -2,9 +2,10 @@ import SwiftUI
 import VisorProtocol
 
 /// Where a session's agent runs, at the top of its row: a box for a Linux
-/// container (one made for it, or the server's own that its sessions
-/// share), else the computer's system — Apple's logo, a penguin for Linux,
-/// a window for Windows. Nothing from a server that does not say.
+/// container (one a server of 0.49 or before made for it, or the server's
+/// own that its sessions share), else the computer's system — Apple's logo,
+/// a penguin for Linux, a window for Windows. Nothing from a server that
+/// does not say.
 @MainActor
 struct SessionPlaceMark: View {
     let session: SessionInfo
