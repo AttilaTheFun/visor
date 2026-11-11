@@ -25,15 +25,210 @@ them. Containers dial out only, through MultiPass, at
 `SHIREWORKS_HOST_ADDRESS` (Shireworks, 11 Nov). Nothing reaches into a
 container.
 
+## Logan's answers (11 Nov, later)
+
+Where this section and the rest of the document differ, this section wins.
+The sections below have been brought into line with it.
+
+- **No server has auth of its own.** The Visor server, the runners and
+  Shireworks are plain HTTP servers on native ports, never exposed directly.
+  MultiPass is the one authenticated way in, for remote clients over the LAN
+  or tailnet and for agents in containers alike. It switches paths, signs
+  people and agents in, and decides which credentials to add when it proxies,
+  so nothing untrusted is ever handed a secret. It is also the one port a
+  container reaches, mapped from the container to the host.
+- **A session's logic lives in the wrapped agent.** That also makes a session
+  easy to move between runners.
+- **Runners own their sessions' data.**
+  - Data lives in the Sessions volume, but the runner that created a session
+    manages it: Shireworks' agent runner for container sessions, Visor.app's
+    native runner for native ones.
+  - A runner is fairly dumb. It keeps track of the sessions it has started and
+    where their data is.
+  - Archiving goes client → server → wrapped agent. The agent archives itself
+    and tells its runner, which tells the Visor server.
+  - **Migrate** copies a session's data from one runner to another, and the
+    receiving runner starts the copy.
+  - **Backup…**, from a session's context menu, copies the same data to a
+    folder the user picks.
+- **Placement:**
+  - The MacBook has a Shireworks server with no primary container, and
+    Visor.app with its native runner.
+  - The mini has a Shireworks server with the primary container.
+  - Shireworks' agent runner is enabled only where Shireworks has a primary
+    container, so container sessions run in the mini's primary container and
+    native ones on the MacBook.
+  - In the medium term, native sessions are avoided where possible on
+    Logan's own pure MacBook. That's his choice for his machine, not
+    Visor's: see "The native runner" below.
+- **Progress and done:** a wrapped agent reports to the runner that started it
+  over that runner's MCP: agent → wrapper → MultiPass → Shireworks' agent
+  runner. It reports progress from time to time, and says complete or blocked.
+  A runner may stop an agent that has been stuck for some time and mark it
+  blocked.
+- **Merging:**
+  - A pull request that touches no code-owned file: the agent merges it, as
+    agents do today.
+  - One that touches a code-owned file: the agent marks itself blocked on code
+    review. Logan moves the issue back to a status the runner watches, and the
+    runner resumes the agent.
+- **Scope:** every repository that isn't archived. For the pilot, agent jobs
+  are started by hand only. Picking up and implementing issues automatically,
+  with a cap on concurrent agent and CI jobs, comes when the Mac Studio
+  arrives.
+
+## The native runner, and Visor on its own
+
+Logan, 11 Nov: "I think 3rd parties may still want to use the native visor
+agents either because they don't care as much about the purity of the machine
+or their build process is more complex and requires tools that can't work on
+linux."
+
+And, in his words: "it's not that it's the default. you can use Visor.app
+without Shireworks.app and then you'd be limited to native sessions, or some
+custom deployment you create like the enterprise deployment with abox and
+sandcastle."
+
+So **no placement is Visor's default.** A session runs wherever the user's
+paired runners are:
+- **Visor.app alone** brings its native runner, and only native sessions.
+- **Shireworks** adds its container and macOS VM runners.
+- **A custom deployment** brings runners of its own, for example an
+  enterprise one on abox and sandcastle.
+
+Visor.app's native runner is a first-class, supported part of Visor, not a
+step on the way to containers. Visor works out of the box with it alone, with
+no Shireworks and no MultiPass:
+- **Visor.app on its own:** the server, the native runner and the client in
+  one app. The Mac's own client reaches the server on loopback. New Session
+  starts a native session at once, in a folder the user picks, as today.
+- **Permissions:** Claude Code's own approval modes, auto or manual, the
+  session's choice (#341). There's no bypass on the computer itself.
+- **The network:** with no MultiPass, agents use the Mac's network as they do
+  today. With MultiPass installed, the native runner gives its agents
+  `HTTP(S)_PROXY` and the CA bundle pointing at it, for the egress log,
+  credentials and GitHub's rules.
+- **Reaching it from elsewhere** (a phone, another Mac) needs MultiPass, the
+  only authenticated way in. Without it, Visor is a single-Mac app.
+- Runners in containers (Shireworks') and agent jobs are additions on top,
+  for those who have them.
+
+## The runner protocol, for anyone's runner
+
+The runner protocol is a documented, stable interface that anyone's runner
+implements, not a private contract between Visor and Shireworks. Logan wants it
+modest: "the runner protocol should be fairly modest since the agent wrappers
++ actual visor server do most of the heavy lifting". A third party should be
+able to implement a runner in a few hundred lines. The session's logic, its
+transcripts and approvals, and talking to clients are the wrapper's
+(`visor-agent-host`) and the server's, never a runner's.
+
+**Runners pull, like GitHub's CI runners** (Logan, 11 Nov: "I don't want the
+server to 'push' sessions to the runner, I want the runner to 'pull' sessions
+from the server like a github ci runner"). The server never calls a runner.
+A runner only ever connects out, which also suits MultiPass's outbound-only
+containers. A runner that's busy, with CI say, just doesn't ask for work, and
+the session waits, queued.
+
+**What a runner does, all of it:**
+1. **Pair:** once, with the code from Add Runner….
+2. **Poll for work** when it has room, by its own judgement:
+   `POST /api/v2/runners/poll`, a long poll whose body is its hello
+   (`RunnerHello`: `protocol: 2`, id, name, kind, agents, capacity, labels,
+   and the sessions it holds with where each one's data is). The answer is a
+   job it has now claimed (`RunnerClaim`: the queue entry, a lease and its
+   expiry, and for a start the agent's one-time token), or nothing after the
+   poll's wait.
+3. **Do the job, and say how it went** (`RunnerUpdate`, `POST
+   /api/v2/runners/update`). It renews the lease while it works, then says
+   `started` or `done` (with where the session's data now lives), or `failed`
+   (with why). The jobs:
+   - `start`: launch `visor-agent-host` with the session's id, the dial URL and
+     the agent token;
+   - `archive`: stop the session's wrapper if it runs, and keep its data;
+   - `copyOut`: send the session's data to the server as one archive (`PUT
+     /api/v2/runners/jobs/<entry>/data`), for Migrate… or Backup…;
+   - `startFromCopy`: fetch the archive (`GET` the same) and start the
+     session from it, Migrate…'s other end;
+   - `delete`: remove the session's data.
+4. **The lease:** a claim lasts a minute, and each renew another. If a runner
+   dies and its lease lapses, the entry goes back to the queue for the next
+   poll. A runner whose update names a lapsed lease is told so and drops the
+   job.
+
+That's the whole protocol for a runner. Polls, claims and updates are plain
+HTTP requests out from the runner.
+
+**Optional, a runner's own:** an MCP its agents report to (Shireworks' agent
+runner, for agent jobs: progress, complete, blocked; below). A runner without
+one is complete: its agents' state reaches the server through the wrapper as
+always.
+
+**Versioned:**
+- Both hellos say `protocol: 2`. A server answers with the version it speaks,
+  and refuses one it can't.
+- Within a version, what's added is optional. A reader ignores fields it
+  doesn't know, and reads unknown values as defaults (visor_protocol's types
+  do).
+- An incompatible change is a new version, which the server speaks beside the
+  old one for a release.
+
+**Written down** in docs/protocol.md, as the client protocol is, beside its
+types in visor_protocol.
+
+**Implementations, as references:**
+- Visor.app's native runner (this repository);
+- Shireworks' container and macOS VM runners (AttilaTheFun/shireworks).
+
+A custom runner needs only this, MultiPass for the way in, and
+`visor-agent-host`, which ships with Visor.
+
+## A runner anywhere: `visor-runner`
+
+Logan, 11 Nov: "this also makes the computers in my network more fungible. E.g.
+if I wanted to lease a beefy linux vm I could start a runner there as well."
+
+- **`visor-runner`** is a standalone program for Linux and macOS, and it ships
+  in Visor's agent image too. It runs on any machine or lease:
+  `visor-runner pair <code>` once, then `visor-runner run`.
+- It pulls work like any runner, launches `visor-agent-host` on the machine it
+  runs on, and keeps its sessions' data in a folder there (`--data`). Its kind
+  is `native` (the machine itself), with labels it's given (`--label
+  linux-big`, say).
+- **Visor.app's native runner is the same code**, run inside the app.
+- **Shireworks** can later offer "lease a VM with a runner" on top: a lease
+  that starts `visor-runner`, paired, so the VM pulls sessions until it's
+  released.
+
+## Three places a session runs
+
+Logan, 11 Nov. The runners Visor and Shireworks bring:
+- **Natively on the Mac:** Visor.app's native runner.
+- **In the primary Linux container:** Shireworks' container agent runner,
+  below.
+- **In the primary macOS VM:** a Shireworks macOS VM agent runner, for work
+  that needs macOS and Xcode. Xcode comes from the VM's image.
+  - It's the container runner's twin, on the same contract: pairing, hello
+    as `kind: macos-vm` with labels `macos`, `xcode`, `shireworks`, starts,
+    the reports MCP, archive, Migrate… and Backup….
+  - It's enabled where Shireworks has its primary macOS VM. Its sessions run
+    as a slot user of that VM, their data on Sessions shared into the VM by
+    name.
+  - The VM's only way out is a macOS `multipass-client` over a vsock relay. Its
+    network card stays, host-only, for Shireworks' SSH and VNC (server-proxy.md,
+    "In a macOS VM"), if Shireworks' spike holds. If not, the fallback is NAT to the host only,
+    with the system's and HTTP(S) proxy settings.
+  - It comes after the container runner.
+
 ## The parts
 
 | Part | Where | What it does |
 |---|---|---|
-| **Server** | Visor.app (menu bar app and client), the nested `visor-server`; on Linux, alone | The session registry and its cached state; relays clients to agents; the start queue; the runners it has paired. Plain HTTP on loopback, behind MultiPass. Owns no process. |
+| **Server** | Visor.app (menu bar app and client), the nested `visor-server`; on Linux, alone | The session registry and its cached state; relays clients to agents; the start queue; the runners it knows. Plain HTTP on a native port with no auth of its own, reached only through MultiPass. Owns no process and no session's data. |
 | **Wrapped agent** | `visor-agent-host`, wrapping `claude` or `codex`, wherever it runs | One session's brain: runs the agent, reads its output into Visor's transcript, asks for approvals, keeps going if the server goes away. Dials the server and advertises itself. |
-| **Runner** | Visor.app's own (native); Shireworks' container agent runner; any other | Takes starts from the server's queue and launches wrapped agents: as processes on the Mac, or as containers. |
+| **Runner** | Visor.app's own (native, on the Mac); Shireworks' container agent runner (in its primary Linux container); Shireworks' macOS VM agent runner (in its primary macOS VM, with Xcode) | Takes starts from the server's queue and launches wrapped agents. Owns its sessions' data and knows where each is. Serves an MCP its agents report to. Plain HTTP, no auth of its own. |
 | **Client** | Visor on the Mac, iPhone, Android, the web; Shireworks' Visor tab | Shows every session, wherever it runs, and the runners. Steers a session through the server. |
-| **MultiPass** | The Mac | The only way in, for all four: who is who (tokens, sign-in), and relaying containers' dial-ins. |
+| **MultiPass** | Each Mac | The only authenticated way in, for clients, agents and containers: path switching, sign-in, and the credentials it adds when it proxies. One port a container reaches, mapped to the host. |
 
 ### What moves where
 
@@ -56,8 +251,11 @@ job all the same thing.
 ## The wire
 
 Every connection is a WebSocket (an HTTP/1.1 upgrade) to the server's one port,
-through MultiPass. MultiPass checks the token and passes on who it is in
-`X-Visor-Caller` (`client:<user>`, `agent:<session>`, `runner:<runner id>`).
+through MultiPass. The server checks nothing itself. MultiPass signs the
+caller in (a client by its account, an agent or a runner by the token
+MultiPass gave it) and passes on who it is in `X-Visor-Caller`
+(`client:<user>`, `agent:<session>`, `runner:<runner id>`). Tokens are
+MultiPass's alone: the server and the runners hold none.
 The envelopes are today's (`Envelope`, docs/protocol.md) wherever their meaning
 is the same.
 
@@ -90,53 +288,51 @@ is the same.
 
 ### A runner (`/api/v2/runners`)
 
-1. **Pairing.** Add Runner… on a client shows a pairing code (like a
-   connection code). The runner is given the code once and trades it, through
-   MultiPass, for a runner token that MultiPass keeps. Visor.app's native
-   runner pairs itself with its own server.
-2. **Hello.** `{type: "runner", id, name, kind: native | container, agents:
-   [claude, codex], capacity, labels, repositories}`.
-   - `capacity`: how many agents at once.
-   - `labels`: for example `macbook`, `container`, `shireworks`.
-3. **Starts, server to runner.** `{type: "start", session, agentToken, agent,
-   repository?, branch?, cwd?, prompt?, title, links, resume?}`.
-   - `session`: a new id, or an archived session's, to resume.
-   - `resume`: the agent's conversation id, and where its files are (below).
-   - `agentToken`: a one-time token for that session's agent.
-
-   The runner launches `visor-agent-host` with the token. It answers
-   `started` or `failed` with why. A start carries no sign-in: the agent gets
-   its sign-ins (its kind's `agents/<kind>.env` on the server) over its own
-   dial connection, once it has said hello with its token. They never pass
-   through a runner, and a container never keeps them at rest (Shireworks, 11
-   Nov).
-4. **Capacity and health.** The runner says what it is running, and the server
-   shows it in the runner's row.
+Pull only, as "The runner protocol" sets out: `poll` (a long poll carrying its
+hello, answered with a claim or nothing), `update` (renew, started, done,
+failed), and a job's data (`PUT`/`GET /api/v2/runners/jobs/<entry>/data`) for
+copies. Pairing gives MultiPass the runner's identity, and MultiPass names it
+on each request (`X-Visor-Caller: runner:<id>`). A start's agent token is one
+the server asks of MultiPass when the entry is claimed. A start carries no
+sign-in: the agent gets its sign-ins (its kind's `agents/<kind>.env` on the
+server) over its own dial connection, once it has said hello. They never pass
+through a runner, and a container never keeps them at rest (Shireworks, 11
+Nov).
 
 ### A client
 
 As today: the REST and WebSocket of docs/protocol.md, with the server's cached
 state for reads and relayed actions for writes. New for clients:
-- `runners`: the list, with each runner's settings and Remove;
+- `runners`: the list, each with its last poll, capacity and sessions, its
+  settings and Remove;
 - `pair`: a pairing code for Add Runner…;
-- `start`: now an entry in the queue, naming a runner or labels.
+- `start`: an entry in the queue, naming a runner or labels. The session shows
+  as queued until a runner claims it, perhaps for a while, and the client can
+  cancel it while it waits;
+- archive, Migrate… and Backup…: entries in the queue too, for the runner that
+  holds the session.
 
 ## The queue
 
-A start is an entry, kept by the server in its SQLite store (swift_sql):
-- `id`, which becomes the session's id;
-- `agent`, `title`, `prompt`;
-- `repository` and `branch`, or `cwd` for a native runner;
-- `runner`, or `labels` to match one;
-- `links`;
-- `archiveWhen` (below);
-- `createdBy`, and `state` (`waiting`, `starting`, `running`, `failed`).
+Every job is an entry (`QueueEntry`), kept by the server in its SQLite store
+(swift_sql):
+- `id`, `kind` (`start`, `archive`, `copyOut`, `startFromCopy`, `delete`) and
+  the `session` it's for;
+- for a start: `agent`, `title`, `prompt`, `repository` and `branch` or `cwd`,
+  `resume`, `links`, `archiveWhen`;
+- for startFromCopy, the copyOut entry it starts from (`copyFrom`);
+- `runner`, or `labels` to match one. A job about an existing session names
+  the runner that holds it;
+- `createdBy`, `created`;
+- `state` (`waiting`, `claimed`, `done`, `failed`, `cancelled`), with
+  `claimedBy` and `leaseExpires` while claimed.
 
-The server gives each entry to the first connected runner that matches it and
-has room, oldest first. A client's New Session is one such entry for the
-runner chosen, the Mac's own by default. The entry is done when its agent says
-hello. An entry no runner takes waits, and the client shows that it waits and
-why.
+A runner's poll claims the oldest waiting entry it may take
+(`QueueEntry.claimable(by:at:)`): the runner named, or one with every label
+asked for, that runs the agent and has room for a start. A claimed entry whose
+lease has lapsed is waiting again. A start is done when its runner says
+`started`, and the session shows as starting until its agent dials in. Waiting
+entries can be cancelled.
 
 ## Sessions: identity, ending, archiving
 
@@ -153,90 +349,114 @@ why.
 - **Archiving.** A session whose entry or job said `archiveWhen: terminal` is
   archived when it reaches a terminal state. Any session can be archived by
   hand.
-- **Where its conversation lives.** For a native runner, on the Mac's disk, as
-  today. For Shireworks' container runner, on the Sessions volume, which
-  outlives the container (Agent jobs, below). For a runner with no volume that
-  lasts, the wrapper uploads the conversation's files to the server at its end.
-  They're the same files a Migrate… carries today, conversation and memory.
-- **Unarchiving.** Unarchive is a start entry with `resume`. Any matching
-  runner takes it, gets the files from the server, and the agent goes on in
-  the same conversation, under the same session id.
+- **Where its data lives.** On the Sessions volume, managed by the runner that
+  started the session: its folder, its conversation, its memory. It's the data
+  a Migrate… carries today. The server keeps none of it, only its cached view.
+- **Archiving, by hand or at a terminal state.** The client asks the server,
+  which relays it to the wrapped agent. The agent archives itself and tells its
+  runner, and the runner tells the server. The runner keeps the data.
+- **Unarchiving.** A start entry with `resume`, for the runner that holds the
+  data. The agent goes on in the same conversation, under the same session id.
+- **Moving to another runner (Migrate…).** The holding runner sends the
+  session's data to the other runner, which starts the copy. That is today's
+  offer and arrival code, runner to runner.
+- **Backup….** From a session's context menu: the holding runner's copy of the
+  same data, saved to a folder the user picks. A backup can be started again
+  on any runner, as today's restore does.
 
-## Agent jobs (with Shireworks)
+## Shireworks' agent runner and agent jobs
 
-Shireworks' side, agreed with it on 11 Nov:
+Agreed with Shireworks on 11 Nov, then placed by Logan's answers:
 
-- **The container agent runner** is a part of the Shireworks server, not a
-  process in a container.
-  - It dials the Visor server through MultiPass, as the native runner does,
-    and says hello as `kind: container`.
-  - Its hello advertises its images, how many agent sessions it can run now
-    (from Shireworks' memory budget, like CI's admission) and the volumes it
-    shares.
-  - It takes a start only when it has room. For each start it leases a
-    container of kind `agent`, linked to the session and its issue, so
-    Shireworks' and Monitor's lists show what it's for.
-  - The container's command is `visor-agent-host dial`. The runner only makes
-    and ends containers; everything about the agent goes over the dial
-    connection.
-- **Triggering:** one queue, in the Visor server, fed by:
-  - a small Actions workflow in each opted-in repository, on `issues:
-    labeled` with a label such as `agent`. It asks Shireworks to start a
-    session for owner/repo#N, with the job grant it holds for its lifetime
-    (`POST /v1/ci/jobs/<id>/agent-session`), then ends. Shireworks checks the
-    repository is opted in and the job is live, then queues the start on the
-    Visor server with its runner token. The runner token never enters a CI
-    job's container, which runs pull requests' code, and a job can only ask
-    while it runs;
-  - Visor's own UI and MCP tool, to queue an issue by hand;
-  - later, perhaps, the server polling GitHub itself.
+- **The runner** is a part of the Shireworks server, enabled only where
+  Shireworks has a primary container, which is the mini. Its sessions run in
+  that primary container.
+  - It says hello to the Visor server through MultiPass as `kind:
+    container`, with its images and agents and how many sessions it can run
+    now. Capacity comes from Shireworks' memory budget, like CI's admission,
+    and is sent again as it changes.
+  - It takes a start only when it has room, and starts the session's wrapped
+    agent (`visor-agent-host`) in the primary container. The agent's folder
+    is `/Volumes/Sessions/<Claude|Codex>/<session id>` (#340); a fresh clone
+    goes in Sources (#345).
+  - It keeps the sessions it started and where their data is, and serves the
+    MCP its agents report to.
+  - Pairing: Shireworks' Server Settings › Pair with Visor…, with the code from
+    Add Runner…. MultiPass keeps what that pairing gives; Shireworks keeps it
+    in its Keychain only to reach MultiPass.
+  - Per-session `agent` leases, a container per job, come with automation
+    once the Mac Studio arrives.
+- **Reporting: the runner's MCP** (Shireworks' proposal, agreed 11 Nov).
+  Agent → wrapper → MultiPass → runner. The session is never an argument:
+  MultiPass names the caller (the agent's token maps to its session), so an
+  agent reports only on itself.
+  - `task()` → `{session, repository, issue, branch, pull_request?, state}`:
+    what it's working on, useful after a resume too.
+  - `report_progress(summary, step?)`, from time to time. `summary` is a
+    sentence or two for Visor's list. `step` is free text (`tests`,
+    `review`). The runner keeps the last few.
+  - `report_complete(pull_request, summary, merged)`. `merged: true` when it
+    merged its own pull request; `false` when the pull request is open and
+    nothing is left for the agent.
+  - `report_blocked(reason, detail, pull_request?)`, the reason one of:
+    - `code_review`: the pull request touches code-owned files;
+    - `question`: it needs Logan's answer, and `detail` is the question;
+    - `failure`: CI or tooling it can't fix;
+    - `stuck`: the runner's own, never the agent's.
 
-  The agent never runs inside the Actions job. A job's lifetime and cancel
-  are GitHub's, it can't be unarchived, and an idle steered session would
-  hold a CI slot. Only the label applied by Logan, or an issue he opened,
-  triggers a session. An issue's text is untrusted input, and the egress
-  allowlist is what limits the damage.
-- **The lease:**
-  - Visor's agent image, pinned by tag and digest.
-  - CPUs, memory and disk: 4 / 8 GB / 40 GB by default, set per repository.
-  - Two volumes by name:
-    - Sessions at `Sessions/<Claude|Codex>/<session id>`, the session's
-      state, which stays after archiving;
-    - Sources at `Sources/<session id>/<repository>`, a fresh clone (#345),
-      so an unarchived session resumes on its own branch.
-  - Bazel's output stays on the container's disk.
-- **Egress:** host-only, through MultiPass. That covers DNS, the HTTP(S)
-  proxy with the repository's allowlist (GitHub, the package registries it
-  declares), MCP, and Shireworks' cache and API on the host. Nothing else.
-- **No secrets at rest:**
-  - `/run/secrets/visor-host`, the container's dial token, is its only
-    secret file.
-  - The agent's model sign-in comes over the dial connection.
-  - GitHub goes through MultiPass as logan-shire-agent[bot], so no GitHub
-    token enters the container.
-- **The lifecycle,** kept by the Visor server from GitHub's state:
-  - Queued, then running: the runner leases the container, and the agent
-    starts, tied to the issue.
-  - A pull request opened: linked to the session.
-  - Merged, or blocked: the agent says it's blocked through an MCP tool, with
-    a reason, or says it's done. The server archives the session and comments
-    on the issue, and the runner releases the container.
-  - The Sessions folder stays. The Sources clone is marked disposable in
-    Shireworks' cleanup and removed after some days.
-  - Unarchive: a new lease with the same two folders, and the agent resumes
-    its own conversation (`--resume`).
-  - Steering, throughout, through the server as with any session.
+    Each blocked report also comments on the issue with the reason, as
+    logan-shire-agent[bot] through MultiPass.
+
+  The runner sends every report to the Visor server as it comes
+  (`AgentReport`), and the server shows it on the session.
+  - **Stuck:** after 45 minutes with no report and no output from the
+    wrapper (its keepalive doesn't count), the runner stops the agent and
+    reports it `blocked: stuck`. The 45 minutes is a setting in Shireworks'
+    Server Settings.
+  - **Resuming a blocked agent:** on blocked, the runner adds the label
+    `agent: blocked` to the issue. Logan resumes it by removing the label, or
+    by answering on the issue: a new comment from him after the block. The
+    runner checks each blocked session's issue every few minutes, through
+    MultiPass, and resumes the agent with that comment as its prompt, if there
+    is one. If Logan uses a Projects board instead, its "Ready" column takes
+    the label's place.
+  - **On the runner's side:** a complete report with `merged` archives the
+    session; a blocked report stops the agent and keeps its data; a resume
+    starts the same session again in the primary container with `--resume`.
+- **Merging:** an agent merges its own pull request when it touches no
+  code-owned file, as agents do today. Otherwise it reports blocked on code
+  review. Logan moves the issue back to a status the runner watches, and the
+  runner resumes the agent.
+- **Triggering:**
+  - **During the pilot:** by hand only, from Visor's UI or MCP tool,
+    queuing an issue for the runner.
+  - **Once the Studio arrives:** a labeled issue's workflow asks Shireworks with
+    its job grant (`POST /v1/ci/jobs/<id>/agent-session`), and Shireworks
+    queues the start, with a cap on concurrent agent and CI jobs. The agent
+    never runs inside an Actions job.
+  - **Scope:** every repository that isn't archived.
+- **Network:** none. The container's only way out is `multipass-client` over
+  its one relayed socket (server-proxy.md, "Containers: no network"). That
+  covers DNS, HTTP(S), MCP and the agent's dial-in. Shireworks' cache and API
+  are reached the same way. MultiPass logs every host, and filters by the
+  repository's allowlist later.
+- **No secrets at rest.** The agent's model sign-in comes over its own
+  connection. GitHub goes through MultiPass as logan-shire-agent[bot], so no
+  GitHub token is in the container.
+- **The lifecycle:**
+  - Queued, running, a pull request linked, then complete or blocked.
+  - On complete, the agent archives itself, as any archive goes: agent →
+    runner → server. The server comments on the issue.
+  - Blocked stays live, to be resumed.
+  - The runner keeps the session's data, and an archived session can be
+    unarchived on it.
 - **Who builds what:**
-  - Shireworks: the runner (its dial client, admission, the `agent` lease
-    kind and its links), per-session Sources in cleanup, and host-only
-    egress.
-  - Visor: the queue, the dial protocol's start and stop, the workflow
-    template and the lifecycle.
-
-Because a container session's state stays on the Sessions volume, the wrapper
-needn't upload its conversation at the end for containers that Shireworks
-runs. The server keeps uploaded files only for a runner without a shared
-volume.
+  - Shireworks: the runner (its hello and capacity, starting wrapped agents in
+    the primary container, keeping its sessions' data, its MCP for reports,
+    stopping the stuck) and host-only egress.
+  - Visor: the queue, the dial protocol, the wrapper's report tools, the
+    server's handling of reports and archiving, and the workflow template for
+    later.
 
 ## Permissions
 
@@ -250,32 +470,31 @@ The rule moves from the server to the wrapper, keyed on the place.
 - **Computers.** The client's list of computers goes. Sessions are one list,
   wherever they run, and runners are the second section. Add Computer… becomes
   Add Runner…. A MultiPass account is what a client adds (#329).
-- **Several Macs.** One Visor server per person, on the Mac that runs
-  MultiPass. Another Mac (the mini) runs Visor.app's native runner, paired to
-  that server, and its own MultiPass only if it serves clients of its own. The
-  relay between servers (`/relay`, mail between computers) goes: every session
-  is on one server.
-- **Migrate….** It goes. Moving a session to another runner is stop, then
-  start it on that runner with `resume`, the server carrying its files. That
-  is today's offer and arrival code, reused as the server's upload and the
-  runner's download. The session keeps its id. #340's folder per session
-  (`/Volumes/Sessions/<Claude|Codex>/<id>`) and #345's clone-only sources stay,
-  as what a container runner gives each start.
+- **Several Macs (Logan's placement).** One Visor server, in Visor.app on the
+  MacBook, with its native runner. The MacBook's Shireworks has no primary
+  container, so it runs no agent runner. The mini's Shireworks has the primary
+  container and its agent runner, which pairs with the MacBook's Visor
+  server. Each Mac has its own MultiPass. The relay between Visor servers
+  (`/relay`, mail between computers) goes: every session is on one server.
+  Native sessions are to be avoided in the medium term, so most sessions run
+  in the mini's primary container.
+- **Migrate…** stays, as a move between runners. The holding runner sends the
+  session's data, which today's offer and arrival code already packs, and the
+  other runner starts the copy. The session keeps its id. #340's folder per
+  session and #345's clone-only sources stay, as what a runner gives each
+  start. **Backup…** saves the same data to a folder.
 - **The co-tenant's cut-over.** Once the server, the wrapper and Shireworks'
-  container agent runner are in:
-  1. each co-tenant session, made idle and pushed (#345's rule), is uploaded
-     to the new server by a one-off import (its conversation, memory and
-     info), keeping its id;
-  2. it's started with `resume` on the container agent runner;
+  agent runner are in:
+  1. each co-tenant session, made idle and pushed (#345's rule), is migrated
+     from the co-tenant's server into the agent runner, keeping its id;
+  2. it resumes in the primary container;
   3. the co-tenant's own server stops, and the co-tenant goes.
 
-  The primary container becomes Shireworks' container agent runner's place,
-  or is replaced by it.
 - **The server's auth, TLS, SSH, fronts** go as in #329's step 6. The server
   binds loopback; MultiPass is the way in.
 - **Kept as they are:** pushes (the server sends, MultiPass signs), messages
-  between sessions (now within one server), the MCP and GitHub proxies
-  (MultiPass's), and backups (now of the server's store and archived files).
+  between sessions (now within one server), and the MCP and GitHub proxies
+  (MultiPass's).
 
 ## Pull requests, in order
 
@@ -292,39 +511,31 @@ Each one is its own pull request with its tests. Logan may take any of them.
    The server accepts dialed agents beside its own and shows both. A native
    wrapped agent dials the server on loopback. A container's waits for
    MultiPass's dial-in (step 2e there).
-5. **Runners and the queue.** The server's queue (SQLite), `/api/v2/runners`,
-   pairing, and Visor.app's native runner. New Session becomes an entry for a
-   runner. From here the server starts no agent itself.
+5. **Runners and the queue.** The server's queue (SQLite), the runners' poll,
+   claims, leases and updates (`/api/v2/runners`), pairing, and the runner
+   itself: `visor-runner` (Linux and macOS, in the agent image too), which
+   Visor.app runs inside as its native runner, pulling like any other. New Session becomes an entry for
+   a runner. From here the server starts no agent itself.
 6. **The client.** Sessions as one list, the Runners section, Add Runner…,
    runner settings and Remove. Computers go from the UI.
-7. **Ending and archiving.** Terminal states, `archiveWhen`, the wrapper's
-   upload of a conversation at its end, and unarchive as a start with `resume`
-   on any runner.
-8. **Agent jobs.** In Shireworks: the container agent runner and the `agent`
-   lease. In Visor: the labeled-issue workflow template, queuing an issue
-   from the UI and the MCP tool, and the lifecycle from GitHub's state
-   (linking, archiving, commenting).
-9. **What goes:** the server's own agents, the relay between servers,
-   Migrate…, Add Computer…, connection codes of servers; and the co-tenant's
-   import, then its end.
+7. **Ending, archiving, Migrate… and Backup….** Terminal states and reports
+   (progress, complete, blocked), archiving through agent and runner,
+   unarchive as a start with `resume` on the holding runner, Migrate… as a
+   copy between runners, and Backup… to a folder.
+8. **Shireworks' agent runner.** In Shireworks: the runner in the primary
+   container, its MCP for reports, stopping the stuck. In Visor: queuing an
+   issue by hand from the UI and the MCP tool. The labeled-issue workflow
+   follows once the Studio arrives.
+9. **What goes:** the server's own agents, its auth, the relay between
+   servers, Add Computer…, servers' connection codes; then the co-tenant,
+   migrated into the agent runner, and its end.
 
 MultiPass's steps (#329: 2c egress, 2d the app, 2e the dial-in relay) run beside
 these. 4's containers and 8 need 2e.
 
-## Open questions for Logan
+## Open questions
 
-- **Where a session's brain lives.** This outline puts it in the wrapped agent:
-  the server only caches and relays, as he said. The other way keeps the
-  harness in the server and makes the wrapper a pipe for the agent's input and
-  output. That makes the server less dumb, and a server restart less
-  invisible.
-- **Merging.** May an agent merge its own pull request? Today main needs a
-  code owner's review: Logan in Reviews, or a reviewing agent with merge
-  rights. "Merged" as a job's end depends on it.
-- **Opting in.** Which repositories get the workflow, and how many agent
-  sessions at once (Shireworks would start at 2)?
-- **One server per person.** Is the mini a runner of the MacBook's server, or
-  does it keep a server of its own for its own clients?
-- **Who declares a job done.** As outlined, the agent says blocked or done
-  through a tool, and the server watches GitHub for the merge. Or should the
-  server alone decide, from GitHub's state?
+Logan answered the first round, and Shireworks proposed the runner's MCP.
+Left for Logan:
+- **Resuming a blocked agent:** the `agent: blocked` label (the default), or a
+  Projects board's "Ready" column?
