@@ -292,8 +292,10 @@ Each one is its own pull request with its tests. Logan may take any of them.
 7. **Ending and archiving.** Terminal states, `archiveWhen`, the wrapper's
    upload of a conversation at its end, and unarchive as a start with `resume`
    on any runner.
-8. **Shireworks:** the container agent runner, then agent jobs, `visor-agent-host
-   job`, and the job's token from its runner.
+8. **Agent jobs.** In Shireworks: the container agent runner and the `agent`
+   lease. In Visor: the labeled-issue workflow template, queuing an issue
+   from the UI and the MCP tool, and the lifecycle from GitHub's state
+   (linking, archiving, commenting).
 9. **What goes:** the server's own agents, the relay between servers,
    Migrate…, Add Computer…, connection codes of servers; and the co-tenant's
    import, then its end.
