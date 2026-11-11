@@ -1,5 +1,6 @@
-// A runner's first word when it dials the server (docs/runners.md, "A
-// runner"), said again whenever its capacity changes.
+// What a runner says of itself with each poll (docs/runners.md, "The runner
+// protocol"): what it is, what it can take now, and the sessions it holds
+// with where each one's data lives.
 
 /// A runner saying what it is and what it can take.
 public struct RunnerHello: Codable, Hashable, Sendable {
@@ -29,9 +30,12 @@ public struct RunnerHello: Codable, Hashable, Sendable {
     public var running: Int
     /// What a queue entry may ask of it: `macbook`, `container`, `shireworks`.
     public var labels: [String]
+    /// The sessions it holds, each with where its data lives.
+    public var sessions: [String: String]
 
     public init(id: String, name: String, kind: Kind, agents: [AgentKind], capacity: Int, running: Int = 0, labels: [String] = [],
-                protocolVersion: Int = Self.protocolVersion) {
+                sessions: [String: String] = [:], protocolVersion: Int = Self.protocolVersion) {
+        self.sessions = sessions
         self.protocolVersion = protocolVersion
         self.id = id
         self.name = name
