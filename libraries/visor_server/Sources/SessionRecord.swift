@@ -360,9 +360,6 @@ public final class SessionRecord {
 
     func setPermissions(skip: Bool) { info.skipPermissions = skip; process.skipPermissions = skip }
 
-    /// The agent shim's connection waiting for the answer, by request id.
-    var approvalWaiters: [String: ClientConnection] = [:]
-
     func setPendingApproval(_ request: ApprovalRequest?) { info.pendingApproval = request }
 
     func setTitle(_ title: String) { info.title = title }

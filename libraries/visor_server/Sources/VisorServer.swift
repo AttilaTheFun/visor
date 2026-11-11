@@ -82,6 +82,10 @@ public final class VisorServer {
     /// moving here, by their plans' ids (VisorServer+Migration.swift).
     var migrationsOut: [String: OutgoingMigration] = [:]
     var migrationsIn: [String: IncomingMigration] = [:]
+    /// The agent shims' connections waiting for an approval's answer: by
+    /// session, then by request id. The server's, not the session's: a
+    /// connection is a client of this server.
+    var approvalWaiters: [String: [String: ClientConnection]] = [:]
     /// A folder for each session, and the repositories apart
     /// (VISOR_SESSIONS_DIR, VISOR_SOURCES_DIR): nil where sessions work
     /// where they are asked to.
@@ -183,12 +187,11 @@ public final class VisorServer {
     /// were all kept, read once and folded in).
     /// Tests point this at a scratch folder: a server built over the real
     /// archive ends the agents it records as orphans of a previous life.
-    static var storeRoot: URL?
-    static var storeURL: URL {
-        let base = storeRoot ?? ServerPlatform.current.host.dataDirectory
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base.appendingPathComponent("sessions.json", isDirectory: false)
+    static var storeRoot: URL? {
+        get { HostFolders.dataRoot }
+        set { HostFolders.dataRoot = newValue }
     }
+    static var storeURL: URL { HostFolders.dataFolder.appendingPathComponent("sessions.json", isDirectory: false) }
 
     /// Beside the sessions: the slash commands each agent last listed.
     static var commandsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("commands.json", isDirectory: false) }

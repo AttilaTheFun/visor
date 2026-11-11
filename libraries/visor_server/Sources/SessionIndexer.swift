@@ -134,7 +134,7 @@ actor SessionIndexer {
             parser.resume(after: store.nodes(in: sessionID).last?.key)
         } else {
             state = SourceState(path: url.path, identity: identity, bytes: 0, nextSeq: 0)
-            do { try store.resetSource(sessionID, state: state) } catch { VisorServer.log("index: reset \(self.sessionID): \(String(describing: error))") }
+            do { try store.resetSource(sessionID, state: state) } catch { ServerPlatform.current.log("index: reset \(self.sessionID): \(String(describing: error))") }
         }
         guard facts.size > state.bytes, let handle = try? FileHandle(forReadingFrom: url) else { return }
         defer { try? handle.close() }
@@ -164,14 +164,14 @@ actor SessionIndexer {
             }
             state.bytes += UInt64(last - data.startIndex + 1)
             do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch {
-                VisorServer.log("index: ingest \(self.sessionID): \(String(describing: error))")
+                ServerPlatform.current.log("index: ingest \(self.sessionID): \(String(describing: error))")
             }
             lineCount += lineRecords.count
             rowCount += rowRecords.count
             carried = Data(data[(last + 1)...])
             if piece.isEmpty { break }
         }
-        VisorServer.log("index: caught up \(self.sessionID): \(lineCount) lines, \(rowCount) rows, \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+        ServerPlatform.current.log("index: caught up \(self.sessionID): \(lineCount) lines, \(rowCount) rows, \(Int(Date().timeIntervalSince(started) * 1000)) ms")
     }
 
     /// The branch, from the tree the cache holds, and the rows to show.
@@ -190,7 +190,7 @@ actor SessionIndexer {
            let row = store.messages(in: sessionID, limit: 1, before: seq + 1).messages.last {
             newestPrompt = (other, row.text)
         }
-        do { try store.removeMessages(in: sessionID, sourceKeys: shape.abandoned) } catch { VisorServer.log("index: drop \(self.sessionID): \(String(describing: error))") }
+        do { try store.removeMessages(in: sessionID, sourceKeys: shape.abandoned) } catch { ServerPlatform.current.log("index: drop \(self.sessionID): \(String(describing: error))") }
         // One more than the window: the row before it, which a client
         // that keeps it carries its history on from.
         let page = store.messages(in: sessionID, limit: window + 1)
@@ -248,7 +248,7 @@ actor SessionIndexer {
             taken.append(Line(uuid: line.uuid, isPrompt: line.isPrompt, isMessage: line.isMessage, record: line.record, rows: rows))
         }
         state.bytes = position
-        do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { VisorServer.log("index: follow \(self.sessionID): \(String(describing: error))") }
+        do { try store.ingest(sessionID, nodes: lineRecords, messages: rowRecords, state: state) } catch { ServerPlatform.current.log("index: follow \(self.sessionID): \(String(describing: error))") }
         return taken
     }
 

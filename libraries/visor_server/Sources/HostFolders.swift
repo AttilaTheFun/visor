@@ -1,9 +1,34 @@
 import ClaudeTranscript
 import Foundation
+import Synchronization
 import VisorProtocol
 
-/// The host's folders, for the client's picker.
+/// The host's folders: the server's data and sockets, and the client's
+/// picker's.
 enum HostFolders {
+    /// The data folder, when something other than the platform's is wanted
+    /// (tests, a staging server): sessions.json, the hosts' log and the rest.
+    static var dataRoot: URL? {
+        get { root.withLock { $0 } }
+        set { root.withLock { $0 = newValue } }
+    }
+    private static let root = Mutex<URL?>(nil)
+
+    /// The data folder: `dataRoot`, else the platform's, made if it isn't
+    /// there yet.
+    static var dataFolder: URL {
+        let base = dataRoot ?? ServerPlatform.current.host.dataDirectory
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }
+
+    /// VISOR_RUNTIME_DIR, when it is set: the sockets' folder
+    /// (VisorServer+RuntimeDirectory).
+    static func runtimeDirectory(in environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
+        guard let given = environment["VISOR_RUNTIME_DIR"]?.trimmingCharacters(in: .whitespaces), !given.isEmpty else { return nil }
+        return URL(fileURLWithPath: given, isDirectory: true)
+    }
+
     /// Where the picker starts, and where a session given no folder (or
     /// "~") works: $VISOR_HOME_FOLDER when it is set, else the user's home.
     static func home(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
