@@ -300,6 +300,7 @@ extension VisorServer {
                 let container = try await makeContainer(session: id, agent: agent, folder: cwd, size: envelope.containerSize ?? .standard)
                 var info = SessionInfo(id: id, agent: agent, cwd: cwd, title: title, skipPermissions: skip, created: Date().timeIntervalSince1970)
                 info.container = container
+                info = withPermissions(info)
                 let record = SessionRecord(info: info, process: makeProcess(info, resume: nil), entries: [])
                 sessions.append(record)
                 if let client { record.subscribers.insert(ObjectIdentifier(client)) }
