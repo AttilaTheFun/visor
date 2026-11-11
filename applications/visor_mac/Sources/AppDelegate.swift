@@ -5,7 +5,6 @@
 // open: it is a menu bar app first.
 
 import AppKit
-import UpdateKit
 import SwiftUI
 import UserNotifications
 import VisorClient
@@ -23,13 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Once launched, when AppKit delivers the token to this delegate:
         // asked any earlier, the answer can go nowhere.
         if !VisorFixture.active { NSApplication.shared.registerForRemoteNotifications() }
-        // The build this is, for Applications (UpdateKit). Only
-        // written: Visor updates itself (the server's own update, which ends
-        // its agents in order), which takes Applications' updates when it
-        // registers its handler. Without the app group in the Info.plist (a
-        // build from the public source; CI's distribution builds stamp it in,
+        // Its updates from Applications, installed by Visor itself through
+        // the server's relaunch, which keeps the agents running
+        // (VisorUpdates). Without the app group in the Info.plist (a build
+        // from the public source; CI's distribution builds stamp it in,
         // tools/signing) or its container, the library does nothing.
-        AppUpdates.start(tellsOfUpdates: false)
+        VisorUpdates.start()
         Self.followWindows()
     }
 
