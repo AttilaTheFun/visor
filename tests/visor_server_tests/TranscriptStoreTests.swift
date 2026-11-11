@@ -4,6 +4,7 @@
 
 import ClaudeTranscript
 import MessageCache
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import XCTest

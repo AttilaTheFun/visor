@@ -19,7 +19,7 @@ extension SessionCatalog {
     }
 
     /// What holds the conversation `id` of a session in `cwd`.
-    static func conversationFiles(agent: AgentKind, id: String, cwd: String) -> [ConversationFile] {
+    package static func conversationFiles(agent: AgentKind, id: String, cwd: String) -> [ConversationFile] {
         let files = FileManager.default
         switch agent {
         case .claude:
@@ -52,7 +52,7 @@ extension SessionCatalog {
 
     /// Where a file the move carried goes here, for a session in `cwd`;
     /// nil for a place that would lead out of the agent's folder.
-    static func destination(of place: String, agent: AgentKind, cwd: String) -> URL? {
+    package static func destination(of place: String, agent: AgentKind, cwd: String) -> URL? {
         guard let root = agentFolder(agent), !place.isEmpty else { return nil }
         let resolved = place.replacingOccurrences(of: "{project}", with: ClaudeSessionFiles.projectDirectoryName(for: cwd))
         let parts = resolved.split(separator: "/").map(String.init)

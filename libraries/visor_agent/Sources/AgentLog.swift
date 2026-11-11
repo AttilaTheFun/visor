@@ -10,9 +10,9 @@ import Foundation
 import VisorProtocol
 
 /// Where each agent keeps a session's log, and how to read it.
-enum AgentLog {
+package enum AgentLog {
     /// The shape a log is written in: which parser reads it.
-    enum Format: Sendable {
+    package enum Format: Sendable {
         case claude, codex, openrouter
 
         func parser() -> any AgentLogParser {
@@ -24,7 +24,7 @@ enum AgentLog {
         }
     }
 
-    static func locate(agent: AgentKind, id: String, cwd: String) -> (url: URL, format: Format)? {
+    package static func locate(agent: AgentKind, id: String, cwd: String) -> (url: URL, format: Format)? {
         switch agent {
         case .claude:
             return ClaudeSessionFiles.locate(sessionID: id, cwd: cwd).map { ($0, .claude) }

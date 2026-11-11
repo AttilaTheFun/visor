@@ -9,7 +9,7 @@ import Foundation
 import VisorProtocol
 import VisorSystem
 
-struct TranscriptAssembler {
+package struct TranscriptAssembler {
     /// The assistant message being assembled, as ordered segments.
     private var assembling: (id: String, segments: [(text: String, activities: [String])])?
     /// The goal set and not yet met: Claude Code records a goal twice as
@@ -167,7 +167,7 @@ struct TranscriptAssembler {
     }
 
     /// A whole file as rows.
-    static func rows(in records: [ClaudeRecord]) -> [TranscriptEntry] {
+    package static func rows(in records: [ClaudeRecord]) -> [TranscriptEntry] {
         var assembler = TranscriptAssembler()
         var out: [TranscriptEntry] = []
         for record in records {

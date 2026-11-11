@@ -16,6 +16,7 @@
 //     <folder>/<session>/<file>        its files (backupName)
 
 import Foundation
+import VisorAgent
 import VisorProtocol
 import VisorSystem
 

@@ -8,18 +8,18 @@ import Foundation
 import VisorProtocol
 import VisorSystem
 
-enum AgentImages {
+package enum AgentImages {
     /// Where pictures live: beside the session store, so removing Visor's
     /// data directory takes them with it.
     static var directory: URL {
-        let base = ServerPlatform.current.host.dataDirectory.appendingPathComponent("images", isDirectory: true)
+        let base = SystemPlatform.current.host.dataDirectory.appendingPathComponent("images", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
 
     /// Writes base64 bytes down and returns the path, or nil if they were
     /// not bytes at all.
-    static func save(base64: String, mediaType: String?, name: String? = nil) -> String? {
+    package static func save(base64: String, mediaType: String?, name: String? = nil) -> String? {
         guard let data = Data(base64Encoded: base64), !data.isEmpty else { return nil }
         // Named by its bytes: the same picture read again from the
         // session file is the same file, not a second copy.
@@ -47,7 +47,7 @@ enum AgentImages {
     /// or was shown, wherever it is; something the user attached), base64
     /// for the wire. Whoever may ask is already let in to the computer's
     /// sessions; the size is what is limited.
-    static func read(path: String) -> String? {
+    package static func read(path: String) -> String? {
         let resolved = (path as NSString).expandingTildeInPath
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: resolved)) else { return nil }
         // A picture, not a payload: enough for a screenshot of a large
@@ -58,13 +58,13 @@ enum AgentImages {
 
     /// A picture's size in pixels, read from its header — the bytes are
     /// not decoded. Nil for a file that is not there or not a picture.
-    static func pixelSize(path: String) -> ImageSize? {
-        ServerPlatform.current.images.pixelSize(path: (path as NSString).expandingTildeInPath)
+    package static func pixelSize(path: String) -> ImageSize? {
+        SystemPlatform.current.images.pixelSize(path: (path as NSString).expandingTildeInPath)
     }
 
     /// Sizes for a row's pictures, in order; stops at the first one that
     /// cannot be read, so the list is always a prefix of `images`.
-    static func pixelSizes(paths: [String]) -> [ImageSize] {
+    package static func pixelSizes(paths: [String]) -> [ImageSize] {
         var sizes: [ImageSize] = []
         for path in paths {
             guard let size = pixelSize(path: path) else { break }

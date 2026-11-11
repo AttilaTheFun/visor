@@ -4,6 +4,7 @@
 import ClaudeTranscript
 import Foundation
 import MessageCache
+import VisorAgent
 import VisorProtocol
 
 extension SessionRecord {

@@ -5,6 +5,7 @@
 // them and the session started on the same conversation.
 
 import Foundation
+import VisorAgent
 import VisorProtocol
 import VisorSystem
 

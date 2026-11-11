@@ -3,6 +3,7 @@
 // the end of the file — not the words at its start, which may be a hook's
 // notice rather than anything the user said.
 
+@testable import VisorAgent
 @testable import VisorServer
 import XCTest
 

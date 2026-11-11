@@ -4,6 +4,7 @@
 import ClaudeTranscript
 import MessageCache
 import Foundation
+import VisorAgent
 import VisorProtocol
 import VisorSystem
 

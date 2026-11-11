@@ -6,7 +6,6 @@
 // path); a finished one goes on as a session of its own, its thread resumed.
 
 import Foundation
-import VisorAgent
 import VisorProtocol
 
 extension CodexHarness {
