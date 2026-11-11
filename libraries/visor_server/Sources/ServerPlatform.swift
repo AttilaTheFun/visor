@@ -2,11 +2,13 @@
 // by the binary that runs it: the menu bar app on a Mac, the command-line
 // server on Linux or Windows. Everything else the server does is the same
 // everywhere, and this library asks nothing of the system except through
-// what is given here.
+// what is given here. The pieces the code below the server shares
+// (VisorSystem) are its SystemPlatform, installed with it.
 
 import ClaudeTranscript
 import Foundation
 import Synchronization
+import VisorSystem
 
 public struct ServerPlatform: Sendable {
     /// Listening on loopback, and the connections that arrive.
@@ -55,15 +57,29 @@ public struct ServerPlatform: Sendable {
         self.log = log
     }
 
+    /// The pieces of it the code below the server takes (VisorSystem).
+    public var system: SystemPlatform {
+        SystemPlatform(tools: tools, processes: processes, host: host, images: images, files: files, agentHosts: agentHosts,
+                       log: log)
+    }
+
     private static let given = Mutex<ServerPlatform?>(nil)
 
     /// The platform the binary gave. Asking before one was given is a
-    /// mistake in the binary, and stops it.
+    /// mistake in the binary, and stops it. Giving one gives its pieces to
+    /// SystemPlatform.current too, so the two never differ.
     public static var current: ServerPlatform {
         get {
             guard let platform = given.withLock({ $0 }) else { fatalError("The server was used before ServerPlatform.current was set") }
             return platform
         }
-        set { given.withLock { $0 = newValue } }
+        set {
+            // Under the server's lock, so two givings can't leave the two
+            // platforms differing.
+            given.withLock {
+                $0 = newValue
+                SystemPlatform.current = newValue.system
+            }
+        }
     }
 }

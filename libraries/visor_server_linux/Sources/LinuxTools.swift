@@ -1,6 +1,7 @@
 import Foundation
 import VisorServer
 import VisorServerPOSIX
+import VisorSystem
 
 /// Where a Linux user's tools are: their own bin directories and npm's
 /// before the system's, and the login shell asked about the rest.

@@ -19,6 +19,7 @@ swift_library(
         "//:foundation",
         ":visor_posix_c",
         "//libraries/visor_server",
+        "//libraries/visor_system",
     ],
 )
 

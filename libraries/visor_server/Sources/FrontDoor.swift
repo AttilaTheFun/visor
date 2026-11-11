@@ -7,6 +7,7 @@
 // read once); what it hands on is a stream of its own that forwards.
 
 import Foundation
+import VisorSystem
 
 @MainActor
 final class FrontDoor {

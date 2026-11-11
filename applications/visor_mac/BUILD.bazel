@@ -52,6 +52,7 @@ swift_library(
         "//libraries/visor_server",
         "//libraries/visor_server_apple",
         "//libraries/visor_services",
+        "//libraries/visor_system",
         "//libraries/visor_ui",
     ],
 )

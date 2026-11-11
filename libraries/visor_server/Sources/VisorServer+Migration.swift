@@ -11,6 +11,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     /// How much of a file one read gives.

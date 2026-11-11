@@ -4,6 +4,7 @@ import VisorServer
 import VisorServerApple
 import VisorServerCLI
 import VisorServerPOSIX
+import VisorSystem
 
 /// The command-line server on a Mac, without the menu bar app: its data
 /// in ~/Library/Application Support/visor-server (or VISOR_DATA_DIR, for a

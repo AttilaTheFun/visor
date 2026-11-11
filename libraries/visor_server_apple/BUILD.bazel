@@ -19,5 +19,6 @@ swift_library(
         "//libraries/visor_protocol",
         "//libraries/visor_server",
         "//libraries/visor_server_posix",
+        "//libraries/visor_system",
     ],
 )

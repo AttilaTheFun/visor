@@ -2,6 +2,7 @@ import ClaudeTranscript
 import Foundation
 import VisorServer
 import VisorServerCLI
+import VisorSystem
 import WinSDK
 
 /// The command-line server on Windows: its folder in Local AppData, a

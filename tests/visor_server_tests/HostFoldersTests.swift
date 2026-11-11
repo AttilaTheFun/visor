@@ -4,6 +4,7 @@
 
 import Foundation
 @testable import VisorServer
+import VisorSystem
 import XCTest
 
 final class HostFoldersTests: XCTestCase {

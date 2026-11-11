@@ -3,6 +3,9 @@
 // server writes it into its data directory and points the agents at that
 // file (VisorMCP.swift).
 
+import VisorSystem
+
+
 enum VisorMCPScript {
     static let source = #"""
 // Visor's MCP server, run by every agent session the menu bar app starts.

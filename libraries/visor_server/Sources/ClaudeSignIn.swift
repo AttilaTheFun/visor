@@ -5,6 +5,7 @@
 // page on whatever device they are on and sends the code from there.
 
 import Foundation
+import VisorSystem
 
 @MainActor
 final class ClaudeSignIn {

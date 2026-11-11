@@ -1,6 +1,7 @@
 import CVisorPOSIX
 import Foundation
 import VisorServer
+import VisorSystem
 
 /// Agents' hosts on a POSIX system: the host program (visor-agent-host),
 /// and the socket file each listens at, reached as a Unix domain socket.

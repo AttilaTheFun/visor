@@ -1,6 +1,7 @@
 import CVisorPOSIX
 import Foundation
 import VisorServer
+import VisorSystem
 
 /// A connection as the server sees it: what arrives, read on a thread of
 /// its own and handed over on the main actor in order; what is sent,

@@ -6,6 +6,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     /// What `/login` and its options are, when the words are that: the

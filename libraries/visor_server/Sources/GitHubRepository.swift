@@ -3,6 +3,7 @@
 // what a session may ask for by it).
 
 import Foundation
+import VisorSystem
 
 enum GitHubRepository {
     /// The folder's `origin` (else its first remote), as owner/name; nil

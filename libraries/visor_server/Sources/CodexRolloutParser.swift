@@ -1,6 +1,7 @@
 import ClaudeTranscript
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 /// Codex's rollout: `response_item`s are the conversation — the user's and
 /// the assistant's messages, tool calls and their outputs; everything else

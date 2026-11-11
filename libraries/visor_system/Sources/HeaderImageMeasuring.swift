@@ -19,7 +19,7 @@ public struct HeaderImageMeasuring: ImageMeasuring {
         return Self.measure([UInt8](data))
     }
 
-    static func measure(_ bytes: [UInt8]) -> ImageSize? {
+    package static func measure(_ bytes: [UInt8]) -> ImageSize? {
         if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return png(bytes) }
         if bytes.starts(with: Array("GIF8".utf8)) { return gif(bytes) }
         if bytes.starts(with: Array("RIFF".utf8)), Array(bytes[8..<12]) == Array("WEBP".utf8) { return webp(bytes) }

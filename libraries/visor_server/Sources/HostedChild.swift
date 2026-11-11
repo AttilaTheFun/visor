@@ -8,6 +8,7 @@
 
 import AgentHostWire
 import Foundation
+import VisorSystem
 
 @MainActor
 final class HostedChild: AgentChild {

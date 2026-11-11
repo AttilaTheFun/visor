@@ -71,7 +71,11 @@ request's commits. A rule that matters and can be checked goes there too.
   protocol in its `ServerPlatform`, implemented per system
   (libraries/visor_server_apple, …_posix, …_linux, …_windows) and given
   by the binary that runs it. A new need of the system is a new member
-  there, never an `#if os(…)`.
+  there, never an `#if os(…)`. The same holds for libraries/visor_system,
+  below it (the tools, processes, folders and this computer the server and
+  the agents' code share): its `SystemPlatform` is the part of
+  `ServerPlatform` it needs, installed whenever `ServerPlatform.current`
+  is set.
 - Apple-only SwiftUI (swipe actions, context menus, item sheets,
   SecureField) goes through libraries/visor_ui/Sources/Compat.swift.
   Views that touch the @MainActor models are marked @MainActor. AgentUI's

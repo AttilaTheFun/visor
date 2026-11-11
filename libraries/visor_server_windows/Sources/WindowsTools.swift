@@ -1,5 +1,6 @@
 import Foundation
 import VisorServer
+import VisorSystem
 
 /// Where a Windows user's tools are: their own bin directory, npm's, the
 /// usual install places; `where` asked about the rest. A tool that is a

@@ -3,6 +3,7 @@ import os
 import VisorProtocol
 import VisorServer
 import VisorServerPOSIX
+import VisorSystem
 
 extension ServerPlatform {
     /// A Mac's, for the menu bar app (and the staging server): the Network

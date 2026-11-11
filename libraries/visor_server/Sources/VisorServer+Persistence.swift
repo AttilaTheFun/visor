@@ -5,6 +5,7 @@ import ClaudeTranscript
 import MessageCache
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     /// Which sessions this launch carries on with. Whatever was running

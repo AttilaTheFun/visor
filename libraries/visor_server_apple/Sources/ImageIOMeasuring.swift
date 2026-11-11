@@ -2,6 +2,7 @@ import Foundation
 import ImageIO
 import VisorProtocol
 import VisorServer
+import VisorSystem
 
 /// Pictures' sizes from ImageIO, which reads every format the system
 /// knows, from the header alone.

@@ -8,6 +8,7 @@ import ClaudeTranscript
 import Foundation
 import MessageCache
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     /// Listens once there is a password (or nothing is asked); without

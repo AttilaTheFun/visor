@@ -69,6 +69,11 @@ progress.
   the same on every system and asks the system for nothing except
   through the `ServerPlatform` it is given: sockets, process signals,
   secrets, pushes, picture headers, file watching, tool paths.
+- **libraries/visor_system** — what the server and the agents' code below
+  it share: the agents' tools and the commands run, processes by id,
+  this computer and its folders, pictures' sizes, a connection's bytes,
+  the agents' hosts. Its `SystemPlatform` is the part of the server's
+  `ServerPlatform` it needs, installed with it.
 - **libraries/visor_server_apple**, **…_posix** — the Mac's platform (the
   Network framework, the keychain, CryptoKit, ImageIO) and what macOS and
   Linux share (signals and sockets, through a small C shim).

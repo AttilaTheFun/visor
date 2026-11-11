@@ -6,6 +6,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 enum AgentImages {
     /// Where pictures live: beside the session store, so removing Visor's

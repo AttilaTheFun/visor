@@ -1,6 +1,7 @@
 import CVisorPOSIX
 import Foundation
 import VisorServer
+import VisorSystem
 
 /// Signals by process id, as POSIX systems send them.
 public struct POSIXProcessSignals: ProcessSignals {

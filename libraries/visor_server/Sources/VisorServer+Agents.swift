@@ -5,6 +5,7 @@ import ClaudeTranscript
 import MessageCache
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     func makeProcess(_ info: SessionInfo, resume: String?) -> AgentProcess {

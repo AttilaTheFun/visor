@@ -2,6 +2,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 /// One client's WebSocket.
 @MainActor

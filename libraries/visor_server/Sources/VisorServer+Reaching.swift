@@ -6,6 +6,7 @@
 
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     public static var settingsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("settings.json", isDirectory: false) }

@@ -5,6 +5,7 @@ import ClaudeTranscript
 import MessageCache
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 extension VisorServer {
     /// What a client that asks for a session in a container of its own, or

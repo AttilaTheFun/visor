@@ -8,6 +8,7 @@
 import ClaudeTranscript
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 enum SessionCatalog {
     /// The newest sessions of `agent` started in `cwd` (or anywhere when empty).

@@ -8,6 +8,7 @@
 
 import Foundation
 import Synchronization
+import VisorSystem
 
 enum VisorMCP {
     /// Where the script was written this run, once it has been.

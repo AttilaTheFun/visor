@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import VisorServer
+import VisorSystem
 
 /// One Network framework connection's bytes, on the main queue.
 @MainActor

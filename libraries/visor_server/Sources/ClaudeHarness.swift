@@ -2,6 +2,7 @@ import ClaudeTranscript
 import Foundation
 import Synchronization
 import VisorProtocol
+import VisorSystem
 
 /// Claude Code, and anything that speaks its stream-json protocol under
 /// another tool name (Ori).

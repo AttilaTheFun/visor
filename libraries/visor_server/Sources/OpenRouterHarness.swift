@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import VisorProtocol
+import VisorSystem
 
 /// OpenRouter through the `openrouter` CLI (github.com/AttilaTheFun/
 /// open_router_cli), which speaks Claude Code's stream-json protocol: it

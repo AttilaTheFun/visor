@@ -15,5 +15,6 @@ swift_library(
         "//:foundation",
         "//libraries/visor_protocol",
         "//libraries/visor_server",
+        "//libraries/visor_system",
     ],
 )

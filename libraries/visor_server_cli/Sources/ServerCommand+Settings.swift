@@ -4,6 +4,7 @@
 import Foundation
 import VisorProtocol
 import VisorServer
+import VisorSystem
 
 extension ServerCommand {
     /// Whether it is running, and where clients reach it.

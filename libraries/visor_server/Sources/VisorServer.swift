@@ -9,6 +9,7 @@ import Foundation
 import MessageCache
 import Observation
 import VisorProtocol
+import VisorSystem
 
 @MainActor
 @Observable

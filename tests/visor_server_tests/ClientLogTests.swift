@@ -4,6 +4,7 @@
 import Foundation
 import VisorProtocol
 @testable import VisorServer
+import VisorSystem
 import XCTest
 
 /// A connection that goes nowhere.

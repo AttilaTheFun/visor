@@ -1,5 +1,6 @@
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 /// What a line from the app server says, as far as the server cares: read
 /// off the main actor.

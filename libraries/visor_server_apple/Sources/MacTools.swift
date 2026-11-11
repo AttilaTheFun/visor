@@ -1,6 +1,7 @@
 import Foundation
 import VisorServer
 import VisorServerPOSIX
+import VisorSystem
 
 /// Where a Mac's developer tools are. An app started at login has none of
 /// the developer directories on its PATH: Homebrew's and the user's own are

@@ -2,6 +2,7 @@ import CVisorPOSIX
 import Foundation
 import Synchronization
 import VisorServer
+import VisorSystem
 
 /// A listening socket, accepted on by a thread of its own.
 @MainActor

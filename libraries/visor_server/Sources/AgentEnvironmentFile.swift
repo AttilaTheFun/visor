@@ -1,5 +1,6 @@
 import Foundation
 import VisorProtocol
+import VisorSystem
 
 /// What a kind of agent's sessions are given besides Visor's own: the lines
 /// of `agents/<kind>.env` in the server's data folder (`KEY=VALUE`; `#`
