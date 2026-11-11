@@ -5,7 +5,8 @@
 // client chooses, its conversation under that folder's project and its
 // Claude memory with it, never over a memory already there; and its
 // repositories go to the sources by name (VISOR_SOURCES_DIR), a folder
-// that isn't one staying behind.
+// that isn't one staying behind, each cloned from its remote and never
+// copied: a session whose checkout has what its remote doesn't is refused.
 
 import ClaudeTranscript
 import Foundation
@@ -47,14 +48,20 @@ final class SessionFoldersTests: ServerTestCase {
         ClaudeSessionFiles.projectsRoot(home: home).appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd), isDirectory: true)
     }
 
-    /// A repository with one commit.
+    /// A repository with one commit, pushed to a remote of its own (a bare
+    /// repository beside it), so it has nothing its remote doesn't.
     private func repository(_ name: String) async throws -> URL {
         let folder = home.appendingPathComponent("Developer/\(name)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try Data("let a = 1\n".utf8).write(to: folder.appendingPathComponent("main.swift"))
-        _ = await ProjectSurvey.git(["init", "-q"], in: folder.path)
+        _ = await ProjectSurvey.git(["init", "-q", "-b", "main"], in: folder.path)
         _ = await ProjectSurvey.git(["add", "."], in: folder.path)
         _ = await ProjectSurvey.git(["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "First"], in: folder.path)
+        let remote = root.appendingPathComponent("remotes/\(name).git").path
+        try FileManager.default.createDirectory(atPath: remote, withIntermediateDirectories: true)
+        _ = await ProjectSurvey.git(["init", "-q", "--bare"], in: remote)
+        _ = await ProjectSurvey.git(["remote", "add", "origin", remote], in: folder.path)
+        _ = await ProjectSurvey.git(["push", "-q", "-u", "origin", "main"], in: folder.path)
         return folder
     }
 
@@ -172,6 +179,60 @@ final class SessionFoldersTests: ServerTestCase {
         let (_, plan) = try await offerAndPlan(cwd: plain.path)
         XCTAssertTrue(plan.steps.isEmpty, "\(plan.steps)")
         XCTAssertTrue(plan.cwd.hasPrefix(sessions + "/Claude/"))
+    }
+
+    func testASessionWhoseCheckoutHasWhatItsRemoteDoesntIsRefused() async throws {
+        let app = try await repository("app")
+        try conversationAndMemory(cwd: app.path)
+        // An untracked file (a .env) is never carried into the sources.
+        try Data("SECRET=1\n".utf8).write(to: app.appendingPathComponent(".env"))
+        let info = SessionInfo(id: "S", agent: .claude, cwd: app.path, title: "Moving", created: 0)
+        server.sessions = [SessionRecord(info: info, process: ClaudeProcess(cwd: app.path, skipPermissions: true, resume: conversation))]
+        var ask = Envelope(type: "migration")
+        ask.session = "S"
+        let offered = await server.migrationOffer(ask)
+        let offer = try XCTUnwrap(offered.offer, offered.message ?? "no offer")
+        server.sessionFolders = SessionFolders(sessions: sessions, sources: sources)
+        var planning = Envelope(type: "migration")
+        planning.offer = offer
+        let planned = await server.migrationPlan(planning)
+        XCTAssertNil(planned.plan)
+        XCTAssertTrue(planned.message?.contains("commit and push it") == true, planned.message ?? "")
+    }
+
+    func testNothingIsCopiedIntoTheSources() async throws {
+        let app = try await repository("app")
+        try conversationAndMemory(cwd: app.path)
+        let (_, plan) = try await offerAndPlan(cwd: app.path)
+        XCTAssertEqual(plan.steps.map(\.action), [.clone])
+        var unpacking = Envelope(type: "migration")
+        unpacking.migration = plan.id
+        unpacking.file = MigrationFile(id: "project-0", place: "", size: 0, packed: true)
+        unpacking.steps = plan.steps
+        let refused = await server.migrationUnpack(unpacking)
+        XCTAssertEqual(refused.type, "error")
+        XCTAssertTrue(refused.message?.contains("never copied") == true, refused.message ?? "")
+    }
+
+    func testARepositoryComesIntoTheSourcesAsAFreshCloneOfItsRemote() async throws {
+        let app = try await repository("app")
+        try conversationAndMemory(cwd: app.path)
+        let (_, plan) = try await offerAndPlan(cwd: app.path)
+        var cloning = Envelope(type: "migration")
+        cloning.migration = plan.id
+        cloning.steps = plan.steps
+        let cloned = await server.migrationClone(cloning)
+        XCTAssertNotEqual(cloned.type, "error", cloned.message ?? "")
+        let clone = URL(fileURLWithPath: sources + "/app", isDirectory: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: clone.appendingPathComponent("main.swift").path))
+        let branch = await ProjectSurvey.git(["rev-parse", "--abbrev-ref", "HEAD"], in: clone.path)
+        XCTAssertEqual(branch, "main", "the session's branch")
+    }
+
+    func testGitHubOverSSHIsClonedOverHTTPS() {
+        XCTAssertEqual(VisorServer.overHTTPS("git@github.com:AttilaTheFun/visor.git"), "https://github.com/AttilaTheFun/visor.git")
+        XCTAssertEqual(VisorServer.overHTTPS("ssh://git@github.com/AttilaTheFun/visor"), "https://github.com/AttilaTheFun/visor")
+        XCTAssertEqual(VisorServer.overHTTPS("https://github.com/AttilaTheFun/visor.git"), "https://github.com/AttilaTheFun/visor.git")
     }
 
     func testAMemoryAlreadyThereIsNeverOverwritten() async throws {
