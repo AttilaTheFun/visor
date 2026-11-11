@@ -7,6 +7,13 @@ plain HTTP server on one port, with no authentication of its own, reached
 only through MultiPass. Visor 0.49 is the small release before it (isomer
 0.50, Shireworks' Visor tab); this is the 0.50 line.
 
+**11 Nov, later:** Logan's model of agents, runners and a server that only
+relays (docs/runners.md) replaces this design's server that runs agents:
+wrapped agents and runners dial in through MultiPass, and nothing reaches into
+a container. MultiPass, its paths, sign-in, egress proxy and DNS stay as
+below; the server's contract, Containers and Steps here are superseded where
+runners.md says so.
+
 ## At a glance
 
 Every client reaches every server through MultiPass, which signs people in,
