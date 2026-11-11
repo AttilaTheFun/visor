@@ -12,6 +12,8 @@ import Foundation
 ///   VISOR_PROXY             --proxy (where its pushes and MCP servers go)
 ///   VISOR_PROXY_TOKEN_FILE  --proxy-token-file (its token for the proxy)
 ///   VISOR_MCP               --mcp (the proxy's MCP servers to pass on)
+///   VISOR_SESSIONS_DIR      --sessions-dir (a folder for each session there)
+///   VISOR_SOURCES_DIR       --sources-dir (where moved sessions' repositories go)
 struct ServerOptions: Sendable {
     var port: UInt16?
     /// The file it logs to; the terminal when nil.
@@ -33,6 +35,10 @@ struct ServerOptions: Sendable {
     var proxy: String?
     var proxyToken: String?
     var mcp: [String] = []
+    /// A folder for each session under `sessionsDir`, and the repositories
+    /// under `sourcesDir` (SessionFolders).
+    var sessionsDir: String?
+    var sourcesDir: String?
     /// The files the password and the proxy's token were read from: passed
     /// on to a run started from this one in place of the values, which go
     /// on no command line.
@@ -64,6 +70,8 @@ struct ServerOptions: Sendable {
             case "--proxy": proxy = value
             case "--proxy-token-file": proxyToken = try Self.read(value, for: flag); proxyTokenFile = value
             case "--mcp": mcp = Self.names(value)
+            case "--sessions-dir": sessionsDir = try Self.folder(value, for: flag)
+            case "--sources-dir": sourcesDir = try Self.folder(value, for: flag)
             case "--auth", "--lan", "--vpn", "--ssh", "--address", "--standalone", "--front", "--keep-messages",
                  "--container-host", "--container-image":
                 settings.append((String(flag.dropFirst(2)), value))
@@ -88,6 +96,14 @@ struct ServerOptions: Sendable {
         if let value = given("VISOR_PROXY") { proxy = value }
         if let value = given("VISOR_PROXY_TOKEN_FILE") { proxyToken = try Self.read(value, for: "VISOR_PROXY_TOKEN_FILE"); proxyTokenFile = value }
         if let value = given("VISOR_MCP") { mcp = Self.names(value) }
+        if let value = given("VISOR_SESSIONS_DIR") { sessionsDir = try Self.folder(value, for: "VISOR_SESSIONS_DIR") }
+        if let value = given("VISOR_SOURCES_DIR") { sourcesDir = try Self.folder(value, for: "VISOR_SOURCES_DIR") }
+    }
+
+    /// A folder's full path.
+    static func folder(_ value: String, for name: String) throws(CommandLineError) -> String {
+        guard value.hasPrefix("/") else { throw .usage("\(name) takes a folder's full path") }
+        return value
     }
 
     /// `all` (or an address that is every interface's): the LAN and a VPN
@@ -126,6 +142,8 @@ struct ServerOptions: Sendable {
         if let proxy { out += ["--proxy", proxy] }
         if let proxyTokenFile { out += ["--proxy-token-file", proxyTokenFile] }
         if !mcp.isEmpty { out += ["--mcp", mcp.joined(separator: ",")] }
+        if let sessionsDir { out += ["--sessions-dir", sessionsDir] }
+        if let sourcesDir { out += ["--sources-dir", sourcesDir] }
         return out
     }
 }
