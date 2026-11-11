@@ -34,6 +34,16 @@ extension VisorServer {
             guard let mapped = here(offer.session.cwd) else { return .error(Self.notShared(offer.session.cwd, shared: shared ?? [])) }
             cwd = mapped
         }
+        // Where repositories are kept apart (VISOR_SOURCES_DIR), each is a
+        // fresh clone from its remote, never a copy of a working tree (Logan,
+        // 11 Nov: no .env or other untracked file carried across). The
+        // session's own checkout must have nothing its remote doesn't, or
+        // the move is refused; another such project stays behind.
+        let clonesOnly = folders?.sources != nil
+        if clonesOnly, let own = offer.projects.first, own.isRepository, let problem = Self.notClonable(own) {
+            return .error("\(own.path) \(problem): commit and push it, then move the session again. "
+                + "Repositories here are cloned from GitHub, never copied.")
+        }
         let most = offer.projects.dropFirst().map(\.mentions).max() ?? 0
         var steps: [MigrationStep] = []
         for (index, project) in offer.projects.enumerated() {
@@ -41,7 +51,8 @@ extension VisorServer {
             // computer shares with it) stays behind.
             let place: String?
             if let folders {
-                place = folders.sources == nil ? here(project.path) : (project.isRepository ? folders.source(for: project.path) : nil)
+                place = folders.sources == nil ? here(project.path)
+                    : (project.isRepository && Self.notClonable(project) == nil ? folders.source(for: project.path) : nil)
             } else {
                 place = here(project.path)
             }
@@ -136,7 +147,10 @@ extension VisorServer {
         let git = ToolPath.resolve("git") ?? "/usr/bin/git"
         var arguments = ["clone"]
         if let branch = project.branch { arguments += ["--branch", branch] }
-        guard let result = await Command.output(git, arguments + [remote, planned.path], environment: ToolPath.environment(), errors: true) else {
+        // Into the sources, GitHub over HTTPS (the proxy's way, with no SSH
+        // key here) for a remote named for SSH.
+        let source = sessionFolders?.sources == nil ? remote : Self.overHTTPS(remote)
+        guard let result = await Command.output(git, arguments + [source, planned.path], environment: ToolPath.environment(), errors: true) else {
             return .error("git could not be started")
         }
         guard result.status == 0 else {
@@ -152,6 +166,10 @@ extension VisorServer {
         guard let id = body.migration, let move = migrationsIn[id] else { return .error("That move has ended; start it again.") }
         guard let step = body.steps?.first, let planned = move.plan.steps.first(where: { $0.path == step.path }),
               let file = body.file?.id, !file.contains("/") else { return .error("That project is not one to copy.") }
+        // Repositories in the sources are clones from GitHub, never copies.
+        if let sources = sessionFolders?.sources, planned.path == sources || planned.path.hasPrefix(sources + "/") {
+            return .error("\(planned.path) is cloned from GitHub here, never copied: push it, then move the session again.")
+        }
         let archive = move.folder.appendingPathComponent(file, isDirectory: false)
         let target = URL(fileURLWithPath: planned.path, isDirectory: true)
         if let inside = try? FileManager.default.contentsOfDirectory(atPath: target.path), !inside.isEmpty {
