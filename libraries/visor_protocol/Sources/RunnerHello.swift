@@ -3,11 +3,14 @@
 
 /// A runner saying what it is and what it can take.
 public struct RunnerHello: Codable, Hashable, Sendable {
-    /// Where its agents run: processes on its computer (Visor.app's own) or
-    /// a container (Shireworks' agent runner, in its primary container).
+    /// Where its agents run: processes on its computer (Visor.app's own), a
+    /// Linux container (Shireworks' container agent runner, in its primary
+    /// container), or a macOS VM (Shireworks' macOS VM agent runner, with
+    /// Xcode).
     public enum Kind: String, Codable, Hashable, Sendable {
         case native
         case container
+        case vm
     }
 
     public var id: String
