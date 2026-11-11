@@ -98,6 +98,10 @@ public struct ServerCommand {
           --keep-messages on|off
           --container-host <command>|-  --container-image <name>|-
         In its environment:
+          VISOR_RUNTIME_DIR=<folder>
+                       Its sockets (the SSH socket, each agent host's) there,
+                       not in the home: a home that can't hold a socket, such
+                       as a folder shared into a container.
           VISOR_IN_CONTAINER=1
                        This server runs in a container, its agents with it
                        (a co-tenant container): its sessions say so, and
