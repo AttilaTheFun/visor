@@ -123,23 +123,41 @@ able to implement a runner in a few hundred lines. The session's logic, its
 transcripts and approvals, and talking to clients are the wrapper's
 (`visor-agent-host`) and the server's, never a runner's.
 
+**Runners pull, like GitHub's CI runners** (Logan, 11 Nov: "I don't want the
+server to 'push' sessions to the runner, I want the runner to 'pull' sessions
+from the server like a github ci runner"). The server never calls a runner.
+A runner only ever connects out, which also suits MultiPass's outbound-only
+containers. A runner that's busy, with CI say, just doesn't ask for work, and
+the session waits, queued.
+
 **What a runner does, all of it:**
 1. **Pair:** once, with the code from Add Runner….
-2. **Hello:** `{type: "runner", protocol: 2, id, name, kind, agents,
-   capacity, labels}`, said again when its capacity changes.
-3. **Start:** take a start (`{session, agentToken, agent, …}`) and launch
-   `visor-agent-host` for it, given the session's id and how to dial in (the
-   dial URL and the agent token). Answer `started`, with where the session's
-   data lives, or `failed`, with why.
-4. **Its sessions:** the sessions it holds and where each one's data is, in its
-   hello and when they change.
-5. **On request:**
-   - archive a session: stop its wrapper if it runs, and keep its data;
-   - copy a session's data out, as one archive, for Migrate… and Backup…;
-   - start a session from data copied in (a Migrate…'s other end);
-   - delete a session's data.
+2. **Poll for work** when it has room, by its own judgement:
+   `POST /api/v2/runners/poll`, a long poll whose body is its hello
+   (`RunnerHello`: `protocol: 2`, id, name, kind, agents, capacity, labels,
+   and the sessions it holds with where each one's data is). The answer is a
+   job it has now claimed (`RunnerClaim`: the queue entry, a lease and its
+   expiry, and for a start the agent's one-time token), or nothing after the
+   poll's wait.
+3. **Do the job, and say how it went** (`RunnerUpdate`, `POST
+   /api/v2/runners/update`). It renews the lease while it works, then says
+   `started` or `done` (with where the session's data now lives), or `failed`
+   (with why). The jobs:
+   - `start`: launch `visor-agent-host` with the session's id, the dial URL and
+     the agent token;
+   - `archive`: stop the session's wrapper if it runs, and keep its data;
+   - `copyOut`: send the session's data to the server as one archive (`PUT
+     /api/v2/runners/jobs/<entry>/data`), for Migrate… or Backup…;
+   - `startFromCopy`: fetch the archive (`GET` the same) and start the
+     session from it, Migrate…'s other end;
+   - `delete`: remove the session's data.
+4. **The lease:** a claim lasts a minute, and each renew another. If a runner
+   dies and its lease lapses, the entry goes back to the queue for the next
+   poll. A runner whose update names a lapsed lease is told so and drops the
+   job.
 
-That's the whole protocol for a runner.
+That's the whole protocol for a runner. Polls, claims and updates are plain
+HTTP requests out from the runner.
 
 **Optional, a runner's own:** an MCP its agents report to (Shireworks' agent
 runner, for agent jobs: progress, complete, blocked; below). A runner without
@@ -253,55 +271,51 @@ is the same.
 
 ### A runner (`/api/v2/runners`)
 
-1. **Pairing.** Add Runner… on a client shows a pairing code (like a
-   connection code). The runner is given the code once and trades it, through
-   MultiPass, for a runner token that MultiPass keeps. Visor.app's native
-   runner pairs itself with its own server.
-2. **Hello.** `{type: "runner", id, name, kind: native | container, agents:
-   [claude, codex], capacity, labels, repositories}`.
-   - `capacity`: how many agents at once.
-   - `labels`: for example `macbook`, `container`, `shireworks`.
-3. **Starts, server to runner.** `{type: "start", session, agentToken, agent,
-   repository?, branch?, cwd?, prompt?, title, links, resume?}`.
-   - `session`: a new id, or an archived session's, to resume.
-   - `resume`: the agent's conversation id, and where its files are (below).
-   - `agentToken`: a one-time token for that session's agent, which the
-     server asks of MultiPass for the start. MultiPass alone checks it, when
-     the agent dials.
-
-   The runner launches `visor-agent-host` with the token. It answers
-   `started` or `failed` with why. A start carries no sign-in: the agent gets
-   its sign-ins (its kind's `agents/<kind>.env` on the server) over its own
-   dial connection, once it has said hello with its token. They never pass
-   through a runner, and a container never keeps them at rest (Shireworks, 11
-   Nov).
-4. **Capacity and health.** The runner says what it is running, and the server
-   shows it in the runner's row.
+Pull only, as "The runner protocol" sets out: `poll` (a long poll carrying its
+hello, answered with a claim or nothing), `update` (renew, started, done,
+failed), and a job's data (`PUT`/`GET /api/v2/runners/jobs/<entry>/data`) for
+copies. Pairing gives MultiPass the runner's identity, and MultiPass names it
+on each request (`X-Visor-Caller: runner:<id>`). A start's agent token is one
+the server asks of MultiPass when the entry is claimed. A start carries no
+sign-in: the agent gets its sign-ins (its kind's `agents/<kind>.env` on the
+server) over its own dial connection, once it has said hello. They never pass
+through a runner, and a container never keeps them at rest (Shireworks, 11
+Nov).
 
 ### A client
 
 As today: the REST and WebSocket of docs/protocol.md, with the server's cached
 state for reads and relayed actions for writes. New for clients:
-- `runners`: the list, with each runner's settings and Remove;
+- `runners`: the list, each with its last poll, capacity and sessions, its
+  settings and Remove;
 - `pair`: a pairing code for Add Runner…;
-- `start`: now an entry in the queue, naming a runner or labels.
+- `start`: an entry in the queue, naming a runner or labels. The session shows
+  as queued until a runner claims it, perhaps for a while, and the client can
+  cancel it while it waits;
+- archive, Migrate… and Backup…: entries in the queue too, for the runner that
+  holds the session.
 
 ## The queue
 
-A start is an entry, kept by the server in its SQLite store (swift_sql):
-- `id`, which becomes the session's id;
-- `agent`, `title`, `prompt`;
-- `repository` and `branch`, or `cwd` for a native runner;
-- `runner`, or `labels` to match one;
-- `links`;
-- `archiveWhen` (below);
-- `createdBy`, and `state` (`waiting`, `starting`, `running`, `failed`).
+Every job is an entry (`QueueEntry`), kept by the server in its SQLite store
+(swift_sql):
+- `id`, `kind` (`start`, `archive`, `copyOut`, `startFromCopy`, `delete`) and
+  the `session` it's for;
+- for a start: `agent`, `title`, `prompt`, `repository` and `branch` or `cwd`,
+  `resume`, `links`, `archiveWhen`;
+- for startFromCopy, the copyOut entry it starts from (`copyFrom`);
+- `runner`, or `labels` to match one. A job about an existing session names
+  the runner that holds it;
+- `createdBy`, `created`;
+- `state` (`waiting`, `claimed`, `done`, `failed`, `cancelled`), with
+  `claimedBy` and `leaseExpires` while claimed.
 
-The server gives each entry to the first connected runner that matches it and
-has room, oldest first. A client's New Session is one such entry for the
-runner chosen, the Mac's own by default. The entry is done when its agent says
-hello. An entry no runner takes waits, and the client shows that it waits and
-why.
+A runner's poll claims the oldest waiting entry it may take
+(`QueueEntry.claimable(by:at:)`): the runner named, or one with every label
+asked for, that runs the agent and has room for a start. A claimed entry whose
+lease has lapsed is waiting again. A start is done when its runner says
+`started`, and the session shows as starting until its agent dials in. Waiting
+entries can be cancelled.
 
 ## Sessions: identity, ending, archiving
 
@@ -480,9 +494,10 @@ Each one is its own pull request with its tests. Logan may take any of them.
    The server accepts dialed agents beside its own and shows both. A native
    wrapped agent dials the server on loopback. A container's waits for
    MultiPass's dial-in (step 2e there).
-5. **Runners and the queue.** The server's queue (SQLite), `/api/v2/runners`,
-   pairing, and Visor.app's native runner. New Session becomes an entry for a
-   runner. From here the server starts no agent itself.
+5. **Runners and the queue.** The server's queue (SQLite), the runners' poll,
+   claims, leases and updates (`/api/v2/runners`), pairing, and Visor.app's
+   native runner, which pulls like any other. New Session becomes an entry for
+   a runner. From here the server starts no agent itself.
 6. **The client.** Sessions as one list, the Runners section, Add Runner…,
    runner settings and Remove. Computers go from the UI.
 7. **Ending, archiving, Migrate… and Backup….** Terminal states and reports
