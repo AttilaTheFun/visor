@@ -98,15 +98,18 @@ is the same.
    [claude, codex], capacity, labels, repositories}`.
    - `capacity`: how many agents at once.
    - `labels`: for example `macbook`, `container`, `shireworks`.
-3. **Starts, server to runner.** `{type: "start", session, agent, repository?,
-   branch?, cwd?, prompt?, title, links, resume?, signIns}`.
+3. **Starts, server to runner.** `{type: "start", session, agentToken, agent,
+   repository?, branch?, cwd?, prompt?, title, links, resume?}`.
    - `session`: a new id, or an archived session's, to resume.
    - `resume`: the agent's conversation id, and where its files are (below).
-   - `signIns`: the agent's sign-ins (its kind's `agents/<kind>.env` on the
-     server), sent with each start, never kept by a container.
+   - `agentToken`: a one-time token for that session's agent.
 
-   The runner launches `visor-agent-host` with a one-time agent token for that
-   session. It answers `started` or `failed` with why.
+   The runner launches `visor-agent-host` with the token. It answers
+   `started` or `failed` with why. A start carries no sign-in: the agent gets
+   its sign-ins (its kind's `agents/<kind>.env` on the server) over its own
+   dial connection, once it has said hello with its token. They never pass
+   through a runner, and a container never keeps them at rest (Shireworks, 11
+   Nov).
 4. **Capacity and health.** The runner says what it is running, and the server
    shows it in the runner's row.
 
@@ -178,8 +181,13 @@ Shireworks' side, agreed with it on 11 Nov:
     connection.
 - **Triggering:** one queue, in the Visor server, fed by:
   - a small Actions workflow in each opted-in repository, on `issues:
-    labeled` with a label such as `agent`, which posts "start a session for
-    owner/repo#N" to the queue through MultiPass and ends;
+    labeled` with a label such as `agent`. It asks Shireworks to start a
+    session for owner/repo#N, with the job grant it holds for its lifetime
+    (`POST /v1/ci/jobs/<id>/agent-session`), then ends. Shireworks checks the
+    repository is opted in and the job is live, then queues the start on the
+    Visor server with its runner token. The runner token never enters a CI
+    job's container, which runs pull requests' code, and a job can only ask
+    while it runs;
   - Visor's own UI and MCP tool, to queue an issue by hand;
   - later, perhaps, the server polling GitHub itself.
 
