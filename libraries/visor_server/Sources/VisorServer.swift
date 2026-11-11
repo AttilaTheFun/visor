@@ -82,6 +82,10 @@ public final class VisorServer {
     /// moving here, by their plans' ids (VisorServer+Migration.swift).
     var migrationsOut: [String: OutgoingMigration] = [:]
     var migrationsIn: [String: IncomingMigration] = [:]
+    /// A folder for each session, and the repositories apart
+    /// (VISOR_SESSIONS_DIR, VISOR_SOURCES_DIR): nil where sessions work
+    /// where they are asked to.
+    public var sessionFolders: SessionFolders?
     /// Addresses connections were refused on (a path that is off), each
     /// logged once.
     var refusedPaths: Set<String> = []

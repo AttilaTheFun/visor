@@ -20,25 +20,44 @@ extension VisorServer {
         }
         let home = SessionCatalog.home.path
         let shared = ServerPlatform.current.host.sharedFolders()
+        let folders = sessionFolders
+        // Where the server keeps a folder for each session: the session's
+        // id here fixed now, its folder made of it, and its repositories
+        // under the sources by name (only repositories: a folder that isn't
+        // one, such as the one the session sat in, stays behind).
+        let sessionID = folders == nil ? nil : Self.newSessionID()
         let here = { (path: String) -> String? in Self.place(path, from: offer.home, to: home, shared: shared) }
-        guard let cwd = here(offer.session.cwd) else { return .error(Self.notShared(offer.session.cwd, shared: shared ?? [])) }
+        let cwd: String
+        if let folders, let sessionID {
+            cwd = folders.folder(agent: offer.session.agent, id: sessionID)
+        } else {
+            guard let mapped = here(offer.session.cwd) else { return .error(Self.notShared(offer.session.cwd, shared: shared ?? [])) }
+            cwd = mapped
+        }
         let most = offer.projects.dropFirst().map(\.mentions).max() ?? 0
         var steps: [MigrationStep] = []
         for (index, project) in offer.projects.enumerated() {
             // A project with no place here (outside what a container's
             // computer shares with it) stays behind.
-            guard let path = here(project.path) else { continue }
+            let place: String?
+            if let folders {
+                place = folders.sources == nil ? here(project.path) : (project.isRepository ? folders.source(for: project.path) : nil)
+            } else {
+                place = here(project.path)
+            }
+            guard let path = place else { continue }
             var step = await Self.step(for: project, at: path)
             // The session's own folder always; the others it works in
             // most, unless the user says not.
-            step.chosen = index == 0 || step.action == .present || (project.mentions >= 3 && project.mentions * 10 >= most)
+            step.chosen = (index == 0 && (folders == nil || project.isRepository)) || step.action == .present
+                || (project.mentions >= 3 && project.mentions * 10 >= most)
             steps.append(step)
         }
         let id = UUID().uuidString.lowercased()
         let plan = MigrationPlan(id: id, cwd: cwd, agentInstalled: harness.available, steps: steps)
         let folder = Self.migrationsFolder.appendingPathComponent("in-" + id, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        migrationsIn[id] = IncomingMigration(offer: offer, plan: plan, folder: folder, created: Date())
+        migrationsIn[id] = IncomingMigration(offer: offer, plan: plan, folder: folder, created: Date(), sessionID: sessionID)
         var e = Envelope(type: "migration")
         e.plan = plan
         return e
@@ -156,7 +175,9 @@ extension VisorServer {
         guard let id = body.migration, let move = migrationsIn[id] else { return .error("That move has ended; start it again.") }
         let offer = move.offer
         var plan = move.plan
-        if let chosen = body.cwd?.trimmingCharacters(in: .whitespacesAndNewlines), !chosen.isEmpty {
+        // Where the server keeps a folder for each session, the session's
+        // is the plan's, whatever the client chose.
+        if sessionFolders == nil, let chosen = body.cwd?.trimmingCharacters(in: .whitespacesAndNewlines), !chosen.isEmpty {
             let expanded = (chosen as NSString).expandingTildeInPath
             guard expanded.hasPrefix("/") else { return .error("\(chosen) is not a folder's full path.") }
             plan.cwd = expanded.count > 1 && expanded.hasSuffix("/") ? String(expanded.dropLast()) : expanded
@@ -188,7 +209,8 @@ extension VisorServer {
             }
         }
         let notice = "Moved here from \(offer.from.isEmpty ? "another computer" : offer.from). The session there is as it was: remove it once this one works."
-        guard let record = startCarried(offer, id: Self.newSessionID(), cwd: plan.cwd, notice: notice) else {
+        await putMemory(of: move, cwd: plan.cwd)
+        guard let record = startCarried(offer, id: move.sessionID ?? Self.newSessionID(), cwd: plan.cwd, notice: notice) else {
             return .error("The session could not be started here.")
         }
         Self.log("session moved here from \(offer.from): \(offer.session.title) (\(record.info.id))")
