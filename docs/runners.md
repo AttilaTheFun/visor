@@ -183,6 +183,23 @@ types in visor_protocol.
 A custom runner needs only this, MultiPass for the way in, and
 `visor-agent-host`, which ships with Visor.
 
+## A runner anywhere: `visor-runner`
+
+Logan, 11 Nov: "this also makes the computers in my network more fungible. E.g.
+if I wanted to lease a beefy linux vm I could start a runner there as well."
+
+- **`visor-runner`** is a standalone program for Linux and macOS, and it ships
+  in Visor's agent image too. It runs on any machine or lease:
+  `visor-runner pair <code>` once, then `visor-runner run`.
+- It pulls work like any runner, launches `visor-agent-host` on the machine it
+  runs on, and keeps its sessions' data in a folder there (`--data`). Its kind
+  is `native` (the machine itself), with labels it's given (`--label
+  linux-big`, say).
+- **Visor.app's native runner is the same code**, run inside the app.
+- **Shireworks** can later offer "lease a VM with a runner" on top: a lease
+  that starts `visor-runner`, paired, so the VM pulls sessions until it's
+  released.
+
 ## Three places a session runs
 
 Logan, 11 Nov. The runners Visor and Shireworks bring:
@@ -495,8 +512,9 @@ Each one is its own pull request with its tests. Logan may take any of them.
    wrapped agent dials the server on loopback. A container's waits for
    MultiPass's dial-in (step 2e there).
 5. **Runners and the queue.** The server's queue (SQLite), the runners' poll,
-   claims, leases and updates (`/api/v2/runners`), pairing, and Visor.app's
-   native runner, which pulls like any other. New Session becomes an entry for
+   claims, leases and updates (`/api/v2/runners`), pairing, and the runner
+   itself: `visor-runner` (Linux and macOS, in the agent image too), which
+   Visor.app runs inside as its native runner, pulling like any other. New Session becomes an entry for
    a runner. From here the server starts no agent itself.
 6. **The client.** Sessions as one list, the Runners section, Add Runner…,
    runner settings and Remove. Computers go from the UI.
