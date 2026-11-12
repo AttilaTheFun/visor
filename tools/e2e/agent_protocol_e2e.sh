@@ -15,7 +15,7 @@
 #                      latest unexpired one from main unless given)
 #   --out              where the proof goes (./agent-protocol-e2e-<time> unless given)
 #
-# The container half is Shireworks' tools/e2e/relay_container.sh, from your
+# The container half is Shireworks' tools/e2e/container_half.sh, from your
 # shireworks checkout (SHIREWORKS_CHECKOUT, ~/Developer/shireworks unless set).
 #
 # It never touches this Mac beyond a temporary folder (removed at the end)
@@ -24,7 +24,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SW="${SW:-sw}"
 dry_run=0 visor_run="" out=""
-relay_container="${SHIREWORKS_CHECKOUT:-$HOME/Developer/shireworks}/tools/e2e/relay_container.sh"
+container_half="${SHIREWORKS_CHECKOUT:-$HOME/Developer/shireworks}/tools/e2e/container_half.sh"
 while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) dry_run=1 ;;
@@ -37,7 +37,7 @@ done
 for tool in "$SW" gh python3; do
     command -v "$tool" > /dev/null || { echo "agent_protocol_e2e: $tool isn't on PATH" >&2; exit 2; }
 done
-[ -f "$relay_container" ] || { echo "agent_protocol_e2e: no $relay_container (Shireworks' container half): set SHIREWORKS_CHECKOUT, or pull shireworks" >&2; exit 2; }
+[ -f "$container_half" ] || { echo "agent_protocol_e2e: no $container_half (Shireworks' container half): set SHIREWORKS_CHECKOUT, or pull shireworks" >&2; exit 2; }
 say() { echo "agent_protocol_e2e: $*"; }
 out="${out:-$PWD/agent-protocol-e2e-$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$out"
@@ -55,13 +55,15 @@ fi
 password="$(python3 -I -c 'import secrets; print(secrets.token_urlsafe(18))')"
 
 work="$(mktemp -d)"
-vm="" container=""
+vm="" container="" container_up=0
 finish() {
     status=$?
     set +e
-    if [ -n "$container" ] && [ -n "$vm" ]; then
+    if [ "$container_up" = 1 ] && [ -n "$vm" ]; then
+        # Without the container's id (a setup that failed before naming it),
+        # the half finds it itself.
         say "the container half's cleanup"
-        bash "$relay_container" down "$vm" "$container"
+        bash "$container_half" cleanup "$vm" ${container:+"$container"}
     fi
     if [ -n "$vm" ]; then
         say "releasing the VM $vm"
@@ -124,10 +126,11 @@ say "the native agent"
 vm_ssh "python3 -I /tmp/e2e/vm_agents.py run native 240" | tee "$out/native.json"
 native="$(python3 -I -c 'import json,sys; print(json.load(sys.stdin)["session"])' < "$out/native.json")"
 
-say "the container half (Shireworks' relay_container.sh): Shireworks.app and its runner, the container, MultiPass's relay"
-printf '%s\n' "$token" | bash "$relay_container" up "$vm" --harness="$harness" | tee "$work/relay_container.out"
+say "the container half (Shireworks' container_half.sh): Shireworks.app and its runner, the container, MultiPass's relay"
+container_up=1
+printf '%s\n' "$token" | bash "$container_half" setup "$vm" http://127.0.0.1:7434 "$harness" > "$work/container_half.out"
 unset token
-container="$(tail -1 "$work/relay_container.out" | sed -n 's/^container=//p')"
+container="$(tail -1 "$work/container_half.out" | sed -n 's/^container=//p')"
 [ -n "$container" ] || { echo "agent_protocol_e2e: the container half named no container" >&2; exit 1; }
 
 say "the container agent"
