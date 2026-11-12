@@ -1,5 +1,3 @@
-import Foundation
-
 /// Agents' messages to one another, as plain words in their conversations
 /// (Logan, 12 Nov 2026): an agent sends one by beginning a reply with
 /// `@@to <session> on <computer>` and its message below; the session it
@@ -54,7 +52,9 @@ public enum AgentMessageMarkers {
         let head = lines[first].trimmingWhitespace
         guard head.hasPrefix(marker) else { return nil }
         let address = head.dropFirst(marker.count)
-        guard let split = address.range(of: separator, options: .backwards) else { return nil }
+        // The standard library's own search, not Foundation's: Visor on the
+        // web has no NSString bridge to lean on.
+        guard let split = address.ranges(of: separator).last else { return nil }
         let session = address[..<split.lowerBound].trimmingWhitespace
         let computer = address[split.upperBound...].trimmingWhitespace
         let body = lines[(first + 1)...].joined(separator: "\n").trimmingWhitespace
@@ -64,5 +64,11 @@ public enum AgentMessageMarkers {
 }
 
 private extension StringProtocol {
-    var trimmingWhitespace: String { trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// Without the spaces and line breaks around it.
+    var trimmingWhitespace: String {
+        var view = Substring(self)
+        while let first = view.first, first.isWhitespace { view.removeFirst() }
+        while let last = view.last, last.isWhitespace { view.removeLast() }
+        return String(view)
+    }
 }

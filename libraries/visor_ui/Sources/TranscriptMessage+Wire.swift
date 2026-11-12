@@ -16,6 +16,11 @@ extension TranscriptMessage {
             self.init(id: id ?? entry.id, role: .tool, text: mail, toolName: "mail")
             return
         }
+        // A message the agent wrote to another session: a mail row too.
+        if entry.role == .assistant, entry.images.isEmpty, let sent = MailTurn.sentRow(for: entry.text) {
+            self.init(id: id ?? entry.id, role: .tool, text: sent, toolName: "mail")
+            return
+        }
         let role: TranscriptMessage.Role
         switch entry.role {
         case .user: role = .user

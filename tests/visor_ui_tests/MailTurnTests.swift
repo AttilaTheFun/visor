@@ -28,6 +28,18 @@ final class MailTurnTests: XCTestCase {
         XCTAssertEqual(message.text, "From Isomer on Logan’s MacBook Pro: The build is green.")
     }
 
+    func testAWrittenMessageIsAMailRowEachWay() {
+        let received = TranscriptMessage(TranscriptEntry(id: "r", role: .user, text: "@@from Isomer on Logan’s MacBook Pro\n\nThe build is green."))
+        XCTAssertEqual(received.toolName, "mail")
+        XCTAssertEqual(received.text, "From Isomer on Logan’s MacBook Pro: The build is green.")
+        let sent = TranscriptMessage(TranscriptEntry(id: "s", role: .assistant, text: "@@to Manager on visor-co-tenant\n\nThe draft is up."))
+        XCTAssertEqual(sent.role, .tool)
+        XCTAssertEqual(sent.toolName, "mail")
+        XCTAssertEqual(sent.text, "To Manager on visor-co-tenant: The draft is up.")
+        XCTAssertEqual(TranscriptMessage(TranscriptEntry(id: "a", role: .assistant, text: "Done; @@to Manager on x\nHi")).role, .assistant,
+                       "a reply that isn't one stays the agent's")
+    }
+
     func testThePersonsOwnWordsStayTheirs() {
         for text in ["Ship it", "[Visor] the agent was restarted", "[Visor: you have a question]", "[Message from the Visor session “X”"] {
             XCTAssertNil(MailTurn.row(for: text), text)
