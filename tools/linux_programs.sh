@@ -28,11 +28,25 @@ swift --version 2>&1 | grep -q "Swift version ${SDK_VERSION%.0}" \
 swift sdk list 2>/dev/null | grep -qx "$SDK" || swift sdk install "$SDK_URL" --checksum "$SDK_SHA256"
 
 cd "$ROOT"
+scratch="${VISOR_LINUX_PROGRAMS_SCRATCH:-$ROOT/.build/linux-programs}"
+# gRPC's transport (agent_protocol, VisorDriver) brings NIOSSL, whose
+# BoringSSL is C++: compiled against the SDK's libc++ (-stdlib=libc++, not the
+# host's GNU headers), and linked with it alone. The libstdc++ the toolchain
+# names for C++ targets is a link to the SDK's libc++, first on the library
+# path, or the host's would be linked beside it (agent_protocol's
+# tools/build_static.sh does the same).
+libcxx="$(find "$HOME/.swiftpm/swift-sdks" -path "*${SDK}*" -path "*musl*/aarch64/usr/lib/libc++.a" 2>/dev/null | head -1)"
+[ -n "$libcxx" ] || { echo "$me: no libc++.a for aarch64 in the static SDK" >&2; exit 1; }
+shim="$scratch-libstdcxx"
+mkdir -p "$shim"
+ln -sf "$libcxx" "$shim/libstdc++.a"
 swift build -c release --swift-sdk aarch64-swift-linux-musl \
+    -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
     -Xswiftc -use-ld=lld -Xlinker -lc++abi -Xlinker -lunwind \
-    --scratch-path "${VISOR_LINUX_PROGRAMS_SCRATCH:-$ROOT/.build/linux-programs}" --product visor-server
+    --scratch-path "$scratch" --product visor-server
 built="$(swift build -c release --swift-sdk aarch64-swift-linux-musl \
-    --scratch-path "${VISOR_LINUX_PROGRAMS_SCRATCH:-$ROOT/.build/linux-programs}" --show-bin-path)/visor-server"
+    -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
+    --scratch-path "$scratch" --show-bin-path)/visor-server"
 
 mkdir -p "$OUT"
 rm -f "$OUT/visor-server" "$OUT/visor-agent-host"
