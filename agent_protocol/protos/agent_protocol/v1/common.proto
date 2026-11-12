@@ -1,0 +1,99 @@
+// What the three services share: who an agent is, what it was asked to do,
+// what it has said, and what it is doing now.
+syntax = "proto3";
+
+package agent_protocol.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// An agent, from before its session exists: made by the dispatcher that
+// queued its job, and carried dispatcher -> runner -> wrapper -> driver.
+// Not the harness's session id (Claude's or Codex's), which comes later.
+// As text (AGENT_ID): `<uuid>@<dispatcher_url>`.
+message AgentID {
+  // A UUID, lowercase.
+  string uuid = 1;
+  // The dispatcher's address, as runners reach it (through MultiPass).
+  string dispatcher_url = 2;
+}
+
+// What an agent is started with.
+message AgentSpec {
+  // The program the wrapper runs: "claude", "codex", "openrouter", or
+  // "echo" (built in: answers each message with its words, for tests).
+  string harness = 1;
+  // The model, as the harness names it; empty for its default.
+  string model = 2;
+  // The reasoning effort (low, medium, high, xhigh, max); empty for the default.
+  string effort = 3;
+  // The folder it works in, as the runner's machine has it.
+  string working_directory = 4;
+  // What it is told first; empty to wait for a message.
+  string prompt = 5;
+  // Its title, as people see it.
+  string title = 6;
+  // The harness's own session to resume; empty for a new one.
+  string resume_session_id = 7;
+  // Whether it asks before acting (false), or acts (true: in a container).
+  bool skip_permissions = 8;
+  // Free-form labels (repository, issue, branch, …).
+  map<string, string> labels = 9;
+}
+
+// A row of the conversation, as the harness's log has it.
+message TranscriptEntry {
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    ROLE_USER = 1;
+    ROLE_ASSISTANT = 2;
+    ROLE_TOOL = 3;
+  }
+  string id = 1;
+  Role role = 2;
+  string text = 3;
+  // A turn's tool calls, as short labels ("Bash: ls").
+  repeated string activities = 4;
+  // A tool result's tool.
+  string tool_name = 5;
+  google.protobuf.Timestamp time = 6;
+}
+
+// A tool call under way.
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  string label = 3;
+}
+
+// A subagent the agent started, while it runs.
+message Subagent {
+  string id = 1;
+  string title = 2;
+  bool running = 3;
+}
+
+// What isn't in the log: what the agent is doing now.
+message EphemeralState {
+  bool busy = 1;
+  bool thinking = 2;
+  // A line on what it is doing ("Running tests").
+  string activity = 3;
+  repeated ToolCall tools = 4;
+  repeated Subagent subagents = 5;
+  // Messages waiting for its turn to end, in order.
+  repeated string queued = 6;
+  // The model it says it is using.
+  string model = 7;
+  int64 context_used = 8;
+  int64 context_limit = 9;
+}
+
+// A permission the agent asks for (a tool call to allow or refuse).
+message ApprovalRequest {
+  string id = 1;
+  string tool = 2;
+  // What it would do, in a line.
+  string summary = 3;
+  // The tool's input, as JSON.
+  string input_json = 4;
+}

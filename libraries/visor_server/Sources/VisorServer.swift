@@ -260,6 +260,14 @@ public final class VisorServer {
     /// The list, once, after a burst: a turn writes a row per tool call.
     var sessionsBroadcastPending = false
 
+    /// The process of a driven session as it is loaded (VisorDriver's:
+    /// the wrapper's stream, waiting for it to dial again). None where no
+    /// driver runs: such a session's agent runs here instead.
+    package var drivenProcess: (@MainActor (SessionInfo) -> AgentProcess)?
+    /// Where jobs for runners go (`POST /api/jobs`): VisorDriver's
+    /// dispatcher. None where no dispatcher runs.
+    package var jobs: (any AgentJobQueue)?
+
     /// The sessions' store, written once `archiveSaveDelay` after a change
     /// however many come in it (saveArchive): written whole on each, it
     /// was most of the gigabytes a day the Mac saw Visor write.

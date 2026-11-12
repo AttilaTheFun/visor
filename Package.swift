@@ -112,7 +112,22 @@ let system: [Target] = [
     .target(name: "VisorServerLinux",
             dependencies: ["ClaudeTranscript", "VisorServer", "VisorServerCLI", "VisorServerPOSIX", "VisorSystem"],
             path: "libraries/visor_server_linux/Sources", swiftSettings: strict),
-    .executableTarget(name: "VisorServerMain", dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge"],
+    // agent_protocol's driver and dispatcher (gRPC), and the native runner
+    // that pulls from a dispatcher and runs agent-wrapper: on Linux and the
+    // Mac, never Windows (the server library itself has neither).
+    .target(name: "VisorDriver",
+            dependencies: ["VisorServer", "VisorAgent", "VisorProtocol",
+                           .product(name: "AgentProtocol", package: "agent_protocol"),
+                           .product(name: "GRPCCore", package: "grpc-swift-2"),
+                           .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport")],
+            path: "libraries/visor_driver/Sources", swiftSettings: strict),
+    .target(name: "VisorNativeRunner",
+            dependencies: [.product(name: "AgentProtocol", package: "agent_protocol"),
+                           .product(name: "GRPCCore", package: "grpc-swift-2"),
+                           .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport")],
+            path: "libraries/visor_native_runner/Sources", swiftSettings: strict),
+    .executableTarget(name: "VisorServerMain",
+                      dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge", "VisorDriver", "VisorNativeRunner"],
                       path: "applications/visor_server_linux", swiftSettings: strict),
     // Visor Runner's MCP proxy and its commands; its agent built here too,
     // for a Mac without Bazel's output for it (`swift build -c release
@@ -131,6 +146,10 @@ let system: [Target] = [
 ]
 /// The server's tests, on Linux's platform (tests/visor_server_tests/linux).
 let tests: [Target] = [
+    .testTarget(name: "VisorDriverTests",
+                dependencies: ["VisorDriver", "VisorNativeRunner", "VisorServer", "VisorAgent", "VisorProtocol",
+                               .product(name: "AgentProtocol", package: "agent_protocol")],
+                path: "tests/visor_driver_tests", swiftSettings: strict),
     .testTarget(name: "VisorServerTests",
                 dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux",
                                "VisorServerPOSIX", "VisorMCPBridge", "VisorSystem", "VisorAgent"],
@@ -164,6 +183,10 @@ let runnerPackages: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-asn1.git", from: "1.7.3"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
     .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.6"),
+    // agent_protocol (its driver, dispatcher and wrapper) and its gRPC.
+    .package(path: "agent_protocol"),
+    .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
+    .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
 ]
 #endif
 

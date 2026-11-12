@@ -1,0 +1,112 @@
+// The queue of agent jobs, which runners pull from, as GitHub's runners
+// pull CI jobs. Implemented by Visor's server and by Shireworks' server
+// (its jobs from GitHub issues). Drafted by Shireworks (12 Nov 2026).
+//
+// A runner claims a job (a long poll; none when the wait ends), keeps the
+// claim by renewing it before `claim_expires`, and reports how it goes.
+// Its wrapper reports too (Started, Completed, Failed). An unrenewed claim
+// is released: the job goes back to the queue.
+syntax = "proto3";
+
+package agent_protocol.v1;
+
+import "google/protobuf/timestamp.proto";
+import "agent_protocol/v1/common.proto";
+
+service AgentDispatcher {
+  // The next job for this runner, waiting up to `wait_seconds` (60 at
+  // most); none when the wait ends. A job given is claimed.
+  rpc Claim(ClaimRequest) returns (ClaimResponse);
+  // How a claimed job goes: the dispatcher's own moves follow (Shireworks':
+  // the issue's labels and comments).
+  rpc Report(JobReport) returns (ReportResponse);
+  // The claim kept; one not renewed by `claim_expires` is released.
+  rpc Renew(RenewRequest) returns (RenewResponse);
+}
+
+message ClaimRequest {
+  // The runner's name.
+  string runner = 1;
+  // What it can run: "native" or "container", and "harness:claude",
+  // "harness:codex", "harness:echo"…
+  repeated string capabilities = 2;
+  int32 wait_seconds = 3;
+}
+
+message ClaimResponse {
+  optional Job job = 1;
+}
+
+message Job {
+  AgentID agent = 1;
+  string title = 2;
+  // What the agent is told first.
+  string prompt = 3;
+  // Where the job came from (an issue's URL).
+  string source_url = 4;
+  // What to clone and check out, for a runner that works in a clone.
+  string repository = 5;
+  string ref = 6;
+  // "claude", "codex", "openrouter", "echo"; empty for the runner's default.
+  string harness = 7;
+  string model = 8;
+  string effort = 9;
+  repeated string labels = 10;
+  google.protobuf.Timestamp claim_expires = 11;
+  // Where a native agent works (no clone): its folder on the runner's computer.
+  string working_directory = 12;
+  // The driver the job's wrapper dials; empty to leave it to the runner's
+  // settings. Visor's dispatcher names itself.
+  string driver_url = 13;
+}
+
+message JobReport {
+  AgentID agent = 1;
+  oneof event {
+    Started started = 2;
+    Progress progress = 3;
+    Blocked blocked = 4;
+    Completed completed = 5;
+    Failed failed = 6;
+    Released released = 7;
+  }
+}
+
+message Started {
+  // The harness's session id.
+  string session_id = 1;
+  string runner = 2;
+}
+
+message Progress {
+  string text = 1;
+}
+
+message Blocked {
+  string reason = 1;
+}
+
+message Completed {
+  string summary = 1;
+  repeated string pull_requests = 2;
+}
+
+message Failed {
+  string reason = 1;
+}
+
+// The runner gave the job back (its agent couldn't run, or it ended badly).
+message Released {
+  string reason = 1;
+}
+
+message ReportResponse {}
+
+message RenewRequest {
+  AgentID agent = 1;
+}
+
+message RenewResponse {
+  // A later expiry, or none when the claim is no longer the runner's.
+  google.protobuf.Timestamp claim_expires = 1;
+}

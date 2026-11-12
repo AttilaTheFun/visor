@@ -41,6 +41,7 @@ extension ServerCommand {
             log.write("each session works in a folder of its own under \(sessions)"
                 + (options.sourcesDir.map { ", the repositories of sessions moved here under \($0)" } ?? ""))
         }
+        onServer?(server)
         system.onStop {
             Task { @MainActor in
                 log.write("stopping: ending the agents")

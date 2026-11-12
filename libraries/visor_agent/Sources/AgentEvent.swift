@@ -38,6 +38,10 @@ public enum AgentEvent: Sendable {
     /// What the agent has running in the background, whole, whenever it
     /// changes; empty when it waits on nothing.
     case background([StatusItem])
+    /// Rows of the conversation, new or changed, from an agent whose rows
+    /// don't come from a file here: one run under agent_protocol's wrapper,
+    /// whose driver this server is (a row again by its id replaces it).
+    case rows([TranscriptEntry])
     /// A subagent did something: the session's subagents may have changed.
     case subagents
     /// The goal the agent itself says it works toward (Codex's), or none:

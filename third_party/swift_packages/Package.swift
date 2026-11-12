@@ -20,6 +20,12 @@ let package = Package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
             exact: "0.51.0"
         ),
+        // agent_protocol's gRPC (agent_protocol/, VisorDriver, the native
+        // runner): the versions Isomer resolves already, and its protobuf.
+        .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
+        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
+        .package(url: "https://github.com/grpc/grpc-swift-protobuf.git", from: "2.5.0"),
+        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.39.0"),
         // SSH as a road to a server: the client's own SSH connection, a
         // port forwarded to the server on its loopback (SSHAgentServer).
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.9.0"),

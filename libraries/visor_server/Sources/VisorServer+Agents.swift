@@ -403,7 +403,7 @@ extension VisorServer {
         }
     }
 
-    func session(_ id: String?) -> SessionRecord? {
+    package func session(_ id: String?) -> SessionRecord? {
         sessions.first { $0.info.id == id }
     }
 }

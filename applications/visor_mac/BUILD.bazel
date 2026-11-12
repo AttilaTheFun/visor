@@ -48,6 +48,8 @@ swift_library(
         "@swiftpkg_update_kit//:UpdateKit",
         "//libraries/message_cache",
         "//libraries/visor_client",
+        "//libraries/visor_driver",
+        "//libraries/visor_native_runner",
         "//libraries/visor_protocol",
         "//libraries/visor_server",
         "//libraries/visor_server_apple",
@@ -68,7 +70,10 @@ macos_application(
     name = "visor_mac",
     # The agents' host beside the app's own program, as in Visor Server:
     # each session's agent runs under one.
+    # And agent_protocol's agent-wrapper, which the native runner runs each
+    # of its agents under.
     additional_contents = {
+        "//agent_protocol:agent-wrapper": "Helpers",
         "//applications/visor_agent_host:visor-agent-host": "Helpers",
     },
     app_icons = ["//artwork/app-icon:app_icon"],

@@ -1,0 +1,35 @@
+// Visor's server as agent_protocol's driver and dispatcher: one gRPC
+// server, on its own port, serving AgentDriver (wrappers dial in) and
+// AgentDispatcher (runners pull jobs). Started by the binary that runs the
+// server (the menu bar app, the command-line server), never by the server
+// library itself, which knows nothing of gRPC.
+
+import AgentProtocol
+import Foundation
+import GRPCCore
+import GRPCNIOTransportHTTP2
+import VisorServer
+
+public enum VisorDriver {
+    /// Serves on `host`:`port` until the task is cancelled, and gives the
+    /// server its driven sessions' processes and its job queue. `url` is
+    /// this server's address as wrappers and runners reach it. `harness`
+    /// is what its jobs run ("echo" for a test without a model).
+    @MainActor
+    public static func start(_ server: VisorServer, host: String, port: Int, url: String, harness: String = "claude") -> Task<Void, Never> {
+        let jobs = JobQueue(dispatcherURL: url, driverURL: url, harness: harness)
+        server.jobs = jobs
+        server.drivenProcess = { _ in DrivenProcess() }
+        return Task.detached {
+            let transport = HTTP2ServerTransport.Posix(address: .ipv4(host: host, port: port), transportSecurity: .plaintext)
+            do {
+                try await withGRPCServer(transport: transport, services: [DriverService(server: server), DispatcherService(jobs: jobs)]) { _ in
+                    VisorServer.log("agent_protocol: driver and dispatcher on \(host):\(port), as \(url)")
+                    while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+                }
+            } catch {
+                VisorServer.log("agent_protocol: the driver and dispatcher couldn't serve on \(host):\(port): \(error)")
+            }
+        }
+    }
+}
