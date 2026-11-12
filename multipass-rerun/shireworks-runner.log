@@ -1,0 +1,19 @@
+# Shireworks 0.3.29 (alpha, eb5f401, with #294) in VM cbd52f7e (~/Library/Logs/Shireworks.log), as Shireworks sent it
+2026-11-12T07:59:06Z runner shireworks-container@e2e-relay: started, container agents, from http://127.0.0.1:7434
+2026-11-12T07:59:45Z runner shireworks-container@e2e-relay: Container agent from http://127.0.0.1:7434: agent 8cfe4fe6-50e6-4ac0-90f7-659489ced34c@http://visor.multipass.internal:7434 started
+2026-11-12T08:00:46Z runner shireworks-container@e2e-relay: Container agent: its agent ended (status 0)
+
+# The container agent's own log (State/agents/8cfe4fe6-….log)
+agent-wrapper: agent 8cfe4fe6-50e6-4ac0-90f7-659489ced34c started (echo)
+agent-wrapper: driver visor.multipass.internal:7434
+agent-wrapper: agent ended: the harness ended
+
+# Container f1ead619 (visor-agent@sha256:e94c364b…), started by the runner's machine.exec grant, no prelude:
+#   wrapper /usr/local/bin/relayed-agent-wrapper = exec unshare -n /run/multipass/client/multipass-client run -- agent-wrapper
+#   (agent-wrapper from visor 350b13d; multipass-client 0.1.0 arm64, sha256 29ad0174…)
+#   agent-wrapper pid 4865 in net:[4026532191]; the container's own is net:[4026531833]
+# The relay, in the container's root network namespace:
+#   sw relay --socket=/run/multipass/relay.sock --host=127.0.0.1 --port=7470 --lease=f1ead619 (shireworks #295's tree, with #294)
+#   ssh -f -N -L 7470:127.0.0.1:7470 … runner@<VM>: carries the relay's stream to the VM, standing in for the host
+#   (Shireworks #295's no-network mode); the agent itself has no network but multipass-client's relay socket.
+# The relay token was made in the container, set once with `multipass-agent relay token set`, never printed.

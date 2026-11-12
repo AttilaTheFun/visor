@@ -1,0 +1,19 @@
+2026-11-12 02:47:56.237 agent_protocol: driver and dispatcher on 127.0.0.1:7434, as http://127.0.0.1:7434, and to containers as http://visor.multipass.internal:7434
+2026-11-12 02:48:19.124 dispatcher: queued 0b74f7f5-85eb-41df-ae86-e1d309eeb765 (Native agent)
+2026-11-12 02:48:19.124 dispatcher: macos-27 claimed 0b74f7f5-85eb-41df-ae86-e1d309eeb765
+2026-11-12 02:48:19.128 native runner: started 0b74f7f5-85eb-41df-ae86-e1d309eeb765 (Native agent), pid 4152
+2026-11-12 02:48:19.158 dispatcher: 0b74f7f5-85eb-41df-ae86-e1d309eeb765 started by macos-27 (session echo-98729f7e-a889-40df-b41b-fcaad9e885c5)
+2026-11-12 02:48:19.158 driven session: Native agent (Claude Code) in /Users/runner/e2e-native
+2026-11-12 02:48:19.160 driver: 0b74f7f5-85eb-41df-ae86-e1d309eeb765 connected from macos-27.local
+2026-11-12 02:59:45.755 dispatcher: queued 8cfe4fe6-50e6-4ac0-90f7-659489ced34c (Container agent)
+2026-11-12 02:59:45.756 dispatcher: shireworks-container@e2e-relay claimed 8cfe4fe6-50e6-4ac0-90f7-659489ced34c
+2026-11-12 02:59:45.892 driven session: Container agent (Claude Code) in ~
+2026-11-12 02:59:45.894 dispatcher: 8cfe4fe6-50e6-4ac0-90f7-659489ced34c started by shireworks-container@e2e-relay (session echo-e0382de3-13f8-4cbb-98cd-a30314ba1fa7)
+2026-11-12 02:59:45.894 driver: 8cfe4fe6-50e6-4ac0-90f7-659489ced34c connected from shireworks-lease-container-f1ead619
+2026-11-12 03:00:33.250 stopping the agent of Container agent (8cfe4fe6-50e6-4ac0-90f7-659489ced34c)
+2026-11-12 03:00:33.262 driver: 8cfe4fe6-50e6-4ac0-90f7-659489ced34c disconnected
+2026-11-12 03:00:33.312 dispatcher: 8cfe4fe6-50e6-4ac0-90f7-659489ced34c completed: echo: Hello through MultiPass, container agent
+2026-11-12 03:00:36.287 stopping the agent of Native agent (0b74f7f5-85eb-41df-ae86-e1d309eeb765)
+2026-11-12 03:00:36.301 dispatcher: 0b74f7f5-85eb-41df-ae86-e1d309eeb765 completed: echo: Hello from the Visor client, native agent
+2026-11-12 03:00:36.301 driver: 0b74f7f5-85eb-41df-ae86-e1d309eeb765 disconnected
+2026-11-12 03:00:36.304 native runner: 0b74f7f5-85eb-41df-ae86-e1d309eeb765 ended (its wrapper reported)
