@@ -63,12 +63,15 @@ struct VisorMacApp: App {
     /// and dispatcher on loopback, and the native runner, which runs each
     /// job's agent under the agent-wrapper in this app's Helpers. Its jobs'
     /// harness is the `AgentJobHarness` default (claude unless set; echo
-    /// for a test without a model).
+    /// for a test without a model). `AgentProtocolContainerURL`, when set,
+    /// is how containers reach them (MultiPass's dial-in:
+    /// `http://visor.multipass.internal:7434`).
     private static func startAgentProtocol(_ server: VisorServer) {
         let port = 7434
         let url = "http://127.0.0.1:\(port)"
         let harness = UserDefaults.standard.string(forKey: "AgentJobHarness") ?? "claude"
-        _ = VisorDriver.start(server, host: "127.0.0.1", port: port, url: url, harness: harness)
+        let containerURL = UserDefaults.standard.string(forKey: "AgentProtocolContainerURL")
+        _ = VisorDriver.start(server, host: "127.0.0.1", port: port, url: url, containerURL: containerURL, harness: harness)
         let wrapper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/agent-wrapper").path
         guard FileManager.default.isExecutableFile(atPath: wrapper),
               let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: Host.current().localizedName ?? "Mac",
