@@ -132,16 +132,30 @@ if [ "$orientation" = landscape ]; then
     "$adb" shell settings put system accelerometer_rotation 0
     "$adb" shell cmd window user-rotation lock 1
     sleep 2
-    "$adb" shell dumpsys window displays < /dev/null | tr -d '\r' | grep -m 1 -o 'mRotation=[A-Z_0-9]*' || true
 fi
+# Whether the display is on its side now.
+# (Read whole before grep: with pipefail, grep -q's early exit fails the pipe.)
+turned() {
+    local displays
+    displays="$("$adb" shell dumpsys window displays < /dev/null 2> /dev/null || true)"
+    case "$displays" in *mRotation=ROTATION_90*) return 0 ;; *) return 1 ;; esac
+}
 status=0
 for screen in $SCREENS; do
     "$adb" shell am start -S -n "$PACKAGE/.MainActivity" --es fixture snapshot --es fixture.screen "$screen" > /dev/null
-    # Again after each launch: the app's stop puts the launcher, which
-    # stands upright, in front for a moment, and on 12 Nov the display
-    # stayed upright after it.
-    [ "$orientation" = portrait ] || "$adb" shell cmd window user-rotation lock 1
     sleep "$SETTLE"
+    # On its side before the picture: the app's stop puts the launcher,
+    # which stands upright, in front for a moment, and on 12 Nov the display
+    # stayed upright after it for one screen in eleven. The lock again, and
+    # waited for, at most ten seconds, then the screen settled again.
+    if [ "$orientation" = landscape ] && ! turned; then
+        for _ in $(seq 1 10); do
+            "$adb" shell cmd window user-rotation lock 1 < /dev/null
+            sleep 1
+            ! turned || break
+        done
+        sleep "$SETTLE"
+    fi
     picture="$out/screens/android-$screen$suffix.png"
     "$adb" exec-out screencap -p > "$picture" || true
     if [ -s "$picture" ]; then
