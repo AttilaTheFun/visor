@@ -645,12 +645,45 @@ The rule moves from the server to the wrapper, keyed on the place.
   other runner starts the copy. The session keeps its id. #340's folder per
   session and #345's clone-only sources stay, as what a runner gives each
   start. **Backup…** saves the same data to a folder.
-- **The co-tenant's cut-over.** Once the server, the wrapper and Shireworks'
-  agent runner are in:
-  1. each co-tenant session, made idle and pushed (#345's rule), is migrated
-     from the co-tenant's server into the agent runner, keeping its id;
-  2. it resumes in the primary container;
-  3. the co-tenant's own server stops, and the co-tenant goes.
+- **The co-tenant's cut-over (Logan, 12 Nov: this order).**
+  1. **The real-model end to end first** (`tools/e2e/agent_protocol_e2e.sh`
+     with Logan's token).
+  2. **The co-tenant's sessions run natively on the mini.**
+     - First the mini's Visor.app is updated to the co-tenant's version (0.50
+       or later: a move's memory needs both ends at 0.50).
+     - The mini's server is given the MCP servers the sessions use.
+     - Any memory the mini's account already has for the same projects is
+       merged by hand: a move never overwrites one, so the co-tenant's would
+       be left behind.
+     - Then each session is made idle and pushed (#345's rule), told, and
+       moved with Migrate…, one at a time, keeping its id. Manager and Visor
+       go last.
+     - Native sessions build nothing on the mini's disk; they lease from
+       the MacBook.
+  3. **The co-tenant container goes,** its server stopped first, once every
+     session runs natively.
+  4. **Shireworks on the mini.**
+     - It retires the mini's OS Server 0.10 (no more simulator lending
+       there).
+     - It lends only containers, with its volumes and the primary container
+       (12 GB while native sessions share the mini, about 20 GB after).
+     - Its `containerRelay` gives the container no network but MultiPass's
+       relay.
+     - Its agent runner pulls from the mini's Visor.
+     - MultiPass runs on the mini too, with its relay, the dial-in to
+       Visor's driver and dispatcher, and logan-shire-agent's key.
+  5. **The sessions move into the primary container** through Shireworks'
+     runner, keeping their ids. Each move is a resume job:
+     - the harness's session id, and a URL Visor's driver serves the
+       conversation's files from;
+     - the wrapper, inside the primary container, fetches them into
+       `/Volumes/Sessions/Claude/<id>` (#340), clones the sources (#345),
+       and runs `claude --resume`.
+     - The model sign-in is a token Logan mints, kept in the mini's
+       Shireworks' Keychain and put into each agent's process environment
+       by its exec request, never in a file. Later, MultiPass adds it to
+       api.anthropic.com's requests itself, so it never enters the
+       container.
 
 - **The server's auth, TLS, SSH, fronts** go as in #329's step 6. The server
   binds loopback; MultiPass is the way in.
@@ -689,8 +722,10 @@ Each one is its own pull request with its tests. Logan may take any of them.
    issue by hand from the UI and the MCP tool. The labeled-issue workflow
    follows once the Studio arrives.
 9. **What goes:** the server's own agents, its auth, the relay between
-   servers, Add Computer…, servers' connection codes; then the co-tenant,
-   migrated into the agent runner, and its end.
+   servers, Add Computer…, servers' connection codes; then the co-tenant's
+   cut-over, in the order above: its sessions native on the mini, the
+   co-tenant gone, Shireworks on the mini, and the sessions into its primary
+   container by resume jobs.
 
 MultiPass's steps (#329: 2c egress, 2d the app, 2e the dial-in relay) run beside
 these. 4's containers and 8 need 2e.
