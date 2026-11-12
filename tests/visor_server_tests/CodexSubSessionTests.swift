@@ -64,9 +64,9 @@ extension ServerTests {
         // A subagent sent off: the call, and the session's subagents read again.
         let sent = #"{"method":"item/started","params":{"threadId":"main","item":{"type":"subAgentActivity","id":"call_1","kind":"started","agentThreadId":"sub","agentPath":"/root/arithmetic"}}}"#
         let outputs = CodexOutput.parse(sent)
-        guard case .toolStarted(let id, let name, let label)? = outputs.first else { return Issue.record("no call") }
+        guard case .toolStarted(let id, let name, let label)? = outputs.first else { Issue.record("no call"); return }
         #expect([id, name, label] == ["call_1", "Agent", "Agent: arithmetic"])
-        guard case .subagentActivity? = outputs.last else { return Issue.record("not read again") }
+        guard case .subagentActivity? = outputs.last else { Issue.record("not read again"); return }
     }
 
     @Test func testASubagentsThreadIsNotTheSessions() async throws {

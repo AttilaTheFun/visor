@@ -92,14 +92,14 @@ extension ServerTests {
             """
         let parsed = CodexOutput.parse(tokens)
         guard parsed.count == 2, case .tokens(let used, let limit) = parsed[0], case .spent(let spent) = parsed[1] else {
-            return Issue.record("\(parsed)")
+            Issue.record("\(parsed)"); return
         }
         #expect(used == 9500)
         #expect(limit == 258_400)
         #expect(spent == SessionUsage(input: 40000, cached: 30000, output: 2000))
 
         let account = #"{"id":2,"result":{"account":{"type":"chatgpt","planType":"pro"},"requiresOpenaiAuth":true}}"#
-        guard case .plan(let plan, let subscription) = CodexOutput.parse(account).last else { return Issue.record() }
+        guard case .plan(let plan, let subscription) = CodexOutput.parse(account).last else { Issue.record(); return }
         #expect(plan == "ChatGPT Pro")
         #expect(subscription)
 
@@ -107,9 +107,9 @@ extension ServerTests {
             {"id":3,"result":{"rateLimits":{"primary":{"usedPercent":17,"windowDurationMins":10080,"resetsAt":1791654291},\
             "secondary":{"usedPercent":40,"windowDurationMins":300,"resetsAt":1791102000},"credits":{"hasCredits":true,"unlimited":false,"balance":"62500"}}}}
             """
-        guard case .rateLimits(let first) = CodexOutput.parse(read).last else { return Issue.record() }
+        guard case .rateLimits(let first) = CodexOutput.parse(read).last else { Issue.record(); return }
         let update = #"{"method":"account/rateLimits/updated","params":{"rateLimits":{"secondary":{"usedPercent":45,"windowDurationMins":300}}}}"#
-        guard case .rateLimits(let sparse) = CodexOutput.parse(update).first else { return Issue.record() }
+        guard case .rateLimits(let sparse) = CodexOutput.parse(update).first else { Issue.record(); return }
         #expect(sparse.merged(over: first).limits == [
             UsageLimit(name: "Weekly", used: 0.17, resets: 1_791_654_291),
             UsageLimit(name: "5-hour", used: 0.45),

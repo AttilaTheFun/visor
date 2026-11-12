@@ -1,6 +1,6 @@
 #!/bin/bash
-# The command-line server on Linux: built, its tests run, and the server
-# itself tried — run, a throwaway session over its WebSocket, restarted,
+# The command-line server on Linux: built with SwiftPM, and the server
+# tried — run, a throwaway session over its WebSocket, restarted,
 # stopped (tools/probes/command_line_server.sh) — in a Linux container of
 # Visor's agent image (Swift 6.4, node, aarch64): verify's linux job, a
 # visor-jit runner of that image, right there, leasing nothing. Also the
@@ -31,9 +31,6 @@ swift build --product visor-server
 echo "::endgroup::"
 echo "::group::Build the client services"
 swift build --target VisorServices
-echo "::endgroup::"
-echo "::group::Test"
-swift test
 echo "::endgroup::"
 echo "::group::Try the server"
 tools/probes/command_line_server.sh

@@ -15,10 +15,10 @@ extension ServerTests {
         let line = #"{"method":"item/completed","params":{"threadId":"t","turnId":"u","item":{"type":"agentMessage","id":"m1","text":"All done."}}}"#
         let outputs = CodexOutput.parse(line)
         #expect(outputs.count == 2)
-        guard case .messageCompleted(let item, let text)? = outputs.first else { return Issue.record("no message") }
+        guard case .messageCompleted(let item, let text)? = outputs.first else { Issue.record("no message"); return }
         #expect(item == "m1")
         #expect(text == "All done.")
-        guard case .itemCompleted(let id, false)? = outputs.last else { return Issue.record("not completed") }
+        guard case .itemCompleted(let id, false)? = outputs.last else { Issue.record("not completed"); return }
         #expect(id == "m1")
     }
 

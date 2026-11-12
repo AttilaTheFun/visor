@@ -58,7 +58,7 @@ extension ServerTests {
     /// sends it: each question with the id its answer goes back under.
     @Test func testCodexsQuestionIsRead() {
         let line = #"{"id":7,"method":"item/tool/requestUserInput","params":{"threadId":"t","turnId":"u","itemId":"call_1","questions":[{"id":"preferred_color","header":"Color","question":"Which color do you prefer?","isOther":true,"isSecret":false,"options":[{"label":"Red","description":"Choose Red."},{"label":"Blue","description":"Choose Blue."}]}],"isBlocking":false,"autoResolutionMs":null}}"#
-        guard case .questions(let id, let asked)? = CodexOutput.parse(line).first else { return Issue.record("not a question") }
+        guard case .questions(let id, let asked)? = CodexOutput.parse(line).first else { Issue.record("not a question"); return }
         #expect(id == 7)
         #expect(asked.map(\.id) == ["preferred_color"])
         #expect((asked.first?.question) == (AgentQuestion(question: "Which color do you prefer?", header: "Color",
@@ -95,7 +95,7 @@ extension ServerTests {
         #expect(lastGoal(#"{"id":5,"result":{"turn":{"id":"u1"}}}"#) == .none, "other answers say nothing of it")
         // A turn Codex started itself.
         guard case .turnStarted(let id)? = CodexOutput.parse(#"{"method":"turn/started","params":{"threadId":"t","turn":{"id":"u2"}}}"#).first else {
-            return Issue.record("no turn")
+            Issue.record("no turn"); return
         }
         #expect(id == "u2")
         #expect(CodexGoal(objective: "Ship it", status: "paused", timeUsedSeconds: 125).summary == "Goal: Ship it — paused (/goal resume), 2 min so far.")

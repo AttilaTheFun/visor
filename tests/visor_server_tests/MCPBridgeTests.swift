@@ -283,7 +283,7 @@ extension ServerTests {
         let server: [UInt8] = [0x81, 126, 0x01, 0x2C] + [UInt8](repeating: 65, count: 300)
         #expect((MCPWebSocketFrames.read(Array(server.prefix(3)))) == .incomplete)
         #expect((MCPWebSocketFrames.read(Array(server.prefix(100)))) == .incomplete)
-        guard case .frame(let frame, let taken) = MCPWebSocketFrames.read(server + [0x89, 0]) else { return Issue.record("a whole frame") }
+        guard case .frame(let frame, let taken) = MCPWebSocketFrames.read(server + [0x89, 0]) else { Issue.record("a whole frame"); return }
         #expect(taken == server.count)
         #expect(frame.payload.count == 300)
         #expect(MCPWebSocketFrames.read([0x81, 127, 0xFF, 0, 0, 0, 0, 0, 0, 0]) == .invalid, "larger than any message")

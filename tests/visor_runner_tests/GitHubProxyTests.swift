@@ -6,7 +6,7 @@
 import CVisorPOSIX
 import Foundation
 @testable import VisorRunner
-import XCTest
+import Testing
 
 /// A server on loopback that answers each connection with what it read,
 /// upper-cased, once the client has said all it will.
@@ -53,7 +53,7 @@ private final class Upper: Sendable {
     }
 }
 
-final class GitHubProxyTests: XCTestCase {
+@Suite final class GitHubProxyTests {
     private static let token = "server-token"
 
     private func proxy(connect: (@Sendable (GitHubProxy.Destination) -> Int32)? = nil) throws -> (GitHubProxy, Int) {
@@ -67,14 +67,14 @@ final class GitHubProxyTests: XCTestCase {
                 return (made, port)
             }
         }
-        throw XCTSkip("no port for the proxy")
+        try Test.cancel("no port for the proxy")
     }
 
     /// Sends `head` (and `then`, its end said) to the proxy, and reads all
     /// that comes back.
     private static func ask(_ port: Int, _ head: String, then text: String = "") throws -> String {
         let connection = visor_connect_tcp("127.0.0.1", UInt16(port))
-        guard connection >= 0 else { throw XCTSkip("the proxy can't be reached") }
+        guard connection >= 0 else { try Test.cancel("the proxy can't be reached") }
         defer { close(connection) }
         let bytes = Array((head + text).utf8)
         _ = bytes.withUnsafeBytes { write(connection, $0.baseAddress, $0.count) }
@@ -93,21 +93,21 @@ final class GitHubProxyTests: XCTestCase {
         "Proxy-Authorization: Basic " + Data("\(token):\(session)".utf8).base64EncodedString() + "\r\n"
     }
 
-    func testACallerIsItsServersTokenAndItsSession() {
+    @Test func testACallerIsItsServersTokenAndItsSession() {
         let header = "Basic " + Data("abc123:k81jr60w2o2rfdjoxohjoc0c".utf8).base64EncodedString()
-        XCTAssertEqual(GitHubProxy.caller(header), .init(token: "abc123", session: "k81jr60w2o2rfdjoxohjoc0c"))
-        XCTAssertNil(GitHubProxy.caller("Bearer abc123"))
-        XCTAssertNil(GitHubProxy.caller("Basic " + Data("abc123:".utf8).base64EncodedString()), "a session is named")
-        XCTAssertNil(GitHubProxy.caller(nil))
-        XCTAssertEqual(GitHubProxy.destination("github.com:443"), .init(host: "github.com", port: 443))
-        XCTAssertEqual(GitHubProxy.destination("[2606:50c0::1]:443"), .init(host: "2606:50c0::1", port: 443))
-        XCTAssertNil(GitHubProxy.destination("github.com"))
-        XCTAssertNil(GitHubProxy.destination("user@github.com:443"))
+        #expect(GitHubProxy.caller(header) == .init(token: "abc123", session: "k81jr60w2o2rfdjoxohjoc0c"))
+        #expect(GitHubProxy.caller("Bearer abc123") == nil)
+        #expect((GitHubProxy.caller("Basic " + Data("abc123:".utf8).base64EncodedString())) == nil, "a session is named")
+        #expect(GitHubProxy.caller(nil) == nil)
+        #expect(GitHubProxy.destination("github.com:443") == .init(host: "github.com", port: 443))
+        #expect(GitHubProxy.destination("[2606:50c0::1]:443") == .init(host: "2606:50c0::1", port: 443))
+        #expect(GitHubProxy.destination("github.com") == nil)
+        #expect(GitHubProxy.destination("user@github.com:443") == nil)
     }
 
     /// The caller's server token admitted, the bytes go both ways untouched.
-    func testATunnelPassesTheBytesThrough() throws {
-        guard let upper = Upper() else { throw XCTSkip("no port for the server") }
+    @Test func testATunnelPassesTheBytesThrough() throws {
+        guard let upper = Upper() else { try Test.cancel("no port for the server") }
         defer { upper.stop() }
         // Loopback stands for an address off this computer here.
         let (proxy, port) = try proxy(connect: { visor_connect_tcp($0.host, $0.port) })
@@ -115,40 +115,40 @@ final class GitHubProxyTests: XCTestCase {
         let head = "CONNECT 127.0.0.1:\(upper.port) HTTP/1.1\r\nHost: 127.0.0.1:\(upper.port)\r\n"
             + Self.authorization(Self.token, "session-a") + "\r\n"
         let answer = try Self.ask(port, head, then: "hello through the tunnel")
-        XCTAssertTrue(answer.hasPrefix("HTTP/1.1 200 Connection Established\r\n\r\n"), answer)
-        XCTAssertTrue(answer.hasSuffix("HELLO THROUGH THE TUNNEL"), answer)
+        #expect(answer.hasPrefix("HTTP/1.1 200 Connection Established\r\n\r\n"), Comment(rawValue: answer))
+        #expect(answer.hasSuffix("HELLO THROUGH THE TUNNEL"), Comment(rawValue: answer))
     }
 
-    func testOnlyAServersAgentsAndOnlyConnect() throws {
+    @Test func testOnlyAServersAgentsAndOnlyConnect() throws {
         let (proxy, port) = try proxy(connect: { visor_connect_tcp($0.host, $0.port) })
         defer { proxy.stop() }
         let none = try Self.ask(port, "CONNECT github.com:443 HTTP/1.1\r\n\r\n")
-        XCTAssertTrue(none.hasPrefix("HTTP/1.1 407 "), none)
-        XCTAssertTrue(none.contains("Proxy-Authenticate: Basic"), none)
+        #expect(none.hasPrefix("HTTP/1.1 407 "), Comment(rawValue: none))
+        #expect(none.contains("Proxy-Authenticate: Basic"), Comment(rawValue: none))
         let stranger = try Self.ask(port, "CONNECT github.com:443 HTTP/1.1\r\n" + Self.authorization("not-a-server", "s") + "\r\n")
-        XCTAssertTrue(stranger.hasPrefix("HTTP/1.1 407 "), stranger)
+        #expect(stranger.hasPrefix("HTTP/1.1 407 "), Comment(rawValue: stranger))
         let get = try Self.ask(port, "GET http://github.com/ HTTP/1.1\r\n" + Self.authorization(Self.token, "s") + "\r\n")
-        XCTAssertTrue(get.hasPrefix("HTTP/1.1 405 "), get)
+        #expect(get.hasPrefix("HTTP/1.1 405 "), Comment(rawValue: get))
     }
 
     /// No name leads back to this computer: loopback is refused, whatever
     /// listens there.
-    func testATunnelNeverReachesThisComputer() throws {
-        guard let upper = Upper() else { throw XCTSkip("no port for the server") }
+    @Test func testATunnelNeverReachesThisComputer() throws {
+        guard let upper = Upper() else { try Test.cancel("no port for the server") }
         defer { upper.stop() }
         let (proxy, port) = try proxy()
         defer { proxy.stop() }
         for host in ["127.0.0.1", "[::1]"] {
             let answer = try Self.ask(port, "CONNECT \(host):\(upper.port) HTTP/1.1\r\n" + Self.authorization(Self.token, "s") + "\r\n")
-            XCTAssertTrue(answer.hasPrefix("HTTP/1.1 403 "), "\(host): \(answer)")
+            #expect(answer.hasPrefix("HTTP/1.1 403 "), "\(host): \(answer)")
         }
         // A name: refused when it resolves here, unreachable where it doesn't
         // (a container with no localhost in its hosts); never a tunnel.
         let named = try Self.ask(port, "CONNECT localhost:\(upper.port) HTTP/1.1\r\n" + Self.authorization(Self.token, "s") + "\r\n")
-        XCTAssertFalse(named.hasPrefix("HTTP/1.1 200 "), named)
-        XCTAssertEqual(visor_connect_tcp_public("127.0.0.1", upper.port), -1)
-        XCTAssertEqual(errno, EACCES)
-        XCTAssertEqual(visor_connect_tcp_public("0.0.0.0", upper.port), -1)
-        XCTAssertEqual(visor_connect_tcp_public("169.254.169.254", 80), -1, "nor a cloud's metadata address")
+        #expect(!named.hasPrefix("HTTP/1.1 200 "), Comment(rawValue: named))
+        #expect(visor_connect_tcp_public("127.0.0.1", upper.port) == -1)
+        #expect(errno == EACCES)
+        #expect(visor_connect_tcp_public("0.0.0.0", upper.port) == -1)
+        #expect(visor_connect_tcp_public("169.254.169.254", 80) == -1, "nor a cloud's metadata address")
     }
 }

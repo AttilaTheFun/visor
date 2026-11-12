@@ -307,7 +307,7 @@ extension ServerTests {
 
     @Test func testTheSessionWaitingOnASubagentSaysSo() {
         let line = #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Agent","input":{"description":"Add two numbers","prompt":"What is 2 + 2?","subagent_type":"general-purpose"}}]}}"#
-        guard case .assistant(_, _, let tools)? = ClaudeOutput.parse(line).first else { return Issue.record("no assistant message") }
+        guard case .assistant(_, _, let tools)? = ClaudeOutput.parse(line).first else { Issue.record("no assistant message"); return }
         #expect(tools.map(\.label) == ["Waiting: Add two numbers"])
         #expect((ClaudeOutput.label(name: "Read", input: ["file_path": "/tmp/a"]).hasPrefix("Read: ")) == true)
     }

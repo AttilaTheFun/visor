@@ -238,7 +238,7 @@ extension ServerTests {
     private func until(_ condition: @MainActor () -> Bool) async throws {
         let limit = Date().addingTimeInterval(5)
         while !condition() {
-            guard Date() < limit else { return Issue.record("timed out") }
+            guard Date() < limit else { Issue.record("timed out"); return }
             try await Task.sleep(for: .milliseconds(10))
         }
     }

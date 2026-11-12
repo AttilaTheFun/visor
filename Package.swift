@@ -144,28 +144,8 @@ let system: [Target] = [
     .executableTarget(name: "VisorRunnerAgentMain", dependencies: ["VisorRunner"],
                       path: "applications/visor_runner_agent", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
-/// The server's tests, on Linux's platform (tests/visor_server_tests/linux).
-let tests: [Target] = [
-    .testTarget(name: "VisorDriverTests",
-                dependencies: ["VisorDriver", "VisorNativeRunner", "VisorServer", "VisorAgent", "VisorProtocol",
-                               .product(name: "AgentProtocol", package: "agent_protocol")],
-                path: "tests/visor_driver_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
-    .testTarget(name: "VisorServerTests",
-                dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux",
-                               "VisorServerPOSIX", "VisorMCPBridge", "VisorSystem", "VisorAgent"],
-                path: "tests/visor_server_tests", exclude: ["apple", "BUILD.bazel"], swiftSettings: strict),
-    // Here rather than on a Mac: nothing in them is Apple's.
-    .testTarget(name: "MessageCacheTests", dependencies: ["MessageCache", "VisorProtocol"],
-                path: "tests/message_cache_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
-    .testTarget(name: "ClaudeTranscriptTests", dependencies: ["ClaudeTranscript"],
-                path: "tests/claude_transcript_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
-    .testTarget(name: "VisorRunnerTests",
-                dependencies: ["VisorRunner", "CVisorPOSIX", .product(name: "X509", package: "swift-certificates"),
-                               .product(name: "Crypto", package: "swift-crypto"), .product(name: "NIOCore", package: "swift-nio"),
-                               .product(name: "NIOPosix", package: "swift-nio"), .product(name: "NIOHTTP1", package: "swift-nio"),
-                               .product(name: "NIOSSL", package: "swift-nio-ssl"), .product(name: "_CryptoExtras", package: "swift-crypto")],
-                path: "tests/visor_runner_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
-]
+/// The tests are Bazel's swift_test targets (//tests:linux), not SwiftPM's.
+let tests: [Target] = []
 /// The agents' host, built with the server: `swift build -c release` puts
 /// both in the same folder, where the server looks for it.
 let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"]),

@@ -6,10 +6,10 @@ import AgentProtocol
 @testable import VisorAgent
 @testable import VisorDriver
 import VisorProtocol
-import XCTest
+import Foundation
+import Testing
 
-@MainActor
-final class DrivenProcessTests: XCTestCase {
+@Suite @MainActor final class DrivenProcessTests {
     /// The first `count` events `process` gave for `messages` (each is
     /// given as the message is taken, so they wait in the stream).
     private func events(of process: DrivenProcess, after messages: [AgentProtocol_V1_WrapperMessage], count: Int) async -> [String] {
@@ -34,7 +34,7 @@ final class DrivenProcessTests: XCTestCase {
         }
     }
 
-    func testWhatTheWrapperSaysComesUpAsAHarnesssEvents() async {
+    @Test func testWhatTheWrapperSaysComesUpAsAHarnesssEvents() async {
         let process = DrivenProcess()
         var working = AgentProtocol_V1_EphemeralState()
         working.busy = true
@@ -47,27 +47,27 @@ final class DrivenProcessTests: XCTestCase {
             .with { $0.state = .init() },
         ]
         let said = await events(of: process, after: messages, count: 8)
-        XCTAssertEqual(said, ["tool Bash", "activity Bash: ls", "model claude-opus", "busy true", "rows assistant:Hello",
+        #expect(said == ["tool Bash", "activity Bash: ls", "model claude-opus", "busy true", "rows assistant:Hello",
                               "tool done", "activity -", "busy false"])
     }
 
-    func testWhatIsSentWaitsForAWrapperThenGoesDown() throws {
+    @Test func testWhatIsSentWaitsForAWrapperThenGoesDown() throws {
         let process = DrivenProcess()
         try process.send("first")
         process.interrupt()
         var down: [AgentProtocol_V1_DriverMessage] = []
         let connection = process.attach { down.append($0) }
-        XCTAssertEqual(down.count, 2, "what waited, in order")
-        XCTAssertEqual(down.first?.send.text, "first")
+        #expect(down.count == 2, "what waited, in order")
+        #expect((down.first?.send.text) == "first")
         try process.send("second")
-        XCTAssertEqual(down.last?.send.text, "second")
+        #expect((down.last?.send.text) == "second")
         process.detach(connection)
         try process.send("third")
-        XCTAssertEqual(down.count, 3, "held again once the wrapper is gone")
+        #expect(down.count == 3, "held again once the wrapper is gone")
     }
 
-    func testAWrappersRowBecomesVisorsRow() {
+    @Test func testAWrappersRowBecomesVisorsRow() {
         let row = DrivenProcess.row(.with { $0.id = "u1"; $0.role = .user; $0.text = "Hi"; $0.activities = ["a"] })
-        XCTAssertEqual(row, TranscriptEntry(id: "u1", role: .user, text: "Hi", activities: ["a"]))
+        #expect(row == TranscriptEntry(id: "u1", role: .user, text: "Hi", activities: ["a"]))
     }
 }
