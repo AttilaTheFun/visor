@@ -31,6 +31,14 @@ rm -rf app
 claude="$HOME/.local/bin/claude"
 if [ "$harness" = claude ]; then
     say "Claude Code"
+    # The installer writes under ~/.cache and ~/.local, which the VM's image
+    # may have left to root (a real run failed: EACCES on ~/.cache/claude).
+    for folder in "$HOME/.cache" "$HOME/.local"; do
+        if [ -e "$folder" ] && [ -n "$(find "$folder" ! -user "$(id -un)" -print -quit 2>/dev/null)" ]; then
+            sudo chown -R "$(id -un):staff" "$folder"
+        fi
+        mkdir -p "$folder"
+    done
     curl -fsSL https://claude.ai/install.sh | bash > /tmp/e2e/claude-install.log 2>&1 \
         || { tail -5 /tmp/e2e/claude-install.log; exit 1; }
     [ -x "$claude" ] || { echo "vm_setup: Claude Code isn't at $claude" >&2; exit 1; }
