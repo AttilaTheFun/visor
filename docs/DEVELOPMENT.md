@@ -1091,34 +1091,39 @@ repository's own (`visor-jit`, which a fork never reaches, with
 own runners, which a public repository has for free, so Shireworks'
 machines are left to CI and the agents (Logan, 5 Nov 2026):
 
-- The iPhone (`tools/ci/proof_ios.sh`, on an `xcode-27` Mac): the app and
-  its probe on an iPhone 17 simulator of iOS 27.2, made for the run, its
-  status bar held still and keyboard suggestions off. GitHub rolls a new
-  image out over days, and the older one had iOS 27.0 alone, whose
-  pictures differ from 27.2's in most screens: where the image hasn't got
-  27.2, it is downloaded. A test that fails runs once more (GitHub's Macs
-  vary in speed, which a UI case's timing feels), and fails the proof only
-  if it fails again. The
-  probe runs as rules_apple's runner runs it (an XCTRunner app made from
-  Xcode's, an `.xctestrun`, then `xcodebuild test-without-building`), as
-  Shireworks ran it on a lease until 0.46. It takes the fixture's screens in
-  each orientation (the probe's `testFixtureScreens` and
-  `testFixtureScreensLandscape`) and, for a full proof, the UI cases
-  (`tools/ios_ui_tests.sh`'s). The pictures come out of the runs' result
-  bundles, where the probe attaches each one.
+Five jobs side by side, as Isomer's proof pictures its stories: the
+iPhone and Android, each upright and on its side, and the Mac. Each opens
+the fixture's screens one by one and pictures each once it has settled.
+
+- The iPhone (`tools/ci/proof_ios.sh <apps> <out> portrait|landscape`, on
+  an `xcode-27` Mac): the app on an iPhone 17 simulator of iOS 27.2, made
+  for the run, its status bar held still, keyboard suggestions off and the
+  light look. GitHub rolls a new image out over days, and the older one had
+  iOS 27.0 alone, whose pictures differ from 27.2's in most screens: where
+  the image hasn't got 27.2, it is downloaded. Each screen is a `simctl
+  launch` with the fixture's arguments, pictured with `simctl io
+  screenshot --mask=black` once two pictures in a row match. No XCUITest:
+  its launches made the proof take 26 minutes and, on a slow runner, fail.
+  On its side the app turns itself (`-visor.fixture.orientation
+  landscape`, which its delegate answers with landscapeRight alone), and
+  the picture, the device's upright frame, is turned to stand.
 - The Mac (`tools/ci/proof_mac.sh`, on another `xcode-27` Mac):
   Visor.app, signed ad hoc as a build on Linux is, opened on each of the
   fixture's screens in the light look and pictured cropped to its window.
-- Android (`tools/ci/proof_android.sh`, on Ubuntu): blue Visor's APK, built
-  for x86_64, on an emulator under the runner's KVM, made as Isomer's
-  hermetic one is (API 34, 1080 by 1920 at 420 dpi), its status bar held
-  still by System UI's demo mode. Each of snapshots.py's screens is opened
-  with its intent and cut below the status bar.
+- Android (`tools/ci/proof_android.sh <apps> <out> portrait|landscape`, on
+  Ubuntu): blue Visor's APK, built for x86_64, on an emulator under the
+  runner's KVM, made as Isomer's hermetic one is (API 34, 1080 by 1920 at
+  420 dpi), its status bar held still by System UI's demo mode, and on its
+  side turned a quarter (auto-rotate off). Each of snapshots.py's screens
+  is opened with its intent and cut below the status bar.
+
+The iPhone's UI cases are not in the proof: `tools/ios_ui_tests.sh` runs
+them, by hand.
 
 `tools/ci/proof_make.sh` then makes the proof in AttilaTheFun/reviews'
 format 2 (docs/PROOF_FORMAT.md there): each screen an item under a stable id
 (`ios/phone/chat`, `ios/phone-landscape/chat`, `macos/window/chat`,
-`android/phone/chat`, …), with its SHA-256 and size, in `proof.zip` with its
+`android/phone/chat`, `android/phone-landscape/chat`, …), with its SHA-256 and size, in `proof.zip` with its
 `proof.json`, the run's `proof` artifact. Nothing compares it in CI, so
 `verify` runs in a container: Reviews compares a release's proof with the
 prior release's, item by item (Logan, 8 Nov 2026), and shows what was added,

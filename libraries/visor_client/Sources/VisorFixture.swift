@@ -34,6 +34,10 @@ public enum VisorFixture {
     /// makes it once it is up the thread, so a slow simulator can't have
     /// the rows come in before it got there. "" for the clock.
     @MainActor public static var goFile: String { active ? (VisorHost.settings?.get(key: "fixture.go") ?? "") : "" }
+    /// "landscape" when the app holds itself on its side for its pictures
+    /// (`-visor.fixture.orientation landscape`: the iPhone's proof, as a
+    /// simulator can't be turned by a command); "" for the device's way.
+    @MainActor public static var orientation: String { active ? (VisorHost.settings?.get(key: "fixture.orientation") ?? "") : "" }
 
     /// The draft a session opens with: "/" in the chat on the commands
     /// screen, so its slash commands are offered with nothing typed;

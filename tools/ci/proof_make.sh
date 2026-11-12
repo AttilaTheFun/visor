@@ -9,7 +9,8 @@
 # <parts> holds a folder for each platform's part (tools/ci/proof_ios.sh's,
 # proof_mac.sh's and proof_android.sh's: screens/<platform>-<screen>.png),
 # named for it (ios, mac, android; or part-ios and so on, as the workflow's
-# artifacts download). Out come <out>/proof/, proof.json and each screen at
+# artifacts download), or for it and an orientation (part-ios-landscape).
+# Each part is pictured by a job of its own. Out come <out>/proof/, proof.json and each screen at
 # screens/<id>.png, which the run keeps as its `proof` artifact (GitHub zips
 # it, so its download is the same zip), and <out>/proof.zip, the same zipped,
 # the release's asset. Each screen is an item, its id stable from
@@ -18,6 +19,7 @@
 #   ios-<screen>-landscape.png  ios/phone-landscape/<screen>
 #   mac-<screen>.png            macos/window/<screen>
 #   android-<screen>.png        android/phone/<screen>
+#   android-<screen>-landscape.png  android/phone-landscape/<screen>
 # <version> is what it is a proof of: the build's (alpha sets it as it
 # attaches the proof: tools/ci/proof_version.sh), else the committed line.
 #
@@ -46,13 +48,15 @@ def size(path):
     return struct.unpack(">II", head[16:24])
 
 items, files = [], []
-folders = {name[len("part-"):] if name.startswith("part-") else name: os.path.join(parts, name)
-           for name in os.listdir(parts) if os.path.isdir(os.path.join(parts, name))}
-for platform in [p for p in order if p in folders] + sorted(p for p in folders if p not in order):
+# Each part's platform, the first word of its name (ios-landscape: ios).
+folders = sorted((name[len("part-"):] if name.startswith("part-") else name, os.path.join(parts, name))
+                 for name in os.listdir(parts) if os.path.isdir(os.path.join(parts, name)))
+for part, folder in sorted(folders, key=lambda pair: (order.index(pair[0].split("-")[0]) if pair[0].split("-")[0] in order else 99, pair[0])):
+    platform = part.split("-")[0]
     if platform not in forms:
-        sys.exit(f"proof_make: no ids for a part named {platform}")
+        sys.exit(f"proof_make: no ids for a part named {part}")
     system, form, words = forms[platform]
-    screens = os.path.join(folders[platform], "screens")
+    screens = os.path.join(folder, "screens")
     for name in sorted(os.listdir(screens)) if os.path.isdir(screens) else []:
         if not name.endswith(".png"):
             continue
@@ -60,7 +64,7 @@ for platform in [p for p in order if p in folders] + sorted(p for p in folders i
         if not stem.startswith(platform + "-"):
             sys.exit(f"proof_make: {platform}'s {name} isn't named {platform}-<screen>.png")
         screen, place, landscape = stem[len(platform) + 1:], form, ""
-        if platform == "ios" and screen.endswith("-landscape"):
+        if platform in ("ios", "android") and screen.endswith("-landscape"):
             screen, place, landscape = screen[:-len("-landscape")], form + "-landscape", ", on its side"
         if not valid.match(screen):
             sys.exit(f"proof_make: {name} makes no id (lowercase letters, digits, - and . only)")

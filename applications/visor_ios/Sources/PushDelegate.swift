@@ -5,11 +5,14 @@
 // Applications (UpdateKit): its build written at launch, a newer
 // one told of with a notification of the library's, which this delegate
 // shows and passes on.
+// And which ways the app turns, which the fixture's pictures on its side
+// hold.
 
 #if os(iOS)
 import UpdateKit
 import UIKit
 import UserNotifications
+import VisorClient
 import VisorServices
 
 final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -19,6 +22,14 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
         // After the delegate: the library leaves an app's own in place.
         AppUpdates.start()
         return true
+    }
+
+    /// The ways the app turns: on its side alone for the fixture's pictures
+    /// in landscape (VisorFixture.orientation), landscapeRight as a device
+    /// turned to landscapeLeft holds it; else as Info.plist says.
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        if VisorFixture.orientation == "landscape" { return .landscapeRight }
+        return UIDevice.current.userInterfaceIdiom == .pad ? .all : .allButUpsideDown
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
