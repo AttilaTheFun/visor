@@ -1,32 +1,34 @@
 #!/bin/bash
 # Visor's client as another app takes it (Package.swift's VisorClient,
-# VisorUI and VisorServices; Shireworks' Visor tab): built with SwiftPM on a
-# Mac, as nothing else of Visor's builds it so.
+# VisorUI and VisorServices; Shireworks' Visor tab), resolved with SwiftPM
+# in a Linux container (verify's client-package job, visor-jit), as every
+# job but the GUI proofs runs.
 #
 #   tools/ci/client_package.sh [work folder]
 #
-# 1. VisorUI on Visor's own resolution (Package.resolved: swift-crypto 4.x),
-#    for macOS.
-# 2. A stand-in host, a package of its own beside the checkout, that shows
-#    VisorView in a TabView as Shireworks does, with swift-crypto pinned to
-#    3.x as Apple's containerization holds it there: for macOS with SwiftPM
-#    and for iOS with xcodebuild. A package's every target must resolve, so
-#    this also fails if the Runner takes a product 3.x lacks.
+# 1. Visor's own package, resolved: every dependency its targets name.
+# 2. A stand-in host, a package of its own beside the checkout, that takes
+#    VisorUI as Shireworks does, with swift-crypto pinned to 3.x as Apple's
+#    containerization holds it there: resolved, its graph loaded, and the
+#    swift-crypto it took checked to be 3.x. A package's every target must
+#    resolve, so this fails if the client takes a product 3.x lacks.
 #
-# Run on verify's xcode-27 runner (Xcode 27.2).
+# Not compiled: VisorUI and the client's native services build only against
+# Apple's SDK (SwiftUI, AVFoundation), which SwiftPM here hasn't got.
+# Shireworks' own build compiles VisorUI when it takes a new Visor.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 WORK="${1:-$(mktemp -d)}"
 mkdir -p "$WORK"
 
-echo "::group::VisorUI, Visor's own resolution (macOS)"
-xcrun swift build --package-path "$ROOT" --scratch-path "$WORK/own" --product VisorUI
+echo "::group::Visor's own resolution"
+swift package --package-path "$ROOT" --scratch-path "$WORK/own" resolve
 echo "::endgroup::"
 
 host="$WORK/host"
 rm -rf "$host"
 mkdir -p "$host/Sources/Host"
-cat > "$host/Package.swift" << EOF
+cat > "$host/Package.swift" << MANIFEST
 // swift-tools-version: 6.0
 import PackageDescription
 let package = Package(
@@ -39,31 +41,20 @@ let package = Package(
     ],
     targets: [.target(name: "Host", dependencies: [.product(name: "VisorUI", package: "visor")])]
 )
-EOF
-cat > "$host/Sources/Host/Tabs.swift" << 'EOF'
-import SwiftUI
-import VisorUI
+MANIFEST
+printf 'import VisorUI\n' > "$host/Sources/Host/Host.swift"
 
-/// Visor as one of a host's tabs, its Settings the host's to hold.
-public struct Tabs: View {
-    @State private var settings = false
-    public init() {}
-    public var body: some View {
-        TabView {
-            Tab("Visor", systemImage: "eye") { VisorView(settingsPresented: $settings) }
-        }
-    }
-}
-EOF
-
-echo "::group::A host with swift-crypto 3 (macOS)"
-xcrun swift build --package-path "$host" --scratch-path "$WORK/host-mac"
-# Which swift-crypto it took (the manifest pins 3.15.1 exactly): said, not checked.
-xcrun swift package --package-path "$host" --scratch-path "$WORK/host-mac" show-dependencies 2>/dev/null | grep swift-crypto || true
+echo "::group::A host with swift-crypto 3"
+swift package --package-path "$host" --scratch-path "$WORK/host" resolve
+crypto="$(swift package --package-path "$host" --scratch-path "$WORK/host" show-dependencies --format json \
+    | python3 -I -c '
+import json, sys
+def walk(node):
+    yield node
+    for child in node.get("dependencies", []):
+        yield from walk(child)
+print(sorted({n["version"] for n in walk(json.load(sys.stdin)) if n.get("identity") == "swift-crypto"}))')"
+echo "swift-crypto: $crypto"
 echo "::endgroup::"
-
-echo "::group::A host with swift-crypto 3 (iOS)"
-(cd "$host" && xcodebuild -scheme Host -destination "generic/platform=iOS" -derivedDataPath "$WORK/host-ios" \
-    -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO build -quiet)
-echo "::endgroup::"
-echo "client_package: VisorUI builds as another app takes it"
+case "$crypto" in "['3."*"']") ;; *) echo "::error::the host took swift-crypto $crypto, not 3.x alone"; exit 1 ;; esac
+echo "client_package: the client resolves as another app takes it"

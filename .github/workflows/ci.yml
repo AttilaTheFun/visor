@@ -195,12 +195,12 @@ jobs:
           path: ${{ runner.temp }}/test-logs
 
   # Visor's client as another app takes it (Package.swift's VisorUI, which
-  # Shireworks' Visor tab embeds), built with SwiftPM for macOS and iOS: on
-  # Visor's own resolution, and in a stand-in host with swift-crypto 3.x
-  # (tools/ci/client_package.sh). Nothing else builds it so.
+  # Shireworks' Visor tab embeds), resolved with SwiftPM: Visor's own
+  # resolution, and a stand-in host with swift-crypto 3.x
+  # (tools/ci/client_package.sh).
   client-package:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
-    runs-on: xcode-27
+    runs-on: [self-hosted, visor-jit]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
