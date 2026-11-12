@@ -60,7 +60,7 @@ connect_from_ci
   [ -z "$notes_file" ] || printf 'X-Applications-Notes: %s\n' "$(base64 < "$notes_file" | tr -d '\n')"
 } > "$work/headers"
 
-echo "Promoting ${GITHUB_SHA:-the commit}'s Alphas on ${server}…"
+echo "Promoting ${GITHUB_SHA:-the commit}'s Alphas on Applications Server…"
 # Signing and notarizing take minutes; the answer waits for them.
 status="$(curl -sS --cacert "$work/ca.pem" --connect-timeout 10 --max-time 3600 -H @"$work/headers" -X POST --data-binary '' \
   -o "$work/answer" -w '%{http_code}' "$server/api/promote")" || fail "the server was not reached"
