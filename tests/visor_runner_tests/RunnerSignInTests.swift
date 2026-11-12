@@ -90,7 +90,8 @@ import Testing
         let wrongName = signIn("someone", "a long enough password")
         let none = servers(nil)
         let made = servers("made-up")
-        #expect([wrongPassword.status, wrongName.status, none.status, made.status] == [401, 401, 401, 401])
+        let statuses: [Int] = [wrongPassword.status, wrongName.status, none.status, made.status]
+        #expect(statuses == [401, 401, 401, 401])
         #expect((wrongPassword.json as NSDictionary) == (wrongName.json as NSDictionary))
         #expect((none.json as NSDictionary) == (wrongName.json as NSDictionary))
         #expect((wrongPassword.json["token"]) == nil)

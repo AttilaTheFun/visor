@@ -9,13 +9,19 @@ import Testing
     @Test func testTwoUnansweredAsksStartTheServerAtMostEveryTwoMinutes() {
         var state = ServerWatch.State()
         let now = ContinuousClock.now
-        #expect(!state.heard(answering: false, at: now), "one is a moment")
-        #expect(state.heard(answering: false, at: now + .seconds(30)))
-        #expect(!(state.heard(answering: false, at: now + .seconds(60))), "coming up")
-        #expect(state.heard(answering: false, at: now + .seconds(150)), "still not, two minutes on")
-        #expect(!(state.heard(answering: true, at: now + .seconds(180))))
+        let first = state.heard(answering: false, at: now)
+        #expect(!first, "one is a moment")
+        let half = state.heard(answering: false, at: now + .seconds(30))
+        #expect(half)
+        let minute = state.heard(answering: false, at: now + .seconds(60))
+        #expect(!minute, "coming up")
+        let later = state.heard(answering: false, at: now + .seconds(150))
+        #expect(later, "still not, two minutes on")
+        let answered = state.heard(answering: true, at: now + .seconds(180))
+        #expect(!answered)
         #expect(state.unanswered == 0)
-        #expect(!(state.heard(answering: false, at: now + .seconds(210))), "up again: a moment again")
+        let again = state.heard(answering: false, at: now + .seconds(210))
+        #expect(!again, "up again: a moment again")
     }
 
     @Test func testAServerThatDoesntAnswerIsStartedWithTheFrontsCommand() throws {

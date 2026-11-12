@@ -113,7 +113,7 @@ extension ServerTests {
         #expect((offer.files.first?.size) == (try FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int))
         #expect(offer.projects.map(\.path) == [cwd.path, other.path], "its own folder, then the one it names")
         #expect((offer.projects.last?.mentions) == 3)
-        #expect(offer.projects.allSatisfy(\.unshared), "no remote")
+        #expect(offer.projects.allSatisfy { $0.unshared }, "no remote")
 
         // As another computer, whose home folder this is, sees it: the
         // session's folder is here; its other project is not, and has no

@@ -82,7 +82,8 @@ import Testing
         _ = run(["server", "add", "Builds", "--host", "192.168.131.1"])
         said = []
         #expect(run(["server", "push-proxy", "Builds", "--host", "192.168.131.1"]) == 0)
-        let body = try #require(JSONSerialization.jsonObject(with: Data(try #require(said.last).utf8)) as? [String: String])
+        let last = try #require(said.last)
+        let body = try #require(JSONSerialization.jsonObject(with: Data(last.utf8)) as? [String: String])
         #expect((body["url"]) == "http://192.168.131.1:7439")
         #expect((body["token"]) == (secrets.value(ProxyTokens.key(server: "Builds"))))
 

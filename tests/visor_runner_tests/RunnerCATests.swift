@@ -21,7 +21,7 @@ import Testing
 
     @Test func testItIsAnAuthorityConstrainedToGitHub() throws {
         let ca = try RunnerCA.kept(in: MemorySecrets())
-        let constraints = try #require(ca.certificate.extensions.nameConstraints)
+        let constraints = try #require(try ca.certificate.extensions.nameConstraints)
         #expect(constraints.permittedDNSDomains == ["github.com"])
         #expect(constraints.excludedIPRanges.count == 2, "no IPv4 or IPv6 address")
         #expect((ca.certificate.extensions[oid: .X509ExtensionID.nameConstraints]?.critical) == true)

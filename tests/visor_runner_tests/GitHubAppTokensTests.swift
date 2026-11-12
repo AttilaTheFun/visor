@@ -45,7 +45,8 @@ private final class TokenEndpoint: Sendable {
             while base64.count % 4 != 0 { base64 += "=" }
             return Data(base64Encoded: base64)
         }
-        let claims = try #require(try JSONSerialization.jsonObject(with: try #require(decoded(parts[1]))) as? [String: Any])
+        let payload = try #require(decoded(parts[1]))
+        let claims = try #require(try JSONSerialization.jsonObject(with: payload) as? [String: Any])
         #expect((claims["iss"] as? String) == "123")
         #expect((claims["iat"] as? Int) == (1_800_000_000 - 60))
         #expect((claims["exp"] as? Int) == (1_800_000_000 + 540), "nine minutes: GitHub takes at most ten")
