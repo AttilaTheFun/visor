@@ -329,6 +329,10 @@ public struct VisorRootView: View {
             // the page it was opened for (a capsule in the list).
             subPath = pendingPath ?? []
             pendingPath = nil
+            // A session's inspector open: it follows the selection, so its
+            // buttons act on the session shown (visor#363); with no session
+            // selected, it closes.
+            if case .session = pane { pane = value?.session.map { .session($0) } }
             // Which session is on screen, so a notification about it, with
             // the app in front, is not shown over it.
             noteViewing(value)
