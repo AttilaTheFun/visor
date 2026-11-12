@@ -1,0 +1,56 @@
+load("@rules_apple//apple:macos.bzl", "macos_command_line_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# agent_protocol: the protos' Swift (generated, Sources/AgentProtocol), the
+# wrapper's library and agent-wrapper. Self-contained: no label of the
+# repository it sits in. On the Mac for now, where Foundation is Apple's;
+# elsewhere it builds with SwiftPM (Package.swift).
+_MACOS = ["@platforms//os:macos"]
+
+_GRPC = [
+    "@swiftpkg_grpc_swift_2//:GRPCCore",
+    "@swiftpkg_grpc_swift_nio_transport//:GRPCNIOTransportHTTP2",
+]
+
+swift_library(
+    name = "agent_protocol",
+    srcs = glob(["Sources/AgentProtocol/**/*.swift"]),
+    # Generated: Swift 6, its warnings protoc's own.
+    copts = ["-swift-version", "6"],
+    module_name = "AgentProtocol",
+    target_compatible_with = _MACOS,
+    deps = [
+        "@swiftpkg_grpc_swift_2//:GRPCCore",
+        "@swiftpkg_grpc_swift_protobuf//:GRPCProtobuf",
+        "@swiftpkg_swift_protobuf//:SwiftProtobuf",
+    ],
+)
+
+swift_library(
+    name = "agent_wrapper",
+    srcs = glob(["Sources/AgentWrapper/*.swift"]),
+    copts = ["-swift-version", "6", "-warnings-as-errors"],
+    module_name = "AgentWrapper",
+    target_compatible_with = _MACOS,
+    deps = [":agent_protocol"] + _GRPC,
+)
+
+swift_library(
+    name = "agent_wrapper_main",
+    srcs = glob(["Sources/AgentWrapperMain/*.swift"]),
+    copts = ["-swift-version", "6", "-warnings-as-errors"],
+    module_name = "AgentWrapperMain",
+    target_compatible_with = _MACOS,
+    deps = [":agent_wrapper"],
+)
+
+# agent-wrapper, for a Mac app to carry (Visor.app's Contents/Helpers).
+macos_command_line_application(
+    name = "agent-wrapper",
+    bundle_id = "com.LoganShire.AgentProtocol.agentWrapper",
+    minimum_os_version = "15.0",
+    target_compatible_with = _MACOS,
+    deps = [":agent_wrapper_main"],
+)

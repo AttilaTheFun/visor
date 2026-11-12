@@ -7,6 +7,8 @@ import AppKit
 import MessageCache
 import SwiftUI
 import VisorClient
+import VisorDriver
+import VisorNativeRunner
 import VisorProtocol
 import VisorServer
 import VisorServerApple
@@ -36,6 +38,7 @@ struct VisorMacApp: App {
         ServerCache.shared = .open(named: "messages", in: MacPlaces.folder("Server"))
         ServerPlatform.current = .apple(secrets: KeychainSecrets(service: MacPlaces.serverService))
         server = VisorServer.shared
+        Self.startAgentProtocol(server)
         // The client's own: its cache and its keychain items. Then its
         // services, which the store connects through.
         AgentServerConnection.cache = .open(named: "messages", in: MacPlaces.folder("Client"))
@@ -54,6 +57,23 @@ struct VisorMacApp: App {
         _store = State(initialValue: store)
         // This Mac's server among the computers, without pairing.
         if !VisorFixture.active { OwnServer.follow(server, in: store) }
+    }
+
+    /// agent_protocol on this Mac (Logan, 12 Nov 2026): the server as driver
+    /// and dispatcher on loopback, and the native runner, which runs each
+    /// job's agent under the agent-wrapper in this app's Helpers. Its jobs'
+    /// harness is the `AgentJobHarness` default (claude unless set; echo
+    /// for a test without a model).
+    private static func startAgentProtocol(_ server: VisorServer) {
+        let port = 7434
+        let url = "http://127.0.0.1:\(port)"
+        let harness = UserDefaults.standard.string(forKey: "AgentJobHarness") ?? "claude"
+        _ = VisorDriver.start(server, host: "127.0.0.1", port: port, url: url, harness: harness)
+        let wrapper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/agent-wrapper").path
+        guard FileManager.default.isExecutableFile(atPath: wrapper),
+              let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: Host.current().localizedName ?? "Mac",
+                                        log: { VisorDriver.log($0) }) else { return }
+        Task { await runner.run() }
     }
 
     var body: some Scene {

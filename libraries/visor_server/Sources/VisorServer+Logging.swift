@@ -3,7 +3,7 @@
 // log file for the command-line server.
 
 extension VisorServer {
-    nonisolated static func log(_ line: String) {
+    nonisolated package static func log(_ line: String) {
         ServerPlatform.current.log(line)
     }
 }

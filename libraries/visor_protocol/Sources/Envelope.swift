@@ -32,6 +32,9 @@ public struct Envelope: Codable, Sendable {
     public var cwd: String?
     /// The session's name; empty means the directory's name.
     public var title: String?
+    /// A queued job (`POST /api/jobs`): the kind of runner that may take
+    /// it ("native", "container"); none means any runner.
+    public var runsOn: String?
     /// start / permissions: run the agent without permission prompts (auto)
     /// or with the agent's own guarded mode (manual).
     public var skipPermissions: Bool?

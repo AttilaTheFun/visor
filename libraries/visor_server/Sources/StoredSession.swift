@@ -45,6 +45,10 @@ struct StoredSession: Codable {
     var mcpSwitched: [String: Bool]?
     /// Its inbox and outbox.
     var mailbox: Mailbox?
+    /// An agent run under agent_protocol's wrapper, elsewhere, with this
+    /// server as its driver: its process is the wrapper's stream, never a
+    /// harness started here.
+    var driven: Bool?
     static let currentShape = 2
 
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
@@ -52,7 +56,7 @@ struct StoredSession: Codable {
          queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil,
          head: String? = nil, leaf: String? = nil, otherBranch: String? = nil, branchKept: Bool? = nil,
          fork: PendingFork? = nil, watchedSubagents: [String]? = nil, closedSubagents: [String]? = nil, mcpSwitched: [String: Bool]? = nil,
-         mailbox: Mailbox? = nil) {
+         mailbox: Mailbox? = nil, driven: Bool? = nil) {
         self.info = info
         self.entries = entries
         self.resumeID = resumeID
@@ -73,6 +77,7 @@ struct StoredSession: Codable {
         self.closedSubagents = closedSubagents
         self.mcpSwitched = mcpSwitched
         self.mailbox = mailbox
+        self.driven = driven
     }
 
     /// Every field but the session itself is optional, so a file written

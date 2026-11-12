@@ -86,7 +86,7 @@ public final class SessionRecord {
     public internal(set) var error: String?
     /// Not a `let`: a session whose folder moved is given a new agent,
     /// because the directory is fixed when the process spawns.
-    var process: AgentProcess
+    package var process: AgentProcess
 
     /// The agent's events being handed to the server, one at a time and in
     /// the order the agent gave them.
@@ -123,6 +123,10 @@ public final class SessionRecord {
     /// What other sessions sent it and what it sent them
     /// (docs/agent-mail.md), kept with it. Its unread count and when it
     /// changed go out with the session's info, for clients to read it again.
+    /// Run under agent_protocol's wrapper, with this server as its driver
+    /// (VisorDriver): its rows come over the wrapper's stream.
+    package var driven = false
+
     var mailbox = Mailbox() {
         didSet {
             guard mailbox != oldValue else { return }
@@ -263,7 +267,7 @@ public final class SessionRecord {
                              watchedSubagents: watchedSubagents.isEmpty ? nil : watchedSubagents.sorted(),
                              closedSubagents: closedSubagents.isEmpty ? nil : closedSubagents.sorted(),
                              mcpSwitched: mcpSwitched.isEmpty ? nil : mcpSwitched,
-                             mailbox: mailbox.isEmpty ? nil : mailbox)
+                             mailbox: mailbox.isEmpty ? nil : mailbox, driven: driven ? true : nil)
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or

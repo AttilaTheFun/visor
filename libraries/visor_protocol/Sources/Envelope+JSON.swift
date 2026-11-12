@@ -21,6 +21,7 @@ extension Envelope {
         e.agent = value["agent"].string.flatMap(AgentKind.init(wire:))
         e.cwd = value["cwd"].string
         e.title = value["title"].string
+        e.runsOn = value["runsOn"].string
         e.skipPermissions = value["skipPermissions"].bool
         e.session = value["session"].string
         e.text = value["text"].string
@@ -111,7 +112,7 @@ extension Envelope {
         func put(_ key: String, _ s: String?) { if let s { o[key] = .string(s) } }
         func putBool(_ key: String, _ b: Bool?) { if let b { o[key] = .bool(b) } }
         put("password", password); put("host", host); put("login", login); put("message", message); put("id", id)
-        put("agent", agent?.rawValue); put("cwd", cwd); put("title", title)
+        put("agent", agent?.rawValue); put("cwd", cwd); put("title", title); put("runsOn", runsOn)
         putBool("skipPermissions", skipPermissions)
         put("session", session); put("text", text)
         if let sessions { o["sessions"] = .array(sessions.map(\.json)) }

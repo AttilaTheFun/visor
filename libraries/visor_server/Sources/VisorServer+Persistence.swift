@@ -108,8 +108,13 @@ extension VisorServer {
             }
             // A contained session always auto-approves (VisorServer+Permissions).
             info = withPermissions(info)
-            let record = SessionRecord(info: info, process: makeProcess(info, resume: item.resumeID), entries: entries,
+            // A driven agent's process is its wrapper's stream, which comes
+            // back when the wrapper dials again (VisorDriver).
+            let driven = item.driven == true
+            let process = driven ? (drivenProcess?(info) ?? makeProcess(info, resume: item.resumeID)) : makeProcess(info, resume: item.resumeID)
+            let record = SessionRecord(info: info, process: process, entries: entries,
                                        shownPrompts: item.shownPrompts ?? [], notice: item.notice)
+            record.driven = driven
             record.refreshResume()
             record.interrupted = item.interrupted ?? false
             record.reportedUsage = item.reportedUsage

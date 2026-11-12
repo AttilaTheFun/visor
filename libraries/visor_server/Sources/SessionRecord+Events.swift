@@ -87,6 +87,12 @@ extension SessionRecord {
         case .commands(let list):
             commands = list
             return nil
+        case .rows(let rows):
+            // Taken as the file's rows are, and told to clients the same way.
+            var changed: [TranscriptEntry] = []
+            for row in rows where take(fileRow: row) { changed.append(row) }
+            if !changed.isEmpty { onFileRows?(changed) }
+            return nil
         case .background(let items):
             backgroundKnown = true
             guard info.background != items else { return nil }

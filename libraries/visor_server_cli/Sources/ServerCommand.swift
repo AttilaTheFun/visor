@@ -10,11 +10,16 @@ import VisorServer
 public struct ServerCommand {
     let system: any CommandLineSystem
     let arguments: [String]
+    /// Called with the server once it is made, before it serves: what the
+    /// binary adds beside it (agent_protocol's driver and runner).
+    let onServer: (@MainActor (VisorServer) -> Void)?
 
     /// `arguments` without the program's own name.
-    public init(system: any CommandLineSystem, arguments: [String] = Array(CommandLine.arguments.dropFirst())) {
+    public init(system: any CommandLineSystem, arguments: [String] = Array(CommandLine.arguments.dropFirst()),
+                onServer: (@MainActor (VisorServer) -> Void)? = nil) {
         self.system = system
         self.arguments = arguments
+        self.onServer = onServer
     }
 
     static let usage = """
