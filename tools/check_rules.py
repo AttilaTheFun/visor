@@ -66,10 +66,8 @@ def problem(where, what):
 
 def tracked():
     files = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, check=True).stdout
-    # third_party/ is others' code; agent_protocol's generated Swift is
-    # protoc's (tools/generate.sh there), checked against its protos.
-    return [name for name in files.decode().split("\0") if name and not name.startswith("third_party/")
-            and not name.startswith("agent_protocol/Sources/AgentProtocol/")]
+    # third_party/ is others' code.
+    return [name for name in files.decode().split("\0") if name and not name.startswith("third_party/")]
 
 
 def line_of(text, index):
@@ -97,11 +95,6 @@ def check_signing(name, text):
 
 
 def check_build(name, text):
-    # agent_protocol/ is its own module-to-be (it splits out of this
-    # repository): its targets set the same flags themselves, with no
-    # label of this repository's.
-    if name.startswith("agent_protocol/"):
-        return
     for found in re.finditer(r"^(\w+)\(\n(.*?)^\)", text, re.M | re.S):
         kind, body = found.group(1), found.group(2)
         if kind not in SWIFT_RULES:

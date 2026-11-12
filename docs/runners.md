@@ -124,7 +124,9 @@ Logan's answers to the plan's questions (12 Nov):
   (split out of visor's `agent_protocol/` with its history, 12 Nov).
   - Visor and Shireworks depend on it by released version (from v0.1.0),
     not by a visor commit or a folder.
-  - Visor's copy goes once Visor depends on the release.
+  - Visor's copy is gone: Visor depends on 0.1.0 (its server's services
+    by SwiftPM and rules_swift_package_manager, the Mac app's agent-wrapper
+    from the release's package).
 - **Existing sessions** all move: first to run natively, then the
   co-tenant container goes, Shireworks' primary container is made, and
   they move into it (a phase of its own, planned with Shireworks).
