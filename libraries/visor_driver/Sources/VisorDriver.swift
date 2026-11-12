@@ -32,4 +32,10 @@ public enum VisorDriver {
             }
         }
     }
+
+    /// The server's log, for what runs beside it (the native runner in an
+    /// app whose module is outside the server's package).
+    public static func log(_ line: String) {
+        VisorServer.log(line)
+    }
 }

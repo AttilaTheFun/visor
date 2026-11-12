@@ -72,7 +72,7 @@ struct VisorMacApp: App {
         let wrapper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/agent-wrapper").path
         guard FileManager.default.isExecutableFile(atPath: wrapper),
               let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: Host.current().localizedName ?? "Mac",
-                                        log: { VisorServer.log($0) }) else { return }
+                                        log: { VisorDriver.log($0) }) else { return }
         Task { await runner.run() }
     }
 
