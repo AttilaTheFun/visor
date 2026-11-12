@@ -275,9 +275,18 @@ package enum SessionCatalog {
         return Array(entries.suffix(limit))
     }
 
+    /// How much of the end of a Claude conversation its latest rows are
+    /// read from. A session moved here, or started on its past, shows the
+    /// last few hundred rows at once; the rest come from the file as the
+    /// session follows it (SessionIndexer, off the main actor). Reading a
+    /// conversation of a gigabyte whole held a move's finish for minutes,
+    /// and its connection was lost (12 Nov 2026).
+    static let claudeTailBytes = 16 << 20
+
     private static func claudeTranscript(id: String, cwd: String) -> [TranscriptEntry] {
         guard let file = ClaudeSessionFiles.locate(sessionID: id, cwd: cwd) else { return [] }
-        return TranscriptAssembler.rows(in: ClaudeBranch.current(of: ClaudeTranscriptParser.lines(contentsOf: file)).records)
+        let lines = ClaudeTranscriptParser.tailLines(contentsOf: file, bytes: claudeTailBytes)
+        return TranscriptAssembler.rows(in: ClaudeBranch.current(of: lines).records)
     }
 
     /// The rollout file of a Codex thread, under Codex's folder.

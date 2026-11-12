@@ -79,6 +79,26 @@ final class ParserTests: XCTestCase {
                        .goal(condition: "In convo, messages sync", met: false, reason: nil))
     }
 
+    func testTheTailOfALargeConversationIsItsLastWholeLines() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("tail-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: file) }
+        var text = ""
+        for index in 0..<1_000 {
+            text += #"{"type":"user","uuid":"u\#(index)","message":{"role":"user","content":"message \#(index)"}}"# + "\n"
+        }
+        try Data(text.utf8).write(to: file)
+        let whole = ClaudeTranscriptParser.lines(contentsOf: file)
+        XCTAssertEqual(whole.count, 1_000)
+        // About the last 50 lines' worth of bytes: only whole lines, ending
+        // with the file's last.
+        let tail = ClaudeTranscriptParser.tailLines(contentsOf: file, bytes: 50 * 90)
+        XCTAssertGreaterThan(tail.count, 40)
+        XCTAssertLessThan(tail.count, 60)
+        XCTAssertEqual(tail.map(\.uuid).last, whole.map(\.uuid).last)
+        XCTAssertEqual(Array(whole.suffix(tail.count)).map(\.uuid), tail.map(\.uuid), "the same lines as the end of the whole")
+        XCTAssertEqual(ClaudeTranscriptParser.tailLines(contentsOf: file, bytes: 10 << 20).count, 1_000, "a small file is read whole")
+    }
+
     func testProjectDirectoryName() {
         XCTAssertEqual(ClaudeSessionFiles.projectDirectoryName(for: "/Users/me/Developer/my_app"), "-Users-me-Developer-my-app")
         // A symlinked folder is named by where it really is.
