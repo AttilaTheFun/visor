@@ -108,7 +108,7 @@ window_frame() { # Visor's window: x y width height (the VM's screen is 1:1)
 }
 shot() { # shot <name>: the screen, then Visor's window cut from it
     local name="$1" x y width height
-    "$SW" machine screenshot "$vm" "$work/screen.png"
+    "$SW" machine screenshot "$vm" "$work/screen.png" > /dev/null
     read -r x y width height <<< "$(window_frame)" || true
     if [ -n "${height:-}" ] && python3 -I "$HERE/pngcrop.py" "$work/screen.png" "$out/$name.png" "$x" "$y" "$width" "$height" > /dev/null 2>&1; then
         :
