@@ -1,0 +1,19 @@
+2026-11-12 11:06:38.560 Df Visor[3430:3290] [com.LoganShire.Visor:server] agent_protocol: driver and dispatcher on 127.0.0.1:7434, as http://127.0.0.1:7434, and to containers as http://visor.multipass.internal:7434
+2026-11-12 11:06:40.222 Df Visor[3430:323a] [com.LoganShire.Visor:server] dispatcher: queued 5129d497-1aa2-4a91-aca5-e82c4281ca76 (Native agent)
+2026-11-12 11:06:40.222 Df Visor[3430:323a] [com.LoganShire.Visor:server] dispatcher: macos-27 claimed 5129d497-1aa2-4a91-aca5-e82c4281ca76
+2026-11-12 11:06:40.225 Df Visor[3430:328f] [com.LoganShire.Visor:server] native runner: started 5129d497-1aa2-4a91-aca5-e82c4281ca76 (Native agent), pid 3487
+2026-11-12 11:06:40.251 Df Visor[3430:323a] [com.LoganShire.Visor:server] driven session: Native agent (Claude Code) in /Users/runner/e2e-native
+2026-11-12 11:06:40.252 Df Visor[3430:32cb] [com.LoganShire.Visor:server] driver: 5129d497-1aa2-4a91-aca5-e82c4281ca76 connected from macos-27.local
+2026-11-12 11:06:42.703 Df Visor[3430:323a] [com.LoganShire.Visor:server] dispatcher: 5129d497-1aa2-4a91-aca5-e82c4281ca76 started by macos-27 (session 4f32591a-615b-4930-91db-cd5ecc2c7685)
+2026-11-12 11:09:06.538 Df Visor[3430:323a] [com.LoganShire.Visor:server] dispatcher: queued ec3d49d7-e5be-4bb0-8a8e-7b94e322203a (Container agent)
+2026-11-12 11:09:06.539 Df Visor[3430:323a] [com.LoganShire.Visor:server] dispatcher: shireworks-container@e2e-relay claimed ec3d49d7-e5be-4bb0-8a8e-7b94e322203a
+2026-11-12 11:09:06.625 Df Visor[3430:323a] [com.LoganShire.Visor:server] driven session: Container agent (Claude Code) in ~
+2026-11-12 11:09:06.627 Df Visor[3430:390c] [com.LoganShire.Visor:server] driver: ec3d49d7-e5be-4bb0-8a8e-7b94e322203a connected from shireworks-lease-container-e0322c90
+2026-11-12 11:09:07.436 Df Visor[3430:323a] [com.LoganShire.Visor:server] dispatcher: ec3d49d7-e5be-4bb0-8a8e-7b94e322203a started by shireworks-container@e2e-relay (session 0976d383-aab3-464c-849f-4e9a07967630)
+2026-11-12 11:09:27.355 Df Visor[3430:323a] [com.LoganShire.Visor:server] stopping the agent of Container agent (ec3d49d7-e5be-4bb0-8a8e-7b94e322203a)
+2026-11-12 11:09:27.464 Df Visor[3430:323a] [com.LoganShire.Visor:server] stopping the agent of Native agent (5129d497-1aa2-4a91-aca5-e82c4281ca76)
+2026-11-12 11:09:27.622 Df Visor[3430:3ed9] [com.LoganShire.Visor:server] driver: ec3d49d7-e5be-4bb0-8a8e-7b94e322203a disconnected
+2026-11-12 11:09:27.719 Df Visor[3430:323a] [com.LoganShire.Visor:server] dispatcher: ec3d49d7-e5be-4bb0-8a8e-7b94e322203a completed: container ok again
+2026-11-12 11:09:27.987 Df Visor[3430:3ed9] [com.LoganShire.Visor:server] driver: 5129d497-1aa2-4a91-aca5-e82c4281ca76 disconnected
+2026-11-12 11:09:27.988 Df Visor[3430:323a] [com.LoganShire.Visor:server] dispatcher: 5129d497-1aa2-4a91-aca5-e82c4281ca76 completed: native ok again
+2026-11-12 11:09:27.990 Df Visor[3430:3ed9] [com.LoganShire.Visor:server] native runner: 5129d497-1aa2-4a91-aca5-e82c4281ca76 ended (its wrapper reported)

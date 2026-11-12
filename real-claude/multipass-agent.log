@@ -1,0 +1,6 @@
+visor-runner-agent: the MCP proxy listens on port 7439, the push proxy too
+visor-runner-agent: the GitHub proxy listens on port 7471
+visor-runner-agent: the relay listener is on loopback port 7470, visor.multipass.internal:7434 to loopback port 7434
+visor-runner-agent: relay: container:e0322c90 CONNECT visor.multipass.internal:7434 dial-in to loopback port 7434
+visor-runner-agent: relay: container:e0322c90 CONNECT visor.multipass.internal:7434 dial-in to loopback port 7434
+visor-runner-agent: relay: container:e0322c90 CONNECT visor.multipass.internal:7434 dial-in to loopback port 7434
