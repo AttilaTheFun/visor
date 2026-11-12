@@ -149,7 +149,7 @@ final class AgentStateTests: ServerTestCase {
         let record = session()
         act("stopAgent", on: record)
         try await settle(record, at: .stopped)
-        server.saveArchive()
+        server.saveArchiveNow()
 
         let again = VisorServer(port: 7989)
         again.harnesses = AgentHarnesses([LoggedHarness(agents)])

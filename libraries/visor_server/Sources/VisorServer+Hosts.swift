@@ -56,7 +56,7 @@ extension VisorServer {
         for record in leaving { (record.process as? HostableProcess)?.hostedChild?.detach() }
         try? await Task.sleep(for: .milliseconds(200))
         for record in sessions where record.info.busy { record.interrupted = true }
-        saveArchive()
+        saveArchiveNow()
         for record in sessions { record.stopListening() }
         let ending = sessions.filter { record in !leaving.contains { $0 === record } }
             .map { record in Task { await record.process.end(within: .seconds(4)) } }

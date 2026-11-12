@@ -138,7 +138,7 @@ extension VisorServer {
             sessions.append(record)
         }
         try? FileManager.default.removeItem(at: legacy)
-        if !stored.isEmpty || dropped { saveArchive() }
+        if !stored.isEmpty || dropped { saveArchiveNow() }
         for left in hosted {
             Task { await pickUp(left.record, host: left.host, agentPID: left.pid, resume: left.resume) }
         }
@@ -166,17 +166,38 @@ extension VisorServer {
         if await !Command.exited(pid, within: .seconds(2)) { processes.kill(pid) }
     }
 
-    /// Writes every session down (the name is historical: it began as the
-    /// archive).
+    /// Writes every session down soon: once, `archiveSaveDelay` after the
+    /// first change, with every change made by then. Most changes are of a
+    /// turn (its state, its queue, mail read and sent), and a turn makes
+    /// many; written whole on each, the store (megabytes, with the
+    /// sessions' mailboxes) cost the Mac about a gigabyte an hour. What
+    /// must survive a crash (a session made or ended, an agent's pid,
+    /// archiving) is written at once with saveArchiveNow, as is everything
+    /// before a quit or a relaunch.
     func saveArchive() {
+        guard !archiveSavePending else { return }
+        archiveSavePending = true
+        let delay = archiveSaveDelay
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, self.archiveSavePending else { return }
+            self.saveArchiveNow()
+        }
+    }
+
+    /// Writes every session down now (the name is historical: it began as
+    /// the archive), and with it any change waiting to be.
+    func saveArchiveNow() {
+        archiveSavePending = false
         guard storeIsReadable else { return }
         let stored = sessions.map(\.stored)
         do {
             let data = try JSONEncoder().encode(stored)
-            // Yesterday's file is kept beside today's. It costs nothing and
-            // it is the difference between a bad write and a lost afternoon.
+            // Yesterday's file is kept beside today's: the difference between
+            // a bad write and a lost afternoon. Copied once a day, not on
+            // every write: on every write it doubled what the store cost.
             let backup = Self.storeURL.deletingLastPathComponent().appendingPathComponent("sessions.previous.json", isDirectory: false)
-            if let existing = try? Data(contentsOf: Self.storeURL), existing.count > 2, existing != data {
+            if Self.backupIsDue(backup), let existing = try? Data(contentsOf: Self.storeURL), existing.count > 2, existing != data {
                 try? existing.write(to: backup, options: .atomic)
             }
             try data.write(to: Self.storeURL, options: .atomic)
@@ -190,6 +211,13 @@ extension VisorServer {
             savingFailed = true
             lastError = "Sessions are not being saved: \(error.localizedDescription)"
         }
+    }
+
+    /// Whether the day's copy of the store is due: none yet, or the one
+    /// there is a day old.
+    static func backupIsDue(_ backup: URL, now: Date = Date()) -> Bool {
+        guard let made = (try? FileManager.default.attributesOfItem(atPath: backup.path))?[.modificationDate] as? Date else { return true }
+        return now.timeIntervalSince(made) >= 24 * 60 * 60
     }
 }
 

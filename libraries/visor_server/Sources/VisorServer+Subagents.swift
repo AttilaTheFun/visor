@@ -142,7 +142,7 @@ extension VisorServer {
         parent.closedSubagents.insert(agent)
         parent.info.subagents.removeAll { $0.id == agent }
         Self.log("session from a subagent: \(info.title) of \(parent.displayName)")
-        saveArchive()
+        saveArchiveNow()
         broadcastSessions()
         let words = (envelope.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !words.isEmpty { deliver(words, to: record) }

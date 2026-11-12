@@ -131,7 +131,7 @@ extension VisorServer {
         sessions.append(record)
         if let client { record.subscribers.insert(ObjectIdentifier(client)) }
         Self.log("session started: \(title) (\(agent.title)) in \(cwd)\(resume.isEmpty ? "" : ", resuming \(resume)")")
-        saveArchive()
+        saveArchiveNow()
         broadcastSessions()
     }
 
@@ -346,7 +346,7 @@ extension VisorServer {
         mcpProxy.forget(session: record.info.id)
         dropWaiters(for: record.info.id)
         Self.log("session ended: \(record.info.title)")
-        saveArchive()
+        saveArchiveNow()
         broadcastSessions()
     }
 
