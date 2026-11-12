@@ -55,7 +55,7 @@ extension VisorServer {
         sessions.append(record)
         if let client { record.subscribers.insert(ObjectIdentifier(client)) }
         Self.log("session \(origin.rawValue)ed: \(info.title) from \(parent.displayName)")
-        saveArchive()
+        saveArchiveNow()
         broadcastSessions()
         let prompt = (envelope.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !prompt.isEmpty { deliver(prompt, to: record) }

@@ -260,6 +260,13 @@ public final class VisorServer {
     /// The list, once, after a burst: a turn writes a row per tool call.
     var sessionsBroadcastPending = false
 
+    /// The sessions' store, written once `archiveSaveDelay` after a change
+    /// however many come in it (saveArchive): written whole on each, it
+    /// was most of the gigabytes a day the Mac saw Visor write.
+    var archiveSavePending = false
+    /// How long a change waits to be written with those after it.
+    var archiveSaveDelay: Duration = .seconds(30)
+
     /// The agents have been ended for a quit: nothing is left to wait for.
     public internal(set) var agentsEnded = false
 }

@@ -17,7 +17,7 @@ extension VisorServer {
         // The sessions that are mid-turn are written down as such: the flag
         // is what the next launch reads to know a reply is owed.
         for record in sessions where record.info.busy { record.interrupted = true }
-        saveArchive()
+        saveArchiveNow()
         // Empty means the default: everything that was running. A caller
         // that names sessions gets exactly those.
         if let problem = ServerPlatform.current.lifecycle.relaunch(installing: build, carrying: carrying.joined(separator: ",")) {
@@ -39,7 +39,7 @@ extension VisorServer {
     /// the record of the shutdown, however the app was quit.
     public func endAll() async {
         for record in sessions where record.info.busy { record.interrupted = true }
-        saveArchive()
+        saveArchiveNow()
         // What the agents say as they go is not heard: the record of the
         // shutdown is the one just written.
         for record in sessions { record.stopListening() }
