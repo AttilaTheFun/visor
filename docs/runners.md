@@ -25,6 +25,66 @@ them. Containers dial out only, through MultiPass, at
 `SHIREWORKS_HOST_ADDRESS` (Shireworks, 11 Nov). Nothing reaches into a
 container.
 
+## The shape (Logan, 12 Nov): agent_protocol, and two standalone apps
+
+Logan, 12 Nov 2026 (via Manager): Visor's MCP goes, agents' messages become
+prefixed messages the client delivers, and a public repository,
+`agent_protocol`, holds what Visor and Shireworks share: three gRPC
+services (AgentWrapper, AgentDispatcher, AgentDriver) and the one
+`agent_wrapper` binary. Visor and Shireworks are standalone again, joined
+only by it. Where this section and the rest of the document differ, this
+section wins: the wire below (`/api/v2/…` JSON) becomes agent_protocol's
+services, and its sections are rewritten as that work lands. Nothing is
+built until Logan answers the plan's questions.
+
+His drawing: dashed boxes are the `.app` bundles, solid ones the parts in
+them (some separate binaries, some the same), dashed arrows optional links
+that are configured. MultiPass's proxying is left out for simplicity: every
+link out of a container, and every agent's outbound traffic, goes through
+it.
+
+```mermaid
+flowchart LR
+  subgraph SW["Shireworks.app"]
+    SWD["Shireworks issue dispatcher"]
+    SWR["Shireworks container runner"]
+    SWA["agent wrapper"]
+    SWR -->|pulls jobs| SWD
+    SWR -->|spawns| SWA
+  end
+  subgraph V["Visor.app"]
+    VC["Visor client"]
+    VS["Visor server<br/>(dispatcher + driver)"]
+    VR["Visor native runner"]
+    VA["agent wrapper"]
+    VC --> VS
+    VR -->|pulls jobs| VS
+    VR -->|spawns| VA
+    VA -->|driver| VS
+  end
+  SWR -. "optional, configured: pulls jobs" .-> VS
+  SWA -. "optional, configured: driver" .-> VS
+  style SW stroke-dasharray: 6 4
+  style V stroke-dasharray: 6 4
+```
+
+What it settles:
+- Visor's native runner pulls only from Visor's dispatcher, and a native
+  wrapper always has Visor as its driver.
+- Shireworks' runner always pulls from its own (GitHub issues) dispatcher,
+  and from Visor's when configured; its wrappers use Visor as their driver
+  only when configured (`AGENT_DRIVER_URL`, Shireworks' Settings). Without
+  one, a job runs headless.
+- `agent_wrapper` is one component, from agent_protocol, shipped in both
+  bundles. Its core is what step 3 moved into visor_agent.
+- The agent id, a UUID with its dispatcher's URL, is made by the dispatcher
+  before any session exists, and goes dispatcher → runner → wrapper →
+  driver.
+- The drawing shows one Visor.app's client and its own server. A client
+  that connects to other computers' servers, as the iPhone's does, and the
+  messages it carries between them, are question 3 of the plan (whether the
+  server also relays).
+
 ## Logan's answers (11 Nov, later)
 
 Where this section and the rest of the document differ, this section wins.
