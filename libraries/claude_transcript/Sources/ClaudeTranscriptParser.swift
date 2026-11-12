@@ -23,15 +23,30 @@ public enum ClaudeTranscriptParser {
     /// branch a resume would take, so the last of these is the latest
     /// thing said.
     public static func tailRecords(contentsOf url: URL, bytes: Int = 65_536) -> [ClaudeRecord] {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
+        guard let data = tail(of: url, bytes: bytes) else { return [] }
+        return records(in: data)
+    }
+
+    /// The lines at the end of a file — its last `bytes`, whole lines only —
+    /// as `lines(contentsOf:)` reads them all: what a session's latest rows
+    /// are built from without reading a conversation of a gigabyte whole.
+    /// A file no longer than `bytes` is read whole.
+    public static func tailLines(contentsOf url: URL, bytes: Int, sidechain: Bool = false) -> [ClaudeLine] {
+        guard let data = tail(of: url, bytes: bytes) else { return [] }
+        return lines(in: data, sidechain: sidechain)
+    }
+
+    /// The last `bytes` of a file, from the start of a line.
+    private static func tail(of url: URL, bytes: Int) -> Data? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
         let start = size > UInt64(bytes) ? size - UInt64(bytes) : 0
         try? handle.seek(toOffset: start)
-        guard var data = try? handle.readToEnd(), !data.isEmpty else { return [] }
+        guard var data = try? handle.readToEnd(), !data.isEmpty else { return nil }
         // A read that began mid-line drops that line.
         if start > 0, let newline = data.firstIndex(of: 0x0A) { data = Data(data[data.index(after: newline)...]) }
-        return records(in: data)
+        return data
     }
 
     /// With `sidechain`, a subagent's own file: its records are all on its
