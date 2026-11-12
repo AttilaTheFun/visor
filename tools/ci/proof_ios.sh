@@ -12,13 +12,15 @@
 # got it), made for the run, its status bar held still and keyboard
 # suggestions off, it runs the fixture's screens in portrait and on its side
 # (the probe's testFixtureScreens and testFixtureScreensLandscape) and, for
-# a full proof, its UI cases (tools/ios_ui_tests.sh's). A test that fails is
+# a full proof, its UI cases (tools/ios_ui_tests.sh's); `screens` runs the
+# screens alone and `cases` the UI cases alone, so the two can be jobs of
+# their own side by side. A test that fails is
 # run once more (GitHub's Macs vary in speed: a UI case's timing, an app
 # that didn't launch), and fails the proof only if it fails again. The
 # pictures come out of the runs' result bundles, where the probe attaches
 # each (from the last repetition that took it).
 #
-#   tools/ci/proof_ios.sh <apps> <out> [quick|full]
+#   tools/ci/proof_ios.sh <apps> <out> [screens|cases|full]
 #
 # <apps> holds visor_ios.ipa and visor_probe.zip. Out come
 # <out>/screens/ios-<screen>.png and ios-<screen>-landscape.png,
@@ -33,13 +35,13 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 me="$(basename "$0")"
-usage() { echo "usage: tools/ci/proof_ios.sh <apps> <out> [quick|full]" >&2; exit 2; }
+usage() { echo "usage: tools/ci/proof_ios.sh <apps> <out> [screens|cases|full]" >&2; exit 2; }
 [ $# -ge 2 ] || usage
 apps="$(cd "$1" && pwd)"
 mkdir -p "$2"
 out="$(cd "$2" && pwd)"
 kind="${3:-full}"
-case "$kind" in quick | full) ;; *) usage ;; esac
+case "$kind" in screens | cases | full) ;; *) usage ;; esac
 DEVICE="iPhone 17"
 UI_CASES="$(sed -n 's/^CASES="\${VISOR_UI_CASES:-\(.*\)}"$/\1/p' "$ROOT/tools/ios_ui_tests.sh")"
 [ -n "$UI_CASES" ] || { echo "$me: no UI cases in tools/ios_ui_tests.sh" >&2; exit 1; }
@@ -247,11 +249,22 @@ xctest() {
     # different probe (a 0.5 s timing, a UI query timing out, "Failed to
     # terminate com.LoganShire.Visor") that passed on the run before. A
     # failure that repeats three times is still the proof's.
+    # A failure's diagnostics go in the result bundle (on 12 Nov the app
+    # twice had no process after launching, and nothing said why); a run
+    # that failed somewhere also keeps the simulator's log of the launch's
+    # parts, from its start.
+    local started
+    started="$(date '+%Y-%m-%d %H:%M:%S')"
     xcodebuild test-without-building -xctestrun "$folder/tests.xctestrun" -destination "id=$udid" \
         -resultBundlePath "$folder/result.xcresult" -derivedDataPath "$folder/derived_data" \
-        -collect-test-diagnostics never -retry-tests-on-failure -test-iterations 3 \
+        -collect-test-diagnostics on-failure -retry-tests-on-failure -test-iterations 3 \
         "${only[@]}" > "$out/logs/$name.log" 2>&1 || result=$?
     grep -E '^(Test Suite|Test Case .*(passed|failed)|.*error:|\*\* TEST)' "$out/logs/$name.log" | tail -40 || true
+    if [ "$result" -ne 0 ] || grep -q "^Test Case .* failed" "$out/logs/$name.log"; then
+        xcrun simctl spawn "$udid" log show --start "$started" --style compact \
+            --predicate 'process BEGINSWITH "visor" OR process IN {"SpringBoard", "runningboardd", "testmanagerd", "XCTRunner"}' \
+            > "$out/logs/$name-simulator.log" 2>&1 || true
+    fi
     if [ "$result" -ne 0 ]; then
         echo "::error::$name failed ($result)"
         tail -60 "$out/logs/$name.log"
@@ -260,11 +273,17 @@ xctest() {
     [ ! -d "$folder/result.xcresult" ] || ditto -c -k --keepParent "$folder/result.xcresult" "$out/logs/$name.xcresult.zip"
     echo "::endgroup::"
 }
-xctest portrait VisorProbe/testFixtureScreens
-xctest landscape VisorProbe/testFixtureScreensLandscape
-if [ "$kind" = full ]; then
+if [ "$kind" != cases ]; then
+    xctest portrait VisorProbe/testFixtureScreens
+    xctest landscape VisorProbe/testFixtureScreensLandscape
+fi
+if [ "$kind" != screens ]; then
     IFS=, read -r -a cases <<< "$UI_CASES"
     xctest ui-cases "${cases[@]}"
+fi
+if [ "$kind" = cases ]; then
+    finished=1
+    exit "$status"
 fi
 
 # The pictures named fixture-<screen> out of each orientation's result

@@ -253,8 +253,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The iPhone app's fixture screens in portrait and on its side, and its UI
-  # cases, on an iPhone 17 simulator (tools/ci/proof_ios.sh).
+  # The iPhone app's fixture screens in portrait and on its side, on an
+  # iPhone 17 simulator (tools/ci/proof_ios.sh). Its UI cases are
+  # proof-ios-cases, beside it on a Mac of their own.
   proof-ios:
     needs: build-apple
     runs-on: xcode-27
@@ -265,7 +266,7 @@ jobs:
         with:
           name: apps-ios
           path: ${{ runner.temp }}/apps
-      - run: tools/ci/proof_ios.sh "$RUNNER_TEMP/apps" "$RUNNER_TEMP/part" full
+      - run: tools/ci/proof_ios.sh "$RUNNER_TEMP/apps" "$RUNNER_TEMP/part" screens
       # The part whether its screens came up or not: a broken screen is what
       # the proof is for.
       - uses: actions/upload-artifact@v4
@@ -273,6 +274,27 @@ jobs:
         with:
           name: part-ios
           path: ${{ runner.temp }}/part
+          retention-days: 7
+
+  # The iPhone app's UI cases (tools/ios_ui_tests.sh's), on a simulator of
+  # their own while proof-ios takes the screens. Their logs only: no
+  # screens, so not a part of the proof (its artifacts are part-*).
+  proof-ios-cases:
+    needs: build-apple
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: apps-ios
+          path: ${{ runner.temp }}/apps
+      - run: tools/ci/proof_ios.sh "$RUNNER_TEMP/apps" "$RUNNER_TEMP/cases" cases
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: ios-cases
+          path: ${{ runner.temp }}/cases
           retention-days: 7
 
   # Visor.app's fixture screens (tools/ci/proof_mac.sh).
@@ -388,7 +410,7 @@ jobs:
   # success is the commit verified, which a release's alpha and the release
   # job ask for.
   verify:
-    needs: [build-tests, test, linux, blue-web, client-package, build-apple, build-android, proof-ios, proof-mac, proof-android]
+    needs: [build-tests, test, linux, blue-web, client-package, build-apple, build-android, proof-ios, proof-ios-cases, proof-mac, proof-android]
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release') }}
     runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 20
@@ -418,9 +440,9 @@ jobs:
           path: ${{ runner.temp }}/proof/proof
           if-no-files-found: error
           retention-days: 90
-      - if: needs.test.result != 'success' || needs.linux.result != 'success' || needs.blue-web.result != 'success' || needs.client-package.result != 'success' || needs.proof-ios.result != 'success' || needs.proof-mac.result != 'success' || needs.proof-android.result != 'success'
+      - if: needs.test.result != 'success' || needs.linux.result != 'success' || needs.blue-web.result != 'success' || needs.client-package.result != 'success' || needs.proof-ios.result != 'success' || needs.proof-ios-cases.result != 'success' || needs.proof-mac.result != 'success' || needs.proof-android.result != 'success'
         run: |
-          echo "::error::Not verified: the Mac's tests $TESTS, Linux's $LINUX, the web client $WEB, the client package $CLIENT, iPhone $IOS, Mac $MAC, Android $ANDROID"
+          echo "::error::Not verified: the Mac's tests $TESTS, Linux's $LINUX, the web client $WEB, the client package $CLIENT, iPhone $IOS (UI cases $IOS_CASES), Mac $MAC, Android $ANDROID"
           exit 1
         env:
           TESTS: ${{ needs.test.result }}
@@ -428,6 +450,7 @@ jobs:
           WEB: ${{ needs.blue-web.result }}
           CLIENT: ${{ needs.client-package.result }}
           IOS: ${{ needs.proof-ios.result }}
+          IOS_CASES: ${{ needs.proof-ios-cases.result }}
           MAC: ${{ needs.proof-mac.result }}
           ANDROID: ${{ needs.proof-android.result }}
 
