@@ -108,6 +108,23 @@ Logan's answers to the plan's questions (12 Nov):
   jobs: an implementation detail).
 - **Issues** refreshes a page as it appears, on coming back to the
   foreground, and on pull to refresh.
+- **The GitHub Apps** (Logan, 12 Nov): each App acts for one kind of caller,
+  and its key is held by one place only.
+  - **logan-shire-runner** is CI's: Shireworks' runners register with it and
+    run CI jobs as it.
+  - **logan-shire-works** is Shireworks': its server, its dispatcher (acting
+    on issues), and its clients.
+  - **logan-shire-agent** is the agents': every GitHub request an agent
+    makes goes out as it.
+  - MultiPass holds logan-shire-agent's key and adds the App's token to an
+    agent's GitHub traffic as it proxies it (its GitHub proxy and gate).
+  - No agent's container, and no runner, wrapper or agent process, ever
+    holds that token or the key.
+- **agent_protocol** has its own repository, AttilaTheFun/agent_protocol
+  (split out of visor's `agent_protocol/` with its history, 12 Nov).
+  - Visor and Shireworks depend on it by released version (from v0.1.0),
+    not by a visor commit or a folder.
+  - Visor's copy goes once Visor depends on the release.
 - **Existing sessions** all move: first to run natively, then the
   co-tenant container goes, Shireworks' primary container is made, and
   they move into it (a phase of its own, planned with Shireworks).
