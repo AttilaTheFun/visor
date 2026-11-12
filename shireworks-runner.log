@@ -1,0 +1,10 @@
+# Shireworks 0.3.28's runner in VM 543ac6bd (~/Library/Logs/Shireworks.log), as Shireworks sent it
+07:17:56Z runner shireworks-container@e2e: started, container agents, from http://127.0.0.1:7434
+07:18:30Z runner shireworks-container@e2e: Container agent from http://127.0.0.1:7434: agent ece99943-ca29-47a3-9ad7-15eaefef1a89@http://127.0.0.1:7434 started
+07:20:31Z runner shireworks-container@e2e: Container agent: its agent ended (status 0)
+
+# The container agent's own log (State/agents/ece99943….log): agent-wrapper in container 8881f651, beside the tunnel
+# ssh -f -N … -L 7434:127.0.0.1:7434 -p 47502 runner@192.168.128.1
+agent-wrapper: agent ECE99943-CA29-47A3-9AD7-15EAEFEF1A89 started (echo)
+agent-wrapper: driver 127.0.0.1:7434
+agent-wrapper: agent ended: the harness ended

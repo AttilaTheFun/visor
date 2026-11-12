@@ -1,0 +1,22 @@
+2026-11-12 02:15:23.867 agent_protocol: driver and dispatcher on 127.0.0.1:7434, as http://127.0.0.1:7434
+2026-11-12 02:15:46.275 listening on 127.0.0.1:7433
+2026-11-12 02:15:46.275 listening for SSH clients at /Users/runner/.visor/server.sock
+2026-11-12 02:16:15.405 dispatcher: queued e7b3ff5c-dcc7-41f8-a472-40a928b5946a (Native agent)
+2026-11-12 02:16:15.405 dispatcher: macos-27 claimed e7b3ff5c-dcc7-41f8-a472-40a928b5946a
+2026-11-12 02:16:15.408 native runner: started e7b3ff5c-dcc7-41f8-a472-40a928b5946a (Native agent), pid 1123
+2026-11-12 02:16:15.436 dispatcher: e7b3ff5c-dcc7-41f8-a472-40a928b5946a started by macos-27 (session echo-9363ea4e-1522-4864-a51a-759b30507904)
+2026-11-12 02:16:15.436 driven session: Native agent (Claude Code) in /Users/runner/e2e-native
+2026-11-12 02:16:15.437 driver: e7b3ff5c-dcc7-41f8-a472-40a928b5946a connected from macos-27.local
+2026-11-12 02:18:30.993 dispatcher: queued ece99943-ca29-47a3-9ad7-15eaefef1a89 (Container agent)
+2026-11-12 02:18:30.993 dispatcher: shireworks-container@e2e claimed ece99943-ca29-47a3-9ad7-15eaefef1a89
+2026-11-12 02:18:31.217 dispatcher: ECE99943-CA29-47A3-9AD7-15EAEFEF1A89 started by shireworks-container@e2e (session echo-d5e0a3f0-d2e6-4eb2-8bba-41362a1304fe)
+2026-11-12 02:18:31.217 driven session: Container agent (Claude Code) in ~
+2026-11-12 02:18:31.219 driver: ECE99943-CA29-47A3-9AD7-15EAEFEF1A89 connected from shireworks-lease-container-8881f651
+2026-11-12 02:20:18.545 stopping the agent of Container agent (ECE99943-CA29-47A3-9AD7-15EAEFEF1A89)
+2026-11-12 02:20:18.575 dispatcher: ECE99943-CA29-47A3-9AD7-15EAEFEF1A89 completed: echo: Hello from the Visor client, container agent
+2026-11-12 02:20:18.575 driver: ECE99943-CA29-47A3-9AD7-15EAEFEF1A89 disconnected
+2026-11-12 02:20:56.192 stopping the agent of Native agent (e7b3ff5c-dcc7-41f8-a472-40a928b5946a)
+2026-11-12 02:20:56.201 dispatcher: e7b3ff5c-dcc7-41f8-a472-40a928b5946a completed: echo: Hello from the Visor client, native agent
+2026-11-12 02:20:56.203 native runner: e7b3ff5c-dcc7-41f8-a472-40a928b5946a ended (its wrapper reported)
+2026-11-12 02:20:56.203 driver: e7b3ff5c-dcc7-41f8-a472-40a928b5946a disconnected
+2026-11-12 02:21:26.256 dispatcher: ece99943-ca29-47a3-9ad7-15eaefef1a89 its claim lapsed: queued again
