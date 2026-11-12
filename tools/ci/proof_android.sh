@@ -9,12 +9,14 @@
 # Each of the fixture's screens (snapshots.py's SCREENS) is opened with the
 # intent snapshots.py sends, pictured once it has settled, and cut below the
 # status bar, as snapshots.py cuts it: its icons redraw between runs even in
-# demo mode.
+# demo mode. On its side, the emulator is turned before the first: its
+# rotation held at a quarter turn, auto-rotate off.
 #
-#   tools/ci/proof_android.sh <apps> <out>
+#   tools/ci/proof_android.sh <apps> <out> [portrait|landscape]
 #
 # <apps> holds the signed APK (visor_android_apk.apk). Out come
-# <out>/screens/android-<screen>.png, <out>/logs/ (the emulator's and the
+# <out>/screens/android-<screen>.png (on its side,
+# android-<screen>-landscape.png), <out>/logs/ (the emulator's and the
 # app's logs) and <out>/device.txt (the emulator, for the proof's summary).
 #
 #   VISOR_SNAPSHOT_SETTLE  seconds a screen is given (default 8)
@@ -24,7 +26,12 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 me="$(basename "$0")"
-[ $# -eq 2 ] || { echo "usage: tools/ci/proof_android.sh <apps> <out>" >&2; exit 2; }
+usage() { echo "usage: tools/ci/proof_android.sh <apps> <out> [portrait|landscape]" >&2; exit 2; }
+[ $# -eq 2 ] || [ $# -eq 3 ] || usage
+orientation="${3:-portrait}"
+case "$orientation" in portrait | landscape) ;; *) usage ;; esac
+suffix=""
+[ "$orientation" = portrait ] || suffix="-landscape"
 apps="$(cd "$1" && pwd)"
 mkdir -p "$2"
 out="$(cd "$2" && pwd)"
@@ -118,12 +125,38 @@ printf 'Android %s (API %s, %s), %s\n' "$("$adb" shell getprop ro.build.version.
     "$("$adb" shell wm size | tr -d '\r' | sed 's/^Physical size: //')" | tee "$out/device.txt"
 echo "::endgroup::"
 
-echo "::group::The screens"
+echo "::group::The screens ($orientation)"
+if [ "$orientation" = landscape ]; then
+    # Window manager's own lock (the settings alone left API 34's display
+    # upright, 12 Nov 2026), then checked on each picture below.
+    "$adb" shell settings put system accelerometer_rotation 0
+    "$adb" shell cmd window user-rotation lock 1
+    sleep 2
+fi
+# Whether the display is on its side now.
+# (Read whole before grep: with pipefail, grep -q's early exit fails the pipe.)
+turned() {
+    local displays
+    displays="$("$adb" shell dumpsys window displays < /dev/null 2> /dev/null || true)"
+    case "$displays" in *mRotation=ROTATION_90*) return 0 ;; *) return 1 ;; esac
+}
 status=0
 for screen in $SCREENS; do
     "$adb" shell am start -S -n "$PACKAGE/.MainActivity" --es fixture snapshot --es fixture.screen "$screen" > /dev/null
     sleep "$SETTLE"
-    picture="$out/screens/android-$screen.png"
+    # On its side before the picture: the app's stop puts the launcher,
+    # which stands upright, in front for a moment, and on 12 Nov the display
+    # stayed upright after it for one screen in eleven. The lock again, and
+    # waited for, at most ten seconds, then the screen settled again.
+    if [ "$orientation" = landscape ] && ! turned; then
+        for _ in $(seq 1 10); do
+            "$adb" shell cmd window user-rotation lock 1 < /dev/null
+            sleep 1
+            ! turned || break
+        done
+        sleep "$SETTLE"
+    fi
+    picture="$out/screens/android-$screen$suffix.png"
     "$adb" exec-out screencap -p > "$picture" || true
     if [ -s "$picture" ]; then
         python3 -I - "$ROOT/tools/isomer/snapshots" "$picture" "$STATUS_BAR" << 'PY'
@@ -132,6 +165,16 @@ sys.path.insert(0, sys.argv[1])
 import pngdiff
 pngdiff.crop_top(sys.argv[2], int(sys.argv[3]))
 PY
+        if [ "$orientation" = landscape ] && ! python3 -I - "$picture" << 'PY'
+import struct, sys
+with open(sys.argv[1], "rb") as f:
+    width, height = struct.unpack(">II", f.read(24)[16:24])
+sys.exit(0 if width > height else 1)
+PY
+        then
+            echo "::error::$screen was pictured upright, not on its side"
+            status=1
+        fi
         echo "$screen"
     else
         echo "::error::no picture of $screen"

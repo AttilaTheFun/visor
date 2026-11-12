@@ -594,14 +594,25 @@ final class VisorProbe: XCTestCase {
     }
 
     /// Rows coming in while the thread is read further up move nothing in
-    /// it: the fixture's chat, scrolled up, gets two rows twelve seconds on
-    /// and one more fourteen seconds after. What was read stays where it was,
-    /// a pill says how many came in below and goes a few seconds later, and
-    /// its tap takes the thread down to the newest.
+    /// it: the fixture's chat, scrolled up, gets two rows once it is up
+    /// there (`-visor.fixture.go`) and one more fourteen seconds after.
+    /// What was read stays where it was, a pill says how many came in below
+    /// and goes a few seconds later, and its tap takes the thread down to
+    /// the newest.
     func testRowsArrivingWhileReadingAboveMoveNothing() throws {
         XCUIDevice.shared.orientation = Self.runOrientation
         let app = XCUIApplication()
         app.launchArguments = ["-visor.fixture", "snapshot", "-visor.fixture.screen", "arrivals"]
+        // The rows come once this file does, which the test makes when it is
+        // up the thread: on the fixture's clock a slow simulator had them
+        // in before the drag, at the end, with no pill (12 Nov). A
+        // simulator's app sees the Mac's files; a phone's doesn't, so a
+        // phone keeps the clock.
+        let go = "\(outDir)/arrivals-go-\(UUID().uuidString)"
+        #if targetEnvironment(simulator)
+        app.launchArguments += ["-visor.fixture.go", go]
+        #endif
+        defer { try? FileManager.default.removeItem(atPath: go) }
         app.launch()
         let last = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Rows now sync in the background, and the banner'")).firstMatch
         XCTAssertTrue(last.waitForExistence(timeout: 8), "the chat's last row did not appear")
@@ -618,14 +629,16 @@ final class VisorProbe: XCTestCase {
             .first { $0.exists && $0.isHittable }
         let watched = try XCTUnwrap(read, "no row in view after scrolling up")
         let before = watched.frame
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: go, contents: nil)
         let pill = app.buttons["new-rows-pill"]
         // Waited for with its count: on a slow machine the pill can show
         // the first of the two rows for a moment before the second. In the
         // fixture the pill stays until tapped (`newRowsPillSeconds`).
         let two = app.buttons.matching(NSPredicate(format: "identifier == 'new-rows-pill' AND label CONTAINS '2 new messages'")).firstMatch
-        // The rows come twelve seconds on; a slow simulator takes as long again.
+        // The rows come a second on (twelve on a phone); a slow simulator
+        // takes longer to show them.
         XCTAssertTrue(two.waitForExistence(timeout: 40), "no pill for the two rows that came in below")
-        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
         shot(app, "arrivals-pill")
         XCTAssertEqual(watched.frame.minY, before.minY, accuracy: 0.5, "what was read moved when rows came in below")
         // The third row: counted on the same pill, and its tap goes down to it.

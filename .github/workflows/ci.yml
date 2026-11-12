@@ -206,8 +206,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: tools/ci/client_package.sh "$RUNNER_TEMP/client-package"
 
-  # The proof's apps: the iPhone app and its probe for Apple silicon's
-  # simulator, and Visor.app (signed ad hoc, as a build on Linux is).
+  # The proof's apps: the iPhone app for Apple silicon's simulator, and
+  # Visor.app (signed ad hoc, as a build on Linux is).
   build-apple:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
     runs-on: [self-hosted, visor-jit]
@@ -218,13 +218,11 @@ jobs:
       - run: |
           VISOR_CI_PACKAGE=.ci/proof-apps tools/ci/container_build.sh "$GITHUB_JOB" \
             --macos_cpus=arm64 --ios_multi_cpus=sim_arm64 \
-            //applications/visor_ios //tests/ios_probe:visor_probe //applications/visor_mac
+            //applications/visor_ios //applications/visor_mac
       - uses: actions/upload-artifact@v4
         with:
           name: apps-ios
-          path: |
-            .ci/proof-apps/visor_ios.ipa
-            .ci/proof-apps/visor_probe.zip
+          path: .ci/proof-apps/visor_ios.ipa
           if-no-files-found: error
           retention-days: 1
       - uses: actions/upload-artifact@v4
@@ -253,25 +251,35 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The iPhone app's fixture screens in portrait and on its side, and its UI
-  # cases, on an iPhone 17 simulator (tools/ci/proof_ios.sh).
+  # The release's proof is five jobs side by side: the iPhone and Android,
+  # each upright and on its side, and the Mac. Each opens the fixture's
+  # screens one by one and pictures them, as Isomer's proof does its
+  # stories. The iPhone app's UI cases are not in it (since 12 Nov 2026):
+  # tools/ios_ui_tests.sh runs them.
+  #
+  # The iPhone app's fixture screens, in one orientation, on an iPhone 17
+  # simulator (tools/ci/proof_ios.sh).
   proof-ios:
     needs: build-apple
     runs-on: xcode-27
-    timeout-minutes: 60
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        orientation: [portrait, landscape]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           name: apps-ios
           path: ${{ runner.temp }}/apps
-      - run: tools/ci/proof_ios.sh "$RUNNER_TEMP/apps" "$RUNNER_TEMP/part" full
+      - run: tools/ci/proof_ios.sh "$RUNNER_TEMP/apps" "$RUNNER_TEMP/part" "${{ matrix.orientation }}"
       # The part whether its screens came up or not: a broken screen is what
       # the proof is for.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: part-ios
+          name: part-ios${{ matrix.orientation == 'landscape' && '-landscape' || '' }}
           path: ${{ runner.temp }}/part
           retention-days: 7
 
@@ -294,23 +302,27 @@ jobs:
           path: ${{ runner.temp }}/part
           retention-days: 7
 
-  # Blue Visor's screens on an Android emulator under Ubuntu's KVM
-  # (tools/ci/proof_android.sh).
+  # Blue Visor's screens, in one orientation, on an Android emulator under
+  # Ubuntu's KVM (tools/ci/proof_android.sh).
   proof-android:
     needs: build-android
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        orientation: [portrait, landscape]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           name: apps-android
           path: ${{ runner.temp }}/apps
-      - run: tools/ci/proof_android.sh "$RUNNER_TEMP/apps" "$RUNNER_TEMP/part"
+      - run: tools/ci/proof_android.sh "$RUNNER_TEMP/apps" "$RUNNER_TEMP/part" "${{ matrix.orientation }}"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: part-android
+          name: part-android${{ matrix.orientation == 'landscape' && '-landscape' || '' }}
           path: ${{ runner.temp }}/part
           retention-days: 7
 

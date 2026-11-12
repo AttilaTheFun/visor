@@ -1,3 +1,4 @@
+import Foundation
 import VisorProtocol
 import VisorServices
 
@@ -104,7 +105,14 @@ final class FixtureAgentServer: AgentServer {
             // Rows come in as a reply would: two twelve seconds on, one
             // more fourteen seconds after, each after the last there was.
             // (The pill stays until tapped here: `newRowsPillSeconds`.)
-            try await Task.sleep(nanoseconds: revision == 1 ? 12_000_000_000 : 14_000_000_000)
+            // With a `goFile`, the first two come a second after it does.
+            let go = VisorFixture.goFile
+            if revision == 1, !go.isEmpty {
+                while !FileManager.default.fileExists(atPath: go) { try await Task.sleep(nanoseconds: 250_000_000) }
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            } else {
+                try await Task.sleep(nanoseconds: revision == 1 ? 12_000_000_000 : 14_000_000_000)
+            }
             let rows = revision == 1
                 ? [TranscriptEntry(id: "arrival-1", role: .user, text: "Run them now, please."),
                    TranscriptEntry(id: "arrival-2", role: .assistant, text: "Running the sync tests now.")]

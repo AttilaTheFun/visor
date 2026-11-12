@@ -22,12 +22,22 @@ public enum VisorFixture {
     /// app's own first screen); also earlier
     /// (a page of earlier rows goes in), learns-earlier (the chat, told
     /// ten seconds on that there are rows before it), arrivals (the
-    /// chat, with rows coming in twelve and twenty-six seconds on) and
+    /// chat, with rows coming in twelve and twenty-six seconds on, or
+    /// from `goFile`'s coming) and
     /// burst (eight long rows at once, eight seconds on).
     /// A session to open a few seconds after launch, for a recording of
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }
     @MainActor public static var screen: String { active ? (VisorHost.settings?.get(key: "fixture.screen") ?? "") : "" }
+    /// A file whose coming starts the arrivals screen's rows, a second
+    /// later, in place of its clock (`-visor.fixture.go <path>`): a test
+    /// makes it once it is up the thread, so a slow simulator can't have
+    /// the rows come in before it got there. "" for the clock.
+    @MainActor public static var goFile: String { active ? (VisorHost.settings?.get(key: "fixture.go") ?? "") : "" }
+    /// "landscape" when the app holds itself on its side for its pictures
+    /// (`-visor.fixture.orientation landscape`: the iPhone's proof, as a
+    /// simulator can't be turned by a command); "" for the device's way.
+    @MainActor public static var orientation: String { active ? (VisorHost.settings?.get(key: "fixture.orientation") ?? "") : "" }
 
     /// The draft a session opens with: "/" in the chat on the commands
     /// screen, so its slash commands are offered with nothing typed;
