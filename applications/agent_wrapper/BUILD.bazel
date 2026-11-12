@@ -1,0 +1,14 @@
+load("@rules_apple//apple:apple.bzl", "apple_universal_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# agent_protocol's agent-wrapper (AttilaTheFun/agent_protocol, by release),
+# built for the Mac: the native runner in Visor.app runs each of its agents
+# under it, from the app's Helpers.
+apple_universal_binary(
+    name = "agent-wrapper",
+    binary = "@swiftpkg_agent_protocol//:agent-wrapper",
+    forced_cpus = ["arm64"],
+    minimum_os_version = "15.0",
+    platform_type = "macos",
+)

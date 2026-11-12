@@ -14,7 +14,7 @@ swift_library(
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//:foundation",
-        "//agent_protocol",
+        "@swiftpkg_agent_protocol//:AgentProtocol",
         "@swiftpkg_grpc_swift_2//:GRPCCore",
         "@swiftpkg_grpc_swift_nio_transport//:GRPCNIOTransportHTTP2",
     ],

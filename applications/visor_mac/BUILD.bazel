@@ -73,7 +73,7 @@ macos_application(
     # And agent_protocol's agent-wrapper, which the native runner runs each
     # of its agents under.
     additional_contents = {
-        "//agent_protocol:agent-wrapper": "Helpers",
+        "//applications/agent_wrapper:agent-wrapper": "Helpers",
         "//applications/visor_agent_host:visor-agent-host": "Helpers",
     },
     app_icons = ["//artwork/app-icon:app_icon"],
