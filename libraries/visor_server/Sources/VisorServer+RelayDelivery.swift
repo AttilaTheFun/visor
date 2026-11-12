@@ -42,6 +42,7 @@ extension VisorServer {
     /// read receipt into its sender's outbox.
     private func perform(_ message: RelayMessage) -> RelayReceipt {
         if message.kind == .receipt { return takeReadReceipt(message) }
+        if message.kind == .send, message.marked == true { return takeMarked(message) }
         var ask = Envelope(type: "agent")
         ask.mode = message.kind.rawValue
         ask.session = message.to.session

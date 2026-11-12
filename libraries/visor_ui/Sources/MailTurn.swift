@@ -5,6 +5,8 @@
 // an agent whose MCP server has no read_inbox is still handed it, headed
 // with its sender.
 
+import VisorProtocol
+
 enum MailTurn {
     static let noticeStart = "[Visor: you have "
     static let noticeEnd = " in your inbox; read them with read_inbox]"
@@ -13,6 +15,10 @@ enum MailTurn {
     /// The mail row's words for a turn of the user's, or nil for the
     /// person's own.
     static func row(for text: String) -> String? {
+        // A message another session wrote (AgentMessageMarkers).
+        if let message = AgentMessageMarkers.inbound(text) {
+            return "From \(message.session) on \(message.computer): " + message.body
+        }
         if text.hasPrefix(noticeStart), text.hasSuffix(noticeEnd) {
             let count = text.dropFirst(noticeStart.count).dropLast(noticeEnd.count)
             return "\(count) in its inbox: its agent was told"
@@ -31,5 +37,11 @@ enum MailTurn {
             computer = String(rest[on.upperBound..<server.lowerBound])
         }
         return "From \(name)" + (computer.isEmpty ? "" : " on \(computer)") + ": " + body
+    }
+
+    /// The mail row's words for an agent's reply that is a message to
+    /// another session (AgentMessageMarkers), or nil for any other reply.
+    static func sentRow(for text: String) -> String? {
+        AgentMessageMarkers.outbound(text).map { "To \($0.session) on \($0.computer): " + $0.body }
     }
 }

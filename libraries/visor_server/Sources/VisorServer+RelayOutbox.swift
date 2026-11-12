@@ -37,6 +37,7 @@ extension VisorServer {
     /// to carry.
     func relayedMessages(for report: DirectoryReport) -> [RelayMessage] {
         ageRelayOutbox()
+        resolveMarked(by: report)
         let reached = Set(report.servers.map(\.id)).subtracting([id])
         return relayOutbox.values.filter { $0.status == .waiting && reached.contains($0.message.to.server) }
             .map(\.message).sorted { $0.created < $1.created }

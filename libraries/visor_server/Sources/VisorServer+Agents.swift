@@ -380,6 +380,8 @@ extension VisorServer {
             // A turn the agent began itself is owed as one sent is.
             if busy { record.interrupted = true }
             if !busy { record.interrupted = false; saveArchive() }
+            // What the agent wrote to other sessions this turn, sent.
+            if !busy { sendMarkedMessages(of: record) }
             broadcastSessions()
             // An archived session takes no turns, and one whose last
             // agent is still going waits for it.
