@@ -50,6 +50,9 @@ final class JobQueue: AgentJobQueue {
         job.effort = request.effort ?? ""
         job.prompt = request.text ?? ""
         job.driverURL = driverURL
+        if let kind = request.runsOn?.trimmingCharacters(in: .whitespaces), !kind.isEmpty {
+            job.labels.append(Self.runsOn + kind)
+        }
         waiting.append(job)
         log("dispatcher: queued \(job.agent.uuid) (\(job.title))")
         wake()
@@ -113,9 +116,17 @@ final class JobQueue: AgentJobQueue {
         }
     }
 
-    /// Whether a runner with these capabilities runs `job`'s harness.
+    /// The label a job that asks for a kind of runner carries:
+    /// `runs-on:native` goes only to a runner whose capabilities say
+    /// `native`.
+    static let runsOn = "runs-on:"
+
+    /// Whether a runner with these capabilities runs `job`: its harness,
+    /// and the kind of runner it asks for, if any.
     static func takes(_ capabilities: [String], _ job: AgentProtocol_V1_Job) -> Bool {
-        job.harness.isEmpty || capabilities.contains("harness:\(job.harness)")
+        let kinds = job.labels.filter { $0.hasPrefix(runsOn) }.map { String($0.dropFirst(runsOn.count)) }
+        guard kinds.allSatisfy(capabilities.contains) else { return false }
+        return job.harness.isEmpty || capabilities.contains("harness:\(job.harness)")
     }
 
     /// Claims not renewed in time, released.

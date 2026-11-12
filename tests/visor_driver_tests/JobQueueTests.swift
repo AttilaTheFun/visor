@@ -80,6 +80,19 @@ final class JobQueueTests: XCTestCase {
         XCTAssertEqual(jobs.queueStart(codex), .failure(AgentJobRefusal("Runners run Claude Code agents for now.")))
     }
 
+    func testAJobThatAsksForAKindOfRunnerGoesOnlyToOne() async {
+        let jobs = queue()
+        var contained = start("Contained")
+        contained.runsOn = "container"
+        _ = jobs.queueStart(contained)
+        _ = jobs.queueStart(start("Anywhere"))
+        let native = await jobs.claim(claim(["native", "harness:claude"]), wait: .zero)
+        XCTAssertEqual(native?.title, "Anywhere")
+        let container = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        XCTAssertEqual(container?.title, "Contained")
+        XCTAssertEqual(container?.labels, ["runs-on:container"])
+    }
+
     func testTheNativeRunnerGivesItsWrapperTheJob() async throws {
         let runner = try XCTUnwrap(NativeRunner(dispatcher: "http://127.0.0.1:7434", wrapper: "/bin/true", name: "Mac", log: { _ in }))
         var job = AgentProtocol_V1_Job()
