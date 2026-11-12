@@ -9,7 +9,6 @@ import Testing
 extension ServerTests {
 @Suite final class AgentEnvironmentFileTests {
     init() {
-        super.setUp()
         TestPlatform.install()
     }
 
