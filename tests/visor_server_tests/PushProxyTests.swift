@@ -8,7 +8,7 @@ import Foundation
 import Synchronization
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
 /// The push proxy, played by the test: what it was sent, kept; APNs's
 /// answer as the test sets it.
@@ -24,22 +24,23 @@ private final class FakePushProxy: HTTPFetching {
     }
 }
 
-@MainActor
-final class PushProxyTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class PushProxyTests {
     private var server: VisorServer!
     private let proxy = FakePushProxy()
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-push-proxy-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         ServerPlatform.current.fetching = proxy
-        server = VisorServer(port: Self.freePort())
+        server = VisorServer(port: ServerTestCase.freePort())
         server.password = "pw"
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
     }
 
@@ -52,60 +53,60 @@ final class PushProxyTests: ServerTestCase {
                                  body: #"{"type":"push","deviceToken":"ab12","platform":"ios","pushEnvironment":"production","pushTopic":"com.example.app"}"#))
     }
 
-    func testARequestGoesToTheProxyUnsigned() throws {
+    @Test func testARequestGoesToTheProxyUnsigned() throws {
         let device = PushDevice(token: "ab12", platform: "ios", environment: "sandbox", topic: "com.example.app", registered: 0)
-        let request = try XCTUnwrap(APNsSender.request(to: device, jwt: "", title: "Halo", body: "Turn finished", collapse: "s/turn",
+        let request = try #require(APNsSender.request(to: device, jwt: "", title: "Halo", body: "Turn finished", collapse: "s/turn",
                                                        data: ["session": "s"]))
-        let proxied = try XCTUnwrap(APNsSender.proxied(request, through: "http://192.168.131.1:7439/", token: "tok"))
-        XCTAssertEqual(proxied.url, "http://192.168.131.1:7439/apns/api.sandbox.push.apple.com/3/device/ab12")
-        XCTAssertNil(proxied.headers["authorization"], "the proxy signs it")
-        XCTAssertEqual(proxied.headers[APNsSender.proxyTokenHeader], "tok")
-        XCTAssertEqual(proxied.headers["apns-topic"], "com.example.app")
-        XCTAssertEqual(proxied.headers["apns-push-type"], "alert")
-        XCTAssertEqual(proxied.method, "POST")
-        XCTAssertEqual(proxied.body, request.body)
+        let proxied = try #require(APNsSender.proxied(request, through: "http://192.168.131.1:7439/", token: "tok"))
+        #expect(proxied.url == "http://192.168.131.1:7439/apns/api.sandbox.push.apple.com/3/device/ab12")
+        #expect((proxied.headers["authorization"]) == nil, "the proxy signs it")
+        #expect((proxied.headers[APNsSender.proxyTokenHeader]) == "tok")
+        #expect((proxied.headers["apns-topic"]) == "com.example.app")
+        #expect((proxied.headers["apns-push-type"]) == "alert")
+        #expect(proxied.method == "POST")
+        #expect(proxied.body == request.body)
     }
 
-    func testTheProxyIsSetWithThePasswordAndItsTokenKeptApart() throws {
-        XCTAssertEqual(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#, bearer: server.agentToken).status, 403,
-                       "an agent could send the pushes anywhere")
-        XCTAssertNil(server.pushProxy)
-        XCTAssertEqual(setProxy(#"{"url":"ftp://proxy"}"#).status, 400)
-        XCTAssertEqual(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#).status, 200)
-        XCTAssertEqual(server.settings.pushProxy, "http://192.168.131.1:7439")
-        XCTAssertEqual(server.pushProxy?.token, "tok")
+    @Test func testTheProxyIsSetWithThePasswordAndItsTokenKeptApart() throws {
+        #expect(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#, bearer: server.agentToken).status == 403, "an agent could send the pushes anywhere")
+        #expect(server.pushProxy == nil)
+        #expect(setProxy(#"{"url":"ftp://proxy"}"#).status == 400)
+        #expect(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#).status == 200)
+        #expect(server.settings.pushProxy == "http://192.168.131.1:7439")
+        #expect((server.pushProxy?.token) == "tok")
         let read = server.route(HTTPRequest(method: "GET", path: "/api/push-proxy", headers: ["authorization": "Bearer pw"], body: ""))
-        XCTAssertTrue(read.body.contains("\"kept\":true") && !read.body.contains("tok"), read.body)
+        #expect(read.body.contains("\"kept\":true") && !read.body.contains("tok"), Comment(rawValue: read.body))
         // Set again without a token, the token stays; no address, both go.
-        XCTAssertEqual(setProxy(#"{"url":"http://192.168.131.1:7440"}"#).status, 200)
-        XCTAssertEqual(server.pushProxy?.token, "tok")
-        XCTAssertEqual(setProxy(#"{"url":""}"#).status, 200)
-        XCTAssertNil(server.pushProxy)
-        XCTAssertNil(VisorServer.secrets.get(VisorServer.pushProxyTokenKey))
+        #expect(setProxy(#"{"url":"http://192.168.131.1:7440"}"#).status == 200)
+        #expect((server.pushProxy?.token) == "tok")
+        #expect(setProxy(#"{"url":""}"#).status == 200)
+        #expect(server.pushProxy == nil)
+        #expect(VisorServer.secrets.get(VisorServer.pushProxyTokenKey) == nil)
     }
 
-    func testWithAProxyPushesGoOutWithoutAKey() async throws {
-        XCTAssertFalse(server.sendsPushes)
-        XCTAssertEqual(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#).status, 200)
-        XCTAssertTrue(server.sendsPushes)
+    @Test func testWithAProxyPushesGoOutWithoutAKey() async throws {
+        #expect(!server.sendsPushes)
+        #expect(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#).status == 200)
+        #expect(server.sendsPushes)
         let registered = registerDevice()
-        XCTAssertEqual(registered.status, 200)
-        XCTAssertEqual(Envelope.decodeBody(registered.body).exists, true, "the device leaves its notifications to the server")
+        #expect(registered.status == 200)
+        #expect(Envelope.decodeBody(registered.body).exists == true, "the device leaves its notifications to the server")
 
         server.push("Halo", "Turn finished", session: "s", kind: "turn")
         for _ in 0..<100 where proxy.heard.withLock({ $0.isEmpty }) { try await Task.sleep(for: .milliseconds(20)) }
-        let sent = try XCTUnwrap(proxy.heard.withLock { $0.first })
-        XCTAssertEqual(sent.url, "http://192.168.131.1:7439/apns/api.push.apple.com/3/device/ab12")
-        XCTAssertEqual(sent.headers[APNsSender.proxyTokenHeader], "tok")
-        XCTAssertNil(sent.headers["authorization"])
+        let sent = try #require(proxy.heard.withLock { $0.first })
+        #expect(sent.url == "http://192.168.131.1:7439/apns/api.push.apple.com/3/device/ab12")
+        #expect((sent.headers[APNsSender.proxyTokenHeader]) == "tok")
+        #expect((sent.headers["authorization"]) == nil)
     }
 
-    func testADeviceTheProxySaysIsGoneIsForgotten() async throws {
-        XCTAssertEqual(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#).status, 200)
+    @Test func testADeviceTheProxySaysIsGoneIsForgotten() async throws {
+        #expect(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#).status == 200)
         _ = registerDevice()
         proxy.status.withLock { $0 = 400 }
         server.push("Halo", "Turn finished", session: "s", kind: "turn")
         for _ in 0..<100 where server.pushDeviceCount > 0 { try await Task.sleep(for: .milliseconds(20)) }
-        XCTAssertEqual(server.pushDeviceCount, 0, "APNs's answer, passed on by the proxy, is heard as APNs's")
+        #expect(server.pushDeviceCount == 0, "APNs's answer, passed on by the proxy, is heard as APNs's")
     }
+}
 }

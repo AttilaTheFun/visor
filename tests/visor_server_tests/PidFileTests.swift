@@ -4,31 +4,33 @@
 
 import Foundation
 @testable import VisorServerCLI
-import XCTest
+import Testing
 
-final class PidFileTests: XCTestCase {
+extension ServerTests {
+@Suite final class PidFileTests {
     private var file: URL!
 
-    override func setUp() {
+    init() {
         file = FileManager.default.temporaryDirectory.appendingPathComponent("visor-pid-\(UUID().uuidString).pid")
     }
 
-    override func tearDown() {
+    deinit {
         try? FileManager.default.removeItem(at: file)
     }
 
-    func testAnotherProcesssFileIsLeft() throws {
+    @Test func testAnotherProcesssFileIsLeft() throws {
         try Data("4242 7878\n".utf8).write(to: file)
         ServerCommand.removePidFile(file, ownPID: 1000)
-        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "4242 7878\n")
+        #expect((try String(contentsOf: file, encoding: .utf8)) == "4242 7878\n")
     }
 
-    func testItsOwnFileGoes() throws {
+    @Test func testItsOwnFileGoes() throws {
         try Data("1000 7878\n".utf8).write(to: file)
         ServerCommand.removePidFile(file, ownPID: 1000)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        #expect(!FileManager.default.fileExists(atPath: file.path))
         // Already gone: nothing to do.
         ServerCommand.removePidFile(file, ownPID: 1000)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        #expect(!FileManager.default.fileExists(atPath: file.path))
     }
+}
 }

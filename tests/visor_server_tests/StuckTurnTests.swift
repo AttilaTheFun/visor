@@ -6,7 +6,7 @@
 import Foundation
 @testable import VisorAgent
 @testable import VisorServer
-import XCTest
+import Testing
 
 /// A claude played by the test: what it is sent, kept; it ends when asked.
 @MainActor
@@ -42,8 +42,10 @@ private final class SilentClaude: AgentChild {
     func say(_ line: String) { speak.yield(Data((line + "\n").utf8)) }
 }
 
-@MainActor
-final class StuckTurnTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class StuckTurnTests {
+    init() { TestPlatform.install() }
+
     private func working() throws -> (ClaudeProcess, SilentClaude) {
         let process = ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil)
         process.interruptGrace = .milliseconds(200)
@@ -53,23 +55,24 @@ final class StuckTurnTests: ServerTestCase {
         return (process, child)
     }
 
-    func testAnInterruptedTurnThatDoesntEndEndsItsAgent() async throws {
+    @Test func testAnInterruptedTurnThatDoesntEndEndsItsAgent() async throws {
         let (process, child) = try working()
         // The turn begun, then stuck in a tool.
         child.say(#"{"type":"system","subtype":"init","session_id":"s1"}"#)
         try await Task.sleep(for: .milliseconds(50))
         process.interrupt()
-        XCTAssertEqual(child.written.last?["type"] as? String, "control_request", "asked first")
+        #expect((child.written.last?["type"] as? String) == "control_request", "asked first")
         for _ in 0..<100 where child.isRunning { try await Task.sleep(for: .milliseconds(20)) }
-        XCTAssertFalse(child.isRunning, "ended once its grace was over")
+        #expect(!child.isRunning, "ended once its grace was over")
     }
 
-    func testATurnThatEndsInTimeIsLeftAlone() async throws {
+    @Test func testATurnThatEndsInTimeIsLeftAlone() async throws {
         let (process, child) = try working()
         process.interrupt()
         child.say(#"{"type":"system","subtype":"init","session_id":"s1"}"#)
         child.say(#"{"type":"result","subtype":"error_during_execution","is_error":true}"#)
         try await Task.sleep(for: .milliseconds(500))
-        XCTAssertTrue(child.isRunning, "the turn ended when asked: the agent stays")
+        #expect(child.isRunning, "the turn ended when asked: the agent stays")
     }
+}
 }

@@ -5,13 +5,16 @@
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-@MainActor
-final class TranscriptDeltaTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class TranscriptDeltaTests {
+    init() { TestPlatform.install() }
+
     private func row(_ id: String, _ text: String = "") -> TranscriptEntry { TranscriptEntry(id: id, role: .assistant, text: text.isEmpty ? id : text) }
 
-    func testRemovalsAndInsertsAreDeltas() {
+    @Test func testRemovalsAndInsertsAreDeltas() {
         let info = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "t", created: 0)
         let r = SessionRecord(info: info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil),
                               entries: [row("a"), row("b"), row("c")])
@@ -20,29 +23,29 @@ final class TranscriptDeltaTests: ServerTestCase {
 
         // A row goes and one comes in the middle: the same generation.
         r.replaceEntriesForTesting([row("a"), row("x"), row("c")])
-        XCTAssertEqual(r.generation, generation)
+        #expect(r.generation == generation)
         let delta = r.rows(since: before)
-        XCTAssertEqual(delta.removed, ["b"])
+        #expect(delta.removed == ["b"])
         // x is new after a; c now follows x.
-        XCTAssertEqual(delta.rows.map(\.id), ["x", "c"])
-        XCTAssertEqual(delta.after, ["a", "x"])
+        #expect(delta.rows.map(\.id) == ["x", "c"])
+        #expect(delta.after == ["a", "x"])
 
         // A change in place is only that row.
         let mid = r.revision
         r.replaceEntriesForTesting([row("a"), row("x", "edited"), row("c")])
-        XCTAssertEqual(r.rows(since: mid).rows.map(\.id), ["x"])
-        XCTAssertEqual(r.rows(since: mid).removed, [])
+        #expect((r.rows(since: mid).rows.map(\.id)) == ["x"])
+        #expect(r.rows(since: mid).removed == [])
 
         // It survives the wire.
         let decoded = Envelope.decode(r.transcriptEnvelope(since: before).encoded())
-        XCTAssertEqual(decoded?.after, ["a", "x"])
-        XCTAssertEqual(decoded?.removed, ["b"])
+        #expect((decoded?.after) == ["a", "x"])
+        #expect((decoded?.removed) == ["b"])
     }
 
     /// A client far behind is brought up a page at a time, in order, with
     /// nothing skipped however many rows came in: what went is said with
     /// the first page, and `later` until the last.
-    func testAClientFarBehindCatchesUpAPageAtATime() {
+    @Test func testAClientFarBehindCatchesUpAPageAtATime() {
         let info = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "t", created: 0)
         let first = (0..<3).map { row("old\($0)") }
         let r = SessionRecord(info: info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: first)
@@ -56,29 +59,30 @@ final class TranscriptDeltaTests: ServerTestCase {
         while true {
             let page = Envelope.decode(r.transcriptEnvelope(since: since, after: after).encoded())
             pages += 1
-            XCTAssertLessThanOrEqual(page?.entries?.count ?? 0, SessionRecord.pageRows)
-            XCTAssertEqual(page?.removed ?? [], pages == 1 ? ["old2"] : [])
+            #expect((page?.entries?.count ?? 0) <= SessionRecord.pageRows)
+            #expect((page?.removed ?? []) == (pages == 1 ? ["old2"] : []))
             got += page?.entries?.map(\.id) ?? []
             guard page?.later == true else { break }
             after = page?.entries?.last?.id
         }
-        XCTAssertEqual(pages, 3)
-        XCTAssertEqual(got, added.map(\.id))
+        #expect(pages == 3)
+        #expect(got == added.map(\.id))
     }
 
     /// The first answer is the latest rows, not the whole thread; a page
     /// of earlier rows is a page.
-    func testTheFirstAnswerAndAnEarlierPageAreSmall() async {
+    @Test func testTheFirstAnswerAndAnEarlierPageAreSmall() async {
         let info = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "t", created: 0)
         let rows = (0..<300).map { row("r\($0)") }
         let r = SessionRecord(info: info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: rows)
         let whole = r.transcriptEnvelope(since: nil)
-        XCTAssertEqual(whole.entries?.count, SessionRecord.servedRows)
-        XCTAssertEqual(whole.entries?.last?.id, "r299")
-        XCTAssertEqual(whole.more, true)
-        XCTAssertEqual(whole.follows, "r199", "the row its first follows: a client keeping it keeps what is before")
+        #expect((whole.entries?.count) == SessionRecord.servedRows)
+        #expect((whole.entries?.last?.id) == "r299")
+        #expect(whole.more == true)
+        #expect(whole.follows == "r199", "the row its first follows: a client keeping it keeps what is before")
         let earlier = await r.earlier(before: "r200")
-        XCTAssertEqual(earlier.entries?.map(\.id), (200 - SessionRecord.pageRows..<200).map { "r\($0)" })
-        XCTAssertEqual(earlier.more, true)
+        #expect((earlier.entries?.map(\.id)) == ((200 - SessionRecord.pageRows..<200).map { "r\($0)" }))
+        #expect(earlier.more == true)
     }
+}
 }

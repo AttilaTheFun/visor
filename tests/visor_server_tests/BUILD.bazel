@@ -8,7 +8,9 @@ swift_library(
     copts = STRICT_SWIFT,
     # The agents' host, which AgentHostTests runs: in the bundle's Resources.
     data = ["//applications/visor_agent_host:visor-agent-host"],
-    srcs = glob(["*.swift", "apple/*.swift"]),
+    # The Apple system's own tests, and what they share with the rest: the
+    # others run on Linux (visor_server_linux_tests). By hand, on a Mac.
+    srcs = ["ServerTestCase.swift", "ServerTests.swift"] + glob(["apple/*.swift"]),
     module_name = "VisorServerTests",
     # VisorSystem's and VisorAgent's `package` members are its to use.
     package_name = "visor",

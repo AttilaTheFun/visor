@@ -4,14 +4,17 @@
 // from the path itself, where the new build is.
 
 @testable import VisorServerLinux
-import XCTest
+import Foundation
+import Testing
 
-final class ProgramPathTests: XCTestCase {
-    func testAReplacedProgramIsAtItsPath() {
-        XCTAssertEqual(LinuxSystem.program(at: "/usr/local/bin/visor-server (deleted)"), "/usr/local/bin/visor-server")
+extension ServerTests {
+@Suite final class ProgramPathTests {
+    @Test func testAReplacedProgramIsAtItsPath() {
+        #expect((LinuxSystem.program(at: "/usr/local/bin/visor-server (deleted)")) == "/usr/local/bin/visor-server")
     }
 
-    func testAProgramInPlaceIsAsLinked() {
-        XCTAssertEqual(LinuxSystem.program(at: "/usr/local/bin/visor-server"), "/usr/local/bin/visor-server")
+    @Test func testAProgramInPlaceIsAsLinked() {
+        #expect(LinuxSystem.program(at: "/usr/local/bin/visor-server") == "/usr/local/bin/visor-server")
     }
+}
 }

@@ -8,24 +8,25 @@
 import Foundation
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-@MainActor
-final class GitHubProxySetupTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class GitHubProxySetupTests {
     private var server: VisorServer!
     private var root: URL!
     private let authority = "-----BEGIN CERTIFICATE-----\nMIIBproxy\n-----END CERTIFICATE-----\n"
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-github-proxy-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
-        server = VisorServer(port: Self.freePort())
+        server = VisorServer(port: ServerTestCase.freePort())
         server.password = "pw"
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
         try? FileManager.default.removeItem(at: root)
     }
@@ -47,37 +48,37 @@ final class GitHubProxySetupTests: ServerTestCase {
         return folder.path
     }
 
-    func testItIsSetWithThePasswordNeverAnAgentsToken() {
-        XCTAssertEqual(set(["url": "http://192.168.131.1:7441", "token": "tok"], bearer: server.agentToken).status, 403)
-        XCTAssertEqual(set(["url": "http://192.168.131.1:7441", "token": "tok", "authority": authority, "sessions": ["S"]]).status, 200)
-        XCTAssertEqual(server.settings.githubProxy, "http://192.168.131.1:7441")
-        XCTAssertEqual(server.settings.githubProxySessions, ["S"])
+    @Test func testItIsSetWithThePasswordNeverAnAgentsToken() {
+        #expect(set(["url": "http://192.168.131.1:7441", "token": "tok"], bearer: server.agentToken).status == 403)
+        #expect(set(["url": "http://192.168.131.1:7441", "token": "tok", "authority": authority, "sessions": ["S"]]).status == 200)
+        #expect(server.settings.githubProxy == "http://192.168.131.1:7441")
+        #expect(server.settings.githubProxySessions == ["S"])
         let read = server.route(HTTPRequest(method: "GET", path: "/api/github-proxy", headers: ["authorization": "Bearer pw"], body: ""))
-        XCTAssertTrue(read.body.contains("\"kept\":true") && read.body.contains("\"authority\":true") && !read.body.contains("tok"), read.body)
-        XCTAssertEqual(set(["url": "github.com"]).status, 400, "an http://host:port address")
-        XCTAssertEqual(set(["url": ""]).status, 200)
-        XCTAssertNil(VisorServer.secrets.get(VisorServer.githubProxyTokenKey), "no proxy, no token")
+        #expect(read.body.contains("\"kept\":true") && read.body.contains("\"authority\":true") && !read.body.contains("tok"), Comment(rawValue: read.body))
+        #expect(set(["url": "github.com"]).status == 400, "an http://host:port address")
+        #expect(set(["url": ""]).status == 200)
+        #expect(VisorServer.secrets.get(VisorServer.githubProxyTokenKey) == nil, "no proxy, no token")
     }
 
-    func testAnAgentOfASessionItIsOnForGoesThroughIt() throws {
-        XCTAssertEqual(set(["url": "http://192.168.131.1:7441", "token": "tok", "authority": authority, "sessions": ["S"]]).status, 200)
+    @Test func testAnAgentOfASessionItIsOnForGoesThroughIt() throws {
+        #expect(set(["url": "http://192.168.131.1:7441", "token": "tok", "authority": authority, "sessions": ["S"]]).status == 200)
         let environment = server.githubProxyEnvironment(for: SessionInfo(id: "S", agent: .claude, cwd: try checkout(), title: "S", created: 0))
-        XCTAssertEqual(environment["HTTPS_PROXY"], "http://tok:S%40AttilaTheFun%2Fshireworks@192.168.131.1:7441")
-        XCTAssertEqual(environment["GH_TOKEN"], VisorServer.githubPlaceholderToken)
-        let bundle = try XCTUnwrap(environment["SSL_CERT_FILE"])
-        XCTAssertEqual(environment["GIT_SSL_CAINFO"], bundle)
-        XCTAssertTrue(try String(contentsOfFile: bundle, encoding: .utf8).hasSuffix(authority), "the system's authorities, then the proxy's")
-        XCTAssertEqual(try String(contentsOfFile: try XCTUnwrap(environment["NODE_EXTRA_CA_CERTS"]), encoding: .utf8), authority)
+        #expect((environment["HTTPS_PROXY"]) == "http://tok:S%40AttilaTheFun%2Fshireworks@192.168.131.1:7441")
+        #expect((environment["GH_TOKEN"]) == VisorServer.githubPlaceholderToken)
+        let bundle = try #require(environment["SSL_CERT_FILE"])
+        #expect((environment["GIT_SSL_CAINFO"]) == bundle)
+        #expect(try String(contentsOfFile: bundle, encoding: .utf8).hasSuffix(authority), "the system's authorities, then the proxy's")
+        #expect((try String(contentsOfFile: try #require(environment["NODE_EXTRA_CA_CERTS"]), encoding: .utf8)) == authority)
         // Not a session it is on for.
-        XCTAssertEqual(server.githubProxyEnvironment(for: SessionInfo(id: "T", agent: .claude, cwd: "/tmp", title: "T", created: 0)), [:])
+        #expect((server.githubProxyEnvironment(for: SessionInfo(id: "T", agent: .claude, cwd: "/tmp", title: "T", created: 0))) == [:])
         // Every session, once it is on for `*`; one in no checkout names none.
-        XCTAssertEqual(set(["url": "http://192.168.131.1:7441", "sessions": ["*"]]).status, 200)
-        XCTAssertEqual(server.githubProxyEnvironment(for: SessionInfo(id: "T", agent: .claude, cwd: root.path, title: "T", created: 0))["HTTPS_PROXY"],
-                       "http://tok:T@192.168.131.1:7441")
+        #expect(set(["url": "http://192.168.131.1:7441", "sessions": ["*"]]).status == 200)
+        #expect((server.githubProxyEnvironment(for: SessionInfo(id: "T", agent: .claude, cwd: root.path, title: "T", created: 0))["HTTPS_PROXY"]) == "http://tok:T@192.168.131.1:7441")
     }
 
-    func testACheckoutsRepositoryIsReadFromItsConfig() throws {
-        XCTAssertEqual(GitHubRepository.ofCheckout(folder: try checkout()), "AttilaTheFun/shireworks")
-        XCTAssertNil(GitHubRepository.ofCheckout(folder: "/"))
+    @Test func testACheckoutsRepositoryIsReadFromItsConfig() throws {
+        #expect((GitHubRepository.ofCheckout(folder: try checkout())) == "AttilaTheFun/shireworks")
+        #expect(GitHubRepository.ofCheckout(folder: "/") == nil)
     }
+}
 }

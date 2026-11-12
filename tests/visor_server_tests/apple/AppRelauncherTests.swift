@@ -6,19 +6,20 @@
 import Foundation
 @testable import VisorServer
 @testable import VisorServerApple
-import XCTest
+import Testing
 
-@MainActor
-final class AppRelauncherTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class AppRelauncherTests {
     private var root: URL!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-relauncher-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         _ = try? run("pkill -f \(AppRelauncher.quoted(root.path))")
         try? FileManager.default.removeItem(at: root)
     }
@@ -46,7 +47,7 @@ final class AppRelauncherTests: ServerTestCase {
         return String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
     }
 
-    func testANewBuildThatCrashesIsRolledBack() throws {
+    @Test func testANewBuildThatCrashesIsRolledBack() throws {
         let destination = root.appendingPathComponent("Server.app").path
         let backup = root.appendingPathComponent("Previous/Server.app").path
         try app(at: destination, name: "new", body: "exit 1")
@@ -54,16 +55,15 @@ final class AppRelauncherTests: ServerTestCase {
         let open = "\(AppRelauncher.quoted(destination + "/Contents/MacOS/run")) >/dev/null 2>&1 &"
         let output = try run(open + "\n" + AppRelauncher.watching(destination: destination, backup: backup, serving: false,
                                                                   newVersion: "0.31 (2)", oldVersion: "0.31 (1)", open: open, seconds: 4))
-        XCTAssertTrue(output.contains("rolled back to 0.31 (1): it quit or crashed"), output)
-        XCTAssertEqual(try String(contentsOfFile: destination + "/name", encoding: .utf8), "old", "the previous build is back")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: backup))
+        #expect(output.contains("rolled back to 0.31 (1): it quit or crashed"), Comment(rawValue: output))
+        #expect((try String(contentsOfFile: destination + "/name", encoding: .utf8)) == "old", "the previous build is back")
+        #expect(!FileManager.default.fileExists(atPath: backup))
         let note = try String(contentsOf: VisorServer.rollbackNoteURL, encoding: .utf8)
-        XCTAssertEqual(note, "Visor Server 0.31 (2) did not stay up after the update (it quit or crashed), so 0.31 (1) was put back.\n")
-        XCTAssertTrue(try run("pgrep -f \(AppRelauncher.quoted(destination + "/Contents/MacOS/"))").contains(where: \.isNumber),
-                      "and it was opened again")
+        #expect(note == "Visor Server 0.31 (2) did not stay up after the update (it quit or crashed), so 0.31 (1) was put back.\n")
+        #expect(try run("pgrep -f \(AppRelauncher.quoted(destination + "/Contents/MacOS/"))").contains(where: \.isNumber), "and it was opened again")
     }
 
-    func testANewBuildThatStaysUpIsKept() throws {
+    @Test func testANewBuildThatStaysUpIsKept() throws {
         let destination = root.appendingPathComponent("Server.app").path
         let backup = root.appendingPathComponent("Previous/Server.app").path
         try app(at: destination, name: "new", body: "sleep 30")
@@ -71,20 +71,21 @@ final class AppRelauncherTests: ServerTestCase {
         let open = "\(AppRelauncher.quoted(destination + "/Contents/MacOS/run")) >/dev/null 2>&1 &"
         let output = try run(open + "\n" + AppRelauncher.watching(destination: destination, backup: backup, serving: false,
                                                                   newVersion: "0.31 (2)", oldVersion: "0.31 (1)", open: open, seconds: 4))
-        XCTAssertTrue(output.contains("0.31 (2) stayed up"), output)
-        XCTAssertEqual(try String(contentsOfFile: destination + "/name", encoding: .utf8), "new")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: backup), "the build it replaced is gone once the new one stays up")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Previous").path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: VisorServer.rollbackNoteURL.path))
+        #expect(output.contains("0.31 (2) stayed up"), Comment(rawValue: output))
+        #expect((try String(contentsOfFile: destination + "/name", encoding: .utf8)) == "new")
+        #expect(!FileManager.default.fileExists(atPath: backup), "the build it replaced is gone once the new one stays up")
+        #expect(!(FileManager.default.fileExists(atPath: root.appendingPathComponent("Previous").path)))
+        #expect(!FileManager.default.fileExists(atPath: VisorServer.rollbackNoteURL.path))
     }
 
-    func testTheServerSaysItWasRolledBack() throws {
+    @Test func testTheServerSaysItWasRolledBack() throws {
         try "Visor Server 0.31 (2) did not stay up after the update (it quit or crashed), so 0.31 (1) was put back.\n"
             .write(to: VisorServer.rollbackNoteURL, atomically: true, encoding: .utf8)
         VisorServer.secrets = MemorySecrets()
         let server = VisorServer(port: 7985)
         defer { server.stop() }
-        XCTAssertEqual(server.updateNotice, "Visor Server 0.31 (2) did not stay up after the update (it quit or crashed), so 0.31 (1) was put back.")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: VisorServer.rollbackNoteURL.path), "said once")
+        #expect(server.updateNotice == "Visor Server 0.31 (2) did not stay up after the update (it quit or crashed), so 0.31 (1) was put back.")
+        #expect(!FileManager.default.fileExists(atPath: VisorServer.rollbackNoteURL.path), "said once")
     }
+}
 }

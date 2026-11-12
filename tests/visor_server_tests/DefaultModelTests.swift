@@ -7,7 +7,7 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
 @MainActor
 private final class ModelAgent: AgentProcess {
@@ -40,11 +40,12 @@ private final class DefaultingHarness: AgentHarness {
     @MainActor func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess { ModelAgent() }
 }
 
-@MainActor
-final class DefaultModelTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class DefaultModelTests {
     private var server: VisorServer!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-default-model-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -53,17 +54,18 @@ final class DefaultModelTests: ServerTestCase {
         server.harnesses = AgentHarnesses([DefaultingHarness()])
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
     }
 
-    func testNoModelChosenRunsTheDefaultItShows() {
+    @Test func testNoModelChosenRunsTheDefaultItShows() {
         let info = SessionInfo(id: "S", agent: .claude, cwd: "/tmp", title: "S", created: 0)
-        XCTAssertEqual(server.makeProcess(info, resume: nil).model, "opus")
+        #expect(server.makeProcess(info, resume: nil).model == "opus")
     }
 
-    func testAChosenModelRunsAsChosen() {
+    @Test func testAChosenModelRunsAsChosen() {
         let info = SessionInfo(id: "S", agent: .claude, cwd: "/tmp", title: "S", model: "sonnet", created: 0)
-        XCTAssertEqual(server.makeProcess(info, resume: nil).model, "sonnet")
+        #expect(server.makeProcess(info, resume: nil).model == "sonnet")
     }
+}
 }

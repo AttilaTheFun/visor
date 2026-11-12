@@ -5,22 +5,24 @@
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-@MainActor
-final class CommandsTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class CommandsTests {
     private var server: VisorServer!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-commands-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
-        server = VisorServer(port: Self.freePort())
+        server = VisorServer(port: ServerTestCase.freePort())
         server.password = "pw"
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
     }
 
@@ -35,7 +37,7 @@ final class CommandsTests: ServerTestCase {
         return Envelope.decode(text)
     }
 
-    func testASessionOffersItsAgentsCommands() async {
+    @Test func testASessionOffersItsAgentsCommands() async {
         let ran = record("A")
         let fresh = record("B")
         server.sessions = [ran, fresh]
@@ -45,13 +47,13 @@ final class CommandsTests: ServerTestCase {
         server.keepCommands(listed, for: .claude)
 
         let own = await commands("A")
-        XCTAssertEqual(own?.type, "commands")
-        XCTAssertEqual(own?.commands, listed + SubSessionCommand.offered + [VisorServer.signInCommand],
-                       "through JSON and back, hint and all; and Visor's own: /btw, /fork, /branch and /login")
+        #expect((own?.type) == "commands")
+        #expect((own?.commands) == (listed + SubSessionCommand.offered + [VisorServer.signInCommand]), "through JSON and back, hint and all; and Visor's own: /btw, /fork, /branch and /login")
         // A session that has not run offers what its agent listed last.
         let other = await commands("B")
-        XCTAssertEqual(other?.commands?.map(\.name), ["compact", "goal", "btw", "fork", "branch", "login"])
+        #expect((other?.commands?.map(\.name)) == ["compact", "goal", "btw", "fork", "branch", "login"])
         // Kept on disk for the next launch: the agent's own.
-        XCTAssertEqual(VisorServer.keptCommands()[.claude], listed)
+        #expect((VisorServer.keptCommands()[.claude]) == listed)
     }
+}
 }

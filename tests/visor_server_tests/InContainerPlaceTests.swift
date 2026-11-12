@@ -7,17 +7,18 @@ import Foundation
 import VisorProtocol
 @testable import VisorServer
 import VisorSystem
-import XCTest
+import Testing
 
-@MainActor
-final class InContainerPlaceTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class InContainerPlaceTests {
     private var host: HostDetails!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         host = ServerPlatform.current.host
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         ServerPlatform.current.host = host
     }
 
@@ -26,20 +27,21 @@ final class InContainerPlaceTests: ServerTestCase {
         return SessionRecord(info: info, process: ClaudeProcess(cwd: "/root/work", skipPermissions: true, resume: nil))
     }
 
-    func testAServerInAContainerSaysSoOfItsSessions() throws {
+    @Test func testAServerInAContainerSaysSoOfItsSessions() throws {
         ServerPlatform.current.host = HostDetails(name: "co-tenant", system: "linux", inContainer: true,
                                                   dataDirectory: FileManager.default.temporaryDirectory)
         let session = record()
-        XCTAssertEqual(session.info.inContainer, true)
-        XCTAssertEqual(session.info.system, "linux")
-        let read = try XCTUnwrap(SessionInfo(json: session.info.json))
-        XCTAssertEqual(read.inContainer, true, "as a client reads it")
+        #expect(session.info.inContainer == true)
+        #expect(session.info.system == "linux")
+        let read = try #require(SessionInfo(json: session.info.json))
+        #expect(read.inContainer == true, "as a client reads it")
     }
 
-    func testAServerOnAComputerSaysNothing() throws {
+    @Test func testAServerOnAComputerSaysNothing() throws {
         ServerPlatform.current.host = HostDetails(name: "Studio Mac", system: "macos", dataDirectory: FileManager.default.temporaryDirectory)
         let session = record()
-        XCTAssertNil(session.info.inContainer)
-        XCTAssertNil(session.info.json["inContainer"].bool, "not written at all")
+        #expect(session.info.inContainer == nil)
+        #expect((session.info.json["inContainer"].bool) == nil, "not written at all")
     }
+}
 }

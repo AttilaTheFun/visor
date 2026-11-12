@@ -5,11 +5,14 @@
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-@MainActor
-final class RepeatedMessageTests: ServerTestCase {
-    func testSentWordsWaitForTheLog() {
+extension ServerTests {
+@Suite @MainActor final class RepeatedMessageTests {
+    init() { TestPlatform.install() }
+
+    @Test func testSentWordsWaitForTheLog() {
         let info = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "t", created: 0)
         let r = SessionRecord(info: info, process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))
         let first = TranscriptEntry(id: "user-file-a", role: .user, text: "go on")
@@ -18,23 +21,24 @@ final class RepeatedMessageTests: ServerTestCase {
 
         // Sent: no row, remembered.
         r.appendUser("go on")
-        XCTAssertEqual(r.entries.map(\.id), ["user-file-a", "msg_1"])
-        XCTAssertEqual(r.unwritten.count, 1)
+        #expect(r.entries.map(\.id) == ["user-file-a", "msg_1"])
+        #expect(r.unwritten.count == 1)
 
         // The log still has only the first "go on": this one waits.
         r.settle(in: [first, reply])
-        XCTAssertEqual(r.unwritten.count, 1)
+        #expect(r.unwritten.count == 1)
 
         // The log writes it: remembered no more.
         r.settle(in: [first, reply, TranscriptEntry(id: "user-file-b", role: .user, text: "go on")])
-        XCTAssertTrue(r.unwritten.isEmpty)
+        #expect(r.unwritten.isEmpty)
     }
 
-    func testEveryAgentWaitsForItsLog() {
+    @Test func testEveryAgentWaitsForItsLog() {
         let info = SessionInfo(id: "c", agent: .codex, cwd: "/tmp", title: "t", created: 0)
         let r = SessionRecord(info: info, process: CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil))
         r.appendUser("Build it")
-        XCTAssertTrue(r.entries.isEmpty)
-        XCTAssertEqual(r.unwritten.map(\.text), ["Build it"])
+        #expect(r.entries.isEmpty)
+        #expect(r.unwritten.map(\.text) == ["Build it"])
     }
+}
 }

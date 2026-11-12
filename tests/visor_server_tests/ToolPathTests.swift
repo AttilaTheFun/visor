@@ -1,12 +1,15 @@
 import Foundation
 import VisorServer
 import VisorSystem
-import XCTest
+import Testing
 
-final class ToolPathTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class ToolPathTests {
+    init() { TestPlatform.install() }
+
     /// A wrapper on the server's own PATH is the tool, ahead of the one in
     /// the usual directories.
-    func testAToolOnTheServersPathComesFirst() throws {
+    @Test func testAToolOnTheServersPathComesFirst() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tools-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -17,18 +20,18 @@ final class ToolPathTests: ServerTestCase {
         let path = ProcessInfo.processInfo.environment["PATH"]
         defer { if let path { setenv("PATH", path, 1) } else { unsetenv("PATH") } }
         setenv("PATH", "relative/bin:\(folder.path):/usr/bin:/bin", 1)
-        XCTAssertEqual(ToolPath.resolve("env"), wrapper.path)
+        #expect(ToolPath.resolve("env") == wrapper.path)
     }
 
     /// An agent's PATH keeps the server's first, as it is, and adds each
     /// tool directory it lacks once after it.
-    func testAnAgentsPathKeepsTheServersFirst() {
-        XCTAssertEqual(ToolPath.searchPath("/wrappers:/usr/bin", then: ["/opt/homebrew/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"],
-                                           separator: ":"),
-                       "/wrappers:/usr/bin:/opt/homebrew/bin:/usr/local/bin")
+    @Test func testAnAgentsPathKeepsTheServersFirst() {
+        #expect(ToolPath.searchPath("/wrappers:/usr/bin", then: ["/opt/homebrew/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"],
+                                           separator: ":") == "/wrappers:/usr/bin:/opt/homebrew/bin:/usr/local/bin")
         let path = ServerPlatform.current.tools.environment(["PATH": "/wrappers:/usr/bin"])["PATH"] ?? ""
         let parts = path.split(separator: ":").map(String.init)
-        XCTAssertEqual(Array(parts.prefix(2)), ["/wrappers", "/usr/bin"])
-        XCTAssertEqual(parts.count, Set(parts).count, "each directory once: \(path)")
+        #expect((Array(parts.prefix(2))) == ["/wrappers", "/usr/bin"])
+        #expect(parts.count == Set(parts).count, "each directory once: \(path)")
     }
+}
 }

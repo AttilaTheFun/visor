@@ -7,6 +7,8 @@ swift_test(
     copts = STRICT_SWIFT,
     srcs = glob(["*.swift"]),
     module_name = "VisorDriverTests",
+    # The server's `package` members are its to use, as SwiftPM's package.
+    package_name = "visor",
     deps = [
         "//:foundation",
         "//libraries/visor_agent",

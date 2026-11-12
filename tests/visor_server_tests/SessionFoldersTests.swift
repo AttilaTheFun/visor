@@ -13,21 +13,22 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-@MainActor
-final class SessionFoldersTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class SessionFoldersTests {
     private var server: VisorServer!
     private var root: URL!
     private var home: URL!
     private var savedHome: URL!
     private let conversation = "99999999-8888-7777-6666-555555555555"
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         let made = FileManager.default.temporaryDirectory.appendingPathComponent("visor-session-folders-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: made, withIntermediateDirectories: true)
         // The real path, as git gives a repository's (/private/var, not /var).
-        root = URL(fileURLWithPath: String(cString: try XCTUnwrap(realpath(made.path, nil))), isDirectory: true)
+        root = URL(fileURLWithPath: String(cString: try #require(realpath(made.path, nil))), isDirectory: true)
         VisorServer.storeRoot = root.appendingPathComponent("store", isDirectory: true)
         VisorServer.secrets = MemorySecrets()
         savedHome = ClaudeSessionFiles.home
@@ -37,7 +38,7 @@ final class SessionFoldersTests: ServerTestCase {
         server = VisorServer(port: 7996)
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         ClaudeSessionFiles.home = savedHome
         try? FileManager.default.removeItem(at: root)
     }
@@ -84,13 +85,13 @@ final class SessionFoldersTests: ServerTestCase {
             read.file = MigrationFile(id: file.id, place: "", size: min(4000, file.size - offset), packed: false)
             read.offset = offset
             let piece = server.migrationRead(read)
-            XCTAssertNotEqual(piece.type, "error", piece.message ?? "")
+            #expect(piece.type != "error", Comment(rawValue: piece.message ?? ""))
             var write = Envelope(type: "migration")
             write.migration = plan
             write.file = file
             write.offset = offset
             write.data = piece.data
-            XCTAssertNotEqual(server.migrationWrite(write).type, "error")
+            #expect(server.migrationWrite(write).type != "error")
             offset = piece.offset ?? file.size
         } while offset < file.size
     }
@@ -103,12 +104,12 @@ final class SessionFoldersTests: ServerTestCase {
         var ask = Envelope(type: "migration")
         ask.session = "S"
         let offered = await server.migrationOffer(ask)
-        let offer = try XCTUnwrap(offered.offer, offered.message ?? "no offer")
+        let offer = try #require(offered.offer, Comment(rawValue: offered.message ?? "no offer"))
         server.sessionFolders = SessionFolders(sessions: sessions + "/", sources: sources)
         var planning = Envelope(type: "migration")
         planning.offer = offer
         let planned = await server.migrationPlan(planning)
-        return (offer, try XCTUnwrap(planned.plan, planned.message ?? "no plan"))
+        return (offer, try #require(planned.plan, Comment(rawValue: planned.message ?? "no plan")))
     }
 
     private func finish(_ offer: MigrationOffer, _ plan: MigrationPlan, cwd: String? = nil) async throws -> SessionRecord {
@@ -118,31 +119,31 @@ final class SessionFoldersTests: ServerTestCase {
         finishing.steps = plan.steps.filter(\.chosen)
         finishing.cwd = cwd
         let finished = await server.migrationFinish(finishing)
-        XCTAssertNotEqual(finished.type, "error", finished.message ?? "")
-        return try XCTUnwrap(server.session(finished.session))
+        #expect(finished.type != "error", Comment(rawValue: finished.message ?? ""))
+        return try #require(server.session(finished.session))
     }
 
     // MARK: Tests
 
-    func testAFolderIsTheAgentsThenTheSessionsAndARepositoryGoesToTheSourcesByName() {
+    @Test func testAFolderIsTheAgentsThenTheSessionsAndARepositoryGoesToTheSourcesByName() {
         let folders = SessionFolders(sessions: "/Volumes/Sessions/", sources: "/Volumes/Sources")
-        XCTAssertEqual(folders.folder(agent: .claude, id: "abc"), "/Volumes/Sessions/Claude/abc")
-        XCTAssertEqual(folders.folder(agent: .codex, id: "abc"), "/Volumes/Sessions/Codex/abc")
-        XCTAssertEqual(folders.source(for: "/Users/logan/Developer/visor/"), "/Volumes/Sources/visor")
-        XCTAssertNil(SessionFolders(sessions: "/Volumes/Sessions").source(for: "/Users/logan/Developer/visor"))
+        #expect(folders.folder(agent: .claude, id: "abc") == "/Volumes/Sessions/Claude/abc")
+        #expect(folders.folder(agent: .codex, id: "abc") == "/Volumes/Sessions/Codex/abc")
+        #expect(folders.source(for: "/Users/logan/Developer/visor/") == "/Volumes/Sources/visor")
+        #expect((SessionFolders(sessions: "/Volumes/Sessions").source(for: "/Users/logan/Developer/visor")) == nil)
     }
 
-    func testANewSessionWorksInAFolderOfItsOwnAndAResumedOneKeepsItsFolder() throws {
+    @Test func testANewSessionWorksInAFolderOfItsOwnAndAResumedOneKeepsItsFolder() throws {
         server.sessionFolders = SessionFolders(sessions: sessions)
         var start = Envelope(type: "start")
         start.id = "new1"
         start.agent = .claude
         start.cwd = "/Users/logan/Developer/visor"
         server.perform(start, from: nil)
-        let made = try XCTUnwrap(server.session("new1"))
-        XCTAssertEqual(made.info.cwd, sessions + "/Claude/new1")
+        let made = try #require(server.session("new1"))
+        #expect(made.info.cwd == (sessions + "/Claude/new1"))
         var isFolder: ObjCBool = false
-        XCTAssertTrue(FileManager.default.fileExists(atPath: made.info.cwd, isDirectory: &isFolder) && isFolder.boolValue)
+        #expect(FileManager.default.fileExists(atPath: made.info.cwd, isDirectory: &isFolder) && isFolder.boolValue)
 
         var resume = Envelope(type: "start")
         resume.id = "old1"
@@ -150,39 +151,38 @@ final class SessionFoldersTests: ServerTestCase {
         resume.cwd = home.path
         resume.resume = conversation
         server.perform(resume, from: nil)
-        XCTAssertEqual(server.session("old1")?.info.cwd, home.path, "its conversation is kept under its folder")
+        #expect((server.session("old1")?.info.cwd) == home.path, "its conversation is kept under its folder")
     }
 
-    func testAMovedSessionGetsItsFolderAndIdFromThePlanItsConversationAndItsMemory() async throws {
+    @Test func testAMovedSessionGetsItsFolderAndIdFromThePlanItsConversationAndItsMemory() async throws {
         let app = try await repository("app")
         try conversationAndMemory(cwd: app.path)
         let (offer, plan) = try await offerAndPlan(cwd: app.path)
-        XCTAssertTrue(offer.files.contains { $0.id == VisorServer.memoryFileID && $0.place.isEmpty && $0.packed },
-                      "the memory carried with no place, which an older server leaves be")
-        XCTAssertTrue(plan.cwd.hasPrefix(sessions + "/Claude/"), plan.cwd)
-        XCTAssertEqual(plan.steps.map(\.path), [sources + "/app"], "its repository, by name, under the sources")
-        XCTAssertEqual(plan.steps.map(\.chosen), [true])
+        #expect(offer.files.contains { $0.id == VisorServer.memoryFileID && $0.place.isEmpty && $0.packed }, "the memory carried with no place, which an older server leaves be")
+        #expect(plan.cwd.hasPrefix(sessions + "/Claude/"), Comment(rawValue: plan.cwd))
+        #expect(plan.steps.map(\.path) == [sources + "/app"], "its repository, by name, under the sources")
+        #expect(plan.steps.map(\.chosen) == [true])
 
         let moved = try await finish(offer, plan, cwd: "/somewhere/else")
-        XCTAssertEqual(moved.info.cwd, plan.cwd, "the plan's folder, not the client's")
-        XCTAssertEqual(moved.info.id, (plan.cwd as NSString).lastPathComponent, "the id the folder was made of")
-        XCTAssertEqual(moved.process.resumeID, conversation)
+        #expect(moved.info.cwd == plan.cwd, "the plan's folder, not the client's")
+        #expect(moved.info.id == ((plan.cwd as NSString).lastPathComponent), "the id the folder was made of")
+        #expect(moved.process.resumeID == conversation)
         let placed = project(plan.cwd)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: placed.appendingPathComponent(conversation + ".jsonl").path))
-        XCTAssertEqual(try String(contentsOf: placed.appendingPathComponent("memory/merge-queue.md"), encoding: .utf8), "the merge queue")
-        XCTAssertNotNil(try? String(contentsOf: placed.appendingPathComponent("memory/MEMORY.md"), encoding: .utf8))
+        #expect(FileManager.default.fileExists(atPath: placed.appendingPathComponent(conversation + ".jsonl").path))
+        #expect((try String(contentsOf: placed.appendingPathComponent("memory/merge-queue.md"), encoding: .utf8)) == "the merge queue")
+        #expect((try? String(contentsOf: placed.appendingPathComponent("memory/MEMORY.md"), encoding: .utf8)) != nil)
     }
 
-    func testAFolderThatIsNotARepositoryStaysBehind() async throws {
+    @Test func testAFolderThatIsNotARepositoryStaysBehind() async throws {
         let plain = home.appendingPathComponent("Developer", isDirectory: true)
         try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
         try conversationAndMemory(cwd: plain.path)
         let (_, plan) = try await offerAndPlan(cwd: plain.path)
-        XCTAssertTrue(plan.steps.isEmpty, "\(plan.steps)")
-        XCTAssertTrue(plan.cwd.hasPrefix(sessions + "/Claude/"))
+        #expect(plan.steps.isEmpty, "\(plan.steps)")
+        #expect(plan.cwd.hasPrefix(sessions + "/Claude/"))
     }
 
-    func testASessionWhoseCheckoutHasWhatItsRemoteDoesntIsRefused() async throws {
+    @Test func testASessionWhoseCheckoutHasWhatItsRemoteDoesntIsRefused() async throws {
         let app = try await repository("app")
         try conversationAndMemory(cwd: app.path)
         // An untracked file (a .env) is never carried into the sources.
@@ -192,30 +192,30 @@ final class SessionFoldersTests: ServerTestCase {
         var ask = Envelope(type: "migration")
         ask.session = "S"
         let offered = await server.migrationOffer(ask)
-        let offer = try XCTUnwrap(offered.offer, offered.message ?? "no offer")
+        let offer = try #require(offered.offer, Comment(rawValue: offered.message ?? "no offer"))
         server.sessionFolders = SessionFolders(sessions: sessions, sources: sources)
         var planning = Envelope(type: "migration")
         planning.offer = offer
         let planned = await server.migrationPlan(planning)
-        XCTAssertNil(planned.plan)
-        XCTAssertTrue(planned.message?.contains("commit and push it") == true, planned.message ?? "")
+        #expect(planned.plan == nil)
+        #expect(planned.message?.contains("commit and push it") == true, Comment(rawValue: planned.message ?? ""))
     }
 
-    func testNothingIsCopiedIntoTheSources() async throws {
+    @Test func testNothingIsCopiedIntoTheSources() async throws {
         let app = try await repository("app")
         try conversationAndMemory(cwd: app.path)
         let (_, plan) = try await offerAndPlan(cwd: app.path)
-        XCTAssertEqual(plan.steps.map(\.action), [.clone])
+        #expect(plan.steps.map(\.action) == [.clone])
         var unpacking = Envelope(type: "migration")
         unpacking.migration = plan.id
         unpacking.file = MigrationFile(id: "project-0", place: "", size: 0, packed: true)
         unpacking.steps = plan.steps
         let refused = await server.migrationUnpack(unpacking)
-        XCTAssertEqual(refused.type, "error")
-        XCTAssertTrue(refused.message?.contains("never copied") == true, refused.message ?? "")
+        #expect(refused.type == "error")
+        #expect(refused.message?.contains("never copied") == true, Comment(rawValue: refused.message ?? ""))
     }
 
-    func testARepositoryComesIntoTheSourcesAsAFreshCloneOfItsRemote() async throws {
+    @Test func testARepositoryComesIntoTheSourcesAsAFreshCloneOfItsRemote() async throws {
         let app = try await repository("app")
         try conversationAndMemory(cwd: app.path)
         let (_, plan) = try await offerAndPlan(cwd: app.path)
@@ -223,20 +223,20 @@ final class SessionFoldersTests: ServerTestCase {
         cloning.migration = plan.id
         cloning.steps = plan.steps
         let cloned = await server.migrationClone(cloning)
-        XCTAssertNotEqual(cloned.type, "error", cloned.message ?? "")
+        #expect(cloned.type != "error", Comment(rawValue: cloned.message ?? ""))
         let clone = URL(fileURLWithPath: sources + "/app", isDirectory: true)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: clone.appendingPathComponent("main.swift").path))
+        #expect(FileManager.default.fileExists(atPath: clone.appendingPathComponent("main.swift").path))
         let branch = await ProjectSurvey.git(["rev-parse", "--abbrev-ref", "HEAD"], in: clone.path)
-        XCTAssertEqual(branch, "main", "the session's branch")
+        #expect(branch == "main", "the session's branch")
     }
 
-    func testGitHubOverSSHIsClonedOverHTTPS() {
-        XCTAssertEqual(VisorServer.overHTTPS("git@github.com:AttilaTheFun/visor.git"), "https://github.com/AttilaTheFun/visor.git")
-        XCTAssertEqual(VisorServer.overHTTPS("ssh://git@github.com/AttilaTheFun/visor"), "https://github.com/AttilaTheFun/visor")
-        XCTAssertEqual(VisorServer.overHTTPS("https://github.com/AttilaTheFun/visor.git"), "https://github.com/AttilaTheFun/visor.git")
+    @Test func testGitHubOverSSHIsClonedOverHTTPS() {
+        #expect(VisorServer.overHTTPS("git@github.com:AttilaTheFun/visor.git") == "https://github.com/AttilaTheFun/visor.git")
+        #expect(VisorServer.overHTTPS("ssh://git@github.com/AttilaTheFun/visor") == "https://github.com/AttilaTheFun/visor")
+        #expect(VisorServer.overHTTPS("https://github.com/AttilaTheFun/visor.git") == "https://github.com/AttilaTheFun/visor.git")
     }
 
-    func testAMemoryAlreadyThereIsNeverOverwritten() async throws {
+    @Test func testAMemoryAlreadyThereIsNeverOverwritten() async throws {
         let app = try await repository("app")
         try conversationAndMemory(cwd: app.path)
         let (offer, plan) = try await offerAndPlan(cwd: app.path)
@@ -244,7 +244,8 @@ final class SessionFoldersTests: ServerTestCase {
         try FileManager.default.createDirectory(at: mine, withIntermediateDirectories: true)
         try Data("mine".utf8).write(to: mine.appendingPathComponent("merge-queue.md"))
         _ = try await finish(offer, plan)
-        XCTAssertEqual(try String(contentsOf: mine.appendingPathComponent("merge-queue.md"), encoding: .utf8), "mine")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: mine.appendingPathComponent("MEMORY.md").path))
+        #expect((try String(contentsOf: mine.appendingPathComponent("merge-queue.md"), encoding: .utf8)) == "mine")
+        #expect(!(FileManager.default.fileExists(atPath: mine.appendingPathComponent("MEMORY.md").path)))
     }
+}
 }

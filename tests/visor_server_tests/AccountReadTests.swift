@@ -6,15 +6,16 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-@MainActor
-final class AccountReadTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class AccountReadTests {
     private var folder: URL!
     private var path: String?
     private var server: VisorServer!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("visor-account-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // Codex's app-server, as far as the reads go: each run noted.
@@ -40,7 +41,7 @@ final class AccountReadTests: ServerTestCase {
         server = VisorServer(port: 7996)
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
         VisorServer.socketPathOverride = nil
         if let path { setenv("PATH", path, 1) } else { unsetenv("PATH") }
@@ -51,31 +52,32 @@ final class AccountReadTests: ServerTestCase {
         ((try? String(contentsOf: folder.appendingPathComponent("runs"), encoding: .utf8)) ?? "").split(separator: "\n").count
     }
 
-    func testCodexSaysHowItsAccountStandsNow() async throws {
+    @Test func testCodexSaysHowItsAccountStandsNow() async throws {
         let read = await CodexHarness().readAccount()
-        let account = try XCTUnwrap(read)
-        XCTAssertEqual(account.plan, "ChatGPT Pro")
-        XCTAssertTrue(account.subscription)
-        XCTAssertEqual(account.limits, [UsageLimit(name: "Weekly", used: 0, resets: 1_800_000_000),
+        let account = try #require(read)
+        #expect(account.plan == "ChatGPT Pro")
+        #expect(account.subscription)
+        #expect(account.limits == [UsageLimit(name: "Weekly", used: 0, resets: 1_800_000_000),
                                         UsageLimit(name: "Credits", left: 10.5, unit: .credits)])
     }
 
     /// A week's window that was reset: what a turn left days ago gives
     /// way to what Codex says now, and a second look moments later reads
     /// nothing again.
-    func testTheServerKeepsWhatCodexSaysNow() async throws {
+    @Test func testTheServerKeepsWhatCodexSaysNow() async throws {
         server.knownAccounts = [.codex: AgentAccount(plan: "ChatGPT Pro", subscription: true,
                                                      limits: [UsageLimit(name: "Weekly", used: 0.94, resets: 1_700_000_000)], updated: 1)]
         await server.refreshAccount(of: .codex)
-        let account = try XCTUnwrap(server.account(for: .codex))
-        XCTAssertEqual(account.limits.first, UsageLimit(name: "Weekly", used: 0, resets: 1_800_000_000))
-        XCTAssertGreaterThan(account.updated, Date().timeIntervalSince1970 - 60)
-        XCTAssertEqual(VisorServer.keptAccounts()[.codex], account, "kept on disk")
+        let account = try #require(server.account(for: .codex))
+        #expect(account.limits.first == UsageLimit(name: "Weekly", used: 0, resets: 1_800_000_000))
+        #expect(account.updated > (Date().timeIntervalSince1970 - 60))
+        #expect((VisorServer.keptAccounts()[.codex]) == account, "kept on disk")
 
         await server.refreshAccount(of: .codex)
-        XCTAssertEqual(runs, 1, "a read a moment ago is fresh enough")
+        #expect(runs == 1, "a read a moment ago is fresh enough")
         // Claude's is only heard from its turns: nothing to ask.
         await server.refreshAccount(of: .claude)
-        XCTAssertNil(server.account(for: .claude))
+        #expect(server.account(for: .claude) == nil)
     }
+}
 }

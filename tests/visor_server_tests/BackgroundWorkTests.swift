@@ -8,13 +8,14 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-@MainActor
-final class BackgroundWorkTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class BackgroundWorkTests {
     private var server: VisorServer!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-background-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -22,7 +23,7 @@ final class BackgroundWorkTests: ServerTestCase {
         server = VisorServer(port: 7981)
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
     }
 
@@ -33,56 +34,57 @@ final class BackgroundWorkTests: ServerTestCase {
 
     /// Claude Code's list, each task by its kind and words; an empty list
     /// is nothing in the background.
-    func testClaudeSaysWhatRunsInTheBackground() {
+    @Test func testClaudeSaysWhatRunsInTheBackground() {
         let changed = """
             {"type":"system","subtype":"background_tasks_changed","tasks":[\
             {"task_id":"bbp94fgoh","task_type":"local_bash","description":"Wait for CI on the ATS fix"},\
             {"task_id":"b1c43c1za","task_type":"monitor","description":"CI checks on visor PR #92"},\
             {"task_id":"af0e75e2","task_type":"local_agent","description":"Review the diff"}]}
             """
-        XCTAssertEqual(ClaudeOutput.parse(changed), [.background([
+        #expect(ClaudeOutput.parse(changed) == ([.background([
             StatusItem(id: "bbp94fgoh", kind: .shell, label: "Wait for CI on the ATS fix", running: true),
             StatusItem(id: "b1c43c1za", kind: .monitor, label: "CI checks on visor PR #92", running: true),
             StatusItem(id: "af0e75e2", kind: .subagent, label: "Review the diff", running: true),
-        ])])
-        XCTAssertEqual(ClaudeOutput.parse(#"{"type":"system","subtype":"background_tasks_changed","tasks":[]}"#), [.background([])])
+        ])]))
+        #expect(ClaudeOutput.parse(#"{"type":"system","subtype":"background_tasks_changed","tasks":[]}"#) == ([.background([])]))
         // The notifications that follow say nothing the list does not.
-        XCTAssertEqual(ClaudeOutput.parse(#"{"type":"system","subtype":"task_notification","task_id":"bbp94fgoh","status":"completed"}"#), [])
+        #expect(ClaudeOutput.parse(#"{"type":"system","subtype":"task_notification","task_id":"bbp94fgoh","status":"completed"}"#) == [])
     }
 
     /// The session carries the list, through its JSON and its store,
     /// and loses it when its process is replaced.
-    func testTheSessionCarriesItUntilTheProcessStartsOver() throws {
+    @Test func testTheSessionCarriesItUntilTheProcessStartsOver() throws {
         let session = record("A")
         server.sessions = [session]
         let items = [StatusItem(id: "b1", kind: .monitor, label: "CI checks", running: true)]
         server.handle(.background(items), from: session)
-        XCTAssertEqual(session.info.background, items)
-        XCTAssertEqual(SessionInfo(json: session.info.json)?.background, items)
+        #expect(session.info.background == items)
+        #expect((SessionInfo(json: session.info.json)?.background) == items)
         let stored = try JSONDecoder().decode(SessionInfo.self, from: JSONEncoder().encode(session.info))
-        XCTAssertEqual(stored.background, items)
+        #expect(stored.background == items)
         // A store from before the field reads as nothing in the background.
         let older = try JSONDecoder().decode(SessionInfo.self, from: Data(#"{"id":"A"}"#.utf8))
-        XCTAssertEqual(older.background, [])
+        #expect(older.background == [])
 
         server.handle(.busy(false), from: session)
-        XCTAssertEqual(session.info.background, items, "a turn ending does not end it")
+        #expect(session.info.background == items, "a turn ending does not end it")
         session.replaceProcess(ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))
-        XCTAssertEqual(session.info.background, [])
+        #expect(session.info.background == [])
     }
 
     /// A server started again finds nothing in the background: it ran in
     /// agents that went with the last one, and the new agent, starting with
     /// none, has no change to say (11 Oct: a wait the restart had ended
     /// showed on the phone after the handover).
-    func testAServerStartedAgainFindsNothingInTheBackground() {
+    @Test func testAServerStartedAgainFindsNothingInTheBackground() {
         let session = record("A")
         server.sessions = [session]
         server.handle(.background([StatusItem(id: "b1", kind: .shell, label: "Wait for the other Mac", running: true)]), from: session)
         server.saveArchiveNow()
         server.stop()
         server = VisorServer(port: 7981)
-        XCTAssertEqual(server.sessions.map(\.info.id), ["A"])
-        XCTAssertEqual(server.sessions.first?.info.background, [])
+        #expect(server.sessions.map(\.info.id) == ["A"])
+        #expect((server.sessions.first?.info.background) == [])
     }
+}
 }

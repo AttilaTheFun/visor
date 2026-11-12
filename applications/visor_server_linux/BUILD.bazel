@@ -9,6 +9,8 @@ swift_binary(
     copts = STRICT_SWIFT,
     srcs = ["main.swift"],
     module_name = "VisorServerMain",
+    # The server's `package` members are its to use, as SwiftPM's package.
+    package_name = "visor",
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         "//:foundation",

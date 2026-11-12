@@ -5,31 +5,32 @@
 
 import Foundation
 import VisorServerPOSIX
-import XCTest
+import Testing
 
-final class DetachedStartTests: XCTestCase {
+extension ServerTests {
+@Suite final class DetachedStartTests {
     private var log: URL!
 
-    override func setUp() {
+    init() {
         log = FileManager.default.temporaryDirectory.appendingPathComponent("visor-detached-\(UUID().uuidString).log")
     }
 
-    override func tearDown() {
+    deinit {
         try? FileManager.default.removeItem(at: log)
     }
 
-    func testAProgramThatIsNotThereIsAnError() {
+    @Test func testAProgramThatIsNotThereIsAnError() {
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent("visor-server-\(UUID().uuidString) (deleted)").path
-        XCTAssertThrowsError(try POSIXDaemon.start(missing, ["run"], log: log.path)) { error in
-            XCTAssertEqual((error as NSError).code, Int(ENOENT))
-        }
+        let error = #expect(throws: (any Error).self) { try POSIXDaemon.start(missing, ["run"], log: log.path) }
+        #expect((error as? NSError)?.code == Int(ENOENT))
     }
 
-    func testAProgramThatStartsIsItsProcess() throws {
+    @Test func testAProgramThatStartsIsItsProcess() throws {
         let pid = try POSIXDaemon.start("/bin/sh", ["-c", "echo started"], log: log.path)
-        XCTAssertGreaterThan(pid, 0)
+        #expect(pid > 0)
         var status: Int32 = 0
-        XCTAssertEqual(waitpid(pid, &status, 0), pid)
-        XCTAssertEqual(try String(contentsOf: log, encoding: .utf8), "started\n")
+        #expect(waitpid(pid, &status, 0) == pid)
+        #expect((try String(contentsOf: log, encoding: .utf8)) == "started\n")
     }
+}
 }

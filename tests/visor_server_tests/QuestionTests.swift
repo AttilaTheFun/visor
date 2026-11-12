@@ -8,7 +8,7 @@ import Foundation
 import VisorProtocol
 @testable import VisorServer
 import VisorSystem
-import XCTest
+import Testing
 
 /// An agent that does nothing: the question comes from its shim.
 @MainActor
@@ -55,24 +55,25 @@ private final class ShimStream: ByteStream {
     }
 }
 
-@MainActor
-final class QuestionTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class QuestionTests {
     private var server: VisorServer!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-question-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
-        server = VisorServer(port: Self.freePort())
+        server = VisorServer(port: ServerTestCase.freePort())
         server.password = "pw"
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
     }
 
-    func testAQuestionIsShownAndItsAnswersGoBackToTheAgent() throws {
+    @Test func testAQuestionIsShownAndItsAnswersGoBackToTheAgent() throws {
         let record = SessionRecord(info: SessionInfo(id: "q", agent: .claude, cwd: "/tmp", title: "q", created: 0), process: QuietAgent())
         server.sessions = [record]
         // As the shim sends it: the questions as Claude Code gave them.
@@ -86,44 +87,44 @@ final class QuestionTests: ServerTestCase {
             + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
         let shim = ClientConnection(stream: stream, received: Data(upgrade.utf8))
         shim.start()
-        server.handle(try XCTUnwrap(Envelope.decode(asked)), from: shim)
-        let pending = try XCTUnwrap(record.info.pendingApproval)
-        XCTAssertEqual(pending.tool, "AskUserQuestion")
-        XCTAssertEqual(pending.questions?.first?.header, "Color")
-        XCTAssertEqual(pending.questions?.first?.options.map(\.label), ["Red", "Blue"])
-        XCTAssertEqual(Envelope.decode(Envelope.approval(session: "q", pending).encoded())?.approval, pending, "as clients read it")
+        server.handle(try #require(Envelope.decode(asked)), from: shim)
+        let pending = try #require(record.info.pendingApproval)
+        #expect(pending.tool == "AskUserQuestion")
+        #expect((pending.questions?.first?.header) == "Color")
+        #expect((pending.questions?.first?.options.map(\.label)) == ["Red", "Blue"])
+        #expect((Envelope.decode(Envelope.approval(session: "q", pending).encoded())?.approval) == pending, "as clients read it")
 
         // Answered over REST, as a client does.
         let body = Envelope.approve(session: "q", id: "r1", allow: true, answers: ["Which color?": "Blue"]).encoded()
         let reply = server.route(HTTPRequest(method: "POST", path: "/api/sessions/q/approve", headers: ["authorization": "Bearer pw"], body: body))
-        XCTAssertEqual(reply.status, 200)
-        XCTAssertNil(record.info.pendingApproval)
-        let result = try XCTUnwrap(stream.envelopes.first { $0.type == "approval_result" })
-        XCTAssertEqual(result.id, "r1")
-        XCTAssertEqual(result.busy, true)
-        XCTAssertEqual(result.answers, ["Which color?": "Blue"])
+        #expect(reply.status == 200)
+        #expect(record.info.pendingApproval == nil)
+        let result = try #require(stream.envelopes.first { $0.type == "approval_result" })
+        #expect(result.id == "r1")
+        #expect(result.busy == true)
+        #expect(result.answers == ["Which color?": "Blue"])
     }
 
     /// A question the agent itself asked (Codex's request_user_input) is
     /// shown the same way, and its answers go to the agent.
-    func testAnAgentsOwnQuestionIsAnsweredToIt() throws {
+    @Test func testAnAgentsOwnQuestionIsAnsweredToIt() throws {
         let agent = QuietAgent()
         let record = SessionRecord(info: SessionInfo(id: "c", agent: .codex, cwd: "/tmp", title: "c", created: 0), process: agent)
         server.sessions = [record]
         let request = ApprovalRequest(id: "codex-7", tool: "request_user_input", summary: "Which color?",
                                       questions: [AgentQuestion(question: "Which color?", options: [.init(label: "Red"), .init(label: "Blue")])])
         server.handle(.question(request), from: record)
-        XCTAssertEqual(record.info.pendingApproval, request)
+        #expect(record.info.pendingApproval == request)
         let body = Envelope.approve(session: "c", id: "codex-7", allow: true, answers: ["Which color?": "Red"]).encoded()
-        XCTAssertEqual(server.route(HTTPRequest(method: "POST", path: "/api/sessions/c/approve", headers: ["authorization": "Bearer pw"], body: body)).status, 200)
-        XCTAssertEqual(agent.answered.first?.0, "codex-7")
-        XCTAssertEqual(agent.answered.first?.1, ["Which color?": "Red"])
-        XCTAssertNil(record.info.pendingApproval)
+        #expect((server.route(HTTPRequest(method: "POST", path: "/api/sessions/c/approve", headers: ["authorization": "Bearer pw"], body: body)).status) == 200)
+        #expect((agent.answered.first?.0) == "codex-7")
+        #expect((agent.answered.first?.1) == ["Which color?": "Red"])
+        #expect(record.info.pendingApproval == nil)
     }
 
     /// The agent gave up waiting (its shim's socket closed before an
     /// answer): the prompt is withdrawn from the clients.
-    func testAPromptWhoseAskerWentIsWithdrawn() throws {
+    @Test func testAPromptWhoseAskerWentIsWithdrawn() throws {
         let record = SessionRecord(info: SessionInfo(id: "w", agent: .claude, cwd: "/tmp", title: "w", created: 0), process: QuietAgent())
         server.sessions = [record]
         var asked = Envelope(type: "approval_request")
@@ -134,16 +135,16 @@ final class QuestionTests: ServerTestCase {
         asked.prompt = "rm -rf build"
         let shim = ClientConnection(stream: ShimStream())
         server.handle(asked, from: shim)
-        XCTAssertNotNil(record.info.pendingApproval)
+        #expect(record.info.pendingApproval != nil)
         server.withdrawApprovals(askedBy: ClientConnection(stream: ShimStream()))
-        XCTAssertNotNil(record.info.pendingApproval, "another connection's going withdraws nothing")
+        #expect(record.info.pendingApproval != nil, "another connection's going withdraws nothing")
         server.withdrawApprovals(askedBy: shim)
-        XCTAssertNil(record.info.pendingApproval)
-        XCTAssertTrue(server.approvalWaiters[record.info.id, default: [:]].isEmpty)
+        #expect(record.info.pendingApproval == nil)
+        #expect(server.approvalWaiters[record.info.id, default: [:]].isEmpty)
     }
 
     /// A tool call that is not a question carries none, as before.
-    func testAPermissionCarriesNoQuestions() throws {
+    @Test func testAPermissionCarriesNoQuestions() throws {
         let record = SessionRecord(info: SessionInfo(id: "p", agent: .claude, cwd: "/tmp", title: "p", created: 0), process: QuietAgent())
         server.sessions = [record]
         var asked = Envelope(type: "approval_request")
@@ -153,7 +154,8 @@ final class QuestionTests: ServerTestCase {
         asked.text = "Bash"
         asked.prompt = "swift test"
         server.handle(asked, from: ClientConnection(stream: ShimStream()))
-        XCTAssertEqual(record.info.pendingApproval, ApprovalRequest(id: "r2", tool: "Bash", summary: "swift test"))
-        XCTAssertNil(Envelope.decode(Envelope.approval(session: "p", ApprovalRequest(id: "r2", tool: "Bash", summary: "x")).encoded())?.approval?.questions)
+        #expect(record.info.pendingApproval == ApprovalRequest(id: "r2", tool: "Bash", summary: "swift test"))
+        #expect((Envelope.decode(Envelope.approval(session: "p", ApprovalRequest(id: "r2", tool: "Bash", summary: "x")).encoded())?.approval?.questions) == nil)
     }
+}
 }

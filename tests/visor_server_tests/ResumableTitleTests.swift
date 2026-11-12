@@ -5,10 +5,14 @@
 
 @testable import VisorAgent
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-final class ResumableTitleTests: ServerTestCase {
-    func testTheLatestTitlesAreReadFromTheEnd() throws {
+extension ServerTests {
+@Suite @MainActor final class ResumableTitleTests {
+    init() { TestPlatform.install() }
+
+    @Test func testTheLatestTitlesAreReadFromTheEnd() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("titles-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: file) }
         var lines = [#"{"type":"user","message":{"role":"user","content":"A session-scoped Stop hook is now active with condition: ship it"}}"#,
@@ -23,13 +27,14 @@ final class ResumableTitleTests: ServerTestCase {
         try (lines.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
 
         let titles = SessionCatalog.titles(atEndOf: file)
-        XCTAssertEqual(titles.named, "Convo")
-        XCTAssertEqual(titles.written, "Later name")
+        #expect(titles.named == "Convo")
+        #expect(titles.written == "Later name")
 
         // A file with no titles at its end gives none.
         try (lines.prefix(1).joined() + "\n").write(to: file, atomically: true, encoding: .utf8)
         let none = SessionCatalog.titles(atEndOf: file)
-        XCTAssertNil(none.named)
-        XCTAssertNil(none.written)
+        #expect(none.named == nil)
+        #expect(none.written == nil)
     }
+}
 }
