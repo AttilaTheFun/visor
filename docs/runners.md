@@ -413,20 +413,18 @@ Agreed with Shireworks on 11 Nov, then placed by Logan's answers:
     wrapper (its keepalive doesn't count), the runner stops the agent and
     reports it `blocked: stuck`. The 45 minutes is a setting in Shireworks'
     Server Settings.
-  - **Resuming a blocked agent:** on blocked, the runner adds the label
-    `agent: blocked` to the issue. Logan resumes it by removing the label, or
-    by answering on the issue: a new comment from him after the block. The
-    runner checks each blocked session's issue every few minutes, through
-    MultiPass, and resumes the agent with that comment as its prompt, if there
-    is one. If Logan uses a Projects board instead, its "Ready" column takes
-    the label's place.
+  - **Resuming a blocked agent:** on blocked, the runner sets the issue's
+    status to `status: blocked` ("Issues: statuses as labels", below). Logan
+    answers on the issue, then moves it back to `status: unscoped` or
+    `status: scoped`, and the next claim of it resumes the blocked session,
+    with his latest comment as its prompt.
   - **On the runner's side:** a complete report with `merged` archives the
     session; a blocked report stops the agent and keeps its data; a resume
     starts the same session again in the primary container with `--resume`.
 - **Merging:** an agent merges its own pull request when it touches no
   code-owned file, as agents do today. Otherwise it reports blocked on code
-  review. Logan moves the issue back to a status the runner watches, and the
-  runner resumes the agent.
+  review (`status: blocked`). Logan moves the issue back to `status:
+  scoped` once he has merged or answered, and the runner resumes the agent.
 - **Triggering:**
   - **During the pilot:** by hand only, from Visor's UI or MCP tool,
     queuing an issue for the runner.
@@ -457,6 +455,66 @@ Agreed with Shireworks on 11 Nov, then placed by Logan's answers:
   - Visor: the queue, the dial protocol, the wrapper's report tools, the
     server's handling of reports and archiving, and the workflow template for
     later.
+
+## Issues: statuses as labels, and the jobs that move them
+
+Logan, 11 Nov: GitHub Issues with labels, no Projects board (a GitHub App's
+token can't reach a user's Projects). Issues (the app) shows and moves them;
+agents move them with the gh proxy's issue_edit. Names agreed with Issues and
+Shireworks (shireworks#261, §14).
+
+- **Status, exactly one label on an open issue:**
+  - `status: backlog`: planned, not prioritized.
+  - `status: unscoped`: prioritized, waiting for a plan job.
+  - `status: in scoping`: a plan agent has it.
+  - `status: scoped`: it has a plan, an agent and an effort; waiting for an
+    implementation job.
+  - `status: in progress`: an implementation agent has it.
+  - `status: blocked`: waiting on Logan (a code-owned pull request to
+    approve, a question, an action), or the agent got stuck.
+  - **Done** is the issue closed as completed, with no status label: the
+    merged pull request's `Fixes #n` closes it. **Won't do** is deleted, in
+    the Issues app.
+- **`priority: low|medium|high`** is Logan's, for the issue as a whole. No job
+  changes it, scoping included.
+- **The plan's choices:** `agent: <agent>` and `effort: <effort>`, free text,
+  set by the plan agent (e.g. `agent: claude-sonnet-5-5`, `effort: medium`).
+- **Two kinds of job:**
+  - **Plan** (from `status: unscoped`): a plan agent on a strong model and
+    high effort (Opus 5.5, high or xhigh) takes the issue, writes and merges
+    a plan pull request, sets `agent:` and `effort:` for the work, and moves
+    the issue to `status: scoped`. An infeasible or unwanted plan goes to
+    `status: blocked`, with a comment saying why.
+  - **Implementation** (from `status: scoped`): an agent of the issue's
+    `agent:` at its `effort:` carries out the plan until it's done (its pull
+    request merged, which closes the issue) or blocked.
+- **One queue for both:** a runner with room claims the highest-priority
+  claimable issue among `status: unscoped` and `status: scoped` together,
+  oldest first among equals ("I would rather we implement a high priority
+  bug fix over planning a low priority feature"). The server holds the
+  queue, so it applies this order when it answers a poll. An issue with no
+  `priority:` label comes after the `low` ones, as Issues lists it (shown
+  there as "No Priority").
+- **How issues become queue entries:** the server reads the tracked
+  repositories' open issues through MultiPass every few minutes (webhooks
+  later) and keeps a `start` entry for each `status: unscoped` or `status:
+  scoped` one, linked to it (`links`), with its kind (plan or
+  implementation), agent and effort. An issue that leaves those statuses
+  loses its entry. During the pilot, entries are queued by hand from Visor's
+  UI or MCP tool instead.
+- **The runner's moves:**
+  - on claiming a plan, `status: unscoped` → `status: in scoping`;
+  - on claiming an implementation, `status: scoped` → `status: in progress`;
+  - on a blocked report, or when it stops a stuck agent, → `status:
+    blocked`, with a comment saying why (as logan-shire-agent[bot]);
+  - on complete with the pull request merged: nothing, since `Fixes #n` has
+    closed the issue; the session archives itself.
+
+  A claim of an issue whose session is blocked resumes that session rather
+  than starting a new one.
+- **Done, and the release that shipped it:** a release's proposal lists the
+  pull requests it carries, and each closes its issues. Issues (the app)
+  shows "Released in vX" by following release → pull requests → `Fixes #n`.
 
 ## Permissions
 
@@ -536,6 +594,5 @@ these. 4's containers and 8 need 2e.
 ## Open questions
 
 Logan answered the first round, and Shireworks proposed the runner's MCP.
-Left for Logan:
-- **Resuming a blocked agent:** the `agent: blocked` label (the default), or a
-  Projects board's "Ready" column?
+None is left: the last, how a blocked agent is resumed, Logan answered with
+statuses as labels and no Projects board ("Issues: statuses as labels").
