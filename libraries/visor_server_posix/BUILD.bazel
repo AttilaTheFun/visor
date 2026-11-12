@@ -8,13 +8,12 @@ package(default_visibility = ["//visibility:public"])
 # What macOS and Linux share for the server: signals to processes, loopback
 # sockets, the agents' hosts. The calls whose shape differs between the two
 # are in C (c/visor_posix.c), so the Swift is the same on both. Built here
-# for the Mac; Linux builds it with SwiftPM (Package.swift).
+# for both.
 swift_library(
     name = "visor_server_posix",
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorServerPOSIX",
-    target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//:foundation",
         ":visor_posix_c",
@@ -29,7 +28,6 @@ cc_library(
     hdrs = ["c/include/visor_posix.h"],
     aspect_hints = [":visor_posix_swift"],
     strip_include_prefix = "c/include",
-    target_compatible_with = ["@platforms//os:macos"],
 )
 
 swift_interop_hint(

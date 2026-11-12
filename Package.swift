@@ -128,7 +128,7 @@ let system: [Target] = [
             path: "libraries/visor_native_runner/Sources", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain",
                       dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge", "VisorDriver", "VisorNativeRunner"],
-                      path: "applications/visor_server_linux", swiftSettings: strict),
+                      path: "applications/visor_server_linux", exclude: ["BUILD.bazel"], swiftSettings: strict),
     // Visor Runner's MCP proxy and its commands; its agent built here too,
     // for a Mac without Bazel's output for it (`swift build -c release
     // --product visor-runner-agent`).
@@ -149,7 +149,7 @@ let tests: [Target] = [
     .testTarget(name: "VisorDriverTests",
                 dependencies: ["VisorDriver", "VisorNativeRunner", "VisorServer", "VisorAgent", "VisorProtocol",
                                .product(name: "AgentProtocol", package: "agent_protocol")],
-                path: "tests/visor_driver_tests", swiftSettings: strict),
+                path: "tests/visor_driver_tests", exclude: ["BUILD.bazel"], swiftSettings: strict),
     .testTarget(name: "VisorServerTests",
                 dependencies: ["VisorServer", "VisorProtocol", "ClaudeTranscript", "MessageCache", "VisorServerCLI", "VisorServerLinux",
                                "VisorServerPOSIX", "VisorMCPBridge", "VisorSystem", "VisorAgent"],

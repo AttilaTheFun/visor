@@ -4,8 +4,7 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 package(default_visibility = ["//visibility:public"])
 
 # Visor's server as agent_protocol's driver and dispatcher (gRPC), started
-# by the binary that runs the server. On the Mac here; Linux's server
-# builds it with SwiftPM.
+# by the binary that runs the server, on the Mac and Linux.
 swift_library(
     name = "visor_driver",
     srcs = glob(["Sources/*.swift"]),
@@ -13,7 +12,6 @@ swift_library(
     module_name = "VisorDriver",
     # The server's `package` members are this library's to use.
     package_name = "visor",
-    target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//:foundation",
         "@swiftpkg_agent_protocol//:AgentProtocol",

@@ -4,14 +4,12 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 package(default_visibility = ["//visibility:public"])
 
 # Visor's native runner: claims jobs from a dispatcher and runs each agent
-# under agent-wrapper on this computer. On the Mac here; Linux's server
-# builds it with SwiftPM.
+# under agent-wrapper on this computer, on the Mac and Linux.
 swift_library(
     name = "visor_native_runner",
     srcs = glob(["Sources/*.swift"]),
     copts = STRICT_SWIFT,
     module_name = "VisorNativeRunner",
-    target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//:foundation",
         "@swiftpkg_agent_protocol//:AgentProtocol",
