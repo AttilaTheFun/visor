@@ -493,7 +493,8 @@ Shireworks (shireworks#261, §14).
   oldest first among equals ("I would rather we implement a high priority
   bug fix over planning a low priority feature"). The server holds the
   queue, so it applies this order when it answers a poll. An issue with no
-  `priority:` label sorts as `low`.
+  `priority:` label comes after the `low` ones, as Issues lists it (shown
+  there as "No Priority").
 - **How issues become queue entries:** the server reads the tracked
   repositories' open issues through MultiPass every few minutes (webhooks
   later) and keeps a `start` entry for each `status: unscoped` or `status:
