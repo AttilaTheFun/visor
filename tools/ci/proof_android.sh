@@ -127,13 +127,20 @@ echo "::endgroup::"
 
 echo "::group::The screens ($orientation)"
 if [ "$orientation" = landscape ]; then
+    # Window manager's own lock (the settings alone left API 34's display
+    # upright, 12 Nov 2026), then checked on each picture below.
     "$adb" shell settings put system accelerometer_rotation 0
-    "$adb" shell settings put system user_rotation 1
+    "$adb" shell cmd window user-rotation lock 1
     sleep 2
+    "$adb" shell dumpsys window displays < /dev/null | tr -d '\r' | grep -m 1 -o 'mRotation=[A-Z_0-9]*' || true
 fi
 status=0
 for screen in $SCREENS; do
     "$adb" shell am start -S -n "$PACKAGE/.MainActivity" --es fixture snapshot --es fixture.screen "$screen" > /dev/null
+    # Again after each launch: the app's stop puts the launcher, which
+    # stands upright, in front for a moment, and on 12 Nov the display
+    # stayed upright after it.
+    [ "$orientation" = portrait ] || "$adb" shell cmd window user-rotation lock 1
     sleep "$SETTLE"
     picture="$out/screens/android-$screen$suffix.png"
     "$adb" exec-out screencap -p > "$picture" || true
@@ -144,6 +151,16 @@ sys.path.insert(0, sys.argv[1])
 import pngdiff
 pngdiff.crop_top(sys.argv[2], int(sys.argv[3]))
 PY
+        if [ "$orientation" = landscape ] && ! python3 -I - "$picture" << 'PY'
+import struct, sys
+with open(sys.argv[1], "rb") as f:
+    width, height = struct.unpack(">II", f.read(24)[16:24])
+sys.exit(0 if width > height else 1)
+PY
+        then
+            echo "::error::$screen was pictured upright, not on its side"
+            status=1
+        fi
         echo "$screen"
     else
         echo "::error::no picture of $screen"
