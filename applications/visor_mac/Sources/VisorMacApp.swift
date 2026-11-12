@@ -38,6 +38,13 @@ struct VisorMacApp: App {
         ServerCache.shared = .open(named: "messages", in: MacPlaces.folder("Server"))
         ServerPlatform.current = .apple(secrets: KeychainSecrets(service: MacPlaces.serverService))
         server = VisorServer.shared
+        // An unattended setup (a leased test VM, tools/e2e): the first
+        // password from the environment (launchctl setenv, so it's on no
+        // disk), kept as Settings' Save would keep it. Never replaces one
+        // already kept.
+        if server.password.isEmpty, let given = ProcessInfo.processInfo.environment["VISOR_SETUP_PASSWORD"], !given.isEmpty {
+            server.password = given
+        }
         Self.startAgentProtocol(server)
         // The client's own: its cache and its keychain items. Then its
         // services, which the store connects through.
