@@ -6,36 +6,33 @@ import Foundation
 import VisorProtocol
 @testable import VisorServer
 import VisorServerApple
-import Testing
+import XCTest
 
-extension ServerTests {
-@Suite @MainActor final class ApplePushSigningTests {
-    init() { TestPlatform.install() }
-
-    @Test func testTheSigningTokenVerifies() throws {
+@MainActor
+final class ApplePushSigningTests: AppleServerTestCase {
+    func testTheSigningTokenVerifies() throws {
         let key = P256.Signing.PrivateKey()
         let jwt = try APNsSender().jwt(for: APNsKey(pem: key.pemRepresentation, keyID: "ABCDEFGHIJ", teamID: "TEAMTEAM12"),
                                        signing: CryptoKitPushSigning())
         let parts = jwt.split(separator: ".").map(String.init)
-        #expect(parts.count == 3)
+        XCTAssertEqual(parts.count, 3)
         func decode(_ s: String) -> Data {
             var b = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
             while b.count % 4 != 0 { b += "=" }
             return Data(base64Encoded: b)!
         }
         let signature = try P256.Signing.ECDSASignature(rawRepresentation: decode(parts[2]))
-        #expect(key.publicKey.isValidSignature(signature, for: Data((parts[0] + "." + parts[1]).utf8)))
+        XCTAssertTrue(key.publicKey.isValidSignature(signature, for: Data((parts[0] + "." + parts[1]).utf8)))
         let header = try JSONSerialization.jsonObject(with: decode(parts[0])) as? [String: String]
-        #expect(header == ["alg": "ES256", "kid": "ABCDEFGHIJ"])
+        XCTAssertEqual(header, ["alg": "ES256", "kid": "ABCDEFGHIJ"])
     }
-}
 }
 
 /// The APNs key can be set over the REST side by whoever is let in, and
 /// is never answered back.
-extension ServerTests {
-@Suite @MainActor final class PushKeyRouteTests {
-    @Test func testTheKeyIsSetOverREST() {
+@MainActor
+final class PushKeyRouteTests: AppleServerTestCase {
+    func testTheKeyIsSetOverREST() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-pushkey-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -48,14 +45,13 @@ extension ServerTests {
         }
         let pem = P256.Signing.PrivateKey().pemRepresentation
         let body = String(decoding: try! JSONSerialization.data(withJSONObject: ["key": pem, "keyID": "ABCDEFGHIJ", "teamID": "TEAMTEAM12"]), as: UTF8.self)
-        #expect(post("/api/push/key", body, bearer: "wrong").status == 401)
-        #expect(post("/api/push/key", #"{"key":"nonsense","keyID":"ABCDEFGHIJ","teamID":"TEAMTEAM12"}"#).status == 400)
+        XCTAssertEqual(post("/api/push/key", body, bearer: "wrong").status, 401)
+        XCTAssertEqual(post("/api/push/key", #"{"key":"nonsense","keyID":"ABCDEFGHIJ","teamID":"TEAMTEAM12"}"#).status, 400)
         let set = post("/api/push/key", body)
-        #expect(set.status == 200)
-        #expect(!set.body.contains("PRIVATE KEY"), "the key is not answered back")
-        #expect(server.apnsKey.keyID == "ABCDEFGHIJ")
-        #expect(server.apnsKey.configured)
-        #expect(post("/api/push/test", "").status == 400, "no device yet")
+        XCTAssertEqual(set.status, 200)
+        XCTAssertFalse(set.body.contains("PRIVATE KEY"), "the key is not answered back")
+        XCTAssertEqual(server.apnsKey.keyID, "ABCDEFGHIJ")
+        XCTAssertTrue(server.apnsKey.configured)
+        XCTAssertEqual(post("/api/push/test", "").status, 400, "no device yet")
     }
-}
 }
