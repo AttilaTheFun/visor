@@ -9,7 +9,7 @@ import Synchronization
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
 /// An agent that writes down what it is sent.
 @MainActor
@@ -57,9 +57,11 @@ private final class SubagentHarness: AgentHarness {
     @MainActor func makeProcess(cwd: String, skipPermissions: Bool, resume: String?) -> AgentProcess { ListeningAgent(resume: resume) }
 }
 
-@MainActor
-final class SubagentTests: ServerTestCase {
-    func testASessionsSubagentsAreReadFromBesideItsFile() throws {
+extension ServerTests {
+@Suite @MainActor final class SubagentTests {
+    init() { TestPlatform.install() }
+
+    @Test func testASessionsSubagentsAreReadFromBesideItsFile() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagents-" + UUID().uuidString)
         let folder = root.appendingPathComponent("S/subagents", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -72,20 +74,20 @@ final class SubagentTests: ServerTestCase {
         ]
         try Data(lines.joined(separator: "\n").utf8).write(to: folder.appendingPathComponent("agent-a1.jsonl"))
         let agents = ClaudeSubagent.all(of: root.appendingPathComponent("S.jsonl"))
-        XCTAssertEqual(agents.map(\.id), ["a1"])
-        XCTAssertEqual(agents.first?.description, "Map the plumbing")
-        XCTAssertEqual(agents.first?.toolUseID, "toolu_1")
-        XCTAssertEqual(agents.first?.finished, true)
+        #expect(agents.map(\.id) == ["a1"])
+        #expect((agents.first?.description) == "Map the plumbing")
+        #expect((agents.first?.toolUseID) == "toolu_1")
+        #expect((agents.first?.finished) == true)
         // Its own file is all sidechain: read as its conversation, not skipped.
-        let records = ClaudeTranscriptParser.lines(contentsOf: try XCTUnwrap(agents.first).transcript, sidechain: true).compactMap(\.record)
-        XCTAssertEqual(records.count, 2)
-        XCTAssertTrue(ClaudeTranscriptParser.lines(contentsOf: try XCTUnwrap(agents.first).transcript).isEmpty, "a session's file skips them")
+        let records = ClaudeTranscriptParser.lines(contentsOf: try #require(agents.first).transcript, sidechain: true).compactMap(\.record)
+        #expect(records.count == 2)
+        #expect(ClaudeTranscriptParser.lines(contentsOf: try #require(agents.first).transcript).isEmpty, "a session's file skips them")
     }
 
     /// Not every finished subagent's meta file says so: one whose last word
     /// is an answer that ended its turn is finished all the same; one that
     /// last called a tool is not.
-    func testASubagentWhoseLastWordEndedItsTurnIsFinished() throws {
+    @Test func testASubagentWhoseLastWordEndedItsTurnIsFinished() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagents-" + UUID().uuidString)
         let folder = root.appendingPathComponent("S/subagents", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -104,13 +106,13 @@ final class SubagentTests: ServerTestCase {
         try agent("calling", last: #"{"type":"assistant","uuid":"m1","isSidechain":true,"message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"t1","name":"Monitor","input":{}}]}}"#)
         try agent("answered", last: #"{"type":"user","uuid":"r1","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}"#)
         let finished = Dictionary(uniqueKeysWithValues: ClaudeSubagent.all(of: root.appendingPathComponent("S.jsonl")).map { ($0.id, $0.finished) })
-        XCTAssertEqual(finished, ["done": true, "calling": false, "answered": false])
+        #expect(finished == ["done": true, "calling": false, "answered": false])
     }
 
     /// A subagent its files leave unfinished but Claude Code no longer
     /// lists in its background, with no call of it going, ended without
     /// saying so (killed); so did every one of an agent that stopped.
-    func testASubagentGoneFromTheAgentsBackgroundHasEnded() {
+    @Test func testASubagentGoneFromTheAgentsBackgroundHasEnded() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-gone-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -129,22 +131,22 @@ final class SubagentTests: ServerTestCase {
         server.handle(.toolStarted(id: "toolu_fg", name: "Agent", label: "Map it", tasks: nil), from: record)
         // Both calls going: both run.
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.running), [true, true])
+        #expect(record.info.subagents.map(\.running) == [true, true])
 
         // The background one on the list, its call over; the other's call going.
         server.handle(.toolFinished(id: "toolu_bg"), from: record)
         server.handle(.background([StatusItem(id: "bg", kind: .subagent, label: "Watch CI", running: true)]), from: record)
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.running), [true, true])
+        #expect(record.info.subagents.map(\.running) == [true, true])
 
         // Gone from the list without a word: ended.
         server.handle(.background([]), from: record)
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.running), [false, true], "off the list, its call long over")
+        #expect(record.info.subagents.map(\.running) == [false, true], "off the list, its call long over")
 
         // The agent stopped: nothing of it runs.
         server.setAgentState(record, .stopped)
-        XCTAssertEqual(record.info.subagents.map(\.running), [false, false])
+        #expect(record.info.subagents.map(\.running) == [false, false])
     }
 
     /// Claude Code says what runs in its background only when that
@@ -152,7 +154,7 @@ final class SubagentTests: ServerTestCase {
     /// its files leave unfinished, from an agent since started again (a
     /// launch of the server, a restart), has ended; so has one sent to the
     /// background by an agent that has gone.
-    func testASubagentOfAnAgentThatHasGoneHasEnded() {
+    @Test func testASubagentOfAnAgentThatHasGoneHasEnded() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-went-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -168,23 +170,23 @@ final class SubagentTests: ServerTestCase {
         record.watchedSubagents = ["old"]
         server.sessions = [record]
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.running), [false], "a new agent has nothing in its background")
+        #expect(record.info.subagents.map(\.running) == [false], "a new agent has nothing in its background")
 
         // Sent to the background now, then its agent went.
         harness.listed.withLock { $0.append(SubagentInfo(id: "bg", description: "Watch CI", type: "general-purpose", running: true, call: "toolu_bg")) }
         server.handle(.background([StatusItem(id: "bg", kind: .subagent, label: "Watch CI", running: true)]), from: record)
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.running), [false, true])
+        #expect(record.info.subagents.map(\.running) == [false, true])
         server.handle(.memory(nil), from: record)
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(record.info.subagents.map(\.running), [false, false], "gone with its agent")
-        XCTAssertTrue(record.info.background.isEmpty)
+        #expect(record.info.subagents.map(\.running) == [false, false], "gone with its agent")
+        #expect(record.info.background.isEmpty)
     }
 
     /// A turn a launch picked up already going may still be waiting on a
     /// subagent it sent off: one its files leave unfinished runs until that
     /// turn ends.
-    func testASubagentOfATurnPickedUpRunsUntilTheTurnEnds() {
+    @Test func testASubagentOfATurnPickedUpRunsUntilTheTurnEnds() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-picked-up-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -200,14 +202,14 @@ final class SubagentTests: ServerTestCase {
         server.sessions = [record]
         server.handle(.busy(true), from: record)
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.running), [true])
+        #expect(record.info.subagents.map(\.running) == [true])
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(record.info.subagents.map(\.running), [false])
+        #expect(record.info.subagents.map(\.running) == [false])
     }
 
     /// A launch whose sessions' agents are gone (not left under a host)
     /// lists none of their subagents as running.
-    func testALaunchListsNoSubagentOfAGoneAgentAsRunning() {
+    @Test func testALaunchListsNoSubagentOfAGoneAgentAsRunning() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-launch-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -222,11 +224,11 @@ final class SubagentTests: ServerTestCase {
 
         let again = VisorServer(port: 7997)
         defer { again.stop() }
-        XCTAssertEqual(again.session("P")?.info.subagents.map(\.running), [false])
-        XCTAssertEqual(again.session("P")?.info.background, [])
+        #expect((again.session("P")?.info.subagents.map(\.running)) == [false])
+        #expect((again.session("P")?.info.background) == [])
     }
 
-    func testAFinishedSubagentsConversationIsWrittenAsASessionOfItsOwn() throws {
+    @Test func testAFinishedSubagentsConversationIsWrittenAsASessionOfItsOwn() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-session-" + UUID().uuidString)
         let folder = root.appendingPathComponent("S/subagents", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -239,25 +241,25 @@ final class SubagentTests: ServerTestCase {
             #"{"type":"assistant","uuid":"m1","parentUuid":"u1","isSidechain":true,"agentId":"a1","sessionId":"S","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"Mapped."}]}}"#,
         ]
         try Data(lines.joined(separator: "\n").utf8).write(to: folder.appendingPathComponent("agent-a1.jsonl"))
-        let agent = try XCTUnwrap(ClaudeSubagent.all(of: root.appendingPathComponent("S.jsonl")).first)
+        let agent = try #require(ClaudeSubagent.all(of: root.appendingPathComponent("S.jsonl")).first)
 
-        let file = try XCTUnwrap(agent.session("N", beside: root.appendingPathComponent("S.jsonl")))
-        XCTAssertEqual(file, root.appendingPathComponent("N.jsonl"), "beside the session that sent it off")
+        let file = try #require(agent.session("N", beside: root.appendingPathComponent("S.jsonl")))
+        #expect(file == root.appendingPathComponent("N.jsonl"), "beside the session that sent it off")
         let written = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map { line in
-            try XCTUnwrap(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+            try #require(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
         }
-        XCTAssertEqual(written.map { $0["uuid"] as? String }, ["u1", "m1"], "its conversation, without what was sent for it")
+        #expect((written.map { $0["uuid"] as? String }) == ["u1", "m1"], "its conversation, without what was sent for it")
         for record in written {
-            XCTAssertEqual(record["sessionId"] as? String, "N")
-            XCTAssertEqual(record["isSidechain"] as? Bool, false)
-            XCTAssertNil(record["agentId"])
+            #expect((record["sessionId"] as? String) == "N")
+            #expect((record["isSidechain"] as? Bool) == false)
+            #expect((record["agentId"]) == nil)
         }
-        XCTAssertEqual(written.first?["cwd"] as? String, "/tmp/a/b", "paths kept as they were")
+        #expect((written.first?["cwd"] as? String) == "/tmp/a/b", "paths kept as they were")
         // A session's file now, read as one rather than skipped.
-        XCTAssertEqual(ClaudeTranscriptParser.lines(contentsOf: file).compactMap(\.record).count, 2)
+        #expect((ClaudeTranscriptParser.lines(contentsOf: file).compactMap(\.record).count) == 2)
     }
 
-    func testAFinishedSubagentGoesOnAsASessionOfItsOwn() throws {
+    @Test func testAFinishedSubagentGoesOnAsASessionOfItsOwn() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-continue-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -275,42 +277,42 @@ final class SubagentTests: ServerTestCase {
 
         // While it works, it is reached through the session's agent only.
         server.perform(.fork(id: "C", parent: "P", origin: .subagent, text: "Go on", subagent: "a1"), from: nil)
-        XCTAssertNil(server.session("C"))
+        #expect(server.session("C") == nil)
 
         harness.listed.withLock { $0[0].running = false }
         server.refreshSubagents(of: parent)
         server.perform(.fork(id: "C", parent: "P", origin: .subagent, text: "Now the tests", subagent: "a1"), from: nil)
-        let session = try XCTUnwrap(server.session("C"))
-        XCTAssertEqual(session.info.parent, "P")
-        XCTAssertEqual(session.info.origin, .subagent)
-        XCTAssertEqual(session.info.title, "Map the plumbing")
-        XCTAssertEqual([session.info.cwd, session.info.model], ["/tmp", "sonnet"])
-        XCTAssertEqual(session.entries.map(\.text), ["Looked at a1."], "the subagent's conversation")
-        let agent = try XCTUnwrap(session.process as? ListeningAgent)
-        XCTAssertEqual(agent.resumeID, "claude-a1", "resumed from the copy of the subagent's conversation")
-        XCTAssertEqual(agent.said, ["Now the tests"])
-        XCTAssertNil(session.pendingFork, "its own conversation already")
+        let session = try #require(server.session("C"))
+        #expect(session.info.parent == "P")
+        #expect(session.info.origin == .subagent)
+        #expect(session.info.title == "Map the plumbing")
+        #expect([session.info.cwd, session.info.model] == ["/tmp", "sonnet"])
+        #expect(session.entries.map(\.text) == ["Looked at a1."], "the subagent's conversation")
+        let agent = try #require(session.process as? ListeningAgent)
+        #expect(agent.resumeID == "claude-a1", "resumed from the copy of the subagent's conversation")
+        #expect(agent.said == ["Now the tests"])
+        #expect(session.pendingFork == nil, "its own conversation already")
         // Its row under the session stands for the subagent's now.
-        XCTAssertTrue(parent.info.subagents.isEmpty)
-        XCTAssertEqual(parent.stored.closedSubagents, ["a1"])
-        XCTAssertEqual((parent.process as? ListeningAgent)?.said, [], "the parent is not told")
+        #expect(parent.info.subagents.isEmpty)
+        #expect(parent.stored.closedSubagents == ["a1"])
+        #expect(((parent.process as? ListeningAgent)?.said) == [], "the parent is not told")
     }
 
-    func testASubagentsMessagesAreNotTheThreads() {
+    @Test func testASubagentsMessagesAreNotTheThreads() {
         let line = #"{"type":"assistant","parent_tool_use_id":"toolu_1","message":{"model":"claude-opus-5-5","usage":{"input_tokens":900000},"content":[{"type":"tool_use","id":"t9","name":"Read","input":{}}]}}"#
-        XCTAssertEqual(ClaudeOutput.parse(line), [.subagentWork(toolUseID: "toolu_1")], "no tool row, no context count of the session's")
+        #expect(ClaudeOutput.parse(line) == [.subagentWork(toolUseID: "toolu_1")], "no tool row, no context count of the session's")
         let own = #"{"type":"assistant","parent_tool_use_id":null,"message":{"content":[]}}"#
-        XCTAssertNotEqual(ClaudeOutput.parse(own), [.subagentWork(toolUseID: "")])
+        #expect(ClaudeOutput.parse(own) != [.subagentWork(toolUseID: "")])
     }
 
-    func testTheSessionWaitingOnASubagentSaysSo() {
+    @Test func testTheSessionWaitingOnASubagentSaysSo() {
         let line = #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Agent","input":{"description":"Add two numbers","prompt":"What is 2 + 2?","subagent_type":"general-purpose"}}]}}"#
-        guard case .assistant(_, _, let tools)? = ClaudeOutput.parse(line).first else { return XCTFail("no assistant message") }
-        XCTAssertEqual(tools.map(\.label), ["Waiting: Add two numbers"])
-        XCTAssertEqual(ClaudeOutput.label(name: "Read", input: ["file_path": "/tmp/a"]).hasPrefix("Read: "), true)
+        guard case .assistant(_, _, let tools)? = ClaudeOutput.parse(line).first else { Issue.record("no assistant message"); return }
+        #expect(tools.map(\.label) == ["Waiting: Add two numbers"])
+        #expect((ClaudeOutput.label(name: "Read", input: ["file_path": "/tmp/a"]).hasPrefix("Read: ")) == true)
     }
 
-    func testSubagentsSeenRunningAreListedUntilClosed() {
+    @Test func testSubagentsSeenRunningAreListedUntilClosed() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-subagent-list-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -326,36 +328,37 @@ final class SubagentTests: ServerTestCase {
         // A long session's past subagents are not listed: none was seen running.
         harness.listed.withLock { $0 = [SubagentInfo(id: "old", description: "Long ago", type: "Explore", running: false)] }
         server.refreshSubagents(of: record)
-        XCTAssertTrue(record.info.subagents.isEmpty)
+        #expect(record.info.subagents.isEmpty)
 
         // One sent off now is, and stays once it has finished.
         harness.listed.withLock { $0.append(SubagentInfo(id: "a1", description: "Map the plumbing", type: "Explore", running: true)) }
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.id), ["a1"])
+        #expect(record.info.subagents.map(\.id) == ["a1"])
 
         // The person's words for it go to the session's agent, to pass on.
         server.perform(.toSubagent(session: "P", id: "a1", text: "Look at the tests too"), from: nil)
-        XCTAssertEqual(agent.said.count, 1)
-        XCTAssertTrue(agent.said[0].contains("agent id a1") && agent.said[0].hasSuffix("Look at the tests too"))
-        XCTAssertEqual(server.subagentTranscript(of: record, agent: "a1").map(\.text), ["Looked at a1."])
+        #expect(agent.said.count == 1)
+        #expect(agent.said[0].contains("agent id a1") && agent.said[0].hasSuffix("Look at the tests too"))
+        #expect((server.subagentTranscript(of: record, agent: "a1").map(\.text)) == ["Looked at a1."])
 
         harness.listed.withLock { $0[1].running = false }
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.running), [false], "finished, still listed")
+        #expect(record.info.subagents.map(\.running) == [false], "finished, still listed")
         server.perform(.toSubagent(session: "P", id: "a1", text: "Anything else?"), from: nil)
-        XCTAssertEqual(agent.said.count, 1, "a finished subagent is no longer reached through the session's agent")
+        #expect(agent.said.count == 1, "a finished subagent is no longer reached through the session's agent")
 
         // One that finished before it was first read, but whose call was
         // seen starting, is listed all the same.
         server.handle(.toolStarted(id: "toolu_quick", name: "Agent", label: "Waiting: Quick", tasks: nil), from: record)
         harness.listed.withLock { $0.append(SubagentInfo(id: "q1", description: "Quick", type: "Explore", running: false, call: "toolu_quick")) }
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.id), ["a1", "q1"])
+        #expect(record.info.subagents.map(\.id) == ["a1", "q1"])
 
         server.perform(.closeSubagent(session: "P", id: "a1"), from: nil)
-        XCTAssertEqual(record.info.subagents.map(\.id), ["q1"])
+        #expect(record.info.subagents.map(\.id) == ["q1"])
         server.refreshSubagents(of: record)
-        XCTAssertEqual(record.info.subagents.map(\.id), ["q1"], "closed stays closed")
-        XCTAssertEqual(record.stored.closedSubagents, ["a1"])
+        #expect(record.info.subagents.map(\.id) == ["q1"], "closed stays closed")
+        #expect(record.stored.closedSubagents == ["a1"])
     }
+}
 }

@@ -7,7 +7,7 @@
 
 import Foundation
 @testable import VisorRunner
-import XCTest
+import Testing
 
 /// GitHub as a table: a path's answer, else 404.
 private struct FakeGitHub: GitHubReading {
@@ -23,7 +23,7 @@ private struct FakeGitHub: GitHubReading {
     }
 }
 
-final class GateCheckerTests: XCTestCase {
+@Suite final class GateCheckerTests {
     private let repo = "AttilaTheFun/shireworks"
     private let head = String(repeating: "a", count: 40)
     private let older = String(repeating: "b", count: 40)
@@ -59,23 +59,23 @@ final class GateCheckerTests: XCTestCase {
     }
 
     private func refused(_ outcome: CheckOutcome, _ containing: String, file: StaticString = #filePath, line: UInt = #line) {
-        guard case .refuse(let reason) = outcome else { return XCTFail("not refused: \(outcome)", file: file, line: line) }
-        XCTAssertTrue(reason.contains(containing), reason, file: file, line: line)
+        guard case .refuse(let reason) = outcome else { Issue.record("not refused: \(outcome)"); return }
+        #expect(reason.contains(containing), Comment(rawValue: reason))
     }
 
     // MARK: Merging
 
-    func testAGreenPullRequestMerges() async {
+    @Test func testAGreenPullRequestMerges() async {
         let outcome = await merge(green())
-        XCTAssertEqual(outcome, .pass(nil))
+        #expect(outcome == .pass(nil))
         // A readable status counts; a pending one holds the merge.
         let success = await merge(green(["/repos/AttilaTheFun/shireworks/commits/\(head)/status?per_page=100": (200, #"{"statuses":[{"context":"ci/x","state":"success"}]}"#)]))
-        XCTAssertEqual(success, .pass(nil))
+        #expect(success == .pass(nil))
         let pending = await merge(green(["/repos/AttilaTheFun/shireworks/commits/\(head)/status?per_page=100": (200, #"{"statuses":[{"context":"ci/x","state":"pending"}]}"#)]))
         refused(pending, "ci/x is pending")
     }
 
-    func testAMergeIsRefusedUnlessEveryGuardHolds() async {
+    @Test func testAMergeIsRefusedUnlessEveryGuardHolds() async {
         refused(await merge(green(pull: pull(draft: true, mergeable: "draft"))), "is a draft")
         refused(await merge(green(pull: pull(state: "closed"))), "is closed")
         refused(await merge(green(pull: pull(base: "release"))), "not AttilaTheFun/shireworks's default branch main")
@@ -93,16 +93,16 @@ final class GateCheckerTests: XCTestCase {
         refused(await merge(green(), sha: older), "check it again")
     }
 
-    func testAnUpdatesPullRequestIsFromItsOwnRepository() async {
+    @Test func testAnUpdatesPullRequestIsFromItsOwnRepository() async {
         let outcome = await check(green(), .updateBranch(repository: repo, number: 50))
-        XCTAssertEqual(outcome, .pass(nil))
+        #expect(outcome == .pass(nil))
         refused(await check(green(pull: pull(headRepo: "someone/shireworks")), .updateBranch(repository: repo, number: 50)), "in someone/shireworks")
     }
 
-    func testGhPrMergeIsPinnedToTheHeadItChecked() async {
+    @Test func testGhPrMergeIsPinnedToTheHeadItChecked() async {
         let github = green(["graphql node": (200, #"{"data":{"node":{"__typename":"PullRequest","number":50,"repository":{"nameWithOwner":"AttilaTheFun/shireworks"}}}}"#)])
         let outcome = await check(github, .graphQLMerge(pullRequestID: "PR_1", method: "squash", variable: "input", expectedHeadOid: nil))
-        XCTAssertEqual(outcome, .pass(.variableField(variable: "input", field: "expectedHeadOid", value: .string(head))))
+        #expect(outcome == (.pass(.variableField(variable: "input", field: "expectedHeadOid", value: .string(head)))))
         refused(await check(github, .graphQLMerge(pullRequestID: "PR_1", method: "squash", variable: nil, expectedHeadOid: nil)), "variable")
         refused(await check(github, .graphQLMerge(pullRequestID: "PR_1", method: "squash", variable: "input", expectedHeadOid: older)), "check it again")
     }
@@ -120,17 +120,17 @@ final class GateCheckerTests: XCTestCase {
         /tools/signing/README.md
         """
 
-    func testCodeOwnersMatchAsGitHubDoes() {
+    @Test func testCodeOwnersMatchAsGitHubDoes() {
         let owners = CodeOwners(guardrails)
         for owned in [".github/workflows/ci.yml", ".github/CODEOWNERS", "AGENTS.md", "swift_ffi/AGENTS.md", "LICENSE",
                       "tools/signing/sign.sh", "tools/ci/publish_from_ci.sh", "docs/a/b/secret.md", "docs/secret.md"] {
-            XCTAssertEqual(owners.owners(of: owned), ["@AttilaTheFun"], owned)
+            #expect(owners.owners(of: owned) == ["@AttilaTheFun"], Comment(rawValue: owned))
         }
         for free in ["Sources/main.swift", "README.md", "swift_ffi/LICENSE", "tools/ci/container_build.sh", "github/x",
                      "tools/signing/README.md", "AGENTS.md.bak", "x/.github/y"] {
-            XCTAssertEqual(owners.owners(of: free), [], free)
+            #expect(owners.owners(of: free) == [], Comment(rawValue: free))
         }
-        XCTAssertEqual(CodeOwners("* @someone").owners(of: "a/b/c"), ["@someone"])
+        #expect((CodeOwners("* @someone").owners(of: "a/b/c")) == ["@someone"])
     }
 
     private func owned(reviews: String) -> FakeGitHub {
@@ -141,7 +141,7 @@ final class GateCheckerTests: XCTestCase {
         ])
     }
 
-    func testProtectedFilesNeedTheOwnersApprovalOfTheHead() async {
+    @Test func testProtectedFilesNeedTheOwnersApprovalOfTheHead() async {
         refused(await merge(owned(reviews: "[]")), "@AttilaTheFun hasn't approved its head")
         refused(await merge(owned(reviews: "[{\"user\":{\"login\":\"AttilaTheFun\"},\"state\":\"APPROVED\",\"commit_id\":\"\(older)\"}]")),
                 ".github/workflows/ci.yml")
@@ -154,7 +154,7 @@ final class GateCheckerTests: XCTestCase {
             [{"user":{"login":"attilathefun"},"state":"APPROVED","commit_id":"\(head)"},
              {"user":{"login":"someone"},"state":"COMMENTED","commit_id":"\(head)"}]
             """))
-        XCTAssertEqual(approved, .pass(nil))
+        #expect(approved == .pass(nil))
     }
 
     // MARK: Actions
@@ -177,16 +177,16 @@ final class GateCheckerTests: XCTestCase {
         """
     }
 
-    func testARunIsRunAgainAtItsBranchsHead() async {
+    @Test func testARunIsRunAgainAtItsBranchsHead() async {
         let failed = await check(runs(run()), .rerun(repository: repo, run: 77, failedOnly: true))
-        XCTAssertEqual(failed, .pass(nil))
+        #expect(failed == .pass(nil))
         let push = await check(runs(run(event: "push", conclusion: "success")), .rerun(repository: repo, run: 77, failedOnly: false))
-        XCTAssertEqual(push, .pass(nil))
+        #expect(push == .pass(nil))
         let dispatched = await check(runs(run(event: "workflow_dispatch")), .rerun(repository: repo, run: 77, failedOnly: true))
-        XCTAssertEqual(dispatched, .pass(nil))
+        #expect(dispatched == .pass(nil))
     }
 
-    func testAReRunIsRefusedUnlessEveryGuardHolds() async {
+    @Test func testAReRunIsRefusedUnlessEveryGuardHolds() async {
         let rerun = GateCheck.rerun(repository: repo, run: 77, failedOnly: true)
         refused(await check(runs(run(sha: older)), rerun), "only the head's runs")
         refused(await check(runs(run(event: "push", sha: older)), rerun), "only the head's runs")
@@ -202,42 +202,42 @@ final class GateCheckerTests: XCTestCase {
         refused(await check(runs(run(conclusion: "success")), rerun), "no job failed")
     }
 
-    func testACancelIsOfARunStillGoingNeverARelease() async {
+    @Test func testACancelIsOfARunStillGoingNeverARelease() async {
         let going = await check(runs(run(status: "in_progress")), .cancel(repository: repo, run: 77))
-        XCTAssertEqual(going, .pass(nil))
+        #expect(going == .pass(nil))
         refused(await check(runs(run(event: "release", status: "in_progress")), .cancel(repository: repo, run: 77)), "its publishing must finish")
         refused(await check(runs(run()), .cancel(repository: repo, run: 77)), "already completed")
     }
 
-    func testADispatchIsOfAnActiveWorkflowOnABranch() async {
+    @Test func testADispatchIsOfAnActiveWorkflowOnABranch() async {
         let github = FakeGitHub(answers: [
             "/repos/AttilaTheFun/shireworks/actions/workflows/12": (200, #"{"id":12,"name":"CI","state":"active"}"#),
             "/repos/AttilaTheFun/shireworks/git/ref/heads/feature": (200, "{\"object\":{\"sha\":\"\(head)\"}}"),
             "/repos/AttilaTheFun/shireworks/actions/workflows/13": (200, #"{"id":13,"name":"Old","state":"disabled_manually"}"#),
         ])
         let dispatched = await check(github, .dispatch(repository: repo, workflow: 12, branch: "feature"))
-        XCTAssertEqual(dispatched, .pass(nil))
+        #expect(dispatched == .pass(nil))
         refused(await check(github, .dispatch(repository: repo, workflow: 13, branch: "feature")), "disabled_manually")
         refused(await check(github, .dispatch(repository: repo, workflow: 12, branch: "gone")), "gone is not a branch")
     }
 
     // MARK: Drafts, nodes and pushes
 
-    func testOnlyADraftIsEditedAndItsTagKept() async {
+    @Test func testOnlyADraftIsEditedAndItsTagKept() async {
         let github = FakeGitHub(answers: [
             "/repos/AttilaTheFun/shireworks/releases/8": (200, #"{"id":8,"tag_name":"v1.0","draft":false}"#),
             "/repos/AttilaTheFun/shireworks/releases/9": (200, #"{"id":9,"tag_name":"v1.1","draft":true}"#),
         ])
         refused(await check(github, .releaseEdit(repository: repo, release: 8)), "is published")
         let draft = await check(github, .releaseEdit(repository: repo, release: 9))
-        XCTAssertEqual(draft, .pass(.bodyFieldIfAbsent("tag_name", .string("v1.1"))))
+        #expect(draft == (.pass(.bodyFieldIfAbsent("tag_name", .string("v1.1")))))
     }
 
-    func testAMutationsNodesAreInAllowedRepositories() async {
+    @Test func testAMutationsNodesAreInAllowedRepositories() async {
         let nodes: [GateCheck.GraphQLNode] = [.init(id: "PR_1", kinds: ["PullRequest"])]
         let allowed = FakeGitHub(answers: ["graphql nodes": (200, #"{"data":{"nodes":[{"__typename":"PullRequest","repository":{"nameWithOwner":"AttilaTheFun/visor"}}]}}"#)])
         let resolved = await check(allowed, .graphQLNodes(nodes))
-        XCTAssertEqual(resolved, .pass(nil))
+        #expect(resolved == .pass(nil))
         let other = FakeGitHub(answers: ["graphql nodes": (200, #"{"data":{"nodes":[{"__typename":"PullRequest","repository":{"nameWithOwner":"someone/else"}}]}}"#)])
         refused(await check(other, .graphQLNodes(nodes)), "not among the repositories")
         let issue = FakeGitHub(answers: ["graphql nodes": (200, #"{"data":{"nodes":[{"__typename":"Issue","repository":{"nameWithOwner":"AttilaTheFun/visor"}}]}}"#)])
@@ -245,10 +245,10 @@ final class GateCheckerTests: XCTestCase {
         refused(await check(FakeGitHub(answers: ["graphql nodes": (200, #"{"data":{"nodes":[null]}}"#)]), .graphQLNodes(nodes)), "no node")
     }
 
-    func testAPushNeverReachesTheDefaultBranch() async {
+    @Test func testAPushNeverReachesTheDefaultBranch() async {
         let github = FakeGitHub(answers: ["/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"develop"}"#)])
         let feature = await check(github, .push(repository: repo, branches: ["feature"]))
-        XCTAssertEqual(feature, .pass(nil))
+        #expect(feature == .pass(nil))
         refused(await check(github, .push(repository: repo, branches: ["feature", "Develop"])), "default branch")
     }
 }

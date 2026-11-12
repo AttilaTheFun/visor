@@ -7,23 +7,24 @@
 import Foundation
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-@MainActor
-final class ContainerSessionsRemovedTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class ContainerSessionsRemovedTests {
     private var server: VisorServer!
     private var root: URL!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-container-sessions-removed-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
-        server = VisorServer(port: Self.freePort())
+        server = VisorServer(port: ServerTestCase.freePort())
         server.password = "pw"
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
         try? FileManager.default.removeItem(at: root)
     }
@@ -33,31 +34,31 @@ final class ContainerSessionsRemovedTests: ServerTestCase {
         return await withCheckedContinuation { done in server.route(request) { done.resume(returning: $0) } }
     }
 
-    func testStartingOneIsRefusedAndMakesNoSession() async {
+    @Test func testStartingOneIsRefusedAndMakesNoSession() async {
         var start = Envelope(type: "start")
         start.id = "S"
         start.agent = .claude
         start.cwd = root.path
         start.container = true
         let answer = await post("/api/sessions", start)
-        XCTAssertEqual(answer.status, 410)
-        XCTAssertEqual(Envelope.decode(answer.body)?.message, VisorServer.containerSessionsRemoved)
+        #expect(answer.status == 410)
+        #expect((Envelope.decode(answer.body)?.message) == VisorServer.containerSessionsRemoved)
         server.perform(start, from: nil)
-        XCTAssertNil(server.session("S"), "neither over REST nor over the socket")
+        #expect(server.session("S") == nil, "neither over REST nor over the socket")
     }
 
-    func testMovingOneIsRefused() async {
+    @Test func testMovingOneIsRefused() async {
         let info = SessionInfo(id: "S", agent: .claude, cwd: root.path, title: "S", created: 0)
         server.sessions = [SessionRecord(info: info, process: server.makeProcess(info, resume: nil))]
         var contain = Envelope(type: "contain")
         contain.session = "S"
         contain.container = true
         let answer = await post("/api/sessions/S/contain", contain)
-        XCTAssertEqual(answer.status, 410)
-        XCTAssertNil(server.session("S")?.info.container)
+        #expect(answer.status == 410)
+        #expect((server.session("S")?.info.container) == nil)
     }
 
-    func testOneSavedInAContainerRunsOnTheComputer() throws {
+    @Test func testOneSavedInAContainerRunsOnTheComputer() throws {
         var info = SessionInfo(id: "S", agent: .claude, cwd: root.path, title: "S", created: 0)
         let record = SessionRecord(info: info, process: server.makeProcess(info, resume: nil))
         server.sessions = [record]
@@ -66,17 +67,18 @@ final class ContainerSessionsRemovedTests: ServerTestCase {
         record.info = info
         server.saveArchiveNow()
 
-        let again = VisorServer(port: Self.freePort())
+        let again = VisorServer(port: ServerTestCase.freePort())
         again.loadSessions()
-        let loaded = try XCTUnwrap(again.session("S"))
-        XCTAssertNil(loaded.info.container)
+        let loaded = try #require(again.session("S"))
+        #expect(loaded.info.container == nil)
         again.stop()
     }
 
-    func testTheProtocolStillReadsAContainer() throws {
+    @Test func testTheProtocolStillReadsAContainer() throws {
         var info = SessionInfo(id: "S", agent: .codex, cwd: "/Users/someone/repo", title: "Codex", created: 0)
         info.container = SessionContainer(id: "c1", image: "visor-agent", size: .standard)
-        XCTAssertEqual(SessionInfo(json: info.json)?.container, info.container)
-        XCTAssertEqual(try JSONDecoder().decode(SessionInfo.self, from: JSONEncoder().encode(info)).container, info.container)
+        #expect((SessionInfo(json: info.json)?.container) == info.container)
+        #expect((try JSONDecoder().decode(SessionInfo.self, from: JSONEncoder().encode(info)).container) == info.container)
     }
+}
 }

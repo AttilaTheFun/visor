@@ -8,19 +8,20 @@ import Foundation
 import VisorProtocol
 @testable import VisorServer
 @testable import VisorServerCLI
-import XCTest
+import Testing
 
-@MainActor
-final class ContainerContractTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class ContainerContractTests {
     private var server: VisorServer!
     private var folder: URL!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("visor-contract-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         VisorServer.storeRoot = folder
         VisorServer.secrets = MemorySecrets()
-        server = VisorServer(port: Self.freePort())
+        server = VisorServer(port: ServerTestCase.freePort())
         server.password = "pw"
     }
 
@@ -30,7 +31,7 @@ final class ContainerContractTests: ServerTestCase {
         return file.path
     }
 
-    func testTheEnvironmentSaysWhereItIsAndTheArgumentsWin() throws {
+    @Test func testTheEnvironmentSaysWhereItIsAndTheArgumentsWin() throws {
         let password = try secret("visor-password", "hunter22")
         let token = try secret("visor-proxy", "tok-5f2a9c")
         let environment = ["VISOR_PORT": "7433", "VISOR_LISTEN": "0.0.0.0", "VISOR_PASSWORD_FILE": password,
@@ -38,52 +39,50 @@ final class ContainerContractTests: ServerTestCase {
                            "VISOR_PROXY": "http://192.168.128.1:7434/", "VISOR_PROXY_TOKEN_FILE": token,
                            "VISOR_MCP": "shireworks, gh", "VISOR_UNRELATED": "x"]
         let options = try ServerOptions([], environment: environment)
-        XCTAssertEqual(options.port, 7433)
-        XCTAssertEqual(options.password, "hunter22", "read from its file, the line's end trimmed")
-        XCTAssertEqual(options.proxy, "http://192.168.128.1:7434/")
-        XCTAssertEqual(options.proxyToken, "tok-5f2a9c")
-        XCTAssertEqual(options.mcp, ["shireworks", "gh"])
-        XCTAssertEqual(options.settings.map { "\($0.0)=\($0.1)" },
-                       ["lan=on", "vpn=on", "front=http://127.0.0.1:17433,http://mac.tail:17433"])
+        #expect(options.port == 7433)
+        #expect(options.password == "hunter22", "read from its file, the line's end trimmed")
+        #expect(options.proxy == "http://192.168.128.1:7434/")
+        #expect(options.proxyToken == "tok-5f2a9c")
+        #expect(options.mcp == ["shireworks", "gh"])
+        #expect((options.settings.map { "\($0.0)=\($0.1)" }) == ["lan=on", "vpn=on", "front=http://127.0.0.1:17433,http://mac.tail:17433"])
         // A run started from this one is given the files, never the secrets.
         let passed = options.arguments.joined(separator: " ")
-        XCTAssertFalse(passed.contains("hunter22") || passed.contains("tok-5f2a9c"), passed)
-        XCTAssertTrue(passed.contains("--password-file " + password) && passed.contains("--proxy-token-file " + token), passed)
-        XCTAssertEqual(try ServerOptions(options.arguments).password, "hunter22", "the successor reads the same file")
+        #expect(!(passed.contains("hunter22") || passed.contains("tok-5f2a9c")), Comment(rawValue: passed))
+        #expect(passed.contains("--password-file " + password) && passed.contains("--proxy-token-file " + token), Comment(rawValue: passed))
+        #expect((try ServerOptions(options.arguments).password) == "hunter22", "the successor reads the same file")
 
         let given = try ServerOptions(["--port", "9000", "--listen", "loopback"], environment: environment)
-        XCTAssertEqual(given.port, 9000, "the argument wins")
-        XCTAssertEqual(given.settings.suffix(2).map { "\($0.0)=\($0.1)" }, ["lan=off", "vpn=off"], "applied after the environment's")
+        #expect(given.port == 9000, "the argument wins")
+        #expect((given.settings.suffix(2).map { "\($0.0)=\($0.1)" }) == ["lan=off", "vpn=off"], "applied after the environment's")
     }
 
-    func testWhatItCanNotUseIsSaid() {
-        XCTAssertThrowsError(try ServerOptions([], environment: ["VISOR_PORT": "seventy"]))
-        XCTAssertThrowsError(try ServerOptions([], environment: ["VISOR_LISTEN": "sometimes"]))
-        XCTAssertThrowsError(try ServerOptions([], environment: ["VISOR_PASSWORD_FILE": "/nowhere/visor-password"]))
-        XCTAssertNoThrow(try ServerOptions([], environment: ["VISOR_PORT": "  "]), "an empty value is none")
+    @Test func testWhatItCanNotUseIsSaid() {
+        #expect(throws: (any Error).self) { try ServerOptions([], environment: ["VISOR_PORT": "seventy"]) }
+        #expect(throws: (any Error).self) { try ServerOptions([], environment: ["VISOR_LISTEN": "sometimes"]) }
+        #expect(throws: (any Error).self) { try ServerOptions([], environment: ["VISOR_PASSWORD_FILE": "/nowhere/visor-password"]) }
+        #expect(throws: Never.self, "an empty value is none") { try ServerOptions([], environment: ["VISOR_PORT": "  "]) }
     }
 
-    func testTheHealthCheckAnswersWithoutCredentials() throws {
+    @Test func testTheHealthCheckAnswersWithoutCredentials() throws {
         let health = server.route(HTTPRequest(method: "GET", path: "/api/health", headers: [:], body: ""))
-        XCTAssertEqual(health.status, 200)
-        let body = try XCTUnwrap(parseJSON(health.body))
-        XCTAssertEqual(body["ok"].bool, true)
-        XCTAssertNotNil(body["version"].string)
-        XCTAssertEqual(server.route(HTTPRequest(method: "GET", path: "/api/sessions", headers: [:], body: "")).status, 401,
-                       "nothing else without them")
-        XCTAssertNotEqual(server.route(HTTPRequest(method: "POST", path: "/api/health", headers: [:], body: "")).status, 200,
-                          "asked, not sent to")
+        #expect(health.status == 200)
+        let body = try #require(parseJSON(health.body))
+        #expect((body["ok"].bool) == true)
+        #expect((body["version"].string) != nil)
+        #expect((server.route(HTTPRequest(method: "GET", path: "/api/sessions", headers: [:], body: "")).status) == 401, "nothing else without them")
+        #expect((server.route(HTTPRequest(method: "POST", path: "/api/health", headers: [:], body: "")).status) != 200, "asked, not sent to")
     }
 
-    func testTheProxyGivenAtStartCarriesPushesAndTheNamedMCPServers() {
+    @Test func testTheProxyGivenAtStartCarriesPushesAndTheNamedMCPServers() {
         server.settings.mcpEndpoints = [MCPEndpoint(name: "gh", url: "http://old/mcp"), MCPEndpoint(name: "own", url: "http://own/mcp")]
         server.useProxy("http://192.168.128.1:7434/", token: "proxy-token", mcp: ["shireworks", "gh"])
-        XCTAssertEqual(server.settings.pushProxy, "http://192.168.128.1:7434")
-        XCTAssertEqual(server.pushProxy?.token, "proxy-token")
-        XCTAssertEqual(server.settings.mcpEndpoints.map(\.name), ["own", "shireworks", "gh"], "the named ones replaced, the rest kept")
+        #expect(server.settings.pushProxy == "http://192.168.128.1:7434")
+        #expect((server.pushProxy?.token) == "proxy-token")
+        #expect(server.settings.mcpEndpoints.map(\.name) == ["own", "shireworks", "gh"], "the named ones replaced, the rest kept")
         let shireworks = server.settings.mcpEndpoints.first { $0.name == "shireworks" }
-        XCTAssertEqual(shireworks?.url, "http://192.168.128.1:7434/mcp/shireworks")
-        XCTAssertEqual(shireworks?.headers, [MCPEndpoint.Header(name: "X-Visor-Proxy", secret: true)], "its value kept apart")
-        XCTAssertEqual(VisorServer.secrets.get(MCPEndpoint.secretKey(endpoint: "shireworks", header: "X-Visor-Proxy")), "proxy-token")
+        #expect((shireworks?.url) == "http://192.168.128.1:7434/mcp/shireworks")
+        #expect((shireworks?.headers) == [MCPEndpoint.Header(name: "X-Visor-Proxy", secret: true)], "its value kept apart")
+        #expect((VisorServer.secrets.get(MCPEndpoint.secretKey(endpoint: "shireworks", header: "X-Visor-Proxy"))) == "proxy-token")
     }
+}
 }

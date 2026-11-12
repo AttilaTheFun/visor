@@ -3,33 +3,39 @@
 
 import Foundation
 @testable import VisorRunner
-import XCTest
+import Testing
 
-final class ServerWatchTests: XCTestCase {
-    func testTwoUnansweredAsksStartTheServerAtMostEveryTwoMinutes() {
+@Suite final class ServerWatchTests {
+    @Test func testTwoUnansweredAsksStartTheServerAtMostEveryTwoMinutes() {
         var state = ServerWatch.State()
         let now = ContinuousClock.now
-        XCTAssertFalse(state.heard(answering: false, at: now), "one is a moment")
-        XCTAssertTrue(state.heard(answering: false, at: now + .seconds(30)))
-        XCTAssertFalse(state.heard(answering: false, at: now + .seconds(60)), "coming up")
-        XCTAssertTrue(state.heard(answering: false, at: now + .seconds(150)), "still not, two minutes on")
-        XCTAssertFalse(state.heard(answering: true, at: now + .seconds(180)))
-        XCTAssertEqual(state.unanswered, 0)
-        XCTAssertFalse(state.heard(answering: false, at: now + .seconds(210)), "up again: a moment again")
+        let first = state.heard(answering: false, at: now)
+        #expect(!first, "one is a moment")
+        let half = state.heard(answering: false, at: now + .seconds(30))
+        #expect(half)
+        let minute = state.heard(answering: false, at: now + .seconds(60))
+        #expect(!minute, "coming up")
+        let later = state.heard(answering: false, at: now + .seconds(150))
+        #expect(later, "still not, two minutes on")
+        let answered = state.heard(answering: true, at: now + .seconds(180))
+        #expect(!answered)
+        #expect(state.unanswered == 0)
+        let again = state.heard(answering: false, at: now + .seconds(210))
+        #expect(!again, "up again: a moment again")
     }
 
-    func testAServerThatDoesntAnswerIsStartedWithTheFrontsCommand() throws {
+    @Test func testAServerThatDoesntAnswerIsStartedWithTheFrontsCommand() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("visor-watch-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let mark = folder.appendingPathComponent("started")
         // Nothing listens on port 1 here.
         let front = ClientProxy.Front(name: "co-tenant", port: 7440, host: "127.0.0.1", hostPort: 1, start: "touch '\(mark.path)'")
-        let watch = try XCTUnwrap(ServerWatch(front: front, log: { _ in }))
+        let watch = try #require(ServerWatch(front: front, log: { _ in }))
         watch.check()
-        XCTAssertFalse(FileManager.default.fileExists(atPath: mark.path))
+        #expect(!FileManager.default.fileExists(atPath: mark.path))
         watch.check()
-        XCTAssertTrue(FileManager.default.fileExists(atPath: mark.path))
-        XCTAssertNil(ServerWatch(front: ClientProxy.Front(name: "b", port: 7441, host: "127.0.0.1", hostPort: 1), log: { _ in }), "no command, no watch")
+        #expect(FileManager.default.fileExists(atPath: mark.path))
+        #expect((ServerWatch(front: ClientProxy.Front(name: "b", port: 7441, host: "127.0.0.1", hostPort: 1), log: { _ in })) == nil, "no command, no watch")
     }
 }

@@ -4,10 +4,12 @@
 // share such as Visor's programs.
 
 @testable import VisorServerLinux
-import XCTest
+import Foundation
+import Testing
 
-final class LinuxMountsTests: XCTestCase {
-    func testTheSharedFoldersAreTheWritableSharesFromTheComputer() {
+extension ServerTests {
+@Suite final class LinuxMountsTests {
+    @Test func testTheSharedFoldersAreTheWritableSharesFromTheComputer() {
         let table = """
         1 0 254:16 / / rw,relatime - ext4 /dev/vdb rw
         2 1 254:32 / /root rw,relatime - ext4 /dev/vdc rw
@@ -17,7 +19,8 @@ final class LinuxMountsTests: XCTestCase {
         6 1 0:42 / /Users/logan/My\\040Work rw,relatime shared:3 - 9p share rw
         7 1 0:5 / /proc rw,nosuid - proc proc rw
         """
-        XCTAssertEqual(LinuxMounts.shared(mountinfo: table), ["/Users/logan/Developer", "/Users/logan/My Work"])
-        XCTAssertEqual(LinuxMounts.shared(mountinfo: ""), [])
+        #expect(LinuxMounts.shared(mountinfo: table) == ["/Users/logan/Developer", "/Users/logan/My Work"])
+        #expect(LinuxMounts.shared(mountinfo: "") == [])
     }
+}
 }

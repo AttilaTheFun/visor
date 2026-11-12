@@ -3,53 +3,53 @@
 
 import Foundation
 import VisorRunner
-import XCTest
+import Testing
 
-final class RunnerFilesTests: XCTestCase {
+@Suite final class RunnerFilesTests {
     private var folder: URL!
 
-    override func setUp() async throws {
+    init() async throws {
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("runner-files-\(UUID().uuidString)", isDirectory: true)
     }
 
-    override func tearDown() async throws {
+    deinit {
         try? FileManager.default.removeItem(at: folder)
     }
 
-    func testTheSecretsFileIsThisUsersAloneAndSeenByBoth() throws {
+    @Test func testTheSecretsFileIsThisUsersAloneAndSeenByBoth() throws {
         let file = folder.appendingPathComponent("runner-secrets.json")
         let command = FileRunnerSecrets(file: file), agent = FileRunnerSecrets(file: file)
         command.set("mcp gh API_KEY", "k1")
         agent.set("proxy-server Builds token", "t1")
-        XCTAssertEqual(agent.value("mcp gh API_KEY"), "k1")
-        XCTAssertEqual(command.value("proxy-server Builds token"), "t1")
+        #expect(agent.value("mcp gh API_KEY") == "k1")
+        #expect(command.value("proxy-server Builds token") == "t1")
         command.set("mcp gh API_KEY", nil)
-        XCTAssertNil(agent.value("mcp gh API_KEY"))
+        #expect(agent.value("mcp gh API_KEY") == nil)
         command.set("mcp shireworks API_KEY", "")
-        XCTAssertNil(agent.value("mcp shireworks API_KEY"), "empty is none")
+        #expect(agent.value("mcp shireworks API_KEY") == nil, "empty is none")
         let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber
-        XCTAssertEqual(mode?.intValue, 0o600)
+        #expect((mode?.intValue) == 0o600)
     }
 
-    func testTheConfigReadsBackAndFieldsLeftOutAreDefaults() throws {
+    @Test func testTheConfigReadsBackAndFieldsLeftOutAreDefaults() throws {
         let config = RunnerConfig(mcpPort: 7539, endpoints: [.init(name: "gh", url: "http://127.0.0.1:7450/mcp", headers: ["X-A": "1"],
                                                                    secretHeaders: ["Authorization"])], servers: ["Builds"])
         try config.write(folder)
-        XCTAssertEqual(RunnerConfig.read(folder), config)
+        #expect(RunnerConfig.read(folder) == config)
         try Data("{}".utf8).write(to: folder.appendingPathComponent("runner.json"))
-        XCTAssertEqual(RunnerConfig.read(folder), RunnerConfig())
+        #expect(RunnerConfig.read(folder) == RunnerConfig())
     }
 
     /// A server's token is made once and kept; only the servers listed get through.
-    func testEachServerHasATokenOfItsOwn() {
+    @Test func testEachServerHasATokenOfItsOwn() {
         let secrets = MemorySecrets()
         let builds = ProxyTokens.token(for: "Builds", in: secrets)
-        XCTAssertEqual(builds.count, 64)
-        XCTAssertEqual(ProxyTokens.token(for: "Builds", in: secrets), builds, "made once")
+        #expect(builds.count == 64)
+        #expect(ProxyTokens.token(for: "Builds", in: secrets) == builds, "made once")
         let other = ProxyTokens.token(for: "Other", in: secrets)
-        XCTAssertNotEqual(other, builds)
-        XCTAssertTrue(ProxyTokens.admits(builds, servers: ["Builds"], in: secrets))
-        XCTAssertFalse(ProxyTokens.admits(other, servers: ["Builds"], in: secrets), "a server not listed")
-        XCTAssertFalse(ProxyTokens.admits("", servers: ["Builds"], in: secrets))
+        #expect(other != builds)
+        #expect(ProxyTokens.admits(builds, servers: ["Builds"], in: secrets))
+        #expect(!ProxyTokens.admits(other, servers: ["Builds"], in: secrets), "a server not listed")
+        #expect(!ProxyTokens.admits("", servers: ["Builds"], in: secrets))
     }
 }

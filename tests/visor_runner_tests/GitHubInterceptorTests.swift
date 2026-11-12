@@ -12,7 +12,7 @@ import NIOPosix
 import NIOSSL
 import Synchronization
 @testable import VisorRunner
-import XCTest
+import Testing
 
 /// The token every session gets here.
 private struct FixedTokens: GitHubTokenSource {
@@ -84,14 +84,14 @@ private final class EchoGitHub: Sendable {
     }
 }
 
-final class GitHubInterceptorTests: XCTestCase {
+@Suite final class GitHubInterceptorTests {
     private var group: MultiThreadedEventLoopGroup!
     private var github: EchoGitHub!
     private var proxy: GitHubProxy!
     private var port = 0
     private var caFile: URL!
 
-    override func setUpWithError() throws {
+    init() throws {
         group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let githubCA = try RunnerCA.make(now: Date())
         github = try EchoGitHub(ca: githubCA, group: group)
@@ -112,14 +112,14 @@ final class GitHubInterceptorTests: XCTestCase {
                 break
             }
         }
-        guard proxy != nil else { throw XCTSkip("no port for the proxy") }
+        guard proxy != nil else { try Test.cancel("no port for the proxy") }
     }
 
-    override func tearDownWithError() throws {
+    deinit {
         proxy?.stop()
         github?.stop()
         try? FileManager.default.removeItem(at: caFile)
-        try group?.syncShutdownGracefully()
+        try? group?.syncShutdownGracefully()
     }
 
     /// curl through the proxy as the session's agent, trusting the Runner's
@@ -129,54 +129,54 @@ final class GitHubInterceptorTests: XCTestCase {
                   "--cacert", caFile.path, "-H", "Authorization: token placeholder"] + arguments)
     }
 
-    func testAReadGoesOnWithTheSessionsTokenWhichNeverComesBack() throws {
+    @Test func testAReadGoesOnWithTheSessionsTokenWhichNeverComesBack() throws {
         let (body, status) = try agent(["https://api.github.com/repos/AttilaTheFun/shireworks/pulls/3"])
-        XCTAssertEqual(status, "200", body)
-        XCTAssertEqual(github.requests, ["GET /repos/AttilaTheFun/shireworks/pulls/3 Bearer ghs_fixedtoken"], "the placeholder replaced")
-        XCTAssertTrue(body.contains("Bearer " + String(repeating: "*", count: "ghs_fixedtoken".count)), "masked on its way back: \(body)")
-        XCTAssertFalse(body.contains("ghs_fixedtoken"))
+        #expect(status == "200", Comment(rawValue: body))
+        #expect(github.requests == ["GET /repos/AttilaTheFun/shireworks/pulls/3 Bearer ghs_fixedtoken"], "the placeholder replaced")
+        #expect(body.contains("Bearer " + String(repeating: "*", count: "ghs_fixedtoken".count)), "masked on its way back: \(body)")
+        #expect(!body.contains("ghs_fixedtoken"))
     }
 
-    func testARefusalIsGitHubsOwnFormAndNeverReachesGitHub() throws {
+    @Test func testARefusalIsGitHubsOwnFormAndNeverReachesGitHub() throws {
         let rest = try agent(["-X", "DELETE", "https://api.github.com/repos/AttilaTheFun/shireworks/git/refs/heads/x"])
-        XCTAssertEqual(rest.status, "403", rest.body)
-        XCTAssertTrue(rest.body.contains("\"message\":\"Refused:"), rest.body)
+        #expect(rest.status == "403", Comment(rawValue: rest.body))
+        #expect(rest.body.contains("\"message\":\"Refused:"), Comment(rawValue: rest.body))
         let graphQL = try agent(["-X", "POST", "-H", "Content-Type: application/json", "--data",
                                  #"{"query":"mutation { deleteRef(input: {refId: \"R\"}) { clientMutationId } }"}"#,
                                  "https://api.github.com/graphql"])
-        XCTAssertEqual(graphQL.status, "200", graphQL.body)
-        XCTAssertTrue(graphQL.body.contains("\"type\":\"FORBIDDEN\""), graphQL.body)
+        #expect(graphQL.status == "200", Comment(rawValue: graphQL.body))
+        #expect(graphQL.body.contains("\"type\":\"FORBIDDEN\""), Comment(rawValue: graphQL.body))
         let other = try agent(["-X", "POST", "-H", "Content-Type: application/json", "--data", #"{"body":"x"}"#,
                                "https://api.github.com/repos/someone/else/issues/3/comments"])
-        XCTAssertEqual(other.status, "403", other.body)
-        XCTAssertTrue(other.body.contains("not among the repositories"), other.body)
-        XCTAssertEqual(github.requests, [], "nothing refused reached GitHub")
+        #expect(other.status == "403", Comment(rawValue: other.body))
+        #expect(other.body.contains("not among the repositories"), Comment(rawValue: other.body))
+        #expect(github.requests == [], "nothing refused reached GitHub")
     }
 
     /// Logan, 9 Nov 2026: a read of a repository outside the allowed ones
     /// goes on with no authorization at all: neither the session's token nor
     /// the client's placeholder reaches GitHub.
-    func testAReadOutsideTheAllowedRepositoriesGoesOnWithNoToken() throws {
+    @Test func testAReadOutsideTheAllowedRepositoriesGoesOnWithNoToken() throws {
         let (body, status) = try agent(["https://api.github.com/repos/swiftlang/swift-foundation/tags"])
-        XCTAssertEqual(status, "200", body)
-        XCTAssertEqual(github.requests, ["GET /repos/swiftlang/swift-foundation/tags "], "no authorization header")
-        XCTAssertFalse(body.contains("ghs_fixedtoken"))
-        XCTAssertFalse(body.contains("placeholder"))
+        #expect(status == "200", Comment(rawValue: body))
+        #expect(github.requests == ["GET /repos/swiftlang/swift-foundation/tags "], "no authorization header")
+        #expect(!body.contains("ghs_fixedtoken"))
+        #expect(!body.contains("placeholder"))
         // An allowed one's read after it still has the token.
         _ = try agent(["https://api.github.com/repos/AttilaTheFun/shireworks/pulls/3"])
-        XCTAssertEqual(github.requests.last, "GET /repos/AttilaTheFun/shireworks/pulls/3 Bearer ghs_fixedtoken")
+        #expect(github.requests.last == "GET /repos/AttilaTheFun/shireworks/pulls/3 Bearer ghs_fixedtoken")
     }
 
-    func testAnAllowedWriteGoesOnWithItsBody() throws {
+    @Test func testAnAllowedWriteGoesOnWithItsBody() throws {
         let (body, status) = try agent(["-X", "POST", "-H", "Content-Type: application/json", "--data", #"{"body":"Looks right"}"#,
                                         "https://api.github.com/repos/AttilaTheFun/shireworks/issues/3/comments"])
-        XCTAssertEqual(status, "200", body)
-        XCTAssertEqual(github.requests, ["POST /repos/AttilaTheFun/shireworks/issues/3/comments Bearer ghs_fixedtoken"])
+        #expect(status == "200", Comment(rawValue: body))
+        #expect(github.requests == ["POST /repos/AttilaTheFun/shireworks/issues/3/comments Bearer ghs_fixedtoken"])
     }
 
     /// A push to main, refused as git reads a push's answer: report-status,
     /// the ref turned down, in side-band as asked.
-    func testAPushToMainIsTurnedDownAsGitShowsIt() throws {
+    @Test func testAPushToMainIsTurnedDownAsGitShowsIt() throws {
         let zero = String(repeating: "0", count: 40), sha = String(repeating: "a", count: 40)
         let line = "\(zero) \(sha) refs/heads/main\0report-status side-band-64k\n"
         let body = String(format: "%04x", line.utf8.count + 4) + line + "0000PACK"
@@ -185,15 +185,15 @@ final class GitHubInterceptorTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: file) }
         let (answer, status) = try agent(["-X", "POST", "-H", "Content-Type: application/x-git-receive-pack-request",
                                           "--data-binary", "@\(file.path)", "https://github.com/AttilaTheFun/shireworks.git/git-receive-pack"])
-        XCTAssertEqual(status, "200", answer)
-        XCTAssertTrue(answer.contains("ng refs/heads/main Refused: main is never pushed"), answer)
-        XCTAssertEqual(github.requests, [])
+        #expect(status == "200", Comment(rawValue: answer))
+        #expect(answer.contains("ng refs/heads/main Refused: main is never pushed"), Comment(rawValue: answer))
+        #expect(github.requests == [])
     }
 
-    func testOnlyAServersAgentsAreLetIn() throws {
+    @Test func testOnlyAServersAgentsAreLetIn() throws {
         let (_, status) = try curl(["--proxy", "http://127.0.0.1:\(port)", "--proxy-user", "stranger:session-a", "--cacert", caFile.path,
                                     "https://api.github.com/repos/AttilaTheFun/shireworks/pulls"])
-        XCTAssertNotEqual(status, "200")
-        XCTAssertEqual(github.requests, [])
+        #expect(status != "200")
+        #expect(github.requests == [])
     }
 }

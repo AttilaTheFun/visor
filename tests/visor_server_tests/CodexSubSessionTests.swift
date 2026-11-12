@@ -8,7 +8,7 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
 /// An app server played by the test: what it is sent, kept; what it says,
 /// the test's lines.
@@ -53,21 +53,23 @@ private final class ScriptedAppServer: AgentChild {
     }
 }
 
-@MainActor
-final class CodexSubSessionTests: ServerTestCase {
-    func testWhatCodexSaysIsTakenByItsThread() {
+extension ServerTests {
+@Suite @MainActor final class CodexSubSessionTests {
+    init() { TestPlatform.install() }
+
+    @Test func testWhatCodexSaysIsTakenByItsThread() {
         let heard = CodexOutput.heard(#"{"method":"item/agentMessage/delta","params":{"threadId":"sub","itemId":"m1","delta":"4"}}"#)
-        XCTAssertEqual(heard.map(\.thread), ["sub"])
-        XCTAssertNil(CodexOutput.heard(#"{"id":3,"result":{"turn":{"id":"t1"}}}"#).first?.thread, "an answer is of no thread")
+        #expect(heard.map(\.thread) == ["sub"])
+        #expect((CodexOutput.heard(#"{"id":3,"result":{"turn":{"id":"t1"}}}"#).first?.thread) == nil, "an answer is of no thread")
         // A subagent sent off: the call, and the session's subagents read again.
         let sent = #"{"method":"item/started","params":{"threadId":"main","item":{"type":"subAgentActivity","id":"call_1","kind":"started","agentThreadId":"sub","agentPath":"/root/arithmetic"}}}"#
         let outputs = CodexOutput.parse(sent)
-        guard case .toolStarted(let id, let name, let label)? = outputs.first else { return XCTFail("no call") }
-        XCTAssertEqual([id, name, label], ["call_1", "Agent", "Agent: arithmetic"])
-        guard case .subagentActivity? = outputs.last else { return XCTFail("not read again") }
+        guard case .toolStarted(let id, let name, let label)? = outputs.first else { Issue.record("no call"); return }
+        #expect([id, name, label] == ["call_1", "Agent", "Agent: arithmetic"])
+        guard case .subagentActivity? = outputs.last else { Issue.record("not read again"); return }
     }
 
-    func testASubagentsThreadIsNotTheSessions() async throws {
+    @Test func testASubagentsThreadIsNotTheSessions() async throws {
         let process = CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: "main")
         let server = ScriptedAppServer()
         process.adopt(server, carried: [:])
@@ -89,15 +91,15 @@ final class CodexSubSessionTests: ServerTestCase {
             if case .delta(_, let text) = event { return text }
             return nil
         }
-        XCTAssertEqual(said, ["DONE"], "the subagent's words are its own")
+        #expect(said == ["DONE"], "the subagent's words are its own")
         let ends = events.indices.filter { if case .busy(false) = events[$0] { true } else { false } }
         let workedAt = events.firstIndex { if case .subagents = $0 { true } else { false } }
-        XCTAssertEqual(ends.count, 1, "the subagent's turn ending is not the session's")
-        XCTAssertNotNil(workedAt, "the session hears that its subagent worked")
-        XCTAssertLessThan(try XCTUnwrap(workedAt), try XCTUnwrap(ends.first))
+        #expect(ends.count == 1, "the subagent's turn ending is not the session's")
+        #expect(workedAt != nil, "the session hears that its subagent worked")
+        #expect((try #require(workedAt)) < (try #require(ends.first)))
     }
 
-    func testASideQuestionIsATurnOnACopyOfTheThread() async throws {
+    @Test func testASideQuestionIsATurnOnACopyOfTheThread() async throws {
         let process = CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: "main")
         let server = ScriptedAppServer()
         process.adopt(server, carried: [:])
@@ -105,31 +107,31 @@ final class CodexSubSessionTests: ServerTestCase {
         let asking = Task { try await process.askSide("Which word?", after: earlier) }
 
         let asked = await server.request("thread/fork")
-        let fork = try XCTUnwrap(asked)
-        let forkParams = try XCTUnwrap(fork["params"] as? [String: Any])
-        XCTAssertEqual(forkParams["threadId"] as? String, "main")
-        XCTAssertEqual(forkParams["ephemeral"] as? Bool, true, "never written down")
-        XCTAssertEqual(forkParams["sandbox"] as? String, "read-only")
-        server.say(["id": try XCTUnwrap(fork["id"] as? Int), "result": ["thread": ["id": "side"]]])
+        let fork = try #require(asked)
+        let forkParams = try #require(fork["params"] as? [String: Any])
+        #expect((forkParams["threadId"] as? String) == "main")
+        #expect((forkParams["ephemeral"] as? Bool) == true, "never written down")
+        #expect((forkParams["sandbox"] as? String) == "read-only")
+        server.say(["id": try #require(fork["id"] as? Int), "result": ["thread": ["id": "side"]]])
 
         let started = await server.request("turn/start")
-        let turn = try XCTUnwrap(started)
-        let turnParams = try XCTUnwrap(turn["params"] as? [String: Any])
-        XCTAssertEqual(turnParams["threadId"] as? String, "side")
-        let prompt = try XCTUnwrap(((turnParams["input"] as? [[String: Any]])?.first)?["text"] as? String)
-        XCTAssertTrue(prompt.contains("Q: Which file?\nA: Sync.swift") && prompt.hasSuffix("Now: Which word?"), prompt)
-        server.say(["id": try XCTUnwrap(turn["id"] as? Int), "result": ["turn": ["id": "s1"]]])
+        let turn = try #require(started)
+        let turnParams = try #require(turn["params"] as? [String: Any])
+        #expect((turnParams["threadId"] as? String) == "side")
+        let prompt = try #require(((turnParams["input"] as? [[String: Any]])?.first)?["text"] as? String)
+        #expect(prompt.contains("Q: Which file?\nA: Sync.swift") && prompt.hasSuffix("Now: Which word?"), Comment(rawValue: prompt))
+        server.say(["id": try #require(turn["id"] as? Int), "result": ["turn": ["id": "s1"]]])
         server.say(["method": "item/completed", "params": ["threadId": "side", "item": ["type": "agentMessage", "id": "m1", "text": "PELICAN"]]])
         server.say(["method": "turn/completed", "params": ["threadId": "side", "turn": ["id": "s1", "status": "completed"]]])
 
         let answer = try await asking.value
-        XCTAssertEqual(answer, "PELICAN")
+        #expect(answer == "PELICAN")
         let unsubscribed = await server.request("thread/unsubscribe")
-        let letGo = try XCTUnwrap(unsubscribed)
-        XCTAssertEqual((letGo["params"] as? [String: Any])?["threadId"] as? String, "side", "its copy is let go")
+        let letGo = try #require(unsubscribed)
+        #expect(((letGo["params"] as? [String: Any])?["threadId"] as? String) == "side", "its copy is let go")
     }
 
-    func testCodexsSubagentsAreReadFromItsRollouts() {
+    @Test func testCodexsSubagentsAreReadFromItsRollouts() {
         // As Codex 0.162 writes them: the session's rollout says each one
         // sent off and finished.
         let session = [
@@ -139,13 +141,13 @@ final class CodexSubSessionTests: ServerTestCase {
             #"{"type":"event_msg","payload":{"type":"item_completed","thread_id":"main","item":{"type":"SubAgentActivity","id":"done-1","kind":"completed","agent_thread_id":"sub","agent_path":"/root/arithmetic"}}}"#,
         ].joined(separator: "\n")
         let listed = CodexHarness.subagents(inRollout: Data(session.utf8))
-        XCTAssertEqual(listed.map(\.id), ["sub", "other"])
-        XCTAssertEqual(listed.map(\.description), ["arithmetic", "docs"])
-        XCTAssertEqual(listed.map(\.running), [false, true])
-        XCTAssertEqual(listed.first?.call, "call_1", "the call that sent it off")
+        #expect(listed.map(\.id) == ["sub", "other"])
+        #expect(listed.map(\.description) == ["arithmetic", "docs"])
+        #expect(listed.map(\.running) == [false, true])
+        #expect((listed.first?.call) == "call_1", "the call that sent it off")
         // The words a running one is handed, through the session's agent.
         let words = CodexHarness().wordsForSubagent("Look at the tests too", to: listed[1])
-        XCTAssertTrue(words.contains("/root/docs") && words.contains("send_message") && words.hasSuffix("Look at the tests too"))
+        #expect(words.contains("/root/docs") && words.contains("send_message") && words.hasSuffix("Look at the tests too"))
 
         // A subagent's own rollout begins with the session's conversation.
         let own = [
@@ -155,6 +157,7 @@ final class CodexSubSessionTests: ServerTestCase {
             #"{"type":"response_item","payload":{"type":"message","id":"msg_4","role":"assistant","content":[{"type":"output_text","text":"4"}]}}"#,
         ].joined(separator: "\n")
         let rows = TranscriptAssembler.rows(in: CodexRolloutParser().lines(in: CodexHarness.ownPart(of: Data(own.utf8), thread: "sub")).compactMap(\.record))
-        XCTAssertEqual(rows.map(\.text), ["4"], "its own work, not the conversation it was copied from")
+        #expect(rows.map(\.text) == ["4"], "its own work, not the conversation it was copied from")
     }
+}
 }

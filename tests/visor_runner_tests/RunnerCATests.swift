@@ -7,31 +7,29 @@ import Crypto
 import Foundation
 @testable import VisorRunner
 import X509
-import XCTest
+import Testing
 
-final class RunnerCATests: XCTestCase {
-    func testItIsMadeOnceAndKept() throws {
+@Suite final class RunnerCATests {
+    @Test func testItIsMadeOnceAndKept() throws {
         let secrets = MemorySecrets()
         let first = try RunnerCA.kept(in: secrets)
         let again = try RunnerCA.kept(in: secrets)
-        XCTAssertEqual(first.certificate, again.certificate)
-        XCTAssertTrue(try first.pem.hasPrefix("-----BEGIN CERTIFICATE-----"))
-        XCTAssertNotNil(secrets.value("github-proxy ca key"), "the key is the Runner's secret")
+        #expect(first.certificate == again.certificate)
+        #expect(try first.pem.hasPrefix("-----BEGIN CERTIFICATE-----"))
+        #expect(secrets.value("github-proxy ca key") != nil, "the key is the Runner's secret")
     }
 
-    func testItIsAnAuthorityConstrainedToGitHub() throws {
+    @Test func testItIsAnAuthorityConstrainedToGitHub() throws {
         let ca = try RunnerCA.kept(in: MemorySecrets())
-        let constraints = try XCTUnwrap(ca.certificate.extensions.nameConstraints)
-        XCTAssertEqual(constraints.permittedDNSDomains, ["github.com"])
-        XCTAssertEqual(constraints.excludedIPRanges.count, 2, "no IPv4 or IPv6 address")
-        XCTAssertEqual(ca.certificate.extensions[oid: .X509ExtensionID.nameConstraints]?.critical, true)
-        XCTAssertEqual(try ca.certificate.extensions.basicConstraints, .isCertificateAuthority(maxPathLength: 0))
-        XCTAssertThrowsError(try ca.leaf(for: "example.com")) { error in
-            XCTAssertEqual(error as? RunnerCAError, .notGitHub("example.com"))
-        }
+        let constraints = try #require(try ca.certificate.extensions.nameConstraints)
+        #expect(constraints.permittedDNSDomains == ["github.com"])
+        #expect(constraints.excludedIPRanges.count == 2, "no IPv4 or IPv6 address")
+        #expect((ca.certificate.extensions[oid: .X509ExtensionID.nameConstraints]?.critical) == true)
+        #expect((try ca.certificate.extensions.basicConstraints) == .isCertificateAuthority(maxPathLength: 0))
+        #expect(throws: RunnerCAError.notGitHub("example.com")) { try ca.leaf(for: "example.com") }
     }
 
-    func testAClientTakesItsLeavesForGitHubAlone() async throws {
+    @Test func testAClientTakesItsLeavesForGitHubAlone() async throws {
         let ca = try RunnerCA.kept(in: MemorySecrets())
         for host in RunnerCA.hosts {
             let leaf = try ca.leaf(for: host).certificate
@@ -40,7 +38,7 @@ final class RunnerCATests: XCTestCase {
                 ServerIdentityPolicy(serverHostname: host, serverIP: nil)
             }
             guard case .validCertificate = await verifier.validate(leaf: leaf, intermediates: CertificateStore()) else {
-                return XCTFail("\(host)'s leaf was not taken")
+                Issue.record("\(host)'s leaf was not taken"); return
             }
         }
         // One it was made to sign for another name all the same: refused by
@@ -48,7 +46,7 @@ final class RunnerCATests: XCTestCase {
         let stray = try ca.sign("example.com", now: Date()).certificate
         var verifier = Verifier(rootCertificates: CertificateStore([ca.certificate])) { RFC5280Policy() }
         guard case .couldNotValidate = await verifier.validate(leaf: stray, intermediates: CertificateStore()) else {
-            return XCTFail("a leaf for example.com was taken")
+            Issue.record("a leaf for example.com was taken"); return
         }
     }
 }

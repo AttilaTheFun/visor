@@ -9,66 +9,68 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-@MainActor
-final class CodexCommandTests: ServerTestCase {
-    func testAGoalWrittenBackItsOwnWayIsTheOneSent() {
+extension ServerTests {
+@Suite @MainActor final class CodexCommandTests {
+    init() { TestPlatform.install() }
+
+    @Test func testAGoalWrittenBackItsOwnWayIsTheOneSent() {
         let sent = "/goal Ok yes please migrate the existing stuff to Bazel first, and get it working\n\nI understand it will be limited"
         // Codex's rollout keeps the breaks and quotes escaped, and may cut it short.
-        XCTAssertTrue(CommandWords.same("/goal Ok yes please migrate the existing stuff to Bazel first, and get it working\\n\\nI under", sent))
-        XCTAssertTrue(SessionRecord.sameWords("/goal Ok yes please migrate the existing stuff to Bazel first, and get it", sent))
-        XCTAssertFalse(CommandWords.same("/goal something else entirely", sent))
-        XCTAssertFalse(CommandWords.same("/compact", "/goal compact"))
-        XCTAssertFalse(CommandWords.same("plain words", "plain words "), "only commands are matched loosely")
+        #expect(CommandWords.same("/goal Ok yes please migrate the existing stuff to Bazel first, and get it working\\n\\nI under", sent))
+        #expect(SessionRecord.sameWords("/goal Ok yes please migrate the existing stuff to Bazel first, and get it", sent))
+        #expect(!CommandWords.same("/goal something else entirely", sent))
+        #expect(!CommandWords.same("/compact", "/goal compact"))
+        #expect(!CommandWords.same("plain words", "plain words "), "only commands are matched loosely")
     }
 
-    func testTheGoalTheAgentSaysIsNotUndoneByTheRows() {
+    @Test func testTheGoalTheAgentSaysIsNotUndoneByTheRows() {
         let info = SessionInfo(id: "C", agent: .codex, cwd: "/tmp", title: "Codex", created: 0)
         let record = SessionRecord(info: info, process: CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil),
                                    entries: [TranscriptEntry(id: "u1", role: .user, text: "/goal clear"),
                                              TranscriptEntry(id: "u2", role: .user, text: "/goal ship 0.31")])
         record.noteMarks(lookingBack: false)
-        XCTAssertEqual(record.info.goal, "ship 0.31", "the latest /goal row sets the goal")
+        #expect(record.info.goal == "ship 0.31", "the latest /goal row sets the goal")
         _ = record.apply(.goal("ship 0.31 and test it", met: false))
         record.entries.append(TranscriptEntry(id: "a1", role: .assistant, text: "Working on it."))
         record.noteMarks(lookingBack: false)
-        XCTAssertEqual(record.info.goal, "ship 0.31 and test it", "Codex's own word stands")
+        #expect(record.info.goal == "ship 0.31 and test it", "Codex's own word stands")
     }
 
-    func testTheCommandsAreRead() {
-        XCTAssertEqual(CodexCommand("/goal"), .showGoal)
-        XCTAssertEqual(CodexCommand(" /goal  ship the release \n"), .setGoal("ship the release"))
-        XCTAssertEqual(CodexCommand("/goal clear"), .clearGoal)
-        XCTAssertEqual(CodexCommand("/goal pause"), .pauseGoal)
-        XCTAssertEqual(CodexCommand("/goal resume"), .resumeGoal)
-        XCTAssertEqual(CodexCommand("/goal fix the\nflaky test"), .setGoal("fix the\nflaky test"))
-        XCTAssertEqual(CodexCommand("/compact"), .compact)
-        XCTAssertEqual(CodexCommand("/review"), .review(nil))
-        XCTAssertEqual(CodexCommand("/review the sync code"), .review("the sync code"))
+    @Test func testTheCommandsAreRead() {
+        #expect(CodexCommand("/goal") == .showGoal)
+        #expect(CodexCommand(" /goal  ship the release \n") == .setGoal("ship the release"))
+        #expect(CodexCommand("/goal clear") == .clearGoal)
+        #expect(CodexCommand("/goal pause") == .pauseGoal)
+        #expect(CodexCommand("/goal resume") == .resumeGoal)
+        #expect(CodexCommand("/goal fix the\nflaky test") == .setGoal("fix the\nflaky test"))
+        #expect(CodexCommand("/compact") == .compact)
+        #expect(CodexCommand("/review") == .review(nil))
+        #expect(CodexCommand("/review the sync code") == .review("the sync code"))
         // Anything else goes to the agent as typed.
-        XCTAssertNil(CodexCommand("/goals are good"))
-        XCTAssertNil(CodexCommand("/prompts:deploy"))
-        XCTAssertNil(CodexCommand("set a goal"))
+        #expect(CodexCommand("/goals are good") == nil)
+        #expect(CodexCommand("/prompts:deploy") == nil)
+        #expect(CodexCommand("set a goal") == nil)
     }
 
     /// Codex's question to the user (request_user_input), as the app server
     /// sends it: each question with the id its answer goes back under.
-    func testCodexsQuestionIsRead() {
+    @Test func testCodexsQuestionIsRead() {
         let line = #"{"id":7,"method":"item/tool/requestUserInput","params":{"threadId":"t","turnId":"u","itemId":"call_1","questions":[{"id":"preferred_color","header":"Color","question":"Which color do you prefer?","isOther":true,"isSecret":false,"options":[{"label":"Red","description":"Choose Red."},{"label":"Blue","description":"Choose Blue."}]}],"isBlocking":false,"autoResolutionMs":null}}"#
-        guard case .questions(let id, let asked)? = CodexOutput.parse(line).first else { return XCTFail("not a question") }
-        XCTAssertEqual(id, 7)
-        XCTAssertEqual(asked.map(\.id), ["preferred_color"])
-        XCTAssertEqual(asked.first?.question, AgentQuestion(question: "Which color do you prefer?", header: "Color",
+        guard case .questions(let id, let asked)? = CodexOutput.parse(line).first else { Issue.record("not a question"); return }
+        #expect(id == 7)
+        #expect(asked.map(\.id) == ["preferred_color"])
+        #expect((asked.first?.question) == (AgentQuestion(question: "Which color do you prefer?", header: "Color",
                                                             options: [.init(label: "Red", description: "Choose Red."),
-                                                                      .init(label: "Blue", description: "Choose Blue.")]))
-        XCTAssertTrue(CodexAppServerProcess.questionArguments.contains("features.default_mode_request_user_input=true"))
+                                                                      .init(label: "Blue", description: "Choose Blue.")])))
+        #expect(CodexAppServerProcess.questionArguments.contains("features.default_mode_request_user_input=true"))
     }
 
     /// The user's answers to Codex's questions read back as theirs: the
     /// call's questions by id, the output's answers by the questions' words.
     /// Claude's are the same row, from the assembler.
-    func testAnswersToCodexsQuestionsAreTheUsers() throws {
+    @Test func testAnswersToCodexsQuestionsAreTheUsers() throws {
         let call: [String: Any] = ["type": "response_item", "ordinal": 1, "payload": [
             "type": "function_call", "id": "fc1", "name": "request_user_input", "call_id": "call_1",
             "arguments": #"{"questions":[{"header":"Color","id":"color","question":"Which color do you prefer?","options":[]}]}"#]]
@@ -77,28 +79,26 @@ final class CodexCommandTests: ServerTestCase {
         let data = Data(try [call, output].map { String(decoding: try JSONSerialization.data(withJSONObject: $0), as: UTF8.self) }
             .joined(separator: "\n").utf8)
         let rows = TranscriptAssembler.rows(in: CodexRolloutParser().lines(in: data).compactMap(\.record))
-        let answers = try XCTUnwrap(rows.last)
-        XCTAssertEqual(answers.toolName, "answers")
-        XCTAssertEqual(answers.text, "Which color do you prefer?\n**Blue**")
-        XCTAssertNil(CodexRolloutParser.answers("aborted by user after 60.1s", to: [("color", "Which color do you prefer?")]), "stopped first")
+        let answers = try #require(rows.last)
+        #expect(answers.toolName == "answers")
+        #expect(answers.text == "Which color do you prefer?\n**Blue**")
+        #expect((CodexRolloutParser.answers("aborted by user after 60.1s", to: [("color", "Which color do you prefer?")])) == nil, "stopped first")
     }
 
-    func testWhatTheAppServerSaysOfTurnsAndGoals() {
+    @Test func testWhatTheAppServerSaysOfTurnsAndGoals() {
         let goal = #"{"threadId":"t","objective":"Ship it","status":"active","tokenBudget":null,"tokensUsed":10,"timeUsedSeconds":125,"createdAt":1,"updatedAt":2}"#
-        XCTAssertEqual(lastGoal(#"{"method":"thread/goal/updated","params":{"threadId":"t","turnId":null,"goal":\#(goal)}}"#),
-                       .some(CodexGoal(objective: "Ship it", status: "active", tokensUsed: 10, timeUsedSeconds: 125)))
-        XCTAssertEqual(lastGoal(#"{"method":"thread/goal/cleared","params":{"threadId":"t"}}"#), .some(nil))
+        #expect((lastGoal(#"{"method":"thread/goal/updated","params":{"threadId":"t","turnId":null,"goal":\#(goal)}}"#)) == (.some(CodexGoal(objective: "Ship it", status: "active", tokensUsed: 10, timeUsedSeconds: 125))))
+        #expect(lastGoal(#"{"method":"thread/goal/cleared","params":{"threadId":"t"}}"#) == .some(nil))
         // The answer to a goal's request carries it; null is none.
-        XCTAssertEqual(lastGoal(#"{"id":4,"result":{"goal":null}}"#), .some(nil))
-        XCTAssertEqual(lastGoal(#"{"id":4,"result":{"goal":\#(goal)}}"#)??.objective, "Ship it")
-        XCTAssertEqual(lastGoal(#"{"id":5,"result":{"turn":{"id":"u1"}}}"#), .none, "other answers say nothing of it")
+        #expect(lastGoal(#"{"id":4,"result":{"goal":null}}"#) == .some(nil))
+        #expect((lastGoal(#"{"id":4,"result":{"goal":\#(goal)}}"#)??.objective) == "Ship it")
+        #expect(lastGoal(#"{"id":5,"result":{"turn":{"id":"u1"}}}"#) == .none, "other answers say nothing of it")
         // A turn Codex started itself.
         guard case .turnStarted(let id)? = CodexOutput.parse(#"{"method":"turn/started","params":{"threadId":"t","turn":{"id":"u2"}}}"#).first else {
-            return XCTFail("no turn")
+            Issue.record("no turn"); return
         }
-        XCTAssertEqual(id, "u2")
-        XCTAssertEqual(CodexGoal(objective: "Ship it", status: "paused", timeUsedSeconds: 125).summary,
-                       "Goal: Ship it — paused (/goal resume), 2 min so far.")
+        #expect(id == "u2")
+        #expect(CodexGoal(objective: "Ship it", status: "paused", timeUsedSeconds: 125).summary == "Goal: Ship it — paused (/goal resume), 2 min so far.")
     }
 
     private func lastGoal(_ line: String) -> CodexGoal?? {
@@ -108,34 +108,34 @@ final class CodexCommandTests: ServerTestCase {
         return .none
     }
 
-    func testTheSessionTakesTheGoalCodexReports() {
+    @Test func testTheSessionTakesTheGoalCodexReports() {
         let record = SessionRecord(info: SessionInfo(id: "C", agent: .codex, cwd: "/tmp", title: "Codex", created: 0),
                                    process: CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
         _ = record.apply(.goal("Ship it", met: false))
-        XCTAssertEqual(record.info.goal, "Ship it")
-        XCTAssertFalse(record.goalWasMet("Ship it"))
+        #expect(record.info.goal == "Ship it")
+        #expect(!record.goalWasMet("Ship it"))
         _ = record.apply(.goal(nil, met: true))
-        XCTAssertNil(record.info.goal)
-        XCTAssertTrue(record.goalWasMet("Ship it"), "met, as Codex said: the push says achieved")
+        #expect(record.info.goal == nil)
+        #expect(record.goalWasMet("Ship it"), "met, as Codex said: the push says achieved")
         _ = record.apply(.goal("Next", met: false))
         _ = record.apply(.goal(nil, met: false))
-        XCTAssertFalse(record.goalWasMet("Next"), "cleared, not met")
+        #expect(!record.goalWasMet("Next"), "cleared, not met")
         // A command answered in words is a notice.
         let envelope = record.apply(.notice("No goal is set."))
-        XCTAssertEqual(record.notice, "No goal is set.")
-        XCTAssertEqual(envelope?.notice, "No goal is set.")
+        #expect(record.notice == "No goal is set.")
+        #expect((envelope?.notice) == "No goal is set.")
     }
 
-    func testAGoalTheUserChangedReadsBackAsTheirCommand() {
+    @Test func testAGoalTheUserChangedReadsBackAsTheirCommand() {
         func said(_ text: String) -> String? {
             CodexRolloutParser.goalCommand("<codex_internal_context source=\"user_goal\">\n" + text + "\n</codex_internal_context>")
         }
-        XCTAssertEqual(said("User set the goal: \"Ship it\"\nUser set goal status: \"active\"."), "/goal Ship it")
-        XCTAssertEqual(said("User set the goal: \"Fix the \"flaky\"\ntest\"\nUser set goal status: \"active\"."), "/goal Fix the \"flaky\"\ntest")
-        XCTAssertEqual(said("User set goal status: \"paused\"."), "/goal pause")
-        XCTAssertEqual(said("User set goal status: \"active\"."), "/goal resume")
-        XCTAssertEqual(said("User cleared the goal."), "/goal clear")
-        XCTAssertNil(CodexRolloutParser.goalCommand("<codex_internal_context source=\"goal\">\nContinue working toward the active thread goal."))
+        #expect(said("User set the goal: \"Ship it\"\nUser set goal status: \"active\".") == "/goal Ship it")
+        #expect(said("User set the goal: \"Fix the \"flaky\"\ntest\"\nUser set goal status: \"active\".") == ("/goal Fix the \"flaky\"\ntest"))
+        #expect(said("User set goal status: \"paused\".") == "/goal pause")
+        #expect(said("User set goal status: \"active\".") == "/goal resume")
+        #expect(said("User cleared the goal.") == "/goal clear")
+        #expect(CodexRolloutParser.goalCommand("<codex_internal_context source=\"goal\">\nContinue working toward the active thread goal.") == nil)
 
         // In the rollout: the user's row, where the context is not one.
         let line: [String: Any] = ["type": "response_item", "ordinal": 1,
@@ -144,14 +144,14 @@ final class CodexCommandTests: ServerTestCase {
                                        "text": "<codex_internal_context source=\"user_goal\">\nUser set the goal: \"Ship it\"\nUser set goal status: \"active\".\n</codex_internal_context>"]]]]
         let data = Data(String(decoding: try! JSONSerialization.data(withJSONObject: line), as: UTF8.self).utf8)
         let rows = TranscriptAssembler.rows(in: CodexRolloutParser().lines(in: data).compactMap(\.record))
-        XCTAssertEqual(rows.map(\.text), ["/goal Ship it"])
-        XCTAssertEqual(rows.first?.role, .user)
+        #expect(rows.map(\.text) == ["/goal Ship it"])
+        #expect((rows.first?.role) == .user)
     }
 
     /// Codex 0.156 writes a goal the user set only as an event (no "User
     /// set the goal" context); 0.162 writes both. Either way, one row: the
     /// user's command.
-    func testAGoalLoggedOnlyAsAnEventReadsBackOnce() {
+    @Test func testAGoalLoggedOnlyAsAnEventReadsBackOnce() {
         func rows(_ lines: [[String: Any]]) -> [TranscriptEntry] {
             let data = Data(lines.map { String(decoding: try! JSONSerialization.data(withJSONObject: $0), as: UTF8.self) }
                 .joined(separator: "\n").utf8)
@@ -175,16 +175,16 @@ final class CodexCommandTests: ServerTestCase {
                         event("Ship it", "complete", at: "2026-10-15T00:20:00.000Z"),
                         event("Then this", "active", at: "2026-10-15T00:30:00.000Z"),
                         ["timestamp": "2026-10-15T00:40:00.000Z", "type": "event_msg", "payload": ["type": "thread_goal_cleared", "threadId": "T"]]])
-        XCTAssertEqual(old.map(\.text), ["/goal Ship it", "/goal pause", "/goal resume", "/goal Then this", "/goal clear"])
-        XCTAssertTrue(old.allSatisfy { $0.role == .user })
+        #expect(old.map(\.text) == ["/goal Ship it", "/goal pause", "/goal resume", "/goal Then this", "/goal clear"])
+        #expect(old.allSatisfy { $0.role == .user })
 
         // 0.162: the context, then the same goal as an event: one row.
         let new = rows([context("<codex_internal_context source=\"user_goal\">\nUser set the goal: \"Ship it\"\nUser set goal status: \"active\".\n</codex_internal_context>", id: "g1"),
                         event("Ship it", "active", at: "2026-10-15T00:02:48.370Z"), continuation])
-        XCTAssertEqual(new.map(\.text), ["/goal Ship it"])
+        #expect(new.map(\.text) == ["/goal Ship it"])
     }
 
-    func testTheComposerOffersThemBeforeCodexHasRun() {
+    @Test func testTheComposerOffersThemBeforeCodexHasRun() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-codex-commands-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -193,6 +193,7 @@ final class CodexCommandTests: ServerTestCase {
         defer { server.stop() }
         let record = SessionRecord(info: SessionInfo(id: "C", agent: .codex, cwd: "/tmp", title: "Codex", created: 0),
                                    process: CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
-        XCTAssertEqual(server.commands(for: record).map(\.name), ["goal", "compact", "review", "btw", "fork", "branch"])
+        #expect((server.commands(for: record).map(\.name)) == ["goal", "compact", "review", "btw", "fork", "branch"])
     }
+}
 }

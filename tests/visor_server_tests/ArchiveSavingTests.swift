@@ -8,7 +8,7 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
 /// An agent that does nothing: the store is what is under test.
 @MainActor
@@ -31,12 +31,13 @@ private final class IdleAgent: AgentProcess {
     func end(within deadline: Duration) async {}
 }
 
-@MainActor
-final class ArchiveSavingTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class ArchiveSavingTests {
     private var server: VisorServer!
     private var root: URL!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-archive-saving-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -44,7 +45,7 @@ final class ArchiveSavingTests: ServerTestCase {
         server = VisorServer(port: 7991)
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
         try? FileManager.default.removeItem(at: root)
     }
@@ -55,40 +56,40 @@ final class ArchiveSavingTests: ServerTestCase {
 
     private var stored: String { (try? String(contentsOf: VisorServer.storeURL, encoding: .utf8)) ?? "" }
 
-    func testChangesAreWrittenOnceTheirDelayIsOverAllTogether() async throws {
+    @Test func testChangesAreWrittenOnceTheirDelayIsOverAllTogether() async throws {
         server.archiveSaveDelay = .milliseconds(200)
         let first = record("S", title: "First")
         server.sessions = [first]
         server.saveArchiveNow()
-        XCTAssertTrue(stored.contains("First"))
+        #expect(stored.contains("First"))
 
         first.info.title = "Second"
         server.saveArchive()
         first.info.title = "Third"
         server.saveArchive()
-        XCTAssertFalse(stored.contains("Third"), "not yet: it waits for the changes after it")
+        #expect(!stored.contains("Third"), "not yet: it waits for the changes after it")
         try await Task.sleep(for: .milliseconds(600))
-        XCTAssertTrue(stored.contains("Third"), "then written once, with the last of them")
-        XCTAssertFalse(server.archiveSavePending)
+        #expect(stored.contains("Third"), "then written once, with the last of them")
+        #expect(!server.archiveSavePending)
     }
 
-    func testWrittenAtOnceWhenItMustBeAndAWaitingWriteIsTakenWithIt() async throws {
+    @Test func testWrittenAtOnceWhenItMustBeAndAWaitingWriteIsTakenWithIt() async throws {
         server.archiveSaveDelay = .seconds(60)
         let first = record("S", title: "Waiting")
         server.sessions = [first]
         server.saveArchive()
-        XCTAssertFalse(stored.contains("Waiting"))
+        #expect(!stored.contains("Waiting"))
         server.saveArchiveNow()
-        XCTAssertTrue(stored.contains("Waiting"))
-        XCTAssertFalse(server.archiveSavePending, "nothing left waiting")
+        #expect(stored.contains("Waiting"))
+        #expect(!server.archiveSavePending, "nothing left waiting")
     }
 
-    func testTheCopyOfTheDayBeforeIsMadeOnceADay() throws {
+    @Test func testTheCopyOfTheDayBeforeIsMadeOnceADay() throws {
         let backup = root.appendingPathComponent("sessions.previous.json")
-        XCTAssertTrue(VisorServer.backupIsDue(backup), "none yet")
+        #expect(VisorServer.backupIsDue(backup), "none yet")
         try Data("[]".utf8).write(to: backup)
-        XCTAssertFalse(VisorServer.backupIsDue(backup), "just made")
-        XCTAssertTrue(VisorServer.backupIsDue(backup, now: Date().addingTimeInterval(25 * 60 * 60)), "a day on")
+        #expect(!VisorServer.backupIsDue(backup), "just made")
+        #expect(VisorServer.backupIsDue(backup, now: Date().addingTimeInterval(25 * 60 * 60)), "a day on")
 
         // Writes in a row: the copy is made by the first, and kept.
         let session = record("S", title: "One")
@@ -98,10 +99,11 @@ final class ArchiveSavingTests: ServerTestCase {
         session.info.title = "Two"
         server.saveArchiveNow()
         let copied = try String(contentsOf: backup, encoding: .utf8)
-        XCTAssertTrue(copied.contains("One"))
+        #expect(copied.contains("One"))
         session.info.title = "Three"
         server.saveArchiveNow()
-        XCTAssertTrue(try String(contentsOf: backup, encoding: .utf8).contains("One"), "not rewritten on the next write")
-        XCTAssertTrue(stored.contains("Three"))
+        #expect(try String(contentsOf: backup, encoding: .utf8).contains("One"), "not rewritten on the next write")
+        #expect(stored.contains("Three"))
     }
+}
 }

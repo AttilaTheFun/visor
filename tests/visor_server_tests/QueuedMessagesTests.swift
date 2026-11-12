@@ -8,7 +8,7 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
 /// An agent that writes down what it is sent and when it is stopped.
 @MainActor
@@ -37,11 +37,12 @@ private final class ScriptedAgent: AgentProcess {
     func end(within deadline: Duration) async {}
 }
 
-@MainActor
-final class QueuedMessagesTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class QueuedMessagesTests {
     private var server: VisorServer!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-queue-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -49,7 +50,7 @@ final class QueuedMessagesTests: ServerTestCase {
         server = VisorServer(port: 7983)
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
     }
 
@@ -60,84 +61,85 @@ final class QueuedMessagesTests: ServerTestCase {
         return record
     }
 
-    func testQueuedMessagesGoOverOneAtATimeWithAStopBetween() {
+    @Test func testQueuedMessagesGoOverOneAtATimeWithAStopBetween() {
         let agent = ScriptedAgent()
         let record = working(agent)
         for text in ["Check the logs", "/compact", "Then summarize"] { server.deliver(text, to: record) }
-        XCTAssertEqual(record.info.queued, ["Check the logs", "/compact", "Then summarize"], "held while it works")
-        XCTAssertTrue(agent.said.isEmpty)
+        #expect(record.info.queued == ["Check the logs", "/compact", "Then summarize"], "held while it works")
+        #expect(agent.said.isEmpty)
 
         // The turn ends (or Send Now stops it): the first goes, and its turn
         // is stopped since more wait.
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(agent.said, ["Check the logs", "stop"])
-        XCTAssertEqual(record.info.queued, ["/compact", "Then summarize"])
+        #expect(agent.said == ["Check the logs", "stop"])
+        #expect(record.info.queued == ["/compact", "Then summarize"])
 
         // The stopped turn ends: the command goes on its own, stopped too.
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(agent.said, ["Check the logs", "stop", "/compact", "stop"])
+        #expect(agent.said == ["Check the logs", "stop", "/compact", "stop"])
 
         // The last goes, and is answered: no stop after it.
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(agent.said, ["Check the logs", "stop", "/compact", "stop", "Then summarize"])
-        XCTAssertTrue(record.info.queued.isEmpty)
-        XCTAssertTrue(record.info.busy, "the last message's turn runs")
+        #expect(agent.said == ["Check the logs", "stop", "/compact", "stop", "Then summarize"])
+        #expect(record.info.queued.isEmpty)
+        #expect(record.info.busy, "the last message's turn runs")
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(agent.said.last, "Then summarize", "nothing more")
+        #expect(agent.said.last == "Then summarize", "nothing more")
     }
 
-    func testClearingTheGoalStopsTheTurnAndGoesFirst() {
+    @Test func testClearingTheGoalStopsTheTurnAndGoesFirst() {
         let agent = ScriptedAgent()
         let record = working(agent)
         server.deliver("Also update the docs", to: record)
-        XCTAssertTrue(agent.said.isEmpty, "a message waits; typing never interrupts")
+        #expect(agent.said.isEmpty, "a message waits; typing never interrupts")
         server.deliver("/goal clear", to: record)
-        XCTAssertEqual(record.info.queued, ["/goal clear", "Also update the docs"], "ahead of what waits")
-        XCTAssertEqual(agent.said, ["stop"], "the goal's turn is stopped now")
+        #expect(record.info.queued == ["/goal clear", "Also update the docs"], "ahead of what waits")
+        #expect(agent.said == ["stop"], "the goal's turn is stopped now")
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(agent.said, ["stop", "/goal clear", "stop"])
+        #expect(agent.said == ["stop", "/goal clear", "stop"])
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(agent.said, ["stop", "/goal clear", "stop", "Also update the docs"])
-        XCTAssertTrue(SessionRecord.clearsGoal(" /goal clear\n"))
-        XCTAssertFalse(SessionRecord.clearsGoal("/goal clearly better"))
+        #expect(agent.said == ["stop", "/goal clear", "stop", "Also update the docs"])
+        #expect(SessionRecord.clearsGoal(" /goal clear\n"))
+        #expect(!SessionRecord.clearsGoal("/goal clearly better"))
     }
 
     /// A session held while the agent before it goes keeps its queue, and
     /// nothing goes round: after a restart this was a loop that put each
     /// message back and saved the sessions file without end.
-    func testAHeldSessionKeepsItsQueueUntilReleased() {
+    @Test func testAHeldSessionKeepsItsQueueUntilReleased() {
         let agent = ScriptedAgent()
         let record = working(agent)
         for text in ["One", "Two"] { server.deliver(text, to: record) }
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(agent.said, ["One", "stop"])
+        #expect(agent.said == ["One", "stop"])
         record.held = true
         server.handle(.busy(false), from: record)
         server.deliverQueued(record)
         server.resumePending()
-        XCTAssertEqual(agent.said, ["One", "stop"], "nothing goes while held")
-        XCTAssertEqual(record.info.queued, ["Two"], "and nothing is lost or repeated")
+        #expect(agent.said == ["One", "stop"], "nothing goes while held")
+        #expect(record.info.queued == ["Two"], "and nothing is lost or repeated")
         server.release(record)
-        XCTAssertEqual(agent.said, ["One", "stop", "Two"])
-        XCTAssertTrue(record.info.queued.isEmpty)
+        #expect(agent.said == ["One", "stop", "Two"])
+        #expect(record.info.queued.isEmpty)
     }
 
-    func testOneQueuedMessageIsSimplySent() {
+    @Test func testOneQueuedMessageIsSimplySent() {
         let agent = ScriptedAgent()
         let record = working(agent)
         server.deliver("/compact", to: record)
         server.handle(.busy(false), from: record)
-        XCTAssertEqual(agent.said, ["/compact"])
+        #expect(agent.said == ["/compact"])
     }
 
-    func testACommandThatStartsNoTurnIsFollowedAtOnce() {
+    @Test func testACommandThatStartsNoTurnIsFollowedAtOnce() {
         let agent = ScriptedAgent()
         agent.commands = ["/goal Ship it"]
         let record = working(agent)
         for text in ["/goal Ship it", "What's left?"] { server.deliver(text, to: record) }
         server.handle(.busy(false), from: record)
         // No turn to stop after the command: the next goes straight after it.
-        XCTAssertEqual(agent.said, ["/goal Ship it", "What's left?"])
-        XCTAssertTrue(record.info.queued.isEmpty)
+        #expect(agent.said == ["/goal Ship it", "What's left?"])
+        #expect(record.info.queued.isEmpty)
     }
+}
 }

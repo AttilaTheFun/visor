@@ -9,7 +9,7 @@ import Foundation
 import XCTest
 
 @MainActor
-final class AppRelauncherTests: ServerTestCase {
+final class AppRelauncherTests: AppleServerTestCase {
     private var root: URL!
 
     override func setUp() async throws {

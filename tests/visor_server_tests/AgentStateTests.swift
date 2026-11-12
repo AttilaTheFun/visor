@@ -8,7 +8,7 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
 /// The agents a harness made, each writing down what it was asked.
 @MainActor
@@ -61,12 +61,13 @@ private final class LoggedHarness: AgentHarness {
     }
 }
 
-@MainActor
-final class AgentStateTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class AgentStateTests {
     private var server: VisorServer!
     private let agents = Agents()
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-agent-state-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -75,7 +76,7 @@ final class AgentStateTests: ServerTestCase {
         server.harnesses = AgentHarnesses([LoggedHarness(agents)])
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         server.stop()
     }
 
@@ -98,54 +99,54 @@ final class AgentStateTests: ServerTestCase {
         for _ in 0..<200 where record.info.agentState != state || record.held {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
-        XCTAssertEqual(record.info.agentState, state)
+        #expect(record.info.agentState == state)
     }
 
-    func testANewSessionsAgentRuns() {
-        XCTAssertEqual(session().info.agentState, .running)
+    @Test func testANewSessionsAgentRuns() {
+        #expect(session().info.agentState == .running)
     }
 
-    func testStoppedTheMessageWaitsAndStartingSendsIt() async throws {
+    @Test func testStoppedTheMessageWaitsAndStartingSendsIt() async throws {
         let record = session()
-        let first = try XCTUnwrap(agents.made.last)
+        let first = try #require(agents.made.last)
         act("stopAgent", on: record)
-        XCTAssertEqual(record.info.agentState, .stopping)
+        #expect(record.info.agentState == .stopping)
         try await settle(record, at: .stopped)
-        XCTAssertTrue(first.ended)
+        #expect(first.ended)
 
         server.deliver("Carry on", to: record)
-        XCTAssertEqual(record.info.queued, ["Carry on"], "kept while the agent is stopped")
-        let stopped = try XCTUnwrap(agents.made.last)
-        XCTAssertFalse(stopped.started)
+        #expect(record.info.queued == ["Carry on"], "kept while the agent is stopped")
+        let stopped = try #require(agents.made.last)
+        #expect(!stopped.started)
 
         // Neither stopped again nor restarted while stopped (an old
         // client's Restart starts it).
         act("stopAgent", on: record)
-        XCTAssertEqual(record.info.agentState, .stopped)
+        #expect(record.info.agentState == .stopped)
 
         act("startAgent", on: record)
-        XCTAssertEqual(record.info.agentState, .running)
-        XCTAssertTrue(stopped.started, "its process up at once")
-        XCTAssertEqual(stopped.said, ["Carry on"])
-        XCTAssertTrue(record.info.queued.isEmpty)
+        #expect(record.info.agentState == .running)
+        #expect(stopped.started, "its process up at once")
+        #expect(stopped.said == ["Carry on"])
+        #expect(record.info.queued.isEmpty)
     }
 
-    func testRestartEndsTheAgentAndStartsANewOne() async throws {
+    @Test func testRestartEndsTheAgentAndStartsANewOne() async throws {
         let record = session()
-        let first = try XCTUnwrap(agents.made.last)
+        let first = try #require(agents.made.last)
         act("startAgent", on: record)
-        XCTAssertEqual(agents.made.count, 1, "a running agent is not started again")
+        #expect(agents.made.count == 1, "a running agent is not started again")
 
         act("restartAgent", on: record)
-        XCTAssertEqual(record.info.agentState, .stopping)
+        #expect(record.info.agentState == .stopping)
         try await settle(record, at: .running)
-        XCTAssertTrue(first.ended)
-        let second = try XCTUnwrap(agents.made.last)
-        XCTAssertFalse(second === first)
-        XCTAssertTrue(second.started, "started at once, not by the next message")
+        #expect(first.ended)
+        let second = try #require(agents.made.last)
+        #expect(!(second === first))
+        #expect(second.started, "started at once, not by the next message")
     }
 
-    func testAStoppedAgentStaysStoppedThroughALaunch() async throws {
+    @Test func testAStoppedAgentStaysStoppedThroughALaunch() async throws {
         let record = session()
         act("stopAgent", on: record)
         try await settle(record, at: .stopped)
@@ -154,16 +155,17 @@ final class AgentStateTests: ServerTestCase {
         let again = VisorServer(port: 7989)
         again.harnesses = AgentHarnesses([LoggedHarness(agents)])
         again.loadSessions()
-        XCTAssertEqual(again.session("S")?.info.agentState, .stopped)
+        #expect((again.session("S")?.info.agentState) == .stopped)
         again.stop()
     }
 
-    func testArchivingStopsAndUnarchivingRuns() {
+    @Test func testArchivingStopsAndUnarchivingRuns() {
         let record = session()
         server.archive(record)
-        XCTAssertEqual(record.info.agentState, .stopped)
-        XCTAssertEqual(SessionInfo(json: record.info.json)?.agentState, .stopped, "told over the wire")
+        #expect(record.info.agentState == .stopped)
+        #expect((SessionInfo(json: record.info.json)?.agentState) == .stopped, "told over the wire")
         server.unarchive(record)
-        XCTAssertEqual(record.info.agentState, .running)
+        #expect(record.info.agentState == .running)
     }
+}
 }

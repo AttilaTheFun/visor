@@ -6,10 +6,12 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-@MainActor
-final class SignInTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class SignInTests {
+    init() { TestPlatform.install() }
+
     /// A stand-in for `claude auth login`: the page, then the prompt; a
     /// code of the right shape signs in.
     private func fakeClaude() throws -> String {
@@ -28,41 +30,42 @@ final class SignInTests: ServerTestCase {
         return path
     }
 
-    func testTheWordsThatStartIt() {
-        XCTAssertEqual(VisorServer.signInArguments("/login"), [])
-        XCTAssertEqual(VisorServer.signInArguments(" /login --console "), ["--console"])
-        XCTAssertNil(VisorServer.signInArguments("/loginx"))
-        XCTAssertNil(VisorServer.signInArguments("please /login"))
+    @Test func testTheWordsThatStartIt() {
+        #expect(VisorServer.signInArguments("/login") == [])
+        #expect(VisorServer.signInArguments(" /login --console ") == ["--console"])
+        #expect(VisorServer.signInArguments("/loginx") == nil)
+        #expect(VisorServer.signInArguments("please /login") == nil)
     }
 
-    func testThePageIsFoundAndTheCodeSignsIn() async throws {
+    @Test func testThePageIsFoundAndTheCodeSignsIn() async throws {
         let signIn = try ClaudeSignIn(claude: try fakeClaude(), arguments: [], environment: ProcessInfo.processInfo.environment)
         var page: String?
         var result: (Bool, String)?
         signIn.onURL = { page = $0 }
         signIn.onEnd = { result = ($0, $1) }
         for _ in 0..<100 where page == nil { try await Task.sleep(for: .milliseconds(50)) }
-        XCTAssertEqual(page, "https://claude.ai/oauth/authorize?code=true&state=s1")
-        XCTAssertEqual(signIn.url, page)
+        #expect(page == "https://claude.ai/oauth/authorize?code=true&state=s1")
+        #expect(signIn.url == page)
         signIn.submit(" abc#s1 \n")
         for _ in 0..<100 where result == nil { try await Task.sleep(for: .milliseconds(50)) }
-        XCTAssertEqual(result?.0, true)
-        XCTAssertEqual(result?.1, "Login successful.")
+        #expect((result?.0) == true)
+        #expect((result?.1) == "Login successful.")
     }
 
-    func testAWrongCodeSaysWhy() async throws {
+    @Test func testAWrongCodeSaysWhy() async throws {
         let signIn = try ClaudeSignIn(claude: try fakeClaude(), arguments: [], environment: ProcessInfo.processInfo.environment)
         var result: (Bool, String)?
         signIn.onEnd = { result = ($0, $1) }
         for _ in 0..<100 where signIn.url == nil { try await Task.sleep(for: .milliseconds(50)) }
         signIn.submit("nope")
         for _ in 0..<100 where result == nil { try await Task.sleep(for: .milliseconds(50)) }
-        XCTAssertEqual(result?.0, false)
-        XCTAssertEqual(result?.1, "Login failed: Invalid code")
+        #expect((result?.0) == false)
+        #expect((result?.1) == "Login failed: Invalid code")
     }
 
-    func testTerminalMarkupIsTakenOff() {
-        XCTAssertEqual(ClaudeSignIn.plain("\u{1B}[1mbold\u{1B}[0m \u{1B}]8;;https://x\u{07}link\u{1B}]8;;\u{07}"), "bold link")
-        XCTAssertNil(ClaudeSignIn.url(in: "visit: https://claude.ai/oauth/auth"), "not yet the whole address")
+    @Test func testTerminalMarkupIsTakenOff() {
+        #expect(ClaudeSignIn.plain("\u{1B}[1mbold\u{1B}[0m \u{1B}]8;;https://x\u{07}link\u{1B}]8;;\u{07}") == "bold link")
+        #expect(ClaudeSignIn.url(in: "visit: https://claude.ai/oauth/auth") == nil, "not yet the whole address")
     }
+}
 }

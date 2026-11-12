@@ -7,10 +7,13 @@ import MessageCache
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-@MainActor
-final class HeldRowsTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class HeldRowsTests {
+    init() { TestPlatform.install() }
+
     private func line(_ type: String, _ uuid: String, _ parent: String?, _ text: String, id: String? = nil) -> String {
         let content: Any = type == "assistant" ? [["type": "text", "text": text]] : text
         var message: [String: Any] = ["role": type, "content": content]
@@ -39,8 +42,8 @@ final class HeldRowsTests: ServerTestCase {
         for await event in indexer.events() {
             if case .loaded(let first) = event { loaded = first; break }
         }
-        let rows = try XCTUnwrap(loaded).rows
-        XCTAssertEqual(rows.count, 600)
+        let rows = try #require(loaded).rows
+        #expect(rows.count == 600)
         let record = SessionRecord(info: SessionInfo(id: "S", agent: .claude, cwd: "/tmp", title: "", created: 0),
                                    process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))
         record.indexer = indexer
@@ -48,56 +51,57 @@ final class HeldRowsTests: ServerTestCase {
         return (record, rows)
     }
 
-    func testTheOldestRowsGoWithoutBeingToldAsRemoved() async throws {
+    @Test func testTheOldestRowsGoWithoutBeingToldAsRemoved() async throws {
         let (record, rows) = try await longSession()
         let held = record.revision
         record.letGoOfOldRows()
-        XCTAssertEqual(record.entries.map(\.id), rows.suffix(SessionRecord.servedRows).map(\.id))
-        XCTAssertEqual(record.revision, held, "no change to the conversation")
-        XCTAssertTrue(record.moreBefore)
+        #expect(record.entries.map(\.id) == (rows.suffix(SessionRecord.servedRows).map(\.id)))
+        #expect(record.revision == held, "no change to the conversation")
+        #expect(record.moreBefore)
 
         // A client up to date: nothing to take, nothing removed.
         let current = record.transcriptEnvelope(since: held)
-        XCTAssertEqual(current.entries?.count, 0)
-        XCTAssertEqual(current.removed ?? [], [])
-        XCTAssertNil(current.reset)
+        #expect((current.entries?.count) == 0)
+        #expect((current.removed ?? []) == [])
+        #expect(current.reset == nil)
 
         // A client from before the rows let go of were stamped: the latest,
         // as a whole, after the row the first of them follows.
         let behind = record.transcriptEnvelope(since: held - 1)
-        XCTAssertEqual(behind.reset, true)
-        XCTAssertEqual(behind.entries?.map(\.id), rows.suffix(SessionRecord.servedRows).map(\.id))
-        XCTAssertEqual(behind.follows, rows[499].id)
-        XCTAssertEqual(behind.more, true)
+        #expect(behind.reset == true)
+        #expect((behind.entries?.map(\.id)) == (rows.suffix(SessionRecord.servedRows).map(\.id)))
+        #expect(behind.follows == (rows[499].id))
+        #expect(behind.more == true)
 
         // Before the first held: a page from the store.
         let page = await record.earlier(before: rows[500].id)
-        XCTAssertEqual(page.entries?.map(\.id), rows[400..<500].map(\.id))
-        XCTAssertEqual(page.more, true)
+        #expect((page.entries?.map(\.id)) == (rows[400..<500].map(\.id)))
+        #expect(page.more == true)
     }
 
-    func testNothingGoesWithinTheBoundOrWithoutAStore() async throws {
+    @Test func testNothingGoesWithinTheBoundOrWithoutAStore() async throws {
         let (record, rows) = try await longSession()
         let indexer = record.indexer
         record.indexer = nil
         record.letGoOfOldRows()
-        XCTAssertEqual(record.entries.count, 600, "only rows the store has go")
+        #expect(record.entries.count == 600, "only rows the store has go")
 
         record.indexer = indexer
         record.replaceEntriesForTesting(Array(rows.suffix(SessionRecord.heldRows)))
         record.letGoOfOldRows()
-        XCTAssertEqual(record.entries.count, SessionRecord.heldRows)
+        #expect(record.entries.count == SessionRecord.heldRows)
     }
 
-    func testWordsSentStillSettleAfterTheirEarlierCopiesGo() async throws {
+    @Test func testWordsSentStillSettleAfterTheirEarlierCopiesGo() async throws {
         let (record, rows) = try await longSession()
         // "Question 0" went once before; sent again, and written after the
         // first went.
         record.unwritten = [(text: "Question 0", seen: 1, orphaned: nil)]
         record.letGoOfOldRows()
-        XCTAssertEqual(record.unwritten.first?.seen, 0)
-        XCTAssertFalse(record.entries.contains { $0.id == rows[0].id })
+        #expect((record.unwritten.first?.seen) == 0)
+        #expect(!(record.entries.contains { $0.id == rows[0].id }))
         _ = record.take(fileRow: TranscriptEntry(id: "again", role: .user, text: "Question 0"))
-        XCTAssertTrue(record.unwritten.isEmpty, "the row written is the words sent")
+        #expect(record.unwritten.isEmpty, "the row written is the words sent")
     }
+}
 }

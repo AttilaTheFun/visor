@@ -8,7 +8,7 @@ import CVisorPOSIX
 import Foundation
 import Synchronization
 import VisorRunner
-import XCTest
+import Testing
 
 /// A server played here: it answers each connection with what it read,
 /// upper-cased, once the client has said all it will (its end read).
@@ -55,7 +55,7 @@ private final class FakeServer: Sendable {
     }
 }
 
-final class ClientProxyTests: XCTestCase {
+@Suite final class ClientProxyTests {
     private func front(to host: String, _ hostPort: Int) throws -> ClientProxy {
         for _ in 0..<20 {
             if let proxy = ClientProxy(front: .init(name: "co-tenant", port: Int.random(in: 20000...45000), host: host, hostPort: hostPort)) {
@@ -63,14 +63,14 @@ final class ClientProxyTests: XCTestCase {
                 return proxy
             }
         }
-        throw XCTSkip("no port for the front")
+        try Test.cancel("no port for the front")
     }
 
     /// Says `text` through the front at `address`, says it's done, and reads
     /// the answer to its end.
     private static func say(_ text: String, to address: String, port: Int) throws -> String {
         let connection = visor_connect_tcp(address, UInt16(port))
-        guard connection >= 0 else { throw XCTSkip("\(address) can't be reached here") }
+        guard connection >= 0 else { try Test.cancel("\(address) can't be reached here") }
         defer { close(connection) }
         let bytes = Array(text.utf8)
         _ = bytes.withUnsafeBytes { write(connection, $0.baseAddress, $0.count) }
@@ -85,30 +85,30 @@ final class ClientProxyTests: XCTestCase {
         return String(decoding: answer, as: UTF8.self)
     }
 
-    func testAConnectionGoesOnToTheServerAndItsAnswerComesBack() throws {
-        let server = try XCTUnwrap(FakeServer())
+    @Test func testAConnectionGoesOnToTheServerAndItsAnswerComesBack() throws {
+        let server = try #require(FakeServer())
         defer { server.stop() }
         let proxy = try front(to: "127.0.0.1", Int(server.port))
         defer { proxy.stop() }
-        XCTAssertEqual(try Self.say("hello over ipv4", to: "127.0.0.1", port: proxy.front.port), "HELLO OVER IPV4")
+        #expect((try Self.say("hello over ipv4", to: "127.0.0.1", port: proxy.front.port)) == "HELLO OVER IPV4")
         // Many at once, each its own.
         let answers = Mutex<[String]>([])
         DispatchQueue.concurrentPerform(iterations: 8) { index in
             let answer = (try? ClientProxyTests.say("client \(index)", to: "127.0.0.1", port: proxy.front.port)) ?? ""
             answers.withLock { $0.append(answer) }
         }
-        XCTAssertEqual(Set(answers.withLock { $0 }), Set((0..<8).map { "CLIENT \($0)" }))
+        #expect(Set(answers.withLock { $0 }) == (Set((0..<8).map { "CLIENT \($0)" })))
     }
 
-    func testIPv6ClientsComeToTheSamePort() throws {
-        let server = try XCTUnwrap(FakeServer())
+    @Test func testIPv6ClientsComeToTheSamePort() throws {
+        let server = try #require(FakeServer())
         defer { server.stop() }
         let proxy = try front(to: "127.0.0.1", Int(server.port))
         defer { proxy.stop() }
-        XCTAssertEqual(try Self.say("hello over ipv6", to: "::1", port: proxy.front.port), "HELLO OVER IPV6")
+        #expect((try Self.say("hello over ipv6", to: "::1", port: proxy.front.port)) == "HELLO OVER IPV6")
     }
 
-    func testAServerThatCantBeReachedEndsTheClientsConnection() throws {
+    @Test func testAServerThatCantBeReachedEndsTheClientsConnection() throws {
         // A port nothing listens on: one just let go. (Not a FakeServer
         // stopped at once: its accept thread could start after the stop, on
         // the descriptor number the front's listener is given next.)
@@ -124,7 +124,7 @@ final class ClientProxyTests: XCTestCase {
         let proxy = try front(to: "127.0.0.1", port)
         defer { proxy.stop() }
         let started = Date()
-        XCTAssertEqual(try Self.say("anyone?", to: "127.0.0.1", port: proxy.front.port), "")
-        XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+        #expect((try Self.say("anyone?", to: "127.0.0.1", port: proxy.front.port)) == "")
+        #expect((Date().timeIntervalSince(started)) < 5)
     }
 }

@@ -9,17 +9,20 @@ import Glibc
 import Darwin
 #endif
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-@MainActor
-final class ListenRetryTests: ServerTestCase {
-    func testATakenPortIsTriedAgain() async throws {
+extension ServerTests {
+@Suite @MainActor final class ListenRetryTests {
+    init() { TestPlatform.install() }
+
+    @Test func testATakenPortIsTriedAgain() async throws {
         #if canImport(Darwin)
         // The Network framework lets two listeners share a port
         // (allowLocalEndpointReuse) and says of one it can't have only later,
         // in its state: the retry is the POSIX listener's, where a server
         // that came up with no port was seen (Linux, the co-tenant).
-        throw XCTSkip("POSIX listening only")
+        try Test.cancel("POSIX listening only")
         #else
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-listen-tests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -29,17 +32,18 @@ final class ListenRetryTests: ServerTestCase {
         VisorServer.socketPathOverride = "/tmp/visor-listen-\(getpid()).sock"
         defer { VisorServer.socketPathOverride = nil }
 
-        let port = Self.freePort()
+        let port = ServerTestCase.freePort()
         let taken = try ServerPlatform.current.listening.listen(ListeningOptions(port: port)) { $0.close() }
         let server = VisorServer(port: port)
         defer { server.stop() }
         server.password = "pearl-grove"
-        XCTAssertFalse(server.listening, "the port is taken")
+        #expect(!server.listening, "the port is taken")
 
         taken.stop()
         for _ in 0..<60 where !server.listening { try await Task.sleep(for: .milliseconds(100)) }
-        XCTAssertTrue(server.listening, "listening once the port is free")
-        XCTAssertNil(server.lastError)
+        #expect(server.listening, "listening once the port is free")
+        #expect(server.lastError == nil)
         #endif
     }
+}
 }

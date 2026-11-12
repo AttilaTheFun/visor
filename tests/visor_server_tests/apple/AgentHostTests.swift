@@ -10,7 +10,7 @@ import VisorServerPOSIX
 import XCTest
 
 @MainActor
-final class AgentHostTests: ServerTestCase {
+final class AgentHostTests: AppleServerTestCase {
     private var hosting: POSIXAgentHosting!
     /// A short folder: a socket's path must fit in 104 bytes, and the
     /// tests' own temporary folder is longer than that.

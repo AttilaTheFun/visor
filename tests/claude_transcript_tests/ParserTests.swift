@@ -1,7 +1,8 @@
 import ClaudeTranscript
-import XCTest
+import Foundation
+import Testing
 
-final class ParserTests: XCTestCase {
+@Suite final class ParserTests {
     let lines = """
     {"type":"queue-operation","operation":"enqueue","uuid":"q1"}
     {"type":"user","uuid":"u1","message":{"role":"user","content":"Use the Bash tool to run sleep"}}
@@ -16,70 +17,69 @@ final class ParserTests: XCTestCase {
     not json at all
     """
 
-    func testRecords() {
+    @Test func testRecords() {
         let records = ClaudeTranscriptParser.records(in: Data(lines.utf8))
-        XCTAssertEqual(records.count, 6, "\(records)")
+        #expect(records.count == 6, "\(records)")
         guard records.count == 6 else { return }
-        XCTAssertEqual(records[0].kind, .user(text: "Use the Bash tool to run sleep", images: []))
+        #expect((records[0].kind) == .user(text: "Use the Bash tool to run sleep", images: []))
         if case .assistant(let id, let blocks, _, let model, let usage) = records[1].kind {
-            XCTAssertEqual(id, "msg_1"); XCTAssertEqual(blocks, [.thinking]); XCTAssertEqual(model, "claude-fable-5-1")
-            XCTAssertEqual(usage?.contextUsed, 2103)
-        } else { XCTFail("\(records[1])") }
+            #expect(id == "msg_1"); #expect(blocks == [.thinking]); #expect(model == "claude-fable-5-1")
+            #expect((usage?.contextUsed) == 2103)
+        } else { Issue.record("\(records[1])") }
         if case .assistant(let id, let blocks, let stop, _, _) = records[2].kind {
-            XCTAssertEqual(id, "msg_1"); XCTAssertEqual(stop, "tool_use")
-            XCTAssertEqual(blocks, [.toolUse(id: "toolu_1", name: "Bash", inputJSON: "{\"command\":\"sleep 4\"}")])
-        } else { XCTFail("\(records[2])") }
+            #expect(id == "msg_1"); #expect(stop == "tool_use")
+            #expect(blocks == [.toolUse(id: "toolu_1", name: "Bash", inputJSON: "{\"command\":\"sleep 4\"}")])
+        } else { Issue.record("\(records[2])") }
         if case .toolResult(let toolUseID, let text, let images, let isError) = records[3].kind {
-            XCTAssertEqual(toolUseID, "toolu_1"); XCTAssertEqual(text, "probe-done"); XCTAssertFalse(isError)
-            XCTAssertEqual(images, [ClaudeImage(base64: "iVBORw0KGgo=", mediaType: "image/png")])
-        } else { XCTFail("\(records[3])") }
-        XCTAssertEqual(records[4].kind, .assistant(messageID: "msg_2", blocks: [.text("finished")], stopReason: "end_turn", model: nil, usage: nil))
-        XCTAssertEqual(records[5].kind, .title("probe title"))
+            #expect(toolUseID == "toolu_1"); #expect(text == "probe-done"); #expect(!isError)
+            #expect(images == [ClaudeImage(base64: "iVBORw0KGgo=", mediaType: "image/png")])
+        } else { Issue.record("\(records[3])") }
+        #expect((records[4].kind) == (.assistant(messageID: "msg_2", blocks: [.text("finished")], stopReason: "end_turn", model: nil, usage: nil)))
+        #expect((records[5].kind) == .title("probe title"))
     }
 
     /// The answers to the agent's questions (AskUserQuestion) are the
     /// user's, in the order asked, read from what Claude Code keeps beside
     /// the tool's result.
-    func testAnswersToTheAgentsQuestionsAreTheUsers() {
+    @Test func testAnswersToTheAgentsQuestionsAreTheUsers() {
         let line = #"{"type":"user","uuid":"u9","toolUseResult":{"questions":[{"question":"Which color?","header":"Color","options":[]},{"question":"How big?","header":"Size","options":[]}],"answers":{"How big?":"Large","Which color?":"Blue"}},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_9","content":"Your questions have been answered"}]}}"#
         let records = ClaudeTranscriptParser.records(in: Data(line.utf8))
-        XCTAssertEqual(records.first?.kind, .answers([ClaudeAnswer(question: "Which color?", answer: "Blue"),
-                                                      ClaudeAnswer(question: "How big?", answer: "Large")]))
-        XCTAssertNil(ClaudeTranscriptParser.answers(["stdout": "x"]), "another tool's result")
+        #expect((records.first?.kind) == (.answers([ClaudeAnswer(question: "Which color?", answer: "Blue"),
+                                                      ClaudeAnswer(question: "How big?", answer: "Large")])))
+        #expect(ClaudeTranscriptParser.answers(["stdout": "x"]) == nil, "another tool's result")
     }
 
-    func testAMessageSentMidTurnIsTheUsers() {
+    @Test func testAMessageSentMidTurnIsTheUsers() {
         let line = #"{"type":"attachment","uuid":"m1","parentUuid":"a3","attachment":{"type":"queued_command","prompt":[{"text":"It was a dialog I approved","type":"text"}],"commandMode":"prompt"}}"#
         let parsed = ClaudeTranscriptParser.lines(in: Data(line.utf8))
-        XCTAssertEqual(parsed.first?.record?.kind, .user(text: "It was a dialog I approved", images: []))
-        XCTAssertEqual(parsed.first?.isPrompt, true)
+        #expect((parsed.first?.record?.kind) == .user(text: "It was a dialog I approved", images: []))
+        #expect((parsed.first?.isPrompt) == true)
         // Other attachments are not conversation.
-        XCTAssertNil(ClaudeTranscriptParser.lines(in: Data(#"{"type":"attachment","uuid":"x","attachment":{"type":"file"}}"#.utf8)).first?.record)
+        #expect((ClaudeTranscriptParser.lines(in: Data(#"{"type":"attachment","uuid":"x","attachment":{"type":"file"}}"#.utf8)).first?.record) == nil)
     }
 
     /// A goal (`/goal`): the command as the user typed it, the goal set,
     /// and the goal met with why — as Claude Code records them.
-    func testAGoalIsTheUsersCommandThenItsState() {
+    @Test func testAGoalIsTheUsersCommandThenItsState() {
         let command = #"{"type":"user","uuid":"g1","parentUuid":"a1","message":{"role":"user","content":"<command-name>/goal</command-name>\n            <command-message>goal</command-message>\n            <command-args>No jumps when sending</command-args>"}}"#
         let set = #"{"type":"attachment","uuid":"g2","parentUuid":"g1","attachment":{"type":"goal_status","met":false,"sentinel":true,"condition":"No jumps when sending"}}"#
         let met = #"{"type":"attachment","uuid":"g3","parentUuid":"a9","attachment":{"type":"goal_status","met":true,"condition":"No jumps when sending","reason":"Recorded without a jump."}}"#
         let parsed = ClaudeTranscriptParser.lines(in: Data([command, set, met].joined(separator: "\n").utf8))
-        XCTAssertEqual(parsed.map(\.record?.kind), [
+        #expect(parsed.map(\.record?.kind) == ([
             .user(text: "/goal No jumps when sending", images: []),
             .goal(condition: "No jumps when sending", met: false, reason: nil),
             .goal(condition: "No jumps when sending", met: true, reason: "Recorded without a jump."),
-        ])
-        XCTAssertEqual(parsed.first?.isPrompt, true)
+        ]))
+        #expect((parsed.first?.isPrompt) == true)
         // A command without arguments.
-        XCTAssertEqual(ClaudeTranscriptParser.command("<command-name>/compact</command-name><command-args></command-args>"), "/compact")
-        XCTAssertNil(ClaudeTranscriptParser.command("Plain words"))
+        #expect(ClaudeTranscriptParser.command("<command-name>/compact</command-name><command-args></command-args>") == "/compact")
+        #expect(ClaudeTranscriptParser.command("Plain words") == nil)
         // An earlier Claude Code's notice of the goal, in the user's place.
         let notice = #"{"type":"user","uuid":"n1","message":{"role":"user","content":"A session-scoped Stop hook is now active with condition: \"In convo, messages sync\""}}"#
-        XCTAssertEqual(ClaudeTranscriptParser.lines(in: Data(notice.utf8)).first?.record?.kind,
-                       .goal(condition: "In convo, messages sync", met: false, reason: nil))
+        #expect((ClaudeTranscriptParser.lines(in: Data(notice.utf8)).first?.record?.kind) == .goal(condition: "In convo, messages sync", met: false, reason: nil))
     }
 
-    func testTheTailOfALargeConversationIsItsLastWholeLines() throws {
+    @Test func testTheTailOfALargeConversationIsItsLastWholeLines() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("tail-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: file) }
         var text = ""
@@ -88,40 +88,37 @@ final class ParserTests: XCTestCase {
         }
         try Data(text.utf8).write(to: file)
         let whole = ClaudeTranscriptParser.lines(contentsOf: file)
-        XCTAssertEqual(whole.count, 1_000)
+        #expect(whole.count == 1_000)
         // About the last 50 lines' worth of bytes: only whole lines, ending
         // with the file's last.
         let tail = ClaudeTranscriptParser.tailLines(contentsOf: file, bytes: 50 * 90)
-        XCTAssertGreaterThan(tail.count, 40)
-        XCTAssertLessThan(tail.count, 60)
-        XCTAssertEqual(tail.map(\.uuid).last, whole.map(\.uuid).last)
-        XCTAssertEqual(Array(whole.suffix(tail.count)).map(\.uuid), tail.map(\.uuid), "the same lines as the end of the whole")
-        XCTAssertEqual(ClaudeTranscriptParser.tailLines(contentsOf: file, bytes: 10 << 20).count, 1_000, "a small file is read whole")
+        #expect(tail.count > 40)
+        #expect(tail.count < 60)
+        #expect(tail.map(\.uuid).last == whole.map(\.uuid).last)
+        #expect((Array(whole.suffix(tail.count)).map(\.uuid)) == tail.map(\.uuid), "the same lines as the end of the whole")
+        #expect(ClaudeTranscriptParser.tailLines(contentsOf: file, bytes: 10 << 20).count == 1_000, "a small file is read whole")
     }
 
-    func testProjectDirectoryName() {
-        XCTAssertEqual(ClaudeSessionFiles.projectDirectoryName(for: "/Users/me/Developer/my_app"), "-Users-me-Developer-my-app")
+    @Test func testProjectDirectoryName() {
+        #expect(ClaudeSessionFiles.projectDirectoryName(for: "/Users/me/Developer/my_app") == "-Users-me-Developer-my-app")
         // A symlinked folder is named by where it really is.
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("link-\(UUID().uuidString)")
         let real = base.appendingPathComponent("real_folder")
         let link = base.appendingPathComponent("alias")
         try? FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
         try? FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
-        XCTAssertEqual(ClaudeSessionFiles.projectDirectoryName(for: link.path),
-                       ClaudeSessionFiles.projectDirectoryName(for: real.path))
-        XCTAssertTrue(ClaudeSessionFiles.projectDirectoryName(for: link.path).hasSuffix("-real-folder"))
+        #expect(ClaudeSessionFiles.projectDirectoryName(for: link.path) == ClaudeSessionFiles.projectDirectoryName(for: real.path))
+        #expect(ClaudeSessionFiles.projectDirectoryName(for: link.path).hasSuffix("-real-folder"))
     }
 
-    func testClaudesFolderIsItsConfigDirWhenSet() {
+    @Test func testClaudesFolderIsItsConfigDirWhenSet() {
         let home = URL(fileURLWithPath: "/Users/me")
-        XCTAssertEqual(ClaudeSessionFiles.configDirectory(home: home, environment: [:]).path, "/Users/me/.claude")
-        XCTAssertEqual(ClaudeSessionFiles.configDirectory(home: home, environment: ["CLAUDE_CONFIG_DIR": ""]).path,
-                       "/Users/me/.claude")
-        XCTAssertEqual(ClaudeSessionFiles.configDirectory(home: home, environment: ["CLAUDE_CONFIG_DIR": "/srv/claude"]).path,
-                       "/srv/claude")
+        #expect(ClaudeSessionFiles.configDirectory(home: home, environment: [:]).path == "/Users/me/.claude")
+        #expect(ClaudeSessionFiles.configDirectory(home: home, environment: ["CLAUDE_CONFIG_DIR": ""]).path == "/Users/me/.claude")
+        #expect(ClaudeSessionFiles.configDirectory(home: home, environment: ["CLAUDE_CONFIG_DIR": "/srv/claude"]).path == "/srv/claude")
     }
 
-    func testTailFollowsAppends() async throws {
+    @Test func testTailFollowsAppends() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("tail-\(UUID().uuidString).jsonl")
         try "".write(to: url, atomically: true, encoding: .utf8)
         let handle = try FileHandle(forWritingTo: url)
@@ -140,12 +137,12 @@ final class ParserTests: XCTestCase {
             if got.count == 2 { break }
         }
         try await writing.value
-        XCTAssertEqual(got.map(\.uuid), ["u1", "u2"])
-        XCTAssertEqual(got.last?.kind, .user(text: "two", images: []))
-        XCTAssertEqual(position, try handle.seekToEnd(), "the place kept is the end of the last whole line")
+        #expect(got.map(\.uuid) == ["u1", "u2"])
+        #expect((got.last?.kind) == .user(text: "two", images: []))
+        #expect(position == (try handle.seekToEnd()), "the place kept is the end of the last whole line")
     }
 
-    func testTailWaitsForAFileAndFollowsItsPathWhenItIsReplaced() async throws {
+    @Test func testTailWaitsForAFileAndFollowsItsPathWhenItIsReplaced() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("tail-\(UUID().uuidString).jsonl")
         let writing = Task {
             try await Task.sleep(for: .milliseconds(400))
@@ -165,7 +162,7 @@ final class ParserTests: XCTestCase {
             if lines.contains("third") { break }
         }
         try await writing.value
-        XCTAssertEqual(lines, ["first", "second", "third"])
+        #expect(lines == ["first", "second", "third"])
     }
 
     // A file as two agents leave it: APPLE, then CHERRY from one and
@@ -190,18 +187,18 @@ final class ParserTests: XCTestCase {
         return ClaudeTranscriptParser.lines(in: Data(text.utf8))
     }
 
-    func testBranchFollowsTheLastLine() {
+    @Test func testBranchFollowsTheLastLine() {
         let branch = ClaudeBranch.current(of: forkedLines())
-        XCTAssertEqual(branch.records.map(\.uuid), ["p1", "a1", "p3", "a3"])
-        XCTAssertEqual(branch.abandoned, ["p2", "a2"])
-        XCTAssertEqual(branch.abandonedPrompts, 1)
-        XCTAssertEqual(branch.lastPrompt, "p3")
+        #expect(branch.records.map(\.uuid) == ["p1", "a1", "p3", "a3"])
+        #expect(branch.abandoned == ["p2", "a2"])
+        #expect(branch.abandonedPrompts == 1)
+        #expect(branch.lastPrompt == "p3")
         // Bookkeeping lines count as members: the next line follows one.
-        XCTAssertTrue(branch.members.contains("m3"))
-        XCTAssertFalse(branch.members.contains("a2"))
+        #expect(branch.members.contains("m3"))
+        #expect(!branch.members.contains("a2"))
     }
 
-    func testBranchKeepsSiblingToolLines() {
+    @Test func testBranchKeepsSiblingToolLines() {
         // Two tools called at once: the second call and both results sit
         // beside the chain, and none of them is a fork.
         let text = """
@@ -213,15 +210,15 @@ final class ParserTests: XCTestCase {
         {"type":"assistant","uuid":"a3","parentUuid":"r2","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}
         """
         let branch = ClaudeBranch.current(of: ClaudeTranscriptParser.lines(in: Data(text.utf8)))
-        XCTAssertTrue(branch.abandoned.isEmpty)
-        XCTAssertEqual(branch.records.count, 6)
-        XCTAssertEqual(branch.lastPrompt, "p1")
+        #expect(branch.abandoned.isEmpty)
+        #expect(branch.records.count == 6)
+        #expect(branch.lastPrompt == "p1")
     }
     private func nodes(_ lines: [ClaudeLine]) -> [ClaudeBranch.Node] {
         lines.map { ClaudeBranch.Node(uuid: $0.uuid, parentUuid: $0.parentUuid, isPrompt: $0.isPrompt, isMessage: $0.isMessage) }
     }
 
-    func testALineBesideAnOlderMessageDecidesNothing() {
+    @Test func testALineBesideAnOlderMessageDecidesNothing() {
         // Claude Code writes attachments between messages, and one may
         // hang off an older message: the newest message decides the
         // branch, not the last line.
@@ -233,27 +230,27 @@ final class ParserTests: XCTestCase {
         {"type":"attachment","uuid":"x","parentUuid":"a1","attachment":{"type":"deferred_tools_record"}}
         """
         let branch = ClaudeBranch.current(of: ClaudeTranscriptParser.lines(in: Data(text.utf8)))
-        XCTAssertTrue(branch.abandoned.isEmpty)
-        XCTAssertEqual(branch.lastPrompt, "p2")
+        #expect(branch.abandoned.isEmpty)
+        #expect(branch.lastPrompt == "p2")
     }
 
-    func testAHeadKeepsToItsBranchWhenTheFileGoesOnElsewhere() {
+    @Test func testAHeadKeepsToItsBranchWhenTheFileGoesOnElsewhere() {
         // Visor's conversation is APPLE then CHERRY (its head, p2); another
         // agent then wrote BANANA from APPLE, last.
         let kept = ClaudeBranch.current(nodes: nodes(forkedLines()), head: "p2")
-        XCTAssertEqual(kept.abandoned, ["p3", "m3", "a3"])
-        XCTAssertEqual(kept.head, "p2")
-        XCTAssertEqual(kept.leaf, "a2", "where its agent resumes")
-        XCTAssertTrue(kept.wentOnElsewhere)
+        #expect(kept.abandoned == ["p3", "m3", "a3"])
+        #expect(kept.head == "p2")
+        #expect(kept.leaf == "a2", "where its agent resumes")
+        #expect(kept.wentOnElsewhere)
         // With no head, the newest message decides, as Claude Code's
         // own resume would.
         let plain = ClaudeBranch.current(nodes: nodes(forkedLines()))
-        XCTAssertEqual(plain.head, "p3")
-        XCTAssertEqual(plain.leaf, "a3")
-        XCTAssertFalse(plain.wentOnElsewhere)
+        #expect(plain.head == "p3")
+        #expect(plain.leaf == "a3")
+        #expect(!plain.wentOnElsewhere)
     }
 
-    func testAHeadFollowsWhatCarriesOnFromIt() {
+    @Test func testAHeadFollowsWhatCarriesOnFromIt() {
         // Two tools at once, then a turn from beside the first result (a
         // terminal resuming the same conversation): all of it carries on
         // from the head's turn.
@@ -268,9 +265,9 @@ final class ParserTests: XCTestCase {
         {"type":"assistant","uuid":"a4","parentUuid":"p2","message":{"role":"assistant","content":[{"type":"text","text":"then"}]}}
         """
         let shape = ClaudeBranch.current(nodes: nodes(ClaudeTranscriptParser.lines(in: Data(text.utf8))), head: "p1")
-        XCTAssertTrue(shape.abandoned.isEmpty)
-        XCTAssertEqual(shape.head, "p2")
-        XCTAssertEqual(shape.leaf, "a4")
-        XCTAssertFalse(shape.wentOnElsewhere)
+        #expect(shape.abandoned.isEmpty)
+        #expect(shape.head == "p2")
+        #expect(shape.leaf == "a4")
+        #expect(!shape.wentOnElsewhere)
     }
 }

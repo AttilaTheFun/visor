@@ -5,22 +5,24 @@
 import Foundation
 @testable import VisorServer
 import VisorSystem
-import XCTest
+import Testing
 
-final class HostFoldersTests: XCTestCase {
-    func testTheHomeFolderIsTheOneGiven() {
+extension ServerTests {
+@Suite final class HostFoldersTests {
+    @Test func testTheHomeFolderIsTheOneGiven() {
         let given = ["VISOR_HOME_FOLDER": "/work/projects"]
-        XCTAssertEqual(HostFolders.home(given), "/work/projects")
-        XCTAssertEqual(HostFolders.resolve("", environment: given), "/work/projects")
-        XCTAssertEqual(HostFolders.resolve("~", environment: given), "/work/projects")
-        XCTAssertEqual(HostFolders.resolve("~/code", environment: given), (NSHomeDirectory() as NSString).appendingPathComponent("code"))
-        XCTAssertEqual(HostFolders.resolve("/tmp/x", environment: given), "/tmp/x")
+        #expect(HostFolders.home(given) == "/work/projects")
+        #expect(HostFolders.resolve("", environment: given) == "/work/projects")
+        #expect(HostFolders.resolve("~", environment: given) == "/work/projects")
+        #expect(HostFolders.resolve("~/code", environment: given) == ((NSHomeDirectory() as NSString).appendingPathComponent("code")))
+        #expect(HostFolders.resolve("/tmp/x", environment: given) == "/tmp/x")
     }
 
-    func testWithoutItTheHomeFolderIsTheUsers() {
-        XCTAssertEqual(HostFolders.home([:]), NSHomeDirectory())
-        XCTAssertEqual(HostFolders.resolve("", environment: [:]), NSHomeDirectory())
-        XCTAssertEqual(HostFolders.resolve("~", environment: [:]), NSHomeDirectory())
-        XCTAssertEqual(HostFolders.home(["VISOR_HOME_FOLDER": "~/sandbox"]), (NSHomeDirectory() as NSString).appendingPathComponent("sandbox"))
+    @Test func testWithoutItTheHomeFolderIsTheUsers() {
+        #expect(HostFolders.home([:]) == NSHomeDirectory())
+        #expect(HostFolders.resolve("", environment: [:]) == NSHomeDirectory())
+        #expect(HostFolders.resolve("~", environment: [:]) == NSHomeDirectory())
+        #expect(HostFolders.home(["VISOR_HOME_FOLDER": "~/sandbox"]) == ((NSHomeDirectory() as NSString).appendingPathComponent("sandbox")))
     }
+}
 }

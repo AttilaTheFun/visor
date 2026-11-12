@@ -1,0 +1,21 @@
+load("@rules_swift//swift:swift.bzl", "swift_test")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# The driver's job queue and the native runner's driven processes.
+swift_test(
+    name = "visor_driver_tests",
+    copts = STRICT_SWIFT,
+    srcs = glob(["*.swift"]),
+    module_name = "VisorDriverTests",
+    # The server's `package` members are its to use, as SwiftPM's package.
+    package_name = "visor",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_agent",
+        "//libraries/visor_driver",
+        "//libraries/visor_native_runner",
+        "//libraries/visor_protocol",
+        "//libraries/visor_server",
+        "@swiftpkg_agent_protocol//:AgentProtocol",
+    ],
+)

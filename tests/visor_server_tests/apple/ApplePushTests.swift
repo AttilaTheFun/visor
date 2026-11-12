@@ -9,7 +9,7 @@ import VisorServerApple
 import XCTest
 
 @MainActor
-final class ApplePushSigningTests: ServerTestCase {
+final class ApplePushSigningTests: AppleServerTestCase {
     func testTheSigningTokenVerifies() throws {
         let key = P256.Signing.PrivateKey()
         let jwt = try APNsSender().jwt(for: APNsKey(pem: key.pemRepresentation, keyID: "ABCDEFGHIJ", teamID: "TEAMTEAM12"),
@@ -31,13 +31,13 @@ final class ApplePushSigningTests: ServerTestCase {
 /// The APNs key can be set over the REST side by whoever is let in, and
 /// is never answered back.
 @MainActor
-final class PushKeyRouteTests: ServerTestCase {
+final class PushKeyRouteTests: AppleServerTestCase {
     func testTheKeyIsSetOverREST() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-pushkey-" + UUID().uuidString)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
-        let server = VisorServer(port: Self.freePort())
+        let server = VisorServer(port: ServerTestCase.freePort())
         server.password = "pw"
         defer { server.stop() }
         func post(_ path: String, _ body: String, bearer: String = "pw") -> HTTPResponse {

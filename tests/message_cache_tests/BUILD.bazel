@@ -5,7 +5,6 @@ swift_test(
     name = "message_cache_tests",
     copts = STRICT_SWIFT,
     srcs = glob(["*.swift"]),
-    target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//libraries/message_cache",
         "//libraries/visor_protocol",

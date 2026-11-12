@@ -8,7 +8,7 @@ import CVisorPOSIX
 import Foundation
 import Synchronization
 import VisorRunner
-import XCTest
+import Testing
 
 /// A signature the test can tell: the message's length, 64 times, and how
 /// many were made.
@@ -32,7 +32,7 @@ private final class FakeAPNs: Sendable {
     }
 }
 
-final class APNsProxyTests: XCTestCase {
+@Suite final class APNsProxyTests {
     private let pem = "-----BEGIN PRIVATE KEY-----\nMIGT\n-----END PRIVATE KEY-----"
 
     private func proxy(key: Bool = true) -> (APNsProxy, FakeAPNs, FakeSigning) {
@@ -54,10 +54,10 @@ final class APNsProxyTests: XCTestCase {
                 return (proxy, port)
             }
         }
-        throw XCTSkip("no port for the proxy")
+        try Test.cancel("no port for the proxy")
     }
 
-    func testAPushGoesOnToAPNsSignedWithTheKeyKeptHere() throws {
+    @Test func testAPushGoesOnToAPNsSignedWithTheKeyKeptHere() throws {
         let (pushes, apns, signing) = proxy()
         apns.answer.withLock { $0 = APNsProxy.Answer(status: 410, body: Data(#"{"reason":"Unregistered"}"#.utf8)) }
         let (listener, port) = try listening(pushes)
@@ -66,58 +66,57 @@ final class APNsProxyTests: XCTestCase {
         let answered = try curl(["-X", "POST", "-H", "X-Visor-Proxy: server-token", "-H", "apns-topic: com.example.app",
                                  "-H", "apns-push-type: alert", "-H", "apns-priority: 10", "-H", "X-Other: no",
                                  "--data-binary", #"{"aps":{}}"#, "http://127.0.0.1:\(port)/apns/api.push.apple.com/3/device/ab12"])
-        XCTAssertEqual(answered.status, "410", "APNs's answer, as it came")
-        XCTAssertEqual(answered.body, #"{"reason":"Unregistered"}"#)
-        let sent = try XCTUnwrap(apns.sent.withLock { $0.first })
-        XCTAssertEqual(sent.url, "https://api.push.apple.com/3/device/ab12")
-        XCTAssertEqual(sent.body, Data(#"{"aps":{}}"#.utf8))
-        XCTAssertEqual(Set(sent.headers.keys), ["apns-topic", "apns-push-type", "apns-priority", "authorization"],
-                       "APNs's headers and the signature: not the server's token, nor anything else")
+        #expect(answered.status == "410", "APNs's answer, as it came")
+        #expect(answered.body == (#"{"reason":"Unregistered"}"#))
+        let sent = try #require(apns.sent.withLock { $0.first })
+        #expect(sent.url == "https://api.push.apple.com/3/device/ab12")
+        #expect(sent.body == Data(#"{"aps":{}}"#.utf8))
+        #expect(Set(sent.headers.keys) == ["apns-topic", "apns-push-type", "apns-priority", "authorization"], "APNs's headers and the signature: not the server's token, nor anything else")
         // The token APNs takes: ES256 with the key's id, from its team.
-        let jwt = try XCTUnwrap(sent.headers["authorization"]?.dropFirst("bearer ".count))
+        let jwt = try #require(sent.headers["authorization"]?.dropFirst("bearer ".count))
         let parts = jwt.split(separator: ".").map(String.init)
-        XCTAssertEqual(parts.count, 3)
-        XCTAssertEqual(try decoded(parts[0]) as? [String: String], ["alg": "ES256", "kid": "ABCDEFGHIJ"])
-        XCTAssertEqual(try decoded(parts[1])["iss"] as? String, "TEAM123456")
+        #expect(parts.count == 3)
+        #expect((try decoded(parts[0]) as? [String: String]) == ["alg": "ES256", "kid": "ABCDEFGHIJ"])
+        #expect((try decoded(parts[1])["iss"] as? String) == "TEAM123456")
 
         // Another push: the same token, not signed again.
         _ = try curl(["-X", "POST", "-H", "X-Visor-Proxy: server-token", "--data-binary", "{}",
                       "http://127.0.0.1:\(port)/apns/api.sandbox.push.apple.com/3/device/cd34"])
-        XCTAssertEqual(apns.sent.withLock { $0.map(\.url) }.last, "https://api.sandbox.push.apple.com/3/device/cd34")
-        XCTAssertEqual(signing.made.withLock { $0 }, 1)
+        #expect((apns.sent.withLock { $0.map(\.url) }.last) == "https://api.sandbox.push.apple.com/3/device/cd34")
+        #expect((signing.made.withLock { $0 }) == 1)
     }
 
-    func testOnlyAPushToADeviceAtAPNsGetsThrough() throws {
+    @Test func testOnlyAPushToADeviceAtAPNsGetsThrough() throws {
         let (pushes, apns, _) = proxy()
         let (listener, port) = try listening(pushes)
         defer { listener.stop() }
         func status(_ path: String, token: String = "server-token", method: String = "POST") throws -> String {
             try curl(["-X", method, "-H", "X-Visor-Proxy: \(token)", "--data-binary", "{}", "http://127.0.0.1:\(port)\(path)"]).status
         }
-        XCTAssertEqual(try status("/apns/api.push.apple.com/3/device/ab12", token: "other"), "401")
-        XCTAssertEqual(try status("/apns/example.com/3/device/ab12"), "400", "APNs alone")
-        XCTAssertEqual(try status("/apns/api.push.apple.com/3/device/not-hex"), "400")
-        XCTAssertEqual(try status("/apns/api.push.apple.com/3/device/ab12/more"), "400")
-        XCTAssertEqual(try status("/apns/api.push.apple.com/3/device/ab12", method: "GET"), "405")
-        XCTAssertTrue(apns.sent.withLock { $0.isEmpty })
+        #expect((try status("/apns/api.push.apple.com/3/device/ab12", token: "other")) == "401")
+        #expect((try status("/apns/example.com/3/device/ab12")) == "400", "APNs alone")
+        #expect((try status("/apns/api.push.apple.com/3/device/not-hex")) == "400")
+        #expect((try status("/apns/api.push.apple.com/3/device/ab12/more")) == "400")
+        #expect((try status("/apns/api.push.apple.com/3/device/ab12", method: "GET")) == "405")
+        #expect(apns.sent.withLock { $0.isEmpty })
     }
 
-    func testWithoutAKeyNothingGoesOut() throws {
+    @Test func testWithoutAKeyNothingGoesOut() throws {
         let (pushes, apns, _) = proxy(key: false)
-        XCTAssertFalse(pushes.hasKey)
+        #expect(!pushes.hasKey)
         let (listener, port) = try listening(pushes)
         defer { listener.stop() }
         let answered = try curl(["-X", "POST", "-H", "X-Visor-Proxy: server-token", "--data-binary", "{}",
                                  "http://127.0.0.1:\(port)/apns/api.push.apple.com/3/device/ab12"])
-        XCTAssertEqual(answered.status, "503")
-        XCTAssertEqual(answered.body, #"{"reason":"NoKey"}"#)
-        XCTAssertTrue(apns.sent.withLock { $0.isEmpty })
+        #expect(answered.status == "503")
+        #expect(answered.body == (#"{"reason":"NoKey"}"#))
+        #expect(apns.sent.withLock { $0.isEmpty })
     }
 
     private func decoded(_ part: String) throws -> [String: Any] {
         var base64 = part.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         while base64.count % 4 != 0 { base64 += "=" }
-        let data = try XCTUnwrap(Data(base64Encoded: base64))
-        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let data = try #require(Data(base64Encoded: base64))
+        return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 }

@@ -6,20 +6,20 @@
 import _CryptoExtras
 import Foundation
 import VisorRunner
-import XCTest
+import Testing
 
-final class RunnerCommandTests: XCTestCase {
+@Suite final class RunnerCommandTests {
     private var folder: URL!
     private var secrets: MemorySecrets!
     private var said: [String] = []
 
-    override func setUp() async throws {
+    init() async throws {
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("runner-command-\(UUID().uuidString)", isDirectory: true)
         secrets = MemorySecrets()
         said = []
     }
 
-    override func tearDown() async throws {
+    deinit {
         try? FileManager.default.removeItem(at: folder)
     }
 
@@ -28,140 +28,140 @@ final class RunnerCommandTests: XCTestCase {
         return RunnerCommand(folder: folder, secrets: secrets, input: { lines.popFirst() }, output: { self.said.append($0) }).run(arguments)
     }
 
-    func testAnEndpointsSecretsAreReadFromInputAndKeptHereAlone() throws {
-        XCTAssertEqual(run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp", "--header", "CLIENT_ID=$SESSION_ID", "--secret", "API_KEY"],
-                           input: ["gh-key\n"]), 0)
-        let config = try XCTUnwrap(RunnerConfig.read(folder))
-        XCTAssertEqual(config.endpoints, [.init(name: "gh", url: "http://127.0.0.1:7470/mcp", headers: ["CLIENT_ID": "$SESSION_ID"],
-                                                secretHeaders: ["API_KEY"])])
-        XCTAssertEqual(secrets.value(ProxyTokens.secretKey(endpoint: "gh", header: "API_KEY")), "gh-key")
+    @Test func testAnEndpointsSecretsAreReadFromInputAndKeptHereAlone() throws {
+        #expect(run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp", "--header", "CLIENT_ID=$SESSION_ID", "--secret", "API_KEY"],
+                           input: ["gh-key\n"]) == 0)
+        let config = try #require(RunnerConfig.read(folder))
+        #expect(config.endpoints == ([.init(name: "gh", url: "http://127.0.0.1:7470/mcp", headers: ["CLIENT_ID": "$SESSION_ID"],
+                                                secretHeaders: ["API_KEY"])]))
+        #expect((secrets.value(ProxyTokens.secretKey(endpoint: "gh", header: "API_KEY"))) == "gh-key")
         let file = try String(contentsOf: folder.appendingPathComponent("runner.json"), encoding: .utf8)
-        XCTAssertFalse(file.contains("gh-key"), "no secret in runner.json")
+        #expect(!file.contains("gh-key"), "no secret in runner.json")
 
         // Set again without that secret: its value goes.
-        XCTAssertEqual(run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp"]), 0)
-        XCTAssertNil(secrets.value(ProxyTokens.secretKey(endpoint: "gh", header: "API_KEY")))
+        #expect(run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp"]) == 0)
+        #expect((secrets.value(ProxyTokens.secretKey(endpoint: "gh", header: "API_KEY"))) == nil)
         // A secret with no value given changes nothing.
-        XCTAssertEqual(run(["endpoint", "set", "shireworks", "http://shireworks.example:7480/mcp", "--secret", "API_KEY"]), 2)
-        XCTAssertEqual(RunnerConfig.read(folder)?.endpoints.map(\.name), ["gh"])
-        XCTAssertEqual(run(["endpoint", "set", "x", "https://example.com/mcp"]), 2, "plain HTTP only")
+        #expect(run(["endpoint", "set", "shireworks", "http://shireworks.example:7480/mcp", "--secret", "API_KEY"]) == 2)
+        #expect((RunnerConfig.read(folder)?.endpoints.map(\.name)) == ["gh"])
+        #expect(run(["endpoint", "set", "x", "https://example.com/mcp"]) == 2, "plain HTTP only")
     }
 
-    func testAServerAddedIsGivenItsSettingsWithItsTokenAndNoSecret() throws {
+    @Test func testAServerAddedIsGivenItsSettingsWithItsTokenAndNoSecret() throws {
         _ = run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp", "--header", "CLIENT_ID=$SESSION_ID", "--secret", "API_KEY"],
                 input: ["gh-key"])
         said = []
-        XCTAssertEqual(run(["server", "add", "Builds", "--host", "mac.example.ts.net"]), 0)
-        XCTAssertEqual(RunnerConfig.read(folder)?.servers, ["Builds"])
-        let token = try XCTUnwrap(secrets.value(ProxyTokens.key(server: "Builds")))
-        let body = try XCTUnwrap(said.last)
-        XCTAssertFalse(body.contains("gh-key"), "the real key stays here")
-        let settings = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])
-        let endpoint = try XCTUnwrap((settings["endpoints"] as? [[String: Any]])?.first)
-        XCTAssertEqual(endpoint["url"] as? String, "http://mac.example.ts.net:7439/mcp/gh")
-        let headers = try XCTUnwrap(endpoint["headers"] as? [[String: Any]])
-        XCTAssertTrue(headers.contains { $0["name"] as? String == "CLIENT_ID" && $0["value"] as? String == "$SESSION_ID" })
-        XCTAssertTrue(headers.contains { $0["name"] as? String == MCPProxy.tokenHeader && $0["value"] as? String == token && $0["secret"] as? Bool == true })
+        #expect(run(["server", "add", "Builds", "--host", "mac.example.ts.net"]) == 0)
+        #expect((RunnerConfig.read(folder)?.servers) == ["Builds"])
+        let token = try #require(secrets.value(ProxyTokens.key(server: "Builds")))
+        let body = try #require(said.last)
+        #expect(!body.contains("gh-key"), "the real key stays here")
+        let settings = try #require(JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])
+        let endpoint = try #require((settings["endpoints"] as? [[String: Any]])?.first)
+        #expect((endpoint["url"] as? String) == "http://mac.example.ts.net:7439/mcp/gh")
+        let headers = try #require(endpoint["headers"] as? [[String: Any]])
+        #expect(headers.contains { $0["name"] as? String == "CLIENT_ID" && $0["value"] as? String == "$SESSION_ID" })
+        #expect(headers.contains { $0["name"] as? String == MCPProxy.tokenHeader && $0["value"] as? String == token && $0["secret"] as? Bool == true })
 
         // Added again: the same token. Removed: it no longer gets through.
-        XCTAssertEqual(run(["server", "add", "Builds", "--host", "mac.example.ts.net"]), 0)
-        XCTAssertEqual(secrets.value(ProxyTokens.key(server: "Builds")), token)
-        XCTAssertEqual(run(["server", "remove", "Builds"]), 0)
-        XCTAssertFalse(ProxyTokens.admits(token, servers: RunnerConfig.read(folder)?.servers ?? [], in: secrets))
+        #expect(run(["server", "add", "Builds", "--host", "mac.example.ts.net"]) == 0)
+        #expect((secrets.value(ProxyTokens.key(server: "Builds"))) == token)
+        #expect(run(["server", "remove", "Builds"]) == 0)
+        #expect(!(ProxyTokens.admits(token, servers: RunnerConfig.read(folder)?.servers ?? [], in: secrets)))
     }
 
-    func testTheAPNsKeyIsReadFromInputAndAServerGivenThePushProxy() throws {
+    @Test func testTheAPNsKeyIsReadFromInputAndAServerGivenThePushProxy() throws {
         let p8 = ["-----BEGIN PRIVATE KEY-----", "MIGTAgEAMBMG", "-----END PRIVATE KEY-----", "after"]
-        XCTAssertEqual(run(["apns", "set", "--key-id", "ABCDEFGHIJ", "--team-id", "TEAM123456"], input: p8), 0)
-        XCTAssertEqual(secrets.value(APNsProxy.keySecret), "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMG\n-----END PRIVATE KEY-----",
-                       "read up to the key's last line")
-        XCTAssertEqual(secrets.value(APNsProxy.keyIDSecret), "ABCDEFGHIJ")
-        XCTAssertEqual(run(["apns", "set", "--key-id", "short", "--team-id", "TEAM123456"], input: p8), 2)
-        XCTAssertEqual(run(["apns", "set", "--key-id", "ABCDEFGHIJ", "--team-id", "TEAM123456"], input: ["not a key"]), 2)
+        #expect(run(["apns", "set", "--key-id", "ABCDEFGHIJ", "--team-id", "TEAM123456"], input: p8) == 0)
+        #expect(secrets.value(APNsProxy.keySecret) == "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMG\n-----END PRIVATE KEY-----", "read up to the key's last line")
+        #expect(secrets.value(APNsProxy.keyIDSecret) == "ABCDEFGHIJ")
+        #expect(run(["apns", "set", "--key-id", "short", "--team-id", "TEAM123456"], input: p8) == 2)
+        #expect(run(["apns", "set", "--key-id", "ABCDEFGHIJ", "--team-id", "TEAM123456"], input: ["not a key"]) == 2)
 
-        XCTAssertEqual(run(["server", "push-proxy", "Builds", "--host", "192.168.131.1"]), 2, "a server added first")
+        #expect(run(["server", "push-proxy", "Builds", "--host", "192.168.131.1"]) == 2, "a server added first")
         _ = run(["server", "add", "Builds", "--host", "192.168.131.1"])
         said = []
-        XCTAssertEqual(run(["server", "push-proxy", "Builds", "--host", "192.168.131.1"]), 0)
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try XCTUnwrap(said.last).utf8)) as? [String: String])
-        XCTAssertEqual(body["url"], "http://192.168.131.1:7439")
-        XCTAssertEqual(body["token"], secrets.value(ProxyTokens.key(server: "Builds")))
+        #expect(run(["server", "push-proxy", "Builds", "--host", "192.168.131.1"]) == 0)
+        let last = try #require(said.last)
+        let body = try #require(JSONSerialization.jsonObject(with: Data(last.utf8)) as? [String: String])
+        #expect((body["url"]) == "http://192.168.131.1:7439")
+        #expect((body["token"]) == (secrets.value(ProxyTokens.key(server: "Builds"))))
 
         said = []
         _ = run(["status"])
-        XCTAssertTrue(said.joined().contains("Pushes: signed with APNs key ABCDEFGHIJ (team TEAM123456)"), said.joined())
-        XCTAssertFalse(said.joined().contains("MIGT"))
-        XCTAssertEqual(run(["apns", "remove"]), 0)
-        XCTAssertNil(secrets.value(APNsProxy.keySecret))
+        #expect(said.joined().contains("Pushes: signed with APNs key ABCDEFGHIJ (team TEAM123456)"), Comment(rawValue: said.joined()))
+        #expect(!(said.joined().contains("MIGT")))
+        #expect(run(["apns", "remove"]) == 0)
+        #expect(secrets.value(APNsProxy.keySecret) == nil)
     }
 
-    func testAFrontIsSetForAServersClients() throws {
-        XCTAssertEqual(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433"]), 0)
-        XCTAssertEqual(RunnerConfig.read(folder)?.fronts, [.init(name: "co-tenant", port: 7440, host: "192.168.131.3", hostPort: 7433)])
-        XCTAssertEqual(run(["front", "set", "co-tenant", "--port", "7441", "--to", "[fd00::3]:7433"]), 0, "set again: replaced")
-        XCTAssertEqual(RunnerConfig.read(folder)?.fronts, [.init(name: "co-tenant", port: 7441, host: "fd00::3", hostPort: 7433)])
-        XCTAssertEqual(run(["front", "set", "builds", "--port", "7441", "--to", "192.168.131.4:7433"]), 2, "a port is one server's")
-        XCTAssertEqual(run(["front", "set", "builds", "--port", "70000", "--to", "192.168.131.4:7433"]), 2)
-        XCTAssertEqual(run(["front", "set", "builds", "--port", "7442", "--to", "192.168.131.4"]), 2, "the server's port is needed")
+    @Test func testAFrontIsSetForAServersClients() throws {
+        #expect(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433"]) == 0)
+        #expect((RunnerConfig.read(folder)?.fronts) == [.init(name: "co-tenant", port: 7440, host: "192.168.131.3", hostPort: 7433)])
+        #expect(run(["front", "set", "co-tenant", "--port", "7441", "--to", "[fd00::3]:7433"]) == 0, "set again: replaced")
+        #expect((RunnerConfig.read(folder)?.fronts) == [.init(name: "co-tenant", port: 7441, host: "fd00::3", hostPort: 7433)])
+        #expect(run(["front", "set", "builds", "--port", "7441", "--to", "192.168.131.4:7433"]) == 2, "a port is one server's")
+        #expect(run(["front", "set", "builds", "--port", "70000", "--to", "192.168.131.4:7433"]) == 2)
+        #expect(run(["front", "set", "builds", "--port", "7442", "--to", "192.168.131.4"]) == 2, "the server's port is needed")
         said = []
         _ = run(["status"])
-        XCTAssertTrue(said.joined().contains("Front for co-tenant: port 7441 to fd00::3:7433"), said.joined())
-        XCTAssertEqual(run(["front", "remove", "co-tenant"]), 0)
-        XCTAssertEqual(RunnerConfig.read(folder)?.fronts, [])
-        XCTAssertEqual(run(["front", "remove", "co-tenant"]), 2)
+        #expect(said.joined().contains("Front for co-tenant: port 7441 to fd00::3:7433"), Comment(rawValue: said.joined()))
+        #expect(run(["front", "remove", "co-tenant"]) == 0)
+        #expect((RunnerConfig.read(folder)?.fronts) == [])
+        #expect(run(["front", "remove", "co-tenant"]) == 2)
     }
 
-    func testTheGitHubProxyIsSetUpForAServer() throws {
-        XCTAssertEqual(run(["server", "add", "co-tenant", "--host", "192.168.131.1"]), 0)
-        XCTAssertEqual(run(["github-proxy", "server", "co-tenant", "--host", "192.168.131.1", "--sessions", "S"]), 2, "no proxy port yet")
-        XCTAssertEqual(run(["github-proxy", "port", "7441"]), 0)
+    @Test func testTheGitHubProxyIsSetUpForAServer() throws {
+        #expect(run(["server", "add", "co-tenant", "--host", "192.168.131.1"]) == 0)
+        #expect(run(["github-proxy", "server", "co-tenant", "--host", "192.168.131.1", "--sessions", "S"]) == 2, "no proxy port yet")
+        #expect(run(["github-proxy", "port", "7441"]) == 0)
         said = []
-        XCTAssertEqual(run(["github-proxy", "server", "co-tenant", "--host", "192.168.131.1", "--sessions", "S, T"]), 0)
-        let body = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(said.joined().utf8)) as? [String: Any])
-        XCTAssertEqual(body["url"] as? String, "http://192.168.131.1:7441")
-        XCTAssertEqual(body["token"] as? String, ProxyTokens.token(for: "co-tenant", in: secrets))
-        XCTAssertEqual(body["sessions"] as? [String], ["S", "T"])
-        XCTAssertTrue((body["authority"] as? String)?.hasPrefix("-----BEGIN CERTIFICATE-----") == true)
-        XCTAssertEqual(run(["github-proxy", "server", "nobody", "--host", "192.168.131.1", "--sessions", "*"]), 2)
+        #expect(run(["github-proxy", "server", "co-tenant", "--host", "192.168.131.1", "--sessions", "S, T"]) == 0)
+        let body = try #require(try JSONSerialization.jsonObject(with: Data(said.joined().utf8)) as? [String: Any])
+        #expect((body["url"] as? String) == "http://192.168.131.1:7441")
+        #expect((body["token"] as? String) == ProxyTokens.token(for: "co-tenant", in: secrets))
+        #expect((body["sessions"] as? [String]) == ["S", "T"])
+        #expect((body["authority"] as? String)?.hasPrefix("-----BEGIN CERTIFICATE-----") == true)
+        #expect(run(["github-proxy", "server", "nobody", "--host", "192.168.131.1", "--sessions", "*"]) == 2)
     }
 
-    func testTheGitHubProxysAppIsSetItsKeyKeptHereOnly() throws {
+    @Test func testTheGitHubProxysAppIsSetItsKeyKeptHereOnly() throws {
         let pem = try _RSA.Signing.PrivateKey(keySize: .bits2048).pemRepresentation
         let lines = pem.split(separator: "\n").map(String.init)
-        XCTAssertEqual(run(["github-proxy", "app", "--app-id", "123", "--installation", "456"], input: ["not a key"]), 2)
-        XCTAssertEqual(run(["github-proxy", "app", "--app-id", "x", "--installation", "456"], input: lines), 2, "ids are numbers")
+        #expect(run(["github-proxy", "app", "--app-id", "123", "--installation", "456"], input: ["not a key"]) == 2)
+        #expect(run(["github-proxy", "app", "--app-id", "x", "--installation", "456"], input: lines) == 2, "ids are numbers")
         said = []
-        XCTAssertEqual(run(["github-proxy", "app", "--app-id", "123", "--installation", "456"], input: lines), 0)
-        XCTAssertEqual(RunnerConfig.read(folder)?.githubAppID, "123")
-        XCTAssertEqual(RunnerConfig.read(folder)?.githubInstallation, "456")
-        XCTAssertEqual(secrets.value(RunnerCommand.githubAppKeySecret), pem.trimmingCharacters(in: .whitespacesAndNewlines) + "\n")
-        XCTAssertFalse(said.joined().contains("PRIVATE KEY"), "never said back")
-        XCTAssertFalse((try String(contentsOf: folder.appendingPathComponent("runner.json"), encoding: .utf8)).contains("PRIVATE KEY"))
+        #expect(run(["github-proxy", "app", "--app-id", "123", "--installation", "456"], input: lines) == 0)
+        #expect((RunnerConfig.read(folder)?.githubAppID) == "123")
+        #expect((RunnerConfig.read(folder)?.githubInstallation) == "456")
+        #expect(secrets.value(RunnerCommand.githubAppKeySecret) == (pem.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"))
+        #expect(!(said.joined().contains("PRIVATE KEY")), "never said back")
+        #expect(!((try String(contentsOf: folder.appendingPathComponent("runner.json"), encoding: .utf8)).contains("PRIVATE KEY")))
     }
 
-    func testAFrontCanSayHowItsServerStartsAgain() throws {
+    @Test func testAFrontCanSayHowItsServerStartsAgain() throws {
         let start = "/usr/local/bin/container exec -d visor-co-tenant visor-server start"
-        XCTAssertEqual(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433", "--start", start]), 0)
-        XCTAssertEqual(RunnerConfig.read(folder)?.fronts, [.init(name: "co-tenant", port: 7440, host: "192.168.131.3", hostPort: 7433, start: start)])
+        #expect(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433", "--start", start]) == 0)
+        #expect((RunnerConfig.read(folder)?.fronts) == [.init(name: "co-tenant", port: 7440, host: "192.168.131.3", hostPort: 7433, start: start)])
         said = []
         _ = run(["status"])
-        XCTAssertTrue(said.joined().contains("started again with: " + start), said.joined())
-        XCTAssertEqual(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433", "--start", " "]), 2, "a command, not nothing")
+        #expect(said.joined().contains("started again with: " + start), Comment(rawValue: said.joined()))
+        #expect(run(["front", "set", "co-tenant", "--port", "7440", "--to", "192.168.131.3:7433", "--start", " "]) == 2, "a command, not nothing")
         // A runner.json from before has no command: none is run.
         let before = #"{"fronts":[{"name":"co-tenant","port":7440,"host":"192.168.131.3","hostPort":7433}]}"#
         try Data(before.utf8).write(to: folder.appendingPathComponent("runner.json"))
-        XCTAssertNil(RunnerConfig.read(folder)?.fronts.first?.start)
+        #expect((RunnerConfig.read(folder)?.fronts.first?.start) == nil)
     }
 
-    func testStatusSaysWhatIsKeptButNoSecret() {
+    @Test func testStatusSaysWhatIsKeptButNoSecret() {
         _ = run(["endpoint", "set", "gh", "http://127.0.0.1:7470/mcp", "--secret", "API_KEY"], input: ["gh-key"])
         _ = run(["server", "add", "Builds", "--host", "h"])
         said = []
-        XCTAssertEqual(run(["status"]), 0)
+        #expect(run(["status"]) == 0)
         let text = said.joined(separator: "\n")
-        XCTAssertTrue(text.contains("gh: http://127.0.0.1:7470/mcp; secret: API_KEY (kept)"), text)
-        XCTAssertTrue(text.contains("Visor servers: Builds"), text)
-        XCTAssertFalse(text.contains("gh-key"))
-        XCTAssertEqual(run(["nonsense"]), 2)
+        #expect(text.contains("gh: http://127.0.0.1:7470/mcp; secret: API_KEY (kept)"), Comment(rawValue: text))
+        #expect(text.contains("Visor servers: Builds"), Comment(rawValue: text))
+        #expect(!text.contains("gh-key"))
+        #expect(run(["nonsense"]) == 2)
     }
 }

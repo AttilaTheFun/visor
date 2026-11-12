@@ -8,18 +8,19 @@ import Foundation
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-@MainActor
-final class ClaudeManagedPolicyTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class ClaudeManagedPolicyTests {
     private var folder: URL!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("visor-managed-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         try? FileManager.default.removeItem(at: folder)
     }
 
@@ -32,51 +33,52 @@ final class ClaudeManagedPolicyTests: ServerTestCase {
         return file.path
     }
 
-    func testAPolicyDisablingBypassStartsClaudeInAutoMode() throws {
+    @Test func testAPolicyDisablingBypassStartsClaudeInAutoMode() throws {
         let policy = ClaudeManagedPolicy.read([try settings(["disableBypassPermissionsMode": "disable"])])
-        XCTAssertEqual(policy, ClaudeManagedPolicy(bypassDisabled: true, autoDisabled: false))
-        XCTAssertEqual(ClaudeProcess.permissionMode(skip: true, tool: "claude", policy: policy, contained: true), "auto")
+        #expect(policy == ClaudeManagedPolicy(bypassDisabled: true, autoDisabled: false))
+        #expect(ClaudeProcess.permissionMode(skip: true, tool: "claude", policy: policy, contained: true) == "auto")
         // Manual is as it was, and another CLI is not Claude's to manage.
-        XCTAssertEqual(ClaudeProcess.permissionMode(skip: false, tool: "claude", policy: policy, contained: true), "acceptEdits")
-        XCTAssertEqual(ClaudeProcess.permissionMode(skip: true, tool: "openrouter", policy: policy, contained: true), "bypassPermissions")
+        #expect(ClaudeProcess.permissionMode(skip: false, tool: "claude", policy: policy, contained: true) == "acceptEdits")
+        #expect(ClaudeProcess.permissionMode(skip: true, tool: "openrouter", policy: policy, contained: true) == "bypassPermissions")
         // Managed preferences say it the same way.
         let preferences = ClaudeManagedPolicy.read([try settings(["disableBypassPermissionsMode": "disable"], plist: true)])
-        XCTAssertEqual(preferences.autoApproveMode(contained: true), "auto")
+        #expect(preferences.autoApproveMode(contained: true) == "auto")
     }
 
-    func testAPolicyDisablingBothLeavesTheSessionManual() throws {
+    @Test func testAPolicyDisablingBothLeavesTheSessionManual() throws {
         let policy = ClaudeManagedPolicy.read([try settings(["disableBypassPermissionsMode": "disable"]),
                                                try settings(["disableAutoMode": "disable"])])
-        XCTAssertEqual(ClaudeProcess.permissionMode(skip: true, tool: "claude", policy: policy, contained: true), "bypassPermissions")
+        #expect(ClaudeProcess.permissionMode(skip: true, tool: "claude", policy: policy, contained: true) == "bypassPermissions")
         // Claude says it started in its default mode: not the one asked.
         let began = ClaudeOutput.parse(#"{"type":"system","subtype":"init","session_id":"s","permissionMode":"default"}"#)
-        XCTAssertEqual(began, [.began(session: "s", model: nil, keySource: nil, mode: "default")])
-        XCTAssertTrue(ClaudeProcess.startedOtherwise(asked: "bypassPermissions", reported: "default"))
-        XCTAssertFalse(ClaudeProcess.startedOtherwise(asked: "auto", reported: "auto"))
+        #expect(began == [.began(session: "s", model: nil, keySource: nil, mode: "default")])
+        #expect(ClaudeProcess.startedOtherwise(asked: "bypassPermissions", reported: "default"))
+        #expect(!ClaudeProcess.startedOtherwise(asked: "auto", reported: "auto"))
         // The session becomes Manual, and says why.
         let record = SessionRecord(info: SessionInfo(id: "M", agent: .claude, cwd: "/tmp", title: "Claude", created: 0),
                                    process: ClaudeProcess(cwd: "/tmp", skipPermissions: true), entries: [])
         _ = record.apply(.manual("Claude started in its default mode."))
-        XCTAssertFalse(record.info.skipPermissions)
-        XCTAssertFalse(record.process.skipPermissions)
-        XCTAssertEqual(record.notice, "Claude started in its default mode.")
+        #expect(!record.info.skipPermissions)
+        #expect(!record.process.skipPermissions)
+        #expect(record.notice == "Claude started in its default mode.")
     }
 
-    func testAnUnmanagedComputerIsAsBefore() throws {
+    @Test func testAnUnmanagedComputerIsAsBefore() throws {
         let policy = ClaudeManagedPolicy.read([folder.appendingPathComponent("missing.json").path,
                                                try settings(["disableBypassPermissionsMode": "allow"])])
-        XCTAssertEqual(policy, ClaudeManagedPolicy())
-        XCTAssertEqual(ClaudeProcess.permissionMode(skip: true, tool: "claude", policy: policy, contained: true), "bypassPermissions")
+        #expect(policy == ClaudeManagedPolicy())
+        #expect(ClaudeProcess.permissionMode(skip: true, tool: "claude", policy: policy, contained: true) == "bypassPermissions")
     }
 
     /// On the computer itself an auto-approving session is Claude's own auto
     /// mode, never a bypass, whatever the policy; the OpenRouter CLI, with
     /// no auto mode, asks (Logan, 11 Nov).
-    func testOnTheComputerItselfAutoApprovingIsClaudesAutoModeNeverABypass() {
+    @Test func testOnTheComputerItselfAutoApprovingIsClaudesAutoModeNeverABypass() {
         for policy in [ClaudeManagedPolicy(), ClaudeManagedPolicy(bypassDisabled: true, autoDisabled: false)] {
-            XCTAssertEqual(ClaudeProcess.permissionMode(skip: true, tool: "claude", policy: policy, contained: false), "auto")
+            #expect(ClaudeProcess.permissionMode(skip: true, tool: "claude", policy: policy, contained: false) == "auto")
         }
-        XCTAssertEqual(ClaudeProcess.permissionMode(skip: false, tool: "claude", policy: ClaudeManagedPolicy(), contained: false), "acceptEdits")
-        XCTAssertEqual(ClaudeProcess.permissionMode(skip: true, tool: "openrouter", policy: ClaudeManagedPolicy(), contained: false), "acceptEdits")
+        #expect((ClaudeProcess.permissionMode(skip: false, tool: "claude", policy: ClaudeManagedPolicy(), contained: false)) == "acceptEdits")
+        #expect((ClaudeProcess.permissionMode(skip: true, tool: "openrouter", policy: ClaudeManagedPolicy(), contained: false)) == "acceptEdits")
     }
+}
 }

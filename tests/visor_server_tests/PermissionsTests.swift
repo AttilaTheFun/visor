@@ -9,13 +9,14 @@ import Foundation
 import VisorProtocol
 @testable import VisorServer
 import VisorSystem
-import XCTest
+import Testing
 
-@MainActor
-final class PermissionsTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class PermissionsTests {
     private var server: VisorServer!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-permissions-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -45,33 +46,34 @@ final class PermissionsTests: ServerTestCase {
         server.perform(permissions, from: nil)
     }
 
-    func testOnTheComputerItselfTheSessionChoosesAutoOrManual() throws {
+    @Test func testOnTheComputerItselfTheSessionChoosesAutoOrManual() throws {
         host(inContainer: false)
-        let auto = try XCTUnwrap(start("a", skip: true))
-        XCTAssertTrue(auto.info.skipPermissions, "auto-approving, as chosen")
-        let manual = try XCTUnwrap(start("m", skip: false))
-        XCTAssertFalse(manual.info.skipPermissions)
+        let auto = try #require(start("a", skip: true))
+        #expect(auto.info.skipPermissions, "auto-approving, as chosen")
+        let manual = try #require(start("m", skip: false))
+        #expect(!manual.info.skipPermissions)
         ask("m", skip: true)
-        XCTAssertTrue(manual.info.skipPermissions, "a client switches it")
+        #expect(manual.info.skipPermissions, "a client switches it")
         ask("a", skip: false)
-        XCTAssertFalse(auto.info.skipPermissions)
+        #expect(!auto.info.skipPermissions)
     }
 
-    func testInAContainerPromptsAreAlwaysSkipped() throws {
+    @Test func testInAContainerPromptsAreAlwaysSkipped() throws {
         host(inContainer: true)
-        let asked = try XCTUnwrap(start("c", skip: false))
-        XCTAssertTrue(asked.info.skipPermissions)
-        XCTAssertTrue(asked.process.skipPermissions)
+        let asked = try #require(start("c", skip: false))
+        #expect(asked.info.skipPermissions)
+        #expect(asked.process.skipPermissions)
         ask("c", skip: false)
-        XCTAssertTrue(asked.info.skipPermissions, "a client's ask for manual refused")
+        #expect(asked.info.skipPermissions, "a client's ask for manual refused")
     }
 
-    func testCodexHasFullAccessOnlyInAContainer() {
+    @Test func testCodexHasFullAccessOnlyInAContainer() {
         host(inContainer: false)
         let native = CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil)
-        XCTAssertEqual(native.threadParams()["sandbox"] as? String, "workspace-write", "its own sandbox, auto-approving or not")
+        #expect((native.threadParams()["sandbox"] as? String) == "workspace-write", "its own sandbox, auto-approving or not")
         host(inContainer: true)
         let contained = CodexAppServerProcess(cwd: "/tmp", skipPermissions: true, resume: nil)
-        XCTAssertEqual(contained.threadParams()["sandbox"] as? String, "danger-full-access")
+        #expect((contained.threadParams()["sandbox"] as? String) == "danger-full-access")
     }
+}
 }

@@ -3,24 +3,17 @@ import Glibc
 #else
 import Darwin
 #endif
-import XCTest
+import Testing
 
-/// A test of the server: the platform it asks of the system is installed
-/// before each test runs, ahead of its setUp (TestPlatform — the build's
-/// own: a Mac's under Bazel, Linux's under SwiftPM there). On the main
-/// actor, as the server is.
-@MainActor
-class ServerTestCase: XCTestCase {
-    nonisolated override func invokeTest() {
-        TestPlatform.install()
-        super.invokeTest()
-    }
-
+/// What a test of the server has beside it: a suite of ServerTests installs
+/// the platform it asks of the system (TestPlatform: the build's own, a
+/// Mac's or Linux's) in its init, ahead of anything else.
+enum ServerTestCase {
     /// A loopback port nothing listens on now, the system's choice: for a
     /// test's server that listens, so that runs side by side on one
     /// computer (CI's slots on the primary Mac) don't take each other's.
     /// 0, the system's choice again, should none be had.
-    nonisolated static func freePort() -> UInt16 { freeLoopbackPort() }
+    static func freePort() -> UInt16 { freeLoopbackPort() }
 }
 
 /// At the file's level, where `bind` is the system's (in a test case,

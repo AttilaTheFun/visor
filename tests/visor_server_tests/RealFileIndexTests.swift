@@ -5,11 +5,15 @@ import MessageCache
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-final class RealFileIndexTests: ServerTestCase {
-    func testIndexesTheRealFile() async throws {
-        guard let path = ProcessInfo.processInfo.environment["VISOR_REAL_FILE"] else { throw XCTSkip("no VISOR_REAL_FILE") }
+extension ServerTests {
+@Suite @MainActor final class RealFileIndexTests {
+    init() { TestPlatform.install() }
+
+    @Test func testIndexesTheRealFile() async throws {
+        guard let path = ProcessInfo.processInfo.environment["VISOR_REAL_FILE"] else { try Test.cancel("no VISOR_REAL_FILE") }
         let dbPath = FileManager.default.temporaryDirectory.appendingPathComponent("visor-real-\(UUID().uuidString).sqlite").path
         let store = MessageCache(storage: try SQLiteStorage(path: dbPath))
         let started = Date()
@@ -18,9 +22,10 @@ final class RealFileIndexTests: ServerTestCase {
         for await event in indexer.events() {
             if case .loaded(let loaded) = event { first = loaded; break }
         }
-        let loaded = try XCTUnwrap(first)
+        let loaded = try #require(first)
         let elapsed = Date().timeIntervalSince(started)
         print("REAL: \(String(format: "%.1f", elapsed))s, window \(loaded.rows.count), more \(loaded.more), prompts \(loaded.prompts.count), abandoned \(loaded.abandoned.count), rows in store \(store.count(in: "R")), state \(String(describing: store.sourceState(of: "R")))")
-        XCTAssertGreaterThan(store.count(in: "R"), 0)
+        #expect(store.count(in: "R") > 0)
     }
+}
 }

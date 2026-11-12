@@ -7,10 +7,13 @@ import MessageCache
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-@MainActor
-final class EarlierPageTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class EarlierPageTests {
+    init() { TestPlatform.install() }
+
     private func line(_ type: String, _ uuid: String, _ parent: String?, _ text: String, id: String? = nil) -> String {
         let content: Any = type == "assistant" ? [["type": "text", "text": text]] : text
         var message: [String: Any] = ["role": type, "content": content]
@@ -20,7 +23,7 @@ final class EarlierPageTests: ServerTestCase {
         return String(data: try! JSONSerialization.data(withJSONObject: o), encoding: .utf8)!
     }
 
-    func testAPageBeforeARowPastTheRecordsOwn() async throws {
+    @Test func testAPageBeforeARowPastTheRecordsOwn() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("visor-earlier-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let file = dir.appendingPathComponent("s.jsonl")
@@ -37,7 +40,7 @@ final class EarlierPageTests: ServerTestCase {
         for await event in indexer.events() {
             if case .loaded(let first) = event { loaded = first; break }
         }
-        let rows = try XCTUnwrap(loaded).rows
+        let rows = try #require(loaded).rows
         let record = SessionRecord(info: SessionInfo(id: "S", agent: .claude, cwd: "/tmp", title: "", created: 0),
                                    process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: rows)
         record.indexer = indexer
@@ -45,20 +48,21 @@ final class EarlierPageTests: ServerTestCase {
 
         // Before the record's first row: the 50 rows before it.
         let first = await record.earlier(before: rows[0].id)
-        let older = try XCTUnwrap(first.entries)
-        XCTAssertEqual(older.count, 50)
-        XCTAssertEqual(first.more, false)
+        let older = try #require(first.entries)
+        #expect(older.count == 50)
+        #expect(first.more == false)
 
         // Before a row the record does not hold (a client paged that far):
         // the rows before that one, none of them ones it already has.
         let asked = older[20]
         let next = await record.earlier(before: asked.id)
-        XCTAssertEqual(next.entries?.map(\.id), older[0..<20].map(\.id))
-        XCTAssertEqual(next.more, false)
+        #expect((next.entries?.map(\.id)) == (older[0..<20].map(\.id)))
+        #expect(next.more == false)
 
         // A row known nowhere: nothing, rather than some other page.
         let unknown = await record.earlier(before: "no-such-row")
-        XCTAssertEqual(unknown.entries?.count, 0)
-        XCTAssertEqual(unknown.more, false)
+        #expect((unknown.entries?.count) == 0)
+        #expect(unknown.more == false)
     }
+}
 }

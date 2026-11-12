@@ -8,10 +8,11 @@ import MessageCache
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-@MainActor
-final class ForkNoticeTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class ForkNoticeTests {
     private var id = ""
     private var file: URL!
     private let cwd = "/tmp/visor_branch_test"
@@ -19,7 +20,8 @@ final class ForkNoticeTests: ServerTestCase {
     /// expected path finds it, not only a scan.
     private var projectDir: URL { ClaudeSessionFiles.projectsRoot().appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd)) }
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         ClaudeSessionFiles.home = FileManager.default.temporaryDirectory.appendingPathComponent("visor-fork-tests-" + UUID().uuidString)
         id = UUID().uuidString.lowercased()
         // A cache of the test's own, never the app's.
@@ -34,7 +36,7 @@ final class ForkNoticeTests: ServerTestCase {
         ]).write(to: file, atomically: true, encoding: .utf8)
     }
 
-    override func tearDown() async throws {
+    isolated deinit {
         try? FileManager.default.removeItem(at: ClaudeSessionFiles.home)
     }
 
@@ -61,50 +63,50 @@ final class ForkNoticeTests: ServerTestCase {
 
     private func texts(_ record: SessionRecord) -> [String] { record.entries.map(\.text) }
 
-    func testForkElsewhereKeepsTheChatOnItsBranchAndResumesThere() async throws {
+    @Test func testForkElsewhereKeepsTheChatOnItsBranchAndResumesThere() async throws {
         let record = record()
         var replaced = 0
         record.onFileReplaced = { replaced += 1 }
         record.followFile()
         await record.waitForFile(past: 0)
-        XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
-        XCTAssertNil(record.notice)
-        XCTAssertEqual(record.head, "p2")
-        XCTAssertEqual(record.leaf, "a2")
+        #expect(texts(record) == ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
+        #expect(record.notice == nil)
+        #expect(record.head == "p2")
+        #expect(record.leaf == "a2")
 
         // Another agent resumes from APPLE and writes last. The chat keeps
         // to its branch, says the file went on elsewhere, and its agent is
         // resumed at its own newest message.
         try append([line("user", "p3", "a1", "Also CHERRY"), line("assistant", "a3", "p3", "OK-CHERRY")])
         try await Task.sleep(nanoseconds: 1_200_000_000)
-        XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
-        XCTAssertEqual(record.info.otherBranch, "Also CHERRY", "offered to the user, by its latest prompt")
-        XCTAssertNil(record.notice)
-        XCTAssertEqual(record.shownPrompts, ["p1", "p2"])
-        XCTAssertEqual(record.leaf, "a2")
-        XCTAssertEqual(record.stored.head, "p2")
-        XCTAssertEqual(record.stored.otherBranch, "Also CHERRY")
+        #expect(texts(record) == ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
+        #expect(record.info.otherBranch == "Also CHERRY", "offered to the user, by its latest prompt")
+        #expect(record.notice == nil)
+        #expect(record.shownPrompts == ["p1", "p2"])
+        #expect(record.leaf == "a2")
+        #expect(record.stored.head == "p2")
+        #expect(record.stored.otherBranch == "Also CHERRY")
 
         // Kept: not offered again, and the agent still resumes here.
         record.keepBranch()
-        XCTAssertNil(record.info.otherBranch)
-        XCTAssertTrue(record.wentOnElsewhere)
+        #expect(record.info.otherBranch == nil)
+        #expect(record.wentOnElsewhere)
 
         // Its agent carries on from there: the conversation is this branch
         // again, and the next resume is Claude Code's own.
         record.notice = nil
         try append([line("user", "p4", "a2", "Also DATE"), line("assistant", "a4", "p4", "OK-DATE")])
         try await Task.sleep(nanoseconds: 1_200_000_000)
-        XCTAssertEqual(texts(record).suffix(2), ["Also DATE", "OK-DATE"])
-        XCTAssertFalse(texts(record).contains("OK-CHERRY"))
-        XCTAssertFalse(record.wentOnElsewhere)
-        XCTAssertNil(record.info.otherBranch)
-        XCTAssertNil(record.notice)
-        XCTAssertEqual(record.head, "p4")
-        XCTAssertEqual(record.leaf, "a4")
+        #expect((texts(record).suffix(2)) == ["Also DATE", "OK-DATE"])
+        #expect(!(texts(record).contains("OK-CHERRY")))
+        #expect(!record.wentOnElsewhere)
+        #expect(record.info.otherBranch == nil)
+        #expect(record.notice == nil)
+        #expect(record.head == "p4")
+        #expect(record.leaf == "a4")
     }
 
-    func testForkFoundOnResumeFromWhatWasShownBefore() async throws {
+    @Test func testForkFoundOnResumeFromWhatWasShownBefore() async throws {
         // As after a restart: the archive remembered APPLE and BANANA as
         // shown, and the file has since been forked twice over.
         try append([
@@ -115,59 +117,59 @@ final class ForkNoticeTests: ServerTestCase {
         let generation = record.generation
         record.followFile()
         await record.waitForFile(past: 0)
-        XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also CHERRY", "OK-CHERRY", "Also DATE", "OK-DATE"])
-        XCTAssertEqual(record.notice?.contains("One message shown here"), true)
+        #expect(texts(record) == ["Remember APPLE", "OK-APPLE", "Also CHERRY", "OK-CHERRY", "Also DATE", "OK-DATE"])
+        #expect((record.notice?.contains("One message shown here")) == true)
         // Clients start again from the new branch: a new generation, and
         // any answer from before it is the whole, marked to reset.
-        XCTAssertNotEqual(record.generation, generation)
-        XCTAssertEqual(record.transcriptEnvelope(since: nil).reset, true)
-        XCTAssertNil(record.transcriptEnvelope(since: record.revision).reset)
-        XCTAssertEqual(record.stored.notice, record.notice)
-        XCTAssertEqual(record.stored.shownPrompts, ["p1", "p3", "p4"])
+        #expect(record.generation != generation)
+        #expect(record.transcriptEnvelope(since: nil).reset == true)
+        #expect(record.transcriptEnvelope(since: record.revision).reset == nil)
+        #expect(record.stored.notice == record.notice)
+        #expect(record.stored.shownPrompts == ["p1", "p3", "p4"])
     }
 
-    func testPreviewIsTheLatestMessage() async throws {
+    @Test func testPreviewIsTheLatestMessage() async throws {
         let record = record()
         record.followFile()
         await record.waitForFile(past: 0)
         // The latest assistant line, trimmed to a line or two.
-        XCTAssertEqual(record.info.preview, "OK-BANANA")
-        XCTAssertNotNil(record.info.updated)
+        #expect(record.info.preview == "OK-BANANA")
+        #expect(record.info.updated != nil)
         // A user turn becomes the new preview.
         record.appendUser("What's next?")
-        XCTAssertEqual(record.info.preview, "What's next?")
+        #expect(record.info.preview == "What's next?")
     }
 
-    func testPrimePreviewReadsTheFileNotTheStore() async throws {
+    @Test func testPrimePreviewReadsTheFileNotTheStore() async throws {
         // The store stopped at the user's question; the file has the answer.
         let info = SessionInfo(id: "s", agent: .claude, cwd: cwd, title: "t", created: 0)
         let stale = [TranscriptEntry(id: "u1", role: .user, text: "Also BANANA")]
         let primed = SessionRecord(info: info, process: ClaudeProcess(cwd: cwd, skipPermissions: true, resume: id), entries: stale)
         primed.primePreview()
-        XCTAssertEqual(primed.info.preview, "OK-BANANA")
+        #expect(primed.info.preview == "OK-BANANA")
         // Timed by the file, not by creation.
-        XCTAssertGreaterThan(primed.info.updated ?? 0, 1)
+        #expect((primed.info.updated ?? 0) > 1)
     }
 
-    func testPrimePreviewReplacesAStaleSavedSummary() async throws {
+    @Test func testPrimePreviewReplacesAStaleSavedSummary() async throws {
         // An earlier run saved the question; the file has the answer.
         var info = SessionInfo(id: "s", agent: .claude, cwd: cwd, title: "t", created: 0)
         info.preview = "Also BANANA"
         let primed = SessionRecord(info: info, process: ClaudeProcess(cwd: cwd, skipPermissions: true, resume: id))
         primed.primePreview()
-        XCTAssertEqual(primed.info.preview, "OK-BANANA")
+        #expect(primed.info.preview == "OK-BANANA")
     }
 
-    func testServerNotesAreNotPreviews() {
-        XCTAssertNil(SessionRecord.preview(of: TranscriptEntry(id: "n", role: .user, text: "[Visor] The Visor server restarted")))
-        XCTAssertEqual(SessionRecord.preview(of: TranscriptEntry(id: "u", role: .user, text: "  hello ")), "hello")
+    @Test func testServerNotesAreNotPreviews() {
+        #expect((SessionRecord.preview(of: TranscriptEntry(id: "n", role: .user, text: "[Visor] The Visor server restarted"))) == nil)
+        #expect((SessionRecord.preview(of: TranscriptEntry(id: "u", role: .user, text: "  hello "))) == "hello")
         // A row of tool calls alone says nothing; the last row that spoke serves.
-        XCTAssertNil(SessionRecord.preview(of: TranscriptEntry(id: "t", role: .assistant, text: "", activities: ["Bash: ls"])))
+        #expect((SessionRecord.preview(of: TranscriptEntry(id: "t", role: .assistant, text: "", activities: ["Bash: ls"]))) == nil)
         // Paragraph breaks and leading blank lines do not take a line.
-        XCTAssertEqual(SessionRecord.preview(of: TranscriptEntry(id: "a", role: .assistant, text: "\n\nDone.\n\n\n- one  \n  \n- two")), "Done.\n- one\n- two")
+        #expect((SessionRecord.preview(of: TranscriptEntry(id: "a", role: .assistant, text: "\n\nDone.\n\n\n- one  \n  \n- two"))) == "Done.\n- one\n- two")
     }
 
-    func testPrimePreviewFillsAnUnopenedSessionFromTheStore() async throws {
+    @Test func testPrimePreviewFillsAnUnopenedSessionFromTheStore() async throws {
         // No file to read (a folder that moved, say): what was kept serves.
         let info = SessionInfo(id: "s", agent: .claude, cwd: cwd, title: "t", created: 0)
         let entries = [
@@ -175,21 +177,21 @@ final class ForkNoticeTests: ServerTestCase {
             TranscriptEntry(id: "a1", role: .assistant, text: "Hi there"),
         ]
         let primed = SessionRecord(info: info, process: ClaudeProcess(cwd: cwd, skipPermissions: true, resume: UUID().uuidString.lowercased()), entries: entries)
-        XCTAssertNil(primed.info.preview)
+        #expect(primed.info.preview == nil)
         primed.primePreview()
-        XCTAssertEqual(primed.info.preview, "Hi there")
+        #expect(primed.info.preview == "Hi there")
     }
 
-    func testNothingToSayWhenTheFileMerelyGrew() async throws {
+    @Test func testNothingToSayWhenTheFileMerelyGrew() async throws {
         try append([line("user", "p3", "a2", "Also CHERRY"), line("assistant", "a3", "p3", "OK-CHERRY")])
         let record = record(shownPrompts: ["p1", "p2"])
         record.followFile()
         await record.waitForFile(past: 0)
-        XCTAssertEqual(texts(record).count, 6)
-        XCTAssertNil(record.notice)
+        #expect(texts(record).count == 6)
+        #expect(record.notice == nil)
     }
 
-    func testContinuingTheOtherBranchReadsItAndStartsTheChatOver() async throws {
+    @Test func testContinuingTheOtherBranchReadsItAndStartsTheChatOver() async throws {
         VisorServer.storeRoot = FileManager.default.temporaryDirectory.appendingPathComponent("visor-branch-server-" + UUID().uuidString)
         VisorServer.secrets = MemorySecrets()
         let server = VisorServer(port: 7993)
@@ -199,17 +201,18 @@ final class ForkNoticeTests: ServerTestCase {
         await record.waitForFile(past: 0)
         try append([line("user", "p3", "a1", "Also CHERRY"), line("assistant", "a3", "p3", "OK-CHERRY")])
         try await Task.sleep(nanoseconds: 1_200_000_000)
-        XCTAssertEqual(record.info.otherBranch, "Also CHERRY")
+        #expect(record.info.otherBranch == "Also CHERRY")
         let generation = record.generation
         let loads = record.fileLoads
 
         server.continueOtherBranch(record)
         await record.waitForFile(past: loads)
-        XCTAssertEqual(texts(record), ["Remember APPLE", "OK-APPLE", "Also CHERRY", "OK-CHERRY"])
-        XCTAssertNil(record.info.otherBranch)
-        XCTAssertFalse(record.wentOnElsewhere)
-        XCTAssertNil(record.notice, "moved at the user's word: no fork to tell of")
-        XCTAssertEqual(record.head, "p3")
-        XCTAssertNotEqual(record.generation, generation, "clients start over from the branch")
+        #expect(texts(record) == ["Remember APPLE", "OK-APPLE", "Also CHERRY", "OK-CHERRY"])
+        #expect(record.info.otherBranch == nil)
+        #expect(!record.wentOnElsewhere)
+        #expect(record.notice == nil, "moved at the user's word: no fork to tell of")
+        #expect(record.head == "p3")
+        #expect(record.generation != generation, "clients start over from the branch")
     }
+}
 }

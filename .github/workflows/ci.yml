@@ -335,6 +335,13 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
+      # The Linux tests, Bazel's swift_test targets in Swift Testing
+      # (//tests:linux).
+      - name: The tests
+        run: bazel test --test_output=errors //tests:linux
+      # Bazel's server let go before SwiftPM builds beside it.
+      - run: bazel shutdown || true
       - run: tools/ci/linux_tests.sh
 
   # Blue Visor's web client (docs/isomer.md), built optimized

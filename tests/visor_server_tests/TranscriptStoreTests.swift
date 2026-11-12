@@ -7,14 +7,17 @@ import MessageCache
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Foundation
+import Testing
 
-final class TranscriptStoreTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class TranscriptStoreTests {
     private var dir: URL!
     private var file: URL!
     private var store: MessageCache!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("visor-store-tests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         file = dir.appendingPathComponent("s.jsonl")
@@ -39,25 +42,25 @@ final class TranscriptStoreTests: ServerTestCase {
         for await event in indexer.events() {
             if case .loaded(let loaded) = event { return loaded }
         }
-        throw XCTSkip("the indexer said nothing")
+        try Test.cancel("the indexer said nothing")
     }
 
-    func testASecondNameForTheFileReadsOnFromWhereTheFirstStopped() async throws {
+    @Test func testASecondNameForTheFileReadsOnFromWhereTheFirstStopped() async throws {
         try write([line("user", "u1", nil, "Hello"), line("assistant", "a1", "u1", "Hi", id: "msg_1")])
         _ = try await load(SessionIndexer(store: store, sessionID: "S", url: file, window: 10))
-        let read = try XCTUnwrap(store.sourceState(of: "S"))
+        let read = try #require(store.sourceState(of: "S"))
         // The folder was renamed: the file has a second name, a hard link.
         let other = dir.appendingPathComponent("renamed.jsonl")
         try FileManager.default.linkItem(at: file, to: other)
         let loaded = try await load(SessionIndexer(store: store, sessionID: "S", url: other, window: 10))
-        XCTAssertEqual(loaded.rows.map(\.text), ["Hello", "Hi"])
-        let now = try XCTUnwrap(store.sourceState(of: "S"))
-        XCTAssertEqual(now.bytes, read.bytes, "read on, not read again")
-        XCTAssertEqual(now.nextSeq, read.nextSeq)
-        XCTAssertEqual(store.nodes(in: "S").count, 2)
+        #expect(loaded.rows.map(\.text) == ["Hello", "Hi"])
+        let now = try #require(store.sourceState(of: "S"))
+        #expect(now.bytes == read.bytes, "read on, not read again")
+        #expect(now.nextSeq == read.nextSeq)
+        #expect(store.nodes(in: "S").count == 2)
     }
 
-    func testBuildsPagesRebuildsAndSearches() async throws {
+    @Test func testBuildsPagesRebuildsAndSearches() async throws {
         var lines: [String] = []
         var parent: String? = nil
         for i in 0..<30 {
@@ -69,23 +72,23 @@ final class TranscriptStoreTests: ServerTestCase {
         try write(lines)
         let indexer = SessionIndexer(store: store, sessionID: "S", url: file, window: 10)
         let loaded = try await load(indexer)
-        XCTAssertEqual(loaded.rows.count, 10)
-        XCTAssertTrue(loaded.more)
-        XCTAssertEqual(loaded.rows.last?.text, "Answer 29: the pelican count is 203")
-        XCTAssertEqual(loaded.prompts.count, 30)
-        XCTAssertEqual(store.count(in: "S"), 60)
+        #expect(loaded.rows.count == 10)
+        #expect(loaded.more)
+        #expect((loaded.rows.last?.text) == "Answer 29: the pelican count is 203")
+        #expect(loaded.prompts.count == 30)
+        #expect(store.count(in: "S") == 60)
 
         // Paged by place, oldest first, until there is no more.
         let page = await indexer.earlier(before: loaded.rows.first!.id, limit: 10)
-        XCTAssertEqual(page.rows.count, 10)
-        XCTAssertTrue(page.more)
-        XCTAssertEqual(page.rows.last?.id, "msg_24")
+        #expect(page.rows.count == 10)
+        #expect(page.more)
+        #expect((page.rows.last?.id) == "msg_24")
 
         // Words found across the cache.
         let hits = store.search("pelican 203")
-        XCTAssertEqual(hits.count, 1)
-        XCTAssertEqual(hits.first?.messageID, "msg_29")
-        XCTAssertTrue(store.search("walrus").isEmpty)
+        #expect(hits.count == 1)
+        #expect((hits.first?.messageID) == "msg_29")
+        #expect(store.search("walrus").isEmpty)
 
         // The file grows: the cache follows from where it stopped.
         let more = Data((line("user", "u30", "a29", "One more") + "\n" + line("assistant", "a30", "u30", "Last answer", id: "msg_30") + "\n").utf8)
@@ -93,7 +96,7 @@ final class TranscriptStoreTests: ServerTestCase {
         for await event in SessionIndexer(store: store, sessionID: "S", url: file, window: 10).events() {
             switch event {
             case .loaded(let second):
-                XCTAssertEqual(second.rows.count, 10)
+                #expect(second.rows.count == 10)
                 let handle = try FileHandle(forWritingTo: file)
                 try handle.seekToEnd()
                 try handle.write(contentsOf: more)
@@ -105,15 +108,15 @@ final class TranscriptStoreTests: ServerTestCase {
             }
             if grown.count >= 2 { break }
         }
-        XCTAssertEqual(grown.compactMap { $0.rows.first?.text }, ["One more", "Last answer"])
-        XCTAssertEqual(store.count(in: "S"), 62)
-        XCTAssertEqual(store.sourceState(of: "S")?.nextSeq, 62)
+        #expect((grown.compactMap { $0.rows.first?.text }) == ["One more", "Last answer"])
+        #expect(store.count(in: "S") == 62)
+        #expect((store.sourceState(of: "S")?.nextSeq) == 62)
 
         // Thrown away: rebuilt from the file alone, the same.
         let fresh = try MessageCache.sqliteInMemory()
         let rebuilt = try await load(SessionIndexer(store: fresh, sessionID: "S", url: file, window: 100))
-        XCTAssertEqual(rebuilt.rows.count, 62)
-        XCTAssertEqual(rebuilt.rows.last?.text, "Last answer")
+        #expect(rebuilt.rows.count == 62)
+        #expect((rebuilt.rows.last?.text) == "Last answer")
     }
 
     private func boundary(_ uuid: String) -> String {
@@ -121,7 +124,7 @@ final class TranscriptStoreTests: ServerTestCase {
         return String(data: try! JSONSerialization.data(withJSONObject: o), encoding: .utf8)!
     }
 
-    func testCompactionKeepsTheHistoryAndAForkAfterItIsStillAFork() async throws {
+    @Test func testCompactionKeepsTheHistoryAndAForkAfterItIsStillAFork() async throws {
         try write([
             line("user", "u1", nil, "First"),
             line("assistant", "a1", "u1", "Reply one", id: "m1"),
@@ -134,12 +137,12 @@ final class TranscriptStoreTests: ServerTestCase {
             line("assistant", "a4", "u4", "New reply", id: "m4"),
         ])
         let loaded = try await load(SessionIndexer(store: store, sessionID: "C", url: file, window: 100))
-        XCTAssertEqual(loaded.rows.map(\.text), ["First", "Reply one", "After compaction", "Reply two", "New branch", "New reply"])
-        XCTAssertEqual(loaded.abandonedPrompts, 1)
-        XCTAssertEqual(loaded.prompts, ["u1", "u2", "u4"])
+        #expect(loaded.rows.map(\.text) == ["First", "Reply one", "After compaction", "Reply two", "New branch", "New reply"])
+        #expect(loaded.abandonedPrompts == 1)
+        #expect(loaded.prompts == ["u1", "u2", "u4"])
     }
 
-    func testForkLeavesAbandonedLinesOutOfRows() async throws {
+    @Test func testForkLeavesAbandonedLinesOutOfRows() async throws {
         try write([
             line("user", "u1", nil, "First"),
             line("assistant", "a1", "u1", "Reply one", id: "m1"),
@@ -150,9 +153,10 @@ final class TranscriptStoreTests: ServerTestCase {
             line("assistant", "a3", "u3", "New branch reply", id: "m3"),
         ])
         let loaded = try await load(SessionIndexer(store: store, sessionID: "F", url: file, window: 100))
-        XCTAssertEqual(loaded.rows.map(\.text), ["First", "Reply one", "New branch question", "New branch reply"])
-        XCTAssertEqual(loaded.abandonedPrompts, 1)
-        XCTAssertTrue(loaded.abandoned.contains("u2"))
-        XCTAssertEqual(store.count(in: "F"), 4)
+        #expect(loaded.rows.map(\.text) == ["First", "Reply one", "New branch question", "New branch reply"])
+        #expect(loaded.abandonedPrompts == 1)
+        #expect(loaded.abandoned.contains("u2"))
+        #expect(store.count(in: "F") == 4)
     }
+}
 }

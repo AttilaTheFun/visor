@@ -5,13 +5,14 @@
 import Foundation
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-@MainActor
-final class NoTerminalSessionsTests: ServerTestCase {
+extension ServerTests {
+@Suite @MainActor final class NoTerminalSessionsTests {
     private var root: URL!
 
-    override func setUp() async throws {
+    init() async throws {
+        TestPlatform.install()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-no-terminals-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
@@ -21,7 +22,7 @@ final class NoTerminalSessionsTests: ServerTestCase {
     /// One kept by an older server is dropped at load, and the file is
     /// written again without it; the chats beside it come back as they
     /// were.
-    func testAStoredTerminalSessionIsDroppedAtLoad() throws {
+    @Test func testAStoredTerminalSessionIsDroppedAtLoad() throws {
         let file = """
             [{"info":{"id":"T","agent":"shell","cwd":"/tmp","title":"Terminal 1","created":1,"mode":{"kind":"tui","controller":"phone","cols":80,"rows":24}},"entries":[]},
              {"info":{"id":"C","agent":"claude","cwd":"/tmp","title":"Chat","created":2},"entries":[]}]
@@ -29,38 +30,39 @@ final class NoTerminalSessionsTests: ServerTestCase {
         try Data(file.utf8).write(to: root.appendingPathComponent("sessions.json"))
         let server = VisorServer(port: 7995)
         defer { server.stop() }
-        XCTAssertEqual(server.sessions.map(\.info.id), ["C"])
-        XCTAssertEqual(server.sessions.first?.info.agent, .claude)
-        XCTAssertTrue(server.storeIsReadable)
+        #expect(server.sessions.map(\.info.id) == ["C"])
+        #expect((server.sessions.first?.info.agent) == .claude)
+        #expect(server.storeIsReadable)
         let written = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("sessions.json"))) as? [[String: Any]]
-        XCTAssertEqual(written?.compactMap { ($0["info"] as? [String: Any])?["id"] as? String }, ["C"])
+        #expect((written?.compactMap { ($0["info"] as? [String: Any])?["id"] as? String }) == ["C"])
     }
 
     /// An older client's terminal is not started, and what it says to one
     /// changes nothing.
-    func testAnOlderClientsTerminalIsNotStarted() throws {
+    @Test func testAnOlderClientsTerminalIsNotStarted() throws {
         let server = VisorServer(port: 7995)
         defer { server.stop() }
-        let start = try XCTUnwrap(Envelope.decode(#"{"type":"start","id":"T","agent":"shell","cwd":"/tmp","title":""}"#))
+        let start = try #require(Envelope.decode(#"{"type":"start","id":"T","agent":"shell","cwd":"/tmp","title":""}"#))
         server.perform(start, from: nil)
-        XCTAssertNil(server.session("T"))
+        #expect(server.session("T") == nil)
         for said in [#"{"type":"mode","session":"T","mode":"tui","cols":80,"rows":24}"#, #"{"type":"input","session":"T","data":"bHMK"}"#,
                      #"{"type":"resize","session":"T","cols":100,"rows":30}"#] {
-            server.perform(try XCTUnwrap(Envelope.decode(said)), from: nil)
+            server.perform(try #require(Envelope.decode(said)), from: nil)
         }
-        XCTAssertTrue(server.sessions.isEmpty)
+        #expect(server.sessions.isEmpty)
     }
 
     /// An older server's list, read by a client: its terminal is left out,
     /// and so is the kind in its catalogs.
-    func testAnOlderServersTerminalIsNotListed() throws {
+    @Test func testAnOlderServersTerminalIsNotListed() throws {
         let welcome = """
             {"type":"welcome","host":"Mac","sessions":[{"id":"T","agent":"shell","cwd":"/tmp","title":"Terminal 1",\
             "mode":{"kind":"tui","controller":"phone","cols":80,"rows":24}},{"id":"C","agent":"claude","cwd":"/tmp","title":"Chat"}],\
             "catalogs":[{"agent":"claude","models":[]},{"agent":"shell","models":[]}]}
             """
-        let decoded = try XCTUnwrap(Envelope.decode(welcome))
-        XCTAssertEqual(decoded.sessions?.map(\.id), ["C"])
-        XCTAssertEqual(decoded.catalogs?.map(\.agent), [.claude])
+        let decoded = try #require(Envelope.decode(welcome))
+        #expect((decoded.sessions?.map(\.id)) == ["C"])
+        #expect((decoded.catalogs?.map(\.agent)) == [.claude])
     }
+}
 }
