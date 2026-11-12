@@ -42,9 +42,23 @@ public enum AgentProtocol_V1_AgentDriver: Sendable {
                 type: .bidirectionalStreaming
             )
         }
+        /// Namespace for "Conversation" metadata.
+        public enum Conversation: Sendable {
+            /// Request type for "Conversation".
+            public typealias Input = AgentProtocol_V1_ConversationRequest
+            /// Response type for "Conversation".
+            public typealias Output = AgentProtocol_V1_ConversationFile
+            /// Descriptor for "Conversation".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "agent_protocol.v1.AgentDriver"),
+                method: "Conversation",
+                type: .serverStreaming
+            )
+        }
         /// Descriptors for all methods in the "agent_protocol.v1.AgentDriver" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
-            Connect.descriptor
+            Connect.descriptor,
+            Conversation.descriptor
         ]
     }
 }
@@ -84,6 +98,27 @@ extension AgentProtocol_V1_AgentDriver {
             request: GRPCCore.StreamingServerRequest<AgentProtocol_V1_WrapperMessage>,
             context: GRPCCore.ServerContext
         ) async throws -> GRPCCore.StreamingServerResponse<AgentProtocol_V1_DriverMessage>
+
+        /// Handle the "Conversation" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A resumed session's conversation, before its harness starts: its files
+        /// > (the conversation, its subagents, the project's memory), each with
+        /// > where it goes under the harness's own folder for the folder it will
+        /// > work in. Empty for an agent the driver has no conversation of.
+        ///
+        /// - Parameters:
+        ///   - request: A streaming request of `AgentProtocol_V1_ConversationRequest` messages.
+        ///   - context: Context providing information about the RPC.
+        /// - Throws: Any error which occurred during the processing of the request. Thrown errors
+        ///     of type `RPCError` are mapped to appropriate statuses. All other errors are converted
+        ///     to an internal error.
+        /// - Returns: A streaming response of `AgentProtocol_V1_ConversationFile` messages.
+        func conversation(
+            request: GRPCCore.StreamingServerRequest<AgentProtocol_V1_ConversationRequest>,
+            context: GRPCCore.ServerContext
+        ) async throws -> GRPCCore.StreamingServerResponse<AgentProtocol_V1_ConversationFile>
     }
 
     /// Service protocol for the "agent_protocol.v1.AgentDriver" service.
@@ -107,6 +142,27 @@ extension AgentProtocol_V1_AgentDriver {
             request: GRPCCore.StreamingServerRequest<AgentProtocol_V1_WrapperMessage>,
             context: GRPCCore.ServerContext
         ) async throws -> GRPCCore.StreamingServerResponse<AgentProtocol_V1_DriverMessage>
+
+        /// Handle the "Conversation" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A resumed session's conversation, before its harness starts: its files
+        /// > (the conversation, its subagents, the project's memory), each with
+        /// > where it goes under the harness's own folder for the folder it will
+        /// > work in. Empty for an agent the driver has no conversation of.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `AgentProtocol_V1_ConversationRequest` message.
+        ///   - context: Context providing information about the RPC.
+        /// - Throws: Any error which occurred during the processing of the request. Thrown errors
+        ///     of type `RPCError` are mapped to appropriate statuses. All other errors are converted
+        ///     to an internal error.
+        /// - Returns: A streaming response of `AgentProtocol_V1_ConversationFile` messages.
+        func conversation(
+            request: GRPCCore.ServerRequest<AgentProtocol_V1_ConversationRequest>,
+            context: GRPCCore.ServerContext
+        ) async throws -> GRPCCore.StreamingServerResponse<AgentProtocol_V1_ConversationFile>
     }
 
     /// Simple service protocol for the "agent_protocol.v1.AgentDriver" service.
@@ -129,6 +185,28 @@ extension AgentProtocol_V1_AgentDriver {
             response: GRPCCore.RPCWriter<AgentProtocol_V1_DriverMessage>,
             context: GRPCCore.ServerContext
         ) async throws
+
+        /// Handle the "Conversation" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A resumed session's conversation, before its harness starts: its files
+        /// > (the conversation, its subagents, the project's memory), each with
+        /// > where it goes under the harness's own folder for the folder it will
+        /// > work in. Empty for an agent the driver has no conversation of.
+        ///
+        /// - Parameters:
+        ///   - request: A `AgentProtocol_V1_ConversationRequest` message.
+        ///   - response: A response stream of `AgentProtocol_V1_ConversationFile` messages.
+        ///   - context: Context providing information about the RPC.
+        /// - Throws: Any error which occurred during the processing of the request. Thrown errors
+        ///     of type `RPCError` are mapped to appropriate statuses. All other errors are converted
+        ///     to an internal error.
+        func conversation(
+            request: AgentProtocol_V1_ConversationRequest,
+            response: GRPCCore.RPCWriter<AgentProtocol_V1_ConversationFile>,
+            context: GRPCCore.ServerContext
+        ) async throws
     }
 }
 
@@ -147,12 +225,33 @@ extension AgentProtocol_V1_AgentDriver.StreamingServiceProtocol {
                 )
             }
         )
+        router.registerHandler(
+            forMethod: AgentProtocol_V1_AgentDriver.Method.Conversation.descriptor,
+            deserializer: GRPCProtobuf.ProtobufDeserializer<AgentProtocol_V1_ConversationRequest>(),
+            serializer: GRPCProtobuf.ProtobufSerializer<AgentProtocol_V1_ConversationFile>(),
+            handler: { request, context in
+                try await self.conversation(
+                    request: request,
+                    context: context
+                )
+            }
+        )
     }
 }
 
 // Default implementation of streaming methods from 'StreamingServiceProtocol'.
 @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
 extension AgentProtocol_V1_AgentDriver.ServiceProtocol {
+    public func conversation(
+        request: GRPCCore.StreamingServerRequest<AgentProtocol_V1_ConversationRequest>,
+        context: GRPCCore.ServerContext
+    ) async throws -> GRPCCore.StreamingServerResponse<AgentProtocol_V1_ConversationFile> {
+        let response = try await self.conversation(
+            request: GRPCCore.ServerRequest(stream: request),
+            context: context
+        )
+        return response
+    }
 }
 
 // Default implementation of methods from 'ServiceProtocol'.
@@ -167,6 +266,23 @@ extension AgentProtocol_V1_AgentDriver.SimpleServiceProtocol {
             producer: { writer in
                 try await self.connect(
                     request: request.messages,
+                    response: writer,
+                    context: context
+                )
+                return [:]
+            }
+        )
+    }
+
+    public func conversation(
+        request: GRPCCore.ServerRequest<AgentProtocol_V1_ConversationRequest>,
+        context: GRPCCore.ServerContext
+    ) async throws -> GRPCCore.StreamingServerResponse<AgentProtocol_V1_ConversationFile> {
+        return GRPCCore.StreamingServerResponse<AgentProtocol_V1_ConversationFile>(
+            metadata: [:],
+            producer: { writer in
+                try await self.conversation(
+                    request: request.message,
                     response: writer,
                     context: context
                 )
@@ -202,6 +318,32 @@ extension AgentProtocol_V1_AgentDriver {
             deserializer: some GRPCCore.MessageDeserializer<AgentProtocol_V1_DriverMessage>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<AgentProtocol_V1_DriverMessage>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "Conversation" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A resumed session's conversation, before its harness starts: its files
+        /// > (the conversation, its subagents, the project's memory), each with
+        /// > where it goes under the harness's own folder for the folder it will
+        /// > work in. Empty for an agent the driver has no conversation of.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `AgentProtocol_V1_ConversationRequest` message.
+        ///   - serializer: A serializer for `AgentProtocol_V1_ConversationRequest` messages.
+        ///   - deserializer: A deserializer for `AgentProtocol_V1_ConversationFile` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func conversation<Result>(
+            request: GRPCCore.ClientRequest<AgentProtocol_V1_ConversationRequest>,
+            serializer: some GRPCCore.MessageSerializer<AgentProtocol_V1_ConversationRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<AgentProtocol_V1_ConversationFile>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<AgentProtocol_V1_ConversationFile>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -248,6 +390,41 @@ extension AgentProtocol_V1_AgentDriver {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "Conversation" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A resumed session's conversation, before its harness starts: its files
+        /// > (the conversation, its subagents, the project's memory), each with
+        /// > where it goes under the harness's own folder for the folder it will
+        /// > work in. Empty for an agent the driver has no conversation of.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `AgentProtocol_V1_ConversationRequest` message.
+        ///   - serializer: A serializer for `AgentProtocol_V1_ConversationRequest` messages.
+        ///   - deserializer: A deserializer for `AgentProtocol_V1_ConversationFile` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func conversation<Result>(
+            request: GRPCCore.ClientRequest<AgentProtocol_V1_ConversationRequest>,
+            serializer: some GRPCCore.MessageSerializer<AgentProtocol_V1_ConversationRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<AgentProtocol_V1_ConversationFile>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<AgentProtocol_V1_ConversationFile>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.serverStreaming(
+                request: request,
+                descriptor: AgentProtocol_V1_AgentDriver.Method.Conversation.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -272,6 +449,36 @@ extension AgentProtocol_V1_AgentDriver.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<AgentProtocol_V1_WrapperMessage>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<AgentProtocol_V1_DriverMessage>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "Conversation" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A resumed session's conversation, before its harness starts: its files
+    /// > (the conversation, its subagents, the project's memory), each with
+    /// > where it goes under the harness's own folder for the folder it will
+    /// > work in. Empty for an agent the driver has no conversation of.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `AgentProtocol_V1_ConversationRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func conversation<Result>(
+        request: GRPCCore.ClientRequest<AgentProtocol_V1_ConversationRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<AgentProtocol_V1_ConversationFile>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.conversation(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<AgentProtocol_V1_ConversationRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<AgentProtocol_V1_ConversationFile>(),
             options: options,
             onResponse: handleResponse
         )
@@ -303,6 +510,40 @@ extension AgentProtocol_V1_AgentDriver.ClientProtocol {
             producer: producer
         )
         return try await self.connect(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "Conversation" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A resumed session's conversation, before its harness starts: its files
+    /// > (the conversation, its subagents, the project's memory), each with
+    /// > where it goes under the harness's own folder for the folder it will
+    /// > work in. Empty for an agent the driver has no conversation of.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func conversation<Result>(
+        _ message: AgentProtocol_V1_ConversationRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<AgentProtocol_V1_ConversationFile>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<AgentProtocol_V1_ConversationRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.conversation(
             request: request,
             options: options,
             onResponse: handleResponse

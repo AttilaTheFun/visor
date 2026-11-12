@@ -14,6 +14,31 @@ import "agent_protocol/v1/common.proto";
 
 service AgentDriver {
   rpc Connect(stream WrapperMessage) returns (stream DriverMessage);
+  // A resumed session's conversation, before its harness starts: its files
+  // (the conversation, its subagents, the project's memory), each with
+  // where it goes under the harness's own folder for the folder it will
+  // work in. Empty for an agent the driver has no conversation of.
+  rpc Conversation(ConversationRequest) returns (stream ConversationFile);
+}
+
+message ConversationRequest {
+  AgentID agent = 1;
+  // Where the resumed session will work, as the wrapper's machine has it:
+  // the harness keys its conversations by this folder.
+  string working_directory = 2;
+  // The harness ("claude"), whose folder the places are under.
+  string harness = 3;
+}
+
+// A file of the conversation, or a piece of one: `place` is its path
+// under the harness's folder (Claude's ~/.claude, or $CLAUDE_CONFIG_DIR),
+// already for the request's working directory. A file larger than a
+// piece comes as several, in order, with the same place; `last` marks a
+// file's last piece.
+message ConversationFile {
+  string place = 1;
+  bytes data = 2;
+  bool last = 3;
 }
 
 // The wrapper's first message on the stream, and again after a reconnect.

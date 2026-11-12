@@ -17,6 +17,7 @@ swift_library(
     deps = [
         "//:foundation",
         "//agent_protocol",
+        "//libraries/claude_transcript",
         "//libraries/visor_agent",
         "//libraries/visor_protocol",
         "//libraries/visor_server",

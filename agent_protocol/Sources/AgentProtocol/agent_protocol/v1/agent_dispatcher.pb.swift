@@ -69,64 +69,132 @@ public nonisolated struct AgentProtocol_V1_ClaimResponse: Sendable {
   fileprivate var _job: AgentProtocol_V1_Job? = nil
 }
 
-public nonisolated struct AgentProtocol_V1_Job: Sendable {
+public nonisolated struct AgentProtocol_V1_Job: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var agent: AgentProtocol_V1_AgentID {
-    get {_agent ?? AgentProtocol_V1_AgentID()}
-    set {_agent = newValue}
+    get {_storage._agent ?? AgentProtocol_V1_AgentID()}
+    set {_uniqueStorage()._agent = newValue}
   }
   /// Returns true if `agent` has been explicitly set.
-  public var hasAgent: Bool {self._agent != nil}
+  public var hasAgent: Bool {_storage._agent != nil}
   /// Clears the value of `agent`. Subsequent reads from it will return its default value.
-  public mutating func clearAgent() {self._agent = nil}
+  public mutating func clearAgent() {_uniqueStorage()._agent = nil}
 
-  public var title: String = String()
+  public var title: String {
+    get {_storage._title}
+    set {_uniqueStorage()._title = newValue}
+  }
 
   /// What the agent is told first.
-  public var prompt: String = String()
+  public var prompt: String {
+    get {_storage._prompt}
+    set {_uniqueStorage()._prompt = newValue}
+  }
 
   /// Where the job came from (an issue's URL).
-  public var sourceURL: String = String()
+  public var sourceURL: String {
+    get {_storage._sourceURL}
+    set {_uniqueStorage()._sourceURL = newValue}
+  }
 
   /// What to clone and check out, for a runner that works in a clone.
-  public var repository: String = String()
+  public var repository: String {
+    get {_storage._repository}
+    set {_uniqueStorage()._repository = newValue}
+  }
 
-  public var ref: String = String()
+  public var ref: String {
+    get {_storage._ref}
+    set {_uniqueStorage()._ref = newValue}
+  }
 
   /// "claude", "codex", "openrouter", "echo"; empty for the runner's default.
-  public var harness: String = String()
+  public var harness: String {
+    get {_storage._harness}
+    set {_uniqueStorage()._harness = newValue}
+  }
 
-  public var model: String = String()
+  public var model: String {
+    get {_storage._model}
+    set {_uniqueStorage()._model = newValue}
+  }
 
-  public var effort: String = String()
+  public var effort: String {
+    get {_storage._effort}
+    set {_uniqueStorage()._effort = newValue}
+  }
 
-  public var labels: [String] = []
+  public var labels: [String] {
+    get {_storage._labels}
+    set {_uniqueStorage()._labels = newValue}
+  }
 
   public var claimExpires: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_claimExpires ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_claimExpires = newValue}
+    get {_storage._claimExpires ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._claimExpires = newValue}
   }
   /// Returns true if `claimExpires` has been explicitly set.
-  public var hasClaimExpires: Bool {self._claimExpires != nil}
+  public var hasClaimExpires: Bool {_storage._claimExpires != nil}
   /// Clears the value of `claimExpires`. Subsequent reads from it will return its default value.
-  public mutating func clearClaimExpires() {self._claimExpires = nil}
+  public mutating func clearClaimExpires() {_uniqueStorage()._claimExpires = nil}
 
   /// Where a native agent works (no clone): its folder on the runner's computer.
-  public var workingDirectory: String = String()
+  public var workingDirectory: String {
+    get {_storage._workingDirectory}
+    set {_uniqueStorage()._workingDirectory = newValue}
+  }
 
   /// The driver the job's wrapper dials; empty to leave it to the runner's
   /// settings. Visor's dispatcher names itself.
-  public var driverURL: String = String()
+  public var driverURL: String {
+    get {_storage._driverURL}
+    set {_uniqueStorage()._driverURL = newValue}
+  }
+
+  /// A session moved here to carry on (a "Move to a runner…"): the harness's
+  /// own session to resume. Before it starts, the wrapper fetches that
+  /// conversation's files from its driver (AgentDriver.Conversation) and
+  /// clones `sources`. Empty for a new session.
+  public var resumeSessionID: String {
+    get {_storage._resumeSessionID}
+    set {_uniqueStorage()._resumeSessionID = newValue}
+  }
+
+  /// The repositories a resumed session worked in, each cloned where the
+  /// runner keeps sources (#345: clone only, never a copy of a checkout).
+  public var sources: [AgentProtocol_V1_Source] {
+    get {_storage._sources}
+    set {_uniqueStorage()._sources = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _agent: AgentProtocol_V1_AgentID? = nil
-  fileprivate var _claimExpires: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// A repository a session works in: cloned under its name, at its ref.
+public nonisolated struct AgentProtocol_V1_Source: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Its clone URL (https).
+  public var repository: String = String()
+
+  /// The branch (or tag, or commit) to check out; empty for its default.
+  public var ref: String = String()
+
+  /// The folder's name: the last part of where it was (`visor`).
+  public var name: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 public nonisolated struct AgentProtocol_V1_JobReport: Sendable {
@@ -421,7 +489,175 @@ nonisolated extension AgentProtocol_V1_ClaimResponse: SwiftProtobuf.Message, Swi
 
 nonisolated extension AgentProtocol_V1_Job: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Job"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}agent\0\u{1}title\0\u{1}prompt\0\u{3}source_url\0\u{1}repository\0\u{1}ref\0\u{1}harness\0\u{1}model\0\u{1}effort\0\u{1}labels\0\u{3}claim_expires\0\u{3}working_directory\0\u{3}driver_url\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}agent\0\u{1}title\0\u{1}prompt\0\u{3}source_url\0\u{1}repository\0\u{1}ref\0\u{1}harness\0\u{1}model\0\u{1}effort\0\u{1}labels\0\u{3}claim_expires\0\u{3}working_directory\0\u{3}driver_url\0\u{3}resume_session_id\0\u{1}sources\0")
+
+  fileprivate class _StorageClass {
+    var _agent: AgentProtocol_V1_AgentID? = nil
+    var _title: String = String()
+    var _prompt: String = String()
+    var _sourceURL: String = String()
+    var _repository: String = String()
+    var _ref: String = String()
+    var _harness: String = String()
+    var _model: String = String()
+    var _effort: String = String()
+    var _labels: [String] = []
+    var _claimExpires: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _workingDirectory: String = String()
+    var _driverURL: String = String()
+    var _resumeSessionID: String = String()
+    var _sources: [AgentProtocol_V1_Source] = []
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _agent = source._agent
+      _title = source._title
+      _prompt = source._prompt
+      _sourceURL = source._sourceURL
+      _repository = source._repository
+      _ref = source._ref
+      _harness = source._harness
+      _model = source._model
+      _effort = source._effort
+      _labels = source._labels
+      _claimExpires = source._claimExpires
+      _workingDirectory = source._workingDirectory
+      _driverURL = source._driverURL
+      _resumeSessionID = source._resumeSessionID
+      _sources = source._sources
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularMessageField(value: &_storage._agent) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._title) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._prompt) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._sourceURL) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._repository) }()
+        case 6: try { try decoder.decodeSingularStringField(value: &_storage._ref) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._harness) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._model) }()
+        case 9: try { try decoder.decodeSingularStringField(value: &_storage._effort) }()
+        case 10: try { try decoder.decodeRepeatedStringField(value: &_storage._labels) }()
+        case 11: try { try decoder.decodeSingularMessageField(value: &_storage._claimExpires) }()
+        case 12: try { try decoder.decodeSingularStringField(value: &_storage._workingDirectory) }()
+        case 13: try { try decoder.decodeSingularStringField(value: &_storage._driverURL) }()
+        case 14: try { try decoder.decodeSingularStringField(value: &_storage._resumeSessionID) }()
+        case 15: try { try decoder.decodeRepeatedMessageField(value: &_storage._sources) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      try { if let v = _storage._agent {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+      } }()
+      if !_storage._title.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._title, fieldNumber: 2)
+      }
+      if !_storage._prompt.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._prompt, fieldNumber: 3)
+      }
+      if !_storage._sourceURL.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._sourceURL, fieldNumber: 4)
+      }
+      if !_storage._repository.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._repository, fieldNumber: 5)
+      }
+      if !_storage._ref.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._ref, fieldNumber: 6)
+      }
+      if !_storage._harness.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._harness, fieldNumber: 7)
+      }
+      if !_storage._model.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._model, fieldNumber: 8)
+      }
+      if !_storage._effort.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._effort, fieldNumber: 9)
+      }
+      if !_storage._labels.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._labels, fieldNumber: 10)
+      }
+      try { if let v = _storage._claimExpires {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+      } }()
+      if !_storage._workingDirectory.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._workingDirectory, fieldNumber: 12)
+      }
+      if !_storage._driverURL.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._driverURL, fieldNumber: 13)
+      }
+      if !_storage._resumeSessionID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._resumeSessionID, fieldNumber: 14)
+      }
+      if !_storage._sources.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._sources, fieldNumber: 15)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: AgentProtocol_V1_Job, rhs: AgentProtocol_V1_Job) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._agent != rhs_storage._agent {return false}
+        if _storage._title != rhs_storage._title {return false}
+        if _storage._prompt != rhs_storage._prompt {return false}
+        if _storage._sourceURL != rhs_storage._sourceURL {return false}
+        if _storage._repository != rhs_storage._repository {return false}
+        if _storage._ref != rhs_storage._ref {return false}
+        if _storage._harness != rhs_storage._harness {return false}
+        if _storage._model != rhs_storage._model {return false}
+        if _storage._effort != rhs_storage._effort {return false}
+        if _storage._labels != rhs_storage._labels {return false}
+        if _storage._claimExpires != rhs_storage._claimExpires {return false}
+        if _storage._workingDirectory != rhs_storage._workingDirectory {return false}
+        if _storage._driverURL != rhs_storage._driverURL {return false}
+        if _storage._resumeSessionID != rhs_storage._resumeSessionID {return false}
+        if _storage._sources != rhs_storage._sources {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension AgentProtocol_V1_Source: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Source"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}repository\0\u{1}ref\0\u{1}name\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -429,85 +665,31 @@ nonisolated extension AgentProtocol_V1_Job: SwiftProtobuf.Message, SwiftProtobuf
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularMessageField(value: &self._agent) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.title) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.prompt) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self.sourceURL) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.repository) }()
-      case 6: try { try decoder.decodeSingularStringField(value: &self.ref) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self.harness) }()
-      case 8: try { try decoder.decodeSingularStringField(value: &self.model) }()
-      case 9: try { try decoder.decodeSingularStringField(value: &self.effort) }()
-      case 10: try { try decoder.decodeRepeatedStringField(value: &self.labels) }()
-      case 11: try { try decoder.decodeSingularMessageField(value: &self._claimExpires) }()
-      case 12: try { try decoder.decodeSingularStringField(value: &self.workingDirectory) }()
-      case 13: try { try decoder.decodeSingularStringField(value: &self.driverURL) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.repository) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.ref) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.name) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._agent {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    } }()
-    if !self.title.isEmpty {
-      try visitor.visitSingularStringField(value: self.title, fieldNumber: 2)
-    }
-    if !self.prompt.isEmpty {
-      try visitor.visitSingularStringField(value: self.prompt, fieldNumber: 3)
-    }
-    if !self.sourceURL.isEmpty {
-      try visitor.visitSingularStringField(value: self.sourceURL, fieldNumber: 4)
-    }
     if !self.repository.isEmpty {
-      try visitor.visitSingularStringField(value: self.repository, fieldNumber: 5)
+      try visitor.visitSingularStringField(value: self.repository, fieldNumber: 1)
     }
     if !self.ref.isEmpty {
-      try visitor.visitSingularStringField(value: self.ref, fieldNumber: 6)
+      try visitor.visitSingularStringField(value: self.ref, fieldNumber: 2)
     }
-    if !self.harness.isEmpty {
-      try visitor.visitSingularStringField(value: self.harness, fieldNumber: 7)
-    }
-    if !self.model.isEmpty {
-      try visitor.visitSingularStringField(value: self.model, fieldNumber: 8)
-    }
-    if !self.effort.isEmpty {
-      try visitor.visitSingularStringField(value: self.effort, fieldNumber: 9)
-    }
-    if !self.labels.isEmpty {
-      try visitor.visitRepeatedStringField(value: self.labels, fieldNumber: 10)
-    }
-    try { if let v = self._claimExpires {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
-    } }()
-    if !self.workingDirectory.isEmpty {
-      try visitor.visitSingularStringField(value: self.workingDirectory, fieldNumber: 12)
-    }
-    if !self.driverURL.isEmpty {
-      try visitor.visitSingularStringField(value: self.driverURL, fieldNumber: 13)
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 3)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: AgentProtocol_V1_Job, rhs: AgentProtocol_V1_Job) -> Bool {
-    if lhs._agent != rhs._agent {return false}
-    if lhs.title != rhs.title {return false}
-    if lhs.prompt != rhs.prompt {return false}
-    if lhs.sourceURL != rhs.sourceURL {return false}
+  public static func ==(lhs: AgentProtocol_V1_Source, rhs: AgentProtocol_V1_Source) -> Bool {
     if lhs.repository != rhs.repository {return false}
     if lhs.ref != rhs.ref {return false}
-    if lhs.harness != rhs.harness {return false}
-    if lhs.model != rhs.model {return false}
-    if lhs.effort != rhs.effort {return false}
-    if lhs.labels != rhs.labels {return false}
-    if lhs._claimExpires != rhs._claimExpires {return false}
-    if lhs.workingDirectory != rhs.workingDirectory {return false}
-    if lhs.driverURL != rhs.driverURL {return false}
+    if lhs.name != rhs.name {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

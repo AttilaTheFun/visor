@@ -58,6 +58,24 @@ message Job {
   // The driver the job's wrapper dials; empty to leave it to the runner's
   // settings. Visor's dispatcher names itself.
   string driver_url = 13;
+  // A session moved here to carry on (a "Move to a runner…"): the harness's
+  // own session to resume. Before it starts, the wrapper fetches that
+  // conversation's files from its driver (AgentDriver.Conversation) and
+  // clones `sources`. Empty for a new session.
+  string resume_session_id = 14;
+  // The repositories a resumed session worked in, each cloned where the
+  // runner keeps sources (#345: clone only, never a copy of a checkout).
+  repeated Source sources = 15;
+}
+
+// A repository a session works in: cloned under its name, at its ref.
+message Source {
+  // Its clone URL (https).
+  string repository = 1;
+  // The branch (or tag, or commit) to check out; empty for its default.
+  string ref = 2;
+  // The folder's name: the last part of where it was (`visor`).
+  string name = 3;
 }
 
 message JobReport {
