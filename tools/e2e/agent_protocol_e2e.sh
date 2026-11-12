@@ -8,34 +8,36 @@
 # The Claude token is asked for without echo. It goes only into the two
 # agents' environments over ssh's standard input: no file, no log, no image.
 #
-#   tools/e2e/agent_protocol_e2e.sh [--dry-run] [--visor-run <id>] [--shireworks-ref <ref>] [--out <folder>]
+#   tools/e2e/agent_protocol_e2e.sh [--dry-run] [--visor-run <id>] [--out <folder>]
 #
 #   --dry-run          the echo harness and a dummy token: no model, no token asked for
 #   --visor-run        the visor CI run whose apps-mac artifact is Visor.app (the
 #                      latest unexpired one from main unless given)
-#   --shireworks-ref   the shireworks commit whose tools/e2e/container_half.sh runs the
-#                      container half (main unless given)
 #   --out              where the proof goes (./agent-protocol-e2e-<time> unless given)
+#
+# The container half is Shireworks' tools/e2e/relay_container.sh, from your
+# shireworks checkout (SHIREWORKS_CHECKOUT, ~/Developer/shireworks unless set).
 #
 # It never touches this Mac beyond a temporary folder (removed at the end)
 # and the proof folder. Every lease is released however it ends.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SW="${SW:-sw}"
-dry_run=0 visor_run="" shireworks_ref=main out=""
+dry_run=0 visor_run="" out=""
+relay_container="${SHIREWORKS_CHECKOUT:-$HOME/Developer/shireworks}/tools/e2e/relay_container.sh"
 while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) dry_run=1 ;;
         --visor-run) visor_run="${2:?}"; shift ;;
-        --shireworks-ref) shireworks_ref="${2:?}"; shift ;;
         --out) out="${2:?}"; shift ;;
-        *) echo "usage: $0 [--dry-run] [--visor-run <id>] [--shireworks-ref <ref>] [--out <folder>]" >&2; exit 2 ;;
+        *) echo "usage: $0 [--dry-run] [--visor-run <id>] [--out <folder>]" >&2; exit 2 ;;
     esac
     shift
 done
-for tool in "$SW" gh python3 curl; do
+for tool in "$SW" gh python3; do
     command -v "$tool" > /dev/null || { echo "agent_protocol_e2e: $tool isn't on PATH" >&2; exit 2; }
 done
+[ -f "$relay_container" ] || { echo "agent_protocol_e2e: no $relay_container (Shireworks' container half): set SHIREWORKS_CHECKOUT, or pull shireworks" >&2; exit 2; }
 say() { echo "agent_protocol_e2e: $*"; }
 out="${out:-$PWD/agent-protocol-e2e-$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$out"
@@ -53,13 +55,13 @@ fi
 password="$(python3 -I -c 'import secrets; print(secrets.token_urlsafe(18))')"
 
 work="$(mktemp -d)"
-vm="" container_half=""
+vm="" container=""
 finish() {
     status=$?
     set +e
-    if [ -n "$container_half" ] && [ -n "$vm" ]; then
+    if [ -n "$container" ] && [ -n "$vm" ]; then
         say "the container half's cleanup"
-        bash "$container_half" cleanup "$vm"
+        bash "$relay_container" down "$vm" "$container"
     fi
     if [ -n "$vm" ]; then
         say "releasing the VM $vm"
@@ -83,9 +85,6 @@ fi
 gh run download "$visor_run" -R AttilaTheFun/visor -n apps-mac -D "$work/visor"
 say "MultiPass's source (main)"
 gh api repos/AttilaTheFun/multipass/tarball/main > "$work/multipass.tar.gz"
-say "Shireworks' container half ($shireworks_ref)"
-curl -fsSL "https://raw.githubusercontent.com/AttilaTheFun/shireworks/$shireworks_ref/tools/e2e/container_half.sh" \
-    -o "$work/container_half.sh"
 
 say "leasing a macOS VM (xcode_27_2, 120 minutes)"
 exports="$("$SW" machine lease macos --config=xcode_27_2 --minutes=120 --label="agent_protocol e2e" --exports)"
@@ -125,10 +124,11 @@ say "the native agent"
 vm_ssh "python3 -I /tmp/e2e/vm_agents.py run native 240" | tee "$out/native.json"
 native="$(python3 -I -c 'import json,sys; print(json.load(sys.stdin)["session"])' < "$out/native.json")"
 
-say "the container half: Shireworks.app, its runner, the container and MultiPass's relay"
-container_half="$work/container_half.sh"
-printf '%s\n' "$token" | bash "$container_half" setup "$vm" http://127.0.0.1:7434 "$harness"
+say "the container half (Shireworks' relay_container.sh): Shireworks.app and its runner, the container, MultiPass's relay"
+printf '%s\n' "$token" | bash "$relay_container" up "$vm" --harness="$harness" | tee "$work/relay_container.out"
 unset token
+container="$(tail -1 "$work/relay_container.out" | sed -n 's/^container=//p')"
+[ -n "$container" ] || { echo "agent_protocol_e2e: the container half named no container" >&2; exit 1; }
 
 say "the container agent"
 vm_ssh "python3 -I /tmp/e2e/vm_agents.py run container 300" | tee "$out/container.json"
