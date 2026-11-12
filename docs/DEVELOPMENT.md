@@ -785,20 +785,27 @@ front paths, `visor-server front`).
   them (a container's `.netrc`, from `<data>/containers/home/`, has the
   token). Without it (CI's Linux
   runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
-  the Linux client (`//applications/visor_client_linux`; the server is
-  `swift build --product visor-server`), the web site and the Android APK
+  the Linux client (`//applications/visor_client_linux`), the Linux
+  server (`//applications/visor_server_linux:visor-server`; the static
+  release build is SwiftPM's, tools/linux_programs.sh), the web site and the Android APK
   build there as on a Mac. The iPhone app for Apple silicon's simulator
   says so, `--ios_multi_cpus=sim_arm64` (Linux's own default, x86_64, an
   Apple-silicon simulator refuses), and a device build says arm64: the
   flag accumulates, so `apple_on_linux` names neither.
-- Test: `bazel test //tests/visor_server_tests //tests/visor_client_tests
-  //tests/message_cache_tests //tests/claude_transcript_tests`.
-  Server tests set `VisorServer.storeRoot` and `ServerCache.shared` to
+- Test, on Linux: `bazel test //tests:linux` — the server's, the
+  driver's, the message cache's, the transcript parser's and the Runner
+  agent's, `swift_test` targets in Swift Testing. The server's suites are
+  each one of `ServerTests`, which is `.serialized`: they set the server's
+  process-wide state. On a Mac: the client's, the UI's and SSH's bundles
+  (`macos_unit_test`), and the server's Apple system's own tests
+  (`//tests/visor_server_tests:visor_server_tests`, apple/; tagged manual,
+  by hand). Server tests set `VisorServer.storeRoot` and `ServerCache.shared` to
   scratch; a `VisorServer()` built over the real archive KILLS every agent
   it lists as an orphan (it has: "claude exited 143").
   `RealFileIndexTests` indexes a real file when `--test_env=VISOR_REAL_FILE=…`.
-  CI's `build-tests` job builds the Mac's .xctest bundles
-  (`macos_unit_test` under tests/) on Linux in its own container
+  CI's `linux` job runs `//tests:linux`. Its `build-tests` job builds the
+  Mac's .xctest bundles (`macos_unit_test` under tests/, not the manual
+  ones) on Linux in its own container
   (tools/ci/mac_tests_build.sh: `tools/ci/build_mac_tests.sh <archive>
   --config=apple_on_linux …`, Shireworks' SDK archive and cache), and its
   `test` job runs each with `xcrun xctest` on one of GitHub's own Macs
@@ -858,9 +865,10 @@ front paths, `visor-server front`).
     merged tree built as `container` builds it, no tests, nothing
     published.
   - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
-    the gh tools' run_dispatch): `verify` runs the tests that need a Mac
-    (their bundles built on Linux, run on GitHub's `xcode-27` Macs), the
-    command-line server's on Linux (tools/ci/linux_tests.sh), blue Visor's
+    the gh tools' run_dispatch): `verify` runs the tests on Linux
+    (`//tests:linux`) and those that need a Mac (their bundles built on
+    Linux, run on GitHub's `xcode-27` Macs), tries the command-line server
+    on Linux (tools/ci/linux_tests.sh), blue Visor's
     web client (tools/ci/container_blue_web.sh `--build-only`) and the
     proof below, and keeps the `proof` artifact; `prerelease` builds and
     publishes the commit's Alphas and proposes a draft pre-release;
