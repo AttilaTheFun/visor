@@ -86,16 +86,17 @@ final class JobQueue: AgentJobQueue {
 
     /// A claim kept: its new expiry, or nil when it isn't held any more.
     func renew(_ agent: AgentProtocol_V1_AgentID) -> Date? {
-        guard let held = claimed[agent.uuid] else { return nil }
+        let id = Self.key(agent.uuid)
+        guard let held = claimed[id] else { return nil }
         let expires = Date().addingTimeInterval(Self.claimLength)
-        claimed[agent.uuid] = (held.job, held.runner, expires)
+        claimed[id] = (held.job, held.runner, expires)
         return expires
     }
 
     /// How a claimed job goes: done (completed, failed) lets it go; released
     /// puts it back at the front of the queue.
     func report(_ report: AgentProtocol_V1_JobReport) {
-        let id = report.agent.uuid
+        let id = Self.key(report.agent.uuid)
         switch report.event {
         case .started(let started):
             log("dispatcher: \(id) started by \(started.runner) (session \(started.sessionID))")
@@ -114,6 +115,13 @@ final class JobQueue: AgentJobQueue {
         case .none:
             break
         }
+    }
+
+    /// An agent's id as this dispatcher keys it: the UUID it issued, in
+    /// lower case, however a runner or wrapper spells it back (Foundation's
+    /// `UUID.uuidString` is upper case).
+    nonisolated static func key(_ uuid: String) -> String {
+        uuid.lowercased()
     }
 
     /// The label a job that asks for a kind of runner carries:
