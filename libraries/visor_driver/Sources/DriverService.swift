@@ -14,9 +14,12 @@ struct DriverService: AgentProtocol_V1_AgentDriver.SimpleServiceProtocol {
     func connect(request: RPCAsyncSequence<AgentProtocol_V1_WrapperMessage, any Error>,
                  response: RPCWriter<AgentProtocol_V1_DriverMessage>, context: ServerContext) async throws {
         var messages = request.makeAsyncIterator()
-        guard let first = try await messages.next(), case .hello(let hello) = first.message else {
+        guard let first = try await messages.next(), case .hello(var hello) = first.message else {
             throw RPCError(code: .failedPrecondition, message: "A wrapper's first message is its hello.")
         }
+        // The session is the agent's id as the dispatcher issued it, however
+        // the wrapper spells it.
+        hello.agent.uuid = JobQueue.key(hello.agent.uuid)
         guard !hello.agent.uuid.isEmpty else { throw RPCError(code: .invalidArgument, message: "The hello names no agent.") }
         let (outgoing, sending) = AsyncStream<AgentProtocol_V1_DriverMessage>.makeStream()
         let server = self.server

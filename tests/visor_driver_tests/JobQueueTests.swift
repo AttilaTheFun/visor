@@ -93,6 +93,18 @@ final class JobQueueTests: XCTestCase {
         XCTAssertEqual(container?.labels, ["runs-on:container"])
     }
 
+    func testAnIdSpelledInUpperCaseIsTheSameAgent() async throws {
+        let jobs = queue()
+        _ = jobs.queueStart(start("Shouted"))
+        let claimed = await jobs.claim(claim(), wait: .zero)
+        let job = try XCTUnwrap(claimed)
+        var upper = job.agent
+        upper.uuid = upper.uuid.uppercased()
+        XCTAssertNotNil(jobs.renew(upper))
+        jobs.report(.with { $0.agent = upper; $0.completed = .init() })
+        XCTAssertNil(jobs.renew(job.agent), "Completed in upper case let the claim go")
+    }
+
     func testTheNativeRunnerGivesItsWrapperTheJob() async throws {
         let runner = try XCTUnwrap(NativeRunner(dispatcher: "http://127.0.0.1:7434", wrapper: "/bin/true", name: "Mac", log: { _ in }))
         var job = AgentProtocol_V1_Job()
