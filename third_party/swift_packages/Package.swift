@@ -20,8 +20,10 @@ let package = Package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
             exact: "0.51.0"
         ),
-        // agent_protocol's gRPC (agent_protocol/, VisorDriver, the native
-        // runner): the versions Isomer resolves already, and its protobuf.
+        // agent_protocol: its services' Swift (VisorDriver, the native
+        // runner) and agent-wrapper (the Mac app's Helpers), by release.
+        .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", exact: "0.1.0"),
+        // Its gRPC: the versions Isomer resolves already, and its protobuf.
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
         .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
         .package(url: "https://github.com/grpc/grpc-swift-protobuf.git", from: "2.5.0"),

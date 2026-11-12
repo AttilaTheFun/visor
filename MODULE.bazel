@@ -138,6 +138,7 @@ swift_deps.configure_package(
 use_repo(
     swift_deps,
     "swift_package",
+    "swiftpkg_agent_protocol",
     "swiftpkg_agent_ui",
     "swiftpkg_grpc_swift_2",
     "swiftpkg_grpc_swift_nio_transport",
