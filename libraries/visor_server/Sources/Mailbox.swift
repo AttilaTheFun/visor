@@ -5,7 +5,7 @@ import VisorProtocol
 /// deleted with it. Each box keeps its newest `kept` messages: a box past
 /// that lets its oldest go, read ones first in the inbox.
 struct Mailbox: Codable, Equatable {
-    static let kept = 500
+    static let kept = 100
 
     var inbox: [MailMessage] = []
     var outbox: [MailMessage] = []

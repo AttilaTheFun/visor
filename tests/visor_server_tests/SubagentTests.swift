@@ -217,7 +217,7 @@ final class SubagentTests: ServerTestCase {
         record.info.subagents = [SubagentInfo(id: "a1", description: "Map it", type: "Explore", running: true)]
         record.info.background = [StatusItem(id: "a1", kind: .subagent, label: "Map it", running: true)]
         server.sessions = [record]
-        server.saveArchive()
+        server.saveArchiveNow()
         server.stop()
 
         let again = VisorServer(port: 7997)

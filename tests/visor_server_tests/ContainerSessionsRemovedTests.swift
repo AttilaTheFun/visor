@@ -64,7 +64,7 @@ final class ContainerSessionsRemovedTests: ServerTestCase {
         // As a server of 0.49 saved it: in a container it made.
         info.container = SessionContainer(id: "visor-s", image: "ghcr.io/attilathefun/visor:0.49.2", size: .standard)
         record.info = info
-        server.saveArchive()
+        server.saveArchiveNow()
 
         let again = VisorServer(port: Self.freePort())
         again.loadSessions()

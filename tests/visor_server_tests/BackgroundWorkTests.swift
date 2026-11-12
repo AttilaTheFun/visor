@@ -79,7 +79,7 @@ final class BackgroundWorkTests: ServerTestCase {
         let session = record("A")
         server.sessions = [session]
         server.handle(.background([StatusItem(id: "b1", kind: .shell, label: "Wait for the other Mac", running: true)]), from: session)
-        server.saveArchive()
+        server.saveArchiveNow()
         server.stop()
         server = VisorServer(port: 7981)
         XCTAssertEqual(server.sessions.map(\.info.id), ["A"])

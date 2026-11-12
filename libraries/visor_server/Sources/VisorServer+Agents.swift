@@ -76,14 +76,14 @@ extension VisorServer {
         // Archived means no process and nothing owed: it must not come back
         // running on the next launch.
         record.interrupted = false
-        saveArchive()
+        saveArchiveNow()
         broadcast(record.transcriptEnvelope, session: record)
         broadcastSessions()
     }
 
     func unarchive(_ record: SessionRecord) {
         record.setArchived(false)
-        saveArchive()
+        saveArchiveNow()
         broadcastSessions()
     }
 
@@ -313,7 +313,7 @@ extension VisorServer {
             // The spawn happened inside `send`, so the pid is knowable
             // only now — and it is what finds this agent again if we are
             // killed outright.
-            saveArchive()
+            saveArchiveNow()
             // Working from now, not from when the agent says so: what the
             // user sends next (a command after its words, split by the
             // client) waits for this turn rather than landing inside it.
