@@ -119,3 +119,24 @@ in the transcript and the agent can be notified."
 
 - Writing into an agent's inbox from the inspector, apart from the chat, if
   wanted.
+
+## Written messages (from 0.51; the inbox's tools go after)
+
+Logan, 12 Nov 2026: Visor's MCP goes, and with it the inbox. An agent sends
+a message by beginning a reply with `@@to <session> on <computer>` and its
+message below; the session takes it as a turn beginning
+`@@from <session> on <computer>`, the sender's. The markers are read and
+written in one place (`AgentMessageMarkers`, visor_protocol).
+
+- At the end of each turn the server looks at the turn's replies; each that
+  is a message goes once (by its row's id).
+- To a session here (the computer named as this server, by name or id): handed over at once, as
+  the turn. To a session here that isn't: failed in the sender's outbox.
+- To another computer: into the relay's outbox with the computer and session
+  by name, until a client's report names them and their ids are filled in;
+  then carried by a client as any relayed message, and taken there once.
+  It doesn't expire: it waits until it is taken (or, later, trashed).
+- A message keeps its place in the sender's outbox, so its fate (waiting,
+  delivered, failed) is shown as the inbox's messages' is.
+- Until every client and session has moved over (Manager says when), the
+  inbox's tools work on beside this, and agents aren't told of the markers.

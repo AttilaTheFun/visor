@@ -15,7 +15,10 @@ extension VisorServer {
     /// set) on another server, by `messageID` (the relay's, for a message
     /// carried here). Into the inbox when its agent reads mail, else as a
     /// turn headed with its sender. Whether the agent was working.
-    func mail(_ text: String, from sender: RelayEndpoint, to target: SessionRecord, messageID: String, here: Bool) -> Bool {
+    /// `marked`: one the agent wrote as words (AgentMessageMarkers), handed
+    /// over as a turn beginning `@@from`, never into the inbox.
+    func mail(_ text: String, from sender: RelayEndpoint, to target: SessionRecord, messageID: String, here: Bool,
+              marked: Bool = false) -> Bool {
         let now = Date().timeIntervalSince1970
         let to = RelayEndpoint(server: id, serverName: hostName, session: target.info.id, sessionName: target.displayName)
         let message = MailMessage(id: messageID, from: sender, to: to, text: text, sent: now, state: .delivered, changed: now)
@@ -23,7 +26,10 @@ extension VisorServer {
         // The sender's copy, when the sender is here; one on another
         // server keeps its own.
         if here, let source = session(sender.session) { source.mailbox.send(message) }
-        if target.takesMail {
+        if marked {
+            let name = sender.sessionName.isEmpty ? sender.session : sender.sessionName
+            deliver(AgentMessageMarkers.inboundText(from: name, on: sender.serverName, body: text), to: target)
+        } else if target.takesMail {
             target.mailbox.receive(message)
             notifyMail(target)
         } else {

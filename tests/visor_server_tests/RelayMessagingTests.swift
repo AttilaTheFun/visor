@@ -94,6 +94,50 @@ final class RelayMessagingTests: ServerTestCase {
         return await withCheckedContinuation { done in here.answerAgent(e) { done.resume(returning: $0) } }
     }
 
+    /// A session whose agent's last reply was `text`.
+    private func writer(_ id: String, _ title: String, wrote text: String) -> SessionRecord {
+        let sender = record(id, title)
+        sender.entries.append(TranscriptEntry(id: "a1", role: .assistant, text: text))
+        return sender
+    }
+
+    func testAWrittenMessageToASessionHereIsHandedOverOnceAsATurnFromItsSender() {
+        let sender = writer("A", "Mini work", wrote: AgentMessageMarkers.outboundText(to: "mini PLAN", on: here.hostName, body: "Ship it\ntoday"))
+        here.sessions = [sender, record("P", "Mini plan", busy: true)]
+        here.sendMarkedMessages(of: sender)
+        here.sendMarkedMessages(of: sender)
+        let queued = here.sessions[1].info.queued
+        XCTAssertEqual(queued, [AgentMessageMarkers.inboundText(from: "Mini work", on: here.hostName, body: "Ship it\ntoday")],
+                       "once, however often the turn is looked at, and not into the inbox")
+        XCTAssertTrue(here.sessions[1].mailbox.inbox.isEmpty)
+        XCTAssertEqual(sender.mailbox.outbox.map(\.state), [.delivered])
+    }
+
+    func testAWrittenMessageToNoSessionHereFails() {
+        let sender = writer("A", "Mini work", wrote: AgentMessageMarkers.outboundText(to: "Nobody", on: here.hostName, body: "Hello"))
+        here.sessions = [sender]
+        here.sendMarkedMessages(of: sender)
+        XCTAssertEqual(sender.mailbox.outbox.first?.state, .failed)
+        XCTAssertEqual(sender.mailbox.outbox.first?.problem?.contains("Nobody"), true)
+    }
+
+    func testAWrittenMessageWaitsForAClientToNameItsComputerThenGoesAsATurn() {
+        let sender = writer("A", "Mini work", wrote: AgentMessageMarkers.outboundText(to: "laptop work", on: "laptop", body: "Over to you"))
+        here.sessions = [sender]
+        there.sessions = [record("B", "Laptop work", busy: true)]
+        here.sendMarkedMessages(of: sender)
+        XCTAssertEqual(sender.mailbox.outbox.first?.state, .waiting, "no client has named the laptop yet")
+        let receipts = exchange(from: here, to: there)
+        XCTAssertEqual(receipts.map(\.outcome), [.queued])
+        XCTAssertEqual(there.sessions[0].info.queued.count, 1)
+        let taken = there.sessions[0].info.queued.first.flatMap(AgentMessageMarkers.inbound)
+        XCTAssertEqual(taken, AgentMessageMarkers.Addressed(session: "Mini work", computer: here.hostName, body: "Over to you"))
+        XCTAssertTrue(there.sessions[0].mailbox.inbox.isEmpty, "a turn, not the inbox")
+        XCTAssertEqual(sender.mailbox.outbox.first?.state, .delivered)
+        XCTAssertEqual(sender.mailbox.outbox.first?.to.server, "", "the sender's copy keeps the names it was written with")
+        XCTAssertTrue(exchange(from: here, to: there).isEmpty, "carried once")
+    }
+
     func testEachServerKnowsItsClientsBuildsAndTheOtherServers() async {
         here.sessions = [record("A", "Mini work")]
         var said = report()

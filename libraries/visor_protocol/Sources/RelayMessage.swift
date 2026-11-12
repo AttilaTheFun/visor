@@ -21,9 +21,14 @@ public struct RelayMessage: Codable, Equatable, Hashable, Sendable {
     public var rows: Int
     public var created: Double
     public var expires: Double
+    /// A message an agent wrote as words (AgentMessageMarkers): delivered as
+    /// a turn beginning `@@from`, never into an inbox. A server from before
+    /// it doesn't know it, and delivers it as a message from the inbox's
+    /// tools.
+    public var marked: Bool?
 
     public init(id: String, kind: Kind, from: RelayEndpoint, to: RelayEndpoint, text: String = "", rows: Int = 10,
-                created: Double, expires: Double) {
+                created: Double, expires: Double, marked: Bool? = nil) {
         self.id = id
         self.kind = kind
         self.from = from
@@ -32,5 +37,6 @@ public struct RelayMessage: Codable, Equatable, Hashable, Sendable {
         self.rows = rows
         self.created = created
         self.expires = expires
+        self.marked = marked
     }
 }
