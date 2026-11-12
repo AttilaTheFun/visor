@@ -105,6 +105,22 @@ final class JobQueueTests: XCTestCase {
         XCTAssertNil(jobs.renew(job.agent), "Completed in upper case let the claim go")
     }
 
+    func testAContainerRunnerIsGivenTheAddressContainersReach() async throws {
+        let jobs = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434",
+                            containerURL: "http://visor.multipass.internal:7434", log: { _ in })
+        _ = jobs.queueStart(start("Native"))
+        _ = jobs.queueStart(start("Contained"))
+        let nativeClaim = await jobs.claim(claim(["native", "harness:claude"]), wait: .zero)
+        let native = try XCTUnwrap(nativeClaim)
+        XCTAssertEqual(native.agent.dispatcherURL, "http://127.0.0.1:7434")
+        XCTAssertEqual(native.driverURL, "http://127.0.0.1:7434")
+        let containedClaim = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        let contained = try XCTUnwrap(containedClaim)
+        XCTAssertEqual(contained.agent.dispatcherURL, "http://visor.multipass.internal:7434")
+        XCTAssertEqual(contained.driverURL, "http://visor.multipass.internal:7434")
+        XCTAssertEqual(jobs.claimed[contained.agent.uuid]?.job.driverURL, "http://127.0.0.1:7434", "the job kept keeps its own")
+    }
+
     func testTheNativeRunnerGivesItsWrapperTheJob() async throws {
         let runner = try XCTUnwrap(NativeRunner(dispatcher: "http://127.0.0.1:7434", wrapper: "/bin/true", name: "Mac", log: { _ in }))
         var job = AgentProtocol_V1_Job()

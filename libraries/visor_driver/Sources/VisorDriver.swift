@@ -15,16 +15,21 @@ public enum VisorDriver {
     /// server its driven sessions' processes and its job queue. `url` is
     /// this server's address as wrappers and runners reach it. `harness`
     /// is what its jobs run ("echo" for a test without a model).
+    /// `containerURL` is this server's address as containers reach it
+    /// (MultiPass's dial-in, `http://visor.multipass.internal:<port>`),
+    /// given to container runners in place of `url`; nil for the same.
     @MainActor
-    public static func start(_ server: VisorServer, host: String, port: Int, url: String, harness: String = "claude") -> Task<Void, Never> {
-        let jobs = JobQueue(dispatcherURL: url, driverURL: url, harness: harness)
+    public static func start(_ server: VisorServer, host: String, port: Int, url: String, containerURL: String? = nil,
+                             harness: String = "claude") -> Task<Void, Never> {
+        let jobs = JobQueue(dispatcherURL: url, driverURL: url, containerURL: containerURL, harness: harness)
         server.jobs = jobs
         server.drivenProcess = { _ in DrivenProcess() }
         return Task.detached {
             let transport = HTTP2ServerTransport.Posix(address: .ipv4(host: host, port: port), transportSecurity: .plaintext)
             do {
                 try await withGRPCServer(transport: transport, services: [DriverService(server: server), DispatcherService(jobs: jobs)]) { _ in
-                    VisorServer.log("agent_protocol: driver and dispatcher on \(host):\(port), as \(url)")
+                    VisorServer.log("agent_protocol: driver and dispatcher on \(host):\(port), as \(url)"
+                        + (containerURL.map { ", and to containers as \($0)" } ?? ""))
                     while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
                 }
             } catch {

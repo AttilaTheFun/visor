@@ -19,6 +19,11 @@ final class JobQueue: AgentJobQueue {
     let dispatcherURL: String
     /// The driver the jobs' wrappers dial (this server's).
     let driverURL: String
+    /// This server's driver and dispatcher as a container reaches them
+    /// (through MultiPass's dial-in: `http://visor.multipass.internal:7434`),
+    /// given to a runner whose capabilities say `container` in place of
+    /// both; nil, and containers are given the same addresses as the rest.
+    let containerURL: String?
     /// The harness jobs run ("claude"; "echo" for a test without a model).
     let harness: String
     private let log: @Sendable (String) -> Void
@@ -28,10 +33,11 @@ final class JobQueue: AgentJobQueue {
     private(set) var claimed: [String: (job: AgentProtocol_V1_Job, runner: String, expires: Date)] = [:]
     private var pollers: [UUID: CheckedContinuation<Void, Never>] = [:]
 
-    init(dispatcherURL: String, driverURL: String, harness: String = "claude",
+    init(dispatcherURL: String, driverURL: String, containerURL: String? = nil, harness: String = "claude",
          log: @escaping @Sendable (String) -> Void = { VisorServer.log($0) }) {
         self.dispatcherURL = dispatcherURL
         self.driverURL = driverURL
+        self.containerURL = containerURL.flatMap { $0.isEmpty ? nil : $0 }
         self.harness = harness
         self.log = log
     }
@@ -70,7 +76,7 @@ final class JobQueue: AgentJobQueue {
                 job.claimExpires = .init(date: expires)
                 claimed[job.agent.uuid] = (job, request.runner, expires)
                 log("dispatcher: \(request.runner) claimed \(job.agent.uuid)")
-                return job
+                return addressed(job, for: request.capabilities)
             }
             let left = deadline - .now
             guard left > .zero else { return nil }
@@ -116,6 +122,20 @@ final class JobQueue: AgentJobQueue {
             break
         }
     }
+
+    /// `job` as `capabilities`' runner is given it: a container's, this
+    /// server's addresses as containers reach them. The job kept (and
+    /// queued again if released) keeps its own.
+    func addressed(_ job: AgentProtocol_V1_Job, for capabilities: [String]) -> AgentProtocol_V1_Job {
+        guard let containerURL, capabilities.contains(Self.container) else { return job }
+        var given = job
+        given.agent.dispatcherURL = containerURL
+        given.driverURL = containerURL
+        return given
+    }
+
+    /// The capability of a runner that runs its agents in containers.
+    static let container = "container"
 
     /// An agent's id as this dispatcher keys it: the UUID it issued, in
     /// lower case, however a runner or wrapper spells it back (Foundation's
