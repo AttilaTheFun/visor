@@ -21,6 +21,29 @@ let reports = options.dispatcherURL.flatMap {
     DispatcherReports(url: $0, agent: options.agent, runner: options.runner ?? ProcessInfo.processInfo.hostName)
 }
 
+// A session moved here: its conversation and its repositories first.
+if !options.spec.resumeSessionID.isEmpty {
+    do {
+        if !options.spec.workingDirectory.isEmpty {
+            try FileManager.default.createDirectory(atPath: options.spec.workingDirectory, withIntermediateDirectories: true)
+        }
+        if let url = options.driverURL {
+            let written = try await ResumePreparation.fetchConversation(
+                driverURL: url, agent: options.agent, workingDirectory: options.spec.workingDirectory,
+                harness: options.spec.harness, into: ResumePreparation.claudeFolder())
+            log("resuming \(options.spec.resumeSessionID): \(written) of its conversation's files written")
+        }
+        if let directory = options.sourcesDirectory, !options.sources.isEmpty {
+            let cloned = try ResumePreparation.clone(options.sources, into: directory)
+            log("resuming: \(cloned.count) of \(options.sources.count) repositories cloned")
+        }
+    } catch {
+        log("the session can't be resumed: \(error)")
+        try? await reports?.failed(reason: "the session can't be resumed: \(error)")
+        exit(1)
+    }
+}
+
 let core: AgentCore
 do {
     let launch = try HarnessLaunch.for(options.spec, claudeProgram: options.claudeProgram)

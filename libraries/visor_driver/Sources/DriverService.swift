@@ -10,6 +10,8 @@ import VisorServer
 
 struct DriverService: AgentProtocol_V1_AgentDriver.SimpleServiceProtocol {
     let server: VisorServer
+    /// Where moved sessions' conversations are known (JobQueue.move).
+    let jobs: JobQueue
 
     func connect(request: RPCAsyncSequence<AgentProtocol_V1_WrapperMessage, any Error>,
                  response: RPCWriter<AgentProtocol_V1_DriverMessage>, context: ServerContext) async throws {
@@ -48,6 +50,30 @@ struct DriverService: AgentProtocol_V1_AgentDriver.SimpleServiceProtocol {
         }
         await MainActor.run { process.detach(connection) }
         VisorServer.log("driver: \(hello.agent.uuid) disconnected")
+    }
+
+    /// A moved session's conversation, before its wrapper starts its harness:
+    /// each of its files in pieces, its place for the folder it will work in.
+    func conversation(request: AgentProtocol_V1_ConversationRequest, response: RPCWriter<AgentProtocol_V1_ConversationFile>,
+                      context: ServerContext) async throws {
+        guard let move = await jobs.move(of: request.agent) else {
+            VisorServer.log("driver: \(request.agent.uuid) asked for a conversation, but it wasn't moved here")
+            return
+        }
+        let files = ConversationFiles.of(resume: move.resume, cwd: move.cwd, for: request.workingDirectory)
+        var sent = 0
+        for file in files {
+            guard let handle = try? FileHandle(forReadingFrom: file.url) else { continue }
+            defer { try? handle.close() }
+            while true {
+                let piece = try handle.read(upToCount: ConversationFiles.piece) ?? Data()
+                let last = piece.count < ConversationFiles.piece
+                try await response.write(.with { $0.place = file.place; $0.data = piece; $0.last = last })
+                if last { break }
+            }
+            sent += 1
+        }
+        VisorServer.log("driver: \(request.agent.uuid)'s conversation (\(move.resume)) sent, \(sent) files, for \(request.workingDirectory)")
     }
 
     /// A session as a wrapper describes its agent: its id is the agent's.

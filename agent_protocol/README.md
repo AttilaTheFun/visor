@@ -81,6 +81,16 @@ sends its first prompt, and takes later messages from its driver. It ends
 when the agent does. `AGENT_WRAPPER_CLAUDE` stands in for `claude`, as
 the tests' stand-in does.
 
+**A session moved to a runner** comes as a job with `resume_session_id` and
+`sources`. Before the harness starts, the wrapper:
+- fetches the conversation's files from its driver (`AgentDriver.Conversation`)
+  into Claude's folder (`$CLAUDE_CONFIG_DIR`, else `~/.claude`), keyed to the
+  folder it will work in;
+- clones each source under `AGENT_SOURCES_DIR` by its name and ref;
+- then runs `claude --resume`.
+Nothing already there is overwritten. A job with no working directory, on a
+runner that sets `AGENT_SESSIONS_DIR`, works in `<dir>/Claude/<agent>`.
+
 Not yet: Codex and OpenRouter, permission prompts relayed to the driver,
 interrupts and model changes, and the AgentWrapper service. Its harnesses
 will come from Visor's agent code (visor_agent).

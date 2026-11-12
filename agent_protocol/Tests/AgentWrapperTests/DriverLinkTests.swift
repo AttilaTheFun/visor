@@ -24,6 +24,17 @@ final class TestDriver: AgentProtocol_V1_AgentDriver.SimpleServiceProtocol {
         }
     }
 
+    /// A resumed session's conversation: its file in two pieces, and a
+    /// memory file; for agent "a3" only, its places for the folder asked.
+    func conversation(request: AgentProtocol_V1_ConversationRequest, response: RPCWriter<AgentProtocol_V1_ConversationFile>,
+                      context: ServerContext) async throws {
+        guard request.agent.uuid == "a3" else { return }
+        let project = "projects/" + request.workingDirectory.replacingOccurrences(of: "/", with: "-")
+        try await response.write(.with { $0.place = "\(project)/s1.jsonl"; $0.data = Data("{\"a\":1}\n".utf8) })
+        try await response.write(.with { $0.place = "\(project)/s1.jsonl"; $0.data = Data("{\"b\":2}\n".utf8); $0.last = true })
+        try await response.write(.with { $0.place = "\(project)/memory/MEMORY.md"; $0.data = Data("- a memory\n".utf8); $0.last = true })
+    }
+
     var answered: Bool {
         heard.withLock { messages in
             messages.contains { message in

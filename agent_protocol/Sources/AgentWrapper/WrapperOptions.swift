@@ -7,10 +7,14 @@ import Foundation
 /// - `AGENT_ID`: `<uuid>@<dispatcher URL>`;
 /// - `AGENT_JOB`: the job as JSON, `{agent, dispatcherURL, title, prompt,
 ///   sourceURL, repository, ref, harness?, model?, effort?, labels,
-///   workingDirectory?, driverURL?}`;
+///   workingDirectory?, driverURL?, resumeSessionID?, sources?}`, where
+///   `sources` is `[{repository, ref, name}]`;
 /// - `AGENT_DISPATCHER_URL`: whom it reports Started, Completed and Failed to;
 /// - `AGENT_DRIVER_URL`: the driver it dials, if any;
-/// - `AGENT_RUNNER`: the runner's name.
+/// - `AGENT_RUNNER`: the runner's name;
+/// - `AGENT_SESSIONS_DIR`: where the runner keeps sessions; a job with no
+///   working directory works in `<dir>/Claude/<agent>` there;
+/// - `AGENT_SOURCES_DIR`: where a resumed session's `sources` are cloned.
 ///
 /// By hand, the same as flags:
 ///
@@ -25,6 +29,11 @@ public struct WrapperOptions: Sendable, Equatable {
     public var dispatcherURL: String?
     public var runner: String?
     public var claudeProgram: String?
+    /// A resumed session's repositories (AGENT_JOB's `sources`), cloned
+    /// under `sourcesDirectory` before it starts.
+    public var sources: [AgentProtocol_V1_Source] = []
+    /// Where the runner keeps sources (AGENT_SOURCES_DIR: /Volumes/Sources).
+    public var sourcesDirectory: String?
 
     public enum Problem: Error, Equatable, CustomStringConvertible {
         case missing(String)
@@ -61,6 +70,18 @@ public struct WrapperOptions: Sendable, Equatable {
         dispatcherURL = Self.given(environment["AGENT_DISPATCHER_URL"])
         runner = Self.given(environment["AGENT_RUNNER"])
         claudeProgram = Self.given(environment["AGENT_WRAPPER_CLAUDE"])
+        sourcesDirectory = Self.given(environment["AGENT_SOURCES_DIR"])
+        // A session with no folder named, where the runner keeps sessions
+        // (AGENT_SESSIONS_DIR: /Volumes/Sessions): a folder of its own
+        // there, <dir>/Claude/<id>, as Visor's SessionFolders gives one.
+        if spec.workingDirectory.isEmpty, let sessions = Self.given(environment["AGENT_SESSIONS_DIR"]) {
+            spec.workingDirectory = "\(sessions)/\(Self.folderName(of: spec.harness))/\(agent.uuid)"
+        }
+    }
+
+    /// A harness's part of a session's folder: Claude, Codex.
+    static func folderName(of harness: String) -> String {
+        harness.isEmpty ? "Claude" : harness.prefix(1).uppercased() + harness.dropFirst()
     }
 
     private static func given(_ value: String?) -> String? {
@@ -87,6 +108,14 @@ public struct WrapperOptions: Sendable, Equatable {
         }
         for label in object["labels"] as? [String] ?? [] { spec.labels[label] = "" }
         if !string("driverURL").isEmpty { driverURL = string("driverURL") }
+        if !string("resumeSessionID").isEmpty { spec.resumeSessionID = string("resumeSessionID") }
+        for source in object["sources"] as? [[String: Any]] ?? [] {
+            sources.append(.with {
+                $0.repository = source["repository"] as? String ?? ""
+                $0.ref = source["ref"] as? String ?? ""
+                $0.name = source["name"] as? String ?? ""
+            })
+        }
     }
 
     private mutating func take(arguments: [String]) throws(Problem) {

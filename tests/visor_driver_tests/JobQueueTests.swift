@@ -121,6 +121,31 @@ final class JobQueueTests: XCTestCase {
         XCTAssertEqual(jobs.claimed[contained.agent.uuid]?.job.driverURL, "http://127.0.0.1:7434", "the job kept keeps its own")
     }
 
+    func testAMovedSessionsResumeJobCarriesItsConversationAndRepositories() async throws {
+        let jobs = queue()
+        let move = AgentJobMove(session: "s7abc", title: "Moved", resume: "c-123", cwd: "/Users/logan/Developer",
+                                sources: [AgentJobSource(repository: "https://github.com/AttilaTheFun/visor.git", ref: "main", name: "visor")],
+                                runsOn: "container")
+        XCTAssertEqual(jobs.queueResume(move), .success("s7abc"))
+        XCTAssertEqual(jobs.queueResume(move), .failure(AgentJobRefusal("The session is moving to a runner already.")))
+        let nativeClaim = await jobs.claim(claim(["native", "harness:claude"]), wait: .zero)
+        XCTAssertNil(nativeClaim, "only a container runner takes it")
+        let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        let job = try XCTUnwrap(claimed)
+        XCTAssertEqual(job.agent.uuid, "s7abc")
+        XCTAssertEqual(job.resumeSessionID, "c-123")
+        XCTAssertEqual(job.sources.map(\.name), ["visor"])
+        XCTAssertEqual(job.sources.first?.ref, "main")
+        let known = jobs.move(of: job.agent)
+        XCTAssertEqual(known?.resume, "c-123")
+        XCTAssertEqual(known?.cwd, "/Users/logan/Developer")
+        XCTAssertEqual(jobs.queueResume(AgentJobMove(session: "s8", title: "None", resume: "", cwd: "/", runsOn: "container")),
+                       .failure(AgentJobRefusal("The session has no conversation to carry on.")))
+        let json = NativeRunner.json(job)
+        XCTAssertTrue(json.contains("\"resumeSessionID\":\"c-123\""), json)
+        XCTAssertTrue(json.contains("\"sources\":[{"), json)
+    }
+
     func testTheNativeRunnerGivesItsWrapperTheJob() async throws {
         let runner = try XCTUnwrap(NativeRunner(dispatcher: "http://127.0.0.1:7434", wrapper: "/bin/true", name: "Mac", log: { _ in }))
         var job = AgentProtocol_V1_Job()

@@ -116,7 +116,7 @@ let system: [Target] = [
     // that pulls from a dispatcher and runs agent-wrapper: on Linux and the
     // Mac, never Windows (the server library itself has neither).
     .target(name: "VisorDriver",
-            dependencies: ["VisorServer", "VisorAgent", "VisorProtocol",
+            dependencies: ["VisorServer", "VisorAgent", "VisorProtocol", "ClaudeTranscript",
                            .product(name: "AgentProtocol", package: "agent_protocol"),
                            .product(name: "GRPCCore", package: "grpc-swift-2"),
                            .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport")],
