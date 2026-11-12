@@ -16,7 +16,8 @@
 set -euo pipefail
 archive="${1:?usage: tools/ci/build_mac_tests.sh <archive.tar.gz> [bazel options…]}"
 shift
-targets="$(bazel query 'kind(macos_unit_test, //tests/...)' 2> /dev/null)"
+# Not the manual ones (the server's Apple system's, run by hand on a Mac).
+targets="$(bazel query 'kind(macos_unit_test, //tests/...) except attr(tags, "\bmanual\b", //tests/...)' 2> /dev/null)"
 [ -n "$targets" ] || { echo "build_mac_tests.sh: no macos_unit_test under //tests" >&2; exit 1; }
 # shellcheck disable=SC2086 # one target a word
 bazel build --keep_going "$@" --macos_cpus=arm64 $targets
