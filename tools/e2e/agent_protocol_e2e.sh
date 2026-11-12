@@ -124,7 +124,7 @@ select_row() { # select_row <n>: the nth session in Visor's sidebar (newest firs
 
 say "the native agent"
 vm_ssh "python3 -I /tmp/e2e/vm_agents.py run native 240" | tee "$out/native.json"
-native="$(python3 -I -c 'import json,sys; print(json.load(sys.stdin)["session"])' < "$out/native.json")"
+native_session="$(python3 -I -c 'import json,sys; print(json.load(sys.stdin)["session"])' < "$out/native.json")"
 
 say "the container half (Shireworks' container_half.sh): Shireworks.app and its runner, the container, MultiPass's relay"
 container_up=1
@@ -135,20 +135,21 @@ container="$(tail -1 "$work/container_half.out" | sed -n 's/^container=//p')"
 
 say "the container agent"
 vm_ssh "python3 -I /tmp/e2e/vm_agents.py run container 300" | tee "$out/container.json"
-container="$(python3 -I -c 'import json,sys; print(json.load(sys.stdin)["session"])' < "$out/container.json")"
+# The session, not the container lease: `container` stays the lease, for cleanup.
+container_session="$(python3 -I -c 'import json,sys; print(json.load(sys.stdin)["session"])' < "$out/container.json")"
 
 say "screenshots"
 select_row 0; sleep 2; shot container-agent
 select_row 1; sleep 2; shot native-agent
 
 say "ending both agents"
-vm_ssh "python3 -I /tmp/e2e/vm_agents.py stop $container; python3 -I /tmp/e2e/vm_agents.py stop $native"
+vm_ssh "python3 -I /tmp/e2e/vm_agents.py stop $container_session; python3 -I /tmp/e2e/vm_agents.py stop $native_session"
 sleep 5
 say "the logs"
 vm_ssh "sudo log show --last 60m --style compact --predicate 'subsystem == \"com.LoganShire.Visor\"' \
     | grep -E 'agent_protocol|dispatcher|driver|driven|native runner|stopping|lapsed'" > "$out/visor-server.log" || true
 vm_ssh "grep -E 'relay|dial-in|listens' ~/mp/agent.log" > "$out/multipass-agent.log" || true
-grep -q "$container.* completed" "$out/visor-server.log" && grep -q "$native.* completed" "$out/visor-server.log" \
+grep -q "$container_session.* completed" "$out/visor-server.log" && grep -q "$native_session.* completed" "$out/visor-server.log" \
     || { echo "agent_protocol_e2e: the dispatcher didn't log both agents completed" >&2; exit 1; }
 grep -q "dial-in to loopback port 7434" "$out/multipass-agent.log" \
     || { echo "agent_protocol_e2e: MultiPass logged no dial-in: the container didn't come through it" >&2; exit 1; }
