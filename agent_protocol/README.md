@@ -58,7 +58,13 @@ out of a container, and all of an agent's outbound traffic, goes through it.
 swift build                    # AgentProtocol and agent-wrapper
 swift test
 tools/generate.sh              # the protos' Swift, after changing a proto (needs protoc)
+tools/build_static.sh out      # agent-wrapper as one static file per Linux architecture (Swift 6.4.0)
 ```
+
+`tools/build_static.sh` builds with Swift's static Linux SDK (musl), so
+`agent-wrapper-linux-arm64` and `-amd64` run in any container image, with
+nothing to install. gRPC's TLS (NIOSSL's BoringSSL) is C++, so the script
+links the SDK's libc++ alone (its comments say how).
 
 The protos' Swift is generated and kept in `Sources/AgentProtocol`, so a
 package that depends on this one needs no protoc. CI checks it matches.
