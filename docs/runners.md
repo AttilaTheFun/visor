@@ -80,10 +80,37 @@ What it settles:
 - The agent id, a UUID with its dispatcher's URL, is made by the dispatcher
   before any session exists, and goes dispatcher → runner → wrapper →
   driver.
-- The drawing shows one Visor.app's client and its own server. A client
-  that connects to other computers' servers, as the iPhone's does, and the
-  messages it carries between them, are question 3 of the plan (whether the
-  server also relays).
+- The drawing shows one Visor.app's client and its own server. It isn't a
+  rule: a client (the iPhone's included) still connects to several
+  computers' servers, and carries agents' messages between them, as today.
+
+Logan's answers to the plan's questions (12 Nov):
+- **Messages:** relayed purely by the client, never by a server. A message
+  to an agent that is disconnected (gone without ending, as in an outage)
+  is kept by the client, shown as sending, until an agent receives it.
+  Every sending message shows at once, optimistically, until it's received
+  or trashed; one that can't go says "Send failed", with trash and retry
+  below it. The client shows the agent as disconnected. The message's
+  syntax is still open.
+- **agent_wrapper's core** is visor_agent's, moved into agent_protocol.
+  agent_protocol is Apache 2.0, as Visor and Isomer are.
+- **Visor's native runner** works much as native sessions do today, not
+  sandboxed; on a pure Mac they're simply avoided, since they can read and
+  write in many places.
+- **The agent id's dispatcher URL** is its address through MultiPass, so a
+  runner reaches a dispatcher over the tailnet, the LAN or localhost: a
+  container session on the mini, started from the MacBook's Visor while
+  travelling.
+- **Shireworks' dispatcher** is Shireworks' server, acting on issues as
+  logan-shire-works, over every repository of Logan's that isn't archived
+  and carries the status labels. For now it runs every session in
+  Shireworks' primary agent container (later perhaps ephemeral, like CI
+  jobs: an implementation detail).
+- **Issues** refreshes a page as it appears, on coming back to the
+  foreground, and on pull to refresh.
+- **Existing sessions** all move: first to run natively, then the
+  co-tenant container goes, Shireworks' primary container is made, and
+  they move into it (a phase of its own, planned with Shireworks).
 
 ## Logan's answers (11 Nov, later)
 
