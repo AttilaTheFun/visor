@@ -184,6 +184,30 @@ import Testing
         #expect(next == nil, "the waiting one went too")
     }
 
+    /// A move whose job fails, or is given up, tells the server to bring
+    /// its session back, with its conversation and folder (13 Nov: a
+    /// clone that failed left the session waiting, its agent here ended).
+    @Test func aFailedMoveBringsItsSessionBack() async throws {
+        let jobs = queue()
+        var back: [String] = []
+        jobs.moveFailed = { session, resume, cwd, why in back.append("\(session) \(resume) \(cwd): \(why)") }
+        #expect(jobs.queueResume(AgentJobMove(session: "s12", title: "A", resume: "c-12", cwd: "/Users/a", runsOn: "container")) == .success("s12"))
+        let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        let job = try #require(claimed)
+        jobs.report(.with { $0.agent = job.agent; $0.failed = .with { $0.reason = "git clone ended with 128" } })
+        #expect(back == ["s12 c-12 /Users/a: git clone ended with 128"])
+        #expect(jobs.movedSessions.isEmpty)
+
+        #expect(jobs.queueResume(AgentJobMove(session: "s13", title: "B", resume: "c-13", cwd: "/Users/b", runsOn: "container")) == .success("s13"))
+        for _ in 1...JobQueue.attempts {
+            let next = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+            let again = try #require(next)
+            jobs.report(.with { $0.agent = again.agent; $0.released = .with { $0.reason = "status 1" } })
+        }
+        #expect(back.count == 2)
+        #expect(back.last?.hasPrefix("s13 c-13 /Users/b: ") == true, Comment(rawValue: back.last ?? ""))
+    }
+
     @Test func testTheNativeRunnerGivesItsWrapperTheJob() async throws {
         let runner = try #require(NativeRunner(dispatcher: "http://127.0.0.1:7434", wrapper: "/bin/true", name: "Mac", log: { _ in }))
         var job = AgentProtocol_V1_Job()

@@ -23,6 +23,9 @@ public enum VisorDriver {
                              harness: String = "claude") -> Task<Void, Never> {
         let jobs = JobQueue(dispatcherURL: url, driverURL: url, containerURL: containerURL, harness: harness)
         server.jobs = jobs
+        jobs.moveFailed = { [weak server] session, resume, cwd, why in
+            server?.moveBack(session, resume: resume, cwd: cwd, why: "the move to a runner failed: \(why)")
+        }
         server.drivenProcess = { _ in DrivenProcess() }
         return Task.detached {
             // A ping every two minutes on a quiet connection: the relays
