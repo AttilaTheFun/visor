@@ -36,6 +36,10 @@ extension VisorServer {
             Task { respond(await restMoveToRunner(call)) }
             return
         }
+        if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "moveBack", authorized(request) {
+            respond(restMoveBack(RESTCall(request: request, parts: parts, query: Self.query(request.path), body: Envelope.decodeBody(request.body))))
+            return
+        }
         // Sessions backed up to a folder here, and restored from one.
         if parts.first == "backups", authorized(request) {
             return routeBackups(request, parts: parts, respond: respond)

@@ -102,6 +102,45 @@ extension VisorServer {
         return .success(())
     }
 
+    /// A moved session back on this computer: its runner's agent told to
+    /// stop, the session native again on its conversation (`resume`) in
+    /// `cwd`, with a notice saying why. What a move that fails or is given
+    /// up does on its own (VisorDriver's JobQueue), and `POST
+    /// /api/sessions/<id>/moveBack {resume, cwd}` for one left waiting.
+    @discardableResult
+    package func moveBack(_ id: String, resume: String, cwd: String, why: String) -> Result<Void, AgentJobRefusal> {
+        guard let record = session(id) else { return .failure(AgentJobRefusal("No such session.")) }
+        guard record.driven else { return .failure(AgentJobRefusal("“\(record.info.title)” runs on this computer already.")) }
+        guard !resume.isEmpty else {
+            return .failure(AgentJobRefusal("Which conversation “\(record.info.title)” carries on isn't known here: give it as `resume`."))
+        }
+        jobs?.forget(session: id)
+        record.process.stop()
+        record.driven = false
+        if !cwd.isEmpty { record.info.cwd = cwd }
+        record.replaceProcess(makeProcess(record.info, resume: resume))
+        record.notice = "Back on this computer: \(why)"
+        Self.log("moved \(record.info.title) (\(id)) back to this computer, carrying on \(resume): \(why)")
+        launchAgent(record)
+        release(record)
+        saveArchiveNow()
+        broadcastSessions()
+        return .success(())
+    }
+
+    /// `POST /api/sessions/<id>/moveBack {resume, cwd}`: a moved session
+    /// back here, its conversation given (`resume`) and, unless given, its
+    /// folder as it is (a runner's folder isn't one here).
+    func restMoveBack(_ call: RESTCall) -> HTTPResponse {
+        let id = call.parts[1]
+        let current = session(id)?.info.cwd ?? ""
+        let cwd = call.body.cwd ?? (current.hasPrefix("/Volumes/") ? "" : current)
+        switch moveBack(id, resume: call.body.resume ?? "", cwd: cwd, why: "moved back by request") {
+        case .success: return .json(Envelope.sessions(session(id).map { [$0.info] } ?? []).encoded())
+        case .failure(let refusal): return HTTPResponse(400, Envelope.error(refusal.reason).encoded())
+        }
+    }
+
     /// A remote as a runner clones it: https, which goes through MultiPass;
     /// GitHub's SSH form turned into its https URL. Nil for a local path.
     static func cloneURL(_ remote: String) -> String? {
