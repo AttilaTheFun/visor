@@ -15,6 +15,7 @@ swift_library(
     deps = [
         "//:foundation",
         "@swiftpkg_agent_protocol//:AgentProtocol",
+        "//libraries/claude_transcript",
         "//libraries/visor_agent",
         "//libraries/visor_protocol",
         "//libraries/visor_server",

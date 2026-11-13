@@ -146,8 +146,12 @@ public actor NativeRunner {
                                      "prompt": job.prompt, "sourceURL": job.sourceURL, "repository": job.repository, "ref": job.ref,
                                      "labels": job.labels]
         for (key, value) in [("harness", job.harness), ("model", job.model), ("effort", job.effort),
-                             ("workingDirectory", job.workingDirectory), ("driverURL", job.driverURL)] where !value.isEmpty {
+                             ("workingDirectory", job.workingDirectory), ("driverURL", job.driverURL),
+                             ("resumeSessionID", job.resumeSessionID)] where !value.isEmpty {
             object[key] = value
+        }
+        if !job.sources.isEmpty {
+            object["sources"] = job.sources.map { ["repository": $0.repository, "ref": $0.ref, "name": $0.name] }
         }
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data("{}".utf8)
         return String(decoding: data, as: UTF8.self)

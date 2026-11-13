@@ -29,6 +29,13 @@ extension VisorServer {
         if request.method == "POST", parts.count == 2, parts[0] == "migration", authorized(request) {
             return routeMigration(parts[1], body: Envelope.decodeBody(request.body), respond: respond)
         }
+        // A session moved to a runner (VisorServer+Driven): answered once
+        // its agent here has ended and its resume job is queued.
+        if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "moveToRunner", authorized(request) {
+            let call = RESTCall(request: request, parts: parts, query: Self.query(request.path), body: Envelope.decodeBody(request.body))
+            Task { respond(await restMoveToRunner(call)) }
+            return
+        }
         // Sessions backed up to a folder here, and restored from one.
         if parts.first == "backups", authorized(request) {
             return routeBackups(request, parts: parts, respond: respond)

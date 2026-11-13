@@ -43,4 +43,9 @@ public enum SessionAction: Equatable, Sendable {
     case toSubagent(id: String, text: String)
     /// The person is done with one of the session's subagents.
     case closeSubagent(id: String)
+    /// The session carried on by a runner's agent (docs/runners.md): its
+    /// agent here ended, a resume job queued for runners labelled `runsOn`
+    /// (`container`, Shireworks' primary container), which picks its
+    /// conversation up and clones its repositories.
+    case moveToRunner(runsOn: String)
 }

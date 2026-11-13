@@ -121,6 +121,30 @@ import Testing
         #expect((jobs.claimed[contained.agent.uuid]?.job.driverURL) == "http://127.0.0.1:7434", "the job kept keeps its own")
     }
 
+    @Test func testAMovedSessionsResumeJobCarriesItsConversationAndRepositories() async throws {
+        let jobs = queue()
+        let move = AgentJobMove(session: "s7abc", title: "Moved", resume: "c-123", cwd: "/Users/logan/Developer",
+                                sources: [AgentJobSource(repository: "https://github.com/AttilaTheFun/visor.git", ref: "main", name: "visor")],
+                                runsOn: "container")
+        #expect(jobs.queueResume(move) == .success("s7abc"))
+        #expect(jobs.queueResume(move) == (.failure(AgentJobRefusal("The session is moving to a runner already."))))
+        let nativeClaim = await jobs.claim(claim(["native", "harness:claude"]), wait: .zero)
+        #expect(nativeClaim == nil, "only a container runner takes it")
+        let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        let job = try #require(claimed)
+        #expect(job.agent.uuid == "s7abc")
+        #expect(job.resumeSessionID == "c-123")
+        #expect(job.sources.map(\.name) == ["visor"])
+        #expect((job.sources.first?.ref) == "main")
+        let known = jobs.move(of: job.agent)
+        #expect((known?.resume) == "c-123")
+        #expect((known?.cwd) == "/Users/logan/Developer")
+        #expect((jobs.queueResume(AgentJobMove(session: "s8", title: "None", resume: "", cwd: "/", runsOn: "container"))) == (.failure(AgentJobRefusal("The session has no conversation to carry on."))))
+        let json = NativeRunner.json(job)
+        #expect(json.contains("\"resumeSessionID\":\"c-123\""), Comment(rawValue: json))
+        #expect(json.contains("\"sources\":[{"), Comment(rawValue: json))
+    }
+
     @Test func testTheNativeRunnerGivesItsWrapperTheJob() async throws {
         let runner = try #require(NativeRunner(dispatcher: "http://127.0.0.1:7434", wrapper: "/bin/true", name: "Mac", log: { _ in }))
         var job = AgentProtocol_V1_Job()

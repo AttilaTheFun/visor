@@ -1466,6 +1466,11 @@ public final class AgentServerConnection: Identifiable {
     public func stopAgent(_ sessionID: String) { act(.stopAgent, on: sessionID) }
     public func startAgent(_ sessionID: String) { act(.startAgent, on: sessionID) }
 
+    /// The session carried on by a runner's agent, in the container's
+    /// runner unless another label is given; the server refuses one that
+    /// has work not pushed, is mid-turn, or isn't Claude Code's.
+    public func moveToRunner(_ sessionID: String, runsOn: String = "container") { act(.moveToRunner(runsOn: runsOn), on: sessionID) }
+
     /// The conversation went on elsewhere: keep to the branch shown (the
     /// next message carries it on and makes it the newest again), or
     /// continue the newest branch instead.

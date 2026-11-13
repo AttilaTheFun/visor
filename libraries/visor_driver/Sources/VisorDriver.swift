@@ -27,7 +27,7 @@ public enum VisorDriver {
         return Task.detached {
             let transport = HTTP2ServerTransport.Posix(address: .ipv4(host: host, port: port), transportSecurity: .plaintext)
             do {
-                try await withGRPCServer(transport: transport, services: [DriverService(server: server), DispatcherService(jobs: jobs)]) { _ in
+                try await withGRPCServer(transport: transport, services: [DriverService(server: server, jobs: jobs), DispatcherService(jobs: jobs)]) { _ in
                     VisorServer.log("agent_protocol: driver and dispatcher on \(host):\(port), as \(url)"
                         + (containerURL.map { ", and to containers as \($0)" } ?? ""))
                     while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
