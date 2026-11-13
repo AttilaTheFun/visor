@@ -23,15 +23,28 @@ final class RunnerHTTP: VisorHTTPService {
 
     func request(method: String, url: String, body: String, headers: [String: String]) async throws -> String {
         heard.withLock { $0.append((method, url, headers, body)) }
-        if url.hasSuffix("/runner/v1/sign-in") {
+        if url.hasSuffix("/multipass/v1/sign-in") {
+            if parseJSON(body)?["kind"].string == "pairing" {
+                guard parseJSON(body)?["secret"].string == "pair-secret" else { throw Refused(status: 401) }
+                return #"{"account":"owner","expires":\#(Date().timeIntervalSince1970 + 3600),"token":"session-1"}"#
+            }
             guard parseJSON(body)?["password"].string == "the right password" else { throw Refused(status: 401) }
             return #"{"account":"logan","expires":\#(Date().timeIntervalSince1970 + 3600),"token":"session-1"}"#
         }
-        if url.hasSuffix("/runner/v1/servers") {
+        if url.hasSuffix("/multipass/v1/servers") {
             guard headers["Authorization"] == "Bearer session-1" else { throw Refused(status: 401) }
-            return #"{"servers":[{"id":"mini","kind":"mac","name":"Mini"},{"id":"co tenant","kind":"container","name":"Co-tenant"}]}"#
+            return #"{"servers":[{"id":"mini","kind":"mac","name":"Mini"},{"id":"co tenant","kind":"container","name":"Co-tenant"},"#
+                + #"{"id":"works","kind":"shireworks","name":"Shireworks"}]}"#
         }
-        if url.hasSuffix("/runner/v1/sign-out") { return "{}" }
+        if url.hasSuffix("/multipass/v1/sign-out") { return "{}" }
+        if url.hasSuffix("/multipass/v1/sign-in/github/device") {
+            return #"{"user_code":"WDJB-MJHT","verification_uri":"https://github.com/login/device","poll":"p-1","interval":5}"#
+        }
+        if url.hasSuffix("/multipass/v1/sign-in/github/device/poll") {
+            let polls = heard.withLock { $0.filter { $0.url.hasSuffix("/device/poll") }.count }
+            return polls < 2 ? #"{"status":"pending"}"#
+                : #"{"account":"octocat","user":"github:583231","expires":\#(Date().timeIntervalSince1970 + 3600),"token":"session-1"}"#
+        }
         // A server through the Runner, as its connection asks after it.
         return Envelope.hello(host: "Mini", login: "", token: "tok-1").encoded()
     }
@@ -66,6 +79,43 @@ final class RunnerAccountTests: XCTestCase {
         for _ in 0..<200 { await Task.yield() }
     }
 
+    func testAPairingCodeIsReadAndSignsInAsTheOwner() async throws {
+        let payload = #"{"fingerprint":"AB:CD","paths":["https://localhost:7443","https://mini.tail.ts.net:7443"],"secret":"pair-secret"}"#
+        let code = "multipass1:" + Data(payload.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        let read = try XCTUnwrap(MultiPassCode(code))
+        XCTAssertEqual(read.paths, ["https://localhost:7443", "https://mini.tail.ts.net:7443"])
+        XCTAssertEqual(read.fingerprint, "AB:CD")
+        XCTAssertEqual(read.secret, "pair-secret")
+        XCTAssertNil(MultiPassCode("multipass1:not base64!"))
+        XCTAssertNil(MultiPassCode("visor://connect?code=x"))
+        XCTAssertTrue(MultiPassCode.isOne("  multipass1:abc"))
+
+        let store = VisorStore()
+        let failure = await store.signInToMultiPass(code: code)
+        XCTAssertNil(failure)
+        await settle()
+        let account = try XCTUnwrap(RunnerAccounts.all.first)
+        XCTAssertEqual(account.username, "owner")
+        XCTAssertEqual(account.kept.fingerprint, "AB:CD")
+        XCTAssertTrue(http.requests.first { $0.url.hasSuffix("/sign-in") }.map { parseJSON($0.body)?["kind"].string == "pairing" } ?? false)
+        XCTAssertEqual(store.servers(of: account).map(\.record.name).sorted(), ["Co-tenant", "Mini"], "Visor's servers alone")
+    }
+
+    func testSigningInWithGitHubWaitsForThePersonThenTakesTheirLogin() async throws {
+        let account = RunnerAccount(kept: RunnerAccount.Kept(id: "a", url: "https://mini.tail.ts.net:7443", username: "",
+                                                             fingerprint: nil, expires: nil))
+        let started = try await account.startGitHubSignIn()
+        XCTAssertEqual(started.userCode, "WDJB-MJHT")
+        XCTAssertEqual(started.verificationURI, "https://github.com/login/device")
+        let first = try await account.finishGitHubSignIn(started)
+        XCTAssertFalse(first, "pending")
+        let second = try await account.finishGitHubSignIn(started)
+        XCTAssertTrue(second)
+        XCTAssertTrue(account.isSignedIn)
+        XCTAssertEqual(account.username, "octocat")
+    }
+
     func testSigningInBringsTheRunnersServersReachedThroughIt() async throws {
         let store = VisorStore()
         let failure = await store.signInToRunner(url: "mini.tail.ts.net:7445/", username: "logan", password: "the right password")
@@ -78,13 +128,13 @@ final class RunnerAccountTests: XCTestCase {
         XCTAssertTrue(account.isSignedIn)
         let signIn = try XCTUnwrap(http.requests.first)
         XCTAssertEqual(signIn.method, "POST")
-        XCTAssertEqual(signIn.url, "https://mini.tail.ts.net:7445/runner/v1/sign-in")
+        XCTAssertEqual(signIn.url, "https://mini.tail.ts.net:7445/multipass/v1/sign-in")
         XCTAssertEqual(parseJSON(signIn.body)?["username"].string, "logan")
 
         let theirs = store.servers.filter { $0.record.account == account.id }
         XCTAssertEqual(theirs.map(\.record.name).sorted(), ["Co-tenant", "Mini"])
-        XCTAssertEqual(theirs.map(\.record.address).sorted(), ["https://mini.tail.ts.net:7445/runner/v1/servers/co%20tenant",
-                                                               "https://mini.tail.ts.net:7445/runner/v1/servers/mini"])
+        XCTAssertEqual(theirs.map(\.record.address).sorted(), ["https://mini.tail.ts.net:7445/multipass/v1/servers/co%20tenant",
+                                                               "https://mini.tail.ts.net:7445/multipass/v1/servers/mini"])
         XCTAssertTrue(theirs.allSatisfy { $0.record.fromAccount && $0.record.authentication == RunnerAuthenticator.name })
         // Every request to them carries the Runner's session.
         let headers = try await AgentServerAuthenticators.authenticator(for: theirs[0].record).headers(for: theirs[0].record)
@@ -100,7 +150,7 @@ final class RunnerAccountTests: XCTestCase {
     func testAWrongPasswordAddsNothing() async {
         let store = VisorStore()
         let failure = await store.signInToRunner(url: "https://mini.tail.ts.net:7445", username: "logan", password: "wrong")
-        XCTAssertEqual(failure, "\(AgentServerError.message("That name and password don't sign in to this Runner."))")
+        XCTAssertEqual(failure, "\(AgentServerError.message("That name and password don't sign in to this MultiPass."))")
         XCTAssertTrue(RunnerAccounts.all.isEmpty)
         XCTAssertTrue(store.servers.allSatisfy { $0.record.account == nil })
     }
@@ -125,7 +175,7 @@ final class RunnerAccountTests: XCTestCase {
         // By its address: connected, a computer takes its server's own name.
         XCTAssertEqual(store.servers.map(\.record.address), ["http://laptop:7433"], "the hand-added computer stays")
         XCTAssertEqual(VisorHost.settings?.secret(key: account.secretKey), "")
-        XCTAssertTrue(http.requests.contains { $0.url.hasSuffix("/runner/v1/sign-out") && $0.headers["Authorization"] == "Bearer session-1" })
+        XCTAssertTrue(http.requests.contains { $0.url.hasSuffix("/multipass/v1/sign-out") && $0.headers["Authorization"] == "Bearer session-1" })
         XCTAssertEqual(RunnerAccounts.all.count, 1, "signed out, the account is kept to sign in to again")
 
         _ = await store.signInToRunner(url: "https://mini.tail.ts.net:7445", username: "logan", password: "the right password")
@@ -140,16 +190,16 @@ final class RunnerAccountTests: XCTestCase {
     }
 
     func testTheChannelCarriesTheSessionWhereTheSocketSendsNoHeaders() {
-        var record = AgentServerRecord(name: "Mini", address: "https://mini.tail.ts.net:7445/runner/v1/servers/mini",
+        var record = AgentServerRecord(name: "Mini", address: "https://mini.tail.ts.net:7445/multipass/v1/servers/mini",
                                        authentication: RunnerAuthenticator.name, fromAccount: true)
         record.account = "acct-1"
-        let socket = "wss://mini.tail.ts.net:7445/runner/v1/servers/mini/"
+        let socket = "wss://mini.tail.ts.net:7445/multipass/v1/servers/mini/"
         let headers = ["Authorization": "Bearer ab+c/d="]
         // A browser's or Android's socket: on the URL, escaped.
         XCTAssertEqual(VisorAgentServer.channelURL(socket, record: record, headers: headers, sendsHeaders: false),
-                       socket + "?runner_session=ab%2Bc/d%3D")
+                       socket + "?multipass_session=ab%2Bc/d%3D")
         XCTAssertEqual(VisorAgentServer.channelURL(socket + "?x=1", record: record, headers: headers, sendsHeaders: false),
-                       socket + "?x=1&runner_session=ab%2Bc/d%3D")
+                       socket + "?x=1&multipass_session=ab%2Bc/d%3D")
         // URLSession's: in the header alone.
         XCTAssertEqual(VisorAgentServer.channelURL(socket, record: record, headers: headers, sendsHeaders: true), socket)
         // A computer of no Runner: never.
@@ -159,7 +209,7 @@ final class RunnerAccountTests: XCTestCase {
     }
 
     func testARecordKeepsItsAccount() throws {
-        var record = AgentServerRecord(name: "Mini", address: "https://runner.example/runner/v1/servers/mini", fromAccount: true)
+        var record = AgentServerRecord(name: "Mini", address: "https://runner.example/multipass/v1/servers/mini", fromAccount: true)
         record.account = "acct-1"
         let read = try XCTUnwrap(AgentServerRecord(json: record.json))
         XCTAssertEqual(read.account, "acct-1")

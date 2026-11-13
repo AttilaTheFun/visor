@@ -25,7 +25,7 @@ struct RunnerAccountSection: View {
                 .accessibilityIdentifier("runner-sign-in-again")
             }
             Button(role: .destructive) { store.remove(account) } label: {
-                Label("Remove Runner", systemImage: "trash").rowLabel()
+                Label("Remove MultiPass", systemImage: "trash").rowLabel()
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("runner-remove")

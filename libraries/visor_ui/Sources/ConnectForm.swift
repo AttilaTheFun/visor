@@ -79,10 +79,10 @@ struct ConnectForm: View {
                     .accessibilityIdentifier("connect")
             }
             Section {
-                Button("Sign In to a Runner…") { runner = true }
+                Button("Sign In to a MultiPass…") { runner = true }
                     .accessibilityIdentifier("runner")
             } footer: {
-                Text("A Visor Runner brings every computer it serves, with one name and password.")
+                Text("A MultiPass brings every Visor server on its computer, with one sign-in: its pairing code, GitHub, or a name and password.")
             }
         }
         .insetGroupedForm()
