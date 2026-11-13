@@ -14,6 +14,66 @@ a container. MultiPass, its paths, sign-in, egress proxy and DNS stay as
 below; the server's contract, Containers and Steps here are superseded where
 runners.md says so.
 
+**13 Nov:** a server is no longer left without auth of its own. Its auth is
+its own configuration, one of three modes; behind a front (MultiPass, or any
+reverse proxy with sign-in of its own) it trusts the user the front names.
+[Auth](#auth-the-servers-own-or-its-fronts) below says how, and supersedes
+what this design says of a server with no password, codes or SSH (the
+contract's "No TLS, no password", steps 5 and 6, and the table's rows for
+them).
+
+## Auth: the server's own, or its front's
+
+Decided 13 Nov 2026, for Visor's server and Shireworks' alike:
+
+- **`auth: none | password | ssh`**, each server's own setting (password
+  and ssh may be on together):
+  - **none:** behind a front that signs people in: MultiPass, or a
+    company's own reverse proxy and sign-in. The server takes the user the
+    front names in a header (below), and listens where it is told
+    (loopback by default).
+  - **password:** for browsers, or any client, when the server is reached
+    directly. Visor's password, connection codes and tokens are this mode.
+  - **ssh:** for clients that can, when the server is reached directly
+    (say, on a personal tailnet): Visor's SSH transport and its authorized
+    device keys are this mode.
+- **None mode is generic**: nothing in Visor names MultiPass.
+  - `VISOR_USER_HEADER` names the header with the user's stable id (for
+    MultiPass, `MultiPass-User-ID`; for another proxy, e.g.
+    `X-Forwarded-User`); `VISOR_USER_NAME_HEADER` the name to show
+    (optional: the id), `VISOR_DEVICE_HEADER` the device (optional).
+    Without a user header, a request is the server's one `owner`.
+  - `VISOR_TRUST` says why a request may name its user: `token`, when it
+    carries the front's shared token (`VISOR_TRUST_TOKEN_FILE`, in the
+    header `VISOR_TRUST_HEADER`), and is refused (401) when it doesn't; or
+    `listener`, when nothing but the front can reach where the server
+    listens (loopback, a socket, a private network): the default on
+    loopback or a socket.
+- **The user id** is what a session (Visor) or a lease (Shireworks) is
+  owned by, so a server can later serve several people. In password and ssh
+  modes the user is the server's own (`owner`).
+
+MultiPass, as one such front:
+
+- One per computer, fronting that computer's servers, on one HTTPS port
+  (7443), each server at `/multipass/v1/servers/<id>/…`.
+- It signs people in with **GitHub**: the device flow for apps, the web
+  flow for browsers (called back at MultiPass's own address), with a GitHub
+  App of its own that has no permissions; it reads who signed in and keeps
+  nothing of GitHub's. Only the GitHub ids on its allow-list are let in. A
+  device is given a MultiPass session (a month, revocable), never a GitHub
+  token.
+- A **pairing code** (its paths, its certificate's fingerprint, and a
+  secret good for ten minutes, made from a shell on the computer) adds a
+  device without GitHub: the way in when GitHub is down.
+- It passes on `MultiPass-User-ID` (`github:<id>`), `MultiPass-User` (the
+  login), `MultiPass-Device`, and its backend token, after removing any
+  the client sent.
+
+Moving to it loses no way in: the front runs beside a server's own auth
+until every device has a MultiPass account, and only then is a server set
+to `none` behind it. A server reached directly keeps password or ssh.
+
 ## At a glance
 
 Every client reaches every server through MultiPass, which signs people in,
