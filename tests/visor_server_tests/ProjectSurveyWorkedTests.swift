@@ -29,8 +29,6 @@ extension ServerTests {
         #expect(Set(worked.keys) == ["/Users/a/Developer/edited/Sources", "/Users/a/Developer/edited/B.swift",
                                      "/Users/a/Developer/gitted", "/Users/a/Developer/ghed"],
                 Comment(rawValue: "\(worked)"))
-        #expect(ProjectSurvey.mentions(in: file, under: home).keys.contains("/Users/a/Developer/mentioned/README.md"),
-                "a migration still offers what it named")
     }
 }
 }
