@@ -18,8 +18,6 @@ public struct VisorRootView: View {
     @Environment(VisorStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.scenePhase) private var scenePhase
-    /// Whether the host shows Visor (EnvironmentValues+VisorShown).
-    @Environment(\.visorShown) private var shown
     /// The app has been in the background since it was last in front.
     @State private var wasInBackground = false
     @State private var columns: NavigationSplitViewVisibility = .all
@@ -58,24 +56,17 @@ public struct VisorRootView: View {
     /// The window's one trailing pane: Settings, or a session's details
     /// (TrailingPane).
     @State private var pane: TrailingPane?
-    /// Settings' open state when whoever shows this view keeps it (Shireworks,
-    /// hosting Visor as one of its tabs), kept in step with the pane.
-    private let givenSettings: Binding<Bool>?
     /// The computer whose page Settings has open, by its id.
     @State private var settingsComputer: String?
 
-    /// Visor, Settings and all. `settingsPresented` is for a host that opens
-    /// or closes Settings itself; without it the view keeps its own.
-    public init(settingsPresented: Binding<Bool>? = nil) {
-        givenSettings = settingsPresented
-    }
+    /// Visor, Settings and all.
+    public init() {}
 
     /// Whether Settings is open: the pane showing it. Opened, it takes the
     /// pane from a session's details; closed, the pane closes.
     private var settingsPresented: Binding<Bool> {
         Binding(get: { pane == .settings }, set: { open in
             if open { pane = .settings } else if pane == .settings { pane = nil }
-            givenSettings?.wrappedValue = open
         })
     }
 
@@ -83,15 +74,13 @@ public struct VisorRootView: View {
     private var paneOpen: Binding<Bool> {
         Binding(get: { pane != nil }, set: { open in
             guard !open else { return }
-            if pane == .settings { givenSettings?.wrappedValue = false }
             pane = nil
         })
     }
 
-    /// The session on screen, for notifications and for keeping it: none
-    /// while the host hides Visor.
+    /// The session on screen, for notifications and for keeping it.
     private func noteViewing(_ value: ContentSelection?) {
-        let session = shown ? value?.session : nil
+        let session = value?.session
         store.noteViewing(serverID: session?.serverID, sessionID: session?.sessionID)
     }
 
@@ -227,9 +216,6 @@ public struct VisorRootView: View {
         }
         .navigationSplitViewStyle(.balanced))
         .environment(\.trailingPane, $pane)
-        .onChange(of: givenSettings?.wrappedValue ?? false) { _, open in
-            if open { pane = .settings } else if pane == .settings { pane = nil }
-        }
         .sheet(isPresented: $composing) {
             ComposeSessionSheet(store: store) { serverID, id in
                 selection = .session(SessionSelection(serverID: serverID, sessionID: id))
@@ -337,11 +323,7 @@ public struct VisorRootView: View {
             // the app in front, is not shown over it.
             noteViewing(value)
         }
-        // A host's tab of Visor hidden: no session is on screen, so a
-        // notification about it is shown, and the session it showed is let
-        // go of (AgentServerConnection.release keeps the session viewed).
-        .onChange(of: shown) { _, _ in noteViewing(selection) }
-        // The same where the host's tab view tells only that: gone, and back.
+        // Gone, and back: no session on screen while it is gone.
         .onDisappear { store.noteViewing(serverID: nil, sessionID: nil) }
         .onAppear { noteViewing(selection) }
         // Back in front: a phone dropped every channel when the app left

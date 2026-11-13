@@ -30,7 +30,7 @@ struct SideQuestionsScreen: View {
         } attachments: {
             EmptyView()
         }
-        .visorTitle("Side Questions")
+        .navigationTitle("Side Questions")
         .toolbarTitleDisplayMode(.inline)
     }
 
