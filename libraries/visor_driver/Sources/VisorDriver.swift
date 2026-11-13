@@ -25,7 +25,12 @@ public enum VisorDriver {
         server.jobs = jobs
         server.drivenProcess = { _ in DrivenProcess() }
         return Task.detached {
-            let transport = HTTP2ServerTransport.Posix(address: .ipv4(host: host, port: port), transportSecurity: .plaintext)
+            // A ping every two minutes on a quiet connection: the relays
+            // between a container's wrapper and here (Shireworks' and
+            // MultiPass's) close one that is quiet for ten (13 Nov: a
+            // moved session's wrapper redialled every ten minutes).
+            let transport = HTTP2ServerTransport.Posix(address: .ipv4(host: host, port: port), transportSecurity: .plaintext,
+                                                       config: .defaults { $0.connection.keepalive.time = .seconds(120) })
             do {
                 try await withGRPCServer(transport: transport, services: [DriverService(server: server, jobs: jobs), DispatcherService(jobs: jobs)]) { _ in
                     VisorServer.log("agent_protocol: driver and dispatcher on \(host):\(port), as \(url)"
