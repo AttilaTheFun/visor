@@ -163,7 +163,7 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.50.1")
+bazel_dep(name = "isomer", version = "0.52.1")
 
 
 # isomer's Android cross-compile toolchains. The extension insists on a
@@ -251,29 +251,10 @@ bazel_dep(name = "rules_go", version = "0.62.0")
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.24.12")
 
-# rules_android's Maven graph, declared from the root (rules_jvm_external
-# reads a lock file only from the root module), merging isomer's
-# contribution; the lock is a copy of isomer's.
-#   REPIN=1 bazel run @rules_android_maven//:pin
-bazel_dep(name = "rules_jvm_external", version = "7.1")
-
-maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
-maven.install(
-    name = "rules_android_maven",
-    aar_import_bzl_label = "@rules_android//rules:rules.bzl",
-    known_contributing_modules = [
-        "rules_android",
-        "isomer",
-    ],
-    lock_file = "//third_party/maven:rules_android_maven_install.json",
-    repositories = [
-        "https://maven.google.com",
-        "https://repo1.maven.org/maven2",
-    ],
-    use_starlark_android_rules = True,
-    version_conflict_policy = "pinned",
-)
-use_repo(maven, "rules_android_maven")
+# Maven: none of Visor's own. Isomer pins its AndroidX (`@isomer_maven`) and
+# rules_android's tools (`@rules_android_maven`) with its own lock files
+# (isomer's docs/android_maven.md); Visor's Kotlin, if it ever uses AndroidX,
+# depends on `@isomer//android/maven:androidx`.
 
 android_tools = use_extension("@isomer//tools/android:extensions.bzl", "android_tools")
 use_repo(
