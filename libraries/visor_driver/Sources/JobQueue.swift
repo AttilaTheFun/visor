@@ -29,6 +29,9 @@ final class JobQueue: AgentJobQueue {
     private let log: @Sendable (String) -> Void
 
     private(set) var waiting: [AgentProtocol_V1_Job] = []
+    /// The sessions moved to runners, by agent id: the conversation each
+    /// carries on and where it worked here, for the driver's Conversation.
+    private(set) var moves: [String: (resume: String, cwd: String)] = [:]
     /// Claimed jobs by agent id, with their runner and expiry.
     private(set) var claimed: [String: (job: AgentProtocol_V1_Job, runner: String, expires: Date)] = [:]
     private var pollers: [UUID: CheckedContinuation<Void, Never>] = [:]
@@ -63,6 +66,35 @@ final class JobQueue: AgentJobQueue {
         log("dispatcher: queued \(job.agent.uuid) (\(job.title))")
         wake()
         return .success(job.agent.uuid)
+    }
+
+    func queueResume(_ move: AgentJobMove) -> Result<String, AgentJobRefusal> {
+        let id = Self.key(move.session)
+        guard !id.isEmpty, !move.resume.isEmpty else { return .failure(AgentJobRefusal("The session has no conversation to carry on.")) }
+        guard !waiting.contains(where: { $0.agent.uuid == id }), claimed[id] == nil else {
+            return .failure(AgentJobRefusal("The session is moving to a runner already."))
+        }
+        var job = AgentProtocol_V1_Job()
+        job.agent.uuid = id
+        job.agent.dispatcherURL = dispatcherURL
+        job.harness = harness
+        job.title = move.title
+        job.model = move.model
+        job.effort = move.effort
+        job.driverURL = driverURL
+        job.resumeSessionID = move.resume
+        job.sources = move.sources.map { source in .with { $0.repository = source.repository; $0.ref = source.ref; $0.name = source.name } }
+        if !move.runsOn.isEmpty { job.labels.append(Self.runsOn + move.runsOn) }
+        moves[id] = (move.resume, move.cwd)
+        waiting.append(job)
+        log("dispatcher: queued \(id) (\(job.title)), carrying on \(move.resume) on a \(move.runsOn.isEmpty ? "any" : move.runsOn) runner")
+        wake()
+        return .success(id)
+    }
+
+    /// The conversation a moved session carries on, and where it was here.
+    func move(of agent: AgentProtocol_V1_AgentID) -> (resume: String, cwd: String)? {
+        moves[Self.key(agent.uuid)]
     }
 
     /// A job for `runner`, now or within `wait`: claimed by it.

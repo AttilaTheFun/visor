@@ -579,6 +579,11 @@ public struct VisorRootView: View {
                 Label("Migrate…", systemImage: "arrow.right.circle")
             }
         }
+        // Into a runner's container, the same session carried on there
+        // (docs/runners.md); the server says why when it can't.
+        if session.agent == .claude {
+            Button { host.moveToRunner(session.id) } label: { Label("Move to a Runner", systemImage: "shippingbox") }
+        }
         // The command that picks the same conversation up in a terminal
         // on the computer itself.
         if let command = session.resumeCommand {
