@@ -151,6 +151,39 @@ import Testing
         #expect(json.contains("\"sources\":[{"), Comment(rawValue: json))
     }
 
+    /// A job whose agent ends at once every time it is given out is given
+    /// up after `JobQueue.attempts`, not handed round and round (12 Nov: a
+    /// wrapper that couldn't reach the driver came back every second).
+    @Test func aJobThatKeepsComingBackUnexplainedIsGivenUp() async throws {
+        let jobs = queue()
+        let move = AgentJobMove(session: "s9", title: "Moved", resume: "c-9", cwd: "/tmp", runsOn: "container")
+        #expect(jobs.queueResume(move) == .success("s9"))
+        for attempt in 1...JobQueue.attempts {
+            let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+            let job = try #require(claimed, "given out, attempt \(attempt)")
+            jobs.report(.with { $0.agent = job.agent; $0.released = .with { $0.reason = "its agent ended (status 1)" } })
+        }
+        let again = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        #expect(again == nil, "given up")
+        #expect(jobs.movedSessions.isEmpty)
+    }
+
+    /// A session ended takes its job with it, waiting or claimed: its
+    /// runner's next renewal is refused.
+    @Test func anEndedSessionsJobGoes() async throws {
+        let jobs = queue()
+        #expect(jobs.queueResume(AgentJobMove(session: "s10", title: "A", resume: "c-10", cwd: "/tmp", runsOn: "container")) == .success("s10"))
+        #expect(jobs.queueResume(AgentJobMove(session: "s11", title: "B", resume: "c-11", cwd: "/tmp", runsOn: "container")) == .success("s11"))
+        let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        let first = try #require(claimed)
+        #expect(jobs.session(of: first.agent.uuid) == "s10")
+        jobs.forget(session: "s10")
+        jobs.forget(session: "s11")
+        #expect(jobs.renew(first.agent) == nil, "its claim is refused")
+        let next = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        #expect(next == nil, "the waiting one went too")
+    }
+
     @Test func testTheNativeRunnerGivesItsWrapperTheJob() async throws {
         let runner = try #require(NativeRunner(dispatcher: "http://127.0.0.1:7434", wrapper: "/bin/true", name: "Mac", log: { _ in }))
         var job = AgentProtocol_V1_Job()

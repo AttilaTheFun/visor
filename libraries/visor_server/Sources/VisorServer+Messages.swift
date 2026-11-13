@@ -345,6 +345,7 @@ extension VisorServer {
         for waiter in (approvalWaiters.removeValue(forKey: record.info.id) ?? [:]).values { waiter.close() }
         mcpProxy.forget(session: record.info.id)
         dropWaiters(for: record.info.id)
+        jobs?.forget(session: record.info.id)
         Self.log("session ended: \(record.info.title)")
         saveArchiveNow()
         broadcastSessions()
