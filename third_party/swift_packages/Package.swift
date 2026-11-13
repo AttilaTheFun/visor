@@ -15,7 +15,7 @@ let package = Package(
         // its release's tag: its own dependencies are by revision and branch,
         // so SwiftPM won't take it by version (tools/released_pins.sh allows
         // this one).
-        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.50.1"),
+        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.52.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
             exact: "0.51.0"
