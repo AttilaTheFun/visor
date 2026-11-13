@@ -66,11 +66,12 @@ MultiPass, as one such front:
 - One per computer, fronting that computer's servers, on one HTTPS port
   (7443), each server at `/multipass/v1/servers/<id>/…`.
 - It signs people in with **GitHub**: the device flow for apps, the web
-  flow for browsers (called back at MultiPass's own address), with a GitHub
-  App of its own that has no permissions; it reads who signed in and keeps
-  nothing of GitHub's. Only the GitHub ids on its allow-list are let in. A
-  device is given a MultiPass session (a month, revocable), never a GitHub
-  token.
+  flow for browsers (called back at MultiPass's own address), with the
+  owner's GitHub App while there is one user (one of its own, with no
+  permissions, if MultiPass is handed out); it uses the person's token
+  once, to read who signed in, and keeps nothing of GitHub's. Only the
+  GitHub ids on its allow-list are let in. A device is given a MultiPass
+  session (a month, revocable), never a GitHub token.
 - A **pairing code** (its paths, its certificate's fingerprint, and a
   secret good for ten minutes, made from a shell on the computer) adds a
   device without GitHub: the way in when GitHub is down.
