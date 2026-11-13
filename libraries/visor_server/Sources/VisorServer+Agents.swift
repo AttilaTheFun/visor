@@ -331,6 +331,7 @@ extension VisorServer {
         record.onFileRows = { [weak self, weak record] rows in
             guard let self, let record else { return }
             for row in rows { self.broadcast(.entry(session: record.info.id, row), session: record) }
+            self.sendMarkedMessages(in: rows, of: record)
         }
         record.onFileReplaced = { [weak self, weak record] in
             guard let self, let record else { return }

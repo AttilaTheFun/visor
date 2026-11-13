@@ -20,8 +20,15 @@ extension VisorServer {
     /// The messages in `record`'s last turn: each sent once, by the id of
     /// its row.
     func sendMarkedMessages(of record: SessionRecord) {
-        let turn = record.entries.reversed().prefix { $0.role != .user }.reversed()
-        for entry in turn where entry.role == .assistant {
+        sendMarkedMessages(in: Array(record.entries.reversed().prefix { $0.role != .user }.reversed()), of: record)
+    }
+
+    /// The messages among `rows`, each sent once, by the id of its row: a
+    /// turn's when it ends, and a native agent's rows as they are read from
+    /// its file, which can come after its turn's end is heard (13 Nov: a
+    /// message written last in a turn never went).
+    func sendMarkedMessages(in rows: [TranscriptEntry], of record: SessionRecord) {
+        for entry in rows where entry.role == .assistant {
             guard let addressed = AgentMessageMarkers.outbound(entry.text) else { continue }
             let messageID = "\(record.info.id)-\(entry.id)"
             guard !record.mailbox.outbox.contains(where: { $0.id == messageID }) else { continue }
