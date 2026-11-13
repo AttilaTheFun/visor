@@ -87,7 +87,8 @@ extension SessionRecord {
             let text = info.queued.removeFirst()
             let images = queuedImages.isEmpty ? [] : queuedImages.removeFirst()
             guard Mailbox.isNotice(text) else { return (text, images) }
-            if mailbox.unread > 0 { return (Mailbox.notice(unread: mailbox.unread), images) }
+            // A runner's agent has no inbox to read: its mail comes as turns.
+            if !driven, mailbox.unread > 0 { return (Mailbox.notice(unread: mailbox.unread), images) }
         }
         return nil
     }

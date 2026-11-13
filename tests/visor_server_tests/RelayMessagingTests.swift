@@ -143,6 +143,30 @@ extension ServerTests {
         #expect(moved.info.queued == [AgentMessageMarkers.inboundText(from: "Mini work", on: here.hostName, body: "Are you there?")])
     }
 
+    @Test func testASessionMovedToARunnerHasItsUnreadInboxHandedOverAsTurns() {
+        let sender = record("A", "Mini work")
+        let moved = record("R", "Reviews", busy: true)
+        here.sessions = [sender, moved]
+        let from = RelayEndpoint(server: here.id, serverName: here.hostName, session: "A", sessionName: "Mini work")
+        let to = RelayEndpoint(server: here.id, serverName: here.hostName, session: "R", sessionName: "Reviews")
+        for (id, text) in [("m1", "First"), ("m2", "Second")] {
+            let message = MailMessage(id: id, from: from, to: to, text: text, sent: 1, state: .delivered, changed: 1)
+            sender.mailbox.send(message)
+            moved.mailbox.receive(message)
+        }
+        moved.info.queued = [Mailbox.notice(unread: 2)]
+        moved.driven = true
+        here.handOverInbox(moved)
+        #expect(moved.mailbox.unread == 0)
+        #expect(moved.info.queued == [AgentMessageMarkers.inboundText(from: "Mini work", on: here.hostName, body: "First"),
+                                      AgentMessageMarkers.inboundText(from: "Mini work", on: here.hostName, body: "Second")],
+                "no notice: the messages themselves, oldest first")
+        #expect(sender.mailbox.outbox.map(\.state) == [.read, .read], "the sender learns they were read")
+        // Later mail is a turn, and a notice never goes.
+        here.notifyMail(moved)
+        #expect(!moved.info.queued.contains(where: Mailbox.isNotice))
+    }
+
     @Test func testAWrittenMessageToNoSessionHereFails() {
         let sender = writer("A", "Mini work", wrote: AgentMessageMarkers.outboundText(to: "Nobody", on: here.hostName, body: "Hello"))
         here.sessions = [sender]
