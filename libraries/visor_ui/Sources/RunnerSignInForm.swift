@@ -2,7 +2,7 @@ import SwiftUI
 import VisorClient
 
 /// Signing in to a Visor Runner (docs/runner-accounts.md): where it is, the
-/// name and the password set on it (`visor-runner-agent user set`). Signed
+/// name and the password set on it (`multipass-agent user set`). Signed
 /// in, its computers come into the sidebar, and `done` is called. Signing
 /// in to one kept and signed out of, its address and name are fixed.
 @MainActor
@@ -52,7 +52,7 @@ struct RunnerSignInForm: View {
             } header: {
                 Text("Visor Runner")
             } footer: {
-                Text("A Runner on a Mac serves its computers to you: the Mac's own and its containers. Its name and password are the ones set on the Runner, with visor-runner-agent user set.")
+                Text("A MultiPass on a Mac serves its computers to you: the Mac's own and its containers. Its name and password are the ones set on it, with multipass-agent user set.")
             }
             Section {
                 if signingIn {

@@ -1,4 +1,4 @@
-// Visor on the Mac (docs/co-tenancy.md, "The app"): a menu bar app, the eye
+// Visor on the Mac: a menu bar app, the eye
 // in the bar with the server's menu, whose window is Visor's macOS client,
 // and the Mac's Visor server under both, each keeping what it has in places
 // of its own (MacPlaces).
