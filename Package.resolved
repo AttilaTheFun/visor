@@ -1,12 +1,13 @@
 {
-  "originHash" : "e729c0a11cfbb29a774c954238dcff2c99310c5b0b8acb21929d1af077dc9de2",
+  "originHash" : "2b867b39304cb5c3d7848293c6633694bcaafc49f11522bc5f39950c3de61d0d",
   "pins" : [
     {
       "identity" : "agent_protocol",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/agent_protocol.git",
       "state" : {
-        "revision" : "90ceb24a8d22757aa94f7bee78e0f2dbdb436ea0"
+        "revision" : "90ceb24a8d22757aa94f7bee78e0f2dbdb436ea0",
+        "version" : "0.2.0"
       }
     },
     {
