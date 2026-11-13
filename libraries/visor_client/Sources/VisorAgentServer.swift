@@ -379,16 +379,16 @@ public final class VisorAgentServer: AgentServer {
     }
 
     /// The channel's URL. Where the host's socket sends no headers (the web,
-    /// Android) and the computer is a Runner's, the Runner's session goes on
-    /// it as `runner_session`, which the Runner takes off before the request
-    /// goes on to the server (docs/runner-accounts.md, step 4).
+    /// Android) and the computer is a MultiPass's, MultiPass's session goes
+    /// on it as `multipass_session`, which MultiPass takes off before the
+    /// request goes on to the server.
     static func channelURL(_ url: String, record: AgentServerRecord, headers: [String: String], sendsHeaders: Bool) -> String {
         guard !sendsHeaders, record.authentication == RunnerAuthenticator.name,
               let bearer = headers.first(where: { $0.key.lowercased() == "authorization" })?.value,
               bearer.lowercased().hasPrefix("bearer ") else { return url }
         let session = String(bearer.dropFirst(7))
         guard !session.isEmpty else { return url }
-        return url + (url.contains("?") ? "&" : "?") + "runner_session=" + escape(session)
+        return url + (url.contains("?") ? "&" : "?") + "multipass_session=" + escape(session)
     }
 
     static func escape(_ text: String) -> String {

@@ -43,6 +43,46 @@ extension VisorStore {
         return nil
     }
 
+    /// Signs in to a MultiPass by its pairing code, at the first of its
+    /// paths that answers, as the computer's owner; nil when it did, else
+    /// what went wrong.
+    public func signInToMultiPass(code text: String) async -> String? {
+        guard let code = MultiPassCode(text) else { return "That isn't a MultiPass pairing code." }
+        var last = "None of its addresses answered."
+        for path in code.paths {
+            let url = RunnerAccounts.normalized(path)
+            let account = RunnerAccounts.all.first { $0.url == url }
+                ?? RunnerAccount(kept: RunnerAccount.Kept(id: AgentServerRecord.newID(), url: url, username: "owner",
+                                                          fingerprint: code.fingerprint.isEmpty ? nil : code.fingerprint, expires: nil))
+            do {
+                try await account.signIn(pairing: code.secret)
+            } catch let AgentServerError.message(text) {
+                return text
+            } catch {
+                last = "\(error)"
+                continue
+            }
+            addSignedIn(account)
+            return nil
+        }
+        return last
+    }
+
+    /// An account signed in to by another way (GitHub), its servers added.
+    public func addSignedIn(_ account: RunnerAccount) {
+        RunnerAccounts.add(account)
+        runners = RunnerAccounts.all
+        runnerChanged(account)
+    }
+
+    /// A new account for a MultiPass at `url`, not yet signed in to, for a
+    /// sign-in by GitHub.
+    public func multiPassAccount(url given: String) -> RunnerAccount {
+        let url = RunnerAccounts.normalized(given)
+        return RunnerAccounts.all.first { $0.url == url }
+            ?? RunnerAccount(kept: RunnerAccount.Kept(id: AgentServerRecord.newID(), url: url, username: "", fingerprint: nil, expires: nil))
+    }
+
     public func signOut(of account: RunnerAccount) {
         account.signOut()
         runnerChanged(account)

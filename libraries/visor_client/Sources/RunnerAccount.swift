@@ -3,12 +3,13 @@ import Observation
 import VisorProtocol
 import VisorServices
 
-/// A Visor Runner the person signed in to (docs/runner-accounts.md, step 5):
-/// its URL, the name signed in with, and a session of the Runner's own,
-/// kept with the device's secrets. Signed in, every server the Runner lists
-/// is a computer of this account, reached through the Runner at
-/// `<url>/runner/v1/servers/<id>` with the session as its bearer, and not
-/// added or forgotten on its own; signed out, they go.
+/// A MultiPass the person signed in to (MultiPass's docs/front-door.md; the
+/// Runner's account before it, docs/runner-accounts.md): its URL, who
+/// signed in, and a session of MultiPass's own, kept with the device's
+/// secrets. Signed in by a password, a pairing code or GitHub; then every
+/// Visor server MultiPass lists is a computer of this account, reached
+/// through it at `<url>/multipass/v1/servers/<id>` with the session as its
+/// bearer, and not added or forgotten on its own; signed out, they go.
 @MainActor
 @Observable
 public final class RunnerAccount: VisorAccount, Identifiable {
@@ -68,6 +69,9 @@ public final class RunnerAccount: VisorAccount, Identifiable {
         token = session
     }
 
+    /// MultiPass's side for clients.
+    static let api = "/multipass/v1"
+
     /// Where the session is kept with the device's secrets.
     var secretKey: String { Self.secretKey(kept.id) }
     static func secretKey(_ id: String) -> String { "runner-session." + id }
@@ -87,11 +91,11 @@ public final class RunnerAccount: VisorAccount, Identifiable {
     /// The name signed in with.
     public var username: String { kept.username }
 
-    /// When its session ends, where the Runner said.
+    /// When its session ends, where MultiPass said.
     public var expires: Date? { kept.expires.map(Date.init(timeIntervalSince1970:)) }
 
-    /// A Runner asks for its password: the views do, and call
-    /// `signIn(password:)`.
+    /// MultiPass asks who it is: the views do, and call `signIn(password:)`,
+    /// `signIn(pairing:)` or the GitHub sign-in.
     public func signIn() async throws {
         throw AgentServerError.needsAuthentication
     }
@@ -99,20 +103,75 @@ public final class RunnerAccount: VisorAccount, Identifiable {
     /// Signs in with the account's name and this password: its session
     /// kept, or what went wrong thrown.
     public func signIn(password: String) async throws {
+        try await signIn(proof: .object(["kind": .string("password"), "username": .string(kept.username), "password": .string(password)]),
+                         refused: "That name and password don't sign in to this MultiPass.")
+    }
+
+    /// Signs in with a pairing code's secret, as the computer's owner.
+    public func signIn(pairing secret: String) async throws {
+        try await signIn(proof: .object(["kind": .string("pairing"), "secret": .string(secret), "device": .string(VisorHost.deviceName)]),
+                         refused: "That pairing code is used up or has run out: make another (multipass-agent pair).")
+    }
+
+    /// A sign-in with GitHub begun: the code the person enters at GitHub's
+    /// page, the page, and how MultiPass knows it (`poll`).
+    public struct GitHubSignIn: Equatable, Sendable {
+        public var userCode: String
+        public var verificationURI: String
+        public var poll: String
+        public var interval: Int
+    }
+
+    /// Begins signing in with GitHub, which MultiPass asks.
+    public func startGitHubSignIn() async throws -> GitHubSignIn {
         guard let http = VisorHost.http else { throw AgentServerError.message("No HTTP service on this host") }
-        let body = JSONValue.object(["kind": .string("password"), "username": .string(kept.username), "password": .string(password)]).encoded()
+        let text = try await http.request(method: "POST", url: kept.url + Self.api + "/sign-in/github/device", body: "{}", headers: [:])
+        guard let answer = parseJSON(text), let code = answer["user_code"].string, let uri = answer["verification_uri"].string,
+              let poll = answer["poll"].string else {
+            throw AgentServerError.message(parseJSON(text)?["error"].string ?? "MultiPass didn't begin a GitHub sign-in.")
+        }
+        return GitHubSignIn(userCode: code, verificationURI: uri, poll: poll, interval: max(1, Int(answer["interval"].double ?? 5)))
+    }
+
+    /// Whether the person has signed in at GitHub yet: true once they have
+    /// (the session kept, the login as the account's name), false while
+    /// GitHub waits; thrown when they can't.
+    public func finishGitHubSignIn(_ started: GitHubSignIn) async throws -> Bool {
+        guard let http = VisorHost.http else { throw AgentServerError.message("No HTTP service on this host") }
+        let body = JSONValue.object(["poll": .string(started.poll), "device": .string(VisorHost.deviceName)]).encoded()
         let text: String
         do {
-            text = try await http.request(method: "POST", url: kept.url + "/runner/v1/sign-in", body: body, headers: [:])
+            text = try await http.request(method: "POST", url: kept.url + Self.api + "/sign-in/github/device/poll", body: body, headers: [:])
         } catch {
-            if http.status(of: error) == 401 { throw AgentServerError.message("That name and password don't sign in to this Runner.") }
+            if http.status(of: error) == 401 { throw AgentServerError.message("GitHub signed you in, but this MultiPass doesn't let that account in.") }
             throw error
         }
-        guard let answer = parseJSON(text), let session = answer["token"].string, !session.isEmpty else {
-            throw AgentServerError.message("The Runner didn't give a session.")
+        guard let answer = parseJSON(text) else { return false }
+        if answer["status"].string == "pending" { return false }
+        try take(answer)
+        return true
+    }
+
+    /// A sign-in's proof sent; its session kept, or `refused` thrown.
+    private func signIn(proof: JSONValue, refused: String) async throws {
+        guard let http = VisorHost.http else { throw AgentServerError.message("No HTTP service on this host") }
+        let text: String
+        do {
+            text = try await http.request(method: "POST", url: kept.url + Self.api + "/sign-in", body: proof.encoded(), headers: [:])
+        } catch {
+            if http.status(of: error) == 401 { throw AgentServerError.message(refused) }
+            throw error
         }
+        guard let answer = parseJSON(text) else { throw AgentServerError.message("MultiPass didn't give a session.") }
+        try take(answer)
+    }
+
+    /// A sign-in's answer: its session kept, and who it is for.
+    private func take(_ answer: JSONValue) throws {
+        guard let session = answer["token"].string, !session.isEmpty else { throw AgentServerError.message("MultiPass didn't give a session.") }
         keep(session: session)
         kept.expires = answer["expires"].double
+        if let account = answer["account"].string, !account.isEmpty { kept.username = account }
         RunnerAccounts.save()
     }
 
@@ -122,7 +181,7 @@ public final class RunnerAccount: VisorAccount, Identifiable {
         kept.expires = nil
         RunnerAccounts.save()
         guard !session.isEmpty, let http = VisorHost.http else { return }
-        let url = kept.url + "/runner/v1/sign-out"
+        let url = kept.url + Self.api + "/sign-out"
         Task { _ = try? await http.request(method: "POST", url: url, body: "{}", headers: ["Authorization": "Bearer " + session]) }
     }
 
@@ -130,7 +189,7 @@ public final class RunnerAccount: VisorAccount, Identifiable {
         guard let http = VisorHost.http else { throw AgentServerError.message("No HTTP service on this host") }
         let text: String
         do {
-            text = try await http.request(method: "GET", url: kept.url + "/runner/v1/servers", body: "", headers: try headers())
+            text = try await http.request(method: "GET", url: kept.url + Self.api + "/servers", body: "", headers: try headers())
         } catch {
             if http.status(of: error) == 401 {
                 keep(session: "")
@@ -139,8 +198,9 @@ public final class RunnerAccount: VisorAccount, Identifiable {
             throw error
         }
         return (parseJSON(text)?["servers"].array ?? []).compactMap { server in
-            guard let id = server["id"].string, !id.isEmpty else { return nil }
-            var record = AgentServerRecord(name: server["name"].string ?? id, address: kept.url + "/runner/v1/servers/" + VisorAgentServer.escape(id),
+            // Visor's own: MultiPass fronts others too (Shireworks').
+            guard let id = server["id"].string, !id.isEmpty, Self.isVisor(kind: server["kind"].string) else { return nil }
+            var record = AgentServerRecord(name: server["name"].string ?? id, address: kept.url + Self.api + "/servers/" + VisorAgentServer.escape(id),
                                            renamed: true, authentication: RunnerAuthenticator.name, fromAccount: true)
             record.account = kept.id
             return record
@@ -154,6 +214,13 @@ public final class RunnerAccount: VisorAccount, Identifiable {
     private func headers() throws -> [String: String] {
         guard isSignedIn else { throw AgentServerError.needsAuthentication }
         return ["Authorization": "Bearer " + token]
+    }
+
+    /// Whether a server MultiPass lists is a Visor server: `visor`, or the
+    /// Runner's places for one (`mac`, `container`).
+    static func isVisor(kind: String?) -> Bool {
+        guard let kind else { return true }
+        return ["visor", "mac", "container"].contains(kind)
     }
 
     /// A URL's host: what an account is named by.
