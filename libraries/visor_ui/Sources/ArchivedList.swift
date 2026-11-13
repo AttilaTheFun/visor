@@ -54,7 +54,7 @@ struct ArchivedList: View {
         }
         // The sidebar's own list style, whose swipes are smooth.
         .insetGroupedList()
-        .visorTitle("Archived Sessions")
+        .navigationTitle("Archived Sessions")
         .toolbarTitleDisplayMode(.inline)
         .alert("Remove this session?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Cancel", role: .cancel) { deleting = nil }
