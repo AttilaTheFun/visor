@@ -26,7 +26,10 @@ extension VisorServer {
         // The sender's copy, when the sender is here; one on another
         // server keeps its own.
         if here, let source = session(sender.session) { source.mailbox.send(message) }
-        if marked {
+        // A written message, or any message to a session run by a runner's
+        // agent, which has none of Visor's tools (no inbox to read): handed
+        // over as a turn beginning `@@from`, which it answers in kind.
+        if marked || target.driven {
             let name = sender.sessionName.isEmpty ? sender.session : sender.sessionName
             deliver(AgentMessageMarkers.inboundText(from: name, on: sender.serverName, body: text), to: target)
         } else if target.takesMail {
