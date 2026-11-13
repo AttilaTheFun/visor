@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// One allowance an agent's account has, and how much of it is used: a
 /// rolling window (five hours, a week), a budget, a balance of credits.
 public struct UsageLimit: Codable, Hashable, Sendable {

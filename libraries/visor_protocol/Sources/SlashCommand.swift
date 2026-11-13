@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// A slash command an agent takes ("/compact"), as it describes it.
 public struct SlashCommand: Codable, Hashable, Sendable {
     /// Without the slash: "compact".

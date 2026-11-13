@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// A session in an agent's own store on the host, resumable here.
 public struct ResumableSession: Codable, Identifiable, Hashable, Sendable {
     public var id: String
