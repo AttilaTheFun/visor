@@ -30,5 +30,23 @@ extension ServerTests {
                                      "/Users/a/Developer/gitted", "/Users/a/Developer/ghed"],
                 Comment(rawValue: "\(worked)"))
     }
+
+    @Test func foldersAMacGuardsAreNeverSurveyed() throws {
+        let home = "/Users/a"
+        let rows: [[String: Any]] = [
+            ["type": "assistant", "message": ["role": "assistant", "content": [
+                ["type": "tool_use", "name": "Bash", "input": ["command": "git -C /Users/a/Downloads/thing status"]],
+                ["type": "tool_use", "name": "Write", "input": ["file_path": "/Users/a/Documents/notes/a.md"]],
+                ["type": "tool_use", "name": "Edit", "input": ["file_path": "/Users/a/Desktop/x.swift"]],
+                ["type": "tool_use", "name": "Edit", "input": ["file_path": "/Users/a/Developer/kept/A.swift"]],
+            ]]],
+        ]
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("guarded-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let lines = try rows.map { String(decoding: try JSONSerialization.data(withJSONObject: $0), as: UTF8.self) }
+        try (lines.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
+        let worked = ProjectSurvey.workedIn(file, under: home)
+        #expect(Set(worked.keys) == ["/Users/a/Developer/kept/A.swift"], Comment(rawValue: "\(worked)"))
+    }
 }
 }
