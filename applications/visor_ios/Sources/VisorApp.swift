@@ -7,8 +7,6 @@ import VisorProtocol
 import VisorServices
 import VisorUI
 #if os(iOS)
-import UpdateKit
-import UpdateKitUI
 #endif
 
 #if os(iOS)
@@ -47,11 +45,6 @@ struct VisorApp: App {
         WindowGroup {
             VisorRootView()
                 .environment(store)
-                // Settings' About: UpdateKit's version, with Install, where
-                // this build checks for updates (its Info.plist names the
-                // app group, which CI's distribution builds stamp in);
-                // else Visor's own.
-                .environment(\.settingsAbout, UpdateKitInfo.mainAppGroup == nil ? nil : AnyView(UpdateVersionSection(title: "About")))
                 // visor://connect?code=… — scanning a Mac's QR code with
                 // the camera opens this, and adds that computer;
                 // visor://sign-in shows a computer's settings.
