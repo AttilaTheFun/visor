@@ -23,7 +23,6 @@ extension SessionInfo {
         if let otherBranch { o["otherBranch"] = .string(otherBranch) }
         if let agentState { o["agentState"] = .string(agentState.rawValue) }
         if let container { o["container"] = container.json }
-        if !leases.isEmpty { o["leases"] = .array(leases.map(\.json)) }
         if let system { o["system"] = .string(system) }
         if inContainer == true { o["inContainer"] = .bool(true) }
         if let parent { o["parent"] = .string(parent) }
@@ -60,7 +59,6 @@ extension SessionInfo {
         otherBranch = json["otherBranch"].string
         agentState = json["agentState"].string.flatMap(AgentState.init(rawValue:))
         container = SessionContainer(json: json["container"])
-        leases = json["leases"].array?.compactMap(SessionLease.init(json:)) ?? []
         system = json["system"].string
         inContainer = json["inContainer"].bool
         parent = json["parent"].string
