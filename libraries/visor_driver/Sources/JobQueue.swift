@@ -46,6 +46,10 @@ final class JobQueue: AgentJobQueue {
     /// Claimed jobs by agent id, with their runner and expiry.
     private(set) var claimed: [String: (job: AgentProtocol_V1_Job, runner: String, expires: Date)] = [:]
     private var pollers: [UUID: CheckedContinuation<Void, Never>] = [:]
+    /// A move whose job failed or was given up: its session, the
+    /// conversation it carries on, where it worked here, and why (the
+    /// server brings it back: VisorServer.moveBack).
+    var moveFailed: (@MainActor (_ session: String, _ resume: String, _ cwd: String, _ why: String) -> Void)?
 
     init(dispatcherURL: String, driverURL: String, containerURL: String? = nil, harness: String = "claude",
          log: @escaping @Sendable (String) -> Void = { VisorServer.log($0) }) {
@@ -112,6 +116,14 @@ final class JobQueue: AgentJobQueue {
         let dropped = waiting.filter { agents.contains($0.agent.uuid) }.count + claimed.keys.filter(agents.contains).count
         for agent in agents { forget(agent: agent) }
         if dropped > 0 { log("dispatcher: \(session) ended: its job dropped") }
+    }
+
+    /// A moved agent that won't carry its session on: the session told to
+    /// come back, and the move forgotten.
+    private func endMove(of agent: String, why: String) {
+        guard let session = movedSessions[agent], let move = moves[agent] else { return }
+        forget(agent: agent)
+        moveFailed?(session, move.resume, move.cwd, why)
     }
 
     /// An agent's job gone, waiting or claimed (its runner's next renewal
@@ -187,6 +199,7 @@ final class JobQueue: AgentJobQueue {
         case .failed(let failed):
             claimed[id] = nil
             log("dispatcher: \(id) failed: \(failed.reason)")
+            endMove(of: id, why: failed.reason)
         case .released(let released):
             requeue(id, why: "released: \(released.reason)")
         case .none:
@@ -238,8 +251,9 @@ final class JobQueue: AgentJobQueue {
         let returned = (returns[id] ?? 0) + 1
         returns[id] = returned
         guard returned < Self.attempts else {
-            forget(agent: id)
             log("dispatcher: \(id) \(why): given up after \(returned) tries")
+            endMove(of: id, why: "its runner's agent ended \(returned) times without starting (\(why))")
+            forget(agent: id)
             return
         }
         var job = held.job
