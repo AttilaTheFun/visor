@@ -24,6 +24,7 @@ extension VisorServer {
             if !record.isBound { bind(record) }
             if record.info.archived { record.setArchived(false) }
             setAgentState(record, .running)
+            handOverInbox(record)
             saveArchiveNow()
             broadcastSessions()
             return record
