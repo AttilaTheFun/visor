@@ -39,13 +39,15 @@ extension VisorServer {
             let token = envelope.token ?? ""
             let byPassword = !password.isEmpty && (envelope.password ?? "") == password
             client.clientID = envelope.client
-            guard client.trusted || settings.asksNothing || byPassword || (!token.isEmpty && tokens.contains(token)) else {
+            let vouched = settings.asksNothing && (front?.admits(client.headers) ?? true)
+            guard client.trusted || vouched || byPassword || (!token.isEmpty && tokens.contains(token)) else {
                 Self.log("\(describe(client)) was refused: wrong password or token")
                 client.sendLast(.error("Wrong password"))
                 return
             }
             client.authenticated = true
-            Self.log("\(describe(client)) signed in (\(signedIn) signed in now)")
+            if vouched, let front { client.user = front.person(client.headers).id }
+            Self.log("\(describe(client)) signed in\(client.user.map { " as \($0)" } ?? "") (\(signedIn) signed in now)")
             client.send(Envelope.welcome(host: hostName, sessions: sessions.map(\.info), catalogs: catalogs()))
             return
         }

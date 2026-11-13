@@ -35,6 +35,17 @@ extension ServerCommand {
             server.useProxy(proxy, token: options.proxyToken ?? "", mcp: options.mcp)
             log.write("pushes and \(options.mcp.isEmpty ? "no MCP servers" : "the MCP servers " + options.mcp.joined(separator: ", ")) go through \(proxy)")
         }
+        // The front it sits behind: why a request is let in, and whom it
+        // names.
+        if let front = try? options.front {
+            server.front = front
+            let why: String
+            switch front.trust {
+            case .listener: why = "whatever reaches it"
+            case .token(let header, _): why = "requests with the front's token in \(header)"
+            }
+            log.write("auth none: it takes \(why)" + (front.userHeader.map { ", the person from \($0)" } ?? ", everyone as owner"))
+        }
         // A folder for each session, the repositories apart.
         if let sessions = options.sessionsDir {
             server.sessionFolders = SessionFolders(sessions: sessions, sources: options.sourcesDir)
