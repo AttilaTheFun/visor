@@ -17,8 +17,6 @@ import VisorServices
 struct VisorSettingsView: View {
     @Environment(VisorStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
-    /// The app's own About section, if it gives one (EnvironmentValues+SettingsAbout).
-    @Environment(\.settingsAbout) private var about
     /// This device's notifications and appearance.
     @Bindable private var preferences = VisorPreferences.shared
     /// The computer whose page is open, by its id (a sign-in link opens one).
@@ -118,14 +116,10 @@ struct VisorSettingsView: View {
             ForEach(store.runners) { account in RunnerAccountSection(account: account) }
             notifications
             appearance
-            if let about {
-                about
-            } else {
-                Section {
-                    LabeledContent("Visor", value: VisorHost.appVersion.isEmpty ? "Development build" : VisorHost.appVersion)
-                } header: {
-                    Text("About")
-                }
+            Section {
+                LabeledContent("Visor", value: VisorHost.appVersion.isEmpty ? "Development build" : VisorHost.appVersion)
+            } header: {
+                Text("About")
             }
         }
         .navigationTitle("Settings")
