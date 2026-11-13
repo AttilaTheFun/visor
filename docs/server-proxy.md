@@ -14,7 +14,15 @@ a container. MultiPass, its paths, sign-in, egress proxy and DNS stay as
 below; the server's contract, Containers and Steps here are superseded where
 runners.md says so.
 
-**13 Nov:** a server is no longer left without auth of its own. Its auth is
+**13 Nov: Visor stands on its own.** Visor depends on no Shireworks code
+or service, and the two meet only through agent_protocol (a runner pulls
+jobs from Visor's dispatcher; its wrapped agents dial Visor's driver) and
+the driver's endpoint. Shireworks is one runner among any, one front's
+host among any, and where CI happens to run. Where this design names
+Shireworks below, read it as that: an example of a runner, a container
+host or a machine server, none of which Visor needs.
+
+**13 Nov, also:** a server is no longer left without auth of its own. Its auth is
 its own configuration, one of three modes; behind a front (MultiPass, or any
 reverse proxy with sign-in of its own) it trusts the user the front names.
 [Auth](#auth-the-servers-own-or-its-fronts) below says how, and supersedes
