@@ -1,4 +1,5 @@
 import Foundation
+import VisorServer
 
 /// How the server is run: what `run` and `start` take after the command,
 /// and, below them, what its environment says (docs/server-proxy.md: a
@@ -14,6 +15,18 @@ import Foundation
 ///   VISOR_MCP               --mcp (the proxy's MCP servers to pass on)
 ///   VISOR_SESSIONS_DIR      --sessions-dir (a folder for each session there)
 ///   VISOR_SOURCES_DIR       --sources-dir (where moved sessions' repositories go)
+///
+/// Behind a front with a sign-in of its own (docs/server-proxy.md, "Auth"),
+/// which sets the auth to `none`:
+///
+///   VISOR_TRUST             --trust token|listener (why a request may name
+///                           its person: the front's token on it, or only the
+///                           front reaching where the server listens)
+///   VISOR_TRUST_HEADER      --trust-header (the header the token comes in)
+///   VISOR_TRUST_TOKEN_FILE  --trust-token-file (the token, from a file)
+///   VISOR_USER_HEADER       --user-header (the person's id)
+///   VISOR_USER_NAME_HEADER  --user-name-header (the name to show)
+///   VISOR_DEVICE_HEADER     --device-header (the device)
 struct ServerOptions: Sendable {
     var port: UInt16?
     /// The file it logs to; the terminal when nil.
@@ -39,6 +52,15 @@ struct ServerOptions: Sendable {
     /// under `sourcesDir` (SessionFolders).
     var sessionsDir: String?
     var sourcesDir: String?
+    /// The front given at start (VisorServer.front), once its trust is
+    /// whole: `front` is nil until then.
+    private var trust: String?
+    private var trustHeader: String?
+    private var trustToken: String?
+    private var trustTokenFile: String?
+    private var userHeader: String?
+    private var userNameHeader: String?
+    private var deviceHeader: String?
     /// The files the password and the proxy's token were read from: passed
     /// on to a run started from this one in place of the values, which go
     /// on no command line.
@@ -72,10 +94,44 @@ struct ServerOptions: Sendable {
             case "--mcp": mcp = Self.names(value)
             case "--sessions-dir": sessionsDir = try Self.folder(value, for: flag)
             case "--sources-dir": sourcesDir = try Self.folder(value, for: flag)
+            case "--trust": trust = value
+            case "--trust-header": trustHeader = value
+            case "--trust-token-file": trustToken = try Self.read(value, for: flag); trustTokenFile = value
+            case "--user-header": userHeader = value
+            case "--user-name-header": userNameHeader = value
+            case "--device-header": deviceHeader = value
             case "--auth", "--lan", "--vpn", "--ssh", "--address", "--standalone", "--front", "--keep-messages":
                 settings.append((String(flag.dropFirst(2)), value))
             default: throw .usage("unknown option \(flag)")
             }
+        }
+        if trust != nil { settings.append(("auth", "none")) }
+        _ = try front
+    }
+
+    /// The front given, if any: its trust and the headers it names.
+    var front: FrontTrust? {
+        get throws(CommandLineError) {
+            guard let trust else {
+                guard trustHeader == nil, trustToken == nil, userHeader == nil, userNameHeader == nil, deviceHeader == nil else {
+                    throw .usage("the front's headers and token need its trust (VISOR_TRUST, --trust)")
+                }
+                return nil
+            }
+            let kind: FrontTrust.Trust
+            switch trust {
+            case "listener":
+                guard trustHeader == nil, trustToken == nil else { throw .usage("--trust listener takes no token") }
+                kind = .listener
+            case "token":
+                guard let trustHeader, let trustToken else {
+                    throw .usage("--trust token needs its header and its token's file (VISOR_TRUST_HEADER, VISOR_TRUST_TOKEN_FILE)")
+                }
+                kind = .token(header: trustHeader, value: trustToken)
+            default:
+                throw .usage("--trust takes token or listener")
+            }
+            return FrontTrust(trust: kind, userHeader: userHeader, userNameHeader: userNameHeader, deviceHeader: deviceHeader)
         }
     }
 
@@ -97,6 +153,12 @@ struct ServerOptions: Sendable {
         if let value = given("VISOR_MCP") { mcp = Self.names(value) }
         if let value = given("VISOR_SESSIONS_DIR") { sessionsDir = try Self.folder(value, for: "VISOR_SESSIONS_DIR") }
         if let value = given("VISOR_SOURCES_DIR") { sourcesDir = try Self.folder(value, for: "VISOR_SOURCES_DIR") }
+        if let value = given("VISOR_TRUST") { trust = value }
+        if let value = given("VISOR_TRUST_HEADER") { trustHeader = value }
+        if let value = given("VISOR_TRUST_TOKEN_FILE") { trustToken = try Self.read(value, for: "VISOR_TRUST_TOKEN_FILE"); trustTokenFile = value }
+        if let value = given("VISOR_USER_HEADER") { userHeader = value }
+        if let value = given("VISOR_USER_NAME_HEADER") { userNameHeader = value }
+        if let value = given("VISOR_DEVICE_HEADER") { deviceHeader = value }
     }
 
     /// A folder's full path.
@@ -143,6 +205,12 @@ struct ServerOptions: Sendable {
         if !mcp.isEmpty { out += ["--mcp", mcp.joined(separator: ",")] }
         if let sessionsDir { out += ["--sessions-dir", sessionsDir] }
         if let sourcesDir { out += ["--sources-dir", sourcesDir] }
+        if let trust { out += ["--trust", trust] }
+        if let trustHeader { out += ["--trust-header", trustHeader] }
+        if let trustTokenFile { out += ["--trust-token-file", trustTokenFile] }
+        if let userHeader { out += ["--user-header", userHeader] }
+        if let userNameHeader { out += ["--user-name-header", userNameHeader] }
+        if let deviceHeader { out += ["--device-header", deviceHeader] }
         return out
     }
 }

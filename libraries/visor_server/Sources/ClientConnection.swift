@@ -14,6 +14,10 @@ final class ClientConnection {
     var trusted = false
     /// The client id its login gave (a Visor client's own), for the log.
     var clientID: String?
+    /// Its upgrade's headers (names in lower case): what a front said of it.
+    var headers: [String: String] = [:]
+    /// Who it is, where a front named them (FrontTrust): their id.
+    var user: String?
     /// An agent's one request (the Visor MCP server's, the permission
     /// shim's), not a client: the log leaves it out.
     var agent = false

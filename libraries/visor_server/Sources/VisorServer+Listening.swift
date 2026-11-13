@@ -173,6 +173,9 @@ extension VisorServer {
     private func acceptClient(_ stream: any ByteStream, received: Data, trusted: Bool) {
         let client = ClientConnection(stream: stream, received: received)
         client.trusted = trusted
+        if let end = HTTPServer.headerEnd(received) {
+            client.headers = HTTPServer.headers(String(decoding: received[..<end], as: UTF8.self))
+        }
         let key = ObjectIdentifier(client)
         connections[key] = client
         clientCount = connections.count

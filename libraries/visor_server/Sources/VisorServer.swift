@@ -92,6 +92,10 @@ public final class VisorServer {
     /// (VISOR_SESSIONS_DIR, VISOR_SOURCES_DIR): nil where sessions work
     /// where they are asked to.
     public var sessionFolders: SessionFolders?
+    /// The front this server sits behind when its auth is `none`
+    /// (VISOR_TRUST and the headers it names): why a request is let in,
+    /// and whom it names. Nil: anyone who reaches it, as `owner`.
+    public var front: FrontTrust?
     /// Addresses connections were refused on (a path that is off), each
     /// logged once.
     var refusedPaths: Set<String> = []
