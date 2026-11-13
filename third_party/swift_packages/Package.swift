@@ -31,10 +31,8 @@ let package = Package(
         // SSH as a road to a server: the client's own SSH connection, a
         // port forwarded to the server on its loopback (SSHAgentServer).
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.9.0"),
-        // The Runner's GitHub proxy: its own certificate authority
-        // (libraries/visor_runner, RunnerCA).
+        // Certificates and TLS, at the versions gRPC's transport resolves.
         .package(url: "https://github.com/apple/swift-certificates.git", from: "1.21.1"),
-        // …and its TLS, for GitHub's hosts.
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.6"),
         // SQLite for the message cache: the system's on Apple's platforms,
         // its vendored amalgamation elsewhere (WebAssembly included).

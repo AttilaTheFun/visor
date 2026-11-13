@@ -102,39 +102,15 @@ let system: [Target] = [
     .executableTarget(name: "VisorServerMain",
                       dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge", "VisorDriver", "VisorNativeRunner"],
                       path: "applications/visor_server_linux", exclude: ["BUILD.bazel"], swiftSettings: strict),
-    // Visor Runner's MCP proxy and its commands; its agent built here too,
-    // for a Mac without Bazel's output for it (`swift build -c release
-    // --product visor-runner-agent`).
-    // Its GitHub proxy's authority (RunnerCA) is swift-certificates'; the
-    // proxy opens GitHub's hosts with SwiftNIO and swift-nio-ssl.
-    .target(name: "VisorRunner",
-            dependencies: ["CVisorPOSIX", .product(name: "X509", package: "swift-certificates"),
-                           .product(name: "Crypto", package: "swift-crypto"), .product(name: "SwiftASN1", package: "swift-asn1"),
-                           .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOPosix", package: "swift-nio"),
-                           .product(name: "NIOHTTP1", package: "swift-nio"), .product(name: "NIOSSL", package: "swift-nio-ssl"),
-                           .product(name: "_CryptoExtras", package: "swift-crypto")],
-            path: "libraries/visor_runner/Sources", swiftSettings: strict),
-    .executableTarget(name: "VisorRunnerAgentMain", dependencies: ["VisorRunner"],
-                      path: "applications/visor_runner_agent", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
 /// The tests are Bazel's swift_test targets (//tests:linux), not SwiftPM's.
 let tests: [Target] = []
 /// The agents' host, built with the server: `swift build -c release` puts
 /// both in the same folder, where the server looks for it.
-let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"]),
-                            .executable(name: "visor-runner-agent", targets: ["VisorRunnerAgentMain"])]
-/// The Runner's packages: X509 and its cryptography, at the versions
-/// third_party/swift_packages pins.
+let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"])]
+/// agent_protocol (its driver, dispatcher and wrapper), by release, and its
+/// gRPC.
 let runnerPackages: [Package.Dependency] = [
-    .package(url: "https://github.com/apple/swift-certificates.git", from: "1.21.1"),
-    // The Runner takes `_CryptoExtras`, the name 3.x and 4.x have (4.x's
-    // re-exports its CryptoExtras).
-    .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
-    .package(url: "https://github.com/apple/swift-asn1.git", from: "1.7.3"),
-    .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
-    .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.6"),
-    // agent_protocol (its driver, dispatcher and wrapper), by release, and
-    // its gRPC.
     .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", from: "0.2.0"),
     .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
     .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
