@@ -114,6 +114,22 @@ extension ServerTests {
         #expect(sender.mailbox.outbox.map(\.state) == [.delivered])
     }
 
+    /// A native agent's row read from its file after its turn's end was
+    /// heard, the next turn already begun: sent as it is read, once.
+    @Test func testAWrittenMessageReadFromTheFileLateIsSentAsItArrives() {
+        let sender = record("A", "Mini work")
+        here.sessions = [sender, record("P", "Mini plan", busy: true)]
+        let late = TranscriptEntry(id: "a9", role: .assistant,
+                                   text: AgentMessageMarkers.outboundText(to: "Mini plan", on: here.hostName, body: "Late words"))
+        sender.entries += [late, TranscriptEntry(id: "u2", role: .user, text: "The next turn")]
+        here.sendMarkedMessages(of: sender)
+        #expect(sender.mailbox.outbox.isEmpty, "the turn's end looks only at the turn")
+        here.sendMarkedMessages(in: [late], of: sender)
+        here.sendMarkedMessages(in: [late], of: sender)
+        #expect(here.sessions[1].info.queued == [AgentMessageMarkers.inboundText(from: "Mini work", on: here.hostName, body: "Late words")])
+        #expect(sender.mailbox.outbox.map(\.state) == [.delivered])
+    }
+
     @Test func testAWrittenMessageToNoSessionHereFails() {
         let sender = writer("A", "Mini work", wrote: AgentMessageMarkers.outboundText(to: "Nobody", on: here.hostName, body: "Hello"))
         here.sessions = [sender]
