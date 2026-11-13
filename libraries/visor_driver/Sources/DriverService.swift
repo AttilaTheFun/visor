@@ -20,8 +20,8 @@ struct DriverService: AgentProtocol_V1_AgentDriver.SimpleServiceProtocol {
             throw RPCError(code: .failedPrecondition, message: "A wrapper's first message is its hello.")
         }
         // The session is the agent's id as the dispatcher issued it, however
-        // the wrapper spells it.
-        hello.agent.uuid = JobQueue.key(hello.agent.uuid)
+        // the wrapper spells it; a moved session's agent, the session's own.
+        hello.agent.uuid = await jobs.session(of: hello.agent.uuid)
         guard !hello.agent.uuid.isEmpty else { throw RPCError(code: .invalidArgument, message: "The hello names no agent.") }
         let (outgoing, sending) = AsyncStream<AgentProtocol_V1_DriverMessage>.makeStream()
         let server = self.server
