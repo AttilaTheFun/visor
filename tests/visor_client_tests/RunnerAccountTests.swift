@@ -150,7 +150,7 @@ final class RunnerAccountTests: XCTestCase {
     func testAWrongPasswordAddsNothing() async {
         let store = VisorStore()
         let failure = await store.signInToRunner(url: "https://mini.tail.ts.net:7445", username: "logan", password: "wrong")
-        XCTAssertEqual(failure, "\(AgentServerError.message("That name and password don't sign in to this Runner."))")
+        XCTAssertEqual(failure, "\(AgentServerError.message("That name and password don't sign in to this MultiPass."))")
         XCTAssertTrue(RunnerAccounts.all.isEmpty)
         XCTAssertTrue(store.servers.allSatisfy { $0.record.account == nil })
     }
