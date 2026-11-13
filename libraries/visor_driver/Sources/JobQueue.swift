@@ -36,6 +36,13 @@ final class JobQueue: AgentJobQueue {
     /// is a UUID (agent_protocol's AgentID, which runners hold to); a
     /// session's isn't, so a move's job is a new agent of the session's.
     private(set) var movedSessions: [String: String] = [:]
+    /// How many times each agent's job has come back from a runner without
+    /// its agent saying how it went: one that ends at once every time goes
+    /// after `attempts`, not round and round.
+    private(set) var returns: [String: Int] = [:]
+    /// How many times a job is given out before one that keeps coming back
+    /// unexplained is given up.
+    static let attempts = 3
     /// Claimed jobs by agent id, with their runner and expiry.
     private(set) var claimed: [String: (job: AgentProtocol_V1_Job, runner: String, expires: Date)] = [:]
     private var pollers: [UUID: CheckedContinuation<Void, Never>] = [:]
@@ -97,6 +104,24 @@ final class JobQueue: AgentJobQueue {
         log("dispatcher: queued \(id) for \(session) (\(job.title)), carrying on \(move.resume) on a \(move.runsOn.isEmpty ? "any" : move.runsOn) runner")
         wake()
         return .success(session)
+    }
+
+    func forget(session: String) {
+        let session = Self.key(session)
+        let agents = Set(movedSessions.filter { $0.value == session }.keys).union([session])
+        let dropped = waiting.filter { agents.contains($0.agent.uuid) }.count + claimed.keys.filter(agents.contains).count
+        for agent in agents { forget(agent: agent) }
+        if dropped > 0 { log("dispatcher: \(session) ended: its job dropped") }
+    }
+
+    /// An agent's job gone, waiting or claimed (its runner's next renewal
+    /// is refused), and what was kept for it.
+    private func forget(agent: String) {
+        waiting.removeAll { $0.agent.uuid == agent }
+        claimed[agent] = nil
+        moves[agent] = nil
+        movedSessions[agent] = nil
+        returns[agent] = nil
     }
 
     /// The session an agent is: a moved session's, else the agent's own id
@@ -210,6 +235,13 @@ final class JobQueue: AgentJobQueue {
 
     private func requeue(_ id: String, why: String) {
         guard let held = claimed.removeValue(forKey: id) else { return }
+        let returned = (returns[id] ?? 0) + 1
+        returns[id] = returned
+        guard returned < Self.attempts else {
+            forget(agent: id)
+            log("dispatcher: \(id) \(why): given up after \(returned) tries")
+            return
+        }
         var job = held.job
         job.clearClaimExpires()
         waiting.insert(job, at: 0)

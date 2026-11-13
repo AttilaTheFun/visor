@@ -10,6 +10,8 @@ package protocol AgentJobQueue: AnyObject {
     /// A job carrying on a session moved here's conversation on a runner
     /// (Move to a runner…): queued under the session's own id.
     func queueResume(_ move: AgentJobMove) -> Result<String, AgentJobRefusal>
+    /// The session ended: any job carrying it on, waiting or claimed, goes.
+    func forget(session: String)
 }
 
 /// A session moved to a runner, as its resume job carries it.
