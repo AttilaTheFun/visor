@@ -10,16 +10,19 @@ import VisorSystem
 
 enum ProjectSurvey {
     /// The session's folder (its repository, when it is in one) first,
-    /// then the repositories the conversation names, most named first.
+    /// then the repositories the conversation names, most named first; or,
+    /// `worked`, only those it worked in (`workedIn`): a move to a runner
+    /// clones each, where a migration offers them to choose from.
     @concurrent
-    static func projects(cwd: String, conversation: URL?, home: String, limit: Int = 12) async -> [MigrationProject] {
+    static func projects(cwd: String, conversation: URL?, home: String, limit: Int = 12, worked: Bool = false) async -> [MigrationProject] {
         let folder = HostFolders.resolve(cwd)
         let own = await repository(at: folder) ?? MigrationProject(path: folder)
         var found = [own]
         guard let conversation else { return found }
         var counts: [String: Int] = [:]
         var tops: [String: String?] = [:]
-        for (named, count) in mentions(in: conversation, under: home).sorted(by: { $0.value > $1.value }).prefix(300) {
+        let named = worked ? workedIn(conversation, under: home) : mentions(in: conversation, under: home)
+        for (named, count) in named.sorted(by: { $0.value > $1.value }).prefix(300) {
             guard let directory = existingFolder(named, under: home) else { continue }
             let top: String?
             if let known = tops[directory] {
@@ -66,6 +69,60 @@ enum ProjectSurvey {
             }
             if last { break }
             carried = Data(text[end...])
+        }
+        return counts
+    }
+
+    /// The places under `home` the conversation worked in, by their first
+    /// three parts, with how often: files its agent edited or wrote, and
+    /// where it ran git or gh (a Bash command's paths) — not every place it
+    /// merely named. Read a line at a time.
+    static func workedIn(_ file: URL, under home: String) -> [String: Int] {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return [:] }
+        defer { try? handle.close() }
+        let needle = Data("\"tool_use\"".utf8)
+        var counts: [String: Int] = [:]
+        var pending = Data()
+        func take(_ line: Data) {
+            guard line.range(of: needle) != nil, let row = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+                  let message = row["message"] as? [String: Any], let content = message["content"] as? [[String: Any]] else { return }
+            for item in content where item["type"] as? String == "tool_use" {
+                let input = item["input"] as? [String: Any] ?? [:]
+                switch item["name"] as? String {
+                case "Edit", "Write", "MultiEdit", "NotebookEdit":
+                    let path = (input["file_path"] as? String) ?? (input["notebook_path"] as? String) ?? ""
+                    if path.hasPrefix(home + "/"), let place = place(in: Data(path.utf8), after: home.utf8.count + 1, home: home) {
+                        counts[place, default: 0] += 1
+                    }
+                case "Bash":
+                    let command = input["command"] as? String ?? ""
+                    guard command.range(of: #"(^|[\s;&|(])(git|gh)\s"#, options: .regularExpression) != nil else { continue }
+                    let text = Data(command.utf8)
+                    let mark = Data((home + "/").utf8)
+                    var from = text.startIndex
+                    while let found = text.range(of: mark, in: from..<text.endIndex) {
+                        if let place = place(in: text, after: found.upperBound, home: home) { counts[place, default: 0] += 1 }
+                        from = found.upperBound
+                    }
+                default:
+                    continue
+                }
+            }
+        }
+        while true {
+            let piece = (try? handle.read(upToCount: 8 << 20)) ?? Data()
+            if piece.isEmpty {
+                if !pending.isEmpty { take(pending) }
+                break
+            }
+            pending.append(piece)
+            var start = pending.startIndex
+            while let newline = pending[start...].firstIndex(of: 0x0A) {
+                take(Data(pending[start..<newline]))
+                start = newline + 1
+            }
+            // What is left of a line, whole with the next piece.
+            pending = Data(pending[start...])
         }
         return counts
     }
