@@ -28,7 +28,7 @@ struct VisorSettingsView: View {
     /// pane, the onboarding's): there a computer's page is pushed. Beside
     /// the detail (an inspector) it is not: a push from an inspector on the
     /// split view's detail column went to the detail column's stack, the
-    /// computer's page over the session (Shireworks' VM check, 10 Nov), so
+    /// computer's page over the session (10 Nov), so
     /// there the page takes Settings' place, with a way back.
     var inSheet = false
 

@@ -35,7 +35,6 @@ struct AgentScreen: View {
     /// details open there, in Settings' place.
     @Environment(\.trailingPane) private var trailingPane
     /// Whether the host shows Visor (EnvironmentValues+VisorShown).
-    @Environment(\.visorShown) private var shown
     /// The screen has appeared, and is counted among the session's screens
     /// (AgentServerConnection.subscribe): counted only while it has
     /// appeared and the host shows it, once.
@@ -80,7 +79,7 @@ struct AgentScreen: View {
     /// they are open (Settings, open there, gives way).
     /// Counted as on screen: the session's sync and state go on.
     private func count() {
-        guard appeared, shown, !counted else { return }
+        guard appeared, !counted else { return }
         counted = true
         host.subscribe(sessionID)
     }
@@ -156,7 +155,7 @@ struct AgentScreen: View {
         } message: {
             Text("Its agent stops, and it leaves Visor. The agent keeps its conversation on the computer, to resume there.")
         }
-        .visorTitle(sessionTitle)
+        .navigationTitle(sessionTitle)
         .toolbarTitleDisplayMode(.inline)
         // The draft is kept as it is typed, and taken up again when the
         // session is opened again (SavedDrafts).
@@ -164,17 +163,14 @@ struct AgentScreen: View {
         // Kept by a view of its own that reads the draft: read here (an
         // onChange of it), each keystroke evaluated the whole screen again.
         .background(DraftKeeper(draft: $draft, server: host.record.id, session: sessionID))
-        // Left, or hidden by the host (a tab not selected): a little later
-        // its rows go from memory (the cache keeps them) and its sync stops,
-        // unless it is shown again first.
+        // Left: a little later its rows go from memory (the cache keeps
+        // them) and its sync stops, unless it is shown again first.
         .onDisappear {
             appeared = false
             uncount()
         }
-        .onChange(of: shown) { _, shown in if shown { count() } else { uncount() } }
         // Let go of while shown all the same: taken up again, rather than
-        // left saying it is loading. Not while the host hides it (a tab not
-        // selected keeps its views): there being let go of is the point.
+        // left saying it is loading.
         .onChange(of: transcript.loaded) { _, loaded in if !loaded, counted { host.takeUp(sessionID) } }
         .onAppear {
             appeared = true

@@ -20,10 +20,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 IMAGE="${VISOR_CI_IMAGE:-ghcr.io/attilathefun/visor-agent:0.43.20}"
 
-# The server alone: the client, which the package declares for apps that
-# embed it, builds only against Apple's SwiftUI (Package.swift).
 steps='set -e
-export VISOR_SERVER_ONLY=1
 mkdir -p /tmp/visor && tar -x -C /tmp/visor && cd /tmp/visor
 swift --version
 echo "::group::Build"

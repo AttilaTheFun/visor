@@ -1,5 +1,5 @@
 {
-  "originHash" : "2b867b39304cb5c3d7848293c6633694bcaafc49f11522bc5f39950c3de61d0d",
+  "originHash" : "1982f458c17a26086209c7659bbeda63b95381138854f5d170d382399731c080",
   "pins" : [
     {
       "identity" : "agent_protocol",
@@ -8,15 +8,6 @@
       "state" : {
         "revision" : "90ceb24a8d22757aa94f7bee78e0f2dbdb436ea0",
         "version" : "0.2.0"
-      }
-    },
-    {
-      "identity" : "agent_ui",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AttilaTheFun/agent_ui.git",
-      "state" : {
-        "revision" : "15c5d3e14e19ca0075d8bf5811ec50bd60fe5f10",
-        "version" : "0.50.0"
       }
     },
     {
@@ -161,15 +152,6 @@
       "state" : {
         "revision" : "0f3e54e29c944c2e835ad52159da7d9e1c94ac69",
         "version" : "1.46.0"
-      }
-    },
-    {
-      "identity" : "swift-nio-ssh",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-nio-ssh.git",
-      "state" : {
-        "revision" : "d1985926494b624e751b379009dc83f3395fd88a",
-        "version" : "0.15.1"
       }
     },
     {
