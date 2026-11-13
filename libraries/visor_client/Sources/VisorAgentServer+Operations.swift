@@ -67,6 +67,9 @@ extension VisorAgentServer {
         case .endSide: reply = try await call("POST", base + "/endSide")
         case .toSubagent(let id, let text): reply = try await call("POST", base + "/toSubagent", .toSubagent(session: session, id: id, text: text))
         case .closeSubagent(let id): reply = try await call("POST", base + "/closeSubagent", .closeSubagent(session: session, id: id))
+        case .moveToRunner(let runsOn):
+            var e = Envelope(type: "moveToRunner"); e.session = session; e.runsOn = runsOn
+            reply = try await call("POST", base + "/moveToRunner", e)
         }
         return reply.sessions ?? []
     }
