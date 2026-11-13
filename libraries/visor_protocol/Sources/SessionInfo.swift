@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// One session, as the sidebar lists it.
 public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     public var id: String

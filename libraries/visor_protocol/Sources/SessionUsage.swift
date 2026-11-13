@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// What a session has used, as its agent counted it: tokens, and the
 /// dollars they cost where the agent prices them.
 public struct SessionUsage: Codable, Hashable, Sendable {

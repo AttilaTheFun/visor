@@ -5,10 +5,6 @@
 // into transcript entries, deltas and activity lines, so a client renders
 // one shape for every agent (AgentUI's TranscriptMessage).
 
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// Every message, both directions, is one envelope; `type` says which
 /// fields are set. Client → server: login, start, send, stop, subscribe,
 /// permissions, settings, approve, archive, unarchive, end. Agent side
