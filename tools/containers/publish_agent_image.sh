@@ -1,15 +1,12 @@
 #!/bin/bash
-# Visor's images (tools/containers/visor-agent/Dockerfile), built with buildah
-# in CI's Linux container (arm64, as the containers that run them) and pushed
-# to GitHub's registry, each as this build's version, its MAJOR.MINOR and
-# latest:
-#
-# - the runtime target as ghcr.io/attilathefun/visor, the image sessions'
-#   containers are made from: a Visor server of that version makes them
-#   from the first (a build CI did not number, from the second; one that
-#   says no version, from the last);
-# - the build target as ghcr.io/attilathefun/visor-agent, with the
-#   toolchains: CI's containers and the co-tenant's.
+# Visor's toolchain image (tools/containers/visor-agent/Dockerfile's build
+# target), built with buildah in CI's Linux container (arm64, as the
+# containers that run it) and pushed to GitHub's registry as
+# ghcr.io/attilathefun/visor-agent, tagged this build's version, its
+# MAJOR.MINOR and latest: what CI's containers and Shireworks' primary
+# container run. (Its runtime target, ghcr.io/attilathefun/visor, was for
+# the session containers Visor made, which it no longer makes: no longer
+# pushed.)
 #
 # CI's agent-image job runs it in a visor-jit container, as every job but the
 # headful proofs (Logan, 8 Nov 2026); until 0.48 it ran on the mini with
@@ -68,5 +65,4 @@ publish() {
   done
 }
 
-publish runtime ghcr.io/attilathefun/visor
 publish build ghcr.io/attilathefun/visor-agent
