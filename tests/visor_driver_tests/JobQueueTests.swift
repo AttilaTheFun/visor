@@ -132,7 +132,13 @@ import Testing
         #expect(nativeClaim == nil, "only a container runner takes it")
         let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
         let job = try #require(claimed)
-        #expect(job.agent.uuid == "s7abc")
+        // The job's agent is a UUID, as runners hold an agent's id to be; it
+        // is the session's.
+        #expect(UUID(uuidString: job.agent.uuid) != nil, Comment(rawValue: job.agent.uuid))
+        #expect(job.agent.uuid == job.agent.uuid.lowercased())
+        #expect(jobs.session(of: job.agent.uuid) == "s7abc")
+        #expect(jobs.session(of: job.agent.uuid.uppercased()) == "s7abc")
+        #expect(jobs.session(of: "a1b2") == "a1b2", "an agent that isn't a move's is its own session")
         #expect(job.resumeSessionID == "c-123")
         #expect(job.sources.map(\.name) == ["visor"])
         #expect((job.sources.first?.ref) == "main")

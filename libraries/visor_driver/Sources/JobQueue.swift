@@ -32,6 +32,10 @@ final class JobQueue: AgentJobQueue {
     /// The sessions moved to runners, by agent id: the conversation each
     /// carries on and where it worked here, for the driver's Conversation.
     private(set) var moves: [String: (resume: String, cwd: String)] = [:]
+    /// The session each moved agent carries on, by agent id. An agent's id
+    /// is a UUID (agent_protocol's AgentID, which runners hold to); a
+    /// session's isn't, so a move's job is a new agent of the session's.
+    private(set) var movedSessions: [String: String] = [:]
     /// Claimed jobs by agent id, with their runner and expiry.
     private(set) var claimed: [String: (job: AgentProtocol_V1_Job, runner: String, expires: Date)] = [:]
     private var pollers: [UUID: CheckedContinuation<Void, Never>] = [:]
@@ -69,11 +73,13 @@ final class JobQueue: AgentJobQueue {
     }
 
     func queueResume(_ move: AgentJobMove) -> Result<String, AgentJobRefusal> {
-        let id = Self.key(move.session)
-        guard !id.isEmpty, !move.resume.isEmpty else { return .failure(AgentJobRefusal("The session has no conversation to carry on.")) }
-        guard !waiting.contains(where: { $0.agent.uuid == id }), claimed[id] == nil else {
+        let session = Self.key(move.session)
+        guard !session.isEmpty, !move.resume.isEmpty else { return .failure(AgentJobRefusal("The session has no conversation to carry on.")) }
+        let agents = movedSessions.filter { $0.value == session }.keys
+        guard !agents.contains(where: { agent in waiting.contains { $0.agent.uuid == agent } || claimed[agent] != nil }) else {
             return .failure(AgentJobRefusal("The session is moving to a runner already."))
         }
+        let id = UUID().uuidString.lowercased()
         var job = AgentProtocol_V1_Job()
         job.agent.uuid = id
         job.agent.dispatcherURL = dispatcherURL
@@ -86,10 +92,18 @@ final class JobQueue: AgentJobQueue {
         job.sources = move.sources.map { source in .with { $0.repository = source.repository; $0.ref = source.ref; $0.name = source.name } }
         if !move.runsOn.isEmpty { job.labels.append(Self.runsOn + move.runsOn) }
         moves[id] = (move.resume, move.cwd)
+        movedSessions[id] = session
         waiting.append(job)
-        log("dispatcher: queued \(id) (\(job.title)), carrying on \(move.resume) on a \(move.runsOn.isEmpty ? "any" : move.runsOn) runner")
+        log("dispatcher: queued \(id) for \(session) (\(job.title)), carrying on \(move.resume) on a \(move.runsOn.isEmpty ? "any" : move.runsOn) runner")
         wake()
-        return .success(id)
+        return .success(session)
+    }
+
+    /// The session an agent is: a moved session's, else the agent's own id
+    /// (a job started here is a session of that id).
+    func session(of agent: String) -> String {
+        let id = Self.key(agent)
+        return movedSessions[id] ?? id
     }
 
     /// The conversation a moved session carries on, and where it was here.
