@@ -1,8 +1,5 @@
-// Settings' About section, where the app gives one of its own: the
-// iPhone's, UpdateKit's version with Install, where its build checks for
-// updates (it names an app group). Without one, Settings shows Visor's own:
-// the version alone. visor_ui names no update library: it builds on Isomer
-// too.
+// Settings' About section, where the app gives one of its own. Without
+// one, Settings shows Visor's own: the version alone.
 
 import SwiftUI
 
