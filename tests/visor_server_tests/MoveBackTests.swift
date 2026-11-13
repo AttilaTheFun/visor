@@ -61,6 +61,7 @@ extension ServerTests {
         let record = server.takeDriven(SessionInfo(id: "m1", agent: .claude, cwd: "/Volumes/Sessions/Claude/a1", title: "Moved", created: 0),
                                        process: runner)
         #expect(record.driven)
+        record.setPermissions(skip: true)
         let result = server.moveBack("m1", resume: "c-1", cwd: "/Users/a/Developer", why: "the clone failed")
         #expect(took(result))
         #expect(runner.stopped, "the runner's agent is told to stop")
@@ -68,6 +69,7 @@ extension ServerTests {
         #expect(record.info.cwd == "/Users/a/Developer")
         #expect(record.process !== runner)
         #expect(record.notice == "Back on this computer: the clone failed")
+        #expect(!record.info.skipPermissions, "prompts skipped only in a container: asked again here")
     }
 
     @Test func oneThatRunsHereOrWhoseConversationIsUnknownIsRefused() {
