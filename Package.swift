@@ -165,7 +165,7 @@ let runnerPackages: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.6"),
     // agent_protocol (its driver, dispatcher and wrapper), by release, and
     // its gRPC.
-    .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", revision: "90ceb24a8d22757aa94f7bee78e0f2dbdb436ea0"),
+    .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", from: "0.2.0"),
     .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
     .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
 ]
