@@ -1,6 +1,5 @@
 #!/bin/bash
-# Visor's own Linux programs for the containers it makes (docs/co-tenancy.md,
-# "Container images"): visor-server, which is also the agents' host when run
+# Visor's own Linux programs for the containers it makes: visor-server, which is also the agents' host when run
 # as visor-agent-host (a link to it beside it), built for Linux on arm64 and
 # linked fully static with Swift's Static Linux SDK (musl): they run in any
 # image, whatever its C library. Visor.app carries the folder in

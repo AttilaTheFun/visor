@@ -3,7 +3,7 @@
 # tools/release_mac.sh puts them in the app it signs: in
 # Contents/Resources/Linux, visor-server and visor-agent-host (a link to
 # it, kept a link), the programs a Visor server mounts read-only into the
-# containers it makes (docs/co-tenancy.md, "Container images"). The tar is
+# containers it makes. The tar is
 # tools/ci/linux_programs.sh's (CI's linux-programs job). The entries are
 # appended to the .zip as it is, with their Unix modes; nothing Bazel built
 # is unpacked or packed again. Applications Server, which the .zip is

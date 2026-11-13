@@ -693,67 +693,13 @@ each tool with the old name). Visor itself knows
 nothing of Shireworks (0.44 dropped `visor machine` and Shireworks' Swift
 client).
 
-**Visor Runner's MCP proxy.** A Visor server in a container (or any server
-that shouldn't hold the MCP servers' keys) sets its MCP servers to
-`visor-runner-agent` on the Mac (applications/visor_runner_agent,
-libraries/visor_runner; docs/co-tenancy.md). The proxy keeps the secret
-headers, in `runner-secrets.json` in Visor's data folder (this user's
-alone). Each server it serves has a token of its own, sent with every call
-(`X-Visor-Proxy`). A call to `/mcp/<name>` with a known token goes on to
-that MCP server with the secret headers added, and its answer comes back
-as it came (JSON or SSE). Set up on a Mac:
-
-```sh
-visor-runner-agent endpoint set gh http://127.0.0.1:7470/mcp --header 'CLIENT_ID=$SESSION_ID' --secret API_KEY  # the key on stdin
-visor-runner-agent endpoint set keymaster http://<Keymaster's Mac>:7450/mcp --header 'CLIENT_ID=$SESSION_ID' \
-    --header 'Keymaster-Repository=$SESSION_REPOSITORY' --secret Authorization --withhold github_token  # "Bearer km_…" on stdin
-visor-runner-agent server add co-tenant --host <the Mac's name as the container reaches it>  # prints the server's PUT /api/mcp body
-visor-runner-agent status
-visor-runner-agent serve   # port 7439, every interface; a LaunchAgent keeps it running
-```
-
-The printed body goes to the server's `PUT /api/mcp` with its password.
-The token is kept there as a secret header, and no key goes into the
-container.
-
-A tool whose answer holds a credential (Keymaster's `github_token`, a
-GitHub installation token) is withheld (`--withhold`): left out of the
-tools a server lists, and a call of it refused by the proxy, never passed
-on. A container's server shares the container with its agents, so what
-the server is given an agent could read. `$SESSION_REPOSITORY` is filled
-in by the server: owner/name of the GitHub repository the session's folder
-is a checkout of (its `origin`), empty for one that isn't.
-
-**Its push proxy.** On the same port and with the same tokens, a server
-with no APNs key of its own (Linux, a container) sends its pushes to
-`/apns/<APNs's host>/3/device/<token>`, unsigned. The Runner passes on
-APNs's own headers alone, adds a token it signs with the APNs key it keeps
-(CryptoKit; a Runner built elsewhere proxies no pushes), and sends it to
-APNs over HTTP/2. APNs's answer comes back as it came.
-
-```sh
-visor-runner-agent apns set --key-id <key id> --team-id <team id> < AuthKey_<key id>.p8
-visor-runner-agent server push-proxy co-tenant --host <the Mac's name as the container reaches it>  # prints the PUT /api/push-proxy body
-```
-
-The printed body goes to the server's `PUT /api/push-proxy` with its
-password.
-
-**Its client proxy.** A container server's clients reach it through the
-Runner: a front per server, a port of the Mac's on every interface (IPv4
-and IPv6), each connection carried on to the server where only the Mac
-reaches it (its address on the containers' network), the bytes both ways
-as they come. When one way ends, the other has five seconds, then both
-end. Set on the Mac, from the agent's next start:
-
-```sh
-visor-runner-agent front set co-tenant --port 7440 --to 192.168.131.3:7433
-```
-
-It takes the place of a forwarder of the Mac's own (the mini's socat
-LaunchAgents on 7440): stop that first, or the port can't be had. The
-server's pairing code lists the Mac's addresses at the front's port (its
-front paths, `visor-server front`).
+**MCP servers' keys, pushes and fronts.** A server that shouldn't hold the
+MCP servers' keys or the APNs key (Linux, a container) passes its MCP
+servers and pushes on through its proxy (`VISOR_PROXY`, `VISOR_MCP`), which
+adds them: MultiPass (AttilaTheFun/multipass, `multipass-agent endpoint
+set`, `apns set`, `forward add`; its README and docs/front-door.md). The
+old Visor Runner that did this (`visor-runner-agent`) moved there and is
+no longer in Visor.
 
 ## 4. The working loop
 

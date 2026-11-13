@@ -1,5 +1,4 @@
-# Visor's images, two targets of one file (docs/co-tenancy.md, "Container
-# images"); CI publishes both for each build
+# Visor's images, two targets of one file; CI publishes both for each build
 # (tools/containers/publish_agent_image.sh):
 #
 # - runtime: ghcr.io/attilathefun/visor:<version>, :<MAJOR.MINOR> and
@@ -40,7 +39,7 @@ RUN git init -q /src && cd /src \
  && install -m 755 "$(swift build -c release --build-system native --static-swift-stdlib --show-bin-path)/openrouter" /usr/local/bin/openrouter
 
 # Visor's own server and the agents' host (visor-server, visor-agent-host),
-# for a container that runs a Visor server of its own (docs/co-tenancy.md),
+# for a container that runs a Visor server of its own,
 # built from the commit the image is published for (VISOR_REF: CI's, else
 # main) in a stage of their own; only the two programs come over.
 FROM docker.io/library/swift:6.4.0-noble AS visor

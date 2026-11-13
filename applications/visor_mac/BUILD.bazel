@@ -30,7 +30,7 @@ update_entitlements(
     template = "app.ci.entitlements",
 )
 
-# Visor on the Mac (docs/co-tenancy.md, "The app"): a menu bar app whose
+# Visor on the Mac: a menu bar app whose
 # window is Visor's macOS client, with the Mac's Visor server under it. It
 # took over from Visor Server (applications/visor_menubar) and the Mac
 # client (applications/visor_macos) in 0.46, and keeps what it has in places

@@ -7,7 +7,6 @@ test_suite(
         "//tests/claude_transcript_tests",
         "//tests/message_cache_tests",
         "//tests/visor_driver_tests",
-        "//tests/visor_runner_tests",
         "//tests/visor_server_tests:visor_server_linux_tests",
     ],
 )

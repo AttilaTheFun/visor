@@ -69,10 +69,9 @@ if [ -n "$package" ] && [ $apps -eq 0 ]; then
     ls -l "$package"
 fi
 [ "$full" = 1 ] || exit $apps
-echo "::group::The Mac: libraries, staging server, command-line server, Runner agent"
+echo "::group::The Mac: libraries, staging server, command-line server"
 bazel build $flags --platforms=@apple_support//platforms:macos_arm64 \
-    //libraries/... //tools/staging_server //applications/visor_server_mac:visor-server \
-    //applications/visor_runner_agent:visor-runner-agent
+    //libraries/... //tools/staging_server //applications/visor_server_mac:visor-server
 mac=$?
 echo "::endgroup::"
 [ $apps -ne 0 ] && exit $apps
