@@ -40,7 +40,16 @@ run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 printf 'Authorization: Bearer %s\n' "$GH_TOKEN" > "$work/auth"
-github() { curl -fsSL --max-time 60 -H @"$work/auth" -H 'Accept: application/vnd.github+json' "$@"; }
+# GitHub's answer; when it refuses, its own words in the job's log (a bare
+# 403 said nothing of why, 13 Nov 2026).
+github() {
+    local answer status
+    answer="$(curl -sSL --fail-with-body --max-time 60 -H @"$work/auth" -H 'Accept: application/vnd.github+json' "$@")" \
+        && { printf '%s\n' "$answer"; return 0; }
+    status=$?
+    echo "::error::GitHub refused $(printf '%s ' "$@" | grep -oE 'https://[^ ]+' | head -1): $(printf '%s' "$answer" | head -c 600)" >&2
+    return "$status"
+}
 # The releases, every page (a draft is listed only to a token that may
 # write), as one JSON list. Each page in a file of its own: GitHub's JSON
 # spans many lines.
