@@ -32,8 +32,8 @@ orientation="${3:-portrait}"
 case "$orientation" in portrait | landscape) ;; *) usage ;; esac
 suffix=""
 [ "$orientation" = portrait ] || suffix="-landscape"
+mkdir -p "$1" "$2"
 apps="$(cd "$1" && pwd)"
-mkdir -p "$2"
 out="$(cd "$2" && pwd)"
 SCREENS="$(python3 -I -c 'import ast, sys
 for line in open(sys.argv[1]):
@@ -44,8 +44,10 @@ SETTLE="${VISOR_SNAPSHOT_SETTLE:-8}"
 STATUS_BAR=80
 IMAGE="system-images;android-34;default;x86_64"
 [ -n "$SCREENS" ] || { echo "$me: no SCREENS in tools/isomer/snapshots/snapshots.py" >&2; exit 1; }
-apk="$(ls "$apps"/*.apk 2> /dev/null | grep -v '_unsigned\.apk$' | head -1 || true)"
-[ -n "$apk" ] || { echo "$me: no signed .apk in $apps" >&2; exit 1; }
+# Not there yet with PROOF_APPS_ARTIFACT: waited for once the emulator is up.
+signed_apk() { ls "$apps"/*.apk 2> /dev/null | grep -v '_unsigned\.apk$' | head -1 || true; }
+apk="$(signed_apk)"
+[ -n "$apk" ] || [ -n "${PROOF_APPS_ARTIFACT:-}" ] || { echo "$me: no signed .apk in $apps" >&2; exit 1; }
 sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:?no Android SDK on this runner}}"
 export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"
 emulator_pid=""
@@ -119,6 +121,13 @@ for attempt in 1 2; do
         "$adb" shell am broadcast -a com.android.systemui.demo -e command $command > /dev/null
     done
 done
+# The APK, once the emulator is up: a job that starts with its run boots
+# while the build job builds (PROOF_APPS_ARTIFACT, from PROOF_APPS_JOB).
+if [ -z "$apk" ]; then
+    "$ROOT/tools/ci/await_artifact.sh" "$PROOF_APPS_ARTIFACT" "$apps" "${PROOF_APPS_JOB:-build-android}"
+    apk="$(signed_apk)"
+fi
+[ -n "$apk" ] || { echo "$me: no signed .apk in $apps" >&2; exit 1; }
 "$adb" install -r "$apk" > /dev/null
 printf 'Android %s (API %s, %s), %s\n' "$("$adb" shell getprop ro.build.version.release | tr -d '\r')" \
     "$("$adb" shell getprop ro.build.version.sdk | tr -d '\r')" "$("$adb" shell getprop ro.product.cpu.abi | tr -d '\r')" \

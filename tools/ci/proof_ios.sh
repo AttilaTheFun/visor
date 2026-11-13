@@ -36,8 +36,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 me="$(basename "$0")"
 usage() { echo "usage: tools/ci/proof_ios.sh <apps> <out> [portrait|landscape]" >&2; exit 2; }
 [ $# -ge 2 ] || usage
+mkdir -p "$1" "$2"
 apps="$(cd "$1" && pwd)"
-mkdir -p "$2"
 out="$(cd "$2" && pwd)"
 orientation="${3:-portrait}"
 case "$orientation" in portrait | landscape) ;; *) usage ;; esac
@@ -47,7 +47,8 @@ SETTLE="${VISOR_SNAPSHOT_SETTLE:-4}"
 # The fixture's screens, as the probe pictured them (tests/ios_probe's
 # fixtureShots): their ids are the proof's, kept from release to release.
 SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands"
-[ -f "$apps/visor_ios.ipa" ] || { echo "$me: no visor_ios.ipa in $apps" >&2; exit 1; }
+# Not there yet with PROOF_APPS_ARTIFACT: waited for once the simulator is up.
+[ -f "$apps/visor_ios.ipa" ] || [ -n "${PROOF_APPS_ARTIFACT:-}" ] || { echo "$me: no visor_ios.ipa in $apps" >&2; exit 1; }
 if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode_27.2.app ]; then
     export DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer
 fi
@@ -114,6 +115,12 @@ xcrun simctl status_bar "$udid" override --time "$still" "${bar[@]}" 2> /dev/nul
     || xcrun simctl status_bar "$udid" override --time 9:41 "${bar[@]}"
 xcrun simctl spawn "$udid" defaults write com.apple.Preferences KeyboardPrediction -bool NO
 xcrun simctl ui "$udid" appearance light 2> /dev/null || true
+# The apps, once the simulator is up: a job that starts with its run boots
+# while the build job builds (PROOF_APPS_ARTIFACT, from PROOF_APPS_JOB).
+if [ ! -f "$apps/visor_ios.ipa" ]; then
+    "$ROOT/tools/ci/await_artifact.sh" "$PROOF_APPS_ARTIFACT" "$apps" "${PROOF_APPS_JOB:-build-apple}"
+fi
+[ -f "$apps/visor_ios.ipa" ] || { echo "$me: no visor_ios.ipa in $apps" >&2; exit 1; }
 ditto -x -k "$apps/visor_ios.ipa" "$work/ipa"
 app="$(find "$work/ipa/Payload" -maxdepth 1 -name '*.app' | head -1)"
 [ -n "$app" ] || { echo "$me: no app in visor_ios.ipa's Payload" >&2; exit 1; }
