@@ -119,6 +119,9 @@ extension VisorServer {
         record.process.stop()
         record.driven = false
         if !cwd.isEmpty { record.info.cwd = cwd }
+        // Prompts skipped only in a container: here they are asked again,
+        // before its agent starts (Claude takes the mode at launch).
+        record.setPermissions(skip: false)
         record.replaceProcess(makeProcess(record.info, resume: resume))
         record.notice = "Back on this computer: \(why)"
         Self.log("moved \(record.info.title) (\(id)) back to this computer, carrying on \(resume): \(why)")
