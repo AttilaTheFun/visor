@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// How an agent is paid for on this computer, and how near its account's
 /// limits it is, as its sessions last said. Sent with the agent's catalog.
 public struct AgentAccount: Codable, Hashable, Sendable {

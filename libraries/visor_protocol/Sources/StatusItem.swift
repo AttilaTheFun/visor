@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// One thing a turn is doing or has done, as streamed — the model
 /// thinking, a shell running, a monitor watching, a subagent working, a
 /// tool called, the task list as it stands. Ephemeral: never the record.

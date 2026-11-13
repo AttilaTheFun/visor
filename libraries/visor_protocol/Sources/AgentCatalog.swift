@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// A provider's models and its default, and its account, sent with
 /// `welcome`.
 public struct AgentCatalog: Codable, Hashable, Sendable {

@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// A tool call waiting for the user's Allow or Deny (manual mode).
 public struct ApprovalRequest: Codable, Hashable, Sendable {
     public var id: String
