@@ -71,11 +71,6 @@ struct SessionCardRow: View {
                     .lineLimit(1)
                     .accessibilityIdentifier("waiting-" + session.id)
             }
-            if !session.leases.isEmpty {
-                LeaseMarks(leases: session.leases)
-                    .padding(.top, 2)
-                    .accessibilityIdentifier("leases-" + session.id)
-            }
             if !subSessions.isEmpty {
                 SubSessionCapsules(subSessions) { [open, serverID, session] item in
                     open?(SubSessionList.selection(of: item, under: SessionSelection(serverID: serverID, sessionID: session.id)))

@@ -82,8 +82,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// when it ran in one rather than on the computer itself; nil on the
     /// computer, and always from a server of 0.50 or later.
     public var container: SessionContainer?
-    /// The machines it leases through the server from the server's Shireworks.
-    public var leases: [SessionLease] = []
     /// The system its agent runs on: "macos", "linux" or "windows"; nil
     /// from a server of 0.37 or before.
     public var system: String?
@@ -166,7 +164,6 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         // A state a later build wrote, which this one has not heard of, is none.
         agentState = (try? c.decodeIfPresent(AgentState.self, forKey: .agentState)) ?? nil
         container = try c.decodeIfPresent(SessionContainer.self, forKey: .container)
-        leases = try c.decodeIfPresent([SessionLease].self, forKey: .leases) ?? []
         system = try c.decodeIfPresent(String.self, forKey: .system)
         inContainer = try c.decodeIfPresent(Bool.self, forKey: .inContainer)
         parent = try c.decodeIfPresent(String.self, forKey: .parent)

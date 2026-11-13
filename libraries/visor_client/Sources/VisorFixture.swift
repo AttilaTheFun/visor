@@ -120,13 +120,10 @@ public enum VisorFixture {
             session("fixture-api", .codex, "/Users/visor/Developer/api", "Rate limits",
                     model: "gpt-5.5", preview: "The limiter now allows bursts of 20 per minute.", age: 86_400),
         ]
-        // On the `machines` screen, where each runs and what it leases:
-        // the widget's agent in a container (the server's own), with a
-        // simulator and an emulator; the rest on the Mac.
+        // On the `machines` screen, where each runs: the widget's agent in a
+        // container (the server's own); the rest on the Mac.
         if screen == "machines" {
             widget.inContainer = true
-            widget.leases = [SessionLease(id: "lease-ios", platform: "ios", config: "iphone", state: "ready", expires: now + 3000),
-                             SessionLease(id: "lease-android", platform: "android", config: "phone", state: "creating", expires: now + 3600)]
             sessions = sessions.map { $0.id == widget.id ? widget : $0 }.map { session in
                 var session = session
                 session.system = session.inContainer == true ? "linux" : "macos"
