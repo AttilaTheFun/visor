@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// One of a provider's models, as the host lists them (Codex: from its
 /// models cache; Claude: the CLI's aliases).
 public struct AgentModel: Codable, Identifiable, Hashable, Sendable {

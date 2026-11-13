@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// Where a session's agent is, as its server tells it, and so what may be
 /// done with it: a running agent can be stopped or restarted, a stopped
 /// one started, and one starting or stopping is left until it gets there.

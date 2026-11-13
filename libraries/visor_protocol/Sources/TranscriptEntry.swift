@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// One transcript row: what AgentUI's TranscriptMessage carries, on the wire.
 public struct TranscriptEntry: Codable, Identifiable, Hashable, Sendable {
     public enum Role: String, Codable, Sendable { case user, assistant, tool }

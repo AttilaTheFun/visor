@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// What a session runs: a command-line agent, chatted with.
 public enum AgentKind: String, Codable, CaseIterable, Sendable {
     case claude

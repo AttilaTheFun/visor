@@ -1,7 +1,3 @@
-#if canImport(Foundation)
-import Foundation
-#endif
-
 /// A picture's size in pixels.
 public struct ImageSize: Codable, Hashable, Sendable {
     public var width: Int
