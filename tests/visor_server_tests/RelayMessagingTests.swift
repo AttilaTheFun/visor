@@ -130,6 +130,19 @@ extension ServerTests {
         #expect(sender.mailbox.outbox.map(\.state) == [.delivered])
     }
 
+    /// Mail sent with the inbox's tools to a session a runner's agent runs,
+    /// which has no inbox to read: handed over as an `@@from` turn.
+    @Test func testMailToASessionARunnerRunsIsATurn() {
+        let sender = record("A", "Mini work")
+        let moved = record("R", "Reviews", busy: true)
+        moved.driven = true
+        here.sessions = [sender, moved]
+        let from = RelayEndpoint(server: here.id, serverName: here.hostName, session: "A", sessionName: "Mini work")
+        _ = here.mail("Are you there?", from: from, to: moved, messageID: "m1", here: true)
+        #expect(moved.mailbox.inbox.isEmpty)
+        #expect(moved.info.queued == [AgentMessageMarkers.inboundText(from: "Mini work", on: here.hostName, body: "Are you there?")])
+    }
+
     @Test func testAWrittenMessageToNoSessionHereFails() {
         let sender = writer("A", "Mini work", wrote: AgentMessageMarkers.outboundText(to: "Nobody", on: here.hostName, body: "Hello"))
         here.sessions = [sender]
