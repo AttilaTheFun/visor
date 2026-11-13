@@ -87,6 +87,10 @@ extension VisorServer {
         await old.end(within: .seconds(5))
         record.replaceProcess(drivenProcess(record.info))
         record.driven = true
+        // In a container, its permission prompts are skipped, as every
+        // container session's are (the runner starts its agent so); a
+        // native runner's agent keeps the session's own mode.
+        if runsOn == "container" { record.setPermissions(skip: true) }
         if case .failure(let refusal) = jobs.queueResume(move) {
             Self.log("moving \(record.info.title) to a runner: \(refusal.reason)")
             return .failure(refusal)
