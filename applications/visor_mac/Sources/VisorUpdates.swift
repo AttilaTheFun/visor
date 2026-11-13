@@ -1,4 +1,4 @@
-// Visor.app's updates from Applications (UpdateKit 0.13, docs/Updates.md
+// Visor.app's updates from Applications (UpdateKit 0.17, docs/Updates.md
 // there): it installs them itself. Applications quitting it would end every
 // session's agent with it, so it answers each offer "install myself"; once
 // the verified build is ready, it waits until no session is mid-turn, then
@@ -24,7 +24,7 @@ enum VisorUpdates {
     static func start() {
         AppUpdates.register(autoUpdate: { _ in .installMyself })
         AppUpdates.register(install: { offer in await install(offer) })
-        AppUpdates.start(tellsOfUpdates: false)
+        AppUpdates.start()
         if let note = VisorServer.shared.updateNotice, note.contains("did not stay up") {
             Task { await AppUpdates.installFailed(note) }
         }

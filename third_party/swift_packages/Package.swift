@@ -45,10 +45,11 @@ let package = Package(
         // UpdateKit (ApplicationUpdates until it left the applications
         // repository, 7 Nov 2026): the build this app is, written at launch to
         // the database it shares with Applications (in the app group its
-        // Info.plist names, tools/signing), and its updates told of.
+        // Info.plist names, tools/signing). Applications alone tells of
+        // updates (0.17).
         .package(
             url: "https://github.com/AttilaTheFun/update_kit.git",
-            exact: "0.13.0"
+            exact: "0.17.0"
         ),
     ]
 )

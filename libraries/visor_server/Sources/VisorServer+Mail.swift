@@ -47,8 +47,36 @@ extension VisorServer {
     /// its queue is enough: it counts what is unread when its turn comes
     /// (SessionRecord.takeNextQueued).
     func notifyMail(_ target: SessionRecord) {
-        guard target.mailbox.unread > 0, !target.info.queued.contains(where: Mailbox.isNotice) else { return }
+        guard !target.driven, target.mailbox.unread > 0, !target.info.queued.contains(where: Mailbox.isNotice) else { return }
         deliver(Mailbox.notice(unread: target.mailbox.unread), to: target)
+    }
+
+    /// A session a runner's agent now runs, which has no inbox to read: the
+    /// messages waiting unread in it handed over as turns beginning `@@from`,
+    /// as new ones are, and marked read (their senders told); a notice of
+    /// them waiting in its queue dropped.
+    func handOverInbox(_ record: SessionRecord) {
+        record.info.queued.removeAll(where: Mailbox.isNotice)
+        let now = Date().timeIntervalSince1970
+        var handed = 0
+        while record.mailbox.unread > 0 {
+            let read = record.mailbox.read(unreadOnly: true, count: 50, at: now)
+            guard !read.newlyRead.isEmpty else { break }
+            for message in read.messages where read.newlyRead.contains(message.id) {
+                let name = message.from.sessionName.isEmpty ? message.from.session : message.from.sessionName
+                deliver(AgentMessageMarkers.inboundText(from: name, on: message.from.serverName, body: message.text), to: record)
+                if isThisServer(message.from.server) {
+                    session(message.from.session)?.mailbox.update(sent: message.id, to: .read, at: now)
+                } else {
+                    sendReadReceipt(for: message, at: now)
+                }
+                handed += 1
+            }
+        }
+        guard handed > 0 else { return }
+        Self.log("\(record.info.title): \(handed) unread message\(handed == 1 ? "" : "s") handed over as turns, its runner's agent having no inbox")
+        saveArchive()
+        broadcastSessionsSoon()
     }
 
     /// read_inbox: the inbox's messages, oldest first, each headed with who

@@ -57,7 +57,6 @@ swift_library(
     deps = [
         "//:foundation",
         "@swiftpkg_update_kit//:UpdateKit",
-        "@swiftpkg_update_kit//:UpdateKitUI",
         "//libraries/visor_client",
         "//libraries/visor_protocol",
         "//libraries/visor_services",
