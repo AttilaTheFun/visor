@@ -25,6 +25,14 @@ them. Containers dial out only, through MultiPass, at
 `SHIREWORKS_HOST_ADDRESS` (Shireworks, 11 Nov). Nothing reaches into a
 container.
 
+**13 Nov: Visor stands on its own.** Visor depends on no Shireworks code
+or service, and the two meet only through agent_protocol (a runner pulls
+jobs from Visor's dispatcher; its wrapped agents dial Visor's driver) and
+the driver's endpoint. Shireworks is one runner among any, one front's
+host among any, and where CI happens to run. Where this design names
+Shireworks below, read it as that: an example of a runner, a container
+host or a machine server, none of which Visor needs.
+
 ## The shape (Logan, 12 Nov): agent_protocol, and two standalone apps
 
 Logan, 12 Nov 2026 (via Manager): Visor's MCP goes, agents' messages become
@@ -470,9 +478,10 @@ entries can be cancelled.
   same data, saved to a folder the user picks. A backup can be started again
   on any runner, as today's restore does.
 
-## Shireworks' agent runner and agent jobs
+## A container runner and agent jobs (Shireworks', for one)
 
-Agreed with Shireworks on 11 Nov, then placed by Logan's answers:
+Shireworks' runner, as agreed with Shireworks on 11 Nov and placed by Logan's
+answers: any runner that speaks agent_protocol does the same.
 
 - **The runner** is a part of the Shireworks server, enabled only where
   Shireworks has a primary container, which is the mini. Its sessions run in
