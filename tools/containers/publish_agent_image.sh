@@ -4,7 +4,9 @@
 # containers that run it) and pushed to GitHub's registry as
 # ghcr.io/attilathefun/visor-agent, tagged this build's version, its
 # MAJOR.MINOR and latest: what CI's containers and Shireworks' primary
-# container run. (Its runtime target, ghcr.io/attilathefun/visor, was for
+# container run. A build by hand, between releases, is tagged
+# `<version>-<commit>` and latest only, so a release's tags keep the image
+# they were given. (Its runtime target, ghcr.io/attilathefun/visor, was for
 # the session containers Visor made, which it no longer makes: no longer
 # pushed.)
 #
@@ -16,10 +18,14 @@
 # before is private until its owner makes it public, once.
 #
 #   GHCR_USER=<user> GHCR_TOKEN=<token> tools/containers/publish_agent_image.sh 0.48.1
-#   VISOR_PUBLISH=0 tools/containers/publish_agent_image.sh 0.48.1   # builds both, pushes nothing
+#   tools/containers/publish_agent_image.sh 0.48.1-1a2b3c4               # by hand: that tag and latest
+#   VISOR_PUBLISH=0 tools/containers/publish_agent_image.sh 0.48.1   # builds it, pushes nothing
 set -euo pipefail
-version="${1:?the version, MAJOR.MINOR.BUILD}"
-minor="${version%.*}"
+version="${1:?the version, MAJOR.MINOR.BUILD, or MAJOR.MINOR.BUILD-<commit> for a build by hand}"
+case "$version" in
+  *-*) tags=("$version" latest) ;;
+  *) tags=("$version" "${version%.*}" latest) ;;
+esac
 here="$(cd "$(dirname "$0")" && pwd)"
 publish="${VISOR_PUBLISH:-1}"
 work="$(mktemp -d)"
@@ -59,7 +65,7 @@ publish() {
     echo "built $image (VISOR_PUBLISH=0: not pushed)"
     return
   fi
-  for tag in "$version" "$minor" latest; do
+  for tag in "${tags[@]}"; do
     buildah --storage-driver "$storage" push --digestfile "$work/digest" "$image" "docker://$repository:$tag"
     echo "pushed $repository:$tag ($(cat "$work/digest"))"
   done

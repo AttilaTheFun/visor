@@ -655,7 +655,9 @@ jobs:
           VERSION: ${{ needs.alpha.outputs.version }}
         run: |
           previous="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2> /dev/null || true)"
-          echo "version=${VERSION:-${previous#v}}" >> "$GITHUB_OUTPUT"
+          # By hand, between releases: the last release's version and this
+          # commit, so its tags (0.56.1, 0.56) keep their image.
+          echo "version=${VERSION:-${previous#v}-$(git rev-parse --short=7 HEAD)}" >> "$GITHUB_OUTPUT"
           if [ "$RUN" = agent-image ] || [ -z "$previous" ] || ! git diff --quiet "$previous" HEAD -- tools/containers; then
             echo "build=true" >> "$GITHUB_OUTPUT"
           else
