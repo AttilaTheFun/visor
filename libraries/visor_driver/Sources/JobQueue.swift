@@ -26,41 +26,60 @@ final class JobQueue: AgentJobQueue {
     let containerURL: String?
     /// The harness jobs run ("claude"; "echo" for a test without a model).
     let harness: String
-    private let log: @Sendable (String) -> Void
+    let log: @Sendable (String) -> Void
+    /// Where the jobs are kept across a restart (JobQueue+Store); nil: in
+    /// memory alone.
+    let file: URL?
 
-    private(set) var waiting: [AgentProtocol_V1_Job] = []
+    var waiting: [AgentProtocol_V1_Job] = []
     /// The sessions moved to runners, by agent id: the conversation each
     /// carries on and where it worked here, for the driver's Conversation.
-    private(set) var moves: [String: (resume: String, cwd: String)] = [:]
+    var moves: [String: (resume: String, cwd: String)] = [:]
     /// The session each moved agent carries on, by agent id. An agent's id
     /// is a UUID (agent_protocol's AgentID, which runners hold to); a
     /// session's isn't, so a move's job is a new agent of the session's.
-    private(set) var movedSessions: [String: String] = [:]
+    var movedSessions: [String: String] = [:]
     /// How many times each agent's job has come back from a runner without
     /// its agent saying how it went, since it last started: one that ends at
     /// once every time goes after `attempts`, not round and round. A start
     /// clears it: an agent that ran, and comes back because its runner
     /// restarted, is no failure (13 Nov: a session moved back after its
     /// third runner restart).
-    private(set) var returns: [String: Int] = [:]
+    var returns: [String: Int] = [:]
     /// How many times a job is given out before one that keeps coming back
     /// unexplained is given up.
     static let attempts = 3
     /// Claimed jobs by agent id, with their runner and expiry.
-    private(set) var claimed: [String: (job: AgentProtocol_V1_Job, runner: String, expires: Date)] = [:]
+    var claimed: [String: (job: AgentProtocol_V1_Job, runner: String, expires: Date)] = [:]
     private var pollers: [UUID: CheckedContinuation<Void, Never>] = [:]
     /// A move whose job failed or was given up: its session, the
     /// conversation it carries on, where it worked here, and why (the
     /// server brings it back: VisorServer.moveBack).
     var moveFailed: (@MainActor (_ session: String, _ resume: String, _ cwd: String, _ why: String) -> Void)?
 
-    init(dispatcherURL: String, driverURL: String, containerURL: String? = nil, harness: String = "claude",
+    /// `file`: where the jobs are kept, and taken up from at start.
+    init(dispatcherURL: String, driverURL: String, containerURL: String? = nil, harness: String = "claude", file: URL? = nil,
          log: @escaping @Sendable (String) -> Void = { VisorServer.log($0) }) {
         self.dispatcherURL = dispatcherURL
         self.driverURL = driverURL
         self.containerURL = containerURL.flatMap { $0.isEmpty ? nil : $0 }
         self.harness = harness
+        self.file = file
         self.log = log
+        guard let kept = Self.read(file) else { return }
+        waiting = kept.waiting.map(\.job)
+        let expires = Date().addingTimeInterval(Self.claimLength)
+        for claim in kept.claimed {
+            var job = claim.job.job
+            job.claimExpires = .init(date: expires)
+            claimed[claim.job.uuid] = (job, claim.runner, expires)
+        }
+        for move in kept.moves {
+            moves[move.agent] = (move.resume, move.cwd)
+            movedSessions[move.agent] = move.session
+        }
+        returns = kept.returns
+        log("dispatcher: \(waiting.count) waiting, \(claimed.count) claimed and \(movedSessions.count) moved sessions taken up from \(file?.lastPathComponent ?? "")")
     }
 
     func queueStart(_ request: Envelope) -> Result<String, AgentJobRefusal> {
@@ -82,6 +101,7 @@ final class JobQueue: AgentJobQueue {
         }
         waiting.append(job)
         log("dispatcher: queued \(job.agent.uuid) (\(job.title))")
+        save()
         wake()
         return .success(job.agent.uuid)
     }
@@ -108,6 +128,7 @@ final class JobQueue: AgentJobQueue {
         moves[id] = (move.resume, move.cwd)
         movedSessions[id] = session
         waiting.append(job)
+        save()
         log("dispatcher: queued \(id) for \(session) (\(job.title)), carrying on \(move.resume) on a \(move.runsOn.isEmpty ? "any" : move.runsOn) runner")
         wake()
         return .success(session)
@@ -118,6 +139,7 @@ final class JobQueue: AgentJobQueue {
         let agents = Set(movedSessions.filter { $0.value == session }.keys).union([session])
         let dropped = waiting.filter { agents.contains($0.agent.uuid) }.count + claimed.keys.filter(agents.contains).count
         for agent in agents { forget(agent: agent) }
+        save()
         if dropped > 0 { log("dispatcher: \(session) ended: its job dropped") }
     }
 
@@ -126,6 +148,7 @@ final class JobQueue: AgentJobQueue {
     private func endMove(of agent: String, why: String) {
         guard let session = movedSessions[agent], let move = moves[agent] else { return }
         forget(agent: agent)
+        save()
         moveFailed?(session, move.resume, move.cwd, why)
     }
 
@@ -161,6 +184,7 @@ final class JobQueue: AgentJobQueue {
                 let expires = Date().addingTimeInterval(Self.claimLength)
                 job.claimExpires = .init(date: expires)
                 claimed[job.agent.uuid] = (job, request.runner, expires)
+                save()
                 log("dispatcher: \(request.runner) claimed \(job.agent.uuid)")
                 return addressed(job, for: request.capabilities)
             }
@@ -192,6 +216,7 @@ final class JobQueue: AgentJobQueue {
         switch report.event {
         case .started(let started):
             returns[id] = nil
+            save()
             log("dispatcher: \(id) started by \(started.runner) (session \(started.sessionID))")
         case .progress(let progress):
             log("dispatcher: \(id): \(progress.text)")
@@ -199,9 +224,11 @@ final class JobQueue: AgentJobQueue {
             log("dispatcher: \(id) blocked: \(blocked.reason)")
         case .completed(let completed):
             claimed[id] = nil
+            save()
             log("dispatcher: \(id) completed\(completed.summary.isEmpty ? "" : ": \(completed.summary.prefix(120))")")
         case .failed(let failed):
             claimed[id] = nil
+            save()
             log("dispatcher: \(id) failed: \(failed.reason)")
             endMove(of: id, why: failed.reason)
         case .released(let released):
@@ -258,11 +285,13 @@ final class JobQueue: AgentJobQueue {
             log("dispatcher: \(id) \(why): given up after \(returned) tries")
             endMove(of: id, why: "its runner's agent ended \(returned) times without starting (\(why))")
             forget(agent: id)
+            save()
             return
         }
         var job = held.job
         job.clearClaimExpires()
         waiting.insert(job, at: 0)
+        save()
         log("dispatcher: \(id) \(why): queued again")
         wake()
     }
