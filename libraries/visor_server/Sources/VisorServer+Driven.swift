@@ -40,6 +40,17 @@ extension VisorServer {
         return record
     }
 
+    /// At the driver's start: every session a runner's agent runs, as the
+    /// archive kept it, given its driven process again (the archive was
+    /// read before there was a driver, and gave it one of this computer's).
+    /// Its wrapper dials back and carries on; nothing starts it here.
+    package func takeUpDrivenSessions() {
+        guard let drivenProcess else { return }
+        for record in sessions where record.driven {
+            record.replaceProcess(drivenProcess(record.info))
+        }
+    }
+
     /// A job for a runner, from a client (an envelope as for a session: its
     /// agent, title, folder, model, and its first prompt as `text`).
     func restQueueJob(_ call: RESTCall) -> HTTPResponse {

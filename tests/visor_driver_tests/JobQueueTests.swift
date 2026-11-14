@@ -151,6 +151,36 @@ import Testing
         #expect(json.contains("\"sources\":[{"), Comment(rawValue: json))
     }
 
+    /// A server that restarts keeps its queue (jobs.json): the claims its
+    /// runners hold are still theirs to renew, and a moved session's agent
+    /// is still its session's (14 Nov: every session in a container came
+    /// back when the server restarted).
+    @Test func aRestartedQueueKeepsItsClaimsAndItsMovedSessions() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("jobs-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let before = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", file: file, log: { _ in })
+        let move = AgentJobMove(session: "s7abc", title: "Moved", resume: "c-123", cwd: "/Users/a/Developer",
+                                sources: [AgentJobSource(repository: "https://github.com/o/r.git", ref: "main", name: "r")],
+                                runsOn: "container")
+        #expect(before.queueResume(move) == .success("s7abc"))
+        let claimed = await before.claim(claim(["container", "harness:claude"]), wait: .zero)
+        let job = try #require(claimed)
+        before.report(.with { $0.agent = job.agent; $0.started = .with { $0.runner = "primary"; $0.sessionID = "c-123" } })
+        _ = try before.queueStart(start("Waiting")).get()
+
+        let after = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", file: file, log: { _ in })
+        #expect(after.renew(job.agent) != nil, "the runner's claim is still its own")
+        #expect(after.session(of: job.agent.uuid) == "s7abc")
+        #expect((after.move(of: job.agent)?.resume) == "c-123")
+        #expect(after.waiting.map(\.title) == ["Waiting"])
+        #expect((after.claimed[job.agent.uuid]?.job.sources.first?.name) == "r")
+        #expect(after.queueResume(move) == .failure(AgentJobRefusal("The session is moving to a runner already.")))
+
+        after.report(.with { $0.agent = job.agent; $0.completed = .with { $0.summary = "Done" } })
+        let later = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", file: file, log: { _ in })
+        #expect(later.renew(job.agent) == nil, "done stays done")
+    }
+
     /// A job whose agent ends at once every time it is given out is given
     /// up after `JobQueue.attempts`, not handed round and round (12 Nov: a
     /// wrapper that couldn't reach the driver came back every second).
