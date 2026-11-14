@@ -168,6 +168,8 @@ import Testing
         before.report(.with { $0.agent = job.agent; $0.started = .with { $0.runner = "primary"; $0.sessionID = "c-123" } })
         _ = try before.queueStart(start("Waiting")).get()
 
+        let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
+        #expect(mode == 0o600, "this user's alone")
         let after = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", file: file, log: { _ in })
         #expect(after.renew(job.agent) != nil, "the runner's claim is still its own")
         #expect(after.session(of: job.agent.uuid) == "s7abc")
