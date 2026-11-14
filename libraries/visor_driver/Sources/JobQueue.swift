@@ -37,8 +37,11 @@ final class JobQueue: AgentJobQueue {
     /// session's isn't, so a move's job is a new agent of the session's.
     private(set) var movedSessions: [String: String] = [:]
     /// How many times each agent's job has come back from a runner without
-    /// its agent saying how it went: one that ends at once every time goes
-    /// after `attempts`, not round and round.
+    /// its agent saying how it went, since it last started: one that ends at
+    /// once every time goes after `attempts`, not round and round. A start
+    /// clears it: an agent that ran, and comes back because its runner
+    /// restarted, is no failure (13 Nov: a session moved back after its
+    /// third runner restart).
     private(set) var returns: [String: Int] = [:]
     /// How many times a job is given out before one that keeps coming back
     /// unexplained is given up.
@@ -188,6 +191,7 @@ final class JobQueue: AgentJobQueue {
         let id = Self.key(report.agent.uuid)
         switch report.event {
         case .started(let started):
+            returns[id] = nil
             log("dispatcher: \(id) started by \(started.runner) (session \(started.sessionID))")
         case .progress(let progress):
             log("dispatcher: \(id): \(progress.text)")

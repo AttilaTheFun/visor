@@ -168,6 +168,21 @@ import Testing
         #expect(jobs.movedSessions.isEmpty)
     }
 
+    /// An agent that started, and comes back each time its runner restarts,
+    /// is never given up: a start clears the count.
+    @Test func aJobThatStartedIsNotGivenUpForItsRunnersRestarts() async throws {
+        let jobs = queue()
+        let move = AgentJobMove(session: "s12", title: "Moved", resume: "c-12", cwd: "/tmp", runsOn: "container")
+        #expect(jobs.queueResume(move) == .success("s12"))
+        for restart in 1...(JobQueue.attempts + 2) {
+            let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+            let job = try #require(claimed, "given out again, restart \(restart)")
+            jobs.report(.with { $0.agent = job.agent; $0.started = .with { $0.runner = "primary@mini"; $0.sessionID = "c-12" } })
+            jobs.report(.with { $0.agent = job.agent; $0.released = .with { $0.reason = "its runner restarted" } })
+        }
+        #expect(jobs.movedSessions.values.contains("s12"), "still the session's")
+    }
+
     /// A session ended takes its job with it, waiting or claimed: its
     /// runner's next renewal is refused.
     @Test func anEndedSessionsJobGoes() async throws {
