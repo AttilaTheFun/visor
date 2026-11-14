@@ -136,10 +136,17 @@ public final class VisorServer {
     var http: HTTPServer?
     var connections: [ObjectIdentifier: ClientConnection] = [:]
 
-    /// What the agents present instead of the password (their tools, the
-    /// permission shim): kept from launch to launch, since an agent under
-    /// its host outlives the server that started it.
-    let agentToken: String
+    /// The one token every agent was given before each session had its
+    /// own (0.59 and earlier): kept from launch to launch, and taken only
+    /// from a session whose agent, left under its host, was started with
+    /// it (VisorServer+AgentTokens).
+    let sharedAgentToken: String
+
+    /// Each session's own token, by session id: what its agent presents
+    /// instead of the password (its tools, the permission shim). Kept with
+    /// the secrets from launch to launch, since an agent under its host
+    /// outlives the server that started it.
+    var sessionAgentTokens: [String: String]
 
     /// Sessions this launch was asked to bring back into a running state:
     /// they were mid-turn when the app went away, and were named on the
@@ -149,7 +156,8 @@ public final class VisorServer {
     public init(port: UInt16 = Envelope.defaultPort) {
         self.port = port
         password = Self.keptPassword()
-        agentToken = Self.keptAgentToken()
+        sharedAgentToken = Self.keptSharedAgentToken()
+        sessionAgentTokens = Self.keptSessionAgentTokens()
         applyAgentDetaching()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()

@@ -19,6 +19,9 @@ extension VisorServer {
            let child = await HostedChild.attach(socket: host.socket, from: host.line, hosting: hosting) {
             if !record.isBound { bind(record) }
             hostable.adopt(child, carried: host.carried ?? [:])
+            // Started by a build that gave every agent the shared token:
+            // it is taken from this session until this agent is gone.
+            if host.ownToken != true { record.sharedTokenChild = child }
             child.limit(AgentChildren.memoryLimit)
             // Its file is followed from now, as an agent started here has
             // its followed once it names its session: where the

@@ -29,7 +29,7 @@ extension VisorServer {
     /// secrets; none sent keeps the one kept. Not with an agent's token: an
     /// agent that could move the proxy could send the pushes anywhere.
     func restSetPushProxy(_ call: RESTCall) -> HTTPResponse {
-        if !call.request.trusted, call.request.authorization == agentToken {
+        if !call.request.trusted, isAgentToken(call.request.authorization) {
             return HTTPResponse(403, Envelope.error("An agent can't set this computer's push proxy.").encoded())
         }
         guard let body = parseJSON(call.request.body), let url = body["url"].string else {
