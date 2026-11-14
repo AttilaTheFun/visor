@@ -46,6 +46,8 @@ extension JobQueue {
             encoder.outputFormatting = [.sortedKeys]
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try encoder.encode(stored).write(to: file, options: .atomic)
+            // Prompts, folders and conversations: this user's alone.
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         } catch {
             log("dispatcher: its jobs couldn't be kept in \(file.path): \(error)")
         }
