@@ -77,8 +77,10 @@ import Testing
     @Test func testSQLiteStorage() throws { try exercise(try MessageCache.sqliteInMemory()) }
 }
 
-/// A host that supplies its own storage gets it from `open(named:)`.
-@Suite final class StorageProviderTests {
+/// A host that supplies its own storage gets it from `open(named:)`. One
+/// test at a time: both set MessageCache's process-wide storage, and one
+/// opening a cache while the other's provider is set was asked of it.
+@Suite(.serialized) final class StorageProviderTests {
     /// A cache in a file, in the folder a host names, is there for the
     /// next open: what a client reads its threads from offline.
     @Test func testAFileInTheHostsFolderKeepsItsRows() throws {
