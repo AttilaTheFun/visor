@@ -19,6 +19,7 @@ swift_library(
         "//libraries/visor_agent",
         "//libraries/visor_protocol",
         "//libraries/visor_server",
+        "//libraries/visor_system",
         "@swiftpkg_grpc_swift_2//:GRPCCore",
         "@swiftpkg_grpc_swift_nio_transport//:GRPCNIOTransportHTTP2",
     ],

@@ -9,6 +9,7 @@ import Foundation
 import GRPCCore
 import GRPCNIOTransportHTTP2
 import VisorServer
+import VisorSystem
 
 public enum VisorDriver {
     /// Serves on `host`:`port` until the task is cancelled, and gives the
@@ -21,12 +22,16 @@ public enum VisorDriver {
     @MainActor
     public static func start(_ server: VisorServer, host: String, port: Int, url: String, containerURL: String? = nil,
                              harness: String = "claude") -> Task<Void, Never> {
-        let jobs = JobQueue(dispatcherURL: url, driverURL: url, containerURL: containerURL, harness: harness)
+        // Kept beside the sessions, so a restart keeps runners' claims and
+        // the moved sessions their agents carry on (JobQueue+Store).
+        let file = HostFolders.dataFolder.appendingPathComponent("jobs.json", isDirectory: false)
+        let jobs = JobQueue(dispatcherURL: url, driverURL: url, containerURL: containerURL, harness: harness, file: file)
         server.jobs = jobs
         jobs.moveFailed = { [weak server] session, resume, cwd, why in
             server?.moveBack(session, resume: resume, cwd: cwd, why: "the move to a runner failed: \(why)")
         }
         server.drivenProcess = { _ in DrivenProcess() }
+        server.takeUpDrivenSessions()
         return Task.detached {
             // A ping every two minutes on a quiet connection: the relays
             // between a container's wrapper and here (Shireworks' and
