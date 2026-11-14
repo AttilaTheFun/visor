@@ -512,8 +512,8 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/googletest/1.17.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.5.0.isomer.1/MODULE.bazel": "810c4b066de392138bd72d0a3d5704394d8b2f97561eac6174481ccbbff3b8e0",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/hermetic_android_toolchains/0.5.0.isomer.1/source.json": "79cad4cd634f452af553b1d8150364b55c37d0dff22a4764797c543fa1ec5512",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.45.2/MODULE.bazel": "57a8eec6b9accf976eec78c109f332a0299087a8eff849b54a5e46a8381fa817",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.45.2/source.json": "d635aa21756218ad3e24da1108b5e4a35c4d6967aa2f58bc8e40db2476bc3dfa",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.52.1/MODULE.bazel": "cdcba25e5136afb3cf63b6cb2f0bc6bc3d68ec13958e24b9c8fa84383d1e137e",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/isomer/0.52.1/source.json": "0966df4753bb98c8e2fc5075030e7c06971eb299f61dd47aeb37c730a7e726e7",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jq.bzl/0.4.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/jsoncpp/1.9.5/MODULE.bazel": "not found",
@@ -1271,12 +1271,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "B2aTY3dA0RubUZkTqFdg+fxS3ocQQeeog6AzCPaqDXY=",
-        "usagesDigest": "8ONkCrhU3XPF6m6xqgyWh7kBVNoxbpabBI7cCWv/ZMk=",
+        "usagesDigest": "Zv+KVa/HgNfRn4qM5kROJTxXS+YFCGcL4knsbCpJcTg=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved b8c0ab08389207df0ea44b4f80724fcd2d2d3b763132acdedfaf6122260c4cf2"
+          "FILE:@@//third_party/swift_packages/Package.resolved 575d7bf5f2ddc4012290743360ebf5369843cc669104ebbfc4563dacf1c211c2"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1290,19 +1290,33 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/bzlmod:swift_deps.bzl%_swift_deps_package_repos",
             "attributes": {
               "repo_names": [
+                "swiftpkg_agent_protocol",
                 "swiftpkg_agent_ui",
+                "swiftpkg_grpc_swift_2",
+                "swiftpkg_grpc_swift_nio_transport",
+                "swiftpkg_grpc_swift_protobuf",
                 "swiftpkg_isomer",
+                "swiftpkg_swift_algorithms",
                 "swiftpkg_swift_asn1",
+                "swiftpkg_swift_async_algorithms",
                 "swiftpkg_swift_atomics",
                 "swiftpkg_swift_certificates",
                 "swiftpkg_swift_collections",
                 "swiftpkg_swift_crypto",
                 "swiftpkg_swift_foundation",
                 "swiftpkg_swift_foundation_icu",
+                "swiftpkg_swift_http_structured_headers",
+                "swiftpkg_swift_http_types",
+                "swiftpkg_swift_log",
                 "swiftpkg_swift_nio",
+                "swiftpkg_swift_nio_extras",
+                "swiftpkg_swift_nio_http2",
                 "swiftpkg_swift_nio_ssh",
                 "swiftpkg_swift_nio_ssl",
+                "swiftpkg_swift_nio_transport_services",
+                "swiftpkg_swift_numerics",
                 "swiftpkg_swift_protobuf",
+                "swiftpkg_swift_service_lifecycle",
                 "swiftpkg_swift_sql",
                 "swiftpkg_swift_syntax",
                 "swiftpkg_swift_system",
@@ -1314,7 +1328,7 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_isomer",
-              "commit": "9c26f2d8dd7893abe9ab80c006cedb56c963daf7",
+              "commit": "15ff31baf86fac9a24587b79d14fa0528640c18d",
               "remote": "https://github.com/AttilaTheFun/isomer.git",
               "env": {},
               "env_inherit": [],
@@ -1334,6 +1348,12 @@
               "target_deps": {
                 "Foundation": [
                   "@isomer//foundation/internationalization"
+                ],
+                "IsomerSwiftUI": [
+                  "@isomer//shared/wire:tree_messages"
+                ],
+                "IsomerWire": [
+                  "@isomer//shared/wire:wire_messages"
                 ]
               },
               "module_aliases": {},
@@ -1346,9 +1366,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_ui",
-              "commit": "22a192c38035862f62583bd5b810769ecb30bc72",
+              "commit": "86dd9a521bedf8e97b34c0812e71c3bc0e6f14f2",
               "remote": "https://github.com/AttilaTheFun/agent_ui.git",
-              "version": "0.47.0",
+              "version": "0.51.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1388,6 +1408,115 @@
                 "NavigationUI": [
                   "@isomer//:swift_ui",
                   "@isomer//:foundation"
+                ]
+              },
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_agent_protocol": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_agent_protocol",
+              "commit": "90ceb24a8d22757aa94f7bee78e0f2dbdb436ea0",
+              "remote": "https://github.com/AttilaTheFun/agent_protocol.git",
+              "version": "0.2.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_grpc_swift_2": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_grpc_swift_2",
+              "commit": "e31eb485c4575e0dbed3d1925e24084f755ac6e8",
+              "remote": "https://github.com/grpc/grpc-swift-2.git",
+              "version": "2.4.4",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_grpc_swift_nio_transport": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_grpc_swift_nio_transport",
+              "commit": "71c5da80432b10e87778928b309808fa89ad1911",
+              "remote": "https://github.com/grpc/grpc-swift-nio-transport.git",
+              "version": "2.12.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_grpc_swift_protobuf": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_grpc_swift_protobuf",
+              "commit": "83f5cdb2f8b4c7b57ed9419c6f4f6380b683500e",
+              "remote": "https://github.com/grpc/grpc-swift-protobuf.git",
+              "version": "2.5.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_protobuf": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_protobuf",
+              "commit": "3d537cb81aef272a03cb3be815439e9bf0eb3bd3",
+              "remote": "https://github.com/apple/swift-protobuf.git",
+              "version": "1.39.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "init_submodules": false,
+              "make_files_read_only": false,
+              "recursive_init_submodules": true,
+              "patch_args": [
+                "-p0"
+              ],
+              "patch_cmds": [],
+              "patch_cmds_win": [],
+              "patch_tool": "",
+              "patches": [],
+              "publicly_expose_all_targets": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {
+                "SwiftProtobuf": [
+                  "@isomer//foundation:for_swift_packages"
                 ]
               },
               "module_aliases": {},
@@ -1476,9 +1605,28 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_update_kit",
-              "commit": "eaa240496a742e2d132978da739c65a55816bf59",
+              "commit": "de42740f0a564ec54c866fcae3413aae0eb316df",
               "remote": "https://github.com/AttilaTheFun/update_kit.git",
-              "version": "0.11.0",
+              "version": "0.17.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_algorithms": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_algorithms",
+              "commit": "87e50f483c54e6efd60e885f7f5aa946cee68023",
+              "remote": "https://github.com/apple/swift-algorithms.git",
+              "version": "1.2.1",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1498,6 +1646,25 @@
               "commit": "3b6410f7dee09eb33cdd26260c5fd47fda19b0e2",
               "remote": "https://github.com/apple/swift-asn1.git",
               "version": "1.7.3",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_async_algorithms": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_async_algorithms",
+              "commit": "9d349bcc328ac3c31ce40e746b5882742a0d1272",
+              "remote": "https://github.com/apple/swift-async-algorithms.git",
+              "version": "1.1.3",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1630,6 +1797,63 @@
               "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
             }
           },
+          "swiftpkg_swift_http_structured_headers": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_http_structured_headers",
+              "commit": "933538faa42c432d385f02e07df0ace7c5ecfc47",
+              "remote": "https://github.com/apple/swift-http-structured-headers.git",
+              "version": "1.7.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_http_types": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_http_types",
+              "commit": "bff4b6903cdc99dda49649dd52f46c11cfd3ed50",
+              "remote": "https://github.com/apple/swift-http-types.git",
+              "version": "1.8.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_log": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_log",
+              "commit": "e3da04078777e6a1b72ce19981fbd6539b0847d8",
+              "remote": "https://github.com/apple/swift-log.git",
+              "version": "1.17.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
           "swiftpkg_swift_nio": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
@@ -1661,33 +1885,95 @@
               "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
             }
           },
-          "swiftpkg_swift_protobuf": {
+          "swiftpkg_swift_nio_extras": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
-              "bazel_package_name": "swiftpkg_swift_protobuf",
-              "commit": "3d537cb81aef272a03cb3be815439e9bf0eb3bd3",
-              "remote": "https://github.com/apple/swift-protobuf.git",
-              "version": "1.39.0",
+              "bazel_package_name": "swiftpkg_swift_nio_extras",
+              "commit": "8e1249b29f92574e05e0d91637f239e378a9a95b",
+              "remote": "https://github.com/apple/swift-nio-extras.git",
+              "version": "1.35.2",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
-              "init_submodules": false,
               "make_files_read_only": false,
-              "recursive_init_submodules": true,
-              "patch_args": [
-                "-p0"
-              ],
-              "patch_cmds": [],
-              "patch_cmds_win": [],
-              "patch_tool": "",
-              "patches": [],
-              "publicly_expose_all_targets": false,
               "replace_scm_with_registry": false,
-              "target_deps": {
-                "SwiftProtobuf": [
-                  "@isomer//foundation:for_swift_packages"
-                ]
-              },
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_nio_http2": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_nio_http2",
+              "commit": "0f3e54e29c944c2e835ad52159da7d9e1c94ac69",
+              "remote": "https://github.com/apple/swift-nio-http2.git",
+              "version": "1.46.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_nio_transport_services": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_nio_transport_services",
+              "commit": "67787bb645a5e67d2edcdfbe48a216cc549222d5",
+              "remote": "https://github.com/apple/swift-nio-transport-services.git",
+              "version": "1.28.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_numerics": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_numerics",
+              "commit": "0c0290ff6b24942dadb83a929ffaaa1481df04a2",
+              "remote": "https://github.com/apple/swift-numerics.git",
+              "version": "1.1.1",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_swift_service_lifecycle": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_service_lifecycle",
+              "commit": "a18ee16b8039866fd919bdb4e8e906882d4ecc75",
+              "remote": "https://github.com/swift-server/swift-service-lifecycle.git",
+              "version": "2.13.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
               "module_aliases": {},
               "dep_module_aliases": "",
               "bazel_target_mods": "",
@@ -1736,6 +2022,11 @@
           "explicitRootModuleDirectDeps": [
             "swiftpkg_isomer",
             "swiftpkg_agent_ui",
+            "swiftpkg_agent_protocol",
+            "swiftpkg_grpc_swift_2",
+            "swiftpkg_grpc_swift_nio_transport",
+            "swiftpkg_grpc_swift_protobuf",
+            "swiftpkg_swift_protobuf",
             "swiftpkg_swift_nio_ssh",
             "swiftpkg_swift_certificates",
             "swiftpkg_swift_nio_ssl",
