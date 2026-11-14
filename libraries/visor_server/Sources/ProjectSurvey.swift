@@ -46,7 +46,7 @@ enum ProjectSurvey {
 
     /// How often the file names each place under `home`, by the place's
     /// first three parts ("/Users/x/Developer/visor/Sources"), skipping the
-    /// home folder's hidden folders and its Library. Read a piece at a
+    /// home folder's hidden folders and its `kept` ones. Read a piece at a
     /// time: a conversation runs to hundreds of megabytes.
     static func mentions(in file: URL, under home: String) -> [String: Int] {
         guard let handle = try? FileHandle(forReadingFrom: file) else { return [:] }
@@ -127,14 +127,21 @@ enum ProjectSurvey {
         return counts
     }
 
+    /// The home folder's own folders never surveyed: the Library, and those
+    /// a Mac guards behind a permission (Downloads, Documents, Desktop…).
+    /// Not where a session's repositories are; and a `git` asked there
+    /// waits on a dialog no one answers (a move to a runner hung on two, in
+    /// Downloads).
+    static let kept: Set<String> = ["Library", "Downloads", "Documents", "Desktop", "Pictures", "Movies", "Music", "Public"]
+
     /// The place named at `start` (just past "<home>/"), by its first three
-    /// parts; nil for a hidden folder or the Library.
+    /// parts; nil for a hidden folder or one of `kept`.
     private static func place(in text: Data, after start: Data.Index, home: String) -> String? {
         let stops: Set<UInt8> = Set("\"' \n\t\\`()[]{}<>|:;,*?".utf8)
         var stop = start
         while stop < text.endIndex, stop - start < 300, !stops.contains(text[stop]) { stop += 1 }
         let parts = String(decoding: text[start..<stop], as: UTF8.self).split(separator: "/").prefix(3).map(String.init)
-        guard let first = parts.first, !first.hasPrefix("."), first != "Library" else { return nil }
+        guard let first = parts.first, !first.hasPrefix("."), !kept.contains(first) else { return nil }
         return home + "/" + parts.joined(separator: "/")
     }
 
