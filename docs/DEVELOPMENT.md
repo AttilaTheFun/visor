@@ -832,10 +832,26 @@ no longer in Visor.
     identity and profile and notarizes the Mac's, whose ticket is stapled
     on a Mac slot; the job's OIDC token says which kind it is, and
     Shireworks' policy (the repository pinned, this workflow, main's
-    dispatch or a releaser's tag) decides. The draft is CI's
+    dispatch or a releaser's tag) decides. Visor for Android (arm64,
+    `--config=alpha`) is built beside them with the same version
+    (tools/ci/stamp_android.sh: its versionName and versionCode), then
+    signed in the job with its private release key (Logan, 15 Nov 2026:
+    never Isomer's public debug key): tools/ci/sign_android.sh, with the
+    JDK Visor's Bazel pins and @android_build_tools' apksigner, takes the
+    key from the job's environment (Logan, 15 Nov 2026: a public
+    repository signs with keys in its GitHub secrets):
+    `ANDROID_SIGNING_KEYSTORE` and `ANDROID_SIGNING_PASSWORD`, secrets of
+    the GitHub environment `release` (deployments from main and `v*` tags
+    alone), given only to the signing step of the jobs that sign (alpha,
+    release-android). It checks the signed APK's certificate against the
+    workflow's `VISOR_ANDROID_PIN` (tools/ci/android_sign.sh
+    --key-from-env, Shireworks'). Shireworks'
+    signing then checks the .apk (APK Signature Scheme v2 or later, its
+    package pinned) and never signs it again. The draft is CI's
     (tools/ci/propose_release.sh, the run's token): no agent makes a draft
     or a tag. The builds, as Shireworks signed them, are attached to the
-    draft (`Visor-<version>-ios.ipa`, `-macos.zip` and `builds.json`:
+    draft (`Visor-<version>-ios.ipa`, `-macos.zip`, `-android.apk` and
+    `builds.json`:
     tools/ci/attach_release.sh), which is what Applications lists
     (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent image of
     that version follows (`agent-image`, in a visor-jit container, built
@@ -847,8 +863,18 @@ no longer in Visor.
     (tools/ci/verified_run.sh), then takes the Alphas the proposal attached,
     of that commit, as tested (tools/ci/release_alphas.sh), and has
     Shireworks stamp them Production and sign them again
-    (`sign_from_ci.sh --promote`; nothing is rebuilt), Visor.app with its
-    disk image made on a Mac slot, signed, notarized and stapled.
+    (`sign_from_ci.sh --promote`; nothing Apple is rebuilt), Visor.app with
+    its disk image made on a Mac slot, signed, notarized and stapled.
+    Android's is the release's own production build (`release-android`,
+    `--config=prod`, the tag's version, signed there with its release key
+    as the alpha's is), which Shireworks checks as production, as
+    AttilaTheFun/reviews' release does. Android never holds Apple's back
+    (New Container Helper, 15 Nov 2026): `release` promotes Apple's
+    whatever `release-android`'s result (tools/ci/promote_release.sh), and
+    `release-android-result` turns the run red afterwards if the APK
+    wasn't made. Re-run failed jobs then promotes the APK alone: Apple's,
+    Production already, are left as they are, and only the APK and
+    builds.json are attached again.
     `release-assets` attaches the Production builds to the release in place
     of the Alphas, under the same names, with the disk image
     (`Visor-<version>-macos.dmg`) and builds.json, then that proof
