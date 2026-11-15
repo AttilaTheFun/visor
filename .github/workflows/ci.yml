@@ -25,21 +25,23 @@ name: CI
 #     compares with the prior release's), and its success is the commit's
 #     tests passing. Run on a
 #     branch pushed at an earlier commit, it bisects a regression;
-#   - `prerelease`: no tests or proof. The commit's version is asked of
-#     Applications Server, its apps built and published as Alphas, and a
-#     draft release marked pre-release proposed (alpha), then the agent
-#     image of that version published if tools/containers/ changed since
-#     the release before (agent-image);
+#   - `prerelease`: no tests or proof. The commit's version taken from the
+#     repository's releases and tags, its apps built as Alphas and signed
+#     by Shireworks (the Mac's notarized there, stapled on a Mac slot), and
+#     a draft release marked pre-release proposed with them attached
+#     (alpha), then the agent image of that version published if
+#     tools/containers/ changed since the release before (agent-image);
 #   - `release`: verify first, and the pins; only once they pass, alpha and
 #     agent-image as above, the draft not marked pre-release, naming the run
 #     that verified it;
-#   - `adhoc`, on a branch other than main: its AdHoc build, as before;
 #   - `agent-image`: Visor's toolchain image alone, built and pushed.
 # - Logan's Release in Reviews publishes a proposed release's draft, which
 #   makes its tag: `release` checks the commit is on main and was verified,
-#   then has Applications Server promote its Alphas to Production;
-#   release-assets attaches the Production builds (the Mac's disk image
-#   among them) and the proof to the release.
+#   then has Shireworks stamp the Alphas its proposal attached Production
+#   and sign them again (the Mac's with its disk image); release-assets
+#   attaches the Production builds and the proof to the release.
+#   A branch's builds are experiments only (Logan, 12 Nov 2026): nothing
+#   publishes them.
 #
 # The policy's verify leases a Mac; Visor's runs on GitHub's own runners
 # instead, free for a public repository, leaving Shireworks' Mac slots to
@@ -62,9 +64,9 @@ on:
   workflow_dispatch:
     inputs:
       run:
-        description: "verify: the tests and the proof. prerelease: Alphas and a draft pre-release. release: verify, then Alphas and a draft release. adhoc: a branch's AdHoc build. agent-image: Visor's toolchain image, built and pushed."
+        description: "verify: the tests and the proof. prerelease: Alphas and a draft pre-release. release: verify, then Alphas and a draft release. agent-image: Visor's toolchain image, built and pushed."
         type: choice
-        options: [verify, prerelease, release, adhoc, agent-image]
+        options: [verify, prerelease, release, agent-image]
         default: verify
   # Logan's Release in Reviews publishes the draft, which makes its v* tag.
   release:
@@ -455,15 +457,14 @@ jobs:
       - run: tools/released_pins.sh
 
   # Visor's own Linux programs (tools/linux_programs.sh: visor-server, also
-  # the agents' host, linked fully static), which alpha and adhoc seal into
+  # the agents' host, linked fully static), which alpha seals into
   # Visor.app for the containers it makes: built in a container of Visor's
   # agent image leased from Shireworks (tools/ci/linux_programs.sh) and
   # handed over as a tar. It needs no version, so it runs beside verify.
   linux-programs:
     if: >-
-      github.event_name == 'workflow_dispatch' &&
-      ((github.ref == 'refs/heads/main' && (inputs.run == 'prerelease' || inputs.run == 'release')) ||
-       (github.ref != 'refs/heads/main' && inputs.run == 'adhoc'))
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+      (inputs.run == 'prerelease' || inputs.run == 'release')
     runs-on: [self-hosted, visor-jit]
     timeout-minutes: 60
     steps:
@@ -477,19 +478,22 @@ jobs:
           retention-days: 7
 
   # The proposal (prerelease, or release once verify and pins passed), on
-  # main: its version asked of Applications Server (0.N.M; the same again for
-  # the same commit, so a run again burns no number) and stamped in
-  # (tools/ci/next_version.sh); the iPhone and iPad app and Visor.app built
-  # on Linux in the job's own container, optimized, as a release promotes
-  # this very build. The iPhone's is a device build signed ad hoc with a
-  # placeholder profile (--config=ci_device, CI holds none of the team's);
-  # Visor.app is given Visor's Linux programs. The server signs each again
-  # with its bundle id's own identity and profile as it publishes it
-  # (tools/ci/publish_from_ci.sh), and notarizes the Mac's. Then the draft
-  # release (tools/ci/propose_release.sh), with the builds as the server
-  # signed them attached (tools/ci/attach_release.sh): what Applications
-  # lists (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The job's
-  # OIDC token says what it is; no key, profile or password here.
+  # main: its version from the repository's releases and tags (0.N.M: one
+  # past the line's highest, or the same again for a commit that already
+  # has one, so a run again burns no number) and stamped in
+  # (tools/ci/version_from_tags.sh); the iPhone and iPad app and Visor.app
+  # built on Linux in the job's own container, optimized, as a release
+  # promotes this very build. The iPhone's is a device build signed ad hoc
+  # with a placeholder profile (--config=ci_device, CI holds none of the
+  # team's); Visor.app is given Visor's Linux programs. Shireworks' signing
+  # service signs each again with its bundle id's own identity and profile
+  # (tools/ci/sign_from_ci.sh), and notarizes the Mac's, whose ticket is
+  # stapled on a Mac slot. Then the draft release
+  # (tools/ci/propose_release.sh), with the signed builds and builds.json
+  # attached (tools/ci/attach_release.sh): what Applications lists
+  # (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The job's OIDC
+  # token says what it is, and Shireworks' policy checks it; no key,
+  # profile or password here.
   alpha:
     needs: [verify, pins, linux-programs]
     if: >-
@@ -500,27 +504,27 @@ jobs:
     runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
     permissions:
-      # The draft release.
+      # The draft release (and the drafts version_from_tags.sh reads).
       contents: write
-      # The OIDC token Applications Server checks.
+      # The OIDC token Shireworks' signing checks.
       id-token: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
       - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
-      # 0.N.M, the next of the committed line for the token's commit, stamped
-      # into the checkout's Info.plists and never committed. No version is no
-      # proposal.
+      # 0.N.M, the next of the committed line after every release and tag on
+      # it (the same again for the same commit), stamped into the checkout's
+      # Info.plists and never committed. No version is no proposal.
       - name: Version
         id: version
         env:
-          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist
+          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist
           version="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           case "$version" in
-            "" | *.0) echo "::error::Applications Server gave no build version (the plist says \"$version\")"; exit 1 ;;
+            "" | *.0) echo "::error::no build version was stamped (the plist says \"$version\")"; exit 1 ;;
           esac
           echo "version=$version" >> "$GITHUB_OUTPUT"
       # Logan's line rule (8 Nov 2026): no proposal on a line already
@@ -555,7 +559,7 @@ jobs:
           line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${line%.*}" \
             --config=alpha --config=ci_device --compilation_mode=opt //applications/visor_ios //applications/visor_mac
-      # The server signs it again from the entitlements it carries: built
+      # Shireworks signs it again keeping the entitlements it carries: built
       # unsigned, it would lose the microphone.
       - name: Visor.app signed with its entitlements
         run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
@@ -565,23 +569,17 @@ jobs:
           path: ${{ runner.temp }}/linux-programs
       - name: Visor's Linux programs into Visor.app
         run: tools/ci/mac_app_linux_programs.sh .ci/packages/visor_mac.zip "$RUNNER_TEMP/linux-programs/linux-programs.tar"
-      # The commit's message, from git: a run by hand has no head_commit.
-      - name: Notes
-        run: git log -1 --format=%B > "$RUNNER_TEMP/notes.md"
-      - name: Publish
-        env:
-          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: |
-          set -o pipefail
-          tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" --download "$RUNNER_TEMP/assets" \
-            .ci/packages/*.ipa .ci/packages/visor_mac.zip | tee "$RUNNER_TEMP/published.txt"
+      # Each build as Shireworks signed it, and builds.json, saved for the
+      # draft: Visor-<version>-ios.ipa and -macos.zip.
+      - name: Sign
+        run: tools/ci/sign_from_ci.sh --app Visor --download "$RUNNER_TEMP/assets" .ci/packages/*.ipa .ci/packages/visor_mac.zip
       # Untrusted text reaches the shell through env, never ${{ }} in run.
       - name: The draft release
         env:
           GH_TOKEN: ${{ github.token }}
           KIND: ${{ inputs.run }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: tools/ci/propose_release.sh "$KIND" "$VERSION" "$RUNNER_TEMP/published.txt"
+        run: tools/ci/propose_release.sh "$KIND" "$VERSION" "$RUNNER_TEMP/assets/builds.json"
       # A release's proposal: the proof verify made of this commit, saying
       # the version, among the assets, so the draft and the release keep it
       # (AttilaTheFun/reviews' docs/PROOF_FORMAT.md).
@@ -663,80 +661,18 @@ jobs:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}
 
-  # AdHoc: a branch other than main built by hand (`run: adhoc`), the iPhone
-  # and iPad app and Visor.app built as alpha's are with --config=adhoc and
-  # published; the server takes them as AdHoc builds, kept a week
-  # (AttilaTheFun/applications' docs/VARIANTS.md).
-  adhoc:
-    needs: linux-programs
-    if: github.event_name == 'workflow_dispatch' && inputs.run == 'adhoc' && github.ref != 'refs/heads/main'
-    runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 90
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v5
-      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
-      - name: Version
-        env:
-          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/next_version.sh Visor applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist
-      # The app group shared with Applications, and Applications' bundle ids
-      # on a Mac (UpdateKit; tools/signing), from the repository's secrets,
-      # so neither the public source nor a log names them. A build published
-      # without the group would never check for updates, so none is made.
-      - name: Update settings
-        env:
-          UPDATE_APP_GROUP: ${{ secrets.VISOR_UPDATE_APP_GROUP }}
-          UPDATE_APPLICATIONS_BUNDLE_IDS: ${{ secrets.VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS }}
-        run: |
-          if [ -z "$UPDATE_APP_GROUP" ] || [ -z "$UPDATE_APPLICATIONS_BUNDLE_IDS" ]; then
-            echo "::error::No VISOR_UPDATE_APP_GROUP or VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS secret: a build published without them never checks for updates"
-            exit 1
-          fi
-          printf 'common --repo_env=VISOR_UPDATE_APP_GROUP=%s\ncommon --repo_env=VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS=%s\n' \
-            "$UPDATE_APP_GROUP" "$UPDATE_APPLICATIONS_BUNDLE_IDS" >> .bazelrc.user
-      - name: Build
-        env:
-          VISOR_CI_PACKAGE: .ci/packages
-        run: |
-          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
-          exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${line%.*}" \
-            --config=adhoc --config=ci_device --compilation_mode=opt //applications/visor_ios //applications/visor_mac
-      # The server signs it again from the entitlements it carries: built
-      # unsigned, it would lose the microphone.
-      - name: Visor.app signed with its entitlements
-        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-programs
-          path: ${{ runner.temp }}/linux-programs
-      - name: Visor's Linux programs into Visor.app
-        run: tools/ci/mac_app_linux_programs.sh .ci/packages/visor_mac.zip "$RUNNER_TEMP/linux-programs/linux-programs.tar"
-      # The branch's commit's message, from git: a run by hand has no
-      # head_commit in its event.
-      - name: Notes
-        run: git log -1 --format=%B > "$RUNNER_TEMP/notes.md"
-      - name: Publish
-        env:
-          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/publish_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" .ci/packages/*.ipa .ci/packages/visor_mac.zip
-
   # ---- Released ------------------------------------------------------------
 
   # Production, when Logan releases a proposed release in Reviews (never a
   # pre-release). Nothing is built: the commit must be on main and verified
   # (tools/ci/verified_run.sh: a run by hand whose verify passed and kept its
-  # proof), then Applications Server promotes the Alphas alpha published of
-  # it, the builds Logan tested, stamping them Production and signing them
-  # again (tools/ci/promote_from_ci.sh, AttilaTheFun/applications'
-  # docs/CI.md, "Production by promotion"). The token's v* tag, released by
-  # a releaser, is the permission. An Alpha that isn't its app's newest is
-  # kept a week, so a release is made within a week of its proposal (or
-  # while its Alphas are still the newest). The promoted builds, the Mac's
-  # disk image among them (which the server makes as it promotes Visor.app),
-  # are handed to release-assets.
+  # proof), then the Alphas its proposal attached, of this commit, the
+  # builds Logan tested (tools/ci/release_alphas.sh), are stamped Production
+  # and signed again by Shireworks (tools/ci/sign_from_ci.sh --promote,
+  # AttilaTheFun/applications' docs/CI.md, "Signing"), the Mac's notarized,
+  # with its disk image made on a Mac slot, signed, notarized and stapled.
+  # The token's v* tag, released by a releaser, is the permission. The
+  # Production builds are handed to release-assets.
   release:
     if: github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v')
     runs-on: [self-hosted, visor-jit-small]
@@ -744,7 +680,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-      # The OIDC token Applications Server checks.
+      # The OIDC token Shireworks' signing checks.
       id-token: write
     outputs:
       verified: ${{ steps.verified.outputs.run }}
@@ -766,15 +702,13 @@ jobs:
             || { echo "::error::$GITHUB_REF_NAME's commit was not verified: nothing promoted"; exit 1; }
           echo "Verified by run $run"
           echo "run=$run" >> "$GITHUB_OUTPUT"
-      # Untrusted text reaches the shell through env, never ${{ }} in run.
-      - name: Notes
+      # Nothing is built: the Alphas the proposal attached, of this commit.
+      - name: The proposal's Alphas
         env:
-          BODY: ${{ github.event.release.body }}
-        run: printf '%s\n' "$BODY" > "$RUNNER_TEMP/notes.md"
+          GH_TOKEN: ${{ github.token }}
+        run: tools/ci/release_alphas.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/alphas"
       - name: Promote
-        env:
-          APPLICATIONS_CI_CODE: ${{ secrets.APPLICATIONS_CI_CODE }}
-        run: tools/ci/promote_from_ci.sh --notes-file "$RUNNER_TEMP/notes.md" --download "$RUNNER_TEMP/assets"
+        run: tools/ci/sign_from_ci.sh --promote --app Visor --download "$RUNNER_TEMP/assets" "$RUNNER_TEMP"/alphas/*
       - uses: actions/upload-artifact@v4
         with:
           name: release-assets
@@ -788,7 +722,7 @@ jobs:
   # notarized -macos.dmg (Logan, 5 Nov 2026) and builds.json, which
   # Applications reads. Then the proof that verified it
   # (tools/ci/release_proof.sh), for the next release's to be compared
-  # with. A job of its own, so that the one reaching Applications Server
+  # with. A job of its own, so that the one reaching Shireworks' signing
   # (release) keeps a read-only token; in a container, as every job but the
   # headful proofs (Logan, 8 Nov 2026). gh as gh_ready.sh installs it.
   release-assets:
