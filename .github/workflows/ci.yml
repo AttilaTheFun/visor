@@ -89,6 +89,12 @@ permissions:
 defaults:
   run:
     shell: bash
+# Visor for Android's release certificate (SHA-256): the APK signed with the
+# key in the GitHub environment `release`'s secrets (alpha's and
+# release-android's signing steps) must carry it (tools/ci/android_sign.sh),
+# so a key that isn't Visor's signs nothing.
+env:
+  VISOR_ANDROID_PIN: 779E6428CC219033DA3A0086DAB3CE21F8D3D35806E4199E8BAC7D58D86B18A5
 jobs:
   # ---- Pull requests -------------------------------------------------------
 
@@ -488,12 +494,18 @@ jobs:
   # team's); Visor.app is given Visor's Linux programs. Shireworks' signing
   # service signs each again with its bundle id's own identity and profile
   # (tools/ci/sign_from_ci.sh), and notarizes the Mac's, whose ticket is
-  # stapled on a Mac slot. Then the draft release
+  # stapled on a Mac slot. Visor for Android, arm64, is built beside them
+  # with the same version (tools/ci/stamp_android.sh) and signed here with
+  # its private release key (tools/ci/sign_android.sh: the key from the
+  # GitHub environment `release`'s secrets, given to that step alone, its
+  # certificate pinned), then checked by Shireworks (its signature, its
+  # package pinned), which never signs an .apk again. Then the draft release
   # (tools/ci/propose_release.sh), with the signed builds and builds.json
   # attached (tools/ci/attach_release.sh): what Applications lists
   # (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The job's OIDC
-  # token says what it is, and Shireworks' policy checks it; no key,
-  # profile or password here.
+  # token says what it is, and Shireworks' policy checks it (its ref,
+  # repository and workflow claims, which an environment leaves as they
+  # are); no Apple key, profile or password here.
   alpha:
     needs: [verify, pins, linux-programs]
     if: >-
@@ -503,6 +515,9 @@ jobs:
        (inputs.run == 'release' && needs.verify.result == 'success' && needs.pins.result == 'success'))
     runs-on: [self-hosted, visor-jit]
     timeout-minutes: 90
+    # Android's signing key: the environment's secrets (deployments from
+    # main and v* tags alone), for the Sign Android step.
+    environment: release
     permissions:
       # The draft release (and the drafts version_from_tags.sh reads).
       contents: write
@@ -569,10 +584,29 @@ jobs:
           path: ${{ runner.temp }}/linux-programs
       - name: Visor's Linux programs into Visor.app
         run: tools/ci/mac_app_linux_programs.sh .ci/packages/visor_mac.zip "$RUNNER_TEMP/linux-programs/linux-programs.tar"
-      # Each build as Shireworks signed it, and builds.json, saved for the
-      # draft: Visor-<version>-ios.ipa and -macos.zip.
+      # Visor for Android with the same version (its versionName and
+      # versionCode), arm64, optimized, into a folder of its own
+      # (container_build.sh empties the one it is given).
+      - name: Build Android
+        env:
+          VISOR_CI_PACKAGE: .ci/android
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tools/ci/stamp_android.sh "$VERSION"
+          exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${VERSION%.*}" \
+            --config=alpha --compilation_mode=opt //applications/visor_android:visor_android_apk
+      # Its release key's signature in place of its build's debug key's,
+      # checked against the pin.
+      - name: Sign Android
+        env:
+          ANDROID_SIGNING_KEYSTORE: ${{ secrets.ANDROID_SIGNING_KEYSTORE }}
+          ANDROID_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+        run: tools/ci/sign_android.sh --pin "$VISOR_ANDROID_PIN" .ci/android/*.apk .ci/android-release/visor_android.apk
+      # Each build as Shireworks signed it (the .apk: checked), and
+      # builds.json, saved for the draft: Visor-<version>-ios.ipa,
+      # -macos.zip and -android.apk.
       - name: Sign
-        run: tools/ci/sign_from_ci.sh --app Visor --download "$RUNNER_TEMP/assets" .ci/packages/*.ipa .ci/packages/visor_mac.zip
+        run: tools/ci/sign_from_ci.sh --app Visor --download "$RUNNER_TEMP/assets" .ci/packages/*.ipa .ci/packages/visor_mac.zip .ci/android-release/*.apk
       # Untrusted text reaches the shell through env, never ${{ }} in run.
       - name: The draft release
         env:
@@ -595,8 +629,9 @@ jobs:
         run: |
           tools/ci/proof_version.sh "$RUNNER_TEMP/proof" "$VERSION" "$RUNNER_TEMP/assets/proof.zip"
           if [ -f "$RUNNER_TEMP/proof/proof-diff.json" ]; then cp "$RUNNER_TEMP/proof/proof-diff.json" "$RUNNER_TEMP/assets/"; fi
-      # The Alphas on the draft: Visor-<version>-ios.ipa, -macos.zip and
-      # builds.json, which Applications reads (and a release's proof.zip).
+      # The Alphas on the draft: Visor-<version>-ios.ipa, -macos.zip,
+      # -android.apk and builds.json, which Applications reads (and a
+      # release's proof.zip).
       - name: The builds on the draft
         env:
           GH_TOKEN: ${{ github.token }}
@@ -664,17 +699,25 @@ jobs:
   # ---- Released ------------------------------------------------------------
 
   # Production, when Logan releases a proposed release in Reviews (never a
-  # pre-release). Nothing is built: the commit must be on main and verified
+  # pre-release). Nothing Apple is built: the commit must be on main and verified
   # (tools/ci/verified_run.sh: a run by hand whose verify passed and kept its
   # proof), then the Alphas its proposal attached, of this commit, the
   # builds Logan tested (tools/ci/release_alphas.sh), are stamped Production
   # and signed again by Shireworks (tools/ci/sign_from_ci.sh --promote,
   # AttilaTheFun/applications' docs/CI.md, "Signing"), the Mac's notarized,
   # with its disk image made on a Mac slot, signed, notarized and stapled.
-  # The token's v* tag, released by a releaser, is the permission. The
-  # Production builds are handed to release-assets.
+  # The token's v* tag, released by a releaser, is the permission. Android's
+  # is the release's own production build, signed with its release key
+  # (release-android), which Shireworks checks as production. Android never
+  # holds Apple's back (New Container Helper, 2026-11-15): whatever
+  # release-android's result, Apple's are promoted (tools/ci/promote_release.sh),
+  # the APK with them only when it was built and signed, and
+  # release-android-result fails the run afterwards when it wasn't. Re-running
+  # the failed jobs then promotes the APK alone, Apple's left as they are.
+  # The Production builds are handed to release-assets.
   release:
-    if: github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v')
+    needs: release-android
+    if: ${{ !cancelled() && github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 90
     permissions:
@@ -702,13 +745,19 @@ jobs:
             || { echo "::error::$GITHUB_REF_NAME's commit was not verified: nothing promoted"; exit 1; }
           echo "Verified by run $run"
           echo "run=$run" >> "$GITHUB_OUTPUT"
-      # Nothing is built: the Alphas the proposal attached, of this commit.
-      - name: The proposal's Alphas
+      # Visor for Android, signed with its release key, when release-android
+      # made it.
+      - if: needs.release-android.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: release-android
+          path: ${{ runner.temp }}/android
+      # Nothing Apple is built: the Alphas the proposal attached, of this
+      # commit (unless a run before promoted them), and the APK if there is one.
+      - name: Promote
         env:
           GH_TOKEN: ${{ github.token }}
-        run: tools/ci/release_alphas.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/alphas"
-      - name: Promote
-        run: tools/ci/sign_from_ci.sh --promote --app Visor --download "$RUNNER_TEMP/assets" "$RUNNER_TEMP"/alphas/*
+        run: tools/ci/promote_release.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/assets" "$RUNNER_TEMP/android"
       - uses: actions/upload-artifact@v4
         with:
           name: release-assets
@@ -716,17 +765,84 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # A release's Android app, built for production (--config=prod) from the
+  # tag's commit with the tag's version, as AttilaTheFun/reviews' release
+  # does, and signed here with its private release key, from the GitHub
+  # environment `release`'s secrets, given to the Sign step alone
+  # (tools/ci/sign_android.sh, checked against the pin). Shireworks only
+  # checks an .apk (sign_from_ci.sh --promote, in release), so no Alpha of
+  # it is promoted. On the large runner, so that release, which reaches
+  # Shireworks' signing, builds nothing.
+  release-android:
+    if: github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, visor-jit]
+    timeout-minutes: 45
+    # Android's signing key: the environment's secrets (deployments from
+    # main and v* tags alone), for the Sign step.
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
+      - name: Build
+        env:
+          VISOR_CI_PACKAGE: .ci/android
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          tools/ci/stamp_android.sh "$version"
+          exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${version%.*}" \
+            --config=prod --compilation_mode=opt //applications/visor_android:visor_android_apk
+      - name: Sign
+        env:
+          ANDROID_SIGNING_KEYSTORE: ${{ secrets.ANDROID_SIGNING_KEYSTORE }}
+          ANDROID_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+        run: tools/ci/sign_android.sh --pin "$VISOR_ANDROID_PIN" .ci/android/*.apk .ci/android-release/visor_android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: .ci/android-release/*.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  # Red when Visor for Android wasn't built and signed for this release,
+  # once Apple's Production builds are attached (release-assets): Re-run
+  # failed jobs then builds it again (release-android) and promotes it alone
+  # (release: Apple's, Production already, are left as they are), and
+  # release-assets attaches only the APK and builds.json.
+  release-android-result:
+    needs: [release-android, release-assets]
+    if: ${{ !cancelled() && github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: [self-hosted, visor-jit-small]
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Visor for Android released
+        env:
+          ANDROID: ${{ needs.release-android.result }}
+          ASSETS: ${{ needs.release-assets.result }}
+        run: |
+          if [ "$ANDROID" != success ]; then
+            echo "::error::release-android $ANDROID: this release has Apple's Production builds without Visor for Android. Re-run the failed jobs to build, sign and add it."
+            exit 1
+          fi
+          [ "$ASSETS" = success ] || { echo "::error::release-assets $ASSETS"; exit 1; }
+
   # The release's Production builds among its files on GitHub, in place of
   # its Alphas under the same names (AttilaTheFun/applications'
-  # docs/RELEASE_ASSETS.md): Visor-<version>-ios.ipa, -macos.zip, the
-  # notarized -macos.dmg (Logan, 5 Nov 2026) and builds.json, which
-  # Applications reads. Then the proof that verified it
+  # docs/RELEASE_ASSETS.md): Visor-<version>-ios.ipa, -macos.zip,
+  # -android.apk, the notarized -macos.dmg (Logan, 5 Nov 2026) and
+  # builds.json, which Applications reads. Then the proof that verified it
   # (tools/ci/release_proof.sh), for the next release's to be compared
   # with. A job of its own, so that the one reaching Shireworks' signing
   # (release) keeps a read-only token; in a container, as every job but the
   # headful proofs (Logan, 8 Nov 2026). gh as gh_ready.sh installs it.
   release-assets:
     needs: release
+    # release-android's failure (upstream, through release) doesn't skip it:
+    # Apple's are attached whenever release promoted them.
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: [self-hosted, visor-jit-small]
     timeout-minutes: 10
     permissions:
