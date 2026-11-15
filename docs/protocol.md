@@ -288,7 +288,11 @@ workspace-write sandbox.
 ## Sessions messaging each other
 
 Every Claude and Codex session the menu bar app starts gets the same MCP
-server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`), with
+server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`). Claude's
+MCP servers inherit its environment, which has `VISOR_PORT`, `VISOR_TOKEN` and
+`VISOR_SESSION`, so its `--mcp-config` carries only `VISOR_APPROVALS` and the
+token never shows in `ps`; Codex gives a stdio MCP server only an allowlist of
+its environment, so its `-c` overrides still carry them. The server has
 six tools: `list_sessions`, `send_message(session, server, text)`,
 `read_messages(session, server, count)`, `message_status(message_id)`,
 `read_inbox(unread_only, count)` and `read_outbox(count)`:
