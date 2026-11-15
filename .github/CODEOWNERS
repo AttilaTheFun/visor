@@ -33,6 +33,7 @@
 /tools/ci/shireworks.sh @AttilaTheFun
 /tools/ci/shireworks_retry.sh @AttilaTheFun
 /tools/ci/sign_from_ci.sh @AttilaTheFun
+/tools/ci/stamp_android.sh @AttilaTheFun
 /tools/ci/version_from_tags.sh @AttilaTheFun
 
 # The license.
