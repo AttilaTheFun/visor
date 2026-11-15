@@ -3,8 +3,10 @@
 # (Logan, 2026-11-15: signing is hermetic, in CI's own container, with the
 # key from Shireworks' secret service, pinned), by tools/ci/android_sign.sh
 # (copied from AttilaTheFun/shireworks) with the repository's own pinned
-# tools: Isomer's hermetic JDK (@hermetic_jdk) and
-# @android_build_tools' apksigner.jar, built here, never the image's.
+# tools, never the image's: the JDK Visor's Bazel runs Java with
+# (rules_java's remotejdk_17, .bazelrc's --java_runtime_version; Isomer's
+# @hermetic_jdk is laid out for a Mac alone) and @android_build_tools'
+# apksigner.jar.
 #
 #   tools/ci/sign_android.sh --pin <sha256> <in.apk> <out.apk>
 #
@@ -31,14 +33,16 @@ done
 [ -n "$pin" ] && [ ${#files[@]} -eq 2 ] || fail "usage: tools/ci/sign_android.sh --pin <sha256> <in.apk> <out.apk>"
 
 cd "$ROOT"
-tools=(@hermetic_jdk//:Contents/Home/bin/java @android_build_tools//:lib/apksigner.jar)
-bazel build "${tools[@]}"
+runtime=@rules_java//toolchains:current_java_runtime
+jar=@android_build_tools//:lib/apksigner.jar
+bazel build "$runtime" "$jar"
 # Each tool's file in its repository, as Bazel fetched it (the JDK whole,
 # so its java runs with its own lib/).
 base="$(bazel info output_base)"
-path() { bazel cquery "$1" --output=files 2> /dev/null | sed -n '1p'; }
-java="$base/$(path "${tools[0]}")"
-apksigner="$base/$(path "${tools[1]}")"
+runtime_files="$(bazel cquery "$runtime" --output=files 2> /dev/null)"
+jar_files="$(bazel cquery "$jar" --output=files 2> /dev/null)"
+java="$base/$(printf '%s\n' "$runtime_files" | sed -n '\#/bin/java$#{p;q;}')"
+apksigner="$base/$(printf '%s\n' "$jar_files" | sed -n '1p')"
 [ -x "$java" ] || fail "no java at $java"
 [ -f "$apksigner" ] || fail "no apksigner.jar at $apksigner"
 
