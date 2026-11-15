@@ -811,23 +811,29 @@ no longer in Visor.
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
 - CI (ci.yml) follows Reviews' policy (AttilaTheFun/reviews
-  docs/CI_POLICY.md; Logan, 7 Nov 2026: automated CI only builds, and no
-  test runs on its own). The header of ci.yml has it whole.
+  docs/CI_POLICY.md; Logan, 7 Nov 2026: automated CI only builds), with
+  one exception: the client's screens, walked headless through Isomer's
+  driver (FEATURE_MAP.md, `//tests/feature_map_tests`), run in a
+  container before and after every merge (Logan, 15 Nov 2026: "run all
+  our tests headlessly from containers pre and post merge"). The header
+  of ci.yml has it whole.
   - **A pull request** runs one job, `container`, main's required check:
     in a Linux container Shireworks makes for it (visor-jit, 12 GB, a runner
     of Visor's agent image), leasing nothing, the rules
     (tools/check_rules.py), every app and the Mac's test bundles, libraries
     and servers built on Linux (tools/ci/container_build.sh), and the
-    command-line server built with SwiftPM. Its Bazel reads Shireworks'
-    cache and never writes it. A diff of documentation alone checks
+    command-line server built with SwiftPM, and the client's screens
+    walked headless (`bazel test --config=headless
+    //tests/feature_map_tests/...`, about a minute and a half). Its Bazel
+    reads Shireworks' cache and never writes it. A diff of documentation alone checks
     the rules and stops there; a newer push cancels the run before. A fork's
     pull request runs nothing.
   - **Each commit on main** runs `populate`, the cache's one writer: the
-    merged tree built as `container` builds it, no tests, nothing
-    published.
+    merged tree built as `container` builds it and its screens walked
+    headless, as `container` does; nothing published.
   - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
     the gh tools' run_dispatch): `verify` runs the tests on Linux
-    (`//tests:linux`) and those that need a Mac (their bundles built on
+    (`//tests:linux`, and the headless screens) and those that need a Mac (their bundles built on
     Linux, run on GitHub's `xcode-27` Macs), tries the command-line server
     on Linux (tools/ci/linux_tests.sh), blue Visor's
     web client (tools/ci/container_blue_web.sh `--build-only`) and the

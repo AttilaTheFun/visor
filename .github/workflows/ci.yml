@@ -2,19 +2,23 @@ name: CI
 # Visor's CI, as Reviews' policy for Logan's protected repositories has it
 # (AttilaTheFun/reviews, docs/CI_POLICY.md; Logan, 7 Nov 2026):
 #
-# Automated CI only builds: no test runs on its own (Logan, 7 Nov 2026).
+# Automated CI only builds (Logan, 7 Nov 2026), but for the client's
+# screens: walked headless through Isomer's driver (FEATURE_MAP.md,
+# //tests/feature_map_tests), they run before and after every merge
+# (Logan, 15 Nov 2026).
 #
 # - A pull request runs one job, `container`, the required check: in one of
 #   Shireworks' single-use Linux containers (visor-jit, a runner of Visor's
 #   agent image), leasing nothing, it checks the rules, builds every app,
-#   the Mac's test bundles, libraries and servers on Linux, and builds the
-#   command-line server with SwiftPM. Its Bazel reads Shireworks' cache and
+#   the Mac's test bundles, libraries and servers on Linux, walks the
+#   client's screens headless, and builds the command-line server with
+#   SwiftPM. Its Bazel reads Shireworks' cache and
 #   never writes it. A pull request of documentation alone checks the rules
 #   and stops there. A newer push cancels its run. A fork's pull request
 #   runs nothing here: no self-hosted runner ever runs a fork's code.
 # - Each commit on main runs `populate`: the merged tree built as
-#   `container` builds it, cache-only (nothing run, nothing published), the
-#   one job that writes the cache.
+#   `container` builds it, and its screens walked headless (nothing
+#   published), the one job that writes the cache.
 # - Every test runs only by hand (workflow_dispatch on main, `run`):
 #   - `verify`: the Mac's tests (their bundles built on Linux, run on
 #     GitHub's own xcode-27 Macs), the command-line server's tests on Linux
@@ -133,6 +137,11 @@ jobs:
       - name: The apps
         if: steps.changes.outputs.code == 'true'
         run: tools/ci/container_build.sh "$GITHUB_JOB"
+      # The client's screens, walked headless through Isomer's driver
+      # (FEATURE_MAP.md; the client in fixture mode, nothing drawn).
+      - name: The client's screens, headless
+        if: steps.changes.outputs.code == 'true'
+        run: bazel test --config=headless --test_output=errors //tests/feature_map_tests/...
       # Bazel's server let go before SwiftPM builds beside it.
       - name: Bazel stopped
         if: steps.changes.outputs.code == 'true'
@@ -150,8 +159,8 @@ jobs:
 
   # The cache's one writer (Shireworks' `ci.populate` grants this job the
   # write): what a pull request's container job builds, for main's merged
-  # tree, so the next pull request's build is mostly cache hits. No tests,
-  # nothing published.
+  # tree, so the next pull request's build is mostly cache hits; and the
+  # client's screens walked headless, as container does. Nothing published.
   populate:
     if: github.event_name == 'push'
     runs-on: [self-hosted, visor-jit]
@@ -160,6 +169,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: The apps
         run: tools/ci/container_build.sh "$GITHUB_JOB"
+      - name: The client's screens, headless
+        run: bazel test --config=headless --test_output=errors //tests/feature_map_tests/...
 
   # ---- By hand: verify -----------------------------------------------------
 
@@ -339,6 +350,8 @@ jobs:
       # (//tests:linux).
       - name: The tests
         run: bazel test --test_output=errors //tests:linux
+      - name: The client's screens, headless
+        run: bazel test --config=headless --test_output=errors //tests/feature_map_tests/...
       # Bazel's server let go before SwiftPM builds beside it.
       - run: bazel shutdown || true
       - run: tools/ci/linux_tests.sh
