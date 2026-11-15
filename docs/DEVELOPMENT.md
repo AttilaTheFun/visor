@@ -864,7 +864,13 @@ no longer in Visor.
     Android's is the release's own production build (`release-android`,
     `--config=prod`, the tag's version, signed there with its release key
     as the alpha's is), which Shireworks checks as production, as
-    AttilaTheFun/reviews' release does.
+    AttilaTheFun/reviews' release does. Android never holds Apple's back
+    (New Container Helper, 15 Nov 2026): `release` promotes Apple's
+    whatever `release-android`'s result (tools/ci/promote_release.sh), and
+    `release-android-result` turns the run red afterwards if the APK
+    wasn't made. Re-run failed jobs then promotes the APK alone: Apple's,
+    Production already, are left as they are, and only the APK and
+    builds.json are attached again.
     `release-assets` attaches the Production builds to the release in place
     of the Alphas, under the same names, with the disk image
     (`Visor-<version>-macos.dmg`) and builds.json, then that proof
