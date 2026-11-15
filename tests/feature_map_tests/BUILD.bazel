@@ -1,0 +1,24 @@
+load("@rules_swift//swift:swift.bzl", "swift_test")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# The feature map (FEATURE_MAP.md) walked through Isomer's driver: every
+# screen reached and recognised, every way between them the driver can take
+# taken, on the client built headless (//applications/visor_headless) in
+# its fixture. In a Linux container, with the headless flag:
+#
+#   bazel test --config=headless //tests/feature_map_tests/...
+#
+# Without the flag it is skipped (incompatible), so `bazel build //...`
+# and `bazel test //...` pass it by.
+swift_test(
+    name = "feature_map_tests",
+    srcs = glob(["*.swift"]),
+    copts = STRICT_SWIFT,
+    data = ["//applications/visor_headless"],
+    module_name = "VisorFeatureMapTests",
+    target_compatible_with = select({
+        "@isomer//headless:on": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = ["@isomer//headless/isomer_headless"],
+)
