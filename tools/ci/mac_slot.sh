@@ -8,7 +8,8 @@
 # through put and get, their paths relative to its user's home.
 #
 #   . "$ROOT/tools/ci/mac_slot.sh"
-#   mac_slot_lease                       # the slot, its renewer started
+#   mac_slot_lease                       # the slot, its renewer started (once:
+#                                        # again, the slot it has)
 #   mac_slot_upload <file> <path>        # a file, to the slot's <path>
 #   mac_slot_exec <command> <args…>      # a command there; its status
 #   mac_slot_download <path> <file>      # a file, from the slot's <path>
@@ -21,6 +22,9 @@ slot=""
 slot_renewer=""
 
 mac_slot_lease() {
+    # sign_from_ci.sh (Applications') asks before each step that needs the
+    # Mac: one slot for them all.
+    [ -z "$slot" ] || return 0
     sh "$ROOT/tools/ci/shireworks.sh" lease mac --minutes=60 > "$work/slot"
     slot="$(. "$work/slot"; printf '%s' "$SHIREWORKS_ID")"
     [ -n "$slot" ] || { echo "mac_slot: no slot came" >&2; return 1; }
