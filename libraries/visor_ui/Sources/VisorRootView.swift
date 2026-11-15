@@ -428,6 +428,7 @@ public struct VisorRootView: View {
             if !compact, let compose {
                 ToolbarItem(placement: .primaryAction) {
                     Button("New session", systemImage: "square.and.pencil", action: compose)
+                        .accessibilityIdentifier("new-session")
                 }
             }
         }

@@ -759,6 +759,21 @@ no longer in Visor.
   for free: Shireworks' Mac slots and VMs are left to agents (Logan, 3 and
   5 Nov 2026). A test whose server listens takes
   `ServerTestCase.freePort()`.
+- Test the client's screens, on Linux: `bazel test --config=headless
+  //tests/feature_map_tests/...` — FEATURE_MAP.md walked through Isomer's
+  driver (Swift Testing, `HeadlessApp`) against the client built headless
+  (`//applications/visor_headless`) in its fixture: every screen opened
+  and recognised, every solid edge taken and its destination checked, at
+  a phone's width and an iPad's. About a minute and a half in a
+  Shireworks container (the build from its cache, two minutes more the
+  first time). Its own invocation: `--config=headless` doesn't go with
+  `--config=drive` (isomer's AGENTS.md), and without it the targets are
+  skipped (incompatible), so `//...` builds pass them by. What the driver
+  can't take yet (a context menu, a swipe action, the agent asking) is a
+  disabled test in `FeatureMapTests+Gaps.swift` saying why; where Isomer's
+  driver doesn't list an identifier the map names, the test finds the
+  element by its label and records a known issue (`IsomerGap.swift`).
+  "Driving the client" below has the rest.
 - Try a server build against real agents without touching the installed
   one: `bazel run //tools/staging_server -- [port] [password]` (7533,
   `staging`) runs a `VisorServer` of its own — its own ports, a scratch
@@ -1007,6 +1022,61 @@ a spinner. Pin the simulator's status bar (`xcrun simctl status_bar booted
 override --time 9:41 …`) and the same screen gives the same pixels every
 run. The iOS probe's `testFixtureScreens` takes all of them in portrait,
 `testFixtureScreensLandscape` in landscape.
+
+### Driving the client
+
+FEATURE_MAP.md is the client's screens and the ways between them, each an
+Isomer driver command (isomer's docs/drive.md: `ls`, `tap <target>`,
+`type`, `back`, `dismiss`, `wait`; a target is an element's name, its
+accessibility identifier or its label). Two builds can be driven:
+
+- **Headless** (`--config=headless`, `--@isomer//headless`): the client
+  with nothing drawn, its screen read and used through Isomer's runtime,
+  on the building machine (a Linux container: no build on a Mac's own
+  disk). `//applications/visor_headless` is `VisorRootView` with settings
+  in memory, given at launch in its environment by their own names
+  (`fixture=snapshot`, `fixture.screen=chat`, `account=fixture`, as
+  Android's launch intent takes them) or as the iPhone's arguments
+  (`-visor.fixture snapshot`); it has no network, so it is for the
+  fixture (or the onboarding and Add Computer with no computer). Its
+  window is 390 by 844 points (a phone) unless `ISO_HEADLESS_WIDTH` and
+  `ISO_HEADLESS_HEIGHT` say otherwise (1180 by 820: the iPad's layout).
+  The feature map's tests (`//tests/feature_map_tests`, above) drive it.
+- **Headful** (`--config=drive`, `--@isomer//drive:headful`): every
+  client carries the driver. Android and the web are Isomer's and link it
+  with the flag; the iPhone, iPad and Mac apps take `@isomer//:isomer`
+  with it alone (`ISOMER_APPLE_DRIVER`, tools/swift/defs.bzl), which brings
+  Isomer's accessibility driver. Launched with `ISO_DRIVER=<a hub's ws://
+  URL>` (Android: `-e ISO_DRIVER …`; a simulator: `SIMCTL_CHILD_ISO_DRIVER`)
+  the app dials out to it; without it, to `iso hub` on its machine. Never
+  in a release: such an app obeys whoever its launch names.
+
+An agent finding its way around the client, in a leased Linux container
+with the repository cloned:
+
+```sh
+bazel build --config=headless //applications/visor_headless
+bazel build @isomer//xplat/iso          # Isomer's CLI
+root="$(bazel info execution_root)"
+visor="$root/$(bazel cquery --config=headless --output=files //applications/visor_headless)"
+cp "$root/$(bazel cquery --output=files @isomer//xplat/iso)" /tmp/iso
+# The client on a Unix socket, in the fixture, on its chat:
+env fixture=snapshot fixture.screen=chat \
+    ISO_DRIVE_LISTEN=unix:/tmp/visor.sock ISO_HEADLESS_PROTOCOL=serve "$visor" &
+iso() { /tmp/iso --url unix:/tmp/visor.sock "$@"; }
+iso ls                                  # where am I: its elements (#identifier), then its texts
+iso tap session-title                   # → Session details
+iso dismiss
+iso back                                # → Sessions (a phone's width)
+iso tap settings                        # → Settings
+iso tap "settings-computer-Snapshot Mac"
+```
+
+Or with no socket, a command a line on its standard input
+(`{"cmd": "ls"}`, `{"cmd": "tap", "target": "settings"}`). A headful
+client, on Android's emulator, say (a `--config=drive` APK, then `iso hub`
+and `adb reverse tcp:7710 tcp:7710`), is `iso --app android ls`, and the
+same commands. FEATURE_MAP.md's "Driving it" has the launch lines.
 
 ### Fixture look check
 
