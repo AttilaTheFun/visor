@@ -28,6 +28,10 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --pin) pin="${2:?--pin takes the SHA-256 of the certificate}"; shift 2 ;;
     -*) fail "unknown option $1" ;;
+    # Isomer's APK rule leaves an unsigned sibling beside the APK it
+    # signs with the debug key, and ci.yml passes both (`*.apk`): the
+    # signed, zip-aligned one is the one re-signed here.
+    *_unsigned.apk) shift ;;
     *) files+=("$1"); shift ;;
   esac
 done
