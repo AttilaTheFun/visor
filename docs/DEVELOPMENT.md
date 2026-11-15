@@ -820,30 +820,35 @@ no longer in Visor.
     publishes the commit's Alphas and proposes a draft pre-release;
     `release` verifies first, with the pins (tools/released_pins.sh), then
     does as `prerelease` and proposes a draft release naming its run. A
-    proposal's version comes from Applications Server
-    (tools/ci/next_version.sh: the same again for the same commit), its
-    builds are made on Linux, optimized, with `--config=alpha` and
-    `--config=ci_device` (the iPhone's a device build signed ad hoc with a
-    placeholder profile; Visor.app signed ad hoc asking for push,
-    `app.ci.entitlements`), Visor.app given Visor's Linux programs
-    (`linux-programs`, tools/ci/mac_app_linux_programs.sh), and published
-    to Applications Server (tools/ci/publish_from_ci.sh), which signs each
-    with its bundle id's identity and notarizes the Mac's; the job's OIDC
-    token says which kind it is (the repository secret
-    APPLICATIONS_CI_CODE names the server). The draft is CI's
+    proposal's version comes from the repository's releases and tags
+    (tools/ci/version_from_tags.sh: one past the line's highest, the same
+    again for the same commit), its builds are made on Linux, optimized,
+    with `--config=alpha` and `--config=ci_device` (the iPhone's a device
+    build signed ad hoc with a placeholder profile; Visor.app signed ad hoc
+    asking for push, `app.ci.entitlements`), Visor.app given Visor's Linux
+    programs (`linux-programs`, tools/ci/mac_app_linux_programs.sh), and
+    signed by Shireworks' signing service (tools/ci/sign_from_ci.sh, from
+    AttilaTheFun/applications), which signs each with its bundle id's
+    identity and profile and notarizes the Mac's, whose ticket is stapled
+    on a Mac slot; the job's OIDC token says which kind it is, and
+    Shireworks' policy (the repository pinned, this workflow, main's
+    dispatch or a releaser's tag) decides. The draft is CI's
     (tools/ci/propose_release.sh, the run's token): no agent makes a draft
-    or a tag. The builds, as the server signed them, are attached to the
+    or a tag. The builds, as Shireworks signed them, are attached to the
     draft (`Visor-<version>-ios.ipa`, `-macos.zip` and `builds.json`:
     tools/ci/attach_release.sh), which is what Applications lists
-    (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent image of that version follows (`agent-image`, in
-    a visor-jit container, built with buildah). `adhoc`, on a branch other than main, builds and
-    publishes its AdHoc build.
+    (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent image of
+    that version follows (`agent-image`, in a visor-jit container, built
+    with buildah). A branch's builds are experiments only (Logan, 12 Nov
+    2026): nothing publishes them.
   - **Released**: Logan's Release in Reviews publishes a proposed
     release's draft, which makes its tag. `release` checks the commit is on
     main and that a `verify` run of it passed and kept its proof
-    (tools/ci/verified_run.sh), then Applications Server promotes its
-    Alphas, as tested, to Production (BuildVariant restamped, signed again;
-    nothing is rebuilt) and makes Visor.app's notarized disk image.
+    (tools/ci/verified_run.sh), then takes the Alphas the proposal attached,
+    of that commit, as tested (tools/ci/release_alphas.sh), and has
+    Shireworks stamp them Production and sign them again
+    (`sign_from_ci.sh --promote`; nothing is rebuilt), Visor.app with its
+    disk image made on a Mac slot, signed, notarized and stapled.
     `release-assets` attaches the Production builds to the release in place
     of the Alphas, under the same names, with the disk image
     (`Visor-<version>-macos.dmg`) and builds.json, then that proof
