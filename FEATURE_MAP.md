@@ -76,7 +76,7 @@ flowchart TD
     NewSession -->|"type first-message, tap start"| Chat
 
     Chat -->|"tap session-title"| Details
-    Chat -->|"tap model"| Model
+    Chat -->|"tap model (no approval waiting)"| Model
     Model -->|"tap all-models"| AllModels
     Chat -.->|"the agent asks for a tool"| Approval
     Approval -->|"tap allow or deny"| Chat
@@ -102,31 +102,34 @@ that opens it directly (see "Driving it" below).
 | Node | You're there when | Elements (identifier, or "label") | Fixture screen |
 |---|---|---|---|
 | Onboarding | text "Welcome to Visor" | `add-computer`, `settings` | `onboarding` |
-| Sign in to Visor | text "Sign in to Visor" | `account-sign-in` | (launch argument `-visor.account fixture`) |
-| Sessions | `computer-‹name›` and `session-‹id›` listed | `session-‹id›` (its `place-`, `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field | `sessions`, `machines` |
+| Sign in to Visor | text "Sign in to Visor" | `account-sign-in` | none: launch with the setting `account=fixture` and no `fixture` (the fixture skips the account) |
+| Sessions | `add-computer` listed, and the rows "Snapshot Mac", "Offline sync" (`computer-‹name›` and `session-‹id›` on Apple; not yet on Isomer, see below) | `session-‹id›` (its `place-`, `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field | `sessions`, `machines` |
 | Search results | text "Messages" or `message-hit` | `message-hit`, `session-‹id›` | `search` (types "sync") |
-| Archived Sessions | text "Archived Sessions" | `archived-session-‹id›` | none |
+| Archived Sessions | text "Archived Sessions" | `archived-session-‹id›` | none (the fixture has no archived sessions) |
 | Add Computer | a sheet; `host` and `connect` listed | `host`, `paste-code`, `password`, `authentication`, `connect`, `runner`, `provider-‹id›` (several providers), `copy-ssh-key`, `show-key-qr` (an SSH address) | `connect` |
-| Sign in to a MultiPass | `multipass-code` or `runner-url` listed | `multipass-code`, `multipass-pair`, `runner-url`, `github-sign-in`, `github-code`, `runner-username`, `runner-password`, `runner-sign-in`, `use-connection-code` | `runner`, `runner-accounts` |
+| Sign in to a MultiPass | `multipass-code` or `runner-url` listed | `multipass-code`, `multipass-pair`, `runner-url`, `github-sign-in`, `github-code`, `runner-username`, `runner-password`, `runner-sign-in`, `use-connection-code` | `runner` |
 | New Session | a sheet; text "New Session" | `computer` (several computers), `choice`, `project`, `project-chosen`, `resume-id`, `title`, `first-message`, `start-error`, `start` | `new-session` |
 | Choose a folder | text "Choose a folder" | `folder-path`, `choose-folder` | none |
-| Session chat | `session-title` and "Send" listed | `session-title` ("Session details"), `attach`, `model`, `goal`, `loop`, `queued`, "Send", `busy-actions`, `dictate`, `copy-message`, `branch-message`, `share-message`, `attachment-‹file›`, `new-rows-pill`, `suggestion-/‹command›` | `chat`, `goal`, `earlier`, `commands` |
+| Session chat | `session-title` and "Send" listed | `session-title` ("Session details"), `attach`, `model` and `goal` (not while an approval or question waits: Approval controls take their place), `loop`, `queued`, "Send", `busy-actions`, `dictate`, `copy-message`, `branch-message`, `share-message`, `attachment-‹file›`, `new-rows-pill`, `suggestion-/‹command›` | `chat`, `goal`, `earlier`, `commands` |
 | Approval controls | `allow` and `deny`, or `answer`, listed | `allow`, `deny`, `answer` | `chat` (a Bash approval is pending) |
-| Question sheet | a sheet; `question-send` listed | `approval-‹option›`, `question-own`, `question-skip`, `question-send` | `question` |
+| Question sheet | a sheet; `question-skip` listed (`question-send` only once every question has an answer) | `approval-‹option›`, `question-own`, `question-skip`, `question-send` | `question` |
 | Model sheet | a sheet; `all-models` or `approval-Auto Approve` listed | `approval-Auto Approve`, `approval-Manually Approve`, `all-models`, `compact` | `models` |
-| All Models | `model-search` listed | `model-search` | none |
-| Session details | text "About" | none of its own: "Done" (a phone's sheet), "Archive", "End session", "Stop Agent", "Restart Agent" | `inspector` |
+| All Models | `model-search` listed | `model-search` | none (`all-models` appears only for a long catalog; the fixture's catalogs are short) |
+| Session details | text "About" | `details-title`, `details-copy-resume`, `stop-agent`, `start-agent`, `restart-agent`, `details-archive`, `details-end`, `details-done` (a phone's sheet) | `inspector` |
 | Tool calls | text "Tool calls" | "Done" | none |
+| Attachment preview | a sheet with "Done" | "Done", "Share" | none |
 | Fork, Branch, Side Questions, Subagent | its title: "Fork of …", "Branch of …", "Side Questions", or the subagent's description | the chat's | none |
 | Settings | `settings-appearance` listed | `settings-computer-‹name›`, `settings-add-computer`, `settings-notify-waiting`, `-failed`, `-goal`, `-turn`, `settings-appearance`, `account-sign-out`, `runner-sign-out`, `runner-sign-in-again`, `runner-remove`, `settings-done` (a sheet) or `settings-back` (a pane) | `settings` (Mac's proof) |
-| Computer settings | `relay-toggle` listed | `use-ssh`, `relay-toggle`, `back-up-sessions`, `show-qr`, `qr-code`, `copy-http-code`, `copy-https-code`, `copy-ssh-code`, `share-log` | none |
+| Computer settings | `share-log` listed | `use-ssh`, `relay-toggle`, `back-up-sessions`, `show-qr`, `qr-code`, `copy-http-code`, `copy-https-code`, `copy-ssh-code`, `share-log` | none |
 
 The fixture's canned data: one computer, "Snapshot Mac", with the sessions
 `fixture-chat` ("Offline sync", Claude, a goal and a pending Bash
 approval), `fixture-busy` ("Widget layout", Codex, mid-turn),
 `fixture-docs` ("Release notes", a goal and a loop) and `fixture-api`
 ("Rate limits"). So `tap session-fixture-chat` opens a chat from the
-`sessions` screen.
+`sessions` screen. To start a walk from the chat with the model pill
+showing, use the `goal` fixture (the `chat` fixture has an approval
+waiting).
 
 ## By size
 
@@ -137,8 +140,10 @@ The graph is the same everywhere; what a node is differs with the width:
   Settings and Session details are sheets (`dismiss`, or their Done);
   search and "New session" sit in the bottom bar.
 - **Regular (iPad, the Mac, a wide window):** the sessions list and the
-  chat side by side; Settings and Session details are a pane beside them,
-  closed with `settings-back` or by tapping `session-title` again.
+  chat side by side; Settings and Session details are a pane beside them.
+  Session details closes by tapping `session-title` again, Settings by
+  tapping `settings` again; from a computer's page, `settings-back`
+  returns to Settings. "New session" is in the toolbar (`new-session`).
 - **The Mac only:** the menu bar's Visor menu and Visor Server's own
   Settings window (password, network paths, push) are outside this
   graph: neither is part of `VisorRootView`.
@@ -162,21 +167,42 @@ The protocol is Isomer's `isomer.wire.Command` / `Answer`
 only exact, language-independent targets: prefer them; labels are
 written above where there's no identifier.
 
-From a shell, with Isomer's `iso` (`bazel run @isomer//xplat/iso -- …`),
-or from Swift with `HeadlessApp` (`@isomer//headless/isomer_headless`):
+The suite that walks this map is `//tests/feature_map_tests`
+(`bazel test --config=headless //tests/feature_map_tests/...`, in a
+Linux container, nothing drawn): every node is reached and checked as in
+the table, and every solid arrow is taken; the dotted ones are disabled
+tests that say why. It drives the headless client,
+`//applications/visor_headless` (`VisorRootView` on Isomer's headless
+host, offline, its settings from the environment). docs/DEVELOPMENT.md,
+"Driving the client", has the whole recipe.
+
+From a shell, with Isomer's `iso` (`bazel build @isomer//xplat/iso`),
+or from Swift with `HeadlessApp` (`@isomer//headless/isomer_headless`).
+The headless client, serving the driver on a socket:
 
 ```sh
-iso --app android ls                      # where am I?
-iso tap session-fixture-chat              # Sessions → Session chat
-iso wait "Message Claude Code"
-iso tap session-title                     # → Session details
-iso dismiss                               # (a phone's sheet)
-iso tap model                             # → Model sheet
-iso tap all-models                        # → All Models
+bazel build --config=headless //applications/visor_headless
+root="$(bazel info execution_root)"
+visor="$root/$(bazel cquery --config=headless --output=files //applications/visor_headless)"
+env fixture=snapshot fixture.screen=sessions \
+    ISO_DRIVE_LISTEN=unix:/tmp/visor.sock ISO_HEADLESS_PROTOCOL=serve "$visor" &
+iso --url unix:/tmp/visor.sock ls
 ```
 
-Launching into a fixture screen, with the app dialling the driver's hub
-(`iso hub`, `ws://127.0.0.1:7710`):
+Then, against it or a headful build (`--config=drive`) attached to `iso hub`:
+
+```sh
+iso ls                                    # where am I?
+iso tap "Offline sync"                    # Sessions → Session chat
+iso wait "Message Claude Code"
+iso tap session-title                     # → Session details
+iso tap details-done                      # (a phone's sheet)
+iso back                                  # → Sessions
+iso tap settings                          # → Settings
+```
+
+Launching a headful build (`--config=drive`) into a fixture screen, with
+the app dialling the driver's hub (`iso hub`, `ws://127.0.0.1:7710`):
 
 - **Android** (emulator or the device lab's phone):
   `adb reverse tcp:7710 tcp:7710`, then
@@ -191,26 +217,33 @@ Launching into a fixture screen, with the app dialling the driver's hub
 
 What this map assumes that Visor doesn't do yet:
 
-- **No build carries the driver.** Isomer builds it into a build with
-  `--@isomer//drive:headful`; Visor's `.bazelrc` has no `build:drive`
-  line for it. On Android that flag is all it takes (`visor_android` is
-  an `isomer_android_app`); the iPhone app, on Apple's SwiftUI, also has
-  to depend on `@isomer//:isomer`, which brings Isomer's Apple driver
-  (it reads the app's accessibility tree). Release builds never carry
-  it.
+- **Identifiers Isomer's driver doesn't see yet** (raised with Isomer;
+  the suite taps their labels meanwhile and records a known issue): one
+  set outside a wrapping modifier (`allow`, `deny`, `answer`, `model`,
+  `goal`, `loop`, `attach`, `queued`, `use-connection-code`), a
+  `List(selection:)` row's (`session-‹id›`, `message-hit`,
+  `archived-‹name›`), a combined element's (`computer-‹name›`), and a
+  toggle's (`settings-notify-…`, `relay-toggle`). On Apple's driver they
+  all work.
+- **`back` in a sheet:** on Isomer, `back` on a page pushed inside a
+  sheet (Settings → a computer's page) closes the whole sheet.
 - **Steps the driver can't take:** context menus (a session's Rename,
   Migrate…, Project Settings, Remove…) and swipe actions (Archive,
   Unarchive) need a long press or a swipe on a row, which the protocol
   doesn't have.
-- **Elements without an identifier:** the composer's text field (found
-  by its "Message ‹Agent›…" label), the "New session" button in the iPad's
-  toolbar, and Session details' rows and buttons. Labels work but change
-  with the language.
-- **Today's tests don't use the driver:** the proofs open each fixture
-  screen with a fresh launch and take its picture
+- **Elements without an identifier:** the composer's text field, which
+  lives in AgentUI (found by its "Message ‹Agent›…" label).
+- **Not in the fixture:** Archived Sessions, All Models, a fork, a branch
+  and a subagent can't be reached in fixture mode; their tests are
+  disabled until it has them.
+- **The rest of the tests don't use the driver yet:** the proofs open
+  each fixture screen with a fresh launch and take its picture
   (tools/ci/proof_ios.sh, proof_android.sh, proof_mac.sh); the iPhone's
   UI tests are XCUITest (tests/ios_probe), Android's use UI Automator
-  (tools/isomer/uitests/android_flow.py).
+  (tools/isomer/uitests/android_flow.py). They move onto the driver
+  next, headful on the iPhone and Android through Isomer's launchers.
+  (The iPhone app reads its fixture from launch arguments, which
+  Isomer's iOS launcher doesn't pass.)
 
 When a screen, a way between screens or an identifier above changes,
 change this map with it.
