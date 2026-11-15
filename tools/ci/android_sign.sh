@@ -5,7 +5,7 @@
 # Every repository's CI copies this file byte for byte from
 # AttilaTheFun/shireworks, as it does shireworks.sh.
 #
-#   tools/ci/android_sign.sh --app <app> --pin <sha256> --java <java> --apksigner <apksigner.jar> <in.apk> <out.apk>
+#   tools/ci/android_sign.sh --app <app> --pin <sha256> --java <java> --apksigner <apksigner.jar> [--key-from-env] <in.apk> <out.apk>
 #
 # - --app: the key's name: its secrets are android-<app>-keystore (PKCS12,
 #   its alias <app>) and android-<app>-password, released to this job when
@@ -20,16 +20,22 @@
 #   debug key's, is replaced); <out.apk>: the same, signed with APK Signature
 #   Schemes v2 and v3 (v1 as the APK's minSdkVersion wants it).
 #
-# The key and its password are fetched into a folder of their own on a
-# tmpfs (shireworks.sh secrets-fetch), used, and removed however the script
-# ends; neither is ever printed. From the job's environment: `permissions:
-# id-token: write`, and its runner's SHIREWORKS_GRANT.
+# The key and its password go into a folder of their own on a tmpfs, are
+# used, and are removed however the script ends; neither is ever printed.
+# They come from:
+# - Shireworks' secret service (a private repository's job on Shireworks'
+#   runners: `shireworks.sh secrets-fetch`), with `permissions: id-token:
+#   write` and the runner's SHIREWORKS_GRANT; or,
+# - with --key-from-env (a public repository's job on GitHub's runners,
+#   Logan 2026-11-15), ANDROID_SIGNING_KEYSTORE (the PKCS12, base64) and
+#   ANDROID_SIGNING_PASSWORD, from its GitHub environment's secrets; read
+#   once, then unset.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 fail() { echo "android_sign: $*" >&2; exit 1; }
-usage="usage: tools/ci/android_sign.sh --app <app> --pin <sha256> --java <java> --apksigner <apksigner.jar> <in.apk> <out.apk>"
+usage="usage: tools/ci/android_sign.sh --app <app> --pin <sha256> --java <java> --apksigner <apksigner.jar> [--key-from-env] <in.apk> <out.apk>"
 
-app="" pin="" java="" apksigner=""
+app="" pin="" java="" apksigner="" from_env=""
 files=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -37,6 +43,7 @@ while [ $# -gt 0 ]; do
     --pin) pin="${2:?--pin takes the SHA-256 of the certificate}"; shift 2 ;;
     --java) java="${2:?--java takes the java of a JDK}"; shift 2 ;;
     --apksigner) apksigner="${2:?--apksigner takes apksigner.jar}"; shift 2 ;;
+    --key-from-env) from_env=1; shift ;;
     -*) fail "unknown option $1" ;;
     *) files+=("$1"); shift ;;
   esac
@@ -60,8 +67,21 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-secrets="$("$ROOT/tools/ci/shireworks_retry.sh" secrets-fetch "android-$app-keystore" "android-$app-password")"
-[ -f "$secrets/android-$app-keystore" ] && [ -f "$secrets/android-$app-password" ] || fail "Shireworks released no key for $app"
+if [ -n "$from_env" ]; then
+  [ -n "${ANDROID_SIGNING_KEYSTORE:-}" ] && [ -n "${ANDROID_SIGNING_PASSWORD:-}" ] \
+    || fail "--key-from-env: ANDROID_SIGNING_KEYSTORE and ANDROID_SIGNING_PASSWORD aren't both set"
+  [ -d /dev/shm ] || fail "no /dev/shm here: the key is written to a tmpfs alone"
+  secrets="$(mktemp -d -p /dev/shm android-sign-XXXXXX)"
+  chmod 700 "$secrets"
+  (umask 077
+   printf '%s' "$ANDROID_SIGNING_KEYSTORE" | base64 -d > "$secrets/android-$app-keystore"
+   printf '%s' "$ANDROID_SIGNING_PASSWORD" > "$secrets/android-$app-password") \
+    || fail "ANDROID_SIGNING_KEYSTORE isn't base64"
+  unset ANDROID_SIGNING_KEYSTORE ANDROID_SIGNING_PASSWORD
+else
+  secrets="$("$ROOT/tools/ci/shireworks_retry.sh" secrets-fetch "android-$app-keystore" "android-$app-password")"
+fi
+[ -s "$secrets/android-$app-keystore" ] && [ -f "$secrets/android-$app-password" ] || fail "no key for $app"
 
 # apksigner reads the password from its file (`file:`, the whole first line), never the command line.
 "$java" -jar "$apksigner" sign \

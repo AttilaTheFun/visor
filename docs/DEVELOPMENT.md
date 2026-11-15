@@ -837,11 +837,15 @@ no longer in Visor.
     (tools/ci/stamp_android.sh: its versionName and versionCode), then
     signed in the job with its private release key (Logan, 15 Nov 2026:
     never Isomer's public debug key): tools/ci/sign_android.sh, with the
-    JDK Visor's Bazel pins and @android_build_tools' apksigner, takes the key from Shireworks'
-    secret service, which releases it only to the jobs
-    .github/shireworks-secrets.json grants it to (alpha, release-android),
-    and checks the signed APK's certificate against the workflow's
-    `VISOR_ANDROID_PIN` (tools/ci/android_sign.sh, Shireworks'). Shireworks'
+    JDK Visor's Bazel pins and @android_build_tools' apksigner, takes the
+    key from the job's environment (Logan, 15 Nov 2026: a public
+    repository signs with keys in its GitHub secrets):
+    `ANDROID_SIGNING_KEYSTORE` and `ANDROID_SIGNING_PASSWORD`, secrets of
+    the GitHub environment `release` (deployments from main and `v*` tags
+    alone), given only to the signing step of the jobs that sign (alpha,
+    release-android). It checks the signed APK's certificate against the
+    workflow's `VISOR_ANDROID_PIN` (tools/ci/android_sign.sh
+    --key-from-env, Shireworks'). Shireworks'
     signing then checks the .apk (APK Signature Scheme v2 or later, its
     package pinned) and never signs it again. The draft is CI's
     (tools/ci/propose_release.sh, the run's token): no agent makes a draft
