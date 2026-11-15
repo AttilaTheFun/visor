@@ -36,13 +36,17 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 gh release download "$tag" --repo "$repo" --pattern builds.json --dir "$work/release" || fail "$tag has no builds.json"
 
-# Apple's promoted already: the release's builds.json lists a Production
-# .ipa or Mac .zip of this commit (a re-run, after Android's failed).
+# Apple's promoted already: the release's builds.json lists both a
+# Production .ipa and a Production Mac .zip of this commit (a re-run, after
+# Android's failed). Both, not either: a first run that died between the
+# two is promoted again whole, rather than leaving the Mac an Alpha.
 promoted="$(python3 -I - "$work/release/builds.json" "$commit" << 'PY'
 import json, sys
 builds = json.load(open(sys.argv[1]))
-print("yes" if any(b.get("variant") == "Production" and b.get("commit") == sys.argv[2]
-                   and b.get("file", "").endswith((".ipa", ".zip")) for b in builds) else "no")
+def production(suffix):
+    return any(b.get("variant") == "Production" and b.get("commit") == sys.argv[2]
+               and b.get("file", "").endswith(suffix) for b in builds)
+print("yes" if all(production(suffix) for suffix in (".ipa", ".zip")) else "no")
 PY
 )"
 
