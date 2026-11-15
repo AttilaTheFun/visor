@@ -836,8 +836,8 @@ no longer in Visor.
     `--config=alpha`) is built beside them with the same version
     (tools/ci/stamp_android.sh: its versionName and versionCode), then
     signed in the job with its private release key (Logan, 15 Nov 2026:
-    never Isomer's public debug key): tools/ci/sign_android.sh, with
-    Isomer's hermetic JDK and apksigner, takes the key from Shireworks'
+    never Isomer's public debug key): tools/ci/sign_android.sh, with the
+    JDK Visor's Bazel pins and @android_build_tools' apksigner, takes the key from Shireworks'
     secret service, which releases it only to the jobs
     .github/shireworks-secrets.json grants it to (alpha, release-android),
     and checks the signed APK's certificate against the workflow's
