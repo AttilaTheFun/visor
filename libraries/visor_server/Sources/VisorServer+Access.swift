@@ -24,8 +24,9 @@ extension VisorServer {
         // An agent's token too: the agents this server started (and the
         // tools they run, such as a deploy, a restart or a backup:
         // docs/DEVELOPMENT.md) hold their session's, and no one else.
-        // Open question for Logan: whether an agent's token should keep
-        // the REST side at all, or only what an agent needs of it.
+        // Logan (2026-11-14): sessions running natively may use the admin
+        // side; those in a container may not, so a runner's agent token
+        // (agent_protocol's) is never let in here.
         return bearer == password || tokens.contains(bearer) || isAgentToken(bearer)
     }
 
