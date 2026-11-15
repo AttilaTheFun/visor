@@ -56,6 +56,10 @@
 #                                  SHIREWORKS_OIDC_TOKEN), and written back (in place unless --out); prints what signed it;
 #                                  --promote (a release's run): a tested Alpha's app stamped Production first. An .apk is
 #                                  checked (v2 signature, its package its repository's) and described, never re-signed
+#   shireworks.sh secrets-fetch <name>… [--to=<dir>] [--audience=shireworks]
+#                                  a CI job's declared secrets (CISecrets: its repository's .github/shireworks-secrets.json,
+#                                  its OIDC token, the job on its runner) written each to <dir>/<name> (mode 600) and the
+#                                  folder printed: a new one in /dev/shm unless --to; remove it when done
 #
 # With SHIREWORKS_ADMIN_KEY (and SHIREWORKS_SERVERS), the admin's:
 #   shireworks.sh secret-remove <account>           (admin) a secret forgotten, its Keychain item and its file:
@@ -82,6 +86,11 @@
 #   shireworks.sh signing-notary-key [<file.p8>]       (admin) the App Store Connect key notarizing uses: the .p8 (else
 #                                  APP_STORE_CONNECT_KEY_PATH's), its id and issuer from APP_STORE_CONNECT_KEY_ID and
 #                                  APP_STORE_CONNECT_ISSUER_ID (never on the command line, nor printed)
+#   shireworks.sh secrets | secrets-audit [--count=N]   (admin) CI's secrets kept (never a value) | the newest releases
+#                                  and refusals
+#   shireworks.sh secret-set <owner/name> <secret> [--file=<file>]   (admin) a CI secret of the repository's, from the file
+#                                  or standard input alone (never the command line), kept under its number at GitHub
+#   shireworks.sh secret-delete <owner/name> <secret>
 #   shireworks.sh restart [--hold | --now | --cancel] [--reason=…]
 #                                  alone: the restart's status; --hold or --now ask for one
 #   shireworks.sh files | files-add <sha256> [--name=…] | files-remove <sha256>
@@ -482,6 +491,81 @@ def signing_notary_key(arguments):
         key = file.read()
     print(json.dumps(call("PUT", "/v1/signing/notary-key", {"key": key, "keyID": key_id, "issuer": issuer}), indent=2))
 
+def secrets(arguments):
+    as_admin(required=True)
+    print(json.dumps(call("GET", "/v1/secrets"), indent=2))
+
+def secrets_audit(arguments):
+    as_admin(required=True)
+    print(json.dumps(call("GET", "/v1/secrets/audit", query={"count": option(arguments, "count", "50")}), indent=2))
+
+def secret_path(repository, name):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository) or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", name):
+        die("a repository is owner/name, and a secret's name lowercase letters, digits, '.', '_' and '-'", 2)
+    return "/v1/secrets/" + repository + "/" + name
+
+def secret_set(arguments):
+    repository, name = positional(arguments, 2, "secret-set <owner/name> <secret> [--file=<file>]  (else standard input)")
+    path = secret_path(repository, name)
+    as_admin(required=True)
+    import base64
+    if option(arguments, "file"):
+        with open(option(arguments, "file"), "rb") as file:
+            value = file.read()
+    else:
+        if sys.stdin.isatty():
+            die("secret-set reads the value from --file or standard input (pipe it in)", 2)
+        value = sys.stdin.buffer.read()
+    if not value:
+        die("secret-set: no value", 2)
+    print(json.dumps(call("PUT", path, {"value": base64.b64encode(value).decode()}), indent=2))
+
+def secret_delete(arguments):
+    repository, name = positional(arguments, 2, "secret-delete <owner/name> <secret>")
+    path = secret_path(repository, name)
+    as_admin(required=True)
+    print(json.dumps(call("DELETE", path), indent=2))
+
+# Whether `path` is on a tmpfs (Linux's /proc/mounts): a secret is never written to a disk.
+def on_tmpfs(path):
+    try:
+        with open("/proc/mounts") as mounts:
+            points = [(line.split()[1], line.split()[2]) for line in mounts if len(line.split()) > 2]
+    except OSError:
+        return False
+    real = os.path.realpath(path)
+    best = max((point for point in points if real == point[0] or real.startswith(point[0].rstrip("/") + "/")), key=lambda p: len(p[0]), default=None)
+    return best is not None and best[1] == "tmpfs"
+
+def secrets_fetch(arguments):
+    names = [a for a in arguments if not a.startswith("--")]
+    if not names:
+        die("usage: secrets-fetch <name>… [--to=<dir>] [--audience=shireworks]", 2)
+    for name in names:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", name):
+            die(f"secrets-fetch: {name} can't be a secret's name", 2)
+    folder = option(arguments, "to")
+    if folder:
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        if os.path.islink(folder) or os.listdir(folder):
+            die(f"secrets-fetch: {folder} is a link or isn't empty: give it a folder of its own", 2)
+    elif os.path.isdir("/dev/shm"):
+        folder = tempfile.mkdtemp(prefix="shireworks-secrets-", dir="/dev/shm")
+    else:
+        die("secrets-fetch: no /dev/shm here: say where with --to=<a folder on a tmpfs>", 2)
+    if not on_tmpfs(folder):
+        die(f"secrets-fetch: {folder} isn't on a tmpfs: a secret isn't written to a disk", 2)
+    os.chmod(folder, 0o700)
+    import base64
+    token = oidc_token(option(arguments, "audience", "shireworks"))
+    answer = call("POST", "/v1/secrets/release", {"token": token, "secrets": names})
+    for name, value in answer["secrets"].items():
+        target = os.path.join(folder, name)
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "wb") as file:
+            file.write(base64.b64decode(value))
+    print(folder)
+
 def restart(arguments):
     as_admin(required=True)
     if flag(arguments, "cancel"):
@@ -806,14 +890,14 @@ def oidc_token(audience):
         return os.environ["SHIREWORKS_OIDC_TOKEN"]
     url, bearer = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL"), os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
     if not (url and bearer):
-        die("sign: no OIDC token: run it in a GitHub Actions job with `permissions: id-token: write`, or set SHIREWORKS_OIDC_TOKEN", 2)
+        die("no OIDC token: run it in a GitHub Actions job with `permissions: id-token: write`, or set SHIREWORKS_OIDC_TOKEN", 2)
     import urllib.request
     asked = urllib.request.Request(url + "&audience=" + urllib.parse.quote(audience), headers={"Authorization": "Bearer " + bearer})
     try:
         with urllib.request.urlopen(asked, timeout=60) as answer:
             return json.loads(answer.read())["value"]
     except (OSError, KeyError, ValueError) as error:
-        die(f"sign: GitHub gave no OIDC token: {error}")
+        die(f"GitHub gave no OIDC token: {error}")
 
 def sign(arguments):
     (file,) = positional(arguments, 1, "sign <file> [--package=ipa|mac|dmg|tool|apk] [--bundle-id=…] [--out=<file>] [--audience=…]")
@@ -887,7 +971,8 @@ commands = {"lease": lease, "release": release, "list": list_leases, "volume-del
             "signing-notary-key": signing_notary_key, "files": files, "files-add": files_add, "files-remove": files_remove, "volumes": volumes,
             "keys": keys, "key-create": key_create, "terminal-session": terminal_session, "key-rotate": key_rotate, "key-revoke": key_revoke, "run": run, "put": put, "get": get,
             "simctl": device("simctl"), "adb": device("adb"), "install": install, "fresh-app": fresh_app, "screenshot": screenshot, "xctest": xctest,
-            "storage-put": storage_put, "sign": sign, "cache-token": cache_token, "files-url": files_url, "capabilities": capabilities,
+            "storage-put": storage_put, "sign": sign, "secrets-fetch": secrets_fetch, "secrets": secrets, "secrets-audit": secrets_audit,
+            "secret-set": secret_set, "secret-delete": secret_delete, "cache-token": cache_token, "files-url": files_url, "capabilities": capabilities,
             "image-build": image_build, "image-builds": image_builds, "components": components,
             "component-install": component_install, "component-remove": component_remove}
 

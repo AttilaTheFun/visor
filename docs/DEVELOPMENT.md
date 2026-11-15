@@ -834,9 +834,16 @@ no longer in Visor.
     Shireworks' policy (the repository pinned, this workflow, main's
     dispatch or a releaser's tag) decides. Visor for Android (arm64,
     `--config=alpha`) is built beside them with the same version
-    (tools/ci/stamp_android.sh: its versionName and versionCode) and signed
-    by its own build; Shireworks checks the .apk (APK Signature Scheme v2
-    or later, its package pinned) and never signs it again. The draft is CI's
+    (tools/ci/stamp_android.sh: its versionName and versionCode), then
+    signed in the job with its private release key (Logan, 15 Nov 2026:
+    never Isomer's public debug key): tools/ci/sign_android.sh, with
+    Isomer's hermetic JDK and apksigner, takes the key from Shireworks'
+    secret service, which releases it only to the jobs
+    .github/shireworks-secrets.json grants it to (alpha, release-android),
+    and checks the signed APK's certificate against the workflow's
+    `VISOR_ANDROID_PIN` (tools/ci/android_sign.sh, Shireworks'). Shireworks'
+    signing then checks the .apk (APK Signature Scheme v2 or later, its
+    package pinned) and never signs it again. The draft is CI's
     (tools/ci/propose_release.sh, the run's token): no agent makes a draft
     or a tag. The builds, as Shireworks signed them, are attached to the
     draft (`Visor-<version>-ios.ipa`, `-macos.zip`, `-android.apk` and
@@ -855,8 +862,9 @@ no longer in Visor.
     (`sign_from_ci.sh --promote`; nothing Apple is rebuilt), Visor.app with
     its disk image made on a Mac slot, signed, notarized and stapled.
     Android's is the release's own production build (`release-android`,
-    `--config=prod`, the tag's version), which Shireworks checks as
-    production, as AttilaTheFun/reviews' release does.
+    `--config=prod`, the tag's version, signed there with its release key
+    as the alpha's is), which Shireworks checks as production, as
+    AttilaTheFun/reviews' release does.
     `release-assets` attaches the Production builds to the release in place
     of the Alphas, under the same names, with the disk image
     (`Visor-<version>-macos.dmg`) and builds.json, then that proof
