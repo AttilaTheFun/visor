@@ -280,7 +280,7 @@ is not an edit comes to it; auto-approving (`bypassPermissions`) only the
 agent's questions do (AskUserQuestion, which Claude Code offers only where a
 prompt can answer it; from 0.35). Each request becomes a WebSocket connection
 from the shim to the app carrying
-`{"type":"approval_request","token":<agent token>,"session":…,"id":…,"text":<tool>,"prompt":<summary>}`,
+`{"type":"approval_request","token":<the session's agent token>,"session":…,"id":…,"text":<tool>,"prompt":<summary>}`,
 with `questions` (the tool's own, as Claude Code gives them) for a question;
 the app shows it to subscribers as `approval` and lists the session as
 waiting; the client's `approve` is answered back to the shim as
@@ -291,8 +291,12 @@ user's. Codex asks through its app server instead (`item/tool/requestUserInput`,
 an experimental request: the server runs Codex with
 `features.default_mode_request_user_input` and initializes with
 `experimentalApi`); the server shows it as the same `approval` (id `codex-<n>`,
-tool `request_user_input`) and answers Codex by its question ids. The token is generated per app launch and is not the
-password. Codex's headless runs never ask; its manual mode is the
+tool `request_user_input`) and answers Codex by its question ids. Each session's agent has a token of its own (from 0.60; before, one
+token for every agent), kept with the server's secrets from launch to launch, and
+not the password: the server takes it only as that session, so one session's agent
+can't ask or be answered as another's. An agent a build before 0.60 left under its
+host holds that build's one token, which is taken as its session until that agent
+ends. Codex's headless runs never ask; its manual mode is the
 workspace-write sandbox.
 
 A runner's agent (one run under agent_protocol's wrapper, whose driver
@@ -309,14 +313,18 @@ switches say (docs/runners.md).
 ## Sessions messaging each other
 
 Every Claude and Codex session the menu bar app starts gets the same MCP
-server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`), with
+server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`). Claude's
+MCP servers inherit its environment, which has `VISOR_PORT`, `VISOR_TOKEN` and
+`VISOR_SESSION`, so its `--mcp-config` carries only `VISOR_APPROVALS` and the
+token never shows in `ps`; Codex gives a stdio MCP server only an allowlist of
+its environment, so its `-c` overrides still carry them. The server has
 six tools: `list_sessions`, `send_message(session, server, text)`,
 `read_messages(session, server, count)`, `message_status(message_id)`,
 `read_inbox(unread_only, count)` and `read_outbox(count)`:
 a session is always named with its computer's server id (the server also
 takes the session id alone, for scripts from before 0.31).
 Each call is a WebSocket connection from the script to the app carrying
-`{"type":"agent","token":<agent token>,"client":<calling session>,"mode":"sessions"|"send"|"read"|"status"|"inbox"|"outbox","session":<other session>,"server":<its server's id or name>,"messageID":…,"text":…,"rows":<count>,"version":"mail","id":…}`,
+`{"type":"agent","token":<the calling session's agent token>,"client":<calling session>,"mode":"sessions"|"send"|"read"|"status"|"inbox"|"outbox","session":<other session>,"server":<its server's id or name>,"messageID":…,"text":…,"rows":<count>,"version":"mail","id":…}`,
 answered with `{"type":"agent_result","id":…,"text":…,"messageID":…}` or `…,"error":…}`.
 `version` `"mail"` (since 0.47) says the agent's MCP server has `read_inbox`;
 for `inbox`, `text` `"all"` asks for the read messages too.

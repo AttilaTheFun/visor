@@ -1,6 +1,7 @@
 // The runners' tokens over REST (RunnerTokens), for the computer's owner:
 // the password, a token `hello` gave, or a trusted connection; never an
-// agent's token (an agent that could mint one could claim its own jobs).
+// agent's token, any session's own included (an agent that could mint one
+// could claim its own jobs, or revoke another runner's).
 //
 //   GET    /api/runners/tokens            {required, runners: [{runner, created, own}]}
 //   POST   /api/runners/tokens {runner}   {runner, token, created, replaced}: the token shown this once
@@ -11,10 +12,11 @@ import Foundation
 import VisorProtocol
 
 extension VisorServer {
-    /// Whether a request is an agent's: shows the agents' token, and came
-    /// on no trusted connection.
+    /// Whether a request is an agent's: shows any session's agent token
+    /// (isAgentToken: a live session's own, or the shared one while an
+    /// earlier build's agent holds it), and came on no trusted connection.
     func isAgentCall(_ request: HTTPRequest) -> Bool {
-        !request.trusted && request.authorization == agentToken
+        !request.trusted && isAgentToken(request.authorization)
     }
 
     /// `/api/runners/tokens…`, by method.

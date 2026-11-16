@@ -87,7 +87,7 @@ extension ServerTests {
     }
 
     @Test func testTheEndpointsAreSetWithThePasswordAndTheirSecretsKeptApart() throws {
-        #expect(setEndpoints(gh, bearer: server.agentToken).status == 403, "an agent could send the secrets anywhere")
+        #expect(setEndpoints(gh, bearer: server.agentToken(for: "S1")).status == 403, "an agent could send the secrets anywhere")
         #expect(server.settings.mcpEndpoints.isEmpty)
         #expect(setEndpoints(gh).status == 200)
         let kept = try #require(server.settings.mcpEndpoints.first)

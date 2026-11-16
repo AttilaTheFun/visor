@@ -100,7 +100,7 @@ extension VisorServer {
     /// the value kept. Not with an agent's token: an agent that could move
     /// an endpoint could send its secrets anywhere.
     func restSetMCP(_ call: RESTCall) -> HTTPResponse {
-        if !call.request.trusted, call.request.authorization == agentToken {
+        if !call.request.trusted, isAgentToken(call.request.authorization) {
             return HTTPResponse(403, Envelope.error("An agent can't set this computer's MCP servers.").encoded())
         }
         guard let body = parseJSON(call.request.body), let list = body["endpoints"].array else {

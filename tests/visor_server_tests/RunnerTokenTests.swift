@@ -11,6 +11,7 @@ import Foundation
 import GRPCCore
 import GRPCNIOTransportHTTP2
 @testable import VisorDriver
+import VisorAgent
 import VisorNativeRunner
 import VisorProtocol
 @testable import VisorServer
@@ -234,8 +235,16 @@ extension ServerTests {
                                                  ("POST", "/api/runners/tokens", #"{"runner":"mine"}"#),
                                                  ("PUT", "/api/runners/tokens", #"{"required":false}"#),
                                                  ("DELETE", "/api/runners/tokens/container@mini", "")]
+        // A native session, whose agent holds a token of its own (#421):
+        // a REST credential, but not for the runners' tokens.
+        server.sessions.append(SessionRecord(info: SessionInfo(id: "N", agent: .claude, cwd: "/tmp", title: "Native", created: 0),
+                                             process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: []))
+        let native = server.agentToken(for: "N")
+        #expect(rest("GET", "/api/sessions", bearer: native).status == 200, "a session's token is REST's")
         for (method, path, body) in calls {
-            #expect(rest(method, path, bearer: server.agentToken, body: body).status == 403, "the agents' token: \(method)")
+            #expect(rest(method, path, bearer: native, body: body).status == 403, "a native session's own token: \(method)")
+            #expect(rest(method, path, bearer: server.sharedAgentToken, body: body).status == 401,
+                    "the shared token of builds before 0.60, with no agent of theirs left: \(method)")
             #expect(rest(method, path, bearer: job.token, body: body).status == 401, "a runner's agent's token is never REST's: \(method)")
             #expect(rest(method, path, bearer: token, body: body).status == 401, "nor a runner's own: \(method)")
         }

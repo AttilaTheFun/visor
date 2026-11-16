@@ -337,7 +337,7 @@ extension ServerTests {
                           process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
         }
 
-        let link = MCPWebSocketLink(url: "ws://127.0.0.1:\(port)", token: server.agentToken, session: "A")
+        let link = MCPWebSocketLink(url: "ws://127.0.0.1:\(port)", token: server.agentToken(for: "A"), session: "A")
         // On a Mac the Network framework's listener is ready a moment after
         // it is started (NWListener.start is asynchronous, `listening` is
         // set at once): the first call waits for it, up to three seconds.

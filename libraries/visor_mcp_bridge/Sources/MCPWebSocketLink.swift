@@ -9,7 +9,7 @@ struct MCPWebSocketLink: MCPServerLink {
     /// `ws://host:port`: this computer's server, or the computer a
     /// container's agent runs on.
     let url: String
-    /// The server's agent-side secret (VISOR_TOKEN).
+    /// The session's agent token (VISOR_TOKEN).
     let token: String
     /// The session the agent is (VISOR_SESSION).
     let session: String

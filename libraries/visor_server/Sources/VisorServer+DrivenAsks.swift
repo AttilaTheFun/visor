@@ -2,7 +2,10 @@
 // wrapper's MCP relay and this server's driver (VisorDriver's DrivenMCP):
 // the asks a session's own MCP server makes here (VisorServer+AgentAsks),
 // as that session. Its driver has already told it by its token (Job.token)
-// which session it is, so it presents none of its own.
+// which session it is, so it presents none of its own: the ask goes
+// straight to the caller-based path (answerAgent(_:caller:reply:)). A
+// runner's agent is never given a session token, which would be a REST
+// credential (VisorServer+Access.swift).
 
 import Foundation
 import VisorProtocol
@@ -17,14 +20,14 @@ extension VisorServer {
         }
         var message = fields
         message["type"] = .string("agent")
-        message["token"] = .string(agentToken)
+        message.removeValue(forKey: "token")
         message["client"] = .string(record.info.id)
         message["id"] = .string(UUID().uuidString.lowercased())
         guard let envelope = Envelope.decode(JSONValue.object(message).encoded()) else { return (false, "The ask couldn't be read.") }
         let once = DrivenAskReply()
         return await withCheckedContinuation { continuation in
             once.continuation = continuation
-            answerAgent(envelope) { reply in
+            answerAgent(envelope, caller: record) { reply in
                 if let error = reply.error, !error.isEmpty {
                     once.give((false, error))
                 } else {
