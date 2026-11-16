@@ -296,7 +296,11 @@ server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`). Claude's
 MCP servers inherit its environment, which has `VISOR_PORT`, `VISOR_TOKEN` and
 `VISOR_SESSION`, so its `--mcp-config` carries only `VISOR_APPROVALS` and the
 token never shows in `ps`; Codex gives a stdio MCP server only an allowlist of
-its environment, so its `-c` overrides still carry them. The server has
+its environment, so its `-c` overrides still carry them. Should Claude Code
+stop passing its environment on, the MCP server (`visor-agent-host mcp`)
+answers every request with a JSON-RPC error (-32002) naming the missing
+variables and saying that Claude Code must pass the agent's environment to
+its MCP servers, and writes the same to stderr. The server has
 six tools: `list_sessions`, `send_message(session, server, text)`,
 `read_messages(session, server, count)`, `message_status(message_id)`,
 `read_inbox(unread_only, count)` and `read_outbox(count)`:
