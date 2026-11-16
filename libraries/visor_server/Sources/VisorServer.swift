@@ -162,10 +162,21 @@ public final class VisorServer {
         sharedAgentToken = Self.keptSharedAgentToken()
         sessionAgentTokens = Self.keptSessionAgentTokens()
         runnerTokens = RunnerTokens(secrets: Self.secrets)
+        Self.forgetRetiredSecrets()
         applyAgentDetaching()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()
         takeRollbackNote()
+    }
+
+    /// The GitHub proxy's token for this server, kept with the secrets
+    /// until its proxy setup was removed (visor#422): nothing reads it
+    /// now, so it is deleted at load.
+    static let retiredGitHubProxyTokenKey = "github.proxyToken"
+
+    /// Deletes the secrets no part of the server reads any more.
+    static func forgetRetiredSecrets() {
+        secrets.set(retiredGitHubProxyTokenKey, nil)
     }
 
     /// A server apart from the user's own: its own port, a folder of its

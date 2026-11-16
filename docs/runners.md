@@ -124,8 +124,14 @@ Logan's answers to the plan's questions (12 Nov):
     on issues), and its clients.
   - **logan-shire-agent** is the agents': every GitHub request an agent
     makes goes out as it.
-  - MultiPass holds logan-shire-agent's key and adds the App's token to an
-    agent's GitHub traffic as it proxies it (its GitHub proxy and gate).
+  - For agents in containers, MultiPass holds logan-shire-agent's key and
+    adds the App's token to their GitHub traffic as it proxies it (its
+    GitHub proxy and gate); Shireworks' agent-proxy takes that over.
+    Native agents get no proxy from Visor (14 Nov 2026): on the mini, this
+    computer's `agents/<kind>.env` gives them the App's identity, through
+    agent-token's `gh` shim and git credential helper, which mint the
+    App's token when called: the exception to the next point, until those
+    sessions move into the primary container.
   - No agent's container, and no runner, wrapper or agent process, ever
     holds that token or the key.
 - **agent_protocol** has its own repository, AttilaTheFun/agent_protocol
@@ -352,10 +358,10 @@ no Shireworks and no MultiPass:
   starts a native session at once, in a folder the user picks, as today.
 - **Permissions:** Claude Code's own approval modes, auto or manual, the
   session's choice (#341). There's no bypass on the computer itself.
-- **The network:** with no MultiPass, agents use the Mac's network as they do
-  today. With MultiPass installed, the native runner gives its agents
-  `HTTP(S)_PROXY` and the CA bundle pointing at it, for the egress log,
-  credentials and GitHub's rules.
+- **The network:** agents use the Mac's network as `claude` on the command
+  line does. Visor proxies nothing for them (Logan, 14 Nov 2026): no
+  `HTTP(S)_PROXY`, CA bundle or `GH_TOKEN` from Visor or its native runner,
+  with MultiPass installed or not.
 - **Reaching it from elsewhere** (a phone, another Mac) needs MultiPass, the
   only authenticated way in. Without it, Visor is a single-Mac app.
 - Runners in containers (Shireworks') and agent jobs are additions on top,

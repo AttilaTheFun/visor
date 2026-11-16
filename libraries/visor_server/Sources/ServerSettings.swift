@@ -73,14 +73,6 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// `<pushProxy>/apns/…`. Empty for none. Its
     /// token for this server is a secret (`VisorServer.pushProxyTokenKey`).
     public var pushProxy = ""
-    /// The GitHub proxy agents reach GitHub through (Visor Runner's,
-    /// docs/github-proxy.md): `http://<host>:<port>`, empty for none. Its
-    /// token for this server is a secret (`VisorServer.githubProxyTokenKey`),
-    /// its authority's certificate is kept beside the settings.
-    public var githubProxy = ""
-    /// The sessions it is on for, by id; `*` for every one. On for one
-    /// session first, then for all (docs/github-proxy.md, Rollout).
-    public var githubProxySessions: [String] = []
     /// Whether agent_protocol's Claim must show its runner's token
     /// (RunnerTokens; `PUT /api/runners/tokens {required}`). Off until the
     /// runners that claim here send one: off, a claim with none is let in
@@ -95,7 +87,6 @@ public struct ServerSettings: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             frontPaths, clientsKeepMessages, detachAgents, mcpEndpoints, pushProxy, githubProxy, githubProxySessions, runnerTokensRequired
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -114,8 +105,6 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         try c.encode(detachAgents, forKey: .detachAgents)
         if !mcpEndpoints.isEmpty { try c.encode(mcpEndpoints, forKey: .mcpEndpoints) }
         if !pushProxy.isEmpty { try c.encode(pushProxy, forKey: .pushProxy) }
-        if !githubProxy.isEmpty { try c.encode(githubProxy, forKey: .githubProxy) }
-        if !githubProxySessions.isEmpty { try c.encode(githubProxySessions, forKey: .githubProxySessions) }
         if runnerTokensRequired { try c.encode(runnerTokensRequired, forKey: .runnerTokensRequired) }
     }
 
@@ -148,8 +137,6 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         detachAgents = try c.decodeIfPresent(Bool.self, forKey: .detachAgents) ?? true
         mcpEndpoints = try c.decodeIfPresent([MCPEndpoint].self, forKey: .mcpEndpoints) ?? []
         pushProxy = try c.decodeIfPresent(String.self, forKey: .pushProxy) ?? ""
-        githubProxy = try c.decodeIfPresent(String.self, forKey: .githubProxy) ?? ""
-        githubProxySessions = try c.decodeIfPresent([String].self, forKey: .githubProxySessions) ?? []
         runnerTokensRequired = try c.decodeIfPresent(Bool.self, forKey: .runnerTokensRequired) ?? false
     }
 

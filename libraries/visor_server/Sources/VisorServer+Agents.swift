@@ -25,10 +25,9 @@ extension VisorServer {
         process.model = info.model ?? harness.catalog().defaultModel
         process.effort = info.effort
         // Visor's own, and this computer's agents/<kind>.env: its paths and
-        // git sign-in. And, where the GitHub proxy is on for it, the way to
-        // GitHub.
+        // git sign-in. Nothing else: Visor proxies nothing for its agents
+        // (Logan, 14 Nov 2026), so they reach GitHub as `claude` would.
         let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken(for: info.id), "VISOR_SESSION": info.id]
-            .merging(githubProxyEnvironment(for: info)) { ours, _ in ours }
         process.approvalEnvironment = AgentEnvironmentFile.read(info.agent).merging(own) { _, ours in ours }
         return process
     }
