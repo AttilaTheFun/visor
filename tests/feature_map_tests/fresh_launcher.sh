@@ -15,6 +15,12 @@
 #
 #   fresh_launcher.sh <the hub's ws:// URL> <the app's name> [KEY=VALUE…]
 #
+# A test's launch settings come as `visor.<key>=<value>` (VisorLaunch.swift),
+# the names a native app reads from its environment, and go on so to the
+# iPhone's (SIMCTL_CHILD_visor.<key>), the Mac's, Linux's and Windows'
+# launchers; Android's intent extras take the settings' own names
+# (VisorServices.kt), so its launcher gets `<key>=<value>`.
+#
 # From the test's environment: VISOR_LAUNCHER (Isomer's launcher, as the
 # test names it: relative to its runfiles' workspace), and the launcher's
 # own (ISOMER_SIMULATOR and ISOMER_BUNDLE_ID; ISOMER_ANDROID_PACKAGE, ADB,
@@ -45,6 +51,16 @@ if [ "$platform" = ios_launcher.sh ]; then
 elif [ "$platform" = android_launcher.sh ]; then
     exec < /dev/null
     "${ADB:-adb}" shell pm clear "${ISOMER_ANDROID_PACKAGE:?ISOMER_ANDROID_PACKAGE: the app}" > /dev/null 2>&1 || true
+    # The settings' own names, for the intent's extras.
+    arguments=("$1" "$2")
+    shift 2
+    for pair in "$@"; do
+        case "$pair" in
+            visor.*=*) arguments+=("${pair#visor.}") ;;
+            *) arguments+=("$pair") ;;
+        esac
+    done
+    set -- "${arguments[@]}"
 fi
 # (The Mac launcher gives the app a home of its own each launch,
 # CFFIXED_USER_HOME: nothing kept to clear.)

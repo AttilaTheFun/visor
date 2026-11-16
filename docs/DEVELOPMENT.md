@@ -781,10 +781,12 @@ no longer in Visor.
   screen). Each launch goes through `fresh_launcher.sh`, which clears the
   app's data (a headful app keeps the computer a test added) and runs
   Isomer's launcher for the platform (`@isomer//drive/launchers`), which
-  passes a test's settings as `KEY=VALUE` (the iPhone's simulator gets them
-  as `SIMCTL_CHILD_`, which the iPhone app reads: `VisorLaunchSettings`)
-  or as Android's intent extras. On a Shireworks Mac slot with a simulator
-  of its own (the slot's user can create and boot one), with Visor's
+  passes a test's settings as `visor.<key>=<value>` (the iPhone's simulator
+  gets them as `SIMCTL_CHILD_visor.<key>`, which the iPhone app reads:
+  `VisorLaunchSettings`) or, by their own names, as Android's intent
+  extras (`fresh_launcher.sh` drops the `visor.`). On a Shireworks Mac
+  slot with a simulator of its own (the slot's user can create and boot
+  one), with Visor's
   `--config=drive` build installed:
 
   ```sh
@@ -1066,9 +1068,10 @@ accessibility identifier or its label). Two builds can be driven:
   disk). `//applications/visor_headless` is `VisorRootView` with settings
   in memory, given at launch in its environment by their own names
   (`fixture=snapshot`, `fixture.screen=chat`, `account=fixture`, as
-  Android's launch intent takes them) or as the iPhone's arguments
-  (`-visor.fixture snapshot`); it has no network, so it is for the
-  fixture (or the onboarding and Add Computer with no computer). Its
+  Android's launch intent takes them; a native app takes `visor.<key>`
+  alone) or as the iPhone's arguments (`-visor.fixture snapshot`); it
+  has no network, so it is for the fixture (or the onboarding and Add
+  Computer with no computer). Its
   window is 390 by 844 points (a phone) unless `ISO_HEADLESS_WIDTH` and
   `ISO_HEADLESS_HEIGHT` say otherwise (1180 by 820: the iPad's layout).
   The feature map's tests (`//tests/feature_map_tests`, above) drive it.
@@ -1082,12 +1085,16 @@ accessibility identifier or its label). Two builds can be driven:
   in a release: such an app obeys whoever its launch names. Every client
   takes the launch settings (`VisorLaunchSettings.keys`: `fixture`,
   `fixture.screen`, `fixture.appearance`, `fixture.orientation`,
-  `fixture.go`, `account`, `probe.open`; none secret) the same way: the
-  iPhone and Mac apps from their environment (`fixture=snapshot` or
-  `visor.fixture=snapshot`; on a simulator `SIMCTL_CHILD_fixture=snapshot`)
-  before UserDefaults (the `-visor.<key> <value>` launch arguments), and
-  Android from its launch intent's extras (`--es fixture snapshot --es
-  account fixture`).
+  `fixture.go`, `account`, `probe.open`; none secret): the iPhone, Mac,
+  Linux and Windows apps from their environment as `visor.<key>` alone
+  (`visor.fixture=snapshot`; on a simulator
+  `SIMCTL_CHILD_visor.fixture=snapshot`, set with `env`: a shell takes no
+  dotted name as an assignment), never a bare `fixture` or `account`,
+  which a shell or a container may have for something else, before
+  UserDefaults (the `-visor.<key> <value>` launch arguments); Android from
+  its launch intent's extras by their own names (`--es fixture snapshot
+  --es account fixture`); the headless client from its environment by
+  their own names (`fixture=snapshot`).
 
 An agent finding its way around the client, in a leased Linux container
 with the repository cloned:

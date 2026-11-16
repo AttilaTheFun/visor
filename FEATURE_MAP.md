@@ -207,11 +207,14 @@ the app dialling the driver's hub (`iso hub`, `ws://127.0.0.1:7710`):
 - **Android** (emulator or the device lab's phone):
   `adb reverse tcp:7710 tcp:7710`, then
   `adb shell am start -n com.loganshire.visor/.MainActivity --es fixture snapshot --es fixture.screen chat -e ISO_DRIVER ws://127.0.0.1:7710 -e ISO_DRIVER_NAME android`.
-- **iPhone simulator:**
-  `SIMCTL_CHILD_ISO_DRIVER=ws://127.0.0.1:7710 xcrun simctl launch <udid> com.LoganShire.Visor -visor.fixture snapshot -visor.fixture.screen chat`
-  (the fixture is read from launch arguments, which Isomer's
-  `ios_launcher.sh` doesn't pass: launch it like this, or from a hosted
-  XCTest).
+- **iPhone simulator:** the app reads its launch settings from its
+  environment as `visor.<key>` (a bare `fixture` or `account` is left
+  alone), so simctl's `SIMCTL_CHILD_` prefix passes them, as Isomer's
+  `ios_launcher.sh` does:
+  `env SIMCTL_CHILD_ISO_DRIVER=ws://127.0.0.1:7710 SIMCTL_CHILD_visor.fixture=snapshot SIMCTL_CHILD_visor.fixture.screen=chat xcrun simctl launch <udid> com.LoganShire.Visor`
+  (`env`, because a shell won't take a name with a dot as an
+  assignment); or as launch arguments, after the bundle id:
+  `-visor.fixture snapshot -visor.fixture.screen chat`.
 
 ## Not wired yet
 
