@@ -801,13 +801,14 @@ no longer in Visor.
   `//tests/feature_map_tests:feature_map_headful_{ios,android,macos}_test`
   (manual: each in an invocation of its own, where the simulator, the
   emulator's adb or the Mac's screen is; never on this Mac's own disk or
-  screen). Each launch goes through `fresh_launcher.sh`, which clears the
-  app's data (a headful app keeps the computer a test added) and runs
-  Isomer's launcher for the platform (`@isomer//drive/launchers`), which
-  passes a test's settings as `visor.<key>=<value>` (the iPhone's simulator
-  gets them as `SIMCTL_CHILD_visor.<key>`, which the iPhone app reads:
+  screen). Each launch is Isomer's launcher for the platform
+  (`@isomer//drive/launchers`), started fresh (`HeadlessApp(…, fresh:
+  true)`, the launcher's `ISOMER_FRESH`: the app's data cleared, as a
+  headful app keeps the computer a test added), which passes a test's
+  settings as `visor.<key>=<value>` (the iPhone's simulator gets them as
+  `SIMCTL_CHILD_visor.<key>`, which the iPhone app reads:
   `VisorLaunchSettings`) or, by their own names, as Android's intent
-  extras (`fresh_launcher.sh` drops the `visor.`). On a Shireworks Mac
+  extras (VisorLaunch.swift leaves out the `visor.` there). On a Shireworks Mac
   slot with a simulator of its own (the slot's user can create and boot
   one), with Visor's
   `--config=drive` build installed:

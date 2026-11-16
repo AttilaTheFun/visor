@@ -49,18 +49,12 @@ extension FeatureMapTests {
             return screen.presented.contains { $0.message.contains(words) } || screen.shows(words)
         }
 
-        /// The composer while the sign-in waits, by its placeholder (on the
-        /// iPhone, where it has no label, the chat's one text field).
-        private func composer(_ app: HeadlessApp) throws -> String {
-            let screen = try app.screen()
-            let placeholder = "Paste the sign-in code"
-            if screen.element(placeholder) != nil { return placeholder }
-            return screen.elements.first { $0.role == "textField" }?.name ?? placeholder
-        }
+        /// The composer while the sign-in waits, by its placeholder.
+        static let composer = "Paste the sign-in code"
 
         /// Sends `code` from the composer, and expects it to reach the sign-in.
         private func sendFromComposer(_ app: HeadlessApp) throws {
-            try app.type(try composer(app), Self.code)
+            try app.type(Self.composer, Self.code)
             try app.tap("Send")
             let told = try app.screen(within: 10) { Self.told($0, Self.code) }
             #expect(Self.told(told, Self.code), "the code didn't reach the sign-in: \(told.summary)")
@@ -71,11 +65,9 @@ extension FeatureMapTests {
             let app = try offered()
             defer { app.quit() }
             let screen = try prompt(app)
-            // Send waits for a code (Isomer's driver leaves a disabled bar
-            // item out).
-            if VisorLaunch.headless {
-                #expect(!screen.has(id: "sign-in-send"), "Send with no code: \(screen.summary)")
-            }
+            // Send waits for a code: listed disabled, or not at all.
+            let send = screen.element("sign-in-send")
+            #expect(send == nil || send?.disabled == true, "Send with no code: \(screen.summary)")
         }
 
         @Test("Sign-in code prompt → Session chat: type sign-in-code, tap sign-in-send")
@@ -83,8 +75,8 @@ extension FeatureMapTests {
             let app = try offered()
             defer { app.quit() }
             try prompt(app)
-            try app.type(id: "sign-in-code", else: "Code from the sign-in page", Self.code)
-            try app.tap(id: "sign-in-send", else: "Send")
+            try app.type("sign-in-code", Self.code)
+            try app.tap("sign-in-send")
             let told = try app.screen(within: 10) { Self.told($0, Self.code) }
             #expect(Self.told(told, Self.code), "the code didn't reach the sign-in: \(told.summary)")
             #expect(!FeatureMapNode.signInCode.isShown(on: told), "the prompt is still up: \(told.summary)")
@@ -99,7 +91,7 @@ extension FeatureMapTests {
             let app = try offered()
             defer { app.quit() }
             try prompt(app)
-            let chat = try app.tap(id: "sign-in-cancel", else: "Cancel")
+            let chat = try app.tap("sign-in-cancel")
             #expect(!FeatureMapNode.signInCode.isShown(on: chat), "the prompt is still up: \(chat.summary)")
             FeatureMapNode.chat.expectShown(on: try app.screen { FeatureMapNode.chat.isShown(on: $0) })
             // The sign-in still waits: its code goes from the composer.
@@ -111,7 +103,7 @@ extension FeatureMapTests {
             let app = try offered()
             defer { app.quit() }
             try prompt(app)
-            let chat = try app.tap(id: "sign-in-cancel", else: "Cancel")
+            let chat = try app.tap("sign-in-cancel")
             #expect(!FeatureMapNode.signInCode.isShown(on: chat), "the prompt is still up: \(chat.summary)")
             // Away (to the sign-in page, say) and back: the code is asked
             // for again.
@@ -120,8 +112,8 @@ extension FeatureMapTests {
             let again = try app.screen { FeatureMapNode.signInCode.isShown(on: $0) }
             FeatureMapNode.signInCode.expectShown(on: again)
             // Sent from the prompt, it isn't asked for on the next return.
-            try app.type(id: "sign-in-code", else: "Code from the sign-in page", Self.code)
-            try app.tap(id: "sign-in-send", else: "Send")
+            try app.type("sign-in-code", Self.code)
+            try app.tap("sign-in-send")
             let told = try app.screen(within: 10) { Self.told($0, Self.code) }
             #expect(Self.told(told, Self.code), "the code didn't reach the sign-in: \(told.summary)")
             try app.tap("OK")

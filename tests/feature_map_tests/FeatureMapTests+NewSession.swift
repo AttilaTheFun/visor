@@ -11,7 +11,7 @@ extension FeatureMapTests {
             let app = try VisorLaunch.fixture("new-session")
             defer { app.quit() }
             try app.screen { FeatureMapNode.newSession.isShown(on: $0) }
-            FeatureMapNode.folder.expectShown(on: try app.tap(id: "project", else: "Choose Folder…"))
+            FeatureMapNode.folder.expectShown(on: try app.tap("project"))
         }
 
         @Test("Choose a folder → New Session: tap choose-folder")
@@ -19,8 +19,8 @@ extension FeatureMapTests {
             let app = try VisorLaunch.fixture("new-session")
             defer { app.quit() }
             try app.screen { FeatureMapNode.newSession.isShown(on: $0) }
-            try app.tap(id: "project", else: "Choose Folder…")
-            FeatureMapNode.newSession.expectShown(on: try app.tap(id: "choose-folder", else: "Choose"))
+            try app.tap("project")
+            FeatureMapNode.newSession.expectShown(on: try app.tap("choose-folder"))
         }
 
         @Test("New Session → Session chat: type first-message, tap start")
@@ -31,7 +31,7 @@ extension FeatureMapTests {
             // The first message where the computer takes one (the fixture's
             // doesn't: no `first-message`).
             if screen.has(id: "first-message") { try app.type("first-message", "Tidy the README") }
-            FeatureMapNode.chat.expectShown(on: try app.tap(id: "start", else: "Start"))
+            FeatureMapNode.chat.expectShown(on: try app.tap("start"))
         }
     }
 }

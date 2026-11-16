@@ -33,7 +33,7 @@ extension FeatureMapTests {
         func onboardingAddsAComputer() throws {
             let app = try VisorLaunch.empty()
             defer { app.quit() }
-            FeatureMapNode.addComputer.expectShown(on: try app.tap(id: "add-computer", else: "Add Computer…"))
+            FeatureMapNode.addComputer.expectShown(on: try app.tap("add-computer"))
         }
 
         @Test("Onboarding → Settings: tap settings")
@@ -47,7 +47,7 @@ extension FeatureMapTests {
         func signInShowsTheAccountsComputers() throws {
             let app = try VisorLaunch.signedOutAccount()
             defer { app.quit() }
-            try app.tap(id: "account-sign-in", else: "Sign In")
+            try app.tap("account-sign-in")
             // The fixture's sign-in takes a moment; then its three computers.
             let screen = try app.screen { $0.texts.contains("Build Box") }
             FeatureMapNode.sessions.expectShown(on: screen)
