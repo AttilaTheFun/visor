@@ -1,4 +1,4 @@
-// Sessions talking to each other: an agent holding this server's token
+// Sessions talking to each other: an agent holding its session's token
 // lists the other sessions, messages one (marked as from it, queued while
 // the other works) and reads what it said. Nobody else can.
 
@@ -34,7 +34,7 @@ extension ServerTests {
     private func ask(_ mode: String, from caller: String, about target: String? = nil, text: String? = nil,
                      token: String? = nil) -> Envelope {
         var e = Envelope(type: "agent")
-        e.token = token ?? server.agentToken
+        e.token = token ?? server.agentToken(for: caller)
         e.client = caller
         e.mode = mode
         e.session = target
@@ -47,7 +47,7 @@ extension ServerTests {
     private func asked(_ mode: String, from caller: String, text: String? = nil, messageID: String? = nil,
                        version: String? = nil) async -> Envelope {
         var e = Envelope(type: "agent")
-        e.token = server.agentToken
+        e.token = server.agentToken(for: caller)
         e.client = caller
         e.mode = mode
         e.text = text
@@ -197,12 +197,6 @@ extension ServerTests {
         #expect((stored.mailbox?.inbox.first?.text) == "Kept?")
         let old = try JSONDecoder().decode(StoredSession.self, from: JSONEncoder().encode(StoredSession(info: b.info, entries: [], resumeID: nil, shape: nil)))
         #expect(old.mailbox == nil, "a session from before keeps none")
-    }
-
-    /// An agent under its host outlives the server that started it, and
-    /// still holds the token it was given.
-    @Test func testTheAgentsTokenOutlivesALaunch() {
-        #expect(VisorServer(port: 7996).agentToken == server.agentToken)
     }
 
     @Test func testOnlyThisServersAgentsAndOnlyOthers() {

@@ -27,7 +27,7 @@ extension VisorServer {
     /// asking session, `session` (and `server`) the one it is about,
     /// `messageID` the message a status is asked of.
     func answerAgent(_ envelope: Envelope, reply: @escaping (Envelope) -> Void) {
-        guard envelope.token == agentToken, let caller = session(envelope.client) else {
+        guard let caller = agentSession(envelope.client, presenting: envelope.token) else {
             return reply(agentReply(envelope))
         }
         // Visor's MCP server since 0.47 says so with every ask: this

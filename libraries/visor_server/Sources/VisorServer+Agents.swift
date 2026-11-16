@@ -27,7 +27,7 @@ extension VisorServer {
         // Visor's own, and this computer's agents/<kind>.env: its paths and
         // git sign-in. And, where the GitHub proxy is on for it, the way to
         // GitHub.
-        let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]
+        let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken(for: info.id), "VISOR_SESSION": info.id]
             .merging(githubProxyEnvironment(for: info)) { ours, _ in ours }
         process.approvalEnvironment = AgentEnvironmentFile.read(info.agent).merging(own) { _, ours in ours }
         return process
