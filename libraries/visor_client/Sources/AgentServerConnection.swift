@@ -1340,8 +1340,9 @@ public final class AgentServerConnection: Identifiable {
         let text = Self.trimmed(text)
         // A sign-in waiting for its code (`/login`): these words are the
         // code, for the sign-in, and nothing for the agent or the thread.
-        if transcripts[sessionID]?.signIn != nil, !text.hasPrefix("/"), images.isEmpty {
+        if let signIn = transcripts[sessionID]?.signIn, !text.hasPrefix("/"), images.isEmpty {
             server.signIn(sessionID, code: text)
+            transcripts[sessionID]?.signInCodeSent = signIn
             note("thread \(sessionID.prefix(8)): a sign-in code sent")
             return
         }
