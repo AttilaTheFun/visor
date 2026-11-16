@@ -66,6 +66,85 @@ import Testing
         #expect(down.count == 3, "held again once the wrapper is gone")
     }
 
+    /// The wrapper's permission prompts (agent_protocol#10): each shown
+    /// once as the session's pending approval, however often it is asked;
+    /// the person's answer down to the wrapper, once, and again to a wrapper
+    /// that asks again (its answer lost with a connection); withdrawn, or
+    /// gone with the connection, no longer shown.
+    @Test func testAWrappersApprovalsAreTheSessionsAndItsAnswersGoBack() async {
+        let process = DrivenProcess()
+        var down: [AgentProtocol_V1_DriverMessage] = []
+        let connection = process.attach { down.append($0) }
+        let bash = AgentProtocol_V1_WrapperMessage.with { $0.approval = .with {
+            $0.id = "p1"; $0.tool = "Bash"; $0.summary = "ls -la"; $0.inputJson = #"{"command":"ls -la"}"#; $0.toolUseID = "tu1"
+        } }
+        let question = AgentProtocol_V1_WrapperMessage.with { $0.approval = .with {
+            $0.id = "p2"; $0.tool = "AskUserQuestion"
+            $0.inputJson = #"{"questions":[{"question":"Which one?","header":"Pick","options":[{"label":"A","description":"a"},{"label":"B"}],"multiSelect":false}]}"#
+        } }
+        let shown = await prompts(of: process, after: [bash, bash, question, .with { $0.approvalWithdrawn = "p9" }], count: 2)
+        #expect(shown.map(\.id) == ["p1", "p2"], "each once, a withdrawal of nothing nothing")
+        #expect(shown.first == ApprovalRequest(id: "p1", tool: "Bash", summary: "ls -la"))
+        #expect((shown.last?.questions?.first?.question) == "Which one?")
+        #expect((shown.last?.questions?.first?.options.map(\.label)) == ["A", "B"])
+        #expect((shown.last?.summary) == "Which one?")
+
+        #expect(process.decide("p1", allow: true, answers: nil))
+        #expect(!process.decide("p1", allow: true, answers: nil), "answered once")
+        #expect(!process.decide("nobody", allow: false, answers: nil))
+        #expect((down.last?.approval) == .with { $0.requestID = "p1"; $0.allow = true })
+        #expect(process.decide("p2", allow: true, answers: ["Which one?": "B"]))
+        let answered = parseJSON(down.last?.approval.updatedInputJson ?? "")
+        #expect((answered?["answers"]["Which one?"].string) == "B")
+        #expect((answered?["questions"][0]["question"].string) == "Which one?", "the input as asked, with its answers")
+
+        // Asked again (a reconnect lost the answer): answered again, not shown.
+        process.take(bash)
+        #expect((down.last?.approval) == .with { $0.requestID = "p1"; $0.allow = true })
+        #expect(down.count == 3)
+
+        let edit = AgentProtocol_V1_WrapperMessage.with { $0.approval = .with { $0.id = "p3"; $0.tool = "Edit"; $0.summary = "/a" } }
+        _ = await prompts(of: process, after: [edit], count: 1)
+        #expect(process.decide("p3", allow: false, answers: nil))
+        #expect((down.last?.approval) == .with { $0.requestID = "p3"; $0.reason = "The user denied this from Visor." })
+
+        // Withdrawn by the agent, or gone with its connection: no longer shown.
+        let write = AgentProtocol_V1_WrapperMessage.with { $0.approval = .with { $0.id = "p4"; $0.tool = "Write" } }
+        let read = AgentProtocol_V1_WrapperMessage.with { $0.approval = .with { $0.id = "p5"; $0.tool = "Read" } }
+        let events = await withdrawals(of: process, after: [write, .with { $0.approvalWithdrawn = "p4" }, read]) { process.detach(connection) }
+        #expect(events == ["asked p4", "withdrawn p4", "asked p5", "withdrawn p5"])
+        #expect(!process.decide("p5", allow: true, answers: nil), "gone with its connection: asked again on the next")
+    }
+
+    /// The prompts `process` showed for `messages`, the first `count`.
+    private func prompts(of process: DrivenProcess, after messages: [AgentProtocol_V1_WrapperMessage], count: Int) async -> [ApprovalRequest] {
+        for message in messages { process.take(message) }
+        var shown: [ApprovalRequest] = []
+        var iterator = process.events.makeAsyncIterator()
+        while shown.count < count, let event = await iterator.next() {
+            if case .question(let request) = event { shown.append(request) }
+        }
+        return shown
+    }
+
+    /// What `process` said of its prompts, asked and withdrawn, for
+    /// `messages` and then `then`.
+    private func withdrawals(of process: DrivenProcess, after messages: [AgentProtocol_V1_WrapperMessage],
+                             then: () -> Void) async -> [String] {
+        for message in messages { process.take(message) }
+        then()
+        var said: [String] = []
+        var iterator = process.events.makeAsyncIterator()
+        while said.count < 4, let event = await iterator.next() {
+            switch event {
+            case .question(let request): said.append("asked \(request.id)")
+            case .withdrawn(let id): said.append("withdrawn \(id)")
+            default: break
+            }
+        }
+        return said
+    }
+
     @Test func testAWrappersRowBecomesVisorsRow() {
         let row = DrivenProcess.row(.with { $0.id = "u1"; $0.role = .user; $0.text = "Hi"; $0.activities = ["a"] })
         #expect(row == TranscriptEntry(id: "u1", role: .user, text: "Hi", activities: ["a"]))

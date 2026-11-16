@@ -2,7 +2,8 @@
 // REST with the password (never an agent's token), a secret header kept
 // with the server's secrets; a session's tools listed under each endpoint's
 // name and its calls passed on with its own headers; an endpoint switched
-// off for a session; an SSE answer read; a forgotten MCP session begun again.
+// off for a session; an SSE answer read; a forgotten MCP session begun again;
+// none for a driven session (its agent on a runner).
 
 import Foundation
 import Synchronization
@@ -173,6 +174,42 @@ extension ServerTests {
         // On again, back to its default: nothing kept for it.
         server.perform(.mcp(session: "S1", endpoint: "gh", on: true), from: nil)
         #expect(record.stored.mcpSwitched == nil)
+    }
+
+    /// A driven session in a container gets none of them, though its
+    /// switch is on; one on Visor's own native runner, and a native one
+    /// beside it, still have them.
+    @Test func testAContainerSessionHasNoPassedOnServers() async throws {
+        #expect(setEndpoints(gh).status == 200)
+        let driven = SessionRecord(info: SessionInfo(id: "D1", agent: .claude, cwd: "/tmp", title: "Runner", created: 0),
+                                   process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
+        driven.driven = true
+        server.sessions.append(driven)
+        #expect(driven.info.mcp == [MCPSwitch(name: "gh", on: true)], "its switch says on")
+
+        func ask(_ mode: String, as caller: SessionRecord, text: String? = nil) async -> Envelope {
+            var e = Envelope(type: "agent")
+            e.mode = mode
+            e.text = text
+            return await server.answerProxied(e, caller: caller)
+        }
+        let listed = await ask("mcp_tools", as: driven)
+        #expect(listed.text == "[]")
+        let called = await ask("mcp_call", as: driven, text: #"{"tool":"gh__pr_create","arguments":{"title":"Sub-sessions"}}"#)
+        #expect(called.error?.contains("runs in a container") ?? false, Comment(rawValue: called.error ?? "no error"))
+        #expect(endpoint.heard.withLock { $0.isEmpty }, "the endpoint never asked for it")
+
+        // Driven, on Visor's own native runner: as any native session.
+        let onNativeRunner = SessionRecord(info: SessionInfo(id: "D2", agent: .claude, cwd: "/tmp", title: "Native runner", created: 0),
+                                           process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
+        onNativeRunner.driven = true
+        onNativeRunner.runsInContainer = false
+        server.sessions.append(onNativeRunner)
+        let nativeRunner = await ask("mcp_tools", as: onNativeRunner)
+        #expect((parseJSON(nativeRunner.text ?? "")?.array?.map { $0["name"].string }) == ["gh__pr_create"], "a native runner's session has them")
+
+        let native = try await self.ask("mcp_tools")
+        #expect((parseJSON(native.text ?? "")?.array?.map { $0["name"].string }) == ["gh__pr_create"], "a native session's are unchanged")
     }
 
     @Test func testAForgottenMCPSessionIsBegunAgain() async throws {

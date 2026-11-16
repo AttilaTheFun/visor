@@ -43,6 +43,12 @@ in the same way, with the password the connection code carries. The API
 reads the same under a mount path a front forwards whole
 (`/visor/api/sessions`).
 
+A runner's agent's token (agent_protocol's `Job.token`, docs/runners.md)
+is never taken here: it is only the driver's and dispatcher's, on their
+gRPC port, which ask it of every call made for that agent. Nor is a
+runner's own token (the one its `Claim` shows as `authorization: Bearer`,
+minted with `POST /runners/tokens`): it too is only the dispatcher's.
+
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
 200 gives `host` (the Mac's name), `login` (whose it is) and `token` —
@@ -94,9 +100,13 @@ under `/api`.
 | `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |
 | `GET /sessions/<id>/mail` | — | `mail`: the session's `inbox` and `outbox` (docs/agent-mail.md), oldest first, each a `MailMessage`: `id`, `from` and `to` (`RelayEndpoint`), `text`, `sent`, `state` (`waiting`, `delivered`, `read`, `failed`, `expired`), `changed`, `problem`?. The session's info carries `unreadMail` (how many wait unread) and `mailChanged` (when either box last changed), which tell a client to read them again. A server before 0.47 answers 404 |
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript). `container: true` (a session whose agent ran in a Linux container of its own on the server's computer) was removed in 0.50: a server of 0.50 or later answers it 410 with `error`, and makes nothing | `sessions` with the new one |
-| `POST /jobs` | `agent` (claude, for now), `title`, `text` (its first prompt), `cwd`, `model`, `effort`, `runsOn` (the kind of runner that may take it: `native`, `container`; absent for any) | `job` with `id`: its agent's id, queued on this server's agent_protocol dispatcher (docs/runners.md) for a runner to claim; the session appears once the runner's agent-wrapper dials the server. 404 when the server has no dispatcher, 400 with `error` for a job no runner can run. From 0.51 |
+| `POST /jobs` | `agent` (claude, for now), `title`, `text` (its first prompt), `cwd`, `model`, `effort`, `runsOn` (the kind of runner that may take it: `native`, `container`; absent for any), `skipPermissions` (true: its agent acts without asking; absent or false: it asks, its prompts this server's) | `job` with `id`: its agent's id, queued on this server's agent_protocol dispatcher (docs/runners.md) for a runner to claim; the session appears once the runner's agent-wrapper dials the server. 404 when the server has no dispatcher, 400 with `error` for a job no runner can run. From 0.51 |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
 | `POST /sessions/<id>/contain` | `container` (true: into a container on its computer; false: out of it) | Removed in 0.50: a server of 0.50 or later answers 410 with `error`. (Before: `sessions` with that one, once its agent had moved.) |
+| `GET /runners/tokens` | | `required`: whether agent_protocol's `Claim` must show its runner's token (the `runnerTokensRequired` setting; off unless turned on), and `runners`: each `runner` name with a token, when it was `created`, and `own: true` for this server's own native runner's (held in memory, new each start). Never the tokens. Refused (403) with an agent's token. |
+| `POST /runners/tokens` | `runner`: the name its claims say (`container@mini`; no slash) | `runner`, `token` (shown this once: kept with the server's secrets), `created`, `replaced` (it had one, which no longer works). The runner shows it on `Claim` as `authorization: Bearer <token>`, with its `runner` field the same name (docs/runners.md). Refused (403) with an agent's token. |
+| `PUT /runners/tokens` | `required` (true or false) | as `GET /runners/tokens`: on, a `Claim` with no runner token is refused (UNAUTHENTICATED); off, it is let in and logged once per runner. A token that isn't a runner's, or is another runner's, is refused either way. Refused (403) with an agent's token. |
+| `DELETE /runners/tokens/<runner>` | | `runner`, `revoked: true`: its token no longer claims; 404 for a runner with none. Refused (403) with an agent's token. |
 | `GET /mcp` | | `endpoints`: the MCP servers passed on to the sessions' agents (see Proxied MCP servers), each `name`, `url`, `onByDefault` and `headers` (`name`, `secret`, and `value`, or for a secret one only `kept`) |
 | `PUT /mcp` | `endpoints`: all of them, each `name`, `url`, `onByDefault`?, `headers` (`name`, `value`?, `secret`?) | as `GET /mcp`. A secret header's `value` is kept with the server's secrets; sent without one, the value kept stays. Refused (403) with an agent's token. |
 | `POST /push` | `deviceToken`, `platform` (`ios`, `macos`, …), `pushEnvironment` (`sandbox`, `production`), `pushTopic` (the app's bundle id), `pushMuted`? (the kinds it doesn't want, of `waiting`, `failed`, `goal`, `turn`; from 0.48) | `exists`: whether this server sends pushes. Kept per token, replacing an earlier registration; a silent state push for the widget goes whatever is muted. A server before 0.48 ignores `pushMuted` and sends every kind; a client before it sends none, and is sent every kind |
@@ -289,6 +299,17 @@ host holds that build's one token, which is taken as its session until that agen
 ends. Codex's headless runs never ask; its manual mode is the
 workspace-write sandbox.
 
+A runner's agent (one run under agent_protocol's wrapper, whose driver
+this server is) asks the same way through its wrapper: its
+`mcp__visor__approve` comes as `WrapperMessage.approval` and is shown as
+the same `approval`, and the client's `approve` goes back as
+`DriverMessage.approval` (`allow`; a question's answers in
+`updated_input_json`, the tool's input with `answers`; or `reason`). A
+prompt it withdraws is cleared (`approval` with none). Its MCP server's
+other tools are answered by the driver as its session's: Visor's own
+tools, never the proxied MCP servers below, whatever the session's `mcp`
+switches say (docs/runners.md).
+
 What a session's token does not separate (as of 0.60): it is a token of 32
 random bytes, compared in constant time, and taken only while its session is
 live (not archived). But any live session's token is also a REST
@@ -362,6 +383,9 @@ of its own for each session and endpoint, begun again if the endpoint
 forgets it. The script looks again every 30 s and sends
 `notifications/tools/list_changed` when the tools changed. Each endpoint is
 on for a session unless it, or its `onByDefault`, says otherwise (`mcp`).
+They are the computer's native sessions' only: a runner's agent (a driven
+session) gets none of them (`mcp_tools` answered `[]`, `mcp_call` refused),
+whatever its switches say; its container gives it its own (docs/runners.md).
 
 Sessions on other computers are reached through a client connected to
 both: servers never talk to one another, and none learns another's address

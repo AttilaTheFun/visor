@@ -10,6 +10,7 @@ import AgentProtocol
 import VisorProtocol
 import VisorServer
 import Foundation
+import GRPCCore
 import Testing
 
 @Suite @MainActor final class JobQueueTests {
@@ -383,5 +384,129 @@ import Testing
         #expect((given["workingDirectory"] as? String) == "/w")
         #expect((given["prompt"] as? String) == "P")
         #expect((given["model"]) == nil, "nothing for what the job doesn't say")
+        #expect((given["skipPermissions"]) == nil, "a job that doesn't say has none in AGENT_JOB")
+        #expect(environment["AGENT_TOKEN"] == nil, "a job with no token gives none")
+
+        job.token = "t0k3n"
+        job.skipPermissions = true
+        let tokened = await runner.environment(for: job)
+        #expect(tokened["AGENT_TOKEN"] == "t0k3n", "the token in AGENT_TOKEN alone")
+        let tokenedJob = try #require(tokened["AGENT_JOB"])
+        #expect(!tokenedJob.contains("t0k3n"), "never in AGENT_JOB")
+        let acting = try #require(JSONSerialization.jsonObject(with: Data(tokenedJob.utf8)) as? [String: Any])
+        #expect((acting["skipPermissions"] as? Bool) == true)
+        #expect(NativeRunner.metadata(job)[stringValues: "authorization"].map { $0 } == ["Bearer t0k3n"], "its renewals and releases show it")
+        #expect(NativeRunner.metadata(job, runnerToken: "r1")[stringValues: "authorization"].map { $0 } == ["Bearer t0k3n", "Bearer r1"],
+                "and the runner's own token beside it")
+        #expect(NativeRunner.metadata(runnerToken: "r1")[stringValues: "authorization"].map { $0 } == ["Bearer r1"], "its claims show its own")
+        #expect(NativeRunner.metadata()[stringValues: "authorization"].map { $0 }.isEmpty)
+
+        // A manual session's job, as Visor's dispatcher gives it out: false, said.
+        let jobs = queue()
+        var manual = start("Manual")
+        manual.skipPermissions = false
+        _ = try jobs.queueStart(manual).get()
+        let claimed = try #require(await jobs.claim(claim(), wait: .zero))
+        let manualJob = try #require(await runner.environment(for: claimed)["AGENT_JOB"])
+        #expect(manualJob.contains("\"skipPermissions\":false"), Comment(rawValue: manualJob))
+    }
+
+    /// Each agent's own token (Job.token): minted when its job is queued,
+    /// on the job a runner claims, the agent's alone, kept with the
+    /// server's secrets across a restart, and gone with its job.
+    @Test func eachAgentHasATokenOfItsOwn() async throws {
+        let secrets = MemorySecrets()
+        let jobs = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", secrets: secrets, log: { _ in })
+        let a = try jobs.queueStart(start("A")).get()
+        #expect(jobs.queueResume(AgentJobMove(agent: "b1", session: "s-b", title: "B", resume: "c-b", cwd: "/tmp", runsOn: "native")) == .success("s-b"))
+        let first = await jobs.claim(claim(), wait: .zero)
+        let second = await jobs.claim(claim(), wait: .zero)
+        let jobA = try #require(first)
+        let jobB = try #require(second)
+        #expect(jobA.agent.uuid == a && jobB.agent.uuid == "b1")
+        #expect(jobA.token.count == 64 && jobB.token.count == 64 && jobA.token != jobB.token)
+        #expect(jobs.access(a, bearer: jobA.token) == .granted)
+        #expect(jobs.access(a.uppercased(), bearer: jobA.token) == .granted, "however the agent's id is spelt")
+        #expect(jobs.access(a, bearer: nil) == .refused("The call shows no token (authorization: Bearer <Job.token>)."))
+        #expect(jobs.access(a, bearer: jobB.token) == .refused("That token is another agent's."))
+        #expect(jobs.access(a, bearer: "guess") == .refused("That token isn't this agent's."))
+        // Only the whole token, compared byte by byte (constant time).
+        #expect(jobs.access(a, bearer: String(jobA.token.dropLast())) == .refused("That token isn't this agent's."), "a prefix")
+        #expect(jobs.access(a, bearer: jobA.token + "0") == .refused("That token isn't this agent's."), "longer")
+        #expect(jobs.access(a, bearers: ["guess", jobA.token]) == .granted, "among others shown")
+        #expect(jobs.access("nobody", bearer: jobA.token) == .unknown)
+        #expect(!(secrets.get(JobQueue.tokensKey) ?? "").isEmpty, "kept with the secrets")
+        #expect(!jobs.stored.claimed.contains { "\($0)".contains(jobA.token) }, "never in jobs.json")
+
+        // A restart keeps them; a requeue keeps the agent's own.
+        let again = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", secrets: secrets, log: { _ in })
+        #expect(again.access("b1", bearer: jobB.token) == .granted)
+        jobs.report(.with { $0.agent = jobB.agent; $0.released = .with { $0.reason = "its runner restarted" } })
+        let requeued = await jobs.claim(claim(), wait: .zero)
+        #expect((requeued?.token) == jobB.token)
+
+        // Gone with its job: an ended session's, a stopped agent's.
+        jobs.forget(session: a)
+        #expect(jobs.access(a, bearer: jobA.token) == .unknown)
+        jobs.stopJobs(of: "s-b")
+        #expect(jobs.access("b1", bearer: jobB.token) == .unknown)
+        #expect(secrets.get(JobQueue.tokensKey) == nil)
+    }
+
+    /// Job.skip_permissions: a started job's from its request (asking when
+    /// it says nothing), a moved session's from its move (the session's).
+    @Test func aJobSaysWhetherItsAgentAsks() async throws {
+        let jobs = queue()
+        var acting = start("Acts")
+        acting.skipPermissions = true
+        _ = try jobs.queueStart(acting).get()
+        _ = try jobs.queueStart(start("Asks")).get()
+        var manual = start("Manual")
+        manual.skipPermissions = false
+        _ = try jobs.queueStart(manual).get()
+        // Said either way, false included: Job.skip_permissions has
+        // presence, and a job without it reads as an old dispatcher's,
+        // whose runner passes --skip-permissions.
+        for (title, skips) in [("Acts", true), ("Asks", false), ("Manual", false)] {
+            let job = try #require(await jobs.claim(claim(), wait: .zero))
+            #expect(job.title == title)
+            #expect(job.hasSkipPermissions, "\(title): said")
+            #expect(job.skipPermissions == skips, "\(title)")
+        }
+        var move = AgentJobMove(session: "s-m", title: "M", resume: "c-m", cwd: "/tmp", runsOn: "native")
+        move.skipPermissions = true
+        let skip = jobs.resumeJob(move, agent: "m1")
+        #expect(skip.hasSkipPermissions && skip.skipPermissions)
+        move.skipPermissions = false
+        let asks = jobs.resumeJob(move, agent: "m1")
+        #expect(asks.hasSkipPermissions && !asks.skipPermissions)
+
+        // A moved session's job (queueResume), as claimed.
+        #expect(jobs.queueResume(move) == .success("s-m"))
+        let resumed = try #require(await jobs.claim(claim(), wait: .zero))
+        #expect(resumed.hasSkipPermissions && !resumed.skipPermissions)
+    }
+
+    /// Job.skip_permissions across a restart (jobs.json): a waiting job and
+    /// a claimed one come back saying what they said, false included.
+    @Test func aRestartedQueueKeepsWhetherItsJobsAsk() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("jobs-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let before = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", file: file, log: { _ in })
+        var acting = start("Acts")
+        acting.skipPermissions = true
+        _ = try before.queueStart(acting).get()
+        let claimed = try #require(await before.claim(claim(), wait: .zero))
+        var manual = start("Manual")
+        manual.skipPermissions = false
+        _ = try before.queueStart(manual).get()
+
+        let after = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", file: file, log: { _ in })
+        let held = try #require(after.claimed[claimed.agent.uuid]?.job)
+        #expect(held.hasSkipPermissions && held.skipPermissions)
+        let waiting = try #require(after.waiting.first)
+        #expect(waiting.title == "Manual")
+        #expect(waiting.hasSkipPermissions, "false kept, not dropped")
+        #expect(!waiting.skipPermissions)
     }
 }

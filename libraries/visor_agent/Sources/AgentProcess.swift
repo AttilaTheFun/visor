@@ -69,6 +69,12 @@ public protocol AgentProcess: AnyObject {
     /// The user's answers to a question the agent asked (`.question`), by
     /// question; nil when the user would not answer.
     func answer(_ request: String, with answers: [String: String]?)
+    /// The user's Allow or Deny of a permission prompt the agent raised
+    /// through its process (`.question` with no questions, or with them for
+    /// an AskUserQuestion: its answers): a driven agent's, which its driver
+    /// sends to its wrapper. Whether the process took it; false for one
+    /// whose prompts go another way (the MCP server's `approve`).
+    func decide(_ request: String, allow: Bool, answers: [String: String]?) -> Bool
     /// Makes the agent's next spawn a copy of the conversation it resumes
     /// (up to `message`, when given), with an id of its own, rather than
     /// going on in that conversation: a fork or a branch. Whether the
@@ -88,6 +94,8 @@ public extension AgentProcess {
     func resume(at message: String?) {}
 
     func answer(_ request: String, with answers: [String: String]?) {}
+
+    func decide(_ request: String, allow: Bool, answers: [String: String]?) -> Bool { false }
 
     func fork(at message: String?) -> Bool { false }
 

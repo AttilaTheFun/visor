@@ -145,6 +145,140 @@ Logan's answers to the plan's questions (12 Nov):
   co-tenant container goes, Shireworks' primary container is made, and
   they move into it (a phase of its own, planned with Shireworks).
 
+## A runner's agents, authenticated, with Visor's tools (as built, 15 Nov)
+
+What a session run by any runner's agent (Visor's native runner, or
+Shireworks' container runner) gets from Visor's driver and dispatcher
+(libraries/visor_driver), over agent_protocol: unmerged, with
+agent_protocol#9, #10 and #12.
+
+- **Its own token.** Each job's agent has a token of its own
+  (`Job.token`), minted when the job is queued (a new session's, a moved
+  session's, each later agent of a moved session: `resumeDriven` queues a
+  new agent) and kept with the server's secrets (`runnerAgentTokens`, an
+  agent id to token map; never in jobs.json, sessions.json or the log),
+  so a restart keeps its runners' agents. A runner hands it to the wrapper
+  in `AGENT_TOKEN` alone, and the wrapper shows it on every call it makes
+  for the agent as `authorization: Bearer <token>`. The driver refuses,
+  with UNAUTHENTICATED, a `Connect` or `Conversation` whose token isn't
+  the agent's (none, a wrong one, or another agent's: the hello's agent
+  must be the token's), and the dispatcher a `Report` or `Renew` the
+  same: the runner shows its job's token on its renewals and releases
+  too. A `Claim` shows the runner's own token (below), not an agent's: it
+  is how a runner is given a job and its token. These tokens are only the gRPC port's: the server's REST and
+  WebSocket side never takes one. A token goes with its agent's job: when
+  its session ends, its move fails or is given up, or its agent is
+  stopped (`stopJobs`); then its runner's renewal is told the claim isn't
+  its own (so the runner ends its agent), its reports are let go, and its
+  wrapper can't dial in. Not yet: a fresh token pushed to a running
+  wrapper (`DriverMessage.token`); a token lives as long as its agent.
+- **The runner's own token, on Claim.** Visor mints a token for each
+  runner name (`container@<computer>`, as the runner's claims say it),
+  kept with the server's secrets (`runnerTokens`; never in sessions.json,
+  jobs.json or the log) and shown once, when minted. The computer's owner
+  mints, lists and revokes them over REST (the password, a `hello` token,
+  or the socket file; refused, 403, with any session's agent token, a
+  native session's own included):
+  - `POST /api/runners/tokens {"runner": "container@mini"}` →
+    `{"runner", "token", "created", "replaced"}`: the token, this once (a
+    runner that had one gets a new one; the old stops working);
+  - `GET /api/runners/tokens` → `{"required", "runners": [{"runner",
+    "created", "own"?}]}`: names, never tokens;
+  - `DELETE /api/runners/tokens/<runner>` (the name percent-encoded) →
+    `{"runner", "revoked": true}`, 404 for a runner with none;
+  - `PUT /api/runners/tokens {"required": true|false}`: the server's
+    `runnerTokensRequired` setting (settings.json), as `GET` answers.
+
+  A `Claim` shows it as `authorization: Bearer <runner token>`, and its
+  `runner` must be the name it was minted for: a token that isn't a
+  runner's of this server (or was revoked) is refused UNAUTHENTICATED,
+  another runner's PERMISSION_DENIED. A `Renew` or a `Report` (Released,
+  say) shows the job's agent token as before; a runner token shown beside
+  it (a second `authorization: Bearer` value, either order) must be the
+  runner's that holds the claim (PERMISSION_DENIED otherwise).
+  `runnerTokensRequired` is off until the runners that claim here send
+  one: off, a claim with none is let in (logged once per runner name), a
+  wrong one refused all the same; on, a claim with none is refused
+  UNAUTHENTICATED. The order: agent_protocol released; Shireworks' runner
+  sends `AGENT_TOKEN` and the bearers, its runner token on Claim; then the
+  setting turned on. Visor's own native runner (in the server's process,
+  on loopback) is given a token for its name at each start, held in
+  memory alone (listed with `"own": true`), and shows it on its claims
+  and beside its jobs' tokens on its renewals and releases, so it claims
+  with tokens required.
+- **What MCP a container session gets** (Logan, 16 Nov, via Manager):
+  Visor's and Shireworks', and nothing of the computer's. "In a container"
+  is the job's: it asks for a container runner (`runs-on:container`, as a
+  move into a container's does), or, asking for no kind, the runner that
+  claimed it says `container` among its capabilities (Shireworks' does);
+  not known (a claim from before the server's restart, by a runner that
+  said neither), it is taken to be. A session on **Visor's own native
+  runner** (`runs-on:native`, or claimed by a runner that says `native`)
+  runs on this computer, and keeps the computer's passed-on servers as
+  any native session does: the rest of this item is a container's.
+  - **Visor's**: the agent's MCP server `visor`, which its wrapper starts
+    (`--mcp-config`) and relays over its connection to this driver
+    (`WrapperMessage.mcp`, agent_protocol#10). It is answered here by
+    Visor's own MCP bridge (libraries/visor_mcp_bridge, as
+    `visor-agent-host mcp` runs it for a session on this computer), as the
+    session the token says it is, with Visor's own tools only:
+    `list_sessions`, `send_message`, `read_messages`, `message_status`,
+    `read_inbox`, `read_outbox`. `approve` is the wrapper's own, never
+    listed here.
+  - **Never the MCP servers this computer passes on** to its native
+    sessions (`GET`/`PUT /api/mcp`: gh, shireworks, …, the
+    `mcp__visor__<endpoint>__*` tools), whatever the session's per-server
+    switches say: the driver's bridge doesn't list, watch or call them
+    (a call of one is refused), and the server answers a container
+    session's `mcp_tools` with none and refuses its `mcp_call`.
+  - Its asks (`list_sessions`, `send_message`, …) are answered as its
+    session by the driver, which knows it by its job's token: the agent
+    is never given a session token of the server's, which would be a
+    REST credential (docs/protocol.md, "Approvals and questions").
+  - **Shireworks'**: from the container itself, at
+    `http://shireworks.agent.internal/mcp/shireworks`, through the
+    container network's agent-proxy, which adds Shireworks' key to each
+    request: the container holds no token for it. Claude finds it in an
+    `mcpServers` entry of the primary container's Claude user config,
+    which Shireworks provides once shireworks#451 ships:
+
+    ```json
+    {"mcpServers":{"shireworks":{"type":"http","url":"http://shireworks.agent.internal/mcp/shireworks"}}}
+    ```
+
+    Claude loads it beside the wrapper's `visor` server, which adds no
+    other.
+  - **GitHub**: no MCP. `gh` is the plain CLI over HTTPS, through the
+    container network and agent-proxy, which adds logan-shire-agent's
+    credentials.
+- **Approvals.** A session that asks before acting has its agent's
+  permission prompts (the wrapper's `mcp__visor__approve`, sent as
+  `WrapperMessage.approval`) shown as the session's pending approval, as a
+  session's on this computer are, with an AskUserQuestion's questions; the
+  person's answer goes back as `DriverMessage.approval` (allowed; with the
+  answers in the tool's input for a question; or denied, and why). A
+  prompt the agent withdraws (`approval_withdrawn`), or whose wrapper's
+  connection drops, is no longer shown; a wrapper that dials again asks
+  again, and one already answered is answered again.
+- **Whether it asks** is the job's (`Job.skip_permissions`), from the
+  session's own setting; a job queued by `POST /api/jobs` asks unless it
+  says `skipPermissions: true`. A session moved into a container still
+  starts acting without asking (it touches only its volumes); set to ask
+  (Permissions), its next agent's job asks.
+  - The field is an `optional bool` with presence (agent_protocol#12).
+    Absent is a dispatcher that predates it (Visor 0.59.1 and earlier):
+    the runner keeps passing `--skip-permissions`, so its agents act. False
+    is manual approvals; true is bypass.
+  - So Visor says it on every job it queues, false included:
+    `queueStart`, `resumeJob` (`queueResume`, and so `resumeDriven` and a
+    move into a container, and the claims `adopt` holds), and the jobs
+    jobs.json keeps (`StoredJob`), so a restarted server's jobs still
+    say. A job left unset would read as an old dispatcher's and act.
+  - A runner puts `skipPermissions` in `AGENT_JOB` only when the job has
+    it, and passes `--skip-permissions` only when it is absent or true.
+    The native runner puts it there when the job has it (always, from
+    Visor's dispatcher) and never passes `--skip-permissions`.
+
 ## Logan's answers (11 Nov, later)
 
 Where this section and the rest of the document differ, this section wins.
@@ -638,6 +772,10 @@ Shireworks (shireworks#261, §14).
   shows "Released in vX" by following release → pull requests → `Fixes #n`.
 
 ## Permissions
+
+As built (15 Nov): the job says (`Job.skip_permissions`, from the
+session), and an agent that asks asks through its driver ("A runner's
+agents, authenticated, with Visor's tools", above). The design before it:
 
 A wrapped agent knows its place. In a container (`place: container`), it always
 skips permission prompts: Claude's bypassPermissions, Codex's full access. On

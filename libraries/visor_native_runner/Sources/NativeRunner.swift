@@ -4,6 +4,12 @@
 // AGENT_JOB, AGENT_DISPATCHER_URL, AGENT_DRIVER_URL, AGENT_RUNNER). While
 // an agent runs its claim is renewed; the wrapper reports how the job
 // went, and one that ends without reporting (not 0) has its job released.
+// The job's token (Job.token) goes to the wrapper in AGENT_TOKEN alone,
+// and is shown on the runner's own renewals and releases
+// (`authorization: Bearer`), as the dispatcher asks. The runner's own token
+// (the dispatcher's runner tokens: Visor gives its own runner one at its
+// start) is shown on its claims, and beside the job's on its renewals and
+// releases.
 // Native agents work as Visor's always have: in the user's own account,
 // reading and writing where the user can (Logan, 12 Nov 2026).
 
@@ -20,21 +26,25 @@ public actor NativeRunner {
     public let wrapper: String
     public let name: String
     public let capacity: Int
+    /// The runner's own token, shown on its claims; nil for none.
+    let token: String?
     /// The harnesses it runs.
     public let harnesses: [String]
     let log: @Sendable (String) -> Void
 
     private var running: [String: Process] = [:]
 
-    /// Nil for a dispatcher address that isn't `http://host:port`.
-    public init?(dispatcher: String, wrapper: String, name: String, capacity: Int = 4, harnesses: [String] = ["claude", "echo"],
-                 log: @escaping @Sendable (String) -> Void) {
+    /// Nil for a dispatcher address that isn't `http://host:port`. `token`:
+    /// the runner's own, minted by the dispatcher for `name`.
+    public init?(dispatcher: String, wrapper: String, name: String, token: String? = nil, capacity: Int = 4,
+                 harnesses: [String] = ["claude", "echo"], log: @escaping @Sendable (String) -> Void) {
         guard let url = URLComponents(string: dispatcher), url.scheme == "http", let host = url.host, !host.isEmpty else { return nil }
         self.dispatcher = dispatcher
         dispatcherHost = host
         dispatcherPort = url.port ?? 80
         self.wrapper = wrapper
         self.name = name
+        self.token = token.flatMap { $0.isEmpty ? nil : $0 }
         self.capacity = capacity
         self.harnesses = harnesses
         self.log = log
@@ -68,7 +78,7 @@ public actor NativeRunner {
             claim.runner = name
             claim.capabilities = ["native"] + harnesses.map { "harness:\($0)" }
             claim.waitSeconds = 25
-            let answer = try await dispatcher.claim(claim)
+            let answer = try await dispatcher.claim(claim, metadata: Self.metadata(runnerToken: token))
             guard answer.hasJob else { continue }
             start(answer.job, dispatcher)
         }
@@ -102,7 +112,8 @@ public actor NativeRunner {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(20))
                     if Task.isCancelled { return }
-                    if let answer = try? await dispatcher.renew(.with { $0.agent = job.agent }), !answer.hasClaimExpires {
+                    if let answer = try? await dispatcher.renew(.with { $0.agent = job.agent }, metadata: Self.metadata(job, runnerToken: token)),
+                       !answer.hasClaimExpires {
                         log("native runner: \(job.agent.uuid)'s claim isn't this runner's any more: stopping it")
                         process.terminate()
                         return
@@ -126,7 +137,16 @@ public actor NativeRunner {
         _ = try? await dispatcher.report(.with {
             $0.agent = job.agent
             $0.released = .with { $0.reason = reason }
-        })
+        }, metadata: Self.metadata(job, runnerToken: token))
+    }
+
+    /// What a call shows: the job's agent's token, if it is for a job that
+    /// has one, then the runner's own, if it has one.
+    static func metadata(_ job: AgentProtocol_V1_Job? = nil, runnerToken: String? = nil) -> Metadata {
+        var metadata = Metadata()
+        if let job, !job.token.isEmpty { metadata.addString("Bearer \(job.token)", forKey: "authorization") }
+        if let runnerToken, !runnerToken.isEmpty { metadata.addString("Bearer \(runnerToken)", forKey: "authorization") }
+        return metadata
     }
 
     /// The wrapper's environment for a job: this process's, and the runner's contract.
@@ -137,6 +157,9 @@ public actor NativeRunner {
         environment["AGENT_DISPATCHER_URL"] = dispatcher
         environment["AGENT_RUNNER"] = name
         if job.driverURL.isEmpty { environment["AGENT_DRIVER_URL"] = nil } else { environment["AGENT_DRIVER_URL"] = job.driverURL }
+        // Only here: never in AGENT_JOB or on a command line. A token this
+        // process was itself given is not the job's.
+        environment["AGENT_TOKEN"] = job.token.isEmpty ? nil : job.token
         return environment
     }
 
@@ -150,6 +173,12 @@ public actor NativeRunner {
                              ("resumeSessionID", job.resumeSessionID)] where !value.isEmpty {
             object[key] = value
         }
+        // Job.skip_permissions, which has presence: the agent acts (true)
+        // or asks through the driver (false), there only when the job says
+        // (agent_protocol's README). Visor's dispatcher always says; this
+        // runner never passes --skip-permissions, so a job that didn't
+        // would ask.
+        if job.hasSkipPermissions { object["skipPermissions"] = job.skipPermissions }
         if !job.sources.isEmpty {
             object["sources"] = job.sources.map { ["repository": $0.repository, "ref": $0.ref, "name": $0.name] }
         }

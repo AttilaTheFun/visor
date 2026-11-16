@@ -4,7 +4,8 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 package(default_visibility = ["//visibility:public"])
 
 # Visor's server as agent_protocol's driver and dispatcher (gRPC), started
-# by the binary that runs the server, on the Mac and Linux.
+# by the binary that runs the server, on the Mac and Linux. A wrapped
+# agent's MCP server is Visor's own (visor_mcp_bridge), answered here.
 swift_library(
     name = "visor_driver",
     srcs = glob(["Sources/*.swift"]),
@@ -17,6 +18,7 @@ swift_library(
         "@swiftpkg_agent_protocol//:AgentProtocol",
         "//libraries/claude_transcript",
         "//libraries/visor_agent",
+        "//libraries/visor_mcp_bridge",
         "//libraries/visor_protocol",
         "//libraries/visor_server",
         "//libraries/visor_system",

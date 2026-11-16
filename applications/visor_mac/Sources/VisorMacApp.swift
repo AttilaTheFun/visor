@@ -88,13 +88,16 @@ struct VisorMacApp: App {
     private static let agentProtocolPort = 7434
     private static var agentProtocolURL: String { "http://127.0.0.1:\(agentProtocolPort)" }
 
-    /// The server served, and the native runner pulling from it.
+    /// The server served, and the native runner pulling from it, with a
+    /// runner token of its own.
     private static func startAgentProtocol(_ agentProtocol: VisorDriver.Listening, serving server: VisorServer) {
         agentProtocol.serve(server)
         let url = agentProtocolURL
         let wrapper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/agent-wrapper").path
+        // Its own runner token, so it claims when runner tokens are required.
+        let name = Host.current().localizedName ?? "Mac"
         guard FileManager.default.isExecutableFile(atPath: wrapper),
-              let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: Host.current().localizedName ?? "Mac",
+              let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: name, token: agentProtocol.runnerToken(for: name),
                                         log: { VisorDriver.log($0) }) else { return }
         Task { await runner.run() }
     }

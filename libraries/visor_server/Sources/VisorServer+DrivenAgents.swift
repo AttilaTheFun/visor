@@ -37,6 +37,7 @@ extension VisorServer {
         move.title = record.info.title
         move.model = record.info.model ?? ""
         move.effort = record.info.effort ?? ""
+        move.skipPermissions = record.info.skipPermissions
         if case .failure(let refusal) = jobs.queueResume(move) {
             Self.log("\(why) \(record.info.title) (\(record.info.id)) on a runner: \(refusal.reason)")
             return refuseDriven(record, "No runner could be asked to carry it on: \(refusal.reason)")

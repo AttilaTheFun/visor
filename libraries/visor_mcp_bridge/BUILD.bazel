@@ -13,6 +13,8 @@ swift_library(
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "VisorMCPBridge",
+    # Its bridge is VisorDriver's too (a wrapped agent's MCP): `package`.
+    package_name = "visor",
     deps = [
         "//:foundation",
         "//libraries/visor_protocol",

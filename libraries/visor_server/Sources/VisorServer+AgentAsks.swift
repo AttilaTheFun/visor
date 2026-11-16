@@ -30,6 +30,14 @@ extension VisorServer {
         guard let caller = agentSession(envelope.client, presenting: envelope.token) else {
             return reply(agentReply(envelope))
         }
+        answerAgent(envelope, caller: caller, reply: reply)
+    }
+
+    /// The same ask, from `caller`, already known to be the session asking:
+    /// by its agent's token (above), or by its driver, which knows a
+    /// runner's agent by its job's token (VisorServer+DrivenAsks). The
+    /// envelope's own `token` and `client` aren't looked at.
+    func answerAgent(_ envelope: Envelope, caller: SessionRecord, reply: @escaping (Envelope) -> Void) {
         // Visor's MCP server since 0.47 says so with every ask: this
         // session's agent has read_inbox, so messages go to its inbox.
         if envelope.version == "mail", !caller.takesMail { caller.takesMail = true }
@@ -44,13 +52,13 @@ extension VisorServer {
             let relayed = envelope.messageID.map { relayOutbox[$0] != nil } ?? false
             reply(relayed ? relayStatus(envelope) : mailStatus(envelope, caller: caller) ?? relayStatus(envelope))
         case "mcp_tools", "mcp_call": Task { reply(await answerProxied(envelope, caller: caller)) }
-        default: reply(agentReply(envelope))
+        default: reply(agentReply(envelope, caller: caller))
         }
     }
 
     /// The other sessions here, then each reported server's.
     private func listSessions(for envelope: Envelope, caller: SessionRecord) -> Envelope {
-        var reply = agentReply(envelope)
+        var reply = agentReply(envelope, caller: caller)
         let here = reply.text ?? ""
         let running = Self.version.isEmpty ? "" : ", Visor Server \(Self.version)"
         var sections = ["On this computer, \(hostName) (server \(id)\(running)):\n" + (here == "No other sessions." ? "No other sessions." : here)]
@@ -84,7 +92,7 @@ extension VisorServer {
             ask.session = String(target[target.index(after: slash)...])
         }
         switch destination(of: ask, caller: caller) {
-        case .here: reply(agentReply(ask))
+        case .here: reply(agentReply(ask, caller: caller))
         case .there(let server, let session): relay(ask, from: caller, to: server, session, reply: reply)
         case .nowhere(let problem): reply(agentError(problem, to: ask))
         }

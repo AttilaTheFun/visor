@@ -166,6 +166,7 @@ extension VisorServer {
         case ("POST", 1, "quit"): restQuit(call)
         case ("POST", 1, "sessions"): restStartSession(call)
         case ("POST", 1, "jobs"): restQueueJob(call)
+        case (_, 2...3, "runners") where parts[1] == "tokens": restRunnerTokens(call)
         case ("DELETE", 2, "sessions"): restEndSession(call)
         case ("POST", 3, "sessions"): restSessionAction(call)
         default: HTTPResponse(404, "{\"error\":\"not found\"}")

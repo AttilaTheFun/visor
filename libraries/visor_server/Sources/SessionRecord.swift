@@ -131,6 +131,13 @@ public final class SessionRecord {
     /// with the session (sessions.json) while it is driven; only moveBack
     /// clears it.
     package var move: AgentJobMove?
+    /// Whether a driven session's agent runs in a container (its job asks
+    /// for one, or a container runner took it: VisorDriver's
+    /// JobQueue.runsInContainer), as its driver says when its wrapper
+    /// connects; until then, taken to. Such a session gets Visor's own MCP
+    /// tools alone, never the servers this computer passes on
+    /// (answerProxied). One on Visor's own native runner gets them.
+    package var runsInContainer = true
 
     var mailbox = Mailbox() {
         didSet {

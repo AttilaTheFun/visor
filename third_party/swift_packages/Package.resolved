@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/agent_protocol.git",
       "state" : {
-        "revision" : "90ceb24a8d22757aa94f7bee78e0f2dbdb436ea0",
-        "version" : "0.2.0"
+        "revision" : "9a6d5d11c08ef90c7aa2745b826f8ea083908865",
+        "version" : "0.4.0"
       }
     },
     {

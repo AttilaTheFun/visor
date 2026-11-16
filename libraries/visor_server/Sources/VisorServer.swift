@@ -44,7 +44,7 @@ public final class VisorServer {
 
     /// Where the password is kept: the system's place for secrets (the
     /// platform's); tests swap in their own.
-    static var secrets: any SecretStore = ServerPlatform.current.secrets
+    package static var secrets: any SecretStore = ServerPlatform.current.secrets
 
     /// How the server is reached (ServerSettings): kept as set, and
     /// listened by again when how it listens changes.
@@ -147,6 +147,9 @@ public final class VisorServer {
     /// the secrets from launch to launch, since an agent under its host
     /// outlives the server that started it.
     var sessionAgentTokens: [String: String]
+    /// The runners' own tokens, which agent_protocol's Claim asks
+    /// (RunnerTokens): kept with the secrets.
+    package let runnerTokens: RunnerTokens
 
     /// Sessions this launch was asked to bring back into a running state:
     /// they were mid-turn when the app went away, and were named on the
@@ -158,6 +161,7 @@ public final class VisorServer {
         password = Self.keptPassword()
         sharedAgentToken = Self.keptSharedAgentToken()
         sessionAgentTokens = Self.keptSessionAgentTokens()
+        runnerTokens = RunnerTokens(secrets: Self.secrets)
         Self.forgetRetiredSecrets()
         applyAgentDetaching()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }

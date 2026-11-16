@@ -73,12 +73,21 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// `<pushProxy>/apns/…`. Empty for none. Its
     /// token for this server is a secret (`VisorServer.pushProxyTokenKey`).
     public var pushProxy = ""
+    /// Whether agent_protocol's Claim must show its runner's token
+    /// (RunnerTokens; `PUT /api/runners/tokens {required}`). Off until the
+    /// runners that claim here send one: off, a claim with none is let in
+    /// (and logged once per runner); a wrong one is refused either way.
+    // TODO(2026-11-16): switch `runnerTokensRequired` on as soon as
+    // Shireworks' runner (shireworks#452) sends runner tokens. Until then,
+    // anything reaching the gRPC port can claim a waiting job and read its
+    // session's transcript and MCP.
+    public var runnerTokensRequired = false
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             frontPaths, clientsKeepMessages, detachAgents, mcpEndpoints, pushProxy
+             frontPaths, clientsKeepMessages, detachAgents, mcpEndpoints, pushProxy, runnerTokensRequired
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -97,6 +106,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         try c.encode(detachAgents, forKey: .detachAgents)
         if !mcpEndpoints.isEmpty { try c.encode(mcpEndpoints, forKey: .mcpEndpoints) }
         if !pushProxy.isEmpty { try c.encode(pushProxy, forKey: .pushProxy) }
+        if runnerTokensRequired { try c.encode(runnerTokensRequired, forKey: .runnerTokensRequired) }
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -128,6 +138,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         detachAgents = try c.decodeIfPresent(Bool.self, forKey: .detachAgents) ?? true
         mcpEndpoints = try c.decodeIfPresent([MCPEndpoint].self, forKey: .mcpEndpoints) ?? []
         pushProxy = try c.decodeIfPresent(String.self, forKey: .pushProxy) ?? ""
+        runnerTokensRequired = try c.decodeIfPresent(Bool.self, forKey: .runnerTokensRequired) ?? false
     }
 
     public func keep(at url: URL) {

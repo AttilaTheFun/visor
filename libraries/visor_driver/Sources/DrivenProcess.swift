@@ -3,7 +3,10 @@
 // What the session sends goes down it (held while no wrapper is connected,
 // and sent when one is); what the wrapper says comes up as the events a
 // harness here would give, its rows as `.rows`. One per session, kept
-// across the wrapper's reconnections.
+// across the wrapper's reconnections. Its permission prompts (the agent's
+// `mcp__visor__approve`, asked by its wrapper as WrapperMessage.approval)
+// are the session's pending approval, as a prompt here is, and the
+// person's answer goes back as DriverMessage.approval.
 
 import AgentProtocol
 import Foundation
@@ -28,6 +31,14 @@ final class DrivenProcess: AgentProcess {
     private var held: [AgentProtocol_V1_DriverMessage] = []
     /// What the wrapper last said it was doing: each change told once.
     private var last = AgentProtocol_V1_EphemeralState()
+    /// The permission prompts shown and not yet answered, by id: what each
+    /// asked (an AskUserQuestion's input takes its answers).
+    private var asking: [String: AgentProtocol_V1_ApprovalRequest] = [:]
+    /// The latest answers given, by id: a prompt asked again (its answer
+    /// lost with a connection) is answered again, not shown twice.
+    private var answered: [(id: String, approval: AgentProtocol_V1_Approval)] = []
+    /// How many answers are kept for that.
+    static let answersKept = 32
 
     init() {
         (events, continuation) = AsyncStream.makeStream()
@@ -60,14 +71,29 @@ final class DrivenProcess: AgentProcess {
         return id
     }
 
-    /// The connection `id` ended: sent nothing more until the next.
+    /// The connection `id` ended: sent nothing more until the next. Its
+    /// prompts go with it: a wrapper that dials again asks those still
+    /// waiting again.
     func detach(_ id: UUID) {
         guard down?.id == id else { return }
         down = nil
+        for prompt in asking.keys.sorted() { continuation.yield(.withdrawn(prompt)) }
+        asking = [:]
         if last.busy {
             last.busy = false
             continuation.yield(.busy(false))
         }
+    }
+
+    /// The person's answer to a prompt the wrapper asked: down to it (or
+    /// held for its next connection). False for one it didn't ask.
+    func decide(_ request: String, allow: Bool, answers: [String: String]?) -> Bool {
+        guard let asked = asking.removeValue(forKey: request) else { return false }
+        let approval = Self.approval(of: asked, allow: allow, answers: answers)
+        answered.append((request, approval))
+        if answered.count > Self.answersKept { answered.removeFirst(answered.count - Self.answersKept) }
+        deliver(.with { $0.approval = approval })
+        return true
     }
 
     /// One thing the wrapper said.
@@ -80,9 +106,28 @@ final class DrivenProcess: AgentProcess {
         case .ended(let why):
             tell(.init())
             continuation.yield(.failure("The agent ended: \(why)."))
-        case .hello, .approval, .sessionID, .none:
+        case .approval(let request):
+            ask(request)
+        case .approvalWithdrawn(let id):
+            guard asking.removeValue(forKey: id) != nil else { return }
+            continuation.yield(.withdrawn(id))
+        case .hello, .sessionID, .mcp, .none:
+            // The MCP requests are the connection's (DrivenMCP).
             break
         }
+    }
+
+    /// A permission prompt: shown once, however often it is asked; one
+    /// answered already, answered again.
+    private func ask(_ request: AgentProtocol_V1_ApprovalRequest) {
+        guard !request.id.isEmpty else { return }
+        if let given = answered.last(where: { $0.id == request.id }) {
+            deliver(.with { $0.approval = given.approval })
+            return
+        }
+        guard asking[request.id] == nil else { return }
+        asking[request.id] = request
+        continuation.yield(.question(Self.prompt(request)))
     }
 
     private func deliver(_ message: AgentProtocol_V1_DriverMessage) {
