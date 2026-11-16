@@ -85,12 +85,34 @@ it only where its owner's own shell sets it.
   the log says so: admin REST takes only the password and the socket file.
   A new one is a relaunch with it; `visor-server admin-token generate`
   prints a fresh one and keeps nothing.
-- **Its limit:** where agents run as the server's own user, they can read
-  the signing keys (in the secrets file on Linux), forging sessions'
-  tokens, and the server's environment through /proc. The admin token
-  protects against containers, the network and other devices, not against
-  a native agent of the same user; running the server as a user of its own
-  is optional hardening.
+- **`hello` tokens:** `GET /api/hello` answers a token for the socket's
+  login that lasts as long as the server runs (it is a REST credential
+  too). Those handed out to a request the admin token let in (or one of
+  those tokens) go when the admin token is rotated or reset, so the old
+  token's holder keeps no way in through them; those the password led to
+  stay.
+- **The command-line server's environment:** it unsets `VISOR_ADMIN_TOKEN`
+  from its own environment as soon as it has read it, so nothing it starts
+  (an agent's host, git, a tool) inherits it; a relaunch (an update) is
+  given it back for its start alone. On Linux, `/proc/<server>/environ`
+  still shows the environment it was started with, to its own user:
+  `unsetenv` changes only the C library's copy (agent_protocol#13 is the
+  same finding for the wrapper's `AGENT_TOKEN`). `--admin-token-file`
+  keeps it out of the environment altogether.
+- **The menu bar's Copy:** the token shown once can be copied; it is
+  marked concealed (`org.nspasteboard.ConcealedType`) so clipboard
+  managers that honour that don't keep it, but it is on the pasteboard,
+  for any process of the user's to read, until something else is copied.
+- **Its limit:** where agents run as the server's own user (every native
+  session's agent shares Logan's uid), they can read the signing keys (in
+  the secrets file on Linux), forging sessions' tokens; any other
+  session's token file (mode 600 is the same user's); the server's
+  environment through /proc on Linux; and they can reach the trusted
+  socket file, which is the full admin REST side: `POST /api/admin-token`
+  while there is none, key rotation, everything. The admin token protects
+  against containers, the network and other devices, not against a native
+  agent of the same user; running the server as a user of its own is
+  optional hardening.
 
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
@@ -149,8 +171,8 @@ under `/api`.
 | `GET /admin-token` | | `exists`: whether there is an admin token; `holding`: `kept` (with the secrets: the menu bar app's) or `givenAtLaunch` (the command-line server's, in memory). Never the token. |
 | `POST /admin-token` | | 201 `token`: the first admin token, shown this once; only where it is `kept` and there is none (409 otherwise, saying why). |
 | `POST /admin-token/rotate` | (the current admin token as the bearer) | `token`: its replacement, shown this once; the old one stops working at once. 403 when the bearer isn't the current one (the password and the socket file don't rotate it); 409 where it is given at launch. |
-| `GET /keys` | | `current`: the signing key's id (`kid`) agents' tokens are signed with now; `kids`: every key held (the current one, and those rotated out less than a day ago). Never the keys. |
-| `POST /keys/rotate` | `dropPrevious`? | as `GET /keys`, with a new current key; the one before is kept a day, as long as the tokens it signed last. `dropPrevious: true` (an emergency) drops every other key at once, and every token signed with one: only on the command-line server (`visor-server keys rotate --drop-previous`); the menu bar app answers 403, its menu's Emergency Key Rotation… being the only way. Native sessions' token files are re-minted at once; after an emergency, each runner's agent is restarted on a new job. Never the admin token. |
+| `GET /keys` | | `current`: the signing key's id (`kid`) agents' tokens are signed with now; `kids`: the keys that verify every token they signed (the current one, and those rotated out less than a day ago); `grace`: those rotated out a day to two days ago, which verify only a runner's Renew and Release (Agents' tokens, below); `problem`: why the kept keys can't be used, while they can't. Never the keys. |
+| `POST /keys/rotate` | `dropPrevious`? | as `GET /keys`, with a new current key; the one before is kept a day, as long as the tokens it signed last, then a day more for a runner's Renew and Release alone. 503 while the kept keys can't be read, but for an emergency rotation, which replaces them. `dropPrevious: true` (an emergency) drops every other key at once, and every token signed with one: only on the command-line server (`visor-server keys rotate --drop-previous`); the menu bar app answers 403, its menu's Emergency Key Rotation… being the only way. Native sessions' token files are re-minted at once; after an emergency, each runner's agent is restarted on a new job. Never the admin token. |
 | `GET /runners/tokens` | | `required`: whether agent_protocol's `Claim` must show its runner's token (the `runnerTokensRequired` setting; off unless turned on), and `runners`: each `runner` name with a token, when it was `created`, and `own: true` for this server's own native runner's (held in memory, new each start). Never the tokens. |
 | `POST /runners/tokens` | `runner`: the name its claims say (`container@mini`; no slash) | `runner`, `token` (shown this once: kept with the server's secrets), `created`, `replaced` (it had one, which no longer works). The runner shows it on `Claim` as `authorization: Bearer <token>`, with its `runner` field the same name (docs/runners.md). |
 | `PUT /runners/tokens` | `required` (true or false) | as `GET /runners/tokens`: on, a `Claim` with no runner token is refused (UNAUTHENTICATED); off, it is let in and logged once per runner. A token that isn't a runner's, or is another runner's, is refused either way. |
@@ -379,8 +401,15 @@ with the server's signing keys alone, no table of tokens kept.
   envelope's own `client` (an `agent` ask) or `session` (an
   `approval_request`) must be the token's `sub`.
 - **A session's:** lasts a day. The server writes it to
-  `<Visor's data>/hosts/<session>/token` (the folder 700, the file 600),
-  re-minted every hour, and the agent is given the path as
+  `<Visor's data>/hosts/<name>/token` (the folder 700, the file 600),
+  where `<name>` is the session's id when that is 1 to 64 letters,
+  digits, `-` and `_` (every UUID), and otherwise `+` and 32 hex digits of
+  its SHA-256: a client's id of `.`, `..`, empty or holding a `/` never
+  names `hosts/` itself, anything outside it, or another session's folder.
+  Nothing is written or removed unless its path is strictly inside
+  `hosts/`; removing it removes the `token` file alone, then its folder
+  only if nothing else is in it. A failed write leaves no staged
+  `token.*.new` behind. It is re-minted every hour, and the agent is given the path as
   `VISOR_TOKEN_FILE`; `visor-agent-host mcp` (and the Node script on
   Windows) reads it on each call, taking `VISOR_TOKEN` (the token as the
   agent started) only where there is no file. Codex's `-c` overrides carry
@@ -389,13 +418,23 @@ with the server's signing keys alone, no table of tokens kept.
 - **A runner's agent's:** `Job.token`, lasting an hour, minted when its
   job is queued and again when it is claimed, and sent fresh over its
   driver stream (`DriverMessage.token`) a sixth of its life before each
-  ends (ten minutes of an hour); docs/runners.md.
+  ends (ten minutes of an hour); docs/runners.md. Past its `exp` it is
+  taken only by the dispatcher, only on its runner's `Renew` and its
+  `Released` report, and only for a day after (`expiredTokenGrace`), a
+  stopgap until runners read agent_protocol's `RenewResponse.token`.
 - **Signing keys:** random 32-byte keys, each named by a `kid`, kept with
   the server's secrets (the keychain on a Mac, the secrets file elsewhere)
   as one set with a current key. Rotating (`visor-server keys rotate`,
   `POST /keys/rotate`, the menu's Rotate Signing Keys) makes a new current
   key and keeps the one before for a day, the longest a token it signed
-  lasts, then drops it. An emergency rotation (`--drop-previous`, the
+  lasts; then, for the grace a day more, it verifies only a runner's
+  `Renew` and `Released` report (as an expired token is taken), so an
+  ordinary rotation never ends a long job sooner than its token's own end
+  would; then it is dropped. A key is never signed with once it isn't
+  current. Keys are made only when the secrets hold none: kept keys that
+  can't be read (the keychain refused) or decoded are never written over;
+  nothing is minted, and the log says why, until they read again or an
+  emergency rotation replaces them. An emergency rotation (`--drop-previous`, the
   menu's Emergency Key Rotation… on a Mac) drops every other key at once:
   every session's and runner's agent's token is refused from then on,
   native sessions are given new ones in their files, and runners' agents
@@ -406,10 +445,25 @@ with the server's signing keys alone, no table of tokens kept.
   and each session's random token of 0.60 and 0.61. Its host's record
   (`sessions.json`) says which it holds. A restarted agent holds a JWT.
 - **What they don't separate:** every native agent runs as the same Unix
-  user, which can read the signing keys (on Linux, the secrets file) and
-  the others' environments, so a native agent that sets out to forge
-  another session's token can. The tokens keep sessions apart by name,
-  and containers, other devices and the network apart for real.
+  user (Logan's), which can read the signing keys (on Linux, the secrets
+  file), every other session's token file (600 is that same user's), the
+  others' environments, and on Linux the server's own through
+  `/proc/<server>/environ`; and which can reach the server's trusted
+  socket file, the full admin REST side (`POST /api/admin-token` while
+  there is none, key rotation, everything). So a native agent that sets
+  out to act as another session, or as the admin, can. The tokens keep
+  sessions apart by name, and containers, other devices and the network
+  apart for real.
+- **What isn't checked yet:** `jti` and `iat` are carried but not
+  checked, and there is no denylist: a token is good until its `exp`
+  whatever happened since, so a session archived and then unarchived takes
+  its old tokens again until they end. `scope` is checked, but every
+  token of an audience is granted every scope of it today, so scopes
+  separate audiences and restrict nothing within one yet. A runner's
+  agent's token is taken while its job is held even when its session isn't
+  known to the server (`liveSession` answers nil: a job whose wrapper
+  hasn't dialled in yet, or a queue without a server); a session that ends
+  takes its jobs, and so its tokens, with it.
 
 ## Sessions messaging each other
 

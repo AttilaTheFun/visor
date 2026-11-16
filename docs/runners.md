@@ -178,15 +178,26 @@ agent_protocol#9, #10 and #12.
   - **Expired:** a wrapper that dials back in with a token past its `exp`
     (away longer than an hour) is refused, and its session, if that agent
     still carries it on, is carried on by a new job with a fresh token, as
-    Restart Agent does (`resumeDriven`, #437's path). The dispatcher takes
-    a `Renew` or a `Report` past the token's `exp` while the agent's job is
-    held: a runner shows the token its claim gave it, and agent_protocol
-    has no way to give a runner a fresher one. (Follow-up for
-    agent_protocol: a fresh token in `RenewResponse`, or the runner taking
-    its wrapper's. Until then, a job that runs more than a day past a key
-    rotation has its runner's renewals refused once the key it was
-    claimed with is dropped; its claim then lapses and its job is queued
-    again.)
+    Restart Agent does (`resumeDriven`, #437's path): only while no wrapper
+    of that agent is connected (one that is means the expired token is
+    someone else's copy: refused, nothing restarted), and once per session
+    in ten minutes at most. The wrapper's own reports (`Started`,
+    `Progress`, `Blocked`, `Completed`, `Failed`) must show a live token:
+    its stream keeps it fresh. Only the runner's `Renew` and its `Released`
+    report are taken past the token's `exp`, and only for a day after it
+    (`AgentTokens.expiredTokenGrace`): a runner shows the token its claim
+    gave it until it reads agent_protocol's `RenewResponse.token`. A token
+    signed by a key an ordinary rotation retired more than a day ago is
+    taken the same way, within the same window, so a rotation doesn't end
+    a long job sooner than its token would; an emergency rotation's
+    dropped keys are refused outright. Past the window, a `Renew` is
+    answered with no claim (as a gone job's is: the runner ends its agent),
+    a `Released` is refused, the claim lapses, and the job is given out
+    again with a fresh token. So a job on a runner that doesn't yet read
+    `RenewResponse.token` runs at most about a day and an hour on one
+    claim. The window is a stopgap: the real fix is agent_protocol's fresh
+    token in `RenewResponse` (being added), which the runner shows from
+    then on; once Shireworks' runner uses it, the window goes.
   - **Gone with its job:** when its session ends, its move fails or is
     given up, or its agent is stopped (`stopJobs`), its token is no longer
     taken: its runner's renewal is told the claim isn't its own (so the
