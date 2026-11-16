@@ -55,7 +55,9 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
         case .subPage:
             return screen.texts.contains { $0 == "Side Questions" || $0.hasPrefix("Fork of") || $0.hasPrefix("Branch of") }
         case .settings: return screen.has(id: "settings-appearance")
-        case .computer: return screen.has(id: "relay-toggle") || screen.has(id: "share-log")
+        // Or its "Network paths": on the iPhone the page is taller than the
+        // screen, and the driver lists what is on it.
+        case .computer: return screen.has(id: "relay-toggle") || screen.has(id: "share-log") || screen.texts.contains("Network paths")
         }
     }
 

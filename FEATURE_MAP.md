@@ -11,12 +11,14 @@ iPad and Mac, Isomer's on Android and the web.
 How to read it:
 
 - **Arrows** are driver commands: `tap <target>`, `type <target> <text>`,
-  `set`, `select`, `back`, `dismiss`, `wait <text>`. A target is an
+  `set`, `select`, `longpress <target>` (a context menu, its items then
+  the screen's buttons), `swipe <row> left|right` (a row's swipe actions),
+  `back`, `dismiss`, `wait <text>`, `scene background|active` (leaving the
+  app and coming back). A target is an
   accessibility identifier (written as is, e.g. `add-computer`) or a
   label (in quotes, e.g. `"Send"`; “curly” in the diagram).
-- **Dotted arrows** are steps a person can take that the driver can't
-  yet (a context menu or a swipe action: the protocol has no long press),
-  or that happen by themselves (a question arriving).
+- **Dotted arrows** are steps that happen by themselves (a question
+  arriving), not commands.
 - `‹id›`, `‹name›`, `‹option›`, `‹file›` stand for a session's id, a
   computer's name, an answer's label and an attachment's file name.
 - Leaving any sheet is `dismiss` (or its Done/Cancel); leaving a pushed
@@ -63,10 +65,10 @@ flowchart TD
     Sessions -->|"tap session-‹id›"| Chat
     Sessions -->|"tap archived-‹name›"| Archived
     Sessions -->|"tap settings"| Settings
-    Sessions -.->|"context menu: Project Settings"| Project
-    Sessions -.->|"context menu: Migrate…"| Migrate
+    Sessions -->|"longpress session-‹id›, tap “Project Settings”"| Project
+    Sessions -->|"longpress session-‹id›, tap “Migrate…”"| Migrate
     Search -->|"tap session-‹id› or message-hit"| Chat
-    Archived -.->|"swipe: Unarchive"| Sessions
+    Archived -->|"swipe archived-session-‹id› left, “Unarchive”"| Sessions
 
     AddComputer -->|"type host, type password, tap connect"| Sessions
     AddComputer -->|"tap runner"| Runner
@@ -86,6 +88,7 @@ flowchart TD
     Question -->|"tap approval-‹option›, tap question-send"| Chat
     Chat -.->|"the agent asks for Claude's sign-in"| SignInCode
     SignInCode -->|"tap sign-in-send or tap sign-in-cancel"| Chat
+    Chat -->|"scene background, then active (the code still awaited)"| SignInCode
     Chat -->|"tap “Made N tool calls”"| ToolCalls
     Chat -->|"tap attachment-‹file›"| Preview
     Chat -->|"type /fork, /branch or /btw, tap “Send”"| SubPage
@@ -165,8 +168,8 @@ only opens the app.
 
 The protocol is Isomer's `isomer.wire.Command` / `Answer`
 (isomer `shared/wire/headless.proto`): `cmd` is one of `ls`, `info`,
-`inspect`, `tap`, `type`, `set`, `select`, `swipe`, `back`, `dismiss`,
-`wait`, `quit`, and every answer carries the settled `Screen` (its
+`inspect`, `tap`, `type`, `set`, `select`, `swipe`, `longpress`, `back`,
+`dismiss`, `scene`, `wait`, `quit`, and every answer carries the settled `Screen` (its
 `texts`, its `elements` with `role`, `label`, `id`, `value`, and what's
 `presented`). A `target` is matched, in order, as a screen name
 (`button-3`), an element's `id` (its `accessibilityIdentifier`), a label
@@ -177,8 +180,9 @@ written above where there's no identifier.
 The suite that walks this map is `//tests/feature_map_tests`
 (`bazel test --config=headless //tests/feature_map_tests/...`, in a
 Linux container, nothing drawn): every node is reached and checked as in
-the table, and every solid arrow is taken; the dotted ones are disabled
-tests that say why. It drives the headless client,
+the table, and every solid arrow is taken, except where the fixture
+hasn't what it needs (Archived Sessions, Migrate, All Models, a fork):
+those, and the dotted ones, are disabled tests that say why. It drives the headless client,
 `//applications/visor_headless` (`VisorRootView` on Isomer's headless
 host, offline, its settings from the environment). docs/DEVELOPMENT.md,
 "Driving the client", has the whole recipe.

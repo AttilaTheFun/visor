@@ -9,7 +9,7 @@ import Testing
 extension FeatureMapTests {
     @Suite("Not driven yet")
     struct Gaps {
-        @Test("Sessions ⇢ Migrate sheet: longpress session-‹id›, “Migrate…”",
+        @Test("Sessions → Migrate sheet: longpress session-‹id›, “Migrate…”",
               .disabled("the context menu opens (Sessions' projectSettings takes it), but it offers Migrate… only with a second connected computer that migrates: the fixture has one, whose computer doesn't migrate"))
         func migrate() {}
 
@@ -17,7 +17,7 @@ extension FeatureMapTests {
               .disabled("the fixture has no archived session, and its computer doesn't answer Session details' Archive or a row's swipe “Archive” (the row stays): no archived-‹name› row to tap"))
         func archived() {}
 
-        @Test("Archived Sessions ⇢ Sessions: swipe “Unarchive”",
+        @Test("Archived Sessions → Sessions: swipe “Unarchive”",
               .disabled("the driver's swipe takes a row's swipe actions now (swipe <row> left, “Unarchive”), but Archived Sessions isn't reached (above)"))
         func unarchive() {}
 
