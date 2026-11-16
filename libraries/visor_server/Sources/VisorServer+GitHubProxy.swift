@@ -42,7 +42,7 @@ extension VisorServer {
     /// with an agent's token: an agent that could move the proxy could read
     /// every other session's traffic to GitHub.
     func restSetGitHubProxy(_ call: RESTCall) -> HTTPResponse {
-        if !call.request.trusted, call.request.authorization == agentToken {
+        if !call.request.trusted, isAgentToken(call.request.authorization) {
             return HTTPResponse(403, Envelope.error("An agent can't set this computer's GitHub proxy.").encoded())
         }
         guard let body = parseJSON(call.request.body), let url = body["url"].string else {

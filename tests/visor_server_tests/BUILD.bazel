@@ -50,6 +50,7 @@ swift_test(
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         "//:foundation",
+        "//libraries/agent_host_wire",
         "//libraries/claude_transcript",
         "//libraries/message_cache",
         "//libraries/visor_agent",
