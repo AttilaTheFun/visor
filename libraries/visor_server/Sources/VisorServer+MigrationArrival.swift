@@ -52,7 +52,6 @@ extension VisorServer {
             return .error("\(own.path) \(problem): commit and push it, then move the session again. "
                 + "Repositories here are cloned from GitHub, never copied.")
         }
-        let most = offer.projects.dropFirst().map(\.mentions).max() ?? 0
         var steps: [MigrationStep] = []
         for (index, project) in offer.projects.enumerated() {
             // A project with no place here (outside what a container's
@@ -69,7 +68,7 @@ extension VisorServer {
             // The session's own folder always; the others it works in
             // most, unless the user says not.
             step.chosen = (index == 0 && (folders == nil || project.isRepository)) || step.action == .present
-                || (project.mentions >= 3 && project.mentions * 10 >= most)
+                || Self.namedOften(project, among: offer.projects)
             steps.append(step)
         }
         let id = UUID().uuidString.lowercased()
@@ -80,6 +79,15 @@ extension VisorServer {
         var e = Envelope(type: "migration")
         e.plan = plan
         return e
+    }
+
+    /// Whether a project other than the session's own is one the
+    /// conversation works in often enough to be ticked for the user (and
+    /// put back by a restore): named three times or more, and at least a
+    /// tenth as often as the one it names most.
+    static func namedOften(_ project: MigrationProject, among projects: [MigrationProject]) -> Bool {
+        let most = projects.dropFirst().map(\.mentions).max() ?? 0
+        return project.mentions >= 3 && project.mentions * 10 >= most
     }
 
     /// A project as it will be here.
@@ -160,7 +168,9 @@ extension VisorServer {
         guard !FileManager.default.fileExists(atPath: planned.path) else { return .error("\(planned.path) is here already.") }
         try? FileManager.default.createDirectory(at: URL(fileURLWithPath: planned.path).deletingLastPathComponent(), withIntermediateDirectories: true)
         let git = ToolPath.resolve("git") ?? "/usr/bin/git"
-        var arguments = ["clone"]
+        // Never hard links into the remote's objects, for a remote on this
+        // disk: the clone is walked below, and its files are its own.
+        var arguments = ["clone", "--no-hardlinks"]
         if let branch = project.branch { arguments += ["--branch", branch] }
         arguments.append("--")
         // Into the sources, GitHub over HTTPS (the proxy's way, with no SSH
@@ -170,8 +180,15 @@ extension VisorServer {
             return .error("git could not be started")
         }
         guard result.status == 0 else {
-            try? FileManager.default.removeItem(atPath: planned.path)
+            Self.removeTree(URL(fileURLWithPath: planned.path, isDirectory: true))
             return .error("Could not clone \(remote): \(result.text.trimmingCharacters(in: .whitespacesAndNewlines))")
+        }
+        // A repository can check out links too (to /Users/…, or up and
+        // out): the clone is walked as an archive is, and goes again when
+        // it holds what an archive may not.
+        if let problem = Self.unsafeTree(URL(fileURLWithPath: planned.path, isDirectory: true)) {
+            Self.removeTree(URL(fileURLWithPath: planned.path, isDirectory: true))
+            return .error("Could not clone \(remote): \(problem). The clone was removed.")
         }
         return Envelope(type: "migration")
     }
@@ -229,23 +246,42 @@ extension VisorServer {
             }
         }
         let files = FileManager.default
-        let chosen = Set((body.steps ?? []).map(\.path))
-        for step in plan.steps where step.action == .create && chosen.contains(step.path) {
-            try? files.createDirectory(atPath: step.path, withIntermediateDirectories: true)
-        }
-        try? files.createDirectory(atPath: plan.cwd, withIntermediateDirectories: true)
+        // Where each file goes, all of them known before anything is made.
         // A packed folder first: unpacked whole or not at all, so one that
         // is refused leaves the conversation's file where it was carried.
+        var placed: [(file: MigrationFile, carried: URL, destination: URL, there: URL?)] = []
         for file in offer.files.filter(\.packed) + offer.files.filter({ !$0.packed }) where !file.place.isEmpty {
             guard let carried = Self.carried(file.id, in: move.folder) else { return .error("“\(file.id)” is not a name a move's file has.") }
             guard Self.fileSize(carried) == file.size else { return .error("Not all of the conversation was carried here; start the move again.") }
             guard let destination = SessionCatalog.destination(of: file.place, agent: offer.session.agent, cwd: plan.cwd, resume: offer.resumeID) else {
                 return .error("Nowhere to put \(file.place)")
             }
+            placed.append((file, carried, destination, Self.alreadyHere(file, at: destination, agent: offer.session.agent, resume: offer.resumeID)))
+        }
+        if let problem = Self.notComingBack(placed.map { ($0.file, $0.carried, $0.there) }) { return .error("The move was refused: \(problem).") }
+        let chosen = Set((body.steps ?? []).map(\.path))
+        for step in plan.steps where step.action == .create && chosen.contains(step.path) {
+            try? files.createDirectory(atPath: step.path, withIntermediateDirectories: true)
+        }
+        try? files.createDirectory(atPath: plan.cwd, withIntermediateDirectories: true)
+        let stamp = Self.backupStamp(Date())
+        for (file, carried, destination, there) in placed {
             try? files.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // The same conversation come back: its log here, the start of
+            // the one carried, is replaced; anything else set aside.
+            var aside: (from: URL, to: URL)?
+            if let there, file.packed || there != destination || !Self.isPrefix(there, of: carried) {
+                let to = there.deletingLastPathComponent().appendingPathComponent(there.lastPathComponent + ".before-move-" + stamp, isDirectory: false)
+                do { try files.moveItem(at: there, to: to) } catch {
+                    return .error("Could not set \(there.path) aside: \(error.localizedDescription)")
+                }
+                aside = (there, to)
+            }
             if file.packed {
-                // The folder by its own name alone, replacing what was there.
+                // The folder by its own name alone, where nothing is; what
+                // was set aside for it back again when it can't be.
                 if let problem = await Self.unpack(carried, into: destination.deletingLastPathComponent(), only: destination.lastPathComponent) {
+                    if let aside { try? files.moveItem(at: aside.to, to: aside.from) }
                     return .error("Could not put the conversation at \(destination.path): \(problem)")
                 }
             } else {
@@ -267,6 +303,32 @@ extension VisorServer {
         e.session = record.info.id
         e.sessions = sessions.map(\.info)
         return e
+    }
+
+    /// What is here already for a carried file that goes to
+    /// `destination`: what is there, or, for Codex's rollout, the thread's
+    /// rollout wherever Codex keeps it (it finds a thread by its id, not
+    /// by the day it began). Nil when nothing is.
+    static func alreadyHere(_ file: MigrationFile, at destination: URL, agent: AgentKind, resume: String) -> URL? {
+        if (try? FileManager.default.attributesOfItem(atPath: destination.path)) != nil { return destination }
+        guard agent == .codex, !file.packed else { return nil }
+        return SessionCatalog.codexRollout(id: resume)
+    }
+
+    /// Why a move's files can't go where something is already (`there`):
+    /// nil when nothing is, or when it is the same conversation coming back.
+    /// The same conversation is the same agent's under the same id (each
+    /// file's place here is made of both, so whatever is there is that
+    /// agent's for that id) whose every log (`.jsonl`) carried is here
+    /// already as the start of the one carried: it has only gone on since.
+    /// Then what is there is replaced or set aside; otherwise nothing is
+    /// put. Another conversation's id, or a conversation that went another
+    /// way here, is never written over.
+    static func notComingBack(_ files: [(file: MigrationFile, carried: URL, there: URL?)]) -> String? {
+        guard let taken = files.first(where: { $0.there != nil })?.there else { return nil }
+        let logs = files.filter { !$0.file.packed && ($0.file.place as NSString).pathExtension == "jsonl" }
+        let returning = !logs.isEmpty && logs.allSatisfy { log in log.there.map { isPrefix($0, of: log.carried) } == true }
+        return returning ? nil : "\(taken.path) is here already, and is not this conversation come back further along"
     }
 
     /// The session a move (or a backup) carried, started here as `id` in

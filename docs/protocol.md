@@ -207,7 +207,7 @@ under `/api`.
 | `POST /migration/finish` | `migration`, `steps` (those chosen), `cwd` (the folder the session runs in there, when the user chose one rather than the plan's: one of its projects, or another) | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here looks for them, the chosen folders made, and the session started resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from |
 | `POST /backups` | `sessionIDs` (else every session not archived), `projects` (also back up the projects a move would copy rather than clone), `path` (a folder of its own, else a new one under Visor's data folder's `backups`, by when it was made) | `backup`: its `path`, `created`, `from` (the computer's name), `size`, and its `sessions`, each with whether it was `kept` and its `outcome`. Each session's folder holds its offer (`offer.json`, as `POST /migration/offer` makes it) and its conversation's files, to their last whole line: one half of a move, written to a folder |
 | `GET /backups` | | `backups`: those under the data folder's `backups`, newest first |
-| `POST /backups/restore` | `path` (a backup's folder), `sessionIDs` (else all it kept) | `backup`, each session's `outcome` saying what was done, and `sessions`. The other half of a move, read from the folder: a project missing here is unpacked where it was (or the session's own folder made); a conversation file missing or shorter here is put back (a shorter one set aside as `.before-restore-<time>`, never removed), one as long or longer left as it is; a session gone from here is started again under its own id on the same conversation, told it was restored, and one still here is left as it is |
+| `POST /backups/restore` | `path` (a backup's folder), `sessionIDs` (else all it kept) | `backup`, each session's `outcome` saying what was done, and `sessions`. The other half of a move, read from the folder, and held to what a move takes: the offer as a plan checks it (and the session's own, by its id), and a project missing here unpacked where it was only when a move would tick it (the session's own, or one its conversation names often) and only where a move would unpack one (in the sources where they are kept apart, or the session's own folder there), its archive checked and walked as a move's is (or the session's own folder made); a conversation file missing or shorter here is put back (a shorter one set aside as `.before-restore-<time>`, never removed), one as long or longer left as it is; a session gone from here is started again under its own id on the same conversation, told it was restored, and one still here is left as it is |
 
 Moving a session (`SessionMigration` in the client): the client asks the
 session's server for an offer and the other for a plan, the user chooses
@@ -219,23 +219,36 @@ at any step is a 400 with an `error` envelope saying why.
 
 The offer is the other server's word, held to what a move takes
 (`VisorServer+MigrationContainment.swift`): a plan (and a restore, and the
-finish again) refuses an offer whose `resumeID` or file `id`s are not plain
-names (1 to 64 letters, digits, `-` and `_`, not starting with `-`; ids are
-unique), whose session `cwd` or project `path`s are not full paths with
-nothing to resolve (no `.`, `..` or empty part), or whose `place`s are not
-where the agent keeps that conversation (Claude's
-`projects/{project}/<resumeID>.jsonl` and the folder `<resumeID>` beside it,
-Codex's `sessions/…/…<resumeID>….jsonl`, OpenRouter's
-`sessions/<resumeID>.json` or `.jsonl`). `write` and `unpack` take a file
-`id` only as a plain name, kept in the move's own folder. Every archive (a
-project, the conversation's folder, Claude's memory, a backup's) is listed
-before anything is written and refused for an entry at an absolute path or
-through `..`, unpacked into a folder of its own inside where it goes
-(`--no-same-owner --no-same-permissions`), refused for a link that leads
-outside it, a hard link to a file outside it or anything but files, folders
-and links, and only then moved into place; the conversation's folder and the
-memory must hold that folder alone. A clone's remote and branch never start
-with `-`, and come after `--`.
+finish again) refuses an offer whose `resumeID` is not a UUID (as Claude
+Code, Codex and the openrouter CLI make a conversation's id, so never
+`memory` or `rollout`), whose file `id`s are not plain names (1 to 64
+letters, digits, `-` and `_`, not starting with `-`; ids are unique), whose
+session `cwd` or project `path`s are not full paths with nothing to resolve
+(no `.`, `..` or empty part), or whose `place`s are not where the agent
+keeps that conversation (Claude's `projects/{project}/<resumeID>.jsonl` and
+the folder `<resumeID>` beside it, Codex's
+`sessions/<year>/<month>/<day>/rollout-<stamp>-<resumeID>.jsonl` exactly,
+OpenRouter's `sessions/<resumeID>.json` or `.jsonl`). `write` and `unpack`
+take a file `id` only as a plain name, kept in the move's own folder. The
+finish writes over nothing but the same conversation come back: where a
+file of it is here already (for Codex, its thread's rollout anywhere under
+`sessions`), the move goes on only when every log carried (`.jsonl`) is
+here as the start of the one carried, the same agent's under the same id
+gone on since; then a log is replaced and anything else (the conversation's
+folder, OpenRouter's `.json`, a rollout of another day) set aside as
+`<name>.before-move-<time>`. Otherwise the move is refused before anything
+is made. Every archive (a project, the conversation's folder, Claude's
+memory, a backup's) is listed before anything is written and refused for an
+entry at an absolute path or through `..`, unpacked into a folder of its own
+inside where it goes (`--no-same-owner --no-same-permissions`), walked —
+each folder opened to its owner (`u+rwx`) before it is listed, and one that
+still can't be listed refused — and refused for a link that leads outside
+it (an absolute one always), a hard link to a file outside it or anything
+but files, folders and links (a device, a fifo), and only then moved into
+place; the conversation's folder and the memory must hold that folder
+alone, and never take the place of one there. A clone's remote and branch
+never start with `-`, and come after `--`; it is made with `--no-hardlinks`
+and walked as an archive is, and removed again when the walk refuses it.
 
 A client asks `GET /sessions` once a minute as the backup for the socket:
 the list is taken as a `sessions` broadcast would be, and an answer while

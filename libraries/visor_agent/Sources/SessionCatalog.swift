@@ -289,11 +289,13 @@ package enum SessionCatalog {
         return TranscriptAssembler.rows(in: ClaudeBranch.current(of: lines).records)
     }
 
-    /// The rollout file of a Codex thread, under Codex's folder.
-    static func codexRollout(id: String, in folder: URL = codexRoot()) -> URL? {
+    /// The rollout file of a Codex thread, under Codex's folder: the one
+    /// named for it exactly (isCodexRollout), never one whose name merely
+    /// holds the id somewhere.
+    package static func codexRollout(id: String, in folder: URL = codexRoot()) -> URL? {
         let root = folder.appendingPathComponent("sessions", isDirectory: true)
         guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return nil }
-        for case let candidate as URL in enumerator where candidate.pathExtension == "jsonl" && candidate.lastPathComponent.contains(id) {
+        for case let candidate as URL in enumerator where isCodexRollout(candidate.lastPathComponent, id: id) {
             return candidate
         }
         return nil

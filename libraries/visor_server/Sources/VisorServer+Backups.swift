@@ -9,7 +9,11 @@
 // conversation file at least as long as the one kept stays (a shorter one
 // is set aside, never removed), a session still here is left as it is, and
 // one that is gone is started again under its own id on the same
-// conversation.
+// conversation. A backup may come from another computer, or be changed
+// where it lies, so a restore holds it to what a move takes
+// (VisorServer+MigrationContainment): the offer checked, a project unpacked
+// only where a move would unpack one and only when a move would tick it,
+// and every archive checked and walked before anything is moved into place.
 //
 //     <folder>/backup.json             what it holds (SessionBackup)
 //     <folder>/<session>/offer.json    the session, as a move offers it
@@ -192,17 +196,31 @@ extension VisorServer {
             result.outcome = "Not restored: \(problem)"
             return result
         }
+        guard offer.session.id == item.id else {
+            result.outcome = "Not restored: its files are of another session, \(offer.session.id)."
+            return result
+        }
         let home = SessionCatalog.home.path
         let cwd = Self.path(offer.session.cwd, from: offer.home, to: home)
         var put: [String] = []
         // Its projects first: the session's own folder must be there before
-        // its agent starts in it.
+        // its agent starts in it. Another comes back only when a move would
+        // tick it (namedOften), and each only where a move would put one.
         for (index, project) in offer.projects.enumerated() {
             let path = Self.path(project.path, from: offer.home, to: home)
             guard !files.fileExists(atPath: path) else { continue }
             if let file = offer.files.first(where: { $0.id == "project-\(index)" }) {
+                guard index == 0 || Self.namedOften(project, among: offer.projects) else {
+                    Self.log("restore of \(offer.session.title) left \(path) out: the conversation names it too seldom for a move to tick it")
+                    continue
+                }
+                if let problem = notARestorePlace(path, index: index, of: offer) {
+                    result.outcome = "Not restored: \(problem)"
+                    return result
+                }
                 try? files.createDirectory(atPath: path, withIntermediateDirectories: true)
                 if let problem = await Self.unpack(folder.appendingPathComponent(Self.backupName(of: file)), into: URL(fileURLWithPath: path)) {
+                    Self.removeTree(URL(fileURLWithPath: path, isDirectory: true))
                     result.outcome = "Not restored: could not unpack \(path): \(problem)"
                     return result
                 }
@@ -258,6 +276,15 @@ extension VisorServer {
         }
         result.outcome = "Restored."
         return result
+    }
+
+    /// Why `path`, a project of the backed-up `offer` (its `index`th), is
+    /// no place to unpack it: nil when it is. Where a move would put a
+    /// project (notAProjectPlace), or the session's own folder where this
+    /// server keeps it (SessionFolders), as a backup made here names it.
+    func notARestorePlace(_ path: String, index: Int, of offer: MigrationOffer) -> String? {
+        if index == 0, let folders = sessionFolders, path == folders.folder(agent: offer.session.agent, id: offer.session.id) { return nil }
+        return notAProjectPlace(path)
     }
 
     // MARK: Files

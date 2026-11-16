@@ -2,13 +2,15 @@
 // belongs. The offer's ids, places, folders and archives are the other
 // server's words, and a server compromised or wrong could name `..`, an
 // absolute path, a `/` inside an id, or an archive whose entries lead out:
-// a move takes ids and the conversation's id only as plain names
-// (SessionPathName: letters, digits, `-` and `_`), and full paths only with
-// nothing to resolve (no `.`, `..` or empty part); writes nothing outside
-// the move's own folder, the agent's place for that conversation, or the
-// folder a project's step names; and unpacks an archive only into a folder
-// of its own inside where it goes, every entry's name and every link it
-// makes checked to stay there, before anything is moved into place.
+// a move takes ids only as plain names (SessionPathName: letters, digits,
+// `-` and `_`), the conversation's id only as one an agent makes (a UUID),
+// and full paths only with nothing to resolve (no `.`, `..` or empty
+// part); writes nothing outside the move's own folder, the agent's place
+// for that conversation, or the folder a project's step names; and unpacks
+// an archive only into a folder of its own inside where it goes, every
+// entry's name and every link it makes checked to stay there, before
+// anything is moved into place. A clone is walked the same way before it
+// is kept: a repository can check out links too.
 
 import Foundation
 import VisorAgent
@@ -43,7 +45,9 @@ extension VisorServer {
     /// Why the offer (a move's, or a backup's) can't come here as it is:
     /// nil when it can.
     static func unsafeOffer(_ offer: MigrationOffer) -> String? {
-        guard isCarriedName(offer.resumeID) else { return "its conversation's id, “\(offer.resumeID)”, is not one an agent makes" }
+        guard SessionCatalog.isConversationID(offer.resumeID) else {
+            return "its conversation's id, “\(offer.resumeID)”, is not one an agent makes"
+        }
         guard isPlainPath(offer.session.cwd) else { return "the session's folder, \(offer.session.cwd), is not a full path" }
         var ids: Set<String> = []
         for file in offer.files {
@@ -76,13 +80,16 @@ extension VisorServer {
     /// A gzipped tar unpacked into `folder` (made when missing): every
     /// entry's name checked first (never absolute, never through `..`;
     /// under `name` alone when one is given), then unpacked into a folder of
-    /// its own inside `folder`, every link it made checked to lead nowhere
-    /// outside that and nothing but files, folders and links in it, and only
-    /// then moved into place: `name` replacing what is there by that name,
-    /// or everything into `folder`. What went wrong, if anything; the
-    /// folder it was unpacked into goes either way.
+    /// its own inside `folder`, walked (unsafeTree), and only then moved
+    /// into place: `name` where nothing is by that name but an empty folder
+    /// (never over what is there), or everything into `folder`. What went
+    /// wrong, if anything; the folder it was unpacked into goes either way.
     static func unpack(_ archive: URL, into folder: URL, only name: String? = nil) async -> String? {
         if let name, !isCarriedName(name) { return "\(name) is not a name to unpack as" }
+        if let name, let there = try? FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent(name).path) {
+            let empty = (try? FileManager.default.contentsOfDirectory(atPath: folder.appendingPathComponent(name).path))?.isEmpty == true
+            guard there[.type] as? FileAttributeType == .typeDirectory, empty else { return "\(name) is in \(folder.path) already" }
+        }
         let tar = ToolPath.resolve("tar") ?? "/usr/bin/tar"
         // Listed as written (`-P`: no leading `/` taken off), so the names
         // checked are the archive's own.
@@ -97,7 +104,7 @@ extension VisorServer {
         guard SessionPathName.isInside(staging, folder), (try? files.createDirectory(at: staging, withIntermediateDirectories: false)) != nil else {
             return "could not make a folder to unpack into in \(folder.path)"
         }
-        defer { try? files.removeItem(at: staging) }
+        defer { removeTree(staging) }
         guard let result = await Command.output(tar, ["--no-same-owner", "--no-same-permissions", "-xzf", archive.path, "-C", staging.path],
                                                 errors: true) else { return "tar could not be started" }
         guard result.status == 0 else { return result.text.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -109,6 +116,7 @@ extension VisorServer {
         for item in top {
             let destination = folder.appendingPathComponent(item, isDirectory: false)
             guard SessionPathName.isInside(destination, folder) else { return "\(item) would lead out of \(folder.path)" }
+            // The empty folder by that name, the one thing it may take the place of.
             if name != nil { try? files.removeItem(at: destination) }
             do { try files.moveItem(at: staging.appendingPathComponent(item, isDirectory: false), to: destination) } catch {
                 return "could not put \(item) in \(folder.path): \(error.localizedDescription)"
@@ -127,9 +135,15 @@ extension VisorServer {
         return nil
     }
 
-    /// Why what was unpacked at `root` can't be kept: a link that leads,
-    /// followed as the system would, anywhere outside `root`; a hard link
-    /// to a file outside it; or anything but files, folders and links.
+    /// Why what was unpacked or cloned at `root` can't be kept: a link
+    /// that leads, followed as the system would, anywhere outside `root`
+    /// (an absolute one always); a hard link to a file outside it; anything
+    /// but files, folders and links (a device, a fifo, a socket); or a
+    /// folder that can't be looked in. Each folder is opened to its owner
+    /// (`u+rwx`) before it is listed, so one an archive made unreadable
+    /// (0000) or unlistable but passable (0111) is walked like any other,
+    /// and one that still can't be listed is a refusal, never taken as
+    /// empty.
     static func unsafeTree(_ root: URL) -> String? {
         let files = FileManager.default
         var linked: [NSNumber: Int] = [:]
@@ -137,7 +151,10 @@ extension VisorServer {
         var folders: [[String]] = [[]]
         while let parts = folders.popLast() {
             let path = ([root.path] + parts).joined(separator: "/")
-            for item in (try? files.contentsOfDirectory(atPath: path)) ?? [] {
+            let shownFolder = parts.isEmpty ? "the folder itself" : parts.joined(separator: "/")
+            openUp(path)
+            guard let items = try? files.contentsOfDirectory(atPath: path) else { return "could not look in \(shownFolder)" }
+            for item in items {
                 let inner = parts + [item]
                 let shown = inner.joined(separator: "/")
                 guard let attributes = try? files.attributesOfItem(atPath: path + "/" + item),
@@ -159,6 +176,48 @@ extension VisorServer {
         }
         for (node, seen) in linked where seen < counts[node] ?? 0 { return "it holds a hard link to a file outside it" }
         return nil
+    }
+
+    /// The folder at `path` opened to its owner (`u+rwx`), so that it can
+    /// be listed, walked through and emptied.
+    static func openUp(_ path: String) {
+        let files = FileManager.default
+        guard let mode = (try? files.attributesOfItem(atPath: path))?[.posixPermissions] as? NSNumber,
+              mode.intValue & 0o700 != 0o700 else { return }
+        try? files.setAttributes([.posixPermissions: NSNumber(value: mode.intValue | 0o700)], ofItemAtPath: path)
+    }
+
+    /// What is at `url` removed, every folder in it opened first (an
+    /// archive's or a clone's folder of mode 0000 can't be emptied as it is).
+    static func removeTree(_ url: URL) {
+        let files = FileManager.default
+        var folders = [url.path]
+        while let folder = folders.popLast() {
+            guard (try? files.attributesOfItem(atPath: folder))?[.type] as? FileAttributeType == .typeDirectory else { continue }
+            openUp(folder)
+            folders += ((try? files.contentsOfDirectory(atPath: folder)) ?? []).map { folder + "/" + $0 }
+        }
+        try? files.removeItem(at: url)
+    }
+
+    /// Whether the file at `existing` is the start of the one at `carried`
+    /// (the same bytes, as many or fewer): a conversation that has only
+    /// gone on since.
+    static func isPrefix(_ existing: URL, of carried: URL) -> Bool {
+        let size = fileSize(existing)
+        guard size <= fileSize(carried), let mine = try? FileHandle(forReadingFrom: existing),
+              let theirs = try? FileHandle(forReadingFrom: carried) else { return false }
+        defer {
+            try? mine.close()
+            try? theirs.close()
+        }
+        var left = size
+        while left > 0 {
+            guard let a = try? mine.read(upToCount: min(left, 1 << 20)), let b = try? theirs.read(upToCount: a.count),
+                  !a.isEmpty, a == b else { return false }
+            left -= a.count
+        }
+        return true
     }
 
     /// `parts` under `root` with every link followed as the system would,
