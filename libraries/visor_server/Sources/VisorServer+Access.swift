@@ -15,32 +15,41 @@ extension VisorServer {
     /// Whether a request may be answered: it came on a trusted connection
     /// (the socket file, through SSH as this user); the server asks nothing
     /// and the front it sits behind (if it was told of one) vouches for it;
-    /// or the bearer is the password, a token `hello` issued, or an
-    /// agent's token.
+    /// or the bearer is the password, a token `hello` issued, or the admin
+    /// token (AdminToken).
+    ///
+    /// Never an agent's token, a session's or a runner's agent's: those act
+    /// as their own session over the socket's `agent` and
+    /// `approval_request` (and a runner's agent over its driver stream),
+    /// never over REST, whose every route is an admin's (VisorServer+REST:
+    /// none is a session's own). The tools an agent runs that need the
+    /// admin side (a deploy, a restart, a backup: docs/DEVELOPMENT.md) take
+    /// the admin token from $VISOR_ADMIN_TOKEN, which Visor never gives an
+    /// agent.
     func authorized(_ request: HTTPRequest) -> Bool {
         if request.trusted { return true }
+        // An agent's token is refused even where nothing is asked.
+        if isAgentToken(request.authorization) { return false }
         if settings.asksNothing { return front?.admits(request.headers) ?? true }
         guard let bearer = request.authorization, !bearer.isEmpty else { return false }
-        // An agent's token too: the agents this server started (and the
-        // tools they run, such as a deploy, a restart or a backup:
-        // docs/DEVELOPMENT.md) hold their session's, and no one else.
-        // Logan (2026-11-14): sessions running natively may use the admin
-        // side; those in a container may not, so a runner's agent token
-        // (agent_protocol's) is never let in here. So any live session's
-        // token is an admin credential: session A's agent may act on
-        // session B over REST (`POST /api/sessions/B/…`). Scoping REST by
-        // the session token is the next step, for Logan to approve
-        // (VisorServer+AgentTokens.swift).
-        return bearer == password || tokens.contains(bearer) || isAgentToken(bearer)
+        return bearer == password || tokens.contains(bearer) || adminToken.admits(bearer)
     }
 
     /// The answer to a request that is not let in: it wants the password.
     /// It says whose computer this is (its id, as `hello` does), so a
     /// client that reached it at another computer's path knows the path
-    /// is wrong rather than taking it for that computer asking.
+    /// is wrong rather than taking it for that computer asking. An agent's
+    /// token is told it is not a REST credential.
     func refusal(_ request: HTTPRequest) -> HTTPResponse {
-        HTTPResponse(401, "{\"error\":\"wrong password\",\"id\":\"\(id)\"}")
+        if !request.trusted, isAgentToken(request.authorization) {
+            return HTTPResponse(401, Envelope.error(Self.agentTokenRefusedOverREST).encoded())
+        }
+        return HTTPResponse(401, "{\"error\":\"wrong password\",\"id\":\"\(id)\"}")
     }
+
+    /// What an agent's token shown to the REST side is told.
+    static let agentTokenRefusedOverREST = "A session's token acts as its own session over Visor's socket, never over REST: "
+        + "the REST side takes the password, or the admin token ($VISOR_ADMIN_TOKEN)."
 
     /// A token for the socket's login, for a client that `hello` let in.
     func issueToken() -> String {

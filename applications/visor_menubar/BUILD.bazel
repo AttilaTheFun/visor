@@ -15,6 +15,7 @@ filegroup(
         "Sources/MenuContent.swift",
         "Sources/QRCode.swift",
         "Sources/SettingsPane.swift",
+        "Sources/TokenAlerts.swift",
     ],
 )
 

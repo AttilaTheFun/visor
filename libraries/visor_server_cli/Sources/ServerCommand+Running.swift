@@ -30,6 +30,9 @@ extension ServerCommand {
 
         beforeServer?()
         let server = VisorServer(port: port)
+        // The admin token given at launch, its hash in memory alone; or
+        // none, and the log says so.
+        server.useAdminTokenGivenAtLaunch(options.adminToken)
         // The proxy given with the run: pushes and the named MCP servers
         // through it, from now on.
         if let proxy = options.proxy {
@@ -121,6 +124,7 @@ extension ServerCommand {
 
     /// Runs the server in the background, logging to a file.
     func start(_ options: ServerOptions) throws {
+        if let problem = options.backgroundProblem { throw CommandLineError.usage(problem) }
         let platform = quietPlatform()
         if let pid = runningProcess(platform) {
             print("The server is already running (process \(pid)).")

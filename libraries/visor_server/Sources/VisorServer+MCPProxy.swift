@@ -98,12 +98,9 @@ extension VisorServer {
     /// `PUT /api/mcp {endpoints: [{name, url, onByDefault?, headers: [{name,
     /// value?, secret?}]}]}`: the endpoints, all of them. A secret header's
     /// value goes with the server's secrets; one sent without a value keeps
-    /// the value kept. Not with an agent's token: an agent that could move
-    /// an endpoint could send its secrets anywhere.
+    /// the value kept. Never with an agent's token (authorized): an agent
+    /// that could move an endpoint could send its secrets anywhere.
     func restSetMCP(_ call: RESTCall) -> HTTPResponse {
-        if !call.request.trusted, isAgentToken(call.request.authorization) {
-            return HTTPResponse(403, Envelope.error("An agent can't set this computer's MCP servers.").encoded())
-        }
         guard let body = parseJSON(call.request.body), let list = body["endpoints"].array else {
             return HTTPResponse(400, Envelope.error("Send {\"endpoints\": [...]}.").encoded())
         }

@@ -1,8 +1,8 @@
 import VisorProtocol
 
 /// What `visor-agent-host mcp` needs from its environment and wasn't given:
-/// `VISOR_SESSION` and `VISOR_TOKEN`, and `VISOR_PORT` unless `VISOR_URL`
-/// says where the server is. Claude's MCP config no longer carries them
+/// `VISOR_SESSION` and `VISOR_TOKEN` (unless `VISOR_TOKEN_FILE` names its
+/// file), and `VISOR_PORT` unless `VISOR_URL` says where the server is. Claude's MCP config no longer carries them
 /// (visor#423): Claude Code passes its own environment, where Visor put
 /// them, to its stdio MCP servers. Should it stop, the server says so to
 /// every request, rather than reaching Visor as no session.
@@ -15,6 +15,8 @@ struct MCPMissingEnvironment: Equatable {
         func missing(_ name: String) -> Bool { (environment[name] ?? "").isEmpty }
         var names = ["VISOR_PORT", "VISOR_SESSION", "VISOR_TOKEN"].filter(missing)
         if !missing("VISOR_URL") { names.removeAll { $0 == "VISOR_PORT" } }
+        // The token file stands for VISOR_TOKEN.
+        if !missing("VISOR_TOKEN_FILE") { names.removeAll { $0 == "VISOR_TOKEN" } }
         guard !names.isEmpty else { return nil }
         self.names = names
     }

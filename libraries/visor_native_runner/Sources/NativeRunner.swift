@@ -17,6 +17,7 @@ import AgentProtocol
 import Foundation
 import GRPCCore
 import GRPCNIOTransportHTTP2
+import VisorSystem
 
 public actor NativeRunner {
     public let dispatcher: String
@@ -149,9 +150,11 @@ public actor NativeRunner {
         return metadata
     }
 
-    /// The wrapper's environment for a job: this process's, and the runner's contract.
+    /// The wrapper's environment for a job: this process's, less what no
+    /// runner's agent is given (the admin token, Shireworks' session:
+    /// AgentEnvironment), and the runner's contract.
     func environment(for job: AgentProtocol_V1_Job) -> [String: String] {
-        var environment = ProcessInfo.processInfo.environment
+        var environment = AgentEnvironment.forRunnerAgent(ProcessInfo.processInfo.environment)
         environment["AGENT_ID"] = "\(job.agent.uuid)@\(job.agent.dispatcherURL)"
         environment["AGENT_JOB"] = Self.json(job)
         environment["AGENT_DISPATCHER_URL"] = dispatcher

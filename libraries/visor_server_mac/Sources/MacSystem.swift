@@ -54,6 +54,10 @@ public struct MacSystem: CommandLineSystem {
         POSIXStopSignals.onStop(stop)
     }
 
+    @MainActor public func connect(unixPath path: String) async -> (any ByteStream)? {
+        await POSIXUnixSocket.connect(path)
+    }
+
     /// A copy beside it, then renamed over it: the running program keeps
     /// the file it was started from.
     public func install(_ build: String, over executable: String) -> String? {

@@ -41,6 +41,7 @@ extension VisorServer {
         }
         listenForSSH()
         keepModelsFresh()
+        keepSessionTokensFresh()
         resumePending()
     }
 
@@ -135,6 +136,8 @@ extension VisorServer {
 
     public func stop() {
         stopListening()
+        sessionTokenRefresh?.cancel()
+        sessionTokenRefresh = nil
         // Whoever was waiting on a transcript gets what there is, now.
         for record in sessions { answerTranscriptWaiters(for: record) }
         for connection in connections.values { connection.close() }

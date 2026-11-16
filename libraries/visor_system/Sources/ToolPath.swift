@@ -46,10 +46,11 @@ public enum ToolPath {
     }
 
     /// The environment for a spawned agent: ours, with the tool
-    /// directories on its search path and any trace of a surrounding
-    /// Claude Code session removed (a nested session refuses to start).
+    /// directories on its search path, any trace of a surrounding Claude
+    /// Code session removed (a nested session refuses to start), and never
+    /// the admin token (AgentEnvironment).
     public static func environment() -> [String: String] {
-        var env = SystemPlatform.current.tools.environment(ProcessInfo.processInfo.environment)
+        var env = AgentEnvironment.forNativeAgent(SystemPlatform.current.tools.environment(ProcessInfo.processInfo.environment))
         for key in env.keys where key == "CLAUDECODE" || key.hasPrefix("CLAUDE_CODE_") { env.removeValue(forKey: key) }
         return env
     }

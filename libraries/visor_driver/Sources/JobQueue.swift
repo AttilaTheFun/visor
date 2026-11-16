@@ -30,11 +30,14 @@ final class JobQueue: AgentJobQueue {
     /// Where the jobs are kept across a restart (JobQueue+Store); nil: in
     /// memory alone.
     let file: URL?
-    /// Where the agents' tokens are kept across a restart (the server's
-    /// secrets: JobQueue+Tokens); nil: in memory alone.
-    let secrets: (any SecretStore)?
-    /// Each agent's token (Job.token), by agent id (JobQueue+Tokens).
-    var tokens: [String: String] = [:]
+    /// What mints and verifies the agents' tokens (Job.token: JobQueue+
+    /// Tokens): the server's, once it is served (with its signing keys);
+    /// until then, and in a test of the queue alone, one of its own.
+    var tokens: AgentTokens
+    /// Whether a session is live (true), archived (false), or not known
+    /// here (nil: not yet, for a job its wrapper hasn't dialled in for):
+    /// the server's, once served.
+    var liveSession: (@MainActor (String) -> Bool?)?
 
     var waiting: [AgentProtocol_V1_Job] = []
     /// The sessions moved to runners, by agent id: the conversation each
@@ -84,17 +87,17 @@ final class JobQueue: AgentJobQueue {
     var moveRequeued: (@MainActor (_ session: String, _ why: String) -> Void)?
 
     /// `file`: where the jobs are kept, and taken up from at start;
-    /// `secrets`: where the agents' tokens are.
+    /// `tokens`: what mints and verifies the agents' tokens (one of its own,
+    /// in memory, if none is given).
     init(dispatcherURL: String, driverURL: String, containerURL: String? = nil, harness: String = "claude", file: URL? = nil,
-         secrets: (any SecretStore)? = nil, log: @escaping @Sendable (String) -> Void = { VisorServer.log($0) }) {
+         tokens: AgentTokens? = nil, log: @escaping @Sendable (String) -> Void = { VisorServer.log($0) }) {
         self.dispatcherURL = dispatcherURL
         self.driverURL = driverURL
         self.containerURL = containerURL.flatMap { $0.isEmpty ? nil : $0 }
         self.harness = harness
         self.file = file
-        self.secrets = secrets
+        self.tokens = tokens ?? AgentTokens(secrets: MemorySecrets(), issuer: dispatcherURL)
         self.log = log
-        tokens = Self.keptTokens(secrets)
         guard let kept = Self.read(file) else { return }
         waiting = kept.waiting.map(\.job)
         // Long enough for the runner, and the wrapper redialling, to find
@@ -215,7 +218,6 @@ final class JobQueue: AgentJobQueue {
         movedSessions[agent] = nil
         returns[agent] = nil
         restored.remove(agent)
-        forgetToken(of: agent)
     }
 
     /// The session an agent is: a moved session's, else the agent's own id
@@ -239,8 +241,9 @@ final class JobQueue: AgentJobQueue {
                 var job = waiting.remove(at: index)
                 let expires = Date().addingTimeInterval(Self.claimLength)
                 job.claimExpires = .init(date: expires)
-                // Its own, minted when queued (or now, for one queued by a
-                // build before tokens): the runner hands it to the wrapper.
+                // Its own, minted now for an hour (refreshed over its
+                // driver stream from then): the runner hands it to the
+                // wrapper.
                 job.token = token(for: job.agent.uuid)
                 claimed[job.agent.uuid] = (job, request.runner, expires)
                 claimCapabilities[Self.key(job.agent.uuid)] = request.capabilities

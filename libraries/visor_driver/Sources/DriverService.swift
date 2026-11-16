@@ -2,9 +2,13 @@
 // that dials in shows its agent's token (Job.token, as `authorization:
 // Bearer`; JobQueue+Tokens) and says who it is, and its session is taken in
 // (a new one, or the one it had); its stream is that session's process from
-// then on. A wrapper whose token isn't the agent's it names is refused. The
-// agent's MCP requests over the stream are answered for that session
-// (DrivenMCP), and its permission prompts are the session's (DrivenProcess).
+// then on. A wrapper whose token isn't the agent's it names is refused; one
+// whose token has expired is refused too, and its session carried on by a
+// new job with a fresh token (VisorServer.resumeAfterExpiredToken). While
+// connected, it is sent a fresh token before the one it holds ends
+// (DriverMessage.token). The agent's MCP requests over the stream are
+// answered for that session (DrivenMCP), and its permission prompts are the
+// session's (DrivenProcess).
 
 import AgentProtocol
 import Foundation
@@ -41,6 +45,8 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         }
         let agent = said.agent.uuid
         guard !agent.isEmpty else { throw RPCError(code: .invalidArgument, message: "The hello names no agent.") }
+        // Its tokens are the server's to verify: once it is served.
+        let server = await listening.ready()
         // The token says which agent it is: the one the hello names, or the
         // wrapper is refused before anything of the session is touched.
         switch await jobs.access(agent, bearer: bearer) {
@@ -49,11 +55,15 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         case .unknown:
             VisorServer.log("driver: \(agent) dialled in, but this dispatcher holds no job of that agent: refused")
             throw AgentBearer.refusal("This dispatcher holds no job of that agent.")
+        case .expired:
+            let session = await jobs.session(of: agent)
+            VisorServer.log("driver: \(agent) dialled in with an expired token: refused; its session carried on with a fresh one")
+            await MainActor.run { server.resumeAfterExpiredToken(session, agent: agent) }
+            throw AgentBearer.refusal(AgentTokenRefusal.expired.message)
         case .refused(let why):
             VisorServer.log("driver: \(agent) dialled in: refused: \(why)")
             throw AgentBearer.refusal(why)
         }
-        let server = await listening.ready()
         // The session is the agent's id as the dispatcher issued it, however
         // the wrapper spells it; a moved session's agent, the session's own.
         said.agent.uuid = await jobs.session(of: agent)
@@ -88,7 +98,11 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         let writing = Task {
             for await message in outgoing { try await response.write(message) }
         }
+        // A fresh token before the one it holds ends, for as long as it is
+        // connected: shown on its next connection and every other call.
+        let refreshing = Task { await refreshTokens(of: agent, from: bearer) { sending.yield($0) } }
         defer {
+            refreshing.cancel()
             sending.finish()
             writing.cancel()
         }
@@ -108,18 +122,40 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         VisorServer.log("driver: \(hello.agent.uuid) disconnected")
     }
 
+    /// Sends the agent a fresh token (DriverMessage.token) a sixth of its
+    /// life before each it holds ends (ten minutes of an hour), starting
+    /// from the one it dialled in with, until cancelled.
+    private func refreshTokens(of agent: String, from shown: String?, send: @escaping @Sendable (AgentProtocol_V1_DriverMessage) -> Void) async {
+        var ends: Date?
+        if let shown { ends = await jobs.expiry(of: shown) }
+        while !Task.isCancelled {
+            let lead = await jobs.tokenRefreshLead
+            let wait = max(0.05, (ends ?? Date()).timeIntervalSinceNow - lead)
+            try? await Task.sleep(for: .milliseconds(Int(wait * 1000)))
+            guard !Task.isCancelled, await jobs.holds(agent) else { return }
+            let fresh = await jobs.token(for: agent)
+            send(.with { $0.token = fresh })
+            ends = await jobs.expiry(of: fresh)
+            VisorServer.log("driver: \(agent) sent a fresh token")
+        }
+    }
+
     /// A moved session's conversation, before its wrapper starts its harness:
     /// each of its files in pieces, its place for the folder it will work
     /// in. Only for the agent whose token the call shows.
     func conversation(request: ServerRequest<AgentProtocol_V1_ConversationRequest>,
                       context: ServerContext) async throws -> StreamingServerResponse<AgentProtocol_V1_ConversationFile> {
         let agent = request.message.agent.uuid
+        _ = await listening.ready()
         switch await jobs.access(agent, bearer: AgentBearer.token(in: request.metadata)) {
         case .granted:
             break
         case .unknown:
             VisorServer.log("driver: \(agent) asked for a conversation, but this dispatcher holds no job of that agent: refused")
             return StreamingServerResponse(error: AgentBearer.refusal("This dispatcher holds no job of that agent."))
+        case .expired:
+            VisorServer.log("driver: \(agent) asked for a conversation with an expired token: refused")
+            return StreamingServerResponse(error: AgentBearer.refusal(AgentTokenRefusal.expired.message))
         case .refused(let why):
             VisorServer.log("driver: \(agent) asked for a conversation: refused: \(why)")
             return StreamingServerResponse(error: AgentBearer.refusal(why))

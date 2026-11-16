@@ -3,7 +3,8 @@
 // restarted server's queue knows its driven sessions' moves first. A report
 // or a renewal is for one agent, and shows that agent's token (Job.token,
 // as `authorization: Bearer`; JobQueue+Tokens): the wrapper's reports and
-// the runner's renewals and releases alike. A claim shows the runner's own
+// the runner's renewals and releases alike, taken past the token's expiry
+// (the runner holds the one its claim gave it). A claim shows the runner's own
 // token (RunnerTokens), minted for the name it claims as: required once
 // the server's `runnerTokensRequired` is on, and a wrong one refused
 // whether or not. A runner token shown beside an agent's, on a renewal or
@@ -35,12 +36,16 @@ struct DispatcherService: AgentProtocol_V1_AgentDispatcher.ServiceProtocol {
         let server = await listening.ready()
         let agent = request.message.agent.uuid
         let bearers = AgentBearer.tokens(in: request.metadata)
-        switch await jobs.access(agent, bearers: bearers) {
+        // Expired or not: a runner's own reports show the token its claim
+        // gave it, which it has no way to refresh (JobQueue+Tokens).
+        switch await jobs.access(agent, bearers: bearers, allowExpired: true) {
         case .granted:
             try await runnerMatches(agent, bearers, server, "a report")
             await jobs.report(request.message)
         case .unknown:
             VisorServer.log("dispatcher: a report for \(agent), whose job it no longer holds: let go")
+        case .expired:
+            break
         case .refused(let why):
             VisorServer.log("dispatcher: a report for \(agent) refused: \(why)")
             throw AgentBearer.refusal(why)
@@ -57,11 +62,12 @@ struct DispatcherService: AgentProtocol_V1_AgentDispatcher.ServiceProtocol {
         let agent = request.message.agent.uuid
         var answer = AgentProtocol_V1_RenewResponse()
         let bearers = AgentBearer.tokens(in: request.metadata)
-        switch await jobs.access(agent, bearers: bearers) {
+        // Expired or not, as a report.
+        switch await jobs.access(agent, bearers: bearers, allowExpired: true) {
         case .granted:
             try await runnerMatches(agent, bearers, server, "a renewal")
             if let expires = await jobs.renew(request.message.agent) { answer.claimExpires = .init(date: expires) }
-        case .unknown:
+        case .unknown, .expired:
             break
         case .refused(let why):
             VisorServer.log("dispatcher: a renewal for \(agent) refused: \(why)")

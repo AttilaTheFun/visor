@@ -1,91 +1,98 @@
-// Each agent's own token (agent_protocol's Job.token): minted when its job
-// is queued, given to the runner that claims it (which hands it to its
-// wrapper in AGENT_TOKEN), and asked of every call made for the agent:
-// the wrapper's Connect, Conversation and Report, and the runner's Renew
-// and Report (AgentBearer). A token is its agent's alone, so it says which
-// session a wrapper is: one agent's can't dial in, report or renew as
-// another's. Kept with the server's secrets (never in jobs.json or the
-// log), so a restart keeps its runners' agents; gone with its agent's job
-// (forget, stopJobs).
+// Each agent's own token (agent_protocol's Job.token): a JWT for
+// `visor.runner-agent` (the server's AgentTokens), its `sub` the session
+// the agent carries on and its `agent` the agent's id, minted for an hour
+// when its job is queued and again when a runner claims it, and refreshed
+// over its driver stream before it ends (DriverService: DriverMessage.token).
+// The runner hands it to its wrapper in AGENT_TOKEN; every call made for
+// the agent shows it (AgentBearer): the wrapper's Connect, Conversation and
+// Report, and the runner's Renew and Report. No table of them is kept:
+// one is taken while its agent's job is here (waiting or claimed), its
+// signature, issuer, audience, agent and scope are right, and its session,
+// if it is one yet, isn't archived. Expired, it is refused on the driver
+// (a wrapper reconnecting is refused, and its session carried on by a new
+// job: VisorServer.resumeAfterExpiredToken), but taken on the dispatcher:
+// a runner's renewals and releases show the token its claim gave it, which
+// agent_protocol has no way to refresh.
 
 import Foundation
 import VisorServer
 
 extension JobQueue {
-    /// What a call shown `bearer` for `agent` may do.
+    /// What a call shown a bearer for `agent` may do.
     enum Access: Equatable {
         /// The agent's own token.
         case granted
-        /// This dispatcher holds no token for the agent (its job is gone,
-        /// or was never here).
+        /// This dispatcher holds no job of the agent (its job is gone, or
+        /// was never here).
         case unknown
+        /// The agent's own token, but past its end.
+        case expired
         /// A token missing, or not the agent's: why.
         case refused(String)
     }
 
-    /// Where the tokens are kept among the server's secrets: one JSON
-    /// object of agent id to token.
-    static let tokensKey = "runnerAgentTokens"
-
-    /// The tokens a secrets store kept, if any.
-    static func keptTokens(_ secrets: (any SecretStore)?) -> [String: String] {
-        guard let kept = secrets?.get(tokensKey), let data = kept.data(using: .utf8),
-              let tokens = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
-        return tokens
-    }
-
-    /// A new token: 32 random bytes, as hex.
-    nonisolated static func mintToken() -> String {
-        SecretToken.mint()
-    }
-
-    /// The agent's token, minted (and kept) the first time it is asked for.
+    /// A new token for the agent: an hour's, as the session it carries on.
     func token(for agent: String) -> String {
         let id = Self.key(agent)
-        if let held = tokens[id] { return held }
-        let made = Self.mintToken()
-        tokens[id] = made
-        keepTokens()
-        return made
+        return tokens.mint(.runnerAgent, session: session(of: id), agent: id)
     }
 
-    /// The agent's token gone: nothing may present it again.
-    func forgetToken(of agent: String) {
-        guard tokens.removeValue(forKey: Self.key(agent)) != nil else { return }
-        keepTokens()
+    /// How long before its token ends an agent's driver stream is sent a
+    /// fresh one: a sixth of its life (ten minutes of an hour).
+    var tokenRefreshLead: TimeInterval { tokens.runnerAgentLifetime / 6 }
+
+    /// When `token` ends, if it is one of this server's.
+    func expiry(of token: String) -> Date? {
+        tokens.expiry(of: token)
+    }
+
+    /// Whether this dispatcher holds the agent's job: waiting, or claimed.
+    func holds(_ agent: String) -> Bool {
+        let id = Self.key(agent)
+        return claimed[id] != nil || waiting.contains { $0.agent.uuid == id }
     }
 
     /// Whether a call for `agent` that shows `bearer` is the agent's.
-    func access(_ agent: String, bearer: String?) -> Access {
-        access(agent, bearers: bearer.map { [$0] } ?? [])
+    func access(_ agent: String, bearer: String?, allowExpired: Bool = false) -> Access {
+        access(agent, bearers: bearer.map { [$0] } ?? [], allowExpired: allowExpired)
     }
 
     /// Whether a call for `agent` that shows `bearers` is the agent's: one
-    /// of them is its token (a runner's renewal may show its own beside it).
-    func access(_ agent: String, bearers: [String]) -> Access {
+    /// of them is its token (a runner's renewal shows its own beside it).
+    /// `allowExpired`: the dispatcher's calls, whose runner can't renew the
+    /// token its claim gave it.
+    func access(_ agent: String, bearers: [String], allowExpired: Bool = false, now: Date = Date()) -> Access {
         let id = Self.key(agent)
-        guard let held = tokens[id] else { return .unknown }
+        guard holds(id) else { return .unknown }
         let shown = bearers.filter { !$0.isEmpty }
         guard !shown.isEmpty else { return .refused("The call shows no token (authorization: Bearer <Job.token>).") }
-        // Each compared in constant time (SecretToken.same): how much of
-        // a guess matched takes no longer to find.
-        guard !shown.contains(where: { SecretToken.same($0, held) }) else { return .granted }
-        if shown.contains(where: { bearer in tokens.values.contains { SecretToken.same(bearer, $0) } }) {
-            return .refused("That token is another agent's.")
+        var why = "That token isn't this agent's."
+        var expired = false
+        // A runner's own token among them isn't a JWT, and is asked apart.
+        for bearer in shown where JWT.isShaped(bearer) {
+            switch tokens.verify(bearer, as: .runnerAgent, agent: id, scope: .job, now: now, allowExpired: allowExpired) {
+            case .success(let claims):
+                guard claims.sub == session(of: id) else {
+                    why = "That token is another session's."
+                    continue
+                }
+                if liveSession?(claims.sub) == false { return .refused(AgentTokenRefusal.archived.message) }
+                return .granted
+            case .failure(.wrongAgent):
+                why = "That token is another agent's."
+            case .failure(.expired):
+                expired = true
+            case .failure(.malformed), .failure(.badSignature):
+                break
+            case .failure(let refusal):
+                why = refusal.message
+            }
         }
-        return .refused("That token isn't this agent's.")
+        return expired ? .expired : .refused(why)
     }
 
     /// The runner whose claim on `agent`'s job is held, if one is.
     func holder(of agent: String) -> String? {
         claimed[Self.key(agent)]?.runner
-    }
-
-    private func keepTokens() {
-        guard let secrets else { return }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(tokens) else { return }
-        secrets.set(Self.tokensKey, tokens.isEmpty ? nil : String(decoding: data, as: UTF8.self))
     }
 }

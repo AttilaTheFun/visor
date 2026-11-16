@@ -96,6 +96,15 @@ extension VisorServer {
         return move.agent.lowercased() == agent.lowercased()
     }
 
+    /// A runner's agent that dialled in with an expired token (it was
+    /// away longer than its token lasts: JobQueue+Tokens): refused, and its
+    /// session, if that agent still carries it on, carried on by a resume
+    /// job with a fresh token, as Restart Agent would.
+    package func resumeAfterExpiredToken(_ session: String, agent: String) {
+        guard let record = self.session(session), record.driven, !record.info.archived, carriesDriven(session, agent: agent) else { return }
+        resumeDriven(record, why: "restarting, as its wrapper reconnected with an expired token, the agent of")
+    }
+
     /// A moved session's agent started on its runner (agent_protocol's
     /// Started): the harness's own session there, which a later agent of
     /// the session resumes.
