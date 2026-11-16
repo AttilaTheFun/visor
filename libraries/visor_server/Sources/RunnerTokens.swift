@@ -111,8 +111,8 @@ package final class RunnerTokens {
     /// The runner whose token `token` is, if any.
     package func runner(presenting token: String) -> String? {
         guard !token.isEmpty else { return nil }
-        for (runner, held) in own where Self.same(held.token, token) { return runner }
-        for (runner, held) in kept where Self.same(held.token, token) { return runner }
+        for (runner, held) in own where SecretToken.same(token, held.token) { return runner }
+        for (runner, held) in kept where SecretToken.same(token, held.token) { return runner }
         return nil
     }
 
@@ -156,26 +156,12 @@ package final class RunnerTokens {
         secrets.set(Self.key, kept.isEmpty ? nil : String(decoding: data, as: UTF8.self))
     }
 
-    /// 32 random bytes, as hex.
+    /// 32 random bytes, as hex (SecretToken).
     private static func newToken() -> String {
-        var generator = SystemRandomNumberGenerator()
-        return (0..<32).map { _ in String(format: "%02x", UInt8.random(in: 0...255, using: &generator)) }.joined()
+        SecretToken.mint()
     }
 
     private static func now() -> String {
         ISO8601DateFormatter().string(from: Date())
-    }
-
-    /// Whether two tokens are the same, compared in a time that doesn't
-    /// say how much of them matched: the runners' tokens here, the agents'
-    /// in the driver (JobQueue+Tokens). SecretToken.same (visor#441) does
-    /// the same for the sessions' tokens; this goes to it once both are on
-    /// main.
-    package static func same(_ a: String, _ b: String) -> Bool {
-        let x = Array(a.utf8), y = Array(b.utf8)
-        guard x.count == y.count else { return false }
-        var difference: UInt8 = 0
-        for index in x.indices { difference |= x[index] ^ y[index] }
-        return difference == 0
     }
 }

@@ -983,7 +983,8 @@ no longer in Visor.
   server has no agent left as a child (`pgrep -lP <server pid>`).
 - The probes talk to the installed server unless `VISOR_PORT` names
   another (a staging server). From inside a Visor session `VISOR_TOKEN`
-  is the session's own agent token, which the REST side takes and the
+  is the session's own agent token, which the REST side takes (for every
+  session, not only its own: docs/protocol.md, "Approvals and questions") and the
   socket's login does not: run them against a staging server, or with the password.
 - `node tools/probes/ephemeral.mjs <visor session id>` — the snapshot a
   subscribing client gets (busy, activity, status count, held streams).

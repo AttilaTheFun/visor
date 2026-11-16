@@ -26,7 +26,11 @@ extension VisorServer {
         // docs/DEVELOPMENT.md) hold their session's, and no one else.
         // Logan (2026-11-14): sessions running natively may use the admin
         // side; those in a container may not, so a runner's agent token
-        // (agent_protocol's) is never let in here.
+        // (agent_protocol's) is never let in here. So any live session's
+        // token is an admin credential: session A's agent may act on
+        // session B over REST (`POST /api/sessions/B/…`). Scoping REST by
+        // the session token is the next step, for Logan to approve
+        // (VisorServer+AgentTokens.swift).
         return bearer == password || tokens.contains(bearer) || isAgentToken(bearer)
     }
 

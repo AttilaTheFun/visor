@@ -36,8 +36,7 @@ extension JobQueue {
 
     /// A new token: 32 random bytes, as hex.
     nonisolated static func mintToken() -> String {
-        var generator = SystemRandomNumberGenerator()
-        return (0..<32).map { _ in String(format: "%02x", UInt8.random(in: 0...255, using: &generator)) }.joined()
+        SecretToken.mint()
     }
 
     /// The agent's token, minted (and kept) the first time it is asked for.
@@ -68,10 +67,10 @@ extension JobQueue {
         guard let held = tokens[id] else { return .unknown }
         let shown = bearers.filter { !$0.isEmpty }
         guard !shown.isEmpty else { return .refused("The call shows no token (authorization: Bearer <Job.token>).") }
-        // Each compared in constant time (RunnerTokens.same): how much of
+        // Each compared in constant time (SecretToken.same): how much of
         // a guess matched takes no longer to find.
-        guard !shown.contains(where: { RunnerTokens.same($0, held) }) else { return .granted }
-        if shown.contains(where: { bearer in tokens.values.contains { RunnerTokens.same(bearer, $0) } }) {
+        guard !shown.contains(where: { SecretToken.same($0, held) }) else { return .granted }
+        if shown.contains(where: { bearer in tokens.values.contains { SecretToken.same(bearer, $0) } }) {
             return .refused("That token is another agent's.")
         }
         return .refused("That token isn't this agent's.")

@@ -310,6 +310,18 @@ other tools are answered by the driver as its session's: Visor's own
 tools, never the proxied MCP servers below, whatever the session's `mcp`
 switches say (docs/runners.md).
 
+What a session's token does not separate (as of 0.60): it is a token of 32
+random bytes, compared in constant time, and taken only while its session is
+live (not archived). But any live session's token is also a REST
+credential, as the password is (Logan, 2026-11-14: sessions running natively
+may use the admin side), so session A's agent can still act on session B
+over REST (`POST /api/sessions/B/…`). And every native agent runs as the
+same Unix user, which can read the others' environments and Visor's secrets,
+so the tokens keep sessions apart by name, not against an agent that sets
+out to cross. The next step, for Logan to approve: REST scoped by the
+session token (a session's token acts on its own session, the admin routes
+take the password).
+
 ## Sessions messaging each other
 
 Every Claude and Codex session the menu bar app starts gets the same MCP
@@ -317,7 +329,11 @@ server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`). Claude's
 MCP servers inherit its environment, which has `VISOR_PORT`, `VISOR_TOKEN` and
 `VISOR_SESSION`, so its `--mcp-config` carries only `VISOR_APPROVALS` and the
 token never shows in `ps`; Codex gives a stdio MCP server only an allowlist of
-its environment, so its `-c` overrides still carry them. The server has
+its environment, so its `-c` overrides still carry them. Should Claude Code
+stop passing its environment on, the MCP server (`visor-agent-host mcp`)
+answers every request with a JSON-RPC error (-32002) naming the missing
+variables and saying that Claude Code must pass the agent's environment to
+its MCP servers, and writes the same to stderr. The server has
 six tools: `list_sessions`, `send_message(session, server, text)`,
 `read_messages(session, server, count)`, `message_status(message_id)`,
 `read_inbox(unread_only, count)` and `read_outbox(count)`:
