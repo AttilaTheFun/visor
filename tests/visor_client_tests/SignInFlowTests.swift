@@ -37,8 +37,10 @@ final class SignInFlowTests: XCTestCase {
         XCTAssertEqual(transcript.signIn, "https://claude.ai/oauth/authorize?code=true")
         XCTAssertTrue(transcript.sending.isEmpty, "the /login is taken")
 
+        XCTAssertNil(transcript.signInCodeSent, "no code sent yet")
         host.sendMessage("S", text: " abc#s1 ")
         XCTAssertEqual(server.codes, ["abc#s1"])
+        XCTAssertEqual(transcript.signInCodeSent, "https://claude.ai/oauth/authorize?code=true", "its code sent: not asked for again")
         XCTAssertTrue(server.sent.isEmpty, "nothing for the agent")
         XCTAssertTrue(transcript.sending.isEmpty, "nothing in the thread")
 

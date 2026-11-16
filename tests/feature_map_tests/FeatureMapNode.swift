@@ -6,7 +6,7 @@ import Testing
 
 enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
     case onboarding, signIn, sessions, search, archived, project, migrate, addComputer, runner
-    case newSession, folder, chat, approval, question, model, allModels, details, toolCalls
+    case newSession, folder, chat, approval, question, signInCode, model, allModels, details, toolCalls
     case preview, subPage, settings, computer
 
     var testDescription: String { rawValue }
@@ -56,6 +56,11 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
         // (Isomer's driver leaves a disabled bar item out); `question-skip`
         // always.
         case .question: return sheet && (screen.has(id: "question-send") || screen.has(id: "question-skip") || screen.has(label: "Skip"))
+        // Its words, or `sign-in-paste` (by its label where that isn't
+        // listed: IsomerGap.appleIdentifier).
+        case .signInCode:
+            return sheet && (screen.shows("Paste the code Claude showed") || screen.has(id: "sign-in-paste")
+                || (screen.has(label: "Paste") && screen.has(label: "Cancel")))
         case .model:
             return sheet && (screen.has(id: "all-models") || screen.has(id: "approval-Auto Approve")
                 || screen.elements.contains { $0.label.hasPrefix("Auto Approve") })
