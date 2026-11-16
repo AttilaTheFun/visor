@@ -7,12 +7,13 @@ import VisorServices
 final class LaunchSettingsService: VisorSettingsService {
     private var values: [String: String] = [:]
 
-    /// `environment`'s settings (VisorLaunchSettings: `fixture=snapshot`,
-    /// as Isomer's launchers and Android's launch intent give them), then
-    /// `arguments`' `-visor.<key> <value>` pairs, as the iPhone's launch
-    /// arguments set them in UserDefaults (`-visor.fixture snapshot`).
+    /// `environment`'s settings by their own names (VisorLaunchSettings:
+    /// `fixture=snapshot`, as Android's launch intent's extras name them;
+    /// a test's process starts it, so nothing else is in its environment),
+    /// then `arguments`' `-visor.<key> <value>` pairs, as the iPhone's
+    /// launch arguments set them in UserDefaults (`-visor.fixture snapshot`).
     init(environment: [String: String], arguments: [String]) {
-        values = VisorLaunchSettings.values(in: environment)
+        values = VisorLaunchSettings.values(in: environment, prefix: "")
         var index = arguments.startIndex
         while index < arguments.endIndex {
             let argument = arguments[index]

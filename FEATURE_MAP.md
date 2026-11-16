@@ -213,16 +213,19 @@ the app dialling the driver's hub (`iso hub`, `ws://127.0.0.1:7710`):
   Every launch setting is an extra (`--es account fixture`,
   `--es fixture.appearance dark`, `--es fixture.orientation landscape`, …).
 - **iPhone simulator:** the app reads its launch settings from its
-  environment (`<key>` or `visor.<key>`), so simctl's `SIMCTL_CHILD_`
-  prefix passes them, as Isomer's `ios_launcher.sh` does:
-  `env SIMCTL_CHILD_ISO_DRIVER=ws://127.0.0.1:7710 SIMCTL_CHILD_fixture=snapshot SIMCTL_CHILD_fixture.screen=chat xcrun simctl launch <udid> com.LoganShire.Visor`.
+  environment as `visor.<key>` (a bare `fixture` or `account` is left
+  alone), so simctl's `SIMCTL_CHILD_` prefix passes them, as Isomer's
+  `ios_launcher.sh` does:
+  `env SIMCTL_CHILD_ISO_DRIVER=ws://127.0.0.1:7710 SIMCTL_CHILD_visor.fixture=snapshot SIMCTL_CHILD_visor.fixture.screen=chat xcrun simctl launch <udid> com.LoganShire.Visor`
   (`env`, because a shell won't take a name with a dot as an
-  assignment.)
+  assignment); or as launch arguments, after the bundle id:
+  `-visor.fixture snapshot -visor.fixture.screen chat`.
 
 The launch settings are `fixture`, `fixture.screen`,
 `fixture.appearance`, `fixture.orientation`, `fixture.go`, `account` and
 `probe.open` (libraries/visor_services, `VisorLaunchSettings`); the
-headless client takes the same list. The suite runs headful on the
+headless client takes the same list under the bare names, as
+Android's extras do. The suite runs headful on the
 iPhone and Android through Isomer's launchers
 (`//tests/feature_map_tests:feature_map_headful_{ios,android,macos}_test`,
 manual), and the iPhone's and Android's release proofs walk this map
