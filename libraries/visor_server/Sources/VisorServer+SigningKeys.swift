@@ -12,9 +12,10 @@
 // server, emergencyRotationOverREST), from the menu bar alone on a Mac.
 // Neither touches the admin token. Either way the native sessions' token
 // files are re-minted at once, so their agents carry on; after an
-// emergency one, each runner's agent is stopped and its session carried on
-// by a new job with a fresh token (resumeDriven), since its runner's
-// renewals show the token its claim gave it, which no longer verifies.
+// emergency one, each runner's agent is told to stop and its session carried
+// on by a new job with a fresh token (resumeDriven; stopped, where it can't
+// be), since its runner's renewals show the token its claim gave it, which
+// no longer verifies.
 
 import Foundation
 import VisorProtocol
@@ -54,7 +55,12 @@ extension VisorServer {
         refreshSessionTokenFiles()
         guard dropPrevious else { return }
         for record in sessions where record.driven && !record.info.archived {
-            resumeDriven(record, why: "restarting, after an emergency rotation of the signing keys, the agent of")
+            // Told to stop now, over its stream: its runner's renewals no
+            // longer verify, so its claim's end wouldn't reach it.
+            record.process.stop()
+            if !resumeDriven(record, why: "restarting, after an emergency rotation of the signing keys, the agent of") {
+                stopDriven(record)
+            }
         }
     }
 }

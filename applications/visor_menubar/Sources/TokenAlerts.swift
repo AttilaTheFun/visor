@@ -39,7 +39,7 @@ enum TokenAlerts {
     }
 
     private static func showOnce(_ token: String, title: String) {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = "\(token)\n\nShown this once: keep it where you keep secrets, and give it as VISOR_ADMIN_TOKEN."
@@ -52,7 +52,7 @@ enum TokenAlerts {
     }
 
     private static func confirm(_ title: String, _ text: String, button: String) -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = text
