@@ -177,7 +177,9 @@ The server does all of it itself:
   configured MCP servers passed on, through the Runner's `/mcp/<name>` for a
   server that holds no keys.
 - **GitHub** (+GitHubProxy): agents started with HTTPS_PROXY at the
-  Runner's GitHub proxy (libraries/visor_runner's GitHubGate).
+  Runner's GitHub proxy (libraries/visor_runner's GitHubGate). Removed
+  (14 Nov 2026): Visor proxies nothing for its agents (below, "Who it
+  serves").
 - **Containers** (+Containers, +ContainerChecks, +ContainerRegistry,
   +ContainerUpgrades, ContainerHost…, docs/container-host.md): a session's
   agent in a container from a container host, moving in and out, sign-ins
@@ -383,16 +385,20 @@ Agreed with Shireworks the same evening.
   its real URL, and MultiPass adds the key on the way. Not every client
   honours `HTTPS_PROXY` (Node's built-in `fetch` ignores it), so
   `/mcp/<name>` stays, the same rule reached as a reverse path.
-- **GitHub**: GitHubGate's rules (docs/github-gate-rules.md) become the
-  github.com hosts' rules.
+- **GitHub**: GitHubGate's rules (MultiPass's GitHubGate; Shireworks'
+  agent-proxy's gate.json after it) become the github.com hosts' rules.
 - **APNs** stays a path (`/apns/…`): MultiPass signs the push either way,
   and a path keeps HTTP/2 to Apple out of the interception.
 
 ### Who it serves
 
 - **Agents on the Mac**: Visor's server gives them `HTTP(S)_PROXY` at
-  `127.0.0.1:<port>` with their session's token, and the bundle, as it
-  gives them the GitHub proxy today.
+  `127.0.0.1:<port>` with their session's token, and the bundle.
+  **Superseded** (Logan, 14 Nov 2026): Visor proxies nothing. A native
+  agent gets exactly the access `claude` has on the command line (plus
+  this computer's `agents/<kind>.env`), with no proxy, CA bundle or
+  `GH_TOKEN` from Visor; its GitHub proxy setup is gone. Proxying for
+  agents in containers is Shireworks' agent-proxy's.
 - **Shireworks' containers**, CI's leases and the primary container alike:
   through `multipass-client` and the relay, with no network of their own and
   no proxy settings (Containers: no network, above). The CA bundle for
@@ -459,12 +465,12 @@ docs/primary-container.md, shireworks#220):
 | Goes | Where it is | Taken by |
 |---|---|---|
 | The Runner: sign-in, sessions, reverse proxy by path, its certificate, the MCP, GitHub and APNs proxies, the server watch | libraries/visor_runner, applications/visor_runner_agent, tests/visor_runner_tests | MultiPass's repository |
-| GitHubGate and its rules | libraries/visor_runner, docs/github-gate-rules.md, docs/github-proxy.md | MultiPass's outbound rules |
+| GitHubGate and its rules | libraries/visor_runner (its docs, github-gate-rules.md and github-proxy.md, removed 14 Nov 2026) | MultiPass's outbound rules; Shireworks' agent-proxy after it |
 | Password, connection codes, client tokens, `/codes` | +Access, +Identity, ConnectionCodes (protocol, client) | MultiPass's sign-in |
 | TLS, every-interface listening, LAN/VPN addresses in `hello` | +Listening, TLSIdentity, +Reaching | MultiPass's paths |
 | The SSH socket and device keys | +Listening's socket file, +SSHKeys, `/ssh/keys`; libraries/visor_ssh in the client | MultiPass's SSH |
 | Direct APNs (the key, signing) | APNsKey, PushSigning, APNsSender's signing, `/push/key` | MultiPass's `/apns/` |
-| The MCP servers' and push proxy's settings over REST | +MCPProxy's `PUT /mcp`, +PushProxy, +GitHubProxy | MultiPass's settings; the server's `VISOR_PROXY` |
+| The MCP servers' and push proxy's settings over REST | +MCPProxy's `PUT /mcp`, +PushProxy (+GitHubProxy: removed 14 Nov 2026) | MultiPass's settings; the server's `VISOR_PROXY` |
 | Container sessions, the host, moving in and out, container checks and upgrades | +Containers, +ContainerChecks, +ContainerRegistry, +ContainerUpgrades, Container*, applications/visor_container_host, docs/container-host.md | Shireworks' primary container |
 | Fronts and front paths | `visor-server front`, `frontPaths` | MultiPass's path per server |
 | The Mac's server in Visor.app's own process | applications/visor_mac (VisorServer linked in) | the nested `visor-server`, started by Visor.app |

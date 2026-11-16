@@ -289,6 +289,18 @@ host holds that build's one token, which is taken as its session until that agen
 ends. Codex's headless runs never ask; its manual mode is the
 workspace-write sandbox.
 
+What a session's token does not separate (as of 0.60): it is a token of 32
+random bytes, compared in constant time, and taken only while its session is
+live (not archived). But any live session's token is also a REST
+credential, as the password is (Logan, 2026-11-14: sessions running natively
+may use the admin side), so session A's agent can still act on session B
+over REST (`POST /api/sessions/B/…`). And every native agent runs as the
+same Unix user, which can read the others' environments and Visor's secrets,
+so the tokens keep sessions apart by name, not against an agent that sets
+out to cross. The next step, for Logan to approve: REST scoped by the
+session token (a session's token acts on its own session, the admin routes
+take the password).
+
 ## Sessions messaging each other
 
 Every Claude and Codex session the menu bar app starts gets the same MCP
