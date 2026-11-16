@@ -493,8 +493,13 @@ gap) — the only scroll target; the first population is not animated; the
 scroll after the composer grows waits for layout (`afterLayout`).
 
 **Who gets in (2026-10-06).** `VisorServer.authorized(request)`: the
-bearer is the password, or a token `GET /api/hello` issued (kept in
-memory, 512 newest); no header names a user. The socket's `login` takes
+bearer is the password, a token `GET /api/hello` issued (kept in
+memory, 512 newest), or the admin token (`AdminToken`: its SHA-256 alone,
+in the secrets for the menu bar app, in memory when the command-line
+server is given it at launch); never an agent's token
+(`AgentTokens`, JWTs signed with `SigningKeys`; docs/protocol.md, "The
+admin token" and "Agents' tokens", with what they don't protect against);
+no header names a user. The socket's `login` takes
 `token` or `password`. One listener (`FrontDoor` tells an upgrade from a
 request by its first bytes), on loopback or every interface
 (`ServerSettings.lan || vpn`; `admits(localAddress:)` closes a connection
@@ -828,13 +833,21 @@ no longer in Visor.
   `staging`) runs a `VisorServer` of its own — its own ports, a scratch
   folder for what it keeps, the password in memory, loopback only, nothing
   put in front of it — and the probes take its port:
-  `VISOR_PORT=7533 VISOR_TOKEN=staging node tools/probes/order.mjs`.
+  `VISOR_PORT=7533 VISOR_ADMIN_TOKEN=staging node tools/probes/order.mjs`
+  (a staging server's password stands for its admin token: both are REST
+  credentials; the probes stop, saying so, when `VISOR_ADMIN_TOKEN` is
+  unset).
   Ctrl-C ends it, its agents first. Its agents get Visor's MCP server
   from the source tree (`VISOR_MCP_SCRIPT`, which the menu bar app has no
   use for: its copy is in its bundle). Do this before deploying a change to
   the agent processes: a deploy that cannot start agents cannot resume
   the session that deployed it.
-- Deploy the server from inside a session: `tools/deploy_server.sh`. The
+- Deploy the server from inside a session: `tools/deploy_server.sh`, with
+  the server's admin token in `$VISOR_ADMIN_TOKEN` (Visor Server ›
+  Settings › Create Admin Token…, or `visor-server admin-token`; it stops,
+  saying so, without one). A session's own `$VISOR_TOKEN` (and the file
+  `$VISOR_TOKEN_FILE` names) is that session's token, for its own actions
+  over Visor's socket only: the REST side refuses it. The
   current turn is cut; the new server resumes the session with the nudge;
   carry on from there. Verify with `shasum` of the installed binary vs
   the staged one and exactly one `claude -p` per session. Never `pkill`
@@ -842,13 +855,13 @@ no longer in Visor.
 - Before an update that might lose sessions (a server swapped, a
   container made again), back them up: `curl -X POST
   http://127.0.0.1:7433/api/backups -H "Authorization: Bearer
-  $VISOR_TOKEN"` (body `{"path": "<a folder of its own>"}` to keep them
+  ${VISOR_ADMIN_TOKEN:?the admin token}"` (body `{"path": "<a folder of its own>"}` to keep them
   off the disk at risk), or Back Up Sessions in the computer's settings.
   `POST /api/backups/restore {"path": …}` puts back what is gone and
   leaves what is there (docs/protocol.md).
 - Upgrade to a released build from inside a session the same way: copy
   `Visor Server.app` out of the disk image to a staging folder and
-  `POST /api/restart {path, session}` with it (bearer `$VISOR_TOKEN`).
+  `POST /api/restart {path, session}` with it (bearer `$VISOR_ADMIN_TOKEN`).
   Never quit the server from a script an agent runs: quitting ends the
   agent and everything it started, the script included, and the server
   stays quit. A server started from the disk image, or from a quarantined
@@ -982,10 +995,12 @@ no longer in Visor.
   ended; the expected tail is `failures 0`, and a few seconds later the
   server has no agent left as a child (`pgrep -lP <server pid>`).
 - The probes talk to the installed server unless `VISOR_PORT` names
-  another (a staging server). From inside a Visor session `VISOR_TOKEN`
-  is the session's own agent token, which the REST side takes (for every
-  session, not only its own: docs/protocol.md, "Approvals and questions") and the
-  socket's login does not: run them against a staging server, or with the password.
+  another (a staging server), with `VISOR_ADMIN_TOKEN`: the server's admin
+  token (taken by its REST side and its socket's login), or a staging
+  server's password. Without it they stop, saying so. From inside a Visor
+  session, `VISOR_TOKEN` (and `VISOR_TOKEN_FILE`) is the session's own
+  token, for its own actions only: neither the REST side nor the socket's
+  login takes it (docs/protocol.md, "Agents' tokens").
 - `node tools/probes/ephemeral.mjs <visor session id>` — the snapshot a
   subscribing client gets (busy, activity, status count, held streams).
   Stale streams here = a bug.
@@ -1033,8 +1048,8 @@ no longer in Visor.
 - REST locally is plain HTTP: `http://127.0.0.1:7433/api/...` with
   `Authorization: Bearer <password>` (`security find-generic-password -s
   com.LoganShire.VisorServer.macOS -a password -w`; Visor.app's service is
-  `com.LoganShire.Visor.server`), or, inside a Visor
-  session, its `$VISOR_TOKEN`. Node's http needs an
+  `com.LoganShire.Visor.server`), or the admin token,
+  `$VISOR_ADMIN_TOKEN` (never a session's `$VISOR_TOKEN`). Node's http needs an
   explicit Content-Length on POST bodies (the server ignores chunked).
 - The indexer logs to the unified log: `log show --predicate 'subsystem ==
   "com.LoganShire.Visor"' --last 10m`. `lsof -p <server pid> | grep jsonl`

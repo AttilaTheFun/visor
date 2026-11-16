@@ -153,32 +153,57 @@ Shireworks' container runner) gets from Visor's driver and dispatcher
 agent_protocol#9, #10 and #12.
 
 - **Its own token.** Each job's agent has a token of its own
-  (`Job.token`), minted when the job is queued (a new session's, a moved
-  session's, each later agent of a moved session: `resumeDriven` queues a
-  new agent) and kept with the server's secrets (`runnerAgentTokens`, an
-  agent id to token map; never in jobs.json, sessions.json or the log),
-  so a restart keeps its runners' agents. A runner hands it to the wrapper
-  in `AGENT_TOKEN` alone, and the wrapper shows it on every call it makes
-  for the agent as `authorization: Bearer <token>`. The driver refuses,
-  with UNAUTHENTICATED, a `Connect` or `Conversation` whose token isn't
-  the agent's (none, a wrong one, or another agent's: the hello's agent
-  must be the token's), and the dispatcher a `Report` or `Renew` the
-  same: the runner shows its job's token on its renewals and releases
-  too. A `Claim` shows the runner's own token (below), not an agent's: it
-  is how a runner is given a job and its token. These tokens are only the gRPC port's: the server's REST and
-  WebSocket side never takes one. A token goes with its agent's job: when
-  its session ends, its move fails or is given up, or its agent is
-  stopped (`stopJobs`); then its runner's renewal is told the claim isn't
-  its own (so the runner ends its agent), its reports are let go, and its
-  wrapper can't dial in. Not yet: a fresh token pushed to a running
-  wrapper (`DriverMessage.token`); a token lives as long as its agent.
+  (`Job.token`): a JWT of the server's (docs/protocol.md, "Agents'
+  tokens") for `aud` `visor.runner-agent`, its `sub` the session the agent
+  carries on (a moved session's id, or a new session's, the agent's own),
+  its `agent` the agent's id, its `scope` `messages`, `approvals`, `mcp`
+  and `job`, lasting an hour. No table of them is kept: the server's
+  signing keys verify them. It is minted when the job is queued (a new
+  session's, a moved session's, each later agent of a moved session:
+  `resumeDriven` queues a new agent) and again when a runner claims it. A
+  runner hands it to the wrapper in `AGENT_TOKEN` alone, and the wrapper
+  shows it on every call it makes for the agent as `authorization: Bearer
+  <token>`. The driver refuses, with UNAUTHENTICATED, a `Connect` or
+  `Conversation` whose token isn't the agent's (none, a wrong one,
+  another server's, a session's, or another agent's: the hello's agent
+  must be the token's `agent`), whose session is archived, or whose agent's
+  job isn't held here; and the dispatcher a `Report` or `Renew` the same.
+  A `Claim` shows the runner's own token (below), not an agent's: it is
+  how a runner is given a job and its token. These tokens are only the
+  gRPC port's: the server's REST and WebSocket side never takes one.
+  - **Refreshed:** while its wrapper is connected, the driver sends it a
+    fresh token (`DriverMessage.token`) a sixth of its life before each
+    it holds ends (ten minutes of an hour); the wrapper shows it from then
+    on, on its next connection and every call.
+  - **Expired:** a wrapper that dials back in with a token past its `exp`
+    (away longer than an hour) is refused, and its session, if that agent
+    still carries it on, is carried on by a new job with a fresh token, as
+    Restart Agent does (`resumeDriven`, #437's path). The dispatcher takes
+    a `Renew` or a `Report` past the token's `exp` while the agent's job is
+    held: a runner shows the token its claim gave it, and agent_protocol
+    has no way to give a runner a fresher one. (Follow-up for
+    agent_protocol: a fresh token in `RenewResponse`, or the runner taking
+    its wrapper's. Until then, a job that runs more than a day past a key
+    rotation has its runner's renewals refused once the key it was
+    claimed with is dropped; its claim then lapses and its job is queued
+    again.)
+  - **Gone with its job:** when its session ends, its move fails or is
+    given up, or its agent is stopped (`stopJobs`), its token is no longer
+    taken: its runner's renewal is told the claim isn't its own (so the
+    runner ends its agent), its reports are let go, and its wrapper can't
+    dial in. An emergency rotation of the signing keys refuses every one
+    at once, and restarts each runner's agent on a new job.
+  - **Its environment:** a runner's agent is never given the admin token
+    (`VISOR_ADMIN_TOKEN`) or Shireworks' session (`SHIREWORKS_SESSION`)
+    from the runner's own environment (Visor's native runner strips both,
+    AgentEnvironment); nor is either in its job.
 - **The runner's own token, on Claim.** Visor mints a token for each
   runner name (`container@<computer>`, as the runner's claims say it),
   kept with the server's secrets (`runnerTokens`; never in sessions.json,
   jobs.json or the log) and shown once, when minted. The computer's owner
   mints, lists and revokes them over REST (the password, a `hello` token,
-  or the socket file; refused, 403, with any session's agent token, a
-  native session's own included):
+  the admin token, or the socket file; never an agent's token, which the
+  REST side refuses with 401):
   - `POST /api/runners/tokens {"runner": "container@mini"}` →
     `{"runner", "token", "created", "replaced"}`: the token, this once (a
     runner that had one gets a new one; the old stops working);
@@ -233,8 +258,8 @@ agent_protocol#9, #10 and #12.
     session's `mcp_tools` with none and refuses its `mcp_call`.
   - Its asks (`list_sessions`, `send_message`, …) are answered as its
     session by the driver, which knows it by its job's token: the agent
-    is never given a session token of the server's, which would be a
-    REST credential (docs/protocol.md, "Approvals and questions").
+    is never given a native session's token (docs/protocol.md, "Agents'
+    tokens"); neither is a REST credential.
   - **Shireworks'**: from the container itself, at
     `http://shireworks.agent.internal/mcp/shireworks`, through the
     container network's agent-proxy, which adds Shireworks' key to each
