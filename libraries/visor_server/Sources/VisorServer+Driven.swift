@@ -119,7 +119,7 @@ extension VisorServer {
             guard let remote = project.remote.flatMap(Self.cloneURL) else { return nil }
             return AgentJobSource(repository: remote, ref: project.branch ?? "", name: (project.path as NSString).lastPathComponent)
         }
-        let move = AgentJobMove(agent: UUID().uuidString.lowercased(), session: record.info.id, title: record.info.title,
+        var move = AgentJobMove(agent: UUID().uuidString.lowercased(), session: record.info.id, title: record.info.title,
                                 model: record.info.model ?? "", effort: record.info.effort ?? "", resume: resume, cwd: cwd,
                                 sources: sources, runsOn: runsOn)
         // The agent here goes first, then the session waits for the runner.
@@ -127,10 +127,14 @@ extension VisorServer {
         await old.end(within: .seconds(5))
         record.replaceProcess(drivenProcess(record.info))
         record.driven = true
-        // In a container, its permission prompts are skipped, as every
-        // container session's are (the runner starts its agent so); a
-        // native runner's agent keeps the session's own mode.
+        // In a container, its permission prompts are skipped to begin with
+        // (it touches only its volumes); a native runner's agent keeps the
+        // session's own mode. Either says so in its job
+        // (Job.skip_permissions): a session that asks, or is set to ask
+        // later (its next agent's job), has its runner's agent ask through
+        // the driver (DrivenProcess).
         if runsOn == "container" { record.setPermissions(skip: true) }
+        move.skipPermissions = record.info.skipPermissions
         if case .failure(let refusal) = jobs.queueResume(move) {
             Self.log("moving \(record.info.title) to a runner: \(refusal.reason)")
             return .failure(refusal)

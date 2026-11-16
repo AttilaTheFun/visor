@@ -381,7 +381,7 @@ extension VisorServer {
         // Nil once the agent has gone.
         if case .memory(nil) = event { noteAgentWent(record) }
         switch event {
-        case .context, .session, .background, .goal, .question, .manual:
+        case .context, .session, .background, .goal, .question, .withdrawn, .manual:
             // These land in the session list, not an envelope (a question
             // as the session's waiting, besides its own envelope).
             broadcastSessions()

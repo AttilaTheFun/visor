@@ -10,6 +10,7 @@ import AgentProtocol
 import VisorProtocol
 import VisorServer
 import Foundation
+import GRPCCore
 import Testing
 
 @Suite @MainActor final class JobQueueTests {
@@ -383,5 +384,74 @@ import Testing
         #expect((given["workingDirectory"] as? String) == "/w")
         #expect((given["prompt"] as? String) == "P")
         #expect((given["model"]) == nil, "nothing for what the job doesn't say")
+        #expect((given["skipPermissions"] as? Bool) == false, "it asks unless the job says otherwise")
+        #expect(environment["AGENT_TOKEN"] == nil, "a job with no token gives none")
+
+        job.token = "t0k3n"
+        job.skipPermissions = true
+        let tokened = await runner.environment(for: job)
+        #expect(tokened["AGENT_TOKEN"] == "t0k3n", "the token in AGENT_TOKEN alone")
+        let tokenedJob = try #require(tokened["AGENT_JOB"])
+        #expect(!tokenedJob.contains("t0k3n"), "never in AGENT_JOB")
+        let acting = try #require(JSONSerialization.jsonObject(with: Data(tokenedJob.utf8)) as? [String: Any])
+        #expect((acting["skipPermissions"] as? Bool) == true)
+        #expect(NativeRunner.metadata(job)[stringValues: "authorization"].map { $0 } == ["Bearer t0k3n"], "its renewals and releases show it")
+    }
+
+    /// Each agent's own token (Job.token): minted when its job is queued,
+    /// on the job a runner claims, the agent's alone, kept with the
+    /// server's secrets across a restart, and gone with its job.
+    @Test func eachAgentHasATokenOfItsOwn() async throws {
+        let secrets = MemorySecrets()
+        let jobs = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", secrets: secrets, log: { _ in })
+        let a = try jobs.queueStart(start("A")).get()
+        #expect(jobs.queueResume(AgentJobMove(agent: "b1", session: "s-b", title: "B", resume: "c-b", cwd: "/tmp", runsOn: "native")) == .success("s-b"))
+        let first = await jobs.claim(claim(), wait: .zero)
+        let second = await jobs.claim(claim(), wait: .zero)
+        let jobA = try #require(first)
+        let jobB = try #require(second)
+        #expect(jobA.agent.uuid == a && jobB.agent.uuid == "b1")
+        #expect(jobA.token.count == 64 && jobB.token.count == 64 && jobA.token != jobB.token)
+        #expect(jobs.access(a, bearer: jobA.token) == .granted)
+        #expect(jobs.access(a.uppercased(), bearer: jobA.token) == .granted, "however the agent's id is spelt")
+        #expect(jobs.access(a, bearer: nil) == .refused("The call shows no token (authorization: Bearer <Job.token>)."))
+        #expect(jobs.access(a, bearer: jobB.token) == .refused("That token is another agent's."))
+        #expect(jobs.access(a, bearer: "guess") == .refused("That token isn't this agent's."))
+        #expect(jobs.access("nobody", bearer: jobA.token) == .unknown)
+        #expect(!(secrets.get(JobQueue.tokensKey) ?? "").isEmpty, "kept with the secrets")
+        #expect(!jobs.stored.claimed.contains { "\($0)".contains(jobA.token) }, "never in jobs.json")
+
+        // A restart keeps them; a requeue keeps the agent's own.
+        let again = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", secrets: secrets, log: { _ in })
+        #expect(again.access("b1", bearer: jobB.token) == .granted)
+        jobs.report(.with { $0.agent = jobB.agent; $0.released = .with { $0.reason = "its runner restarted" } })
+        let requeued = await jobs.claim(claim(), wait: .zero)
+        #expect((requeued?.token) == jobB.token)
+
+        // Gone with its job: an ended session's, a stopped agent's.
+        jobs.forget(session: a)
+        #expect(jobs.access(a, bearer: jobA.token) == .unknown)
+        jobs.stopJobs(of: "s-b")
+        #expect(jobs.access("b1", bearer: jobB.token) == .unknown)
+        #expect(secrets.get(JobQueue.tokensKey) == nil)
+    }
+
+    /// Job.skip_permissions: a started job's from its request (asking when
+    /// it says nothing), a moved session's from its move (the session's).
+    @Test func aJobSaysWhetherItsAgentAsks() async throws {
+        let jobs = queue()
+        var acting = start("Acts")
+        acting.skipPermissions = true
+        _ = try jobs.queueStart(acting).get()
+        _ = try jobs.queueStart(start("Asks")).get()
+        let first = await jobs.claim(claim(), wait: .zero)
+        let second = await jobs.claim(claim(), wait: .zero)
+        #expect((first?.skipPermissions) == true)
+        #expect((second?.skipPermissions) == false)
+        var move = AgentJobMove(session: "s-m", title: "M", resume: "c-m", cwd: "/tmp", runsOn: "native")
+        move.skipPermissions = true
+        #expect(jobs.resumeJob(move, agent: "m1").skipPermissions)
+        move.skipPermissions = false
+        #expect(!jobs.resumeJob(move, agent: "m1").skipPermissions)
     }
 }

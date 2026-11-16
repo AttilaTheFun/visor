@@ -57,13 +57,18 @@ package struct AgentJobMove: Codable, Equatable, Sendable {
     /// The harness's own session on the runner, once its agent has started
     /// (agent_protocol's Started): what a later agent resumes. "": `resume`.
     package var conversation: String = ""
+    /// Whether its agent acts without asking (the session's own setting,
+    /// as it was when the job was queued): the job's skip_permissions.
+    /// False, it asks, and its prompts come here (DrivenProcess).
+    package var skipPermissions: Bool = false
 
     /// What a later agent of the session resumes: the runner's own
     /// conversation once known, else the one moved.
     package var resumeOnRunner: String { conversation.isEmpty ? resume : conversation }
 
     package init(agent: String = "", session: String, title: String, model: String = "", effort: String = "", resume: String, cwd: String,
-                 sources: [AgentJobSource] = [], runsOn: String, workingDirectory: String = "", conversation: String = "") {
+                 sources: [AgentJobSource] = [], runsOn: String, workingDirectory: String = "", conversation: String = "",
+                 skipPermissions: Bool = false) {
         self.agent = agent
         self.session = session
         self.title = title
@@ -75,6 +80,7 @@ package struct AgentJobMove: Codable, Equatable, Sendable {
         self.runsOn = runsOn
         self.workingDirectory = workingDirectory
         self.conversation = conversation
+        self.skipPermissions = skipPermissions
     }
 
     /// What sessions.json kept: the session, its conversation and folder
@@ -92,6 +98,7 @@ package struct AgentJobMove: Codable, Equatable, Sendable {
         runsOn = try c.decodeIfPresent(String.self, forKey: .runsOn) ?? ""
         workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory) ?? ""
         conversation = try c.decodeIfPresent(String.self, forKey: .conversation) ?? ""
+        skipPermissions = try c.decodeIfPresent(Bool.self, forKey: .skipPermissions) ?? false
     }
 }
 

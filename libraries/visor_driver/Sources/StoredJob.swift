@@ -1,7 +1,8 @@
 // A runner's job as the dispatcher keeps it on disk (JobQueue+Store): the
 // fields this server sets on a job, so a server that restarts gives its
 // runners the jobs they hold, and its moved sessions' agents find their
-// sessions.
+// sessions. Never its token (Job.token): that is kept with the server's
+// secrets (JobQueue+Tokens), and put on the job as it is claimed.
 
 import AgentProtocol
 import Foundation

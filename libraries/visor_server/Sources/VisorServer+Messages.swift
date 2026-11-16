@@ -227,8 +227,13 @@ extension VisorServer {
         guard let record = session(envelope.session), let id = envelope.id, let allow = envelope.allow else { return }
         // A question the agent itself asked (Codex's): answered to it.
         guard let waiter = approvalWaiters[record.info.id]?.removeValue(forKey: id) else {
-            guard let pending = record.info.pendingApproval, pending.id == id, pending.questions != nil else { return }
-            record.process.answer(id, with: allow ? envelope.answers : nil)
+            guard let pending = record.info.pendingApproval, pending.id == id else { return }
+            // A driven agent's permission prompt (or its question): to its
+            // wrapper, through the driver; else a question the agent asked.
+            if !record.process.decide(id, allow: allow, answers: allow ? envelope.answers : nil) {
+                guard pending.questions != nil else { return }
+                record.process.answer(id, with: allow ? envelope.answers : nil)
+            }
             record.setPendingApproval(nil)
             broadcast(.approval(session: record.info.id, nil), session: record)
             broadcastSessions()

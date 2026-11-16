@@ -48,7 +48,9 @@ extension VisorDriver {
             // Kept beside the sessions, so a restart keeps runners' claims and
             // the moved sessions their agents carry on (JobQueue+Store).
             let file = HostFolders.dataFolder.appendingPathComponent("jobs.json", isDirectory: false)
-            let jobs = JobQueue(dispatcherURL: url, driverURL: url, containerURL: containerURL, harness: harness, file: file)
+            // Its agents' tokens with the server's secrets: never in a file.
+            let jobs = JobQueue(dispatcherURL: url, driverURL: url, containerURL: containerURL, harness: harness, file: file,
+                                secrets: VisorServer.secrets)
             self.jobs = jobs
             let (host, port, url, containerURL) = (host, port, url, containerURL)
             serving = Task.detached { [self] in
@@ -101,6 +103,15 @@ extension VisorDriver {
                     jobs?.releaseLapsed()
                 }
             }
+        }
+
+        /// No longer listening, and its claims no longer lapsing: for a test
+        /// that serves a server of its own.
+        func stop() {
+            serving?.cancel()
+            serving = nil
+            lapsing?.cancel()
+            lapsing = nil
         }
 
         /// The server, once it is served.

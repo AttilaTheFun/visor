@@ -30,6 +30,11 @@ final class JobQueue: AgentJobQueue {
     /// Where the jobs are kept across a restart (JobQueue+Store); nil: in
     /// memory alone.
     let file: URL?
+    /// Where the agents' tokens are kept across a restart (the server's
+    /// secrets: JobQueue+Tokens); nil: in memory alone.
+    let secrets: (any SecretStore)?
+    /// Each agent's token (Job.token), by agent id (JobQueue+Tokens).
+    var tokens: [String: String] = [:]
 
     var waiting: [AgentProtocol_V1_Job] = []
     /// The sessions moved to runners, by agent id: the conversation each
@@ -74,15 +79,18 @@ final class JobQueue: AgentJobQueue {
     /// didn't come back after this server restarted, and why.
     var moveRequeued: (@MainActor (_ session: String, _ why: String) -> Void)?
 
-    /// `file`: where the jobs are kept, and taken up from at start.
+    /// `file`: where the jobs are kept, and taken up from at start;
+    /// `secrets`: where the agents' tokens are.
     init(dispatcherURL: String, driverURL: String, containerURL: String? = nil, harness: String = "claude", file: URL? = nil,
-         log: @escaping @Sendable (String) -> Void = { VisorServer.log($0) }) {
+         secrets: (any SecretStore)? = nil, log: @escaping @Sendable (String) -> Void = { VisorServer.log($0) }) {
         self.dispatcherURL = dispatcherURL
         self.driverURL = driverURL
         self.containerURL = containerURL.flatMap { $0.isEmpty ? nil : $0 }
         self.harness = harness
         self.file = file
+        self.secrets = secrets
         self.log = log
+        tokens = Self.keptTokens(secrets)
         guard let kept = Self.read(file) else { return }
         waiting = kept.waiting.map(\.job)
         // Long enough for the runner, and the wrapper redialling, to find
@@ -116,9 +124,13 @@ final class JobQueue: AgentJobQueue {
         job.effort = request.effort ?? ""
         job.prompt = request.text ?? ""
         job.driverURL = driverURL
+        // Asks before acting unless the request says otherwise: the
+        // session it becomes takes the same (DriverService.info).
+        job.skipPermissions = request.skipPermissions ?? false
         if let kind = request.runsOn?.trimmingCharacters(in: .whitespaces), !kind.isEmpty {
             job.labels.append(Self.runsOn + kind)
         }
+        job.token = token(for: job.agent.uuid)
         waiting.append(job)
         log("dispatcher: queued \(job.agent.uuid) (\(job.title))")
         save()
@@ -134,7 +146,8 @@ final class JobQueue: AgentJobQueue {
             return .failure(AgentJobRefusal("The session is moving to a runner already."))
         }
         let id = move.agent.isEmpty ? UUID().uuidString.lowercased() : Self.key(move.agent)
-        let job = resumeJob(move, agent: id)
+        var job = resumeJob(move, agent: id)
+        job.token = token(for: id)
         moves[id] = (move.resume, move.cwd)
         movedSessions[id] = session
         returns[id] = nil
@@ -169,6 +182,7 @@ final class JobQueue: AgentJobQueue {
         job.driverURL = driverURL
         job.resumeSessionID = move.resumeOnRunner
         job.workingDirectory = move.workingDirectory
+        job.skipPermissions = move.skipPermissions
         job.sources = move.sources.map { source in .with { $0.repository = source.repository; $0.ref = source.ref; $0.name = source.name } }
         if !move.runsOn.isEmpty { job.labels.append(Self.runsOn + move.runsOn) }
         return job
@@ -192,6 +206,7 @@ final class JobQueue: AgentJobQueue {
         movedSessions[agent] = nil
         returns[agent] = nil
         restored.remove(agent)
+        forgetToken(of: agent)
     }
 
     /// The session an agent is: a moved session's, else the agent's own id
@@ -215,6 +230,9 @@ final class JobQueue: AgentJobQueue {
                 var job = waiting.remove(at: index)
                 let expires = Date().addingTimeInterval(Self.claimLength)
                 job.claimExpires = .init(date: expires)
+                // Its own, minted when queued (or now, for one queued by a
+                // build before tokens): the runner hands it to the wrapper.
+                job.token = token(for: job.agent.uuid)
                 claimed[job.agent.uuid] = (job, request.runner, expires)
                 save()
                 log("dispatcher: \(request.runner) claimed \(job.agent.uuid)")

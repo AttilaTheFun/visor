@@ -1,0 +1,370 @@
+// A runner's agent as this server drives it, over gRPC as its wrapper and
+// runner reach it (agent_protocol's AgentDriver and AgentDispatcher):
+// every call shows the agent's own token (Job.token), and one that doesn't,
+// or shows another agent's, is refused; its MCP requests are answered as
+// its session's; its permission prompts are its session's, and the
+// person's answers go back to it; its job says whether it asks
+// (Job.skip_permissions), as its session does.
+
+import AgentProtocol
+import Foundation
+import GRPCCore
+import GRPCNIOTransportHTTP2
+import Synchronization
+@testable import VisorDriver
+import VisorProtocol
+@testable import VisorServer
+import Testing
+
+/// A wrapper's connection to the driver: what it sends up, what it is
+/// sent, and how the call ended.
+private final class FakeWrapper: Sendable {
+    struct State {
+        var down: [AgentProtocol_V1_DriverMessage] = []
+        var code: RPCError.Code?
+        var ended = false
+    }
+
+    let state = Mutex(State())
+    private let upward: AsyncStream<AgentProtocol_V1_WrapperMessage>
+    private let up: AsyncStream<AgentProtocol_V1_WrapperMessage>.Continuation
+
+    init() {
+        (upward, up) = AsyncStream.makeStream()
+    }
+
+    /// Dials the driver on `port`, showing `token` if any.
+    @discardableResult
+    func connect(port: Int, token: String?) -> Task<Void, Never> {
+        let metadata: Metadata = token.map { ["authorization": "Bearer \($0)"] } ?? [:]
+        let upward = self.upward
+        return Task {
+            do {
+                let transport = try HTTP2ClientTransport.Posix(target: .dns(host: "127.0.0.1", port: port), transportSecurity: .plaintext)
+                try await withGRPCClient(transport: transport) { client in
+                    try await AgentProtocol_V1_AgentDriver.Client(wrapping: client).connect(metadata: metadata, requestProducer: { writer in
+                        for await message in upward { try await writer.write(message) }
+                    }, onResponse: { response in
+                        for try await message in response.messages { self.state.withLock { $0.down.append(message) } }
+                    })
+                }
+            } catch {
+                state.withLock { $0.code = (error as? RPCError)?.code ?? .unknown }
+            }
+            state.withLock { $0.ended = true }
+        }
+    }
+
+    func send(_ message: AgentProtocol_V1_WrapperMessage) { up.yield(message) }
+
+    func finish() { up.finish() }
+
+    var down: [AgentProtocol_V1_DriverMessage] { state.withLock { $0.down } }
+
+    /// The MCP answer under the wrapper's `id`, once it has come.
+    @MainActor
+    func mcp(_ id: String) async -> AgentProtocol_V1_McpResponse? {
+        await eventually { self.down.first { $0.mcp.id == id && !id.isEmpty }?.mcp }
+    }
+
+    /// The answers to the approval `id`, once there are `count`.
+    @MainActor
+    func approvals(_ id: String, count: Int = 1) async -> [AgentProtocol_V1_Approval] {
+        await eventually {
+            let given = self.down.compactMap { message -> AgentProtocol_V1_Approval? in
+                guard case .approval(let approval) = message.message, approval.requestID == id else { return nil }
+                return approval
+            }
+            return given.count >= count ? given : nil
+        } ?? []
+    }
+}
+
+/// `value` once it is there, within five seconds.
+@MainActor
+private func eventually<T>(_ value: () -> T?) async -> T? {
+    for _ in 0..<500 {
+        if let found = value() { return found }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return nil
+}
+
+extension ServerTests {
+@Suite(.serialized) @MainActor final class DrivenAgentTests {
+    private var server: VisorServer!
+    private var listening: VisorDriver.Listening!
+    private var root: URL!
+    private let port = Int(ServerTestCase.freePort())
+
+    init() async throws {
+        TestPlatform.install()
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-driven-agents-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
+        VisorServer.secrets = MemorySecrets()
+        server = VisorServer(port: UInt16(ServerTestCase.freePort()))
+        listening = VisorDriver.Listening(host: "127.0.0.1", port: port, url: "http://127.0.0.1:\(port)", harness: "echo")
+        listening.serve(server)
+        // Listening once a claim is answered.
+        for _ in 0..<200 {
+            do {
+                _ = try await claimed()
+                break
+            } catch {
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+        }
+    }
+
+    isolated deinit {
+        listening.stop()
+        server.stop()
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    private var jobs: JobQueue { listening.jobs! }
+
+    private func start(_ title: String, skip: Bool? = nil) -> Envelope {
+        var e = Envelope(type: "job")
+        e.agent = .claude
+        e.title = title
+        e.cwd = "/tmp"
+        e.skipPermissions = skip
+        return e
+    }
+
+    private func dispatcher<T: Sendable>(_ body: @escaping @Sendable (AgentProtocol_V1_AgentDispatcher.Client<HTTP2ClientTransport.Posix>) async throws -> T)
+        async throws -> T {
+        let transport = try HTTP2ClientTransport.Posix(target: .dns(host: "127.0.0.1", port: port), transportSecurity: .plaintext)
+        return try await withGRPCClient(transport: transport) { client in
+            try await body(AgentProtocol_V1_AgentDispatcher.Client(wrapping: client))
+        }
+    }
+
+    /// The next job a native runner is given, if any (claimed over gRPC).
+    private func claimed() async throws -> AgentProtocol_V1_Job? {
+        let answer = try await dispatcher { try await $0.claim(.with { $0.runner = "Test"; $0.capabilities = ["native", "harness:echo"] }) }
+        return answer.hasJob ? answer.job : nil
+    }
+
+    private nonisolated static func bearer(_ token: String?) -> Metadata {
+        token.map { ["authorization": "Bearer \($0)"] } ?? [:]
+    }
+
+    /// How a call ended: nil when it was answered.
+    private func code<T: Sendable>(_ call: @escaping @Sendable (AgentProtocol_V1_AgentDispatcher.Client<HTTP2ClientTransport.Posix>) async throws -> T)
+        async -> RPCError.Code? {
+        do {
+            _ = try await dispatcher(call)
+            return nil
+        } catch {
+            return (error as? RPCError)?.code ?? .unknown
+        }
+    }
+
+    private nonisolated static func hello(_ agent: String, title: String = "Driven") -> AgentProtocol_V1_WrapperMessage {
+        .with { $0.hello = .with {
+            $0.agent = .with { $0.uuid = agent; $0.dispatcherURL = "http://127.0.0.1" }
+            $0.spec = .with { $0.harness = "echo"; $0.title = title; $0.workingDirectory = "/tmp" }
+            $0.hostName = "test"
+        } }
+    }
+
+    /// A wrapper dialled in for `agent` with `token`, said hello and hung
+    /// up: how its call ended.
+    private func refusal(connecting agent: String, token: String?) async -> RPCError.Code? {
+        let wrapper = FakeWrapper()
+        let call = wrapper.connect(port: port, token: token)
+        wrapper.send(Self.hello(agent))
+        wrapper.finish()
+        await call.value
+        return wrapper.state.withLock { $0.code }
+    }
+
+    /// The job `title`'s agent dialled in as its wrapper, with its token:
+    /// its job, its connection, and its session.
+    private func driven(_ title: String) async throws -> (AgentProtocol_V1_Job, FakeWrapper, SessionRecord) {
+        _ = try jobs.queueStart(start(title)).get()
+        let job = try #require(try await claimed())
+        let wrapper = FakeWrapper()
+        wrapper.connect(port: port, token: job.token)
+        wrapper.send(Self.hello(job.agent.uuid, title: title))
+        let record = try #require(await eventually { self.server.session(job.agent.uuid) }, "its session taken in")
+        return (job, wrapper, record)
+    }
+
+    @Test func aCallWithoutItsAgentsTokenIsRefused() async throws {
+        let a = try jobs.queueStart(start("A")).get()
+        let b = try jobs.queueStart(start("B")).get()
+        let jobA = try #require(try await claimed())
+        let jobB = try #require(try await claimed())
+        #expect(jobA.agent.uuid == a && jobB.agent.uuid == b)
+        #expect(!jobA.token.isEmpty && !jobB.token.isEmpty && jobA.token != jobB.token, "each its own")
+
+        // Connect: no token, a wrong one, and B's as A.
+        #expect(await refusal(connecting: a, token: nil) == .unauthenticated)
+        #expect(await refusal(connecting: a, token: "not-a-token") == .unauthenticated)
+        #expect(await refusal(connecting: a, token: jobB.token) == .unauthenticated, "B's token can't dial in as A")
+        #expect(await refusal(connecting: "someone-else", token: jobA.token) == .unauthenticated, "nor A's as an agent of no job")
+        #expect(server.session(a) == nil && server.session(b) == nil, "no session taken in for any of them")
+
+        // Report and Renew, the wrapper's and the runner's.
+        let started = AgentProtocol_V1_JobReport.with { $0.agent = jobA.agent; $0.started = .with { $0.runner = "Test"; $0.sessionID = "s" } }
+        #expect(await code { try await $0.report(started) } == .unauthenticated)
+        #expect(await code { try await $0.report(started, metadata: Self.bearer(jobB.token)) } == .unauthenticated)
+        let renewal = AgentProtocol_V1_RenewRequest.with { $0.agent = jobA.agent }
+        #expect(await code { try await $0.renew(renewal) } == .unauthenticated)
+        #expect(await code { try await $0.renew(renewal, metadata: Self.bearer(jobB.token)) } == .unauthenticated)
+        let renewed = try await dispatcher { try await $0.renew(renewal, metadata: Self.bearer(jobA.token)) }
+        #expect(renewed.hasClaimExpires, "with its own token, the claim is kept")
+        #expect(await code { try await $0.report(started, metadata: Self.bearer(jobA.token)) } == nil)
+
+        // Conversation.
+        let conversation = AgentProtocol_V1_ConversationRequest.with { $0.agent = jobA.agent; $0.workingDirectory = "/tmp" }
+        let transport = try HTTP2ClientTransport.Posix(target: .dns(host: "127.0.0.1", port: port), transportSecurity: .plaintext)
+        let refused: RPCError.Code? = await {
+            do {
+                try await withGRPCClient(transport: transport) { client in
+                    try await AgentProtocol_V1_AgentDriver.Client(wrapping: client).conversation(conversation) { response in
+                        for try await _ in response.messages {}
+                    }
+                }
+                return nil
+            } catch {
+                return (error as? RPCError)?.code ?? .unknown
+            }
+        }()
+        #expect(refused == .unauthenticated)
+
+        // With its own, A dials in and is its session.
+        let wrapper = FakeWrapper()
+        wrapper.connect(port: port, token: jobA.token)
+        wrapper.send(Self.hello(a, title: "A"))
+        let record = await eventually { self.server.session(a) }
+        #expect((record?.driven) == true)
+        wrapper.finish()
+
+        // A job let go takes its token with it: its runner's renewal is
+        // told the claim isn't its own, and its wrapper can't dial in.
+        jobs.forget(session: b)
+        let gone = try await dispatcher { try await $0.renew(.with { $0.agent = jobB.agent }, metadata: Self.bearer(jobB.token)) }
+        #expect(!gone.hasClaimExpires)
+        #expect(await refusal(connecting: b, token: jobB.token) == .unauthenticated)
+    }
+
+    @Test func aWrappersMCPIsAnsweredAsItsSession() async throws {
+        server.takeDriven(SessionInfo(id: "other-session", agent: .claude, cwd: "/tmp", title: "Other", created: 0), process: DrivenProcess())
+        let (job, wrapper, _) = try await driven("Asker")
+        func request(_ id: String, _ json: String) -> AgentProtocol_V1_WrapperMessage {
+            .with { $0.mcp = .with { $0.id = id; $0.json = json; $0.client = "c1" } }
+        }
+        wrapper.send(request("w1", #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#))
+        wrapper.send(request("", #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#))
+        wrapper.send(request("w2", #"{"jsonrpc":"2.0","id":"two","method":"tools/list"}"#))
+        wrapper.send(request("w3", #"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_sessions","arguments":{}}}"#))
+        wrapper.send(request("w4", "not json"))
+
+        let initialized = try #require(await wrapper.mcp("w1"))
+        #expect(initialized.client == "c1")
+        let hello = try #require(parseJSON(initialized.json))
+        #expect(hello["id"] == .number(1))
+        #expect(hello["result"]["serverInfo"]["name"].string == "visor")
+        #expect(hello["result"]["protocolVersion"].string == "2025-06-18")
+
+        let listed = try #require(parseJSON(try #require(await wrapper.mcp("w2")).json))
+        #expect(listed["id"] == .string("two"), "the agent's own id, whatever its kind")
+        let tools = listed["result"]["tools"].array?.compactMap { $0["name"].string } ?? []
+        #expect(tools.contains("list_sessions") && tools.contains("send_message") && tools.contains("read_inbox"))
+        #expect(!tools.contains("approve"), "the wrapper's own")
+
+        let call = try #require(parseJSON(try #require(await wrapper.mcp("w3")).json))
+        let text = call["result"]["content"][0]["text"].string ?? ""
+        #expect(call["result"]["isError"] == .bool(false), Comment(rawValue: text))
+        #expect(text.contains("other-session"), Comment(rawValue: text))
+        #expect(!text.contains(job.agent.uuid), "its own session isn't another: it asks as itself")
+
+        let unreadable = try #require(parseJSON(try #require(await wrapper.mcp("w4")).json))
+        #expect(unreadable["error"]["code"] == .number(-32700))
+        #expect(!wrapper.down.contains { $0.mcp.id.isEmpty && $0.mcp.json.contains("notifications/initialized") }, "a notification isn't answered")
+        wrapper.finish()
+    }
+
+    @Test func aWrappersApprovalsAreItsSessionsAndTheAnswersGoBack() async throws {
+        let (job, wrapper, record) = try await driven("Asks first")
+        let session = job.agent.uuid
+        func ask(_ id: String, _ tool: String, _ input: String = "{}") {
+            wrapper.send(.with { $0.approval = .with { $0.id = id; $0.tool = tool; $0.summary = "\(tool) it"; $0.inputJson = input } })
+        }
+        func answer(_ id: String, allow: Bool, answers: [String: String]? = nil) {
+            var e = Envelope(type: "approve")
+            e.session = session
+            e.id = id
+            e.allow = allow
+            e.answers = answers
+            server.perform(e, from: nil)
+        }
+        func pending(_ id: String?) async -> Bool {
+            await eventually { record.info.pendingApproval?.id == id ? true : nil } ?? false
+        }
+
+        ask("p1", "Bash", #"{"command":"ls"}"#)
+        #expect(await pending("p1"))
+        #expect(record.info.pendingApproval == ApprovalRequest(id: "p1", tool: "Bash", summary: "Bash it"))
+        answer("p1", allow: true)
+        #expect(await wrapper.approvals("p1") == [.with { $0.requestID = "p1"; $0.allow = true }])
+        #expect(record.info.pendingApproval == nil)
+
+        ask("p2", "Edit")
+        #expect(await pending("p2"))
+        answer("p2", allow: false)
+        #expect(await wrapper.approvals("p2") == [.with { $0.requestID = "p2"; $0.reason = "The user denied this from Visor." }])
+
+        ask("p3", "AskUserQuestion", #"{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"A"},{"label":"B"}]}]}"#)
+        #expect(await pending("p3"))
+        #expect((record.info.pendingApproval?.questions?.first?.question) == "Which?")
+        answer("p3", allow: true, answers: ["Which?": "B"])
+        let updated = parseJSON(await wrapper.approvals("p3").first?.updatedInputJson ?? "")
+        #expect((updated?["answers"]["Which?"].string) == "B")
+        #expect((updated?["questions"][0]["question"].string) == "Which?")
+
+        ask("p4", "Write")
+        #expect(await pending("p4"))
+        wrapper.send(.with { $0.approvalWithdrawn = "p4" })
+        #expect(await pending(nil), "withdrawn: no longer asked")
+
+        // Asked again after a reconnect: the answer given, again.
+        ask("p1", "Bash", #"{"command":"ls"}"#)
+        #expect(await wrapper.approvals("p1", count: 2).count == 2)
+        #expect(record.info.pendingApproval == nil, "not shown again")
+        wrapper.finish()
+    }
+
+    @Test func aJobAsksOrNotAsItsSessionDoes() async throws {
+        // A job queued as such.
+        _ = try jobs.queueStart(start("Acts", skip: true)).get()
+        _ = try jobs.queueStart(start("Asks")).get()
+        #expect((try await claimed()?.skipPermissions) == true)
+        #expect((try await claimed()?.skipPermissions) == false, "asks unless it says otherwise")
+
+        // A driven session's next agent: as the session is set.
+        let record = server.takeDriven(SessionInfo(id: "moved", agent: .claude, cwd: "/tmp", title: "Moved", skipPermissions: true, created: 0),
+                                       process: DrivenProcess())
+        record.move = AgentJobMove(agent: "old-agent", session: "moved", title: "Moved", resume: "c-1", cwd: "/tmp", runsOn: "native")
+        var manual = Envelope(type: "permissions")
+        manual.session = "moved"
+        manual.skipPermissions = false
+        server.perform(manual, from: nil)
+        let asking = try #require(try await claimed())
+        #expect(!asking.skipPermissions && asking.resumeSessionID == "c-1" && !asking.token.isEmpty)
+        #expect(jobs.session(of: asking.agent.uuid) == "moved")
+
+        var auto = manual
+        auto.skipPermissions = true
+        server.perform(auto, from: nil)
+        let acting = try #require(try await claimed())
+        #expect(acting.skipPermissions && acting.agent.uuid != asking.agent.uuid)
+        #expect(record.move?.skipPermissions == true)
+    }
+}
+}

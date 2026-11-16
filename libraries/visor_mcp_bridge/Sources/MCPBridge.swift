@@ -8,7 +8,7 @@ import VisorProtocol
 /// (to the server, or for `approve` to the person), `ping`. Every call goes
 /// to the server through its link; what the agent is told goes out a line
 /// at a time.
-actor MCPBridge {
+package actor MCPBridge {
     private let link: any MCPServerLink
     private let output: any MCPOutput
     /// Whether `approve` is offered (VISOR_APPROVALS).
@@ -20,11 +20,13 @@ actor MCPBridge {
     /// is held against.
     private var listedProxied: String?
     private var watching = false
+    /// The look every 30 s at the passed-on tools, until `close`.
+    private var watch: Task<Void, Never>?
     /// The `approve` calls waiting on the person, by the agent's request id
     /// (as JSON): each given up when the agent gives up on it.
     private var asking: [String: MCPAsking] = [:]
 
-    init(link: any MCPServerLink, output: any MCPOutput, approvals: Bool, contained: Bool, timing: MCPTiming = MCPTiming()) {
+    package init(link: any MCPServerLink, output: any MCPOutput, approvals: Bool, contained: Bool, timing: MCPTiming = MCPTiming()) {
         self.link = link
         self.output = output
         self.approvals = approvals
@@ -33,7 +35,7 @@ actor MCPBridge {
     }
 
     /// One line from the agent: a request, or a notification.
-    func handle(_ line: String) {
+    package func handle(_ line: String) {
         guard let request = parseJSON(line), request.object != nil else { return }
         let id = request["id"]
         let params = request["params"]
@@ -75,6 +77,14 @@ actor MCPBridge {
         }
     }
 
+    /// Done with: its look at the passed-on tools stopped. (A bridge whose
+    /// process ends with the agent's needs none; one a driver keeps for a
+    /// connection does: VisorDriver's DrivenMCP.)
+    package func close() {
+        watch?.cancel()
+        watch = nil
+    }
+
     private func respond(_ id: JSONValue, _ result: JSONValue) {
         output.send(.object(["jsonrpc": .string("2.0"), "id": id, "result": result]))
     }
@@ -106,9 +116,10 @@ actor MCPBridge {
         guard !watching else { return }
         watching = true
         let every = timing.watch
-        Task {
-            while true {
+        watch = Task {
+            while !Task.isCancelled {
                 try? await Task.sleep(for: every)
+                if Task.isCancelled { return }
                 let tools = await proxiedTools()
                 let now = Self.signature(tools)
                 if let listed = listedProxied, now != listed {

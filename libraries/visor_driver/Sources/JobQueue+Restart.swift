@@ -51,6 +51,10 @@ extension JobQueue {
             dropped += before - waiting.count
             restored.remove(agent)
             returns[agent] = nil
+            // Its token too: its runner's next renewal is told the claim
+            // isn't its own, its wrapper can't dial in again, and its
+            // reports are no longer taken.
+            forgetToken(of: agent)
         }
         save()
         if dropped > 0 { log("dispatcher: \(session)'s agent stopped: its job let go") }

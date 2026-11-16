@@ -120,6 +120,10 @@ extension SessionRecord {
         case .question(let request):
             info.pendingApproval = request
             return .approval(session: info.id, request)
+        case .withdrawn(let id):
+            guard info.pendingApproval?.id == id else { return nil }
+            info.pendingApproval = nil
+            return .approval(session: info.id, nil)
         case .spent(let total):
             let added = reportedUsage.map { total.continues(from: $0) ? total.since($0) : total } ?? total
             reportedUsage = total

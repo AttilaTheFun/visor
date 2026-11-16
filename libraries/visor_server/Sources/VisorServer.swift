@@ -44,7 +44,7 @@ public final class VisorServer {
 
     /// Where the password is kept: the system's place for secrets (the
     /// platform's); tests swap in their own.
-    static var secrets: any SecretStore = ServerPlatform.current.secrets
+    package static var secrets: any SecretStore = ServerPlatform.current.secrets
 
     /// How the server is reached (ServerSettings): kept as set, and
     /// listened by again when how it listens changes.

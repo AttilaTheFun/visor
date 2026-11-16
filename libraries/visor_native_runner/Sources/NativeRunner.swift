@@ -4,6 +4,9 @@
 // AGENT_JOB, AGENT_DISPATCHER_URL, AGENT_DRIVER_URL, AGENT_RUNNER). While
 // an agent runs its claim is renewed; the wrapper reports how the job
 // went, and one that ends without reporting (not 0) has its job released.
+// The job's token (Job.token) goes to the wrapper in AGENT_TOKEN alone,
+// and is shown on the runner's own renewals and releases
+// (`authorization: Bearer`), as the dispatcher asks.
 // Native agents work as Visor's always have: in the user's own account,
 // reading and writing where the user can (Logan, 12 Nov 2026).
 
@@ -102,7 +105,8 @@ public actor NativeRunner {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(20))
                     if Task.isCancelled { return }
-                    if let answer = try? await dispatcher.renew(.with { $0.agent = job.agent }), !answer.hasClaimExpires {
+                    if let answer = try? await dispatcher.renew(.with { $0.agent = job.agent }, metadata: Self.metadata(job)),
+                       !answer.hasClaimExpires {
                         log("native runner: \(job.agent.uuid)'s claim isn't this runner's any more: stopping it")
                         process.terminate()
                         return
@@ -126,7 +130,12 @@ public actor NativeRunner {
         _ = try? await dispatcher.report(.with {
             $0.agent = job.agent
             $0.released = .with { $0.reason = reason }
-        })
+        }, metadata: Self.metadata(job))
+    }
+
+    /// What a call for the job's agent shows: its token, if it has one.
+    static func metadata(_ job: AgentProtocol_V1_Job) -> Metadata {
+        job.token.isEmpty ? [:] : ["authorization": "Bearer \(job.token)"]
     }
 
     /// The wrapper's environment for a job: this process's, and the runner's contract.
@@ -137,6 +146,9 @@ public actor NativeRunner {
         environment["AGENT_DISPATCHER_URL"] = dispatcher
         environment["AGENT_RUNNER"] = name
         if job.driverURL.isEmpty { environment["AGENT_DRIVER_URL"] = nil } else { environment["AGENT_DRIVER_URL"] = job.driverURL }
+        // Only here: never in AGENT_JOB or on a command line. A token this
+        // process was itself given is not the job's.
+        environment["AGENT_TOKEN"] = job.token.isEmpty ? nil : job.token
         return environment
     }
 
@@ -150,6 +162,8 @@ public actor NativeRunner {
                              ("resumeSessionID", job.resumeSessionID)] where !value.isEmpty {
             object[key] = value
         }
+        // Job.skip_permissions: the agent acts (true) or asks through the driver.
+        object["skipPermissions"] = job.skipPermissions
         if !job.sources.isEmpty {
             object["sources"] = job.sources.map { ["repository": $0.repository, "ref": $0.ref, "name": $0.name] }
         }

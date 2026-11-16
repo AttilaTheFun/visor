@@ -7,7 +7,7 @@ extension AgentQuestion {
                  "multiSelect": .bool(multiSelect)])
     }
 
-    init?(json: JSONValue) {
+    public init?(json: JSONValue) {
         guard let question = json["question"].string else { return nil }
         self.init(question: question, header: json["header"].string ?? "",
                   options: json["options"].array?.compactMap(Option.init(json:)) ?? [], multiSelect: json["multiSelect"].bool ?? false)

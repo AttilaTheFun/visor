@@ -61,4 +61,7 @@ public enum AgentEvent: Sendable {
     /// request_user_input): shown as the session's pending approval, with
     /// its questions; the answers go back through `AgentProcess.answer`.
     case question(ApprovalRequest)
+    /// The agent no longer waits on the question or approval with this id
+    /// (it gave up on it, or it was answered elsewhere): no longer shown.
+    case withdrawn(String)
 }

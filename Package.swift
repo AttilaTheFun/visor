@@ -89,7 +89,7 @@ let system: [Target] = [
     // that pulls from a dispatcher and runs agent-wrapper: on Linux and the
     // Mac, never Windows (the server library itself has neither).
     .target(name: "VisorDriver",
-            dependencies: ["VisorServer", "VisorAgent", "VisorProtocol", "VisorSystem",
+            dependencies: ["VisorServer", "VisorAgent", "VisorMCPBridge", "VisorProtocol", "VisorSystem",
                            .product(name: "AgentProtocol", package: "agent_protocol"),
                            .product(name: "GRPCCore", package: "grpc-swift-2"),
                            .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport")],
@@ -111,7 +111,8 @@ let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["Vis
 /// agent_protocol (its driver, dispatcher and wrapper), by release, and its
 /// gRPC.
 let runnerPackages: [Package.Dependency] = [
-    .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", from: "0.2.0"),
+    // Unreleased for now (agent_protocol#9, #10, #12): a release before this merges.
+    .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", revision: "ba221f53f1de729641e456f2c8785b384ac06cf7"),
     .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
     .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
 ]
