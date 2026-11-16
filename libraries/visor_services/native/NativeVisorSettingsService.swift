@@ -3,9 +3,10 @@
 // Android) secrets are kept with the settings, as the system keeps an
 // app's own preferences. A launch's own settings (VisorLaunchSettings: the
 // fixture's and the account's, never a secret) come first from the
-// environment, as Isomer's launchers give a test's (on the iPhone's
-// simulator, simctl's SIMCTL_CHILD_), then from UserDefaults, where the
-// iPhone's `-visor.<key> <value>` launch arguments put them.
+// environment, as `visor.<key>` alone (as Isomer's launchers give a test's:
+// on the iPhone's simulator, through simctl's SIMCTL_CHILD_), then from
+// UserDefaults, where the iPhone's `-visor.<key> <value>` launch arguments
+// put them.
 
 import Foundation
 #if canImport(os)
@@ -26,26 +27,34 @@ public final class NativeVisorSettingsService: VisorSettingsService {
     /// for the app's default group. On the Mac a group is the data
     /// protection keychain's, not the login keychain's.
     private let keychainGroup: String?
-    /// The launch's settings from its environment (`fixture=snapshot`, or
-    /// `visor.fixture=snapshot`), read once: none in a launch of the app's
-    /// own.
+    /// The launch's settings from its environment (`visor.fixture=snapshot`;
+    /// a bare `fixture` or `account` is someone else's), read once: none in
+    /// a launch of the app's own.
     private var launch: [String: String]
+    /// Where the settings are kept: the app's own UserDefaults, which its
+    /// launch arguments also fill.
+    private let defaults: UserDefaults
 
-    public init(keychainService: String? = nil, keychainGroup: String? = nil) {
+    /// `environment` and `defaults` are the process's own, unless a test
+    /// gives others.
+    public init(keychainService: String? = nil, keychainGroup: String? = nil,
+                environment: [String: String] = ProcessInfo.processInfo.environment,
+                defaults: UserDefaults = .standard) {
         self.keychainService = keychainService ?? Bundle.main.bundleIdentifier ?? "Visor"
         self.keychainGroup = keychainGroup
-        launch = VisorLaunchSettings.values(in: ProcessInfo.processInfo.environment)
+        self.defaults = defaults
+        launch = VisorLaunchSettings.values(in: environment, prefix: VisorLaunchSettings.prefix)
     }
 
     public func get(key: String) -> String {
-        launch[key] ?? UserDefaults.standard.string(forKey: "visor." + key) ?? ""
+        launch[key] ?? defaults.string(forKey: "visor." + key) ?? ""
     }
 
     public func set(key: String, value: String) {
         // What the app sets stands over what it was launched with.
         launch[key] = nil
-        if value.isEmpty { UserDefaults.standard.removeObject(forKey: "visor." + key) }
-        else { UserDefaults.standard.set(value, forKey: "visor." + key) }
+        if value.isEmpty { defaults.removeObject(forKey: "visor." + key) }
+        else { defaults.set(value, forKey: "visor." + key) }
     }
 
     #if canImport(Security)
