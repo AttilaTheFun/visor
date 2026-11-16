@@ -270,6 +270,60 @@ extension ServerTests {
         #expect(try claims(try String(contentsOfFile: file, encoding: .utf8)).sub == "A", "unarchived: back")
     }
 
+    /// A session's id is a client's: whatever it is, its token file is
+    /// `token` in a folder of its own directly inside `hosts/`, never
+    /// `hosts/` itself, outside it, or another session's; and removing it
+    /// removes that file, and its folder only when empty, and nothing else.
+    @Test func aTokenFileIsAlwaysItsOwnInsideHosts() throws {
+        let files = FileManager.default
+        let hosts = VisorServer.sessionTokenFolders
+        try files.createDirectory(at: hosts, withIntermediateDirectories: true)
+        let log = hosts.appendingPathComponent("hosts.log", isDirectory: false)
+        let socket = hosts.appendingPathComponent("A-abc123.sock", isDirectory: false)
+        #expect(files.createFile(atPath: log.path, contents: Data("the hosts' log".utf8)))
+        #expect(files.createFile(atPath: socket.path, contents: nil))
+        let survivors = { files.fileExists(atPath: log.path) && files.fileExists(atPath: socket.path) }
+
+        let ids = [".", "..", "", "a/b", "a_b", "../x", "x/../../y", String(repeating: "long-", count: 60)]
+        var paths: [String: String] = [:]
+        for id in ids {
+            let file = VisorServer.sessionTokenFile(of: id)
+            #expect(VisorServer.isSessionTokenFile(file), Comment(rawValue: id))
+            #expect(file.deletingLastPathComponent().deletingLastPathComponent().standardizedFileURL.path == hosts.standardizedFileURL.path,
+                    Comment(rawValue: id))
+            let name = file.deletingLastPathComponent().lastPathComponent
+            #expect(!["", ".", ".."].contains(name) && !name.contains("/"), Comment(rawValue: id))
+            paths[id] = file.path
+            let token = server.writeSessionToken(of: id)
+            #expect(try String(contentsOfFile: file.path, encoding: .utf8) == token, Comment(rawValue: id))
+            #expect(try claims(token).sub == id)
+        }
+        #expect(Set(paths.values).count == ids.count, "each its own file")
+        #expect(paths["a/b"] != paths["a_b"])
+        #expect(paths["a_b"] == hosts.appendingPathComponent("a_b/token").path, "a plain id is its own name")
+        #expect(!VisorServer.isSessionTokenFile(hosts.appendingPathComponent("token")), "never hosts/ itself")
+        #expect(!VisorServer.isSessionTokenFile(hosts.appendingPathComponent("../token")))
+        #expect(survivors())
+
+        // Something else in a session's folder keeps the folder.
+        let kept = URL(fileURLWithPath: try #require(paths["a_b"])).deletingLastPathComponent().appendingPathComponent("note")
+        #expect(files.createFile(atPath: kept.path, contents: nil))
+        for (index, id) in ids.enumerated() {
+            server.removeSessionTokenFile(of: id)
+            let path = try #require(paths[id])
+            #expect(!files.fileExists(atPath: path), Comment(rawValue: id))
+            #expect(survivors() && files.fileExists(atPath: hosts.path), "hosts/ and its other files survive \(id)")
+            for later in ids[(index + 1)...] {
+                #expect(files.fileExists(atPath: try #require(paths[later])), "\(later)'s survives \(id)'s removal")
+            }
+        }
+        #expect(files.fileExists(atPath: kept.path), "a folder with something else in it stays")
+        #expect(!files.fileExists(atPath: URL(fileURLWithPath: try #require(paths["a/b"])).deletingLastPathComponent().path),
+                "an emptied one goes")
+        let everything = files.enumerator(atPath: hosts.path)?.compactMap { $0 as? String } ?? []
+        #expect(!everything.contains { $0.hasSuffix(".new") }, "no staged file left")
+    }
+
     @Test func rotatingTheKeysReMintsTheTokenFilesAndAnEmergencyRefusesTheOld() throws {
         let file = VisorServer.sessionTokenFile(of: "A").path
         let before = server.writeSessionToken(of: "A")
