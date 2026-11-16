@@ -106,6 +106,32 @@ extension FeatureMapTests {
             try sendFromComposer(app)
         }
 
+        @Test("Sign-in code prompt, again: leave Visor and come back (scene background, then active) while the code is awaited, not once it's sent")
+        func comesBack() throws {
+            let app = try offered()
+            defer { app.quit() }
+            try prompt(app)
+            let chat = try app.tap(id: "sign-in-cancel", else: "Cancel")
+            #expect(!FeatureMapNode.signInCode.isShown(on: chat), "the prompt is still up: \(chat.summary)")
+            // Away (to the sign-in page, say) and back: the code is asked
+            // for again.
+            try app.scene(.background)
+            try app.scene(.active)
+            let again = try app.screen { FeatureMapNode.signInCode.isShown(on: $0) }
+            FeatureMapNode.signInCode.expectShown(on: again)
+            // Sent from the prompt, it isn't asked for on the next return.
+            try app.type(id: "sign-in-code", else: "Code from the sign-in page", Self.code)
+            try app.tap(id: "sign-in-send", else: "Send")
+            let told = try app.screen(within: 10) { Self.told($0, Self.code) }
+            #expect(Self.told(told, Self.code), "the code didn't reach the sign-in: \(told.summary)")
+            try app.tap("OK")
+            try app.scene(.background)
+            try app.scene(.active)
+            Thread.sleep(forTimeInterval: 2)
+            let back = try app.screen()
+            #expect(!FeatureMapNode.signInCode.isShown(on: back), "asked again once sent: \(back.summary)")
+        }
+
         @Test("Session chat: “Later”, then the code from the composer")
         func composerRoute() throws {
             let app = try offered()

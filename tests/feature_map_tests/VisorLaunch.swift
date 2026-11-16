@@ -57,18 +57,26 @@ struct VisorLaunch {
         try launch(["account": "fixture"], width: width)
     }
 
+    /// Whether the launcher is Android's, whose launch intent's extras take
+    /// the settings by their own names.
+    static var android: Bool {
+        (launcher.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "").hasPrefix("android")
+    }
+
     /// `settings` are the client's settings for this launch, by their own
     /// names (`fixture`, `fixture.screen`, `account`: VisorLaunchSettings):
-    /// the headless client's environment as they are. A headful app gets
-    /// them from its launcher as `visor.<key>`, the names a native app
-    /// takes from its environment (the iPhone's simulator's SIMCTL_CHILD_,
-    /// the Mac app's); fresh_launcher.sh gives Android's launch intent's
-    /// extras their own names back.
+    /// the headless client's environment as they are, and Android's launch
+    /// intent's extras (VisorServices.kt). Another headful app gets them
+    /// from its launcher as `visor.<key>`, the names a native app takes
+    /// from its environment (the iPhone's simulator's SIMCTL_CHILD_, the
+    /// Mac app's). A headful app starts fresh, with none of the data a
+    /// launch before it kept (the computer a test added), as the headless
+    /// client always does: the launcher's ISOMER_FRESH.
     private static func launch(_ settings: [String: String], width: Width) throws -> HeadlessApp {
         if let launcher {
             let start = ContinuousClock.now
-            let environment = Dictionary(uniqueKeysWithValues: settings.map { ("visor." + $0.key, $0.value) })
-            let app = try HeadlessApp(launcher: launcher, environment: environment)
+            let environment = Dictionary(uniqueKeysWithValues: settings.map { (android ? $0.key : "visor." + $0.key, $0.value) })
+            let app = try HeadlessApp(launcher: launcher, environment: environment, fresh: true)
             print("[launch] \(settings["fixture.screen"] ?? settings["fixture"] ?? "empty"): attached in \(ContinuousClock.now - start)")
             return app
         }

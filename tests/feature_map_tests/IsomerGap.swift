@@ -55,4 +55,9 @@ enum IsomerGap: String {
     /// "didn't take" (drive/apple/UIKitAccessibility.swift's `activate`),
     /// scrolled to or not; upright it does.
     case appleLandscapeTap = "Isomer (iOS): on its side, a tap on a list's row doesn't take"
+
+    /// On the iPhone, `longpress` (drive/apple/UIKitAccessibility.swift's
+    /// `longPress`) isn't driven yet: a context menu's interaction presents
+    /// only through UIKit's own SPI.
+    case appleLongPress = "Isomer (iOS): longpress (a context menu) isn't driven yet"
 }

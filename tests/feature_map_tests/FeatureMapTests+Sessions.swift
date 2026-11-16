@@ -57,6 +57,25 @@ extension FeatureMapTests {
             FeatureMapNode.sessions.expectShown(on: try app.back())
         }
 
+        @Test("Sessions → Project settings: longpress session-‹id›, tap “Project Settings”")
+        func projectSettings() throws {
+            let app = try VisorLaunch.fixture("sessions")
+            defer { app.quit() }
+            try app.screen { FeatureMapNode.sessions.isShown(on: $0) }
+            let row = try app.target(id: "session-fixture-chat", else: "Offline sync", .listRow)
+            let menu: HeadlessScreen
+            do {
+                menu = try app.longPress(row)
+            } catch where app.apple {
+                // Isomer's Apple driver has no long press yet.
+                withKnownIssue(Comment(rawValue: IsomerGap.appleLongPress.rawValue)) { Issue.record(error) }
+                return
+            }
+            // The row's context menu, its items the screen's buttons.
+            #expect(menu.element("Project Settings") != nil, "no context menu: \(menu.summary)")
+            FeatureMapNode.project.expectShown(on: try app.tap("Project Settings"))
+        }
+
         @Test("Sessions → Settings: tap settings")
         func opensSettings() throws {
             let app = try VisorLaunch.fixture("sessions")

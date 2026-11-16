@@ -33,10 +33,11 @@ _SUPPORT = [
     "VisorLaunch.swift",
 ]
 
-# Headful: each platform's app built with --config=drive, started fresh
-# (its data cleared: fresh_launcher.sh) by Isomer's launcher for the
-# platform (@isomer//drive/launchers), which dials it out to the test's hub
-# and takes its pictures. The app is installed where the test's environment
+# Headful: each platform's app built with --config=drive, started by
+# Isomer's launcher for the platform (@isomer//drive/launchers) fresh, its
+# data from before cleared (HeadlessApp's `fresh`, the launcher's
+# ISOMER_FRESH), which dials it out to the test's hub and takes its
+# pictures. The app is installed where the test's environment
 # says, as Isomer's launchers read it:
 #
 #   ios      ISOMER_SIMULATOR=<a booted simulator's UDID>, Visor installed on it
@@ -59,15 +60,13 @@ _PLATFORMS = ["ios", "android", "macos"]
         srcs = glob(["*.swift"]),
         copts = STRICT_SWIFT,
         data = [
-            ":fresh_launcher.sh",
             "@isomer//drive/launchers:%s" % platform,
             "@isomer//drive/launchers:%s_launcher.sh" % platform,
         ],
         env = {
             "ISOMER_ANDROID_PACKAGE": "com.loganshire.visor",
             "ISOMER_BUNDLE_ID": "com.LoganShire.Visor",
-            "ISOMER_HEADFUL_LAUNCHER": "$(rootpath :fresh_launcher.sh)",
-            "VISOR_LAUNCHER": "$(rootpath @isomer//drive/launchers:%s_launcher.sh)" % platform,
+            "ISOMER_HEADFUL_LAUNCHER": "$(rootpath @isomer//drive/launchers:%s_launcher.sh)" % platform,
         },
         module_name = "VisorFeatureMapHeadful%sTests" % platform.capitalize(),
         tags = [
@@ -94,15 +93,13 @@ _PLATFORMS = ["ios", "android", "macos"]
         srcs = _SUPPORT + glob(["proof/*.swift"]),
         copts = STRICT_SWIFT,
         data = [
-            ":fresh_launcher.sh",
             "@isomer//drive/launchers:%s" % platform,
             "@isomer//drive/launchers:%s_launcher.sh" % platform,
         ],
         env = {
             "ISOMER_ANDROID_PACKAGE": "com.loganshire.visor",
             "ISOMER_BUNDLE_ID": "com.LoganShire.Visor",
-            "ISOMER_HEADFUL_LAUNCHER": "$(rootpath :fresh_launcher.sh)",
-            "VISOR_LAUNCHER": "$(rootpath @isomer//drive/launchers:%s_launcher.sh)" % platform,
+            "ISOMER_HEADFUL_LAUNCHER": "$(rootpath @isomer//drive/launchers:%s_launcher.sh)" % platform,
         },
         module_name = "VisorFeatureMapProof%s" % platform.capitalize(),
         tags = [

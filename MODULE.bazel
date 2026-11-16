@@ -163,7 +163,32 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.52.1")
+bazel_dep(name = "isomer", version = "0.55.0")
+
+# Isomer's AndroidX (the Android runtime's Compose and AndroidX), a module of
+# its own since isomer 0.54, at isomer's version (isomer's
+# docs/android_maven.md): Visor has no AndroidX of its own, so isomer's
+# `@isomer//android/maven:androidx` flags stay at their defaults, which find it.
+bazel_dep(name = "isomer_android_maven", version = "0.55.0")
+
+# Until isomer 0.56 is released: isomer's main at #231 (the Apple driver's
+# identifiers, dismiss, landscape taps and scene phase; launchers that start
+# an app fresh and stop at once), which the feature map's headful suite
+# needs. A branch may pin an unreleased revision; a release may not
+# (tools/released_pins.sh). Back to the registry's version, both modules and
+# third_party/swift_packages' isomer, once 0.56 is tagged.
+git_override(
+    module_name = "isomer",
+    commit = "262098292e89b03e427a30a965acbad7a394640b",
+    remote = "https://github.com/AttilaTheFun/isomer.git",
+)
+
+git_override(
+    module_name = "isomer_android_maven",
+    commit = "262098292e89b03e427a30a965acbad7a394640b",
+    remote = "https://github.com/AttilaTheFun/isomer.git",
+    strip_prefix = "android/maven_module",
+)
 
 
 # isomer's Android cross-compile toolchains. The extension insists on a
@@ -251,10 +276,11 @@ bazel_dep(name = "rules_go", version = "0.62.0")
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.24.12")
 
-# Maven: none of Visor's own. Isomer pins its AndroidX (`@isomer_maven`) and
-# rules_android's tools (`@rules_android_maven`) with its own lock files
-# (isomer's docs/android_maven.md); Visor's Kotlin, if it ever uses AndroidX,
-# depends on `@isomer//android/maven:androidx`.
+# Maven: none of Visor's own. isomer_android_maven pins Isomer's AndroidX
+# (`@isomer_maven`) with its own lock file (isomer's docs/android_maven.md);
+# rules_android resolves its own tools (`@rules_android_maven`), which isomer
+# no longer pins for its consumers (0.54). Visor's Kotlin, if it ever uses
+# AndroidX, depends on `@isomer//android/maven:androidx`.
 
 android_tools = use_extension("@isomer//tools/android:extensions.bzl", "android_tools")
 use_repo(

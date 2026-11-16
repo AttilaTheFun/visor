@@ -14,8 +14,9 @@ let package = Package(
         // Isomer's Swift (Foundation and SwiftUI off Apple's platforms), by
         // its release's tag: its own dependencies are by revision and branch,
         // so SwiftPM won't take it by version (tools/released_pins.sh allows
-        // this one).
-        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.52.1"),
+        // this one). Until isomer 0.56 is tagged, the commit MODULE.bazel's
+        // git_override pins (isomer#231), which a release may not have.
+        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "262098292e89b03e427a30a965acbad7a394640b"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
             exact: "0.51.0"

@@ -29,7 +29,8 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
                 || (screen.texts.last == "Sessions" && !screen.has(label: "Session details")))
         case .search: return screen.texts.contains("Messages") || screen.has(id: "message-hit")
         case .archived: return screen.shows("Archived Sessions")
-        case .project: return screen.shows("Project Settings")
+        // The project's page, titled by its name: its own buttons.
+        case .project: return screen.shows("Copy folder path") || screen.has(label: "Copy folder path")
         case .migrate: return screen.shows("Migrate")
         // By the labels where the identifiers aren't listed
         // (IsomerGap.appleIdentifier), here and below.
