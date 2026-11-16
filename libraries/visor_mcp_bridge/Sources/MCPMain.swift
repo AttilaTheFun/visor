@@ -4,7 +4,7 @@
 /// nor a container needs Node: the same program on the Mac (in the app's
 /// Helpers) and in every container (mounted from the app at /opt/visor/bin).
 ///
-/// Env: VISOR_PORT, VISOR_TOKEN (the server's agent-side secret),
+/// Env: VISOR_PORT, VISOR_TOKEN (the session's agent token),
 /// VISOR_SESSION, VISOR_APPROVALS ("1": offer `approve`), and VISOR_URL
 /// where the server is not this computer's own (an agent in a container:
 /// ws://host:port).

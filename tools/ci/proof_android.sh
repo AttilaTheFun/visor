@@ -1,28 +1,41 @@
 #!/bin/bash
 # Visor on Android's part of the proof (ci.yml's verify), on one
 # of GitHub's own Ubuntu runners (x86_64, with KVM): blue Visor's APK, built
-# on Linux by the proof's build job for x86_64, installed on an emulator
-# made here from the runner's Android SDK as Isomer's hermetic one is
+# on Linux by the proof's build job for x86_64 with Isomer's driver in it
+# (--config=drive: never a release's), installed on an emulator made here
+# from the runner's Android SDK as Isomer's hermetic one is
 # (@isomer//tools/android/emulator: API 34's AOSP image, 1080 by 1920 at
 # 420 dpi; SwiftShader draws it, the same pixels every run), its status bar
 # held still (System UI's demo mode, sent twice as snapshots.py sends it).
-# Each of the fixture's screens (snapshots.py's SCREENS) is opened with the
-# intent snapshots.py sends, pictured once it has settled, and cut below the
-# status bar, as snapshots.py cuts it: its icons redraw between runs even in
-# demo mode. On its side, the emulator is turned before the first: its
-# rotation held at a quarter turn, auto-rotate off.
+# The fixture's screens (snapshots.py's SCREENS) are pictured through
+# Isomer's driver (//tests/feature_map_tests:feature_map_proof_android, its
+# proof/FeatureMapProof.swift): one launch walking FEATURE_MAP.md to each
+# screen it reaches, and a launch for each screen whose fixture differs;
+# each pictured by Isomer's Android launcher (adb's screencap) once the
+# driver says it has settled and two pictures in a row are the same, then
+# cut below the status bar, as snapshots.py cuts it: its icons redraw
+# between runs even in demo mode. On its side, the emulator is turned
+# before the first: its rotation held at a quarter turn, auto-rotate off,
+# and held so while the test runs. The test is built here by Bazel while
+# the emulator boots and the APK builds.
 #
 #   tools/ci/proof_android.sh <apps> <out> [portrait|landscape]
 #
 # <apps> holds the signed APK (visor_android_apk.apk). Out come
 # <out>/screens/android-<screen>.png (on its side,
-# android-<screen>-landscape.png), <out>/logs/ (the emulator's and the
-# app's logs) and <out>/device.txt (the emulator, for the proof's summary).
+# android-<screen>-landscape.png), <out>/logs/ (the emulator's, the test's
+# and the launchers' logs) and <out>/device.txt (the emulator, for the
+# proof's summary).
 #
-#   VISOR_SNAPSHOT_SETTLE  seconds a screen is given (default 8)
+#   PROOF_BAZEL          the Bazel to build and run the test (default: bazel)
+#   PROOF_ANDROID_SERIAL a device adb already reaches (a Shireworks
+#                        `android` lease, `adb connect`ed), used as it is
+#                        in place of an emulator made here: by hand, on
+#                        any machine with adb (ADB, else the PATH's);
+#                        its status bar is held as here
 #
-# Fails when the emulator doesn't boot or a screen has no picture, after
-# every screen.
+# Fails when the emulator doesn't boot, the test fails (a screen that never
+# showed) or a screen has no picture.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 me="$(basename "$0")"
@@ -39,7 +52,8 @@ SCREENS="$(python3 -I -c 'import ast, sys
 for line in open(sys.argv[1]):
     if line.startswith("SCREENS = "): print(" ".join(ast.literal_eval(line.split("=", 1)[1].strip())))' "$ROOT/tools/isomer/snapshots/snapshots.py")"
 PACKAGE="com.loganshire.visor"
-SETTLE="${VISOR_SNAPSHOT_SETTLE:-8}"
+BAZEL="${PROOF_BAZEL:-bazel}"
+TEST=//tests/feature_map_tests:feature_map_proof_android
 # 24dp at 2.625x, as snapshots.py's ANDROID_STATUS_BAR.
 STATUS_BAR=80
 IMAGE="system-images;android-34;default;x86_64"
@@ -48,13 +62,21 @@ IMAGE="system-images;android-34;default;x86_64"
 signed_apk() { ls "$apps"/*.apk 2> /dev/null | grep -v '_unsigned\.apk$' | head -1 || true; }
 apk="$(signed_apk)"
 [ -n "$apk" ] || [ -n "${PROOF_APPS_ARTIFACT:-}" ] || { echo "$me: no signed .apk in $apps" >&2; exit 1; }
-sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:?no Android SDK on this runner}}"
-export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"
+serial="${PROOF_ANDROID_SERIAL:-}"
+if [ -z "$serial" ]; then
+    sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:?no Android SDK on this runner}}"
+    export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"
+fi
+proof="$(mktemp -d)/proof"
 emulator_pid=""
 finished=""
+builder=""
+holder=""
 cleanup() {
     local status=$?
     [ -n "$finished" ] || [ "$status" -ne 0 ] || status=1
+    [ -z "$builder" ] || kill "$builder" 2> /dev/null || true
+    [ -z "$holder" ] || kill "$holder" 2> /dev/null || true
     if [ -n "$emulator_pid" ]; then
         "$sdk/platform-tools/adb" logcat -d > "$out/logs/logcat.txt" 2> /dev/null || true
         "$sdk/platform-tools/adb" emu kill > /dev/null 2>&1 || kill "$emulator_pid" 2> /dev/null || true
@@ -62,8 +84,27 @@ cleanup() {
     exit "$status"
 }
 trap cleanup EXIT
-mkdir -p "$out/screens" "$out/logs" "$ANDROID_AVD_HOME"
+mkdir -p "$out/screens" "$out/logs" ${ANDROID_AVD_HOME:+"$ANDROID_AVD_HOME"}
+# The test, built while the emulator boots (Bazel's own server; the run
+# below waits for it). It links swift.org's Foundation, whose networking
+# wants libcurl's and libxml2's development libraries, which Ubuntu's
+# runner lacks.
+(
+    if [ "$(uname -s)" = Linux ] && [ -n "${GITHUB_ACTIONS:-}" ]; then
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends libcurl4-openssl-dev libxml2-dev \
+            || { sudo apt-get update -qq && sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+                libcurl4-openssl-dev libxml2-dev; }
+    fi
+    cd "$ROOT" && "$BAZEL" build "$TEST"
+) > "$out/logs/test-build.log" 2>&1 &
+builder=$!
 
+if [ -n "$serial" ]; then
+echo "::group::The device $serial"
+adb="${ADB:-adb}"
+export ANDROID_SERIAL="$serial"
+"$adb" wait-for-device
+else
 echo "::group::An emulator (API 34, x86_64)"
 # KVM for the runner's user: GitHub's Ubuntu runners have it, root's alone.
 echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules > /dev/null
@@ -106,6 +147,8 @@ for _ in $(seq 1 120); do
     sleep 5
 done
 [ -n "$booted" ] || { echo "$me: the emulator did not boot"; tail -30 "$out/logs/emulator.txt"; exit 1; }
+serial="$("$adb" devices | awk '$2 == "device" { print $1; exit }')"
+fi
 "$adb" shell cmd uimode night no
 # A fixed status bar: 9:41, Wi-Fi and a full battery; the cellular network
 # hidden (the emulator draws a shown one differently from run to run); the
@@ -134,66 +177,81 @@ printf 'Android %s (API %s, %s), %s\n' "$("$adb" shell getprop ro.build.version.
     "$("$adb" shell wm size | tr -d '\r' | sed 's/^Physical size: //')" | tee "$out/device.txt"
 echo "::endgroup::"
 
-echo "::group::The screens ($orientation)"
+echo "::group::The test's build"
+build=0
+wait "$builder" || build=$?
+builder=""
+tail -5 "$out/logs/test-build.log"
+[ "$build" -eq 0 ] || { echo "::error::$TEST didn't build"; cat "$out/logs/test-build.log"; exit 1; }
+echo "::endgroup::"
+
+echo "::group::The screens ($orientation), through the driver"
 if [ "$orientation" = landscape ]; then
     # Window manager's own lock (the settings alone left API 34's display
-    # upright, 12 Nov 2026), then checked on each picture below.
+    # upright, 12 Nov 2026), and held while the test runs: a launch's stop
+    # puts the launcher, which stands upright, in front for a moment, and
+    # on 12 Nov the display stayed upright after it for one screen in
+    # eleven.
     "$adb" shell settings put system accelerometer_rotation 0
     "$adb" shell cmd window user-rotation lock 1
+    (
+        exec < /dev/null
+        while sleep 1; do "$adb" shell cmd window user-rotation lock 1 > /dev/null 2>&1; done
+    ) &
+    holder=$!
     sleep 2
 fi
-# Whether the display is on its side now.
-# (Read whole before grep: with pipefail, grep -q's early exit fails the pipe.)
-turned() {
-    local displays
-    displays="$("$adb" shell dumpsys window displays < /dev/null 2> /dev/null || true)"
-    case "$displays" in *mRotation=ROTATION_90*) return 0 ;; *) return 1 ;; esac
-}
 status=0
+start="$(date +%s)"
+(cd "$ROOT" && "$BAZEL" test --test_output=streamed --test_env=ADB="$adb" --test_env=ANDROID_SERIAL="$serial" \
+    --test_env=ISOMER_PROOF="$proof" --test_env=VISOR_PROOF_SCREENS="$SCREENS" \
+    --test_env=VISOR_PROOF_ORIENTATION="$orientation" "$TEST") || status=1
+echo "The screens took $(($(date +%s) - start)) s"
+logs="$(cd "$ROOT" && "$BAZEL" info bazel-testlogs 2> /dev/null)/tests/feature_map_tests/feature_map_proof_android"
+cp -R "$logs/." "$out/logs/" 2> /dev/null || true
+# Writable, as Bazel's outputs are not: the folder can be removed after.
+chmod -R u+w "$out/logs" 2> /dev/null || true
+[ -z "$holder" ] || { kill "$holder" 2> /dev/null || true; holder=""; }
+"$adb" shell am force-stop "$PACKAGE"
+if [ -n "${PROOF_ANDROID_SERIAL:-}" ]; then
+    # A device of one's own: upright again, its status bar left held.
+    [ "$orientation" = portrait ] || "$adb" shell cmd window user-rotation lock 0 > /dev/null 2>&1 || true
+else
+    "$adb" shell am broadcast -a com.android.systemui.demo -e command exit > /dev/null || true
+fi
+echo "::endgroup::"
+
+# The driver's pictures (screens/android/<device>/<screen>.png) as the
+# proof's parts name them (tools/ci/proof_make.sh): android-<screen>.png,
+# on its side android-<screen>-landscape.png, cut below the status bar.
+suffix=""
+[ "$orientation" = portrait ] || suffix="-landscape"
 for screen in $SCREENS; do
-    "$adb" shell am start -S -n "$PACKAGE/.MainActivity" --es fixture snapshot --es fixture.screen "$screen" > /dev/null
-    sleep "$SETTLE"
-    # On its side before the picture: the app's stop puts the launcher,
-    # which stands upright, in front for a moment, and on 12 Nov the display
-    # stayed upright after it for one screen in eleven. The lock again, and
-    # waited for, at most ten seconds, then the screen settled again.
-    if [ "$orientation" = landscape ] && ! turned; then
-        for _ in $(seq 1 10); do
-            "$adb" shell cmd window user-rotation lock 1 < /dev/null
-            sleep 1
-            ! turned || break
-        done
-        sleep "$SETTLE"
+    found="$(find "$proof/screens/android" -name "$screen.png" 2> /dev/null | head -1)"
+    if [ -z "$found" ] || [ ! -s "$found" ]; then
+        echo "::error::no picture of $screen"
+        status=1
+        continue
     fi
     picture="$out/screens/android-$screen$suffix.png"
-    "$adb" exec-out screencap -p > "$picture" || true
-    if [ -s "$picture" ]; then
-        python3 -I - "$ROOT/tools/isomer/snapshots" "$picture" "$STATUS_BAR" << 'PY'
+    cp "$found" "$picture"
+    python3 -I - "$ROOT/tools/isomer/snapshots" "$picture" "$STATUS_BAR" << 'PY'
 import sys
 sys.path.insert(0, sys.argv[1])
 import pngdiff
 pngdiff.crop_top(sys.argv[2], int(sys.argv[3]))
 PY
-        if [ "$orientation" = landscape ] && ! python3 -I - "$picture" << 'PY'
+    if [ "$orientation" = landscape ] && ! python3 -I - "$picture" << 'PY'
 import struct, sys
 with open(sys.argv[1], "rb") as f:
     width, height = struct.unpack(">II", f.read(24)[16:24])
 sys.exit(0 if width > height else 1)
 PY
-        then
-            echo "::error::$screen was pictured upright, not on its side"
-            status=1
-        fi
-        echo "$screen"
-    else
-        echo "::error::no picture of $screen"
-        rm -f "$picture"
+    then
+        echo "::error::$screen was pictured upright, not on its side"
         status=1
     fi
 done
-"$adb" shell am force-stop "$PACKAGE"
-"$adb" shell am broadcast -a com.android.systemui.demo -e command exit > /dev/null || true
-echo "::endgroup::"
 count="$(find "$out/screens" -name 'android-*.png' | wc -l | tr -d ' ')"
 echo "$count Android screens"
 [ "$count" -gt 0 ] || status=1

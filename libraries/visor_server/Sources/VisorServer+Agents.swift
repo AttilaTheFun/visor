@@ -27,7 +27,7 @@ extension VisorServer {
         // Visor's own, and this computer's agents/<kind>.env: its paths and
         // git sign-in. Nothing else: Visor proxies nothing for its agents
         // (Logan, 14 Nov 2026), so they reach GitHub as `claude` would.
-        let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken, "VISOR_SESSION": info.id]
+        let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken(for: info.id), "VISOR_SESSION": info.id]
         process.approvalEnvironment = AgentEnvironmentFile.read(info.agent).merging(own) { _, ours in ours }
         return process
     }
@@ -112,8 +112,14 @@ extension VisorServer {
     /// is cut short. The new agent starts with the next message, which is
     /// when resuming matters. With `rereading`, the transcript is read
     /// again, since the file may have moved on under another writer.
+    /// A driven session's agent is never made here: it is restarted on its
+    /// runner (resumeDriven), and the session stays driven.
     func rebuild(_ record: SessionRecord, rereading: Bool = false, then gone: (@MainActor () -> Void)? = nil) {
         record.restartWhenIdle = false
+        if record.driven {
+            resumeDriven(record, why: "restarting the agent of")
+            return
+        }
         let old = record.process
         record.replaceProcess(makeProcess(record.info, resume: old.resumeID))
         // The old agent goes first: until it has, what is said waits.
@@ -137,9 +143,19 @@ extension VisorServer {
     /// conversation, as the user asked: stopping until the old one has
     /// gone, then starting, then running; a turn the old one was working
     /// on is carried on by a nudge that goes first.
+    /// A driven session's is restarted on its runner: a resume job for its
+    /// conversation, in its folder there (resumeDriven).
     func restartAgent(_ record: SessionRecord) {
         Self.log("restarting the agent of \(record.info.title) (\(record.info.id))")
         let working = record.info.busy
+        if record.driven {
+            if resumeDriven(record, why: "restarting the agent of"), working {
+                record.enqueue(Self.restartNudge, images: [], first: true)
+                saveArchive()
+            }
+            broadcastSessions()
+            return
+        }
         setAgentState(record, .stopping)
         rebuild(record) { [weak self] in self?.launchAgent(record) }
         if working {
@@ -153,7 +169,10 @@ extension VisorServer {
     /// stopping until it has gone, then stopped, through a launch of the
     /// server too, until Start Agent. A turn in flight is cut short and
     /// not carried on; what is said meanwhile waits in the queue.
+    /// A driven session's runner agent is let go, and the session stays
+    /// driven (stopDriven).
     func stopAgent(_ record: SessionRecord) {
+        if record.driven { return stopDriven(record) }
         Self.log("stopping the agent of \(record.info.title) (\(record.info.id))")
         setAgentState(record, .stopping)
         // Nothing is owed: a later launch resumes no turn.
@@ -163,8 +182,14 @@ extension VisorServer {
 
     /// Starts the stopped agent again, as the user asked; what waited in
     /// the queue then goes over.
+    /// A driven session's is started on a runner again: a resume job for
+    /// its conversation (resumeDriven), never an agent here.
     func startAgent(_ record: SessionRecord) {
         Self.log("starting the agent of \(record.info.title) (\(record.info.id))")
+        if record.driven {
+            resumeDriven(record, why: "starting the agent of")
+            return
+        }
         launchAgent(record)
         release(record)
     }
@@ -174,7 +199,8 @@ extension VisorServer {
     /// tool is not found) is stopped, and the session says why.
     func launchAgent(_ record: SessionRecord) {
         // Put away meanwhile (archived while it was stopping): no agent.
-        guard !record.info.archived else { return }
+        // Nor for a driven session: its agent is its runner's to start.
+        guard !record.info.archived, !record.driven else { return }
         setAgentState(record, .starting)
         if !record.isBound { bind(record) }
         do {

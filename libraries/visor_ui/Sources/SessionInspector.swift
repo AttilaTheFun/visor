@@ -41,6 +41,7 @@ struct SessionInspector: View {
                             // Saved as it is typed (after a pause) and when
                             // the inspector goes, not only on Return: a
                             // sheet swiped away never submits.
+                            .accessibilityIdentifier("details-title")
                             .onChange(of: title) {
                                 titleSave?.cancel()
                                 titleSave = Task { @MainActor in
@@ -62,6 +63,7 @@ struct SessionInspector: View {
                     // terminal on the computer.
                     if let command = session.resumeCommand {
                         Button { Pasteboard.string = command } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
+                            .accessibilityIdentifier("details-copy-resume")
                     }
                 }
                 SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)
@@ -73,7 +75,9 @@ struct SessionInspector: View {
                 }
                 Section {
                     Button("Archive", action: archive)
+                        .accessibilityIdentifier("details-archive")
                     Button("End session", role: .destructive, action: end)
+                        .accessibilityIdentifier("details-end")
                 }
             }
             .insetGroupedForm()
@@ -83,7 +87,10 @@ struct SessionInspector: View {
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 if asSheet {
-                    ToolbarItem(placement: .confirmationAction) { Button("Done", action: close) }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", action: close)
+                            .accessibilityIdentifier("details-done")
+                    }
                 }
             }
         }

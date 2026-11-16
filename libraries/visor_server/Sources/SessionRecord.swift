@@ -126,6 +126,11 @@ public final class SessionRecord {
     /// Run under agent_protocol's wrapper, with this server as its driver
     /// (VisorDriver): its rows come over the wrapper's stream.
     package var driven = false
+    /// A driven session's move to a runner: the agent that carries it on
+    /// there, its conversation and folder here, where it works there. Kept
+    /// with the session (sessions.json) while it is driven; only moveBack
+    /// clears it.
+    package var move: AgentJobMove?
 
     var mailbox = Mailbox() {
         didSet {
@@ -161,6 +166,12 @@ public final class SessionRecord {
     /// The host an earlier launch left the agent under, until this one
     /// has picked it up or found it gone (VisorServer+Hosts.swift).
     var leftHost: StoredHost?
+
+    /// The agent an earlier launch left under its host that holds the
+    /// server's shared token, not this session's own (it was started by a
+    /// build from before each session had its own): while it runs, the
+    /// shared token is taken from this session (VisorServer+AgentTokens).
+    weak var sharedTokenChild: HostedChild?
 
     /// The agent that ran before this one has been told to go and is not
     /// yet gone: what is said waits, so that two agents never hold the
@@ -267,14 +278,16 @@ public final class SessionRecord {
                              watchedSubagents: watchedSubagents.isEmpty ? nil : watchedSubagents.sorted(),
                              closedSubagents: closedSubagents.isEmpty ? nil : closedSubagents.sorted(),
                              mcpSwitched: mcpSwitched.isEmpty ? nil : mcpSwitched,
-                             mailbox: mailbox.isEmpty ? nil : mailbox, driven: driven ? true : nil)
+                             mailbox: mailbox.isEmpty ? nil : mailbox, driven: driven ? true : nil,
+                             move: driven ? move : nil)
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or
     /// the one an earlier launch left, until it is picked up).
     var host: StoredHost? {
         guard let hostable = process as? HostableProcess, let child = hostable.hostedChild else { return leftHost }
-        return StoredHost(socket: child.socket, line: child.nextLine, carried: hostable.carried)
+        return StoredHost(socket: child.socket, line: child.nextLine, carried: hostable.carried,
+                          ownToken: child === sharedTokenChild ? nil : true)
     }
 
     /// The session's resume command, refreshed from the process (the id is
