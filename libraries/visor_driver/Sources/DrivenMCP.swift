@@ -3,9 +3,13 @@
 // (VisorMCPBridge's MCPBridge, as a session here runs it), answering for
 // the session the wrapper's token says it is. One bridge for each of the
 // wrapper's MCP connections (`client`), for as long as the wrapper's
-// connection lasts. Its tools are a session's here (the other sessions,
-// their messages, the computer's passed-on servers); not `approve`, which
-// the wrapper offers and turns into WrapperMessage.approval (DrivenProcess).
+// connection lasts. Its tools are only Visor's own (the other sessions,
+// their messages, its inbox): never the MCP servers this computer passes
+// on to its native sessions (gh, shireworks, …), whatever the session's
+// switches say (Logan, 2026-11-16: a container's agent gets Visor's MCP
+// from here and Shireworks' from its container). Not `approve` either,
+// which the wrapper offers and turns into WrapperMessage.approval
+// (DrivenProcess).
 
 import AgentProtocol
 import Foundation
@@ -55,9 +59,10 @@ actor DrivenMCP {
     private func connection(_ client: String) -> (MCPBridge, DrivenMCPOutput) {
         if let open = bridges[client] { return open }
         let output = DrivenMCPOutput(client: client, deliver: send)
-        // No `approve` (the wrapper's own), and what a session on this
-        // computer is told at `initialize`.
-        let bridge = MCPBridge(link: DrivenMCPLink(session: session, server: server), output: output, approvals: false, contained: false)
+        // No `approve` (the wrapper's own), no passed-on servers, and what
+        // a session on this computer is told at `initialize`.
+        let bridge = MCPBridge(link: DrivenMCPLink(session: session, server: server), output: output, approvals: false, contained: false,
+                               passesOn: false)
         bridges[client] = (bridge, output)
         return (bridge, output)
     }

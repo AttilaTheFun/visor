@@ -64,10 +64,11 @@ extension ServerTests {
 @Suite @MainActor final class MCPBridgeTests {
     init() { TestPlatform.install() }
 
-    private func bridge(approvals: Bool = false, contained: Bool = false, server: FakeServer = FakeServer(),
+    private func bridge(approvals: Bool = false, contained: Bool = false, passesOn: Bool = true, server: FakeServer = FakeServer(),
                         timing: MCPTiming = MCPTiming()) -> (MCPBridge, FakeServer, Said) {
         let said = Said()
-        return (MCPBridge(link: server, output: said, approvals: approvals, contained: contained, timing: timing), server, said)
+        return (MCPBridge(link: server, output: said, approvals: approvals, contained: contained, passesOn: passesOn, timing: timing),
+                server, said)
     }
 
     private func call(_ id: Int, _ name: String, _ arguments: String = "{}", meta: String = "") -> String {
@@ -105,6 +106,30 @@ extension ServerTests {
         await plain.handle(#"{"jsonrpc":"2.0","id":4,"method":"tools/list"}"#)
         let plainNames = await plainSaid.answer(4)?["result"]["tools"].array?.compactMap { $0["name"].string }
         #expect(plainNames == ["list_sessions", "send_message", "read_messages", "message_status", "read_inbox", "read_outbox"], "no approve unless asked for")
+    }
+
+    /// An agent on a runner (VisorDriver's DrivenMCP): Visor's own tools
+    /// only. The computer's passed-on ones aren't asked for, listed, looked
+    /// at again or called, whatever the server would say.
+    @Test func testAnAgentOnARunnerGetsOnlyVisorsOwnTools() async {
+        let server = FakeServer()
+        server.state.withLock { $0.replies["mcp_tools"] = MCPReply(ok: true, text: #"[{"name":"gh__pr_create","description":"Opens a pull request."}]"#) }
+        let timing = MCPTiming(heartbeat: .seconds(20), unanswered: .seconds(60), watch: .milliseconds(30))
+        let (bridge, _, said) = self.bridge(passesOn: false, server: server, timing: timing)
+        await bridge.handle(#"{"jsonrpc":"2.0","id":30,"method":"tools/list"}"#)
+        let names = await said.answer(30)?["result"]["tools"].array?.compactMap { $0["name"].string }
+        #expect(names == ["list_sessions", "send_message", "read_messages", "message_status", "read_inbox", "read_outbox"])
+
+        await bridge.handle(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
+        await bridge.handle(call(31, "gh__pr_create", #"{"title":"Sub-sessions"}"#))
+        let refused = await said.answer(31)
+        #expect((refused?["result"]["isError"].bool) == true)
+        #expect(text(refused)?.contains("isn't one of Visor's tools") ?? false, Comment(rawValue: text(refused) ?? ""))
+        try? await Task.sleep(for: .milliseconds(150))
+        let modes = server.state.withLock { $0.calls.compactMap { $0["mode"]?.string } }
+        #expect(!modes.contains("mcp_tools") && !modes.contains("mcp_call"), "never asked of the server: \(modes)")
+        #expect(!(said.all.contains { $0["method"].string == "notifications/tools/list_changed" }), "nothing watched")
+        await bridge.close()
     }
 
     @Test func testASessionToolGoesToTheServerUnderTheNamesAnAgentReachesFor() async {

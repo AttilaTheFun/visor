@@ -199,13 +199,30 @@ agent_protocol#9, #10 and #12.
   memory alone (listed with `"own": true`), and shows it on its claims
   and beside its jobs' tokens on its renewals and releases, so it claims
   with tokens required.
-- **Visor's MCP tools.** The agent's MCP server `visor` is relayed by its
-  wrapper (`WrapperMessage.mcp`) and answered here by Visor's own MCP
-  bridge (libraries/visor_mcp_bridge, as `visor-agent-host mcp` runs it
-  for a session on this computer), as the session the token says it is:
-  `list_sessions`, `send_message`, `read_messages`, `message_status`,
-  `read_inbox`, `read_outbox`, and the computer's passed-on MCP servers.
-  `approve` is the wrapper's own, never listed here.
+- **What MCP a container session gets** (Logan, 16 Nov, via Manager):
+  Visor's and Shireworks', and nothing of the computer's.
+  - **Visor's**: the agent's MCP server `visor`, which its wrapper starts
+    (`--mcp-config`) and relays over its connection to this driver
+    (`WrapperMessage.mcp`, agent_protocol#10). It is answered here by
+    Visor's own MCP bridge (libraries/visor_mcp_bridge, as
+    `visor-agent-host mcp` runs it for a session on this computer), as the
+    session the token says it is, with Visor's own tools only:
+    `list_sessions`, `send_message`, `read_messages`, `message_status`,
+    `read_inbox`, `read_outbox`. `approve` is the wrapper's own, never
+    listed here.
+  - **Never the MCP servers this computer passes on** to its native
+    sessions (`GET`/`PUT /api/mcp`: gh, shireworks, …, the
+    `mcp__visor__<endpoint>__*` tools), whatever the session's per-server
+    switches say: the driver's bridge doesn't list, watch or call them
+    (a call of one is refused), and the server answers a driven
+    session's `mcp_tools` with none and refuses its `mcp_call`.
+  - **Shireworks'**: from the container itself, through its own Claude
+    configuration and the container network's agent-proxy
+    (`/mcp/shireworks`); Claude loads it beside the wrapper's `visor`
+    server, which adds no other.
+  - **GitHub**: no MCP. `gh` is the plain CLI over HTTPS, through the
+    container network and agent-proxy, which adds logan-shire-agent's
+    credentials.
 - **Approvals.** A session that asks before acting has its agent's
   permission prompts (the wrapper's `mcp__visor__approve`, sent as
   `WrapperMessage.approval`) shown as the session's pending approval, as a

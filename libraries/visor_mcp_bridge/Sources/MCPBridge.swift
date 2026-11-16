@@ -4,8 +4,9 @@ import VisorProtocol
 /// Visor's MCP server, request by request, as the Node script answered
 /// them: `initialize`, the tools' list (Visor's own, `approve` where asked
 /// for, and the MCP servers the computer passes on to the session, looked
-/// at again every 30 s and the agent told when they change), their calls
-/// (to the server, or for `approve` to the person), `ping`. Every call goes
+/// at again every 30 s and the agent told when they change; none for an
+/// agent on a runner), their calls (to the server, or for `approve` to the
+/// person), `ping`. Every call goes
 /// to the server through its link; what the agent is told goes out a line
 /// at a time.
 package actor MCPBridge {
@@ -15,6 +16,10 @@ package actor MCPBridge {
     private let approvals: Bool
     /// Whether the agent runs in a container (VISOR_URL set).
     private let contained: Bool
+    /// Whether the computer's passed-on MCP servers are offered. An agent
+    /// on a runner (VisorDriver's DrivenMCP) gets only Visor's own tools:
+    /// none of them listed, watched or called.
+    private let passesOn: Bool
     private let timing: MCPTiming
     /// The passed-on tools as last listed to the agent: what a later look
     /// is held against.
@@ -26,11 +31,13 @@ package actor MCPBridge {
     /// (as JSON): each given up when the agent gives up on it.
     private var asking: [String: MCPAsking] = [:]
 
-    package init(link: any MCPServerLink, output: any MCPOutput, approvals: Bool, contained: Bool, timing: MCPTiming = MCPTiming()) {
+    package init(link: any MCPServerLink, output: any MCPOutput, approvals: Bool, contained: Bool, passesOn: Bool = true,
+                 timing: MCPTiming = MCPTiming()) {
         self.link = link
         self.output = output
         self.approvals = approvals
         self.contained = contained
+        self.passesOn = passesOn
         self.timing = timing
     }
 
@@ -49,12 +56,13 @@ package actor MCPBridge {
                 "instructions": .string(MCPTools.instructions(contained: contained)),
             ]))
         case "notifications/initialized":
-            watchProxied()
+            if passesOn { watchProxied() }
         case "notifications/cancelled":
             asking[params["requestId"].encoded()]?.cancel("cancelled")
         case "tools/list":
             Task {
-                let proxied = await proxiedTools()
+                var proxied: [JSONValue] = []
+                if passesOn { proxied = await proxiedTools() }
                 listedProxied = Self.signature(proxied)
                 respond(id, .object(["tools": .array((approvals ? [MCPTools.approve] : []) + MCPTools.sessions + proxied)]))
             }
@@ -62,6 +70,7 @@ package actor MCPBridge {
             let name = params["name"].string ?? ""
             let arguments = params["arguments"].object ?? [:]
             if name.contains("__") {
+                guard passesOn else { return respond(id, Self.text(Self.notPassedOn(name), error: true)) }
                 callProxied(id, name, arguments)
             } else if name != "approve" {
                 callSessions(id, name, arguments)
@@ -128,6 +137,12 @@ package actor MCPBridge {
                 }
             }
         }
+    }
+
+    /// Why an agent on a runner can't call `name`: it isn't one of Visor's
+    /// own tools, and the computer's passed-on servers aren't its.
+    static func notPassedOn(_ name: String) -> String {
+        "\(name) isn't one of Visor's tools. An agent on a runner gets only Visor's own tools here, not the MCP servers this computer passes on to its own sessions; its other MCP servers are its container's."
     }
 
     /// A passed-on tool: the server passes it on, and its result comes back

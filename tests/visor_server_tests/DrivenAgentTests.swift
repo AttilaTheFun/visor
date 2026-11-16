@@ -2,7 +2,8 @@
 // runner reach it (agent_protocol's AgentDriver and AgentDispatcher):
 // every call shows the agent's own token (Job.token), and one that doesn't,
 // or shows another agent's, is refused; its MCP requests are answered as
-// its session's; its permission prompts are its session's, and the
+// its session's, with Visor's own tools and none of the computer's
+// passed-on servers; its permission prompts are its session's, and the
 // person's answers go back to it; its job says whether it asks
 // (Job.skip_permissions), as its session does.
 
@@ -11,7 +12,9 @@ import Foundation
 import GRPCCore
 import GRPCNIOTransportHTTP2
 import Synchronization
+@testable import VisorAgent
 @testable import VisorDriver
+import VisorMCPBridge
 import VisorProtocol
 @testable import VisorServer
 import Testing
@@ -77,6 +80,68 @@ private final class FakeWrapper: Sendable {
             }
             return given.count >= count ? given : nil
         } ?? []
+    }
+}
+
+/// An MCP server this computer passes on to its sessions (gh, say): what
+/// it was sent, kept; one tool, `pr_create`.
+private final class PassedOnEndpoint: HTTPFetching {
+    let heard = Mutex<[JSONValue]>([])
+
+    func fetch(_ request: OutgoingRequest) async throws -> OutgoingRequest.Answer {
+        let message = parseJSON(String(decoding: request.body, as: UTF8.self)) ?? .null
+        heard.withLock { $0.append(message) }
+        guard let id = message["id"].int else { return .init(status: 202, body: Data()) }
+        let result: JSONValue
+        switch message["method"].string ?? "" {
+        case "initialize":
+            result = .object(["protocolVersion": .string("2025-06-18"), "capabilities": .object(["tools": .object([:])])])
+        case "tools/list":
+            result = .object(["tools": .array([.object(["name": .string("pr_create"), "inputSchema": .object(["type": .string("object")])])])])
+        default:
+            result = .object(["content": .array([.object(["type": .string("text"), "text": .string("made")])])])
+        }
+        let body = JSONValue.object(["jsonrpc": .string("2.0"), "id": .number(Double(id)), "result": result]).encoded()
+        return .init(status: 200, body: Data(body.utf8), headers: ["content-type": "application/json"])
+    }
+}
+
+/// A native session's MCP server reaching this server, as its own
+/// (VisorServer.answerAgent, with the server's agent token).
+private struct NativeLink: MCPServerLink {
+    let session: String
+    let server: VisorServer
+
+    func call(_ fields: [String: JSONValue]) async -> MCPReply {
+        await withCheckedContinuation { continuation in
+            Task { @MainActor in
+                var message = fields
+                message["type"] = .string("agent")
+                message["token"] = .string(server.agentToken)
+                message["client"] = .string(session)
+                message["id"] = .string(UUID().uuidString)
+                guard let envelope = Envelope.decode(JSONValue.object(message).encoded()) else {
+                    return continuation.resume(returning: MCPReply(ok: false, text: "unreadable"))
+                }
+                server.answerAgent(envelope) { reply in
+                    let error = reply.error ?? ""
+                    continuation.resume(returning: MCPReply(ok: error.isEmpty, text: error.isEmpty ? reply.text ?? "" : error))
+                }
+            }
+        }
+    }
+
+    func ask(_ request: [String: JSONValue], _ asking: MCPAsking) async -> MCPAnswer { .no }
+}
+
+/// What a native session's MCP server said to its agent.
+private final class NativeSaid: MCPOutput {
+    let all = Mutex<[JSONValue]>([])
+
+    func send(_ message: JSONValue) { all.withLock { $0.append(message) } }
+
+    func answer(_ id: Int) async -> JSONValue? {
+        await eventually { self.all.withLock { $0.first { $0["id"] == .number(Double(id)) } } }
     }
 }
 
@@ -294,6 +359,52 @@ extension ServerTests {
         #expect(unreadable["error"]["code"] == .number(-32700))
         #expect(!wrapper.down.contains { $0.mcp.id.isEmpty && $0.mcp.json.contains("notifications/initialized") }, "a notification isn't answered")
         wrapper.finish()
+    }
+
+    /// Logan (2026-11-16): a container's agent gets Visor's MCP through its
+    /// wrapper and Shireworks' from its container, never this computer's
+    /// passed-on servers, whatever its session's switches say. A native
+    /// session beside it still has them.
+    @Test func aWrapperGetsVisorsOwnToolsNotThePassedOn() async throws {
+        let endpoint = PassedOnEndpoint()
+        ServerPlatform.current.fetching = endpoint
+        server.settings.mcpEndpoints = [MCPEndpoint(name: "gh", url: "http://127.0.0.1:7470/mcp")]
+        let (_, wrapper, record) = try await driven("Contained")
+        #expect(record.info.mcp == [MCPSwitch(name: "gh", on: true)], "its switch says on")
+        func request(_ id: String, _ json: String) -> AgentProtocol_V1_WrapperMessage {
+            .with { $0.mcp = .with { $0.id = id; $0.json = json; $0.client = "c1" } }
+        }
+        wrapper.send(request("w1", #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#))
+        wrapper.send(request("", #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#))
+        wrapper.send(request("w2", #"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#))
+        wrapper.send(request("w3", #"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"gh__pr_create","arguments":{}}}"#))
+
+        let listing = try #require(await wrapper.mcp("w2"))
+        let tools = parseJSON(listing.json)?["result"]["tools"].array?.compactMap { $0["name"].string } ?? []
+        #expect(tools.contains("list_sessions") && tools.contains("send_message") && tools.contains("read_inbox"), "Visor's own")
+        #expect(!tools.contains { $0.contains("__") }, "no passed-on tools: \(tools)")
+
+        let calling = try #require(await wrapper.mcp("w3"))
+        let call = try #require(parseJSON(calling.json))
+        let text = call["result"]["content"][0]["text"].string ?? ""
+        #expect(call["result"]["isError"] == .bool(true), Comment(rawValue: text))
+        #expect(text.contains("isn't one of Visor's tools"), Comment(rawValue: text))
+        #expect(endpoint.heard.withLock { $0.isEmpty }, "the endpoint never asked on its behalf")
+        wrapper.finish()
+
+        // A native session, through Visor's MCP as it runs one here.
+        let native = SessionRecord(info: SessionInfo(id: "native-session", agent: .claude, cwd: "/tmp", title: "Native", created: 0),
+                                   process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
+        server.sessions.append(native)
+        let said = NativeSaid()
+        let bridge = MCPBridge(link: NativeLink(session: native.info.id, server: server), output: said, approvals: false, contained: false)
+        await bridge.handle(#"{"jsonrpc":"2.0","id":4,"method":"tools/list"}"#)
+        let nativeTools = await said.answer(4)?["result"]["tools"].array?.compactMap { $0["name"].string } ?? []
+        #expect(nativeTools.contains("gh__pr_create"), "a native session's are unchanged: \(nativeTools)")
+        await bridge.handle(#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"gh__pr_create","arguments":{}}}"#)
+        let made = await said.answer(5)
+        #expect((made?["result"]["content"][0]["text"].string) == "made")
+        await bridge.close()
     }
 
     @Test func aWrappersApprovalsAreItsSessionsAndTheAnswersGoBack() async throws {

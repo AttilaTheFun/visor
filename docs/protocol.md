@@ -302,8 +302,9 @@ the same `approval`, and the client's `approve` goes back as
 `DriverMessage.approval` (`allow`; a question's answers in
 `updated_input_json`, the tool's input with `answers`; or `reason`). A
 prompt it withdraws is cleared (`approval` with none). Its MCP server's
-other tools are answered by the driver as its session's
-(docs/runners.md).
+other tools are answered by the driver as its session's: Visor's own
+tools, never the proxied MCP servers below, whatever the session's `mcp`
+switches say (docs/runners.md).
 
 ## Sessions messaging each other
 
@@ -358,6 +359,9 @@ of its own for each session and endpoint, begun again if the endpoint
 forgets it. The script looks again every 30 s and sends
 `notifications/tools/list_changed` when the tools changed. Each endpoint is
 on for a session unless it, or its `onByDefault`, says otherwise (`mcp`).
+They are the computer's native sessions' only: a runner's agent (a driven
+session) gets none of them (`mcp_tools` answered `[]`, `mcp_call` refused),
+whatever its switches say; its container gives it its own (docs/runners.md).
 
 Sessions on other computers are reached through a client connected to
 both: servers never talk to one another, and none learns another's address

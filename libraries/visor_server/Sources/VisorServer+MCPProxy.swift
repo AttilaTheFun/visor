@@ -35,9 +35,20 @@ extension VisorServer {
 
     /// `mcp_tools` and `mcp_call`, from Visor's MCP script: the session's
     /// proxied tools as JSON, or a call's result as its endpoint gave it.
+    /// A driven session (its agent on a runner) has none, whatever its
+    /// switches say: its bridge doesn't ask (VisorDriver's DrivenMCP), and
+    /// is refused here if it did.
     func answerProxied(_ envelope: Envelope, caller: SessionRecord) async -> Envelope {
         var reply = Envelope(type: "agent_result")
         reply.id = envelope.id
+        guard !caller.driven else {
+            if envelope.mode == "mcp_tools" {
+                reply.text = "[]"
+            } else {
+                reply.error = "This session's agent runs on a runner: it gets Visor's own tools, not the MCP servers this computer passes on."
+            }
+            return reply
+        }
         let endpoints = mcpEndpoints(for: caller)
         // The repository the session works in, for a header that names it.
         let repository = endpoints.contains(where: \.namesRepository) ? await GitHubRepository.of(folder: caller.info.cwd) ?? "" : ""

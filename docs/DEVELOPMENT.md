@@ -707,7 +707,8 @@ its sessions say `inContainer`.
 **Machines.** Sessions lease machines (macOS,
 Linux and Windows VMs, iOS simulators, Android emulators) through the MCP
 servers their Visor server passes on to them (docs/protocol.md, Proxied MCP
-servers): a Shireworks server's own MCP port, set as an endpoint with a key of the
+servers; a runner's agent gets none of these, and has Shireworks' MCP from
+its container instead, docs/runners.md): a Shireworks server's own MCP port, set as an endpoint with a key of the
 server's (`<session>@<application>` is each lease's holder), whose tools
 the agent calls as `<endpoint>__lease` and so on (Shireworks' `/shireworks`
 MCP path; its first path, still the sessions' until they move, prefixes
