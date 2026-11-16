@@ -33,37 +33,37 @@ package final class SigningKeys {
     package static let previousKeyLife: TimeInterval = 24 * 3600
 
     private let secrets: any SecretStore
-    private var set: KeySet
+    private var keySet: KeySet
 
     /// The keys kept, or a first key made and kept.
     package init(secrets: any SecretStore, now: Date = Date()) {
         self.secrets = secrets
         if let text = secrets.get(Self.secretKey), let decoded = try? JSONDecoder().decode(KeySet.self, from: Data(text.utf8)),
            decoded.keys[decoded.current] != nil {
-            set = decoded
+            keySet = decoded
             if prune(now: now) { keep() }
         } else {
             let kid = Self.newKID()
-            set = KeySet(current: kid, keys: [kid: Kept(key: Self.newKey(), created: now.timeIntervalSince1970, retired: nil)])
+            keySet = KeySet(current: kid, keys: [kid: Kept(key: Self.newKey(), created: now.timeIntervalSince1970, retired: nil)])
             keep()
         }
     }
 
     /// The current key's name.
-    package var currentKID: String { set.current }
+    package var currentKID: String { keySet.current }
 
     /// The current key, to sign with.
     package var current: (kid: String, key: Data) {
-        (set.current, Data(base64Encoded: set.keys[set.current]?.key ?? "") ?? Data())
+        (keySet.current, Data(base64Encoded: keySet.keys[keySet.current]?.key ?? "") ?? Data())
     }
 
     /// Every key held, by name: the current one and those still kept.
-    package var kids: [String] { set.keys.keys.sorted() }
+    package var kids: [String] { keySet.keys.keys.sorted() }
 
     /// The key named `kid`, while it is held (current, or retired less than
     /// `previousKeyLife` ago).
     package func key(_ kid: String, now: Date = Date()) -> Data? {
-        guard let kept = set.keys[kid] else { return nil }
+        guard let kept = keySet.keys[kid] else { return nil }
         if let retired = kept.retired, now.timeIntervalSince1970 - retired >= Self.previousKeyLife { return nil }
         return Data(base64Encoded: kept.key)
     }
@@ -76,13 +76,13 @@ package final class SigningKeys {
     package func rotate(dropPrevious: Bool, now: Date = Date()) -> String {
         let kid = Self.newKID()
         if dropPrevious {
-            set.keys = [:]
-        } else if var before = set.keys[set.current] {
+            keySet.keys = [:]
+        } else if var before = keySet.keys[keySet.current] {
             before.retired = now.timeIntervalSince1970
-            set.keys[set.current] = before
+            keySet.keys[keySet.current] = before
         }
-        set.keys[kid] = Kept(key: Self.newKey(), created: now.timeIntervalSince1970, retired: nil)
-        set.current = kid
+        keySet.keys[kid] = Kept(key: Self.newKey(), created: now.timeIntervalSince1970, retired: nil)
+        keySet.current = kid
         _ = prune(now: now)
         keep()
         return kid
@@ -92,17 +92,17 @@ package final class SigningKeys {
     /// any went.
     @discardableResult
     package func prune(now: Date = Date()) -> Bool {
-        let before = set.keys.count
-        set.keys = set.keys.filter { kid, kept in
-            kid == set.current || kept.retired.map { now.timeIntervalSince1970 - $0 < Self.previousKeyLife } ?? true
+        let before = keySet.keys.count
+        keySet.keys = keySet.keys.filter { kid, kept in
+            kid == keySet.current || kept.retired.map { now.timeIntervalSince1970 - $0 < Self.previousKeyLife } ?? true
         }
-        return set.keys.count != before
+        return keySet.keys.count != before
     }
 
     private func keep() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(set) else { return }
+        guard let data = try? encoder.encode(keySet) else { return }
         secrets.set(Self.secretKey, String(decoding: data, as: UTF8.self))
     }
 

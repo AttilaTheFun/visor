@@ -29,7 +29,7 @@ package final class AgentTokens {
     /// The keys tokens are signed with.
     package let keys: SigningKeys
     /// This server's id: every token's `iss`.
-    package let issuer: String
+    package var issuer: String
 
     package init(secrets: any SecretStore, issuer: String) {
         keys = SigningKeys(secrets: secrets)

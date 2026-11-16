@@ -150,7 +150,7 @@ public final class VisorServer {
     /// The agents' tokens, minted and verified with the signing keys kept
     /// with the secrets (AgentTokens): native sessions' and runners'
     /// agents'.
-    package lazy var agentTokens = AgentTokens(secrets: Self.secrets, issuer: id)
+    package let agentTokens: AgentTokens
     /// The admin token's hash: kept with the secrets (the menu bar app's),
     /// or given at launch (the command-line server's:
     /// useAdminTokenGivenAtLaunch).
@@ -180,9 +180,12 @@ public final class VisorServer {
         sessionAgentTokens = Self.keptSessionAgentTokens()
         runnerTokens = RunnerTokens(secrets: Self.secrets)
         adminToken = AdminToken(keptIn: Self.secrets)
+        // Its issuer is this server's id, made below the first time.
+        agentTokens = AgentTokens(secrets: Self.secrets, issuer: "")
         Self.forgetRetiredSecrets()
         applyAgentDetaching()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
+        agentTokens.issuer = id
         loadSessions()
         takeRollbackNote()
     }

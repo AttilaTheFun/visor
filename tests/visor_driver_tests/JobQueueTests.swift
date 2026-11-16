@@ -372,7 +372,17 @@ import Testing
         job.harness = "echo"
         job.workingDirectory = "/w"
         job.driverURL = "http://127.0.0.1:7434"
+        // What a runner's agent is never given from the server's own
+        // environment: the admin token, Shireworks' session.
+        setenv("VISOR_ADMIN_TOKEN", "admin", 1)
+        setenv("SHIREWORKS_SESSION", "lease", 1)
+        defer {
+            unsetenv("VISOR_ADMIN_TOKEN")
+            unsetenv("SHIREWORKS_SESSION")
+        }
         let environment = await runner.environment(for: job)
+        #expect(environment["VISOR_ADMIN_TOKEN"] == nil && environment["SHIREWORKS_SESSION"] == nil)
+        #expect(!(environment["AGENT_JOB"] ?? "").contains("admin"), "nor in its job")
         #expect((environment["AGENT_ID"]) == "u1@http://127.0.0.1:7434")
         #expect((environment["AGENT_DISPATCHER_URL"]) == "http://127.0.0.1:7434")
         #expect((environment["AGENT_DRIVER_URL"]) == "http://127.0.0.1:7434")

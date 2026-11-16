@@ -326,6 +326,8 @@ extension ServerTests {
         #expect(MCPMissingEnvironment(["VISOR_URL": "ws://host:7433", "VISOR_SESSION": "A", "VISOR_TOKEN": "t"]) == nil,
                 "a server given by its URL needs no port")
         #expect(MCPMissingEnvironment(["VISOR_URL": "ws://host:7433"])?.names == ["VISOR_SESSION", "VISOR_TOKEN"])
+        #expect(MCPMissingEnvironment(["VISOR_PORT": "7433", "VISOR_SESSION": "A", "VISOR_TOKEN_FILE": "/tmp/t"]) == nil,
+                "the token file stands for VISOR_TOKEN")
 
         let missing = MCPMissingEnvironment(["VISOR_APPROVALS": "1", "VISOR_PORT": "7433"])
         #expect(missing?.names == ["VISOR_SESSION", "VISOR_TOKEN"])
@@ -382,6 +384,22 @@ extension ServerTests {
         let stranger = MCPWebSocketLink(url: "ws://127.0.0.1:\(port)", token: "not-the-token", session: "A")
         let refused = await stranger.call(["mode": .string("sessions")])
         #expect(!refused.ok)
+
+        // The token file (VISOR_TOKEN_FILE), read on each call: what the
+        // server re-mints is taken, VISOR_TOKEN only without it.
+        server.writeSessionToken(of: "A")
+        let file = VisorServer.sessionTokenFile(of: "A").path
+        let filed = MCPWebSocketLink(url: "ws://127.0.0.1:\(port)", token: "stale", session: "A", tokenFile: file)
+        let fromFile = await filed.call(["mode": .string("sessions")])
+        #expect(fromFile.ok, Comment(rawValue: fromFile.text))
+        server.refreshSessionTokenFiles()
+        #expect(filed.currentToken == (try String(contentsOfFile: file, encoding: .utf8)), "the re-minted one, read again")
+        #expect((await filed.call(["mode": .string("sessions")])).ok)
+        let noFile = MCPWebSocketLink(url: "ws://127.0.0.1:\(port)", token: server.agentToken(for: "A"), session: "A",
+                                      tokenFile: file + ".missing")
+        #expect((await noFile.call(["mode": .string("sessions")])).ok, "no file: VISOR_TOKEN")
+        let asB = MCPWebSocketLink(url: "ws://127.0.0.1:\(port)", token: "", session: "B", tokenFile: file)
+        #expect(!(await asB.call(["mode": .string("sessions")])).ok, "A's file, as B")
 
         let nobody = MCPWebSocketLink(url: "ws://127.0.0.1:\(ServerTestCase.freePort())", token: "", session: "A")
         let unreachable = await nobody.call(["mode": .string("sessions")])

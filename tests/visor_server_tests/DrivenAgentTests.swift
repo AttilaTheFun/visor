@@ -324,6 +324,54 @@ extension ServerTests {
         #expect(await refusal(connecting: b, token: jobB.token) == .unauthenticated)
     }
 
+    /// The fresh tokens a wrapper was sent (DriverMessage.token).
+    private func freshTokens(_ wrapper: FakeWrapper) -> [String] {
+        wrapper.down.compactMap { message in
+            guard case .token(let token) = message.message else { return nil }
+            return token
+        }
+    }
+
+    /// A connected wrapper is sent a fresh token a sixth of its token's
+    /// life before it ends (ten minutes of an hour), again and again.
+    @Test func aWrapperIsSentAFreshTokenBeforeItsOwnEnds() async throws {
+        server.agentTokens.runnerAgentLifetime = 1.2
+        let (job, wrapper, record) = try await driven("Refreshed")
+        let first = try #require(await eventually { self.freshTokens(wrapper).first })
+        #expect(first != job.token)
+        let claims = try server.agentTokens.verify(first, as: .runnerAgent, agent: job.agent.uuid).get()
+        #expect(claims.sub == record.info.id && claims.agent == job.agent.uuid)
+        let second = await eventually { self.freshTokens(wrapper).count >= 2 ? self.freshTokens(wrapper)[1] : nil }
+        #expect(second != nil && second != first, "and again before that one ends")
+        // Its next connection, with the fresh one, is let in.
+        #expect(jobs.access(job.agent.uuid, bearer: try #require(second)) == .granted)
+        wrapper.finish()
+    }
+
+    /// A wrapper away longer than its token lasts is refused when it dials
+    /// back in, and its session carried on by a new job with a fresh token
+    /// (#437's resume); its runner's renewals were taken meanwhile.
+    @Test func aWrapperReconnectingWithAnExpiredTokenIsRefusedAndItsSessionCarriedOnAfresh() async throws {
+        let move = AgentJobMove(agent: "m1", session: "moved", title: "Moved", resume: "c-1", cwd: "/tmp", runsOn: "native")
+        let record = server.takeDriven(SessionInfo(id: "moved", agent: .claude, cwd: "/tmp", title: "Moved", created: 0), process: DrivenProcess())
+        record.move = move
+        #expect(jobs.queueResume(move) == .success("moved"))
+        let job = try #require(try await claimed())
+        #expect(job.agent.uuid == "m1")
+        let expired = server.agentTokens.mint(.runnerAgent, session: "moved", agent: "m1", now: Date().addingTimeInterval(-7200))
+        let renewed = try await dispatcher { try await $0.renew(.with { $0.agent = job.agent }, metadata: bearerMetadata(expired)) }
+        #expect(renewed.hasClaimExpires, "a runner's renewal shows the token its claim gave it: taken past its end")
+
+        #expect(await refusal(connecting: "m1", token: expired) == .unauthenticated)
+        let next = try #require(await eventually { record.move.flatMap { $0.agent != "m1" ? $0.agent : nil } }, "a new agent for it")
+        #expect(!jobs.holds("m1"), "the old agent's job let go")
+        #expect(jobs.holds(next) && record.driven, "the session still driven, its new job queued")
+        let fresh = try #require(try await claimed())
+        #expect(fresh.agent.uuid == next)
+        #expect((try? server.agentTokens.verify(fresh.token, as: .runnerAgent, agent: next).get())?.sub == "moved")
+        #expect(await refusal(connecting: "m1", token: job.token) == .unauthenticated, "the old agent's own is let go with its job")
+    }
+
     @Test func aWrappersMCPIsAnsweredAsItsSession() async throws {
         server.takeDriven(SessionInfo(id: "other-session", agent: .claude, cwd: "/tmp", title: "Other", created: 0), process: DrivenProcess())
         // In a container: Visor's own tools, answered as its session by
