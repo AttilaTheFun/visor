@@ -11,9 +11,10 @@ bazel build //applications/visor_menubar
 ZIP="$(bazel cquery --output=files //applications/visor_menubar 2>/dev/null | head -1)"
 rm -rf /tmp/vmb && mkdir -p /tmp/vmb && unzip -qo "$ZIP" -d /tmp/vmb
 tools/sign_mac_app.sh "/tmp/vmb/Visor Server.app"
-# Inside a Visor session, its agent token; otherwise the password, from
-# the keychain (the first read asks once).
-PW="${VISOR_TOKEN:-$(security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w 2>/dev/null || true)}"
+# The server's admin token (Visor Server › Settings › Create Admin Token…, or
+# `visor-server admin-token`). A session's own VISOR_TOKEN is for its own
+# actions only: no session's token reaches the REST side.
+PW="${VISOR_ADMIN_TOKEN:?VISOR_ADMIN_TOKEN is unset: give the server's admin token (a session's own VISOR_TOKEN is for its own actions only)}"
 SESSION="${1:-${VISOR_SESSION:-}}"
 # The REST side is plain HTTP on localhost, on the server's one port.
 curl -s --max-time 10 -X POST http://127.0.0.1:7433/api/restart \

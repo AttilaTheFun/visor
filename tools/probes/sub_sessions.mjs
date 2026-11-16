@@ -5,12 +5,12 @@
 // (the branch knows only the first), then sends a subagent off (listed, its
 // conversation readable) and, once it has finished, goes on with it as a
 // session of its own (which knows its conversation). Ends them all.
-//   VISOR_PORT=7633 VISOR_TOKEN=<password> [AGENT=codex] node tools/probes/sub_sessions.mjs
+//   VISOR_PORT=7633 VISOR_ADMIN_TOKEN=<admin token or password> [AGENT=codex] node tools/probes/sub_sessions.mjs
 // (Codex: no branch at a reply, which it can't make.)
 import http from 'node:http';
 const PORT = Number(process.env.VISOR_PORT ?? 7633);
-const PW = process.env.VISOR_TOKEN;
-if (!PW) { console.error('VISOR_TOKEN: the staging server\'s password'); process.exit(2); }
+const PW = process.env.VISOR_ADMIN_TOKEN;
+if (!PW) { console.error('VISOR_ADMIN_TOKEN is unset: give the server\'s admin token (or a staging server\'s password).'); process.exit(2); }
 const AGENT = process.env.AGENT ?? 'claude';
 const MODEL = process.env.MODEL ?? (AGENT === 'claude' ? 'haiku' : '');
 const id = crypto.randomUUID().toUpperCase();

@@ -38,9 +38,12 @@ extension VisorServer {
             guard envelope.type == "login" else { client.send(.error("Log in first")); return }
             let token = envelope.token ?? ""
             let byPassword = !password.isEmpty && (envelope.password ?? "") == password
+            // The admin token too, as the password or the token (the
+            // probes' and tools' login): it is the REST side's admin already.
+            let byAdminToken = adminToken.admits(envelope.password) || adminToken.admits(token)
             client.clientID = envelope.client
             let vouched = settings.asksNothing && (front?.admits(client.headers) ?? true)
-            guard client.trusted || vouched || byPassword || (!token.isEmpty && tokens.contains(token)) else {
+            guard client.trusted || vouched || byPassword || byAdminToken || (!token.isEmpty && tokens.contains(token)) else {
                 Self.log("\(describe(client)) was refused: wrong password or token")
                 client.sendLast(.error("Wrong password"))
                 return

@@ -32,7 +32,7 @@ HERE=tools/probes/frames
 OUT="$(mktemp -d)/send"
 mkdir -p "$OUT"
 API=http://127.0.0.1:7433/api
-PW="${VISOR_TOKEN:-$(security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w 2>/dev/null || true)}"
+PW="${VISOR_ADMIN_TOKEN:?VISOR_ADMIN_TOKEN is unset: give the server's admin token. A session's own VISOR_TOKEN is for its own actions only.}"
 # The connection code, which the probe signs in with should the
 # simulator's Visor not know this computer yet (an erased simulator): it
 # carries the password, and is never printed.

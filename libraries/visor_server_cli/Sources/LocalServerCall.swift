@@ -17,7 +17,8 @@ struct LocalServerCall {
 
     /// The status and body of the answer.
     @MainActor
-    func send(through system: any CommandLineSystem, socket: String = VisorServer.socketPath) async throws(CommandLineError) -> (status: Int, body: String) {
+    func send(through system: any CommandLineSystem, socket: String? = nil) async throws(CommandLineError) -> (status: Int, body: String) {
+        let socket = socket ?? VisorServer.socketPath
         guard let stream = await system.connect(unixPath: socket) else {
             throw .failed("no server answers at \(socket): is it running, with `ssh on` (its trusted socket)?")
         }
