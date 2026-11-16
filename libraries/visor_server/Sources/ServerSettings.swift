@@ -85,6 +85,10 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// (RunnerTokens; `PUT /api/runners/tokens {required}`). Off until the
     /// runners that claim here send one: off, a claim with none is let in
     /// (and logged once per runner); a wrong one is refused either way.
+    // TODO(2026-11-16): switch `runnerTokensRequired` on as soon as
+    // Shireworks' runner (shireworks#452) sends runner tokens. Until then,
+    // anything reaching the gRPC port can claim a waiting job and read its
+    // session's transcript and MCP.
     public var runnerTokensRequired = false
 
     public init() {}
