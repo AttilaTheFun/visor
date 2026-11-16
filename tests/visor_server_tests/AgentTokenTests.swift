@@ -112,6 +112,36 @@ extension ServerTests {
         #expect(a["VISOR_TOKEN"] != server.sharedAgentToken)
     }
 
+    @Test func testASessionsTokenIsThirtyTwoRandomBytes() {
+        let a = server.agentToken(for: "A"), b = server.agentToken(for: "B")
+        for token in [a, b] {
+            #expect(token.count == 64)
+            #expect(token.allSatisfy { $0.isHexDigit && !$0.isUppercase })
+        }
+        #expect(a != b)
+    }
+
+    @Test func testOnlyTheWholeTokenIsTaken() {
+        let a = server.agentToken(for: "A")
+        for wrong in [String(a.dropLast()), a + "0", String(a.dropLast()) + (a.hasSuffix("0") ? "1" : "0"), a.uppercased(), ""] {
+            #expect(!server.isAgentToken(wrong))
+            #expect(server.agentSession("A", presenting: wrong) == nil)
+        }
+        #expect(server.isAgentToken(a))
+        #expect(server.agentSession("A", presenting: a) != nil)
+    }
+
+    @Test func testAnArchivedSessionsTokenIsRefused() throws {
+        let a = server.agentToken(for: "A")
+        try #require(server.session("A")).info.archived = true
+        #expect(!server.isAgentToken(a))
+        #expect(server.agentSession("A", presenting: a) == nil)
+        #expect(ask(from: "A", token: a).error != nil)
+        approval(for: "A", token: a)
+        #expect(try #require(server.session("A")).info.pendingApproval == nil)
+        #expect(rest(a) == 401)
+    }
+
     @Test func testOneSessionsTokenCannotAskAsAnother() throws {
         let a = server.agentToken(for: "A")
         #expect(ask(from: "A", token: a).error == nil)
