@@ -35,7 +35,15 @@ enum TokenAlerts {
                             + "are restarted on new jobs. The admin token is unchanged.",
                           button: "Drop Them") else { return }
         }
-        server.rotateSigningKeys(dropPrevious: emergency)
+        guard server.rotateSigningKeys(dropPrevious: emergency) else {
+            NSApp.activate()
+            let alert = NSAlert()
+            alert.messageText = "The signing keys weren't rotated"
+            alert.informativeText = "The kept keys can't be read (Visor Server's log says why), and aren't written over. "
+                + "Emergency Key Rotation… replaces them."
+            alert.runModal()
+            return
+        }
     }
 
     private static func showOnce(_ token: String, title: String) {
@@ -46,8 +54,15 @@ enum TokenAlerts {
         alert.addButton(withTitle: "Copy and Close")
         alert.addButton(withTitle: "Close")
         if alert.runModal() == .alertFirstButtonReturn {
+            // Marked concealed (nspasteboard.org's convention), so clipboard
+            // managers that honour it don't keep it. It is on the
+            // pasteboard all the same, for any process of this user's to
+            // read, until something else is copied.
+            let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
             NSPasteboard.general.clearContents()
+            _ = NSPasteboard.general.declareTypes([.string, concealed], owner: nil)
             NSPasteboard.general.setString(token, forType: .string)
+            NSPasteboard.general.setString("", forType: concealed)
         }
     }
 

@@ -13,12 +13,26 @@ public final class FileSecrets: SecretStore {
     }
 
     public func get(_ key: String) -> String? {
-        lock.withLock { _ in read()[key] }
+        guard case .found(let value) = lookup(key) else { return nil }
+        return value
     }
 
+    /// Absent when the file, or its key, isn't there; unreadable when the
+    /// file is there but can't be read or isn't JSON.
+    public func lookup(_ key: String) -> SecretLookup {
+        lock.withLock { _ -> SecretLookup in
+            switch read() {
+            case .success(let values): return values[key].map(SecretLookup.found) ?? .absent
+            case .failure(let why): return .unreadable(why.message)
+            }
+        }
+    }
+
+    /// A secrets file that can't be read is never written over: every
+    /// other secret in it would go.
     public func set(_ key: String, _ value: String?) {
         lock.withLock { _ in
-            var values = read()
+            guard case .success(var values) = read() else { return }
             values[key] = value.flatMap { $0.isEmpty ? nil : $0 }
             guard let data = try? JSONEncoder().encode(values) else { return }
             try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -30,8 +44,20 @@ public final class FileSecrets: SecretStore {
         }
     }
 
-    private func read() -> [String: String] {
-        guard let data = try? Data(contentsOf: url) else { return [:] }
-        return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+    /// Why the file couldn't be read.
+    private struct Unreadable: Error {
+        let message: String
+    }
+
+    /// The file's secrets: none where there is no file (or it is empty).
+    private func read() -> Result<[String: String], Unreadable> {
+        guard FileManager.default.fileExists(atPath: url.path) else { return .success([:]) }
+        let data: Data
+        do { data = try Data(contentsOf: url) } catch { return .failure(Unreadable(message: "\(url.path) can't be read: \(error)")) }
+        if data.isEmpty { return .success([:]) }
+        guard let values = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return .failure(Unreadable(message: "\(url.path) isn't a JSON object of secrets"))
+        }
+        return .success(values)
     }
 }

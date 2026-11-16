@@ -373,6 +373,76 @@ extension ServerTests {
         #expect(await refusal(connecting: "m1", token: job.token) == .unauthenticated, "the old agent's own is let go with its job")
     }
 
+    /// A token past its end is taken, within AgentTokens.expiredTokenGrace,
+    /// on a runner's Renew and its Release alone: the wrapper's reports
+    /// (Started, Progress, Blocked, Completed, Failed) show a live one, its
+    /// token kept fresh over its stream. Past its grace, a renewal is
+    /// answered with no claim (its runner ends its agent) and a release
+    /// refused.
+    @Test func anEndedTokenIsTakenOnlyOnRenewAndReleaseWithinItsGrace() async throws {
+        let move = AgentJobMove(agent: "g1", session: "graced", title: "Graced", resume: "c-1", cwd: "/tmp", runsOn: "native")
+        let record = server.takeDriven(SessionInfo(id: "graced", agent: .claude, cwd: "/tmp", title: "Graced", created: 0), process: DrivenProcess())
+        record.move = move
+        #expect(jobs.queueResume(move) == .success("graced"))
+        let job = try #require(try await claimed())
+        let agent = job.agent
+        let ended = server.agentTokens.mint(.runnerAgent, session: "graced", agent: "g1", now: Date().addingTimeInterval(-7200))
+        let past = server.agentTokens.mint(.runnerAgent, session: "graced", agent: "g1",
+                                           now: Date().addingTimeInterval(-3600 - AgentTokens.expiredTokenGrace - 60))
+
+        let renewed = try await dispatcher { try await $0.renew(.with { $0.agent = agent }, metadata: bearerMetadata(ended)) }
+        #expect(renewed.hasClaimExpires, "a renewal within its grace")
+        let reports: [(String, AgentProtocol_V1_JobReport)] = [
+            ("started", .with { $0.agent = agent; $0.started = .with { $0.sessionID = "c-2"; $0.runner = "Test" } }),
+            ("progress", .with { $0.agent = agent; $0.progress = .with { $0.text = "working" } }),
+            ("blocked", .with { $0.agent = agent; $0.blocked = .with { $0.reason = "stuck" } }),
+            ("completed", .with { $0.agent = agent; $0.completed = .with { $0.summary = "done" } }),
+            ("failed", .with { $0.agent = agent; $0.failed = .with { $0.reason = "broke" } }),
+        ]
+        for (kind, report) in reports {
+            #expect(await code { try await $0.report(report, metadata: bearerMetadata(ended)) } == .unauthenticated, "\(kind): refused")
+            #expect(DispatcherService.takesEndedToken(report) == false, "\(kind)")
+        }
+        #expect(jobs.holder(of: "g1") == "Test", "none of them taken")
+
+        let lapsed = try await dispatcher { try await $0.renew(.with { $0.agent = agent }, metadata: bearerMetadata(past)) }
+        #expect(!lapsed.hasClaimExpires, "past its grace: no claim, so its runner ends its agent")
+        let released = AgentProtocol_V1_JobReport.with { $0.agent = agent; $0.released = .with { $0.reason = "its runner stopped" } }
+        #expect(DispatcherService.takesEndedToken(released))
+        #expect(await code { try await $0.report(released, metadata: bearerMetadata(past)) } == .unauthenticated, "a release past it")
+        #expect(jobs.holder(of: "g1") == "Test")
+        #expect(await code { try await $0.report(released, metadata: bearerMetadata(ended)) } == nil, "a release within it")
+        #expect(jobs.holder(of: "g1") == nil && jobs.holds("g1"), "released, queued again")
+    }
+
+    /// An expired token shown while its agent's wrapper is connected is
+    /// someone else's copy: refused, and its session's agent not restarted.
+    /// And however often an old token comes back, a session's agent is
+    /// restarted for one once in expiredTokenResumeInterval.
+    @Test func anExpiredTokenRestartsItsSessionsAgentOnlyWhenItsStreamIsGoneAndNotOften() async throws {
+        let (job, wrapper, record) = try await driven("Live")
+        try #require(await eventually { (record.process as? DrivenProcess)?.isAttached == true ? true : nil } ?? false)
+        let ended = server.agentTokens.mint(.runnerAgent, session: record.info.id, agent: job.agent.uuid, now: Date().addingTimeInterval(-7200))
+        #expect(await refusal(connecting: job.agent.uuid, token: ended) == .unauthenticated)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(jobs.holds(job.agent.uuid), "its job still held")
+        #expect(server.expiredTokenResumes[record.info.id] == nil, "nothing restarted")
+        wrapper.finish()
+
+        // Rate-limited, whatever agent it names.
+        let move = AgentJobMove(agent: "r1", session: "limited", title: "Limited", resume: "c-1", cwd: "/tmp", runsOn: "native")
+        let limited = server.takeDriven(SessionInfo(id: "limited", agent: .claude, cwd: "/tmp", title: "Limited", created: 0), process: DrivenProcess())
+        limited.move = move
+        #expect(jobs.queueResume(move) == .success("limited"))
+        server.resumeAfterExpiredToken("limited", agent: "r1")
+        let second = try #require(await eventually { limited.move.flatMap { $0.agent != "r1" ? $0.agent : nil } }, "restarted once")
+        server.resumeAfterExpiredToken("limited", agent: second)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(limited.move?.agent == second, "not again so soon")
+        server.resumeAfterExpiredToken("limited", agent: second, now: Date().addingTimeInterval(VisorServer.expiredTokenResumeInterval + 1))
+        #expect(await eventually { limited.move.flatMap { $0.agent != second ? $0.agent : nil } } != nil, "again once it has passed")
+    }
+
     @Test func aWrappersMCPIsAnsweredAsItsSession() async throws {
         server.takeDriven(SessionInfo(id: "other-session", agent: .claude, cwd: "/tmp", title: "Other", created: 0), process: DrivenProcess())
         // In a container: Visor's own tools, answered as its session by

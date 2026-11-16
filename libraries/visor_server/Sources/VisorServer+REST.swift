@@ -191,7 +191,7 @@ extension VisorServer {
     /// name for this computer, whose it is, and a token to log
     /// the socket in with.
     private func restHello(_ call: RESTCall) -> HTTPResponse {
-        var e = Envelope.hello(host: hostName, login: "", token: issueToken())
+        var e = Envelope.hello(host: hostName, login: "", token: issueToken(byAdmin: isAdminBearer(call.request.authorization)))
         e.id = id
         e.version = Self.version
         if !settings.clientsKeepMessages { e.keepMessages = false }

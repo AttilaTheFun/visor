@@ -4,7 +4,9 @@
 // (a new one, or the one it had); its stream is that session's process from
 // then on. A wrapper whose token isn't the agent's it names is refused; one
 // whose token has expired is refused too, and its session carried on by a
-// new job with a fresh token (VisorServer.resumeAfterExpiredToken). While
+// new job with a fresh token (VisorServer.resumeAfterExpiredToken: only
+// while no wrapper of it is connected, and once per session in
+// expiredTokenResumeInterval). While
 // connected, it is sent a fresh token before the one it holds ends
 // (DriverMessage.token). The agent's MCP requests over the stream are
 // answered for that session (DrivenMCP), and its permission prompts are the
@@ -57,8 +59,16 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
             throw AgentBearer.refusal("This dispatcher holds no job of that agent.")
         case .expired:
             let session = await jobs.session(of: agent)
-            VisorServer.log("driver: \(agent) dialled in with an expired token: refused; its session carried on with a fresh one")
-            await MainActor.run { server.resumeAfterExpiredToken(session, agent: agent) }
+            // Its wrapper's stream still live: this isn't that wrapper back
+            // after a long absence (whose stream has gone), but someone
+            // else's copy of an old token. Refused, and nothing restarted.
+            let live = await MainActor.run { (server.session(session)?.process as? DrivenProcess)?.isAttached == true }
+            if live {
+                VisorServer.log("driver: \(agent) dialled in with an expired token while its wrapper is connected: refused")
+            } else {
+                VisorServer.log("driver: \(agent) dialled in with an expired token: refused; its session carried on with a fresh one")
+                await MainActor.run { server.resumeAfterExpiredToken(session, agent: agent) }
+            }
             throw AgentBearer.refusal(AgentTokenRefusal.expired.message)
         case .refused(let why):
             VisorServer.log("driver: \(agent) dialled in: refused: \(why)")

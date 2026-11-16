@@ -96,12 +96,25 @@ extension VisorServer {
         return move.agent.lowercased() == agent.lowercased()
     }
 
+    /// How often a session's agent may be restarted for a wrapper that
+    /// dialled in with an expired token.
+    static let expiredTokenResumeInterval: TimeInterval = 600
+
     /// A runner's agent that dialled in with an expired token (it was
-    /// away longer than its token lasts: JobQueue+Tokens): refused, and its
-    /// session, if that agent still carries it on, carried on by a resume
-    /// job with a fresh token, as Restart Agent would.
-    package func resumeAfterExpiredToken(_ session: String, agent: String) {
+    /// away longer than its token lasts: JobQueue+Tokens), while no wrapper
+    /// of it is connected (DriverService): refused, and its session, if that
+    /// agent still carries it on, carried on by a resume job with a fresh
+    /// token, as Restart Agent would. Once per session in
+    /// `expiredTokenResumeInterval`: an old token, however many times it is
+    /// shown, restarts its session's agent once at most (the restarted
+    /// agent is another, which the old token doesn't name).
+    package func resumeAfterExpiredToken(_ session: String, agent: String, now: Date = Date()) {
         guard let record = self.session(session), record.driven, !record.info.archived, carriesDriven(session, agent: agent) else { return }
+        if let last = expiredTokenResumes[session], now.timeIntervalSince(last) < Self.expiredTokenResumeInterval {
+            Self.log("\(record.info.title) (\(session)): not restarted for an expired token again so soon")
+            return
+        }
+        expiredTokenResumes[session] = now
         resumeDriven(record, why: "restarting, as its wrapper reconnected with an expired token, the agent of")
     }
 

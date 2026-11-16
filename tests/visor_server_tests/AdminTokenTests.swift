@@ -52,6 +52,29 @@ extension ServerTests {
         return files.compactMap { try? String(contentsOf: $0, encoding: .utf8) }.joined(separator: "\n")
     }
 
+    /// `GET /api/hello` hands out a socket-login token that never expires:
+    /// those handed out to the admin token (or to one of them) go when it
+    /// is rotated or reset, the password's stay.
+    @Test func helloTokensTheAdminTokenLedToGoWhenItIsReplaced() throws {
+        let first = try #require(token(rest("POST", "/api/admin-token")))
+        let byAdmin = try #require(token(rest("GET", "/api/hello", bearer: first)))
+        let byThat = try #require(token(rest("GET", "/api/hello", bearer: byAdmin)), "a hello token's own hello")
+        let byPassword = try #require(token(rest("GET", "/api/hello")))
+        for bearer in [byAdmin, byThat, byPassword] { #expect(rest("GET", "/api/sessions", bearer: bearer).status == 200) }
+
+        let rotated = rest("POST", "/api/admin-token/rotate", bearer: first)
+        #expect(rotated.status == 200)
+        #expect(rest("GET", "/api/sessions", bearer: byAdmin).status == 401, "the admin token's hello token is gone")
+        #expect(rest("GET", "/api/sessions", bearer: byThat).status == 401, "and the one it led to")
+        #expect(rest("GET", "/api/sessions", bearer: byPassword).status == 200, "the password's stays")
+
+        let second = try #require(token(rotated))
+        let bySecond = try #require(token(rest("GET", "/api/hello", bearer: second)))
+        #expect(server.resetAdminToken() != nil)
+        #expect(rest("GET", "/api/sessions", bearer: bySecond).status == 401, "gone with a reset too")
+        #expect(rest("GET", "/api/sessions", bearer: byPassword).status == 200)
+    }
+
     @Test func aKeptAdminTokenIsMadeOnlyWhenThereIsNone() throws {
         #expect(parseJSON(rest("GET", "/api/admin-token").body)?["exists"].bool == false)
         #expect(parseJSON(rest("GET", "/api/admin-token").body)?["holding"].string == "kept")

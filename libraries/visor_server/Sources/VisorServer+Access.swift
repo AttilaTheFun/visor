@@ -51,12 +51,33 @@ extension VisorServer {
     static let agentTokenRefusedOverREST = "A session's token acts as its own session over Visor's socket, never over REST: "
         + "the REST side takes the password, or the admin token ($VISOR_ADMIN_TOKEN)."
 
-    /// A token for the socket's login, for a client that `hello` let in.
-    func issueToken() -> String {
+    /// A token for the socket's login, for a client that `hello` let in;
+    /// `byAdmin`, for one the admin token let in (or a token of these),
+    /// which goes when the admin token is rotated or reset.
+    func issueToken(byAdmin: Bool = false) -> String {
         let token = UUID().uuidString.lowercased()
         tokens.append(token)
-        if tokens.count > 512 { tokens.removeFirst(tokens.count - 512) }
+        if byAdmin { adminHelloTokens.insert(token) }
+        if tokens.count > 512 {
+            for old in tokens.prefix(tokens.count - 512) { adminHelloTokens.remove(old) }
+            tokens.removeFirst(tokens.count - 512)
+        }
         return token
+    }
+
+    /// Whether `bearer` is the admin token, or a `hello` token handed out
+    /// to it.
+    func isAdminBearer(_ bearer: String?) -> Bool {
+        adminToken.admits(bearer) || (bearer.map { adminHelloTokens.contains($0) } ?? false)
+    }
+
+    /// The `hello` tokens the admin token led to, gone (the admin token
+    /// was rotated or reset): the old admin token's holder keeps nothing.
+    func forgetAdminHelloTokens() {
+        guard !adminHelloTokens.isEmpty else { return }
+        tokens.removeAll { adminHelloTokens.contains($0) }
+        Self.log("admin token replaced: the \(adminHelloTokens.count) hello token(s) handed out to it are gone")
+        adminHelloTokens = []
     }
 
     /// Four short words, easy to type on a phone.

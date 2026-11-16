@@ -208,6 +208,14 @@ struct ServerOptions: Sendable {
         return value
     }
 
+    /// The admin token as a run started from this one (a relaunch) is
+    /// given it, in its environment: one this run was given in its own
+    /// environment or on standard input; nil for one in a file, which the
+    /// new run reads itself (`arguments`).
+    var adminTokenForEnvironment: String? {
+        adminTokenFile == nil || adminTokenFile == "-" ? adminToken : nil
+    }
+
     /// Why these can't be passed on to a run in the background, if they
     /// can't: a token read from standard input has no file to name.
     var backgroundProblem: String? {

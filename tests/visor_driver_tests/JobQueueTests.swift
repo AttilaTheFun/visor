@@ -460,10 +460,15 @@ import Testing
         let other = AgentTokens(secrets: MemorySecrets(), issuer: "server-2")
         #expect(jobs.access(a, bearer: other.mint(.runnerAgent, session: a, agent: a)) != .granted)
 
-        // Expired: refused on the driver, taken on the dispatcher's calls.
+        // Expired: refused on the driver, taken on a runner's Renew and
+        // Release within its grace, and no longer.
         let old = tokens.mint(.runnerAgent, session: a, agent: a, now: Date().addingTimeInterval(-7200))
         #expect(jobs.access(a, bearer: old) == .expired)
-        #expect(jobs.access(a, bearer: old, allowExpired: true) == .granted)
+        #expect(jobs.access(a, bearer: old, withinGrace: true) == .granted)
+        let ancient = tokens.mint(.runnerAgent, session: a, agent: a, now: Date().addingTimeInterval(-3600 - AgentTokens.expiredTokenGrace - 60))
+        #expect(jobs.access(a, bearer: ancient, withinGrace: true) == .expired, "past its grace")
+        #expect(jobs.access(a, bearer: old, withinGrace: true, now: Date().addingTimeInterval(AgentTokens.expiredTokenGrace)) == .expired,
+                "its grace runs out")
 
         // An archived session's agent is refused.
         jobs.liveSession = { $0 == a ? false : nil }

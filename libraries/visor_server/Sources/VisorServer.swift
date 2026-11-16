@@ -127,6 +127,9 @@ public final class VisorServer {
     /// Tokens handed out by `hello` to clients the path (or the password)
     /// let in, for the socket's login; new each launch.
     var tokens: [String] = []
+    /// Those of `tokens` handed out to a request the admin token let in (or
+    /// one of these): gone when the admin token is rotated or reset.
+    var adminHelloTokens: Set<String> = []
 
     public let port: UInt16
 
@@ -164,6 +167,9 @@ public final class VisorServer {
     /// Re-mints the native sessions' token files hourly
     /// (VisorServer+SessionTokenFiles).
     var sessionTokenRefresh: Task<Void, Never>?
+    /// When each driven session's agent was last restarted for a wrapper
+    /// that dialled in with an expired token (resumeAfterExpiredToken).
+    var expiredTokenResumes: [String: Date] = [:]
     /// The runners' own tokens, which agent_protocol's Claim asks
     /// (RunnerTokens): kept with the secrets.
     package let runnerTokens: RunnerTokens

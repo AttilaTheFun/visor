@@ -14,7 +14,9 @@
 // agent's token. Rotating takes the current token whatever else lets the
 // request in (the password, the trusted socket): nothing over REST resets
 // it without it. The menu bar app's Reset Admin Token… does
-// (resetAdminToken), in its own process.
+// (resetAdminToken), in its own process. Rotating or resetting it also
+// ends the `hello` tokens handed out to a request it let in (they never
+// expire otherwise): the old token's holder keeps no way in through them.
 
 import Foundation
 import VisorProtocol
@@ -38,6 +40,7 @@ extension VisorServer {
         switch result {
         case .success(let token):
             Self.log("admin token \(what)")
+            forgetAdminHelloTokens()
             return HTTPResponse(status, JSONValue.object(["token": .string(token)]).encoded())
         case .failure(let refusal):
             return HTTPResponse(refusal == .notPresented ? 403 : 409, Envelope.error(refusal.message).encoded())
@@ -82,6 +85,7 @@ extension VisorServer {
     public func resetAdminToken() -> String? {
         guard let token = adminToken.reset() else { return nil }
         Self.log("admin token reset from the menu bar")
+        forgetAdminHelloTokens()
         return token
     }
 }
