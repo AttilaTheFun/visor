@@ -21,12 +21,13 @@ let package = Package(
             exact: "0.51.0"
         ),
         // agent_protocol: its services' Swift (VisorDriver, the native
-        // runner) and agent-wrapper (the Mac app's Helpers), by release.
-        // For now (a development branch) its job-skip-permissions branch,
-        // unreleased: Job.token, the wrapper's MCP and approvals, and
-        // Job.skip_permissions (agent_protocol#9, #10, #12). Back to a
-        // release before this merges (CI's `pins`).
-        .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", revision: "c777d30290784c83254fa930b8505116b1734d00"),
+        // runner) and agent-wrapper (the Mac app's Helpers), by release:
+        // 0.4.0 has Job.token, the wrapper's MCP and approvals, and
+        // Job.skip_permissions (agent_protocol#9 to #13).
+        .package(
+            url: "https://github.com/AttilaTheFun/agent_protocol.git",
+            exact: "0.4.0"
+        ),
         // Its gRPC: the versions Isomer resolves already, and its protobuf.
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
         .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
