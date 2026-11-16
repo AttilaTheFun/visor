@@ -1,7 +1,11 @@
 // Settings in UserDefaults, and secrets in the keychain where there is one
 // (Apple's systems); elsewhere (a host's own Foundation, on the web and
 // Android) secrets are kept with the settings, as the system keeps an
-// app's own preferences.
+// app's own preferences. A launch's own settings (VisorLaunchSettings: the
+// fixture's and the account's, never a secret) come first from the
+// environment, as Isomer's launchers give a test's (on the iPhone's
+// simulator, simctl's SIMCTL_CHILD_), then from UserDefaults, where the
+// iPhone's `-visor.<key> <value>` launch arguments put them.
 
 import Foundation
 #if canImport(os)
@@ -22,17 +26,24 @@ public final class NativeVisorSettingsService: VisorSettingsService {
     /// for the app's default group. On the Mac a group is the data
     /// protection keychain's, not the login keychain's.
     private let keychainGroup: String?
+    /// The launch's settings from its environment (`fixture=snapshot`, or
+    /// `visor.fixture=snapshot`), read once: none in a launch of the app's
+    /// own.
+    private var launch: [String: String]
 
     public init(keychainService: String? = nil, keychainGroup: String? = nil) {
         self.keychainService = keychainService ?? Bundle.main.bundleIdentifier ?? "Visor"
         self.keychainGroup = keychainGroup
+        launch = VisorLaunchSettings.values(in: ProcessInfo.processInfo.environment)
     }
 
     public func get(key: String) -> String {
-        UserDefaults.standard.string(forKey: "visor." + key) ?? ""
+        launch[key] ?? UserDefaults.standard.string(forKey: "visor." + key) ?? ""
     }
 
     public func set(key: String, value: String) {
+        // What the app sets stands over what it was launched with.
+        launch[key] = nil
         if value.isEmpty { UserDefaults.standard.removeObject(forKey: "visor." + key) }
         else { UserDefaults.standard.set(value, forKey: "visor." + key) }
     }

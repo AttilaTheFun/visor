@@ -13,11 +13,13 @@ extension FeatureMapTests {
             // answers (the headless client has no network).
             let app = try VisorLaunch.empty()
             defer { app.quit() }
-            try app.tap("add-computer")
-            try app.type("host", "http://192.168.1.20:7433")
+            try app.tap(id: "add-computer", else: "Add Computer…")
+            try app.type(id: "host", else: "Paste the code, or type an address", "http://192.168.1.20:7433")
             // The password's field is there once an address is.
-            try app.type("password", "secret")
-            let screen = try app.tap("connect")
+            // (On the iPhone the field has no label: the form's last.)
+            let password = try app.screen().elements.last { $0.role == "textField" }?.name ?? "Password"
+            try app.type(id: "password", else: password, "secret")
+            let screen = try app.tap(id: "connect", else: "Connect")
             FeatureMapNode.sessions.expectShown(on: screen)
             #expect(!screen.shows("Welcome to Visor"), "\(screen.summary)")
         }
@@ -27,7 +29,7 @@ extension FeatureMapTests {
             let app = try VisorLaunch.fixture("connect")
             defer { app.quit() }
             try app.screen { FeatureMapNode.addComputer.isShown(on: $0) }
-            FeatureMapNode.runner.expectShown(on: try app.tap("runner"))
+            FeatureMapNode.runner.expectShown(on: try app.tap(id: "runner", else: "Sign In to a MultiPass…"))
         }
 
         @Test("Sign in to a MultiPass → Add Computer: tap use-connection-code")
@@ -44,7 +46,7 @@ extension FeatureMapTests {
             let app = try VisorLaunch.fixture("connect")
             defer { app.quit() }
             try app.screen { FeatureMapNode.addComputer.isShown(on: $0) }
-            FeatureMapNode.sessions.expectShown(on: try app.dismiss())
+            FeatureMapNode.sessions.expectShown(on: try app.putAway())
         }
     }
 }

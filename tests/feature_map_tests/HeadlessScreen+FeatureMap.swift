@@ -7,6 +7,11 @@ extension HeadlessScreen {
 
     func has(label: String) -> Bool { elements.contains { $0.label == label } }
 
+    /// Whether `title` is the page's title: its first text on Isomer's
+    /// runtime, its last on the iPhone (the navigation bar's, after the
+    /// page's own).
+    func titled(_ title: String) -> Bool { texts.first == title || texts.last == title }
+
     /// The screen's texts and elements, for a failure's message.
     var summary: String {
         "texts: \(texts.prefix(30)); elements: \(elements.map { "\($0.name) \($0.id ?? "") \($0.label.prefix(40))" })"
