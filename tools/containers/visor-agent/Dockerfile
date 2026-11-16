@@ -65,8 +65,7 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && ln -s ../
 RUN npm install -g @anthropic-ai/claude-code @openai/codex && npm cache clean --force
 ARG TARGETARCH
 # GitHub's CLI, pinned and checked like bazelisk: CI's scripts (a draft
-# release, a run's artifacts) and the agents' own use, its token the GitHub
-# proxy's (docs/github-proxy.md) where a session goes through it.
+# release, a run's artifacts) and the agents' own use.
 ARG GH_VERSION=2.103.3
 RUN case "${TARGETARCH:-arm64}" in \
       arm64) sum=ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63 ;; \
@@ -146,8 +145,7 @@ ENV XDG_CACHE_HOME=/var/cache/bazel/xdg \
     npm_config_cache=/var/cache/bazel/npm \
     GRADLE_USER_HOME=/var/cache/bazel/gradle
 # GitHub's CLI, pinned and checked like bazelisk: CI's scripts (a draft
-# release, a run's artifacts) and the agents' own use, its token the GitHub
-# proxy's (docs/github-proxy.md) where a session goes through it.
+# release, a run's artifacts) and the agents' own use.
 ARG GH_VERSION=2.103.3
 RUN case "${TARGETARCH:-arm64}" in \
       arm64) sum=ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63 ;; \
