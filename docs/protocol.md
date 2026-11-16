@@ -43,6 +43,10 @@ in the same way, with the password the connection code carries. The API
 reads the same under a mount path a front forwards whole
 (`/visor/api/sessions`).
 
+A runner's agent's token (agent_protocol's `Job.token`, docs/runners.md)
+is never taken here: it is only the driver's and dispatcher's, on their
+gRPC port, which ask it of every call made for that agent.
+
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
 200 gives `host` (the Mac's name), `login` (whose it is) and `token` —
@@ -94,7 +98,7 @@ under `/api`.
 | `GET /sessions/<id>/commands` | — | `commands`: the slash commands the session's agent takes (`name`, `description`, `argumentHint`), as it last listed them, or as the same agent last did |
 | `GET /sessions/<id>/mail` | — | `mail`: the session's `inbox` and `outbox` (docs/agent-mail.md), oldest first, each a `MailMessage`: `id`, `from` and `to` (`RelayEndpoint`), `text`, `sent`, `state` (`waiting`, `delivered`, `read`, `failed`, `expired`), `changed`, `problem`?. The session's info carries `unreadMail` (how many wait unread) and `mailChanged` (when either box last changed), which tell a client to read them again. A server before 0.47 answers 404 |
 | `POST /sessions` | `id` (client-chosen, optional), `agent`, `cwd`, `title`, `skipPermissions`, `resume` (the agent's own session id to continue; its past conversation is imported into the transcript). `container: true` (a session whose agent ran in a Linux container of its own on the server's computer) was removed in 0.50: a server of 0.50 or later answers it 410 with `error`, and makes nothing | `sessions` with the new one |
-| `POST /jobs` | `agent` (claude, for now), `title`, `text` (its first prompt), `cwd`, `model`, `effort`, `runsOn` (the kind of runner that may take it: `native`, `container`; absent for any) | `job` with `id`: its agent's id, queued on this server's agent_protocol dispatcher (docs/runners.md) for a runner to claim; the session appears once the runner's agent-wrapper dials the server. 404 when the server has no dispatcher, 400 with `error` for a job no runner can run. From 0.51 |
+| `POST /jobs` | `agent` (claude, for now), `title`, `text` (its first prompt), `cwd`, `model`, `effort`, `runsOn` (the kind of runner that may take it: `native`, `container`; absent for any), `skipPermissions` (true: its agent acts without asking; absent or false: it asks, its prompts this server's) | `job` with `id`: its agent's id, queued on this server's agent_protocol dispatcher (docs/runners.md) for a runner to claim; the session appears once the runner's agent-wrapper dials the server. 404 when the server has no dispatcher, 400 with `error` for a job no runner can run. From 0.51 |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
 | `POST /sessions/<id>/contain` | `container` (true: into a container on its computer; false: out of it) | Removed in 0.50: a server of 0.50 or later answers 410 with `error`. (Before: `sessions` with that one, once its agent had moved.) |
 | `GET /mcp` | | `endpoints`: the MCP servers passed on to the sessions' agents (see Proxied MCP servers), each `name`, `url`, `onByDefault` and `headers` (`name`, `secret`, and `value`, or for a secret one only `kept`) |
@@ -284,6 +288,16 @@ an experimental request: the server runs Codex with
 tool `request_user_input`) and answers Codex by its question ids. The token is generated per app launch and is not the
 password. Codex's headless runs never ask; its manual mode is the
 workspace-write sandbox.
+
+A runner's agent (one run under agent_protocol's wrapper, whose driver
+this server is) asks the same way through its wrapper: its
+`mcp__visor__approve` comes as `WrapperMessage.approval` and is shown as
+the same `approval`, and the client's `approve` goes back as
+`DriverMessage.approval` (`allow`; a question's answers in
+`updated_input_json`, the tool's input with `answers`; or `reason`). A
+prompt it withdraws is cleared (`approval` with none). Its MCP server's
+other tools are answered by the driver as its session's
+(docs/runners.md).
 
 ## Sessions messaging each other
 

@@ -47,7 +47,7 @@ actor DrivenMCP {
 
     /// The wrapper's connection ended: each bridge's own work stopped.
     func close() async {
-        let open = bridges.values.map(\.bridge)
+        let open = bridges.values.map { $0.bridge }
         bridges = [:]
         for bridge in open { await bridge.close() }
     }

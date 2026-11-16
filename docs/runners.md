@@ -139,6 +139,57 @@ Logan's answers to the plan's questions (12 Nov):
   co-tenant container goes, Shireworks' primary container is made, and
   they move into it (a phase of its own, planned with Shireworks).
 
+## A runner's agents, authenticated, with Visor's tools (as built, 15 Nov)
+
+What a session run by any runner's agent (Visor's native runner, or
+Shireworks' container runner) gets from Visor's driver and dispatcher
+(libraries/visor_driver), over agent_protocol: unmerged, with
+agent_protocol#9, #10 and #12.
+
+- **Its own token.** Each job's agent has a token of its own
+  (`Job.token`), minted when the job is queued (a new session's, a moved
+  session's, each later agent of a moved session: `resumeDriven` queues a
+  new agent) and kept with the server's secrets (`runnerAgentTokens`, an
+  agent id to token map; never in jobs.json, sessions.json or the log),
+  so a restart keeps its runners' agents. A runner hands it to the wrapper
+  in `AGENT_TOKEN` alone, and the wrapper shows it on every call it makes
+  for the agent as `authorization: Bearer <token>`. The driver refuses,
+  with UNAUTHENTICATED, a `Connect` or `Conversation` whose token isn't
+  the agent's (none, a wrong one, or another agent's: the hello's agent
+  must be the token's), and the dispatcher a `Report` or `Renew` the
+  same: the runner shows its job's token on its renewals and releases
+  too. A `Claim` shows none: it is how a runner is given a job and its
+  token. These tokens are only the gRPC port's: the server's REST and
+  WebSocket side never takes one. A token goes with its agent's job: when
+  its session ends, its move fails or is given up, or its agent is
+  stopped (`stopJobs`); then its runner's renewal is told the claim isn't
+  its own (so the runner ends its agent), its reports are let go, and its
+  wrapper can't dial in. Not yet: a fresh token pushed to a running
+  wrapper (`DriverMessage.token`); a token lives as long as its agent.
+- **Visor's MCP tools.** The agent's MCP server `visor` is relayed by its
+  wrapper (`WrapperMessage.mcp`) and answered here by Visor's own MCP
+  bridge (libraries/visor_mcp_bridge, as `visor-agent-host mcp` runs it
+  for a session on this computer), as the session the token says it is:
+  `list_sessions`, `send_message`, `read_messages`, `message_status`,
+  `read_inbox`, `read_outbox`, and the computer's passed-on MCP servers.
+  `approve` is the wrapper's own, never listed here.
+- **Approvals.** A session that asks before acting has its agent's
+  permission prompts (the wrapper's `mcp__visor__approve`, sent as
+  `WrapperMessage.approval`) shown as the session's pending approval, as a
+  session's on this computer are, with an AskUserQuestion's questions; the
+  person's answer goes back as `DriverMessage.approval` (allowed; with the
+  answers in the tool's input for a question; or denied, and why). A
+  prompt the agent withdraws (`approval_withdrawn`), or whose wrapper's
+  connection drops, is no longer shown; a wrapper that dials again asks
+  again, and one already answered is answered again.
+- **Whether it asks** is the job's (`Job.skip_permissions`), from the
+  session's own setting; a job queued by `POST /api/jobs` asks unless it
+  says `skipPermissions: true`. A session moved into a container still
+  starts acting without asking (it touches only its volumes); set to ask
+  (Permissions), its next agent's job asks. A runner passes it on in
+  `AGENT_JOB` as `skipPermissions`. Shireworks' runner always passes
+  `--skip-permissions` until it reads the field.
+
 ## Logan's answers (11 Nov, later)
 
 Where this section and the rest of the document differ, this section wins.
@@ -632,6 +683,10 @@ Shireworks (shireworks#261, §14).
   shows "Released in vX" by following release → pull requests → `Fixes #n`.
 
 ## Permissions
+
+As built (15 Nov): the job says (`Job.skip_permissions`, from the
+session), and an agent that asks asks through its driver ("A runner's
+agents, authenticated, with Visor's tools", above). The design before it:
 
 A wrapped agent knows its place. In a container (`place: container`), it always
 skips permission prompts: Claude's bypassPermissions, Codex's full access. On

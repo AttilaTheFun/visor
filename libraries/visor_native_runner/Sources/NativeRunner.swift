@@ -135,7 +135,9 @@ public actor NativeRunner {
 
     /// What a call for the job's agent shows: its token, if it has one.
     static func metadata(_ job: AgentProtocol_V1_Job) -> Metadata {
-        job.token.isEmpty ? [:] : ["authorization": "Bearer \(job.token)"]
+        var metadata = Metadata()
+        if !job.token.isEmpty { metadata.addString("Bearer \(job.token)", forKey: "authorization") }
+        return metadata
     }
 
     /// The wrapper's environment for a job: this process's, and the runner's contract.

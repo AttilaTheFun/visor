@@ -36,7 +36,7 @@ private final class FakeWrapper: Sendable {
     /// Dials the driver on `port`, showing `token` if any.
     @discardableResult
     func connect(port: Int, token: String?) -> Task<Void, Never> {
-        let metadata: Metadata = token.map { ["authorization": "Bearer \($0)"] } ?? [:]
+        let metadata = bearerMetadata(token)
         let upward = self.upward
         return Task {
             do {
@@ -78,6 +78,13 @@ private final class FakeWrapper: Sendable {
             return given.count >= count ? given : nil
         } ?? []
     }
+}
+
+/// What a call shows: `token` as a bearer, or nothing.
+private func bearerMetadata(_ token: String?) -> Metadata {
+    var metadata = Metadata()
+    if let token { metadata.addString("Bearer \(token)", forKey: "authorization") }
+    return metadata
 }
 
 /// `value` once it is there, within five seconds.
@@ -148,10 +155,6 @@ extension ServerTests {
         return answer.hasJob ? answer.job : nil
     }
 
-    private nonisolated static func bearer(_ token: String?) -> Metadata {
-        token.map { ["authorization": "Bearer \($0)"] } ?? [:]
-    }
-
     /// How a call ended: nil when it was answered.
     private func code<T: Sendable>(_ call: @escaping @Sendable (AgentProtocol_V1_AgentDispatcher.Client<HTTP2ClientTransport.Posix>) async throws -> T)
         async -> RPCError.Code? {
@@ -212,13 +215,13 @@ extension ServerTests {
         // Report and Renew, the wrapper's and the runner's.
         let started = AgentProtocol_V1_JobReport.with { $0.agent = jobA.agent; $0.started = .with { $0.runner = "Test"; $0.sessionID = "s" } }
         #expect(await code { try await $0.report(started) } == .unauthenticated)
-        #expect(await code { try await $0.report(started, metadata: Self.bearer(jobB.token)) } == .unauthenticated)
+        #expect(await code { try await $0.report(started, metadata: bearerMetadata(jobB.token)) } == .unauthenticated)
         let renewal = AgentProtocol_V1_RenewRequest.with { $0.agent = jobA.agent }
         #expect(await code { try await $0.renew(renewal) } == .unauthenticated)
-        #expect(await code { try await $0.renew(renewal, metadata: Self.bearer(jobB.token)) } == .unauthenticated)
-        let renewed = try await dispatcher { try await $0.renew(renewal, metadata: Self.bearer(jobA.token)) }
+        #expect(await code { try await $0.renew(renewal, metadata: bearerMetadata(jobB.token)) } == .unauthenticated)
+        let renewed = try await dispatcher { try await $0.renew(renewal, metadata: bearerMetadata(jobA.token)) }
         #expect(renewed.hasClaimExpires, "with its own token, the claim is kept")
-        #expect(await code { try await $0.report(started, metadata: Self.bearer(jobA.token)) } == nil)
+        #expect(await code { try await $0.report(started, metadata: bearerMetadata(jobA.token)) } == nil)
 
         // Conversation.
         let conversation = AgentProtocol_V1_ConversationRequest.with { $0.agent = jobA.agent; $0.workingDirectory = "/tmp" }
@@ -248,7 +251,7 @@ extension ServerTests {
         // A job let go takes its token with it: its runner's renewal is
         // told the claim isn't its own, and its wrapper can't dial in.
         jobs.forget(session: b)
-        let gone = try await dispatcher { try await $0.renew(.with { $0.agent = jobB.agent }, metadata: Self.bearer(jobB.token)) }
+        let gone = try await dispatcher { try await $0.renew(.with { $0.agent = jobB.agent }, metadata: bearerMetadata(jobB.token)) }
         #expect(!gone.hasClaimExpires)
         #expect(await refusal(connecting: b, token: jobB.token) == .unauthenticated)
     }
