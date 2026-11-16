@@ -44,11 +44,12 @@ enum VisorMCP {
     }
 
     /// What the script is given: Visor's own variables from the session's
-    /// environment (this server's port, the agents' token, the session),
+    /// environment (this server's port, the session's token, the session),
     /// and whether it offers `approve`. Nothing else of the session's: this
-    /// goes on the agent's command line, which any `ps` shows, and the rest
-    /// is what agents/<kind>.env gives the agent itself — its sign-ins
-    /// among it (git's, say).
+    /// goes on the agent's command line (Codex's `-c`, the OpenRouter
+    /// CLI's `--mcp-config`), which any `ps` shows, and the rest is what
+    /// agents/<kind>.env gives the agent itself — its sign-ins among it
+    /// (git's, say).
     static func scriptEnvironment(_ environment: [String: String], approvals: Bool) -> [String: String] {
         var env = environment.filter { $0.key.hasPrefix("VISOR_") }
         if approvals { env["VISOR_APPROVALS"] = "1" }
@@ -57,9 +58,14 @@ enum VisorMCP {
 
     /// Claude's `--mcp-config`: the server as JSON. With `approvals`, the
     /// `approve` tool is offered too, for `--permission-prompt-tool`.
-    static func claudeConfig(_ environment: [String: String], approvals: Bool) -> String? {
-        guard let launch = launch(environment) else { return nil }
-        let env = scriptEnvironment(environment, approvals: approvals)
+    /// Claude Code starts its MCP servers with its own environment, which
+    /// has Visor's variables already, so where it `inherits` the config
+    /// says only whether to offer `approve`: the token stays off the
+    /// command line.
+    static func claudeConfig(_ environment: [String: String], approvals: Bool, inherits: Bool,
+                             agentHost: String? = SystemPlatform.current.agentHosts?.program) -> String? {
+        guard let launch = launch(environment, agentHost: agentHost) else { return nil }
+        let env = inherits ? (approvals ? ["VISOR_APPROVALS": "1"] : [:]) : scriptEnvironment(environment, approvals: approvals)
         let servers: [String: Any] = ["visor": ["command": launch.command, "args": launch.arguments, "env": env]]
         guard let data = try? JSONSerialization.data(withJSONObject: ["mcpServers": servers]) else { return nil }
         return String(data: data, encoding: .utf8)

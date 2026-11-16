@@ -18,8 +18,9 @@ public enum VisorFixture {
     /// models, search, connect, runner (Add Computer's sign-in to a
     /// Runner), runner-accounts (the canned computer a Runner's, with a
     /// second Runner signed out of), new-session or commands (the chat
-    /// with "/" in its composer, its slash commands offered) ("" for the
-    /// app's own first screen); also earlier
+    /// with "/" in its composer, its slash commands offered),
+    /// sign-in-code (the chat, its Claude Code waiting on a sign-in:
+    /// `signInPage`) ("" for the app's own first screen); also earlier
     /// (a page of earlier rows goes in), learns-earlier (the chat, told
     /// ten seconds on that there are rows before it), arrivals (the
     /// chat, with rows coming in twelve and twenty-six seconds on, or
@@ -58,6 +59,9 @@ public enum VisorFixture {
     public static let goalSession = "fixture-docs"
     /// The words the search screen searches for.
     public static let searchQuery = "sync"
+    /// The page the sign-in-code screen's session waits on a sign-in at
+    /// (`/login`): its code is what the user sends next.
+    public static let signInPage = "https://claude.ai/oauth/authorize?code=true&state=fixture"
 
     static let record = AgentServerRecord(id: serverID, name: "Snapshot Mac", address: "snapshot.local", everConnected: true,
                                           provider: FixtureAgentServerProvider.name)
