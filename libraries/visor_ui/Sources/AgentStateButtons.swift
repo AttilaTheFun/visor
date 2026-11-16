@@ -15,9 +15,11 @@ struct AgentStateButtons: View {
         switch session.agentState {
         case .running?:
             Button { host.stopAgent(session.id) } label: { Label("Stop Agent", systemImage: "stop.circle") }
+                .accessibilityIdentifier("stop-agent")
             restart
         case .stopped?:
             Button { host.startAgent(session.id) } label: { Label("Start Agent", systemImage: "play.circle") }
+                .accessibilityIdentifier("start-agent")
         case .starting?, .stopping?:
             EmptyView()
         case nil:
@@ -29,6 +31,7 @@ struct AgentStateButtons: View {
     /// holds too much.
     private var restart: some View {
         Button { host.restartAgent(session.id) } label: { Label("Restart Agent", systemImage: "arrow.clockwise") }
+            .accessibilityIdentifier("restart-agent")
     }
 
     /// The session's state in a word, for the inspector.

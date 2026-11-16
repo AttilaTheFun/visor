@@ -592,6 +592,28 @@ it and keeps it ended, through a launch too, what is sent meanwhile
 waiting in the queue (`SessionRecord.waits`) until Start (`startAgent`).
 Hosts log to `hosts/hosts.log` in the data folder.
 
+**Sessions on runners across a restart** (visor#424). A session moved to
+a runner (`moveToRunner`) is `driven`, and keeps its move on its record in
+sessions.json (`SessionRecord.move`: the agent id its job is for, its
+conversation and folder here, its folder and conversation on the runner
+once its wrapper and Started say). Only `moveBack` makes it this
+computer's again, with a dated notice and a push. A relaunch (`leaveAgents`)
+and a quit (`endAll`) leave its runner's agent working: the driver's
+stream closes and the wrapper redials. The new process opens 7434 before
+it reads its sessions (`VisorDriver.Listening.listen`), and serves calls
+once `serve` has handed the queue the moves kept on the sessions
+(`takeUpDrivenSessions` → `JobQueue.adopt`). jobs.json may lack them.
+A claim taken up at a start holds for three minutes
+(`JobQueue.redialGrace`). If its runner hasn't renewed it by then, its
+job goes out again and the session says so. Neither that, nor a release
+whose words say the dispatcher or driver was out of reach or something
+restarted (`JobQueue.mayBeStartFailure`), counts toward the three
+returns. Start Agent and Restart Agent on a driven session queue a resume
+job for a runner of its kind (`resumeDriven`), under a new agent id, with
+the runner's conversation in the folder it worked in there. Settings that
+restart Claude do the same. Stop Agent lets its job go (`stopDriven`), so
+its runner ends it. None of them starts an agent here.
+
 **Moving a session.** "Migrate…" in a session's menu lists the other
 computers connected now. The client (`SessionMigration`) asks the
 session's server for an offer (VisorServer+Migration.swift: the agent's
@@ -759,6 +781,47 @@ no longer in Visor.
   for free: Shireworks' Mac slots and VMs are left to agents (Logan, 3 and
   5 Nov 2026). A test whose server listens takes
   `ServerTestCase.freePort()`.
+- Test the client's screens, on Linux: `bazel test --config=headless
+  //tests/feature_map_tests/...` — FEATURE_MAP.md walked through Isomer's
+  driver (Swift Testing, `HeadlessApp`) against the client built headless
+  (`//applications/visor_headless`) in its fixture: every screen opened
+  and recognised, every solid edge taken and its destination checked, at
+  a phone's width and an iPad's. About a minute and a half in a
+  Shireworks container (the build from its cache, two minutes more the
+  first time). Its own invocation: `--config=headless` doesn't go with
+  `--config=drive` (isomer's AGENTS.md), and without it the targets are
+  skipped (incompatible), so `//...` builds pass them by. What the driver
+  can't take yet (a context menu, a swipe action, the agent asking) is a
+  disabled test in `FeatureMapTests+Gaps.swift` saying why; where Isomer's
+  driver doesn't list an identifier the map names, the test finds the
+  element by its label and records a known issue (`IsomerGap.swift`).
+  "Driving the client" below has the rest.
+- The same suite headful, against an app built with `--config=drive`:
+  `//tests/feature_map_tests:feature_map_headful_{ios,android,macos}_test`
+  (manual: each in an invocation of its own, where the simulator, the
+  emulator's adb or the Mac's screen is; never on this Mac's own disk or
+  screen). Each launch goes through `fresh_launcher.sh`, which clears the
+  app's data (a headful app keeps the computer a test added) and runs
+  Isomer's launcher for the platform (`@isomer//drive/launchers`), which
+  passes a test's settings as `visor.<key>=<value>` (the iPhone's simulator
+  gets them as `SIMCTL_CHILD_visor.<key>`, which the iPhone app reads:
+  `VisorLaunchSettings`) or, by their own names, as Android's intent
+  extras (`fresh_launcher.sh` drops the `visor.`). On a Shireworks Mac
+  slot with a simulator of its own (the slot's user can create and boot
+  one), with Visor's
+  `--config=drive` build installed:
+
+  ```sh
+  bazel test --test_env=ISOMER_SIMULATOR=<udid> //tests/feature_map_tests:feature_map_headful_ios_test
+  # an `android` lease, `adb connect`ed (from a slot: <the VM's gateway>:<port>)
+  bazel test --test_env=ADB=<adb> --test_env=ANDROID_SERIAL=<serial> \
+      //tests/feature_map_tests:feature_map_headful_android_test
+  ```
+
+  The regular width's suite is headless alone (a device's width is its
+  own). Where Isomer's Apple driver lists no identifier (most SwiftUI
+  controls in a List or Form row on the iPhone), the test takes the label
+  and records `IsomerGap.appleIdentifier`.
 - Try a server build against real agents without touching the installed
   one: `bazel run //tools/staging_server -- [port] [password]` (7533,
   `staging`) runs a `VisorServer` of its own — its own ports, a scratch
@@ -796,23 +859,29 @@ no longer in Visor.
   third_party/swift_packages/Package.swift, `swift package resolve` in that
   folder (updates Package.resolved), then build here.
 - CI (ci.yml) follows Reviews' policy (AttilaTheFun/reviews
-  docs/CI_POLICY.md; Logan, 7 Nov 2026: automated CI only builds, and no
-  test runs on its own). The header of ci.yml has it whole.
+  docs/CI_POLICY.md; Logan, 7 Nov 2026: automated CI only builds), with
+  one exception: the client's screens, walked headless through Isomer's
+  driver (FEATURE_MAP.md, `//tests/feature_map_tests`), run in a
+  container before and after every merge (Logan, 15 Nov 2026: "run all
+  our tests headlessly from containers pre and post merge"). The header
+  of ci.yml has it whole.
   - **A pull request** runs one job, `container`, main's required check:
     in a Linux container Shireworks makes for it (visor-jit, 12 GB, a runner
     of Visor's agent image), leasing nothing, the rules
     (tools/check_rules.py), every app and the Mac's test bundles, libraries
     and servers built on Linux (tools/ci/container_build.sh), and the
-    command-line server built with SwiftPM. Its Bazel reads Shireworks'
-    cache and never writes it. A diff of documentation alone checks
+    command-line server built with SwiftPM, and the client's screens
+    walked headless (`bazel test --config=headless
+    //tests/feature_map_tests/...`, about a minute and a half). Its Bazel
+    reads Shireworks' cache and never writes it. A diff of documentation alone checks
     the rules and stops there; a newer push cancels the run before. A fork's
     pull request runs nothing.
   - **Each commit on main** runs `populate`, the cache's one writer: the
-    merged tree built as `container` builds it, no tests, nothing
-    published.
+    merged tree built as `container` builds it and its screens walked
+    headless, as `container` does; nothing published.
   - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
     the gh tools' run_dispatch): `verify` runs the tests on Linux
-    (`//tests:linux`) and those that need a Mac (their bundles built on
+    (`//tests:linux`, and the headless screens) and those that need a Mac (their bundles built on
     Linux, run on GitHub's `xcode-27` Macs), tries the command-line server
     on Linux (tools/ci/linux_tests.sh), blue Visor's
     web client (tools/ci/container_blue_web.sh `--build-only`) and the
@@ -820,30 +889,61 @@ no longer in Visor.
     publishes the commit's Alphas and proposes a draft pre-release;
     `release` verifies first, with the pins (tools/released_pins.sh), then
     does as `prerelease` and proposes a draft release naming its run. A
-    proposal's version comes from Applications Server
-    (tools/ci/next_version.sh: the same again for the same commit), its
-    builds are made on Linux, optimized, with `--config=alpha` and
-    `--config=ci_device` (the iPhone's a device build signed ad hoc with a
-    placeholder profile; Visor.app signed ad hoc asking for push,
-    `app.ci.entitlements`), Visor.app given Visor's Linux programs
-    (`linux-programs`, tools/ci/mac_app_linux_programs.sh), and published
-    to Applications Server (tools/ci/publish_from_ci.sh), which signs each
-    with its bundle id's identity and notarizes the Mac's; the job's OIDC
-    token says which kind it is (the repository secret
-    APPLICATIONS_CI_CODE names the server). The draft is CI's
+    proposal's version comes from the repository's releases and tags
+    (tools/ci/version_from_tags.sh: one past the line's highest, the same
+    again for the same commit), its builds are made on Linux, optimized,
+    with `--config=alpha` and `--config=ci_device` (the iPhone's a device
+    build signed ad hoc with a placeholder profile; Visor.app signed ad hoc
+    asking for push, `app.ci.entitlements`), Visor.app given Visor's Linux
+    programs (`linux-programs`, tools/ci/mac_app_linux_programs.sh), and
+    signed by Shireworks' signing service (tools/ci/sign_from_ci.sh, from
+    AttilaTheFun/applications), which signs each with its bundle id's
+    identity and profile and notarizes the Mac's, whose ticket is stapled
+    on a Mac slot; the job's OIDC token says which kind it is, and
+    Shireworks' policy (the repository pinned, this workflow, main's
+    dispatch or a releaser's tag) decides. Visor for Android (arm64,
+    `--config=alpha`) is built beside them with the same version
+    (tools/ci/stamp_android.sh: its versionName and versionCode), then
+    signed in the job with its private release key (Logan, 15 Nov 2026:
+    never Isomer's public debug key): tools/ci/sign_android.sh, with the
+    JDK Visor's Bazel pins and @android_build_tools' apksigner, takes the
+    key from the job's environment (Logan, 15 Nov 2026: a public
+    repository signs with keys in its GitHub secrets):
+    `ANDROID_SIGNING_KEYSTORE` and `ANDROID_SIGNING_PASSWORD`, secrets of
+    the GitHub environment `release` (deployments from main and `v*` tags
+    alone), given only to the signing step of the jobs that sign (alpha,
+    release-android). It checks the signed APK's certificate against the
+    workflow's `VISOR_ANDROID_PIN` (tools/ci/android_sign.sh
+    --key-from-env, Shireworks'). Shireworks'
+    signing then checks the .apk (APK Signature Scheme v2 or later, its
+    package pinned) and never signs it again. The draft is CI's
     (tools/ci/propose_release.sh, the run's token): no agent makes a draft
-    or a tag. The builds, as the server signed them, are attached to the
-    draft (`Visor-<version>-ios.ipa`, `-macos.zip` and `builds.json`:
+    or a tag. The builds, as Shireworks signed them, are attached to the
+    draft (`Visor-<version>-ios.ipa`, `-macos.zip`, `-android.apk` and
+    `builds.json`:
     tools/ci/attach_release.sh), which is what Applications lists
-    (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent image of that version follows (`agent-image`, in
-    a visor-jit container, built with buildah). `adhoc`, on a branch other than main, builds and
-    publishes its AdHoc build.
+    (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent image of
+    that version follows (`agent-image`, in a visor-jit container, built
+    with buildah). A branch's builds are experiments only (Logan, 12 Nov
+    2026): nothing publishes them.
   - **Released**: Logan's Release in Reviews publishes a proposed
     release's draft, which makes its tag. `release` checks the commit is on
     main and that a `verify` run of it passed and kept its proof
-    (tools/ci/verified_run.sh), then Applications Server promotes its
-    Alphas, as tested, to Production (BuildVariant restamped, signed again;
-    nothing is rebuilt) and makes Visor.app's notarized disk image.
+    (tools/ci/verified_run.sh), then takes the Alphas the proposal attached,
+    of that commit, as tested (tools/ci/release_alphas.sh), and has
+    Shireworks stamp them Production and sign them again
+    (`sign_from_ci.sh --promote`; nothing Apple is rebuilt), Visor.app with
+    its disk image made on a Mac slot, signed, notarized and stapled.
+    Android's is the release's own production build (`release-android`,
+    `--config=prod`, the tag's version, signed there with its release key
+    as the alpha's is), which Shireworks checks as production, as
+    AttilaTheFun/reviews' release does. Android never holds Apple's back
+    (New Container Helper, 15 Nov 2026): `release` promotes Apple's
+    whatever `release-android`'s result (tools/ci/promote_release.sh), and
+    `release-android-result` turns the run red afterwards if the APK
+    wasn't made. Re-run failed jobs then promotes the APK alone: Apple's,
+    Production already, are left as they are, and only the APK and
+    builds.json are attached again.
     `release-assets` attaches the Production builds to the release in place
     of the Alphas, under the same names, with the disk image
     (`Visor-<version>-macos.dmg`) and builds.json, then that proof
@@ -882,8 +982,8 @@ no longer in Visor.
   server has no agent left as a child (`pgrep -lP <server pid>`).
 - The probes talk to the installed server unless `VISOR_PORT` names
   another (a staging server). From inside a Visor session `VISOR_TOKEN`
-  is the agent token, which the REST side takes and the socket's login
-  does not: run them against a staging server, or with the password.
+  is the session's own agent token, which the REST side takes and the
+  socket's login does not: run them against a staging server, or with the password.
 - `node tools/probes/ephemeral.mjs <visor session id>` — the snapshot a
   subscribing client gets (busy, activity, status count, held streams).
   Stale streams here = a bug.
@@ -977,6 +1077,74 @@ override --time 9:41 …`) and the same screen gives the same pixels every
 run. The iOS probe's `testFixtureScreens` takes all of them in portrait,
 `testFixtureScreensLandscape` in landscape.
 
+### Driving the client
+
+FEATURE_MAP.md is the client's screens and the ways between them, each an
+Isomer driver command (isomer's docs/drive.md: `ls`, `tap <target>`,
+`type`, `back`, `dismiss`, `wait`; a target is an element's name, its
+accessibility identifier or its label). Two builds can be driven:
+
+- **Headless** (`--config=headless`, `--@isomer//headless`): the client
+  with nothing drawn, its screen read and used through Isomer's runtime,
+  on the building machine (a Linux container: no build on a Mac's own
+  disk). `//applications/visor_headless` is `VisorRootView` with settings
+  in memory, given at launch in its environment by their own names
+  (`fixture=snapshot`, `fixture.screen=chat`, `account=fixture`, as
+  Android's launch intent takes them; a native app takes `visor.<key>`
+  alone) or as the iPhone's arguments (`-visor.fixture snapshot`); it
+  has no network, so it is for the fixture (or the onboarding and Add
+  Computer with no computer). Its
+  window is 390 by 844 points (a phone) unless `ISO_HEADLESS_WIDTH` and
+  `ISO_HEADLESS_HEIGHT` say otherwise (1180 by 820: the iPad's layout).
+  The feature map's tests (`//tests/feature_map_tests`, above) drive it.
+- **Headful** (`--config=drive`, `--@isomer//drive:headful`): every
+  client carries the driver. Android and the web are Isomer's and link it
+  with the flag; the iPhone, iPad and Mac apps take `@isomer//:isomer`
+  with it alone (`ISOMER_APPLE_DRIVER`, tools/swift/defs.bzl), which brings
+  Isomer's accessibility driver. Launched with `ISO_DRIVER=<a hub's ws://
+  URL>` (Android: `-e ISO_DRIVER …`; a simulator: `SIMCTL_CHILD_ISO_DRIVER`)
+  the app dials out to it; without it, to `iso hub` on its machine. Never
+  in a release: such an app obeys whoever its launch names. Every client
+  takes the launch settings (`VisorLaunchSettings.keys`: `fixture`,
+  `fixture.screen`, `fixture.appearance`, `fixture.orientation`,
+  `fixture.go`, `account`, `probe.open`; none secret): the iPhone, Mac,
+  Linux and Windows apps from their environment as `visor.<key>` alone
+  (`visor.fixture=snapshot`; on a simulator
+  `SIMCTL_CHILD_visor.fixture=snapshot`, set with `env`: a shell takes no
+  dotted name as an assignment), never a bare `fixture` or `account`,
+  which a shell or a container may have for something else, before
+  UserDefaults (the `-visor.<key> <value>` launch arguments); Android from
+  its launch intent's extras by their own names (`--es fixture snapshot
+  --es account fixture`); the headless client from its environment by
+  their own names (`fixture=snapshot`).
+
+An agent finding its way around the client, in a leased Linux container
+with the repository cloned:
+
+```sh
+bazel build --config=headless //applications/visor_headless
+bazel build @isomer//xplat/iso          # Isomer's CLI
+root="$(bazel info execution_root)"
+visor="$root/$(bazel cquery --config=headless --output=files //applications/visor_headless)"
+cp "$root/$(bazel cquery --output=files @isomer//xplat/iso)" /tmp/iso
+# The client on a Unix socket, in the fixture, on its chat:
+env fixture=snapshot fixture.screen=chat \
+    ISO_DRIVE_LISTEN=unix:/tmp/visor.sock ISO_HEADLESS_PROTOCOL=serve "$visor" &
+iso() { /tmp/iso --url unix:/tmp/visor.sock "$@"; }
+iso ls                                  # where am I: its elements (#identifier), then its texts
+iso tap session-title                   # → Session details
+iso dismiss
+iso back                                # → Sessions (a phone's width)
+iso tap settings                        # → Settings
+iso tap "settings-computer-Snapshot Mac"
+```
+
+Or with no socket, a command a line on its standard input
+(`{"cmd": "ls"}`, `{"cmd": "tap", "target": "settings"}`). A headful
+client, on Android's emulator, say (a `--config=drive` APK, then `iso hub`
+and `adb reverse tcp:7710 tcp:7710`), is `iso --app android ls`, and the
+same commands. FEATURE_MAP.md's "Driving it" has the launch lines.
+
 ### Fixture look check
 
 `tools/probes/look/fixture_look.sh` photographs each fixture screen on a
@@ -1045,31 +1213,70 @@ repository's own (`visor-jit`, which a fork never reaches, with
 own runners, which a public repository has for free, so Shireworks'
 machines are left to CI and the agents (Logan, 5 Nov 2026):
 
-Five jobs side by side, as Isomer's proof pictures its stories: the
-iPhone and Android, each upright and on its side, and the Mac. Each opens
-the fixture's screens one by one and pictures each once it has settled.
+Five jobs side by side: the iPhone and Android, each upright and on its
+side, and the Mac. The iPhone's and Android's take their pictures through
+Isomer's driver, from apps built with `--config=drive` (the proof's builds
+alone, never a release's): `//tests/feature_map_tests:feature_map_proof_ios`
+and `…_android` (`proof/FeatureMapProof.swift`), built on the job's runner
+by Bazel while its simulator or emulator boots. One launch of the fixture
+walks FEATURE_MAP.md to the screens it reaches by a tap (Sessions, Add
+Computer and its MultiPass sign-in, New Session, the chat, its details,
+the goal's chat), and each screen whose fixture's data differs (the
+question, the machines, the Runner's accounts, the earlier rows) or that
+the fixture opens without a tap (the model sheet over the chat's approval,
+"/" in the composer, the search's words: a field typed into shows its
+caret and keyboard) is a launch of its own. Each is pictured
+(`HeadlessApp.picture`, by Isomer's launcher: simctl's masked screenshot,
+adb's screencap) once the driver has found the screen's node (its
+"you're there when") and two pictures in a row are the same. The screens
+and their ids are as before (proof_ios.sh's SCREENS, snapshots.py's for
+Android), and each script names its pictures as the proof's parts are
+named, so `proof_make.sh` is unchanged. A walk that stops (an element not
+found) leaves its screens to launches of their own, and fails the test.
 
 - The iPhone (`tools/ci/proof_ios.sh <apps> <out> portrait|landscape`, on
   an `xcode-27` Mac): the app on an iPhone 17 simulator of iOS 27.2, made
   for the run, its status bar held still, keyboard suggestions off and the
   light look. GitHub rolls a new image out over days, and the older one had
   iOS 27.0 alone, whose pictures differ from 27.2's in most screens: where
-  the image hasn't got 27.2, it is downloaded. Each screen is a `simctl
-  launch` with the fixture's arguments, pictured with `simctl io
-  screenshot --mask=black` once two pictures in a row match. No XCUITest:
-  its launches made the proof take 26 minutes and, on a slow runner, fail.
-  On its side the app turns itself (`-visor.fixture.orientation
-  landscape`, which its delegate answers with landscapeRight alone), and
-  the picture, the device's upright frame, is turned to stand.
+  the image hasn't got 27.2, it is downloaded. No XCUITest: its launches
+  made the proof take 26 minutes and, on a slow runner, fail. On its side
+  the app turns itself (its `fixture.orientation` setting, which its
+  delegate answers with landscapeRight alone), and the picture, the
+  device's upright frame, is turned to stand.
 - The Mac (`tools/ci/proof_mac.sh`, on another `xcode-27` Mac):
   Visor.app, signed ad hoc as a build on Linux is, opened on each of the
   fixture's screens in the light look and pictured cropped to its window.
+  Not through the driver yet: Isomer's Mac launcher takes no launch
+  arguments (the caret held lit, visor#244) and its screen is the
+  runner's 1024 by 768 unless the script makes it 1920 by 1080.
 - Android (`tools/ci/proof_android.sh <apps> <out> portrait|landscape`, on
   Ubuntu): blue Visor's APK, built for x86_64, on an emulator under the
   runner's KVM, made as Isomer's hermetic one is (API 34, 1080 by 1920 at
   420 dpi), its status bar held still by System UI's demo mode, and on its
-  side turned a quarter (auto-rotate off). Each of snapshots.py's screens
-  is opened with its intent and cut below the status bar.
+  side turned a quarter (auto-rotate off, held so while the test runs).
+  Each picture is cut below the status bar. By hand, against a device adb
+  already reaches (a Shireworks `android` lease): `PROOF_ANDROID_SERIAL=<serial>
+  ADB=<adb> tools/ci/proof_android.sh <apps> <out>`.
+
+The driver's proof takes about as long as the launches it replaced on the
+iPhone, and less on Android (15 Nov 2026; the screens alone, the test
+built): on a Shireworks Mac slot the iPhone's 13 screens took 130 s
+upright and 151 s on its side, against the old script's 136 s and 142 s
+on the same slot; on an `android`
+lease Android's 11 took 77 s upright and 78 s on its side, where the old
+script's fixed eight seconds a screen took 108 s and 139 s on GitHub's
+runner. Isomer's picture (a request its launcher polls for, then simctl's
+or adb's) and a launch's attaching (about 5 s on the iPhone, 1 s on
+Android) cost what the fixed waits did. On its side the iPhone walks
+nothing: the app turns itself on an upright simulator, where Isomer's
+Apple driver's taps on a list's rows don't take, so each screen is a
+launch of its own. The gains are that a screen is pictured once it is
+there rather than after a guess (the search's 20 s are gone), that the
+walk is the feature map's, and the pictures are the same: upright on the
+iPhone, the walked screens differ from the launched ones by a few hundred
+pixels at most (the sheet's Cancel or Done, as a tap leaves it), the
+others not at all.
 
 The iPhone's UI cases are not in the proof: `tools/ios_ui_tests.sh` runs
 them, by hand.

@@ -16,7 +16,7 @@ extension VisorServer {
         // The permission shim: one request per connection, answered later.
         if envelope.type == "approval_request" || envelope.type == "agent" { client.agent = true }
         if envelope.type == "approval_request" {
-            guard envelope.token == agentToken, let record = session(envelope.session), let id = envelope.id else {
+            guard let record = agentSession(envelope.session, presenting: envelope.token), let id = envelope.id else {
                 client.sendLast(.error("Not an agent of this host"))
                 return
             }
@@ -209,8 +209,16 @@ extension VisorServer {
         record.setPermissions(skip: skip)
         // Claude's mode is a launch flag: the process restarts (resumed by
         // session id) once idle. Codex spawns per turn and just picks it up.
+        // A driven session's agent is restarted on its runner instead:
+        // stopped, it would end its job there (resumeDriven).
         if record.info.agent == .claude {
-            if record.info.busy { record.restartWhenIdle = true } else { record.process.stop() }
+            if record.info.busy {
+                record.restartWhenIdle = true
+            } else if record.driven {
+                resumeDriven(record, why: "restarting, for its new settings, the agent of")
+            } else {
+                record.process.stop()
+            }
         }
         broadcastSessions()
     }
@@ -260,8 +268,16 @@ extension VisorServer {
         record.setSettings(model: model, effort: effort)
         saveArchive()
         // Claude's flags are launch flags: restart (resumed) once idle.
+        // A driven session's agent is restarted on its runner instead:
+        // stopped, it would end its job there (resumeDriven).
         if record.info.agent == .claude {
-            if record.info.busy { record.restartWhenIdle = true } else { record.process.stop() }
+            if record.info.busy {
+                record.restartWhenIdle = true
+            } else if record.driven {
+                resumeDriven(record, why: "restarting, for its new settings, the agent of")
+            } else {
+                record.process.stop()
+            }
         }
         broadcastSessions()
     }
@@ -343,6 +359,7 @@ extension VisorServer {
         record.process.stop()
         record.markEnded()
         sessions.removeAll { $0 === record }
+        forgetAgentToken(of: record.info.id)
         // Its agent's shims waiting on approvals go with it.
         for waiter in (approvalWaiters.removeValue(forKey: record.info.id) ?? [:]).values { waiter.close() }
         mcpProxy.forget(session: record.info.id)
@@ -355,9 +372,10 @@ extension VisorServer {
 
     /// What an agent asked of the other sessions, answered: `mode` is the
     /// ask, `client` the asking session, `session` the one it is about.
-    /// Only the agents this server started hold the token.
+    /// Only the agents this server started hold a token, each its own
+    /// session's: one can't ask as another.
     func agentReply(_ envelope: Envelope) -> Envelope {
-        guard envelope.token == agentToken, let caller = session(envelope.client) else {
+        guard let caller = agentSession(envelope.client, presenting: envelope.token) else {
             var reply = Envelope(type: "agent_result")
             reply.id = envelope.id
             reply.error = "Not an agent of this computer"

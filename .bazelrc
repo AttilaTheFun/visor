@@ -83,11 +83,25 @@ build:beta --//tools/variant:variant=beta
 build:prod --//tools/variant:variant=production
 build:adhoc --//tools/variant:variant=adhoc
 # CI's iPhone and iPad app: a device build, signed ad hoc with a placeholder
-# profile (applications/visor_ios/BUILD.bazel), which Applications Server
-# signs again with the team's identity and each bundle id's profile when it
-# is published (tools/ci/publish_from_ci.sh).
+# profile (applications/visor_ios/BUILD.bazel), which Shireworks' signing
+# service signs again with the team's identity and each bundle id's profile
+# (tools/ci/sign_from_ci.sh).
 build:ci_device --ios_multi_cpus=arm64
 build:ci_device --ios_signing_cert_name=-
+
+# Isomer's driver (isomer's docs/driver_in_apps.md): a build to drive, never
+# a release's. With it every client carries the driver: Android and the web
+# (Isomer's hosts link it), the iPhone, iPad and Mac (Apple's SwiftUI: the
+# accessibility driver, through @isomer//:isomer, linked only with this).
+# Launched with ISO_DRIVER=<a hub's URL> the app dials out to it; without,
+# to `iso hub` on its machine. docs/DEVELOPMENT.md, "Driving the client".
+build:drive --@isomer//drive:headful
+# The client headless (//applications/visor_headless) and its driver tests
+# (//tests/feature_map_tests): built for Isomer's headless host on the
+# building machine (a Linux container), nothing drawn. Not in the same
+# invocation as --config=drive: the two flags in one build shadow
+# swift-crypto's modules (isomer's AGENTS.md).
+build:headless --@isomer//headless
 
 # Your own settings, such as the signing team (tools/signing).
 try-import %workspace%/.bazelrc.user

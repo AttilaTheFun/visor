@@ -1,4 +1,4 @@
-load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load("//tools/swift:defs.bzl", "ISOMER_APPLE_DRIVER", "STRICT_SWIFT")
 load("@rules_apple//apple:macos.bzl", "macos_application")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 load("//tools/signing:defs.bzl", "update_entitlements", "update_infoplist")
@@ -20,7 +20,7 @@ variant_infoplist(
 # UpdateKit (tools/signing; CI's distribution builds set them). The group's
 # entitlement is in CI's builds alone: outside the Mac App Store a `group.`
 # group needs a Developer ID profile that grants it, or macOS asks at
-# launch, and Applications Server embeds that profile as it signs them. A
+# launch, and Shireworks' signing embeds that profile as it signs them. A
 # build to run here names none, so UpdateKit finds no container and does
 # nothing.
 update_infoplist(name = "update_plist")
@@ -60,7 +60,7 @@ swift_library(
 )
 
 # CI's builds to publish (--config=ci_device, .bazelrc), signed ad hoc for
-# Applications Server to sign again (applications/visor_ios's ci_device).
+# Shireworks' signing to sign again (applications/visor_ios's ci_device).
 config_setting(
     name = "ci_signed",
     values = {"ios_signing_cert_name": "-"},
@@ -80,7 +80,7 @@ macos_application(
     bundle_id = BUNDLE_ID,
     bundle_name = "Visor",
     # The hardened runtime's own (the microphone); and push in a build CI
-    # publishes, which Applications Server signs again with the Developer
+    # publishes, which Shireworks' signing signs again with the Developer
     # ID profile, taking push's value from it, but only for an app that
     # asks for push; and the app group, which the profile grants. A build to run here asks for none: a restricted
     # entitlement with no profile to allow it stops the app at launch.
@@ -94,5 +94,6 @@ macos_application(
         ":variant_plist",
     ],
     minimum_os_version = "15.0",
-    deps = [":mac_lib"],
+    # Isomer's driver with --config=drive alone (tools/swift/defs.bzl).
+    deps = [":mac_lib"] + ISOMER_APPLE_DRIVER,
 )

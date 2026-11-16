@@ -6,6 +6,7 @@
 
 import Foundation
 import Synchronization
+import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import Testing
@@ -68,7 +69,9 @@ extension ServerTests {
     }
 
     @Test func testTheProxyIsSetWithThePasswordAndItsTokenKeptApart() throws {
-        #expect(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#, bearer: server.agentToken).status == 403, "an agent could send the pushes anywhere")
+        server.sessions = [SessionRecord(info: SessionInfo(id: "S", agent: .claude, cwd: "/tmp", title: "S", created: 0),
+                                         process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])]
+        #expect(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#, bearer: server.agentToken(for: "S")).status == 403, "an agent could send the pushes anywhere")
         #expect(server.pushProxy == nil)
         #expect(setProxy(#"{"url":"ftp://proxy"}"#).status == 400)
         #expect(setProxy(#"{"url":"http://192.168.131.1:7439","token":"tok"}"#).status == 200)

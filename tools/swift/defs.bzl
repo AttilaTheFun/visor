@@ -19,3 +19,15 @@ STRICT_SWIFT = select({
     "@isomer//apple/compiled:feature_on": [],
     "//conditions:default": _STRICT,
 })
+
+# What an app on Apple's SwiftUI (the iPhone and iPad app, the Mac's) adds
+# to its deps for Isomer's driver (isomer's docs/driver_in_apps.md): the
+# Isomer module, which links the accessibility driver, in a build with
+# --config=drive (--@isomer//drive:headful) alone. Without it, nothing: a
+# release build has none of Isomer's Apple module (its web view, map,
+# bridge) nor the driver, which turns accessibility on with a private call
+# and obeys whoever its launch names.
+ISOMER_APPLE_DRIVER = select({
+    "@isomer//drive:headful_on": ["@isomer//:isomer"],
+    "//conditions:default": [],
+})

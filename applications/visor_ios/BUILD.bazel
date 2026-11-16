@@ -1,4 +1,4 @@
-load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load("//tools/swift:defs.bzl", "ISOMER_APPLE_DRIVER", "STRICT_SWIFT")
 load("@rules_apple//apple:apple.bzl", "local_provisioning_profile")
 load("@rules_apple//apple:ios.bzl", "ios_application", "ios_extension")
 load("@rules_swift//swift:swift.bzl", "swift_library")
@@ -103,9 +103,9 @@ xcode_provisioning_profile(
 # the team's, so it signs ad hoc (--ios_signing_cert_name=-) with this
 # placeholder, the app and its widget alike, which allows what their
 # entitlements ask for (push, the keychain group, the app group if any).
-# Applications Server replaces both, the profiles and the signatures, with
-# each bundle id's own (AttilaTheFun/applications' docs/CI.md, "What the
-# server does with each build"). A plain plist: rules_applecross reads the
+# Shireworks' signing service replaces both, the profiles and the
+# signatures, with each bundle id's own (AttilaTheFun/applications'
+# docs/CI.md, "Signing"). A plain plist: rules_applecross reads the
 # plist in a profile off a Mac, so this builds on Linux alone, as CI does.
 # The setting refines the device's alone, so the selects below take it.
 config_setting(
@@ -239,5 +239,6 @@ ios_application(
         "@apple_support//constraints:device": ":app_profile",
         "//conditions:default": None,
     }),
-    deps = [":ios_lib"],
+    # Isomer's driver with --config=drive alone (tools/swift/defs.bzl).
+    deps = [":ios_lib"] + ISOMER_APPLE_DRIVER,
 )

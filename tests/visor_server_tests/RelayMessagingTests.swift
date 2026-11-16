@@ -85,7 +85,7 @@ extension ServerTests {
     private func ask(_ mode: String, about target: String? = nil, server: String? = nil, text: String? = nil,
                      messageID: String? = nil) async -> Envelope {
         var e = Envelope(type: "agent")
-        e.token = here.agentToken
+        e.token = here.agentToken(for: "A")
         e.client = "A"
         e.mode = mode
         e.session = target
@@ -269,7 +269,7 @@ extension ServerTests {
             #expect((here.sessions.first?.mailbox.outbox.map(\.state)) == [.delivered], Comment(rawValue: version))
 
             var read = Envelope(type: "agent")
-            read.token = there.agentToken
+            read.token = there.agentToken(for: "B")
             read.client = "B"
             read.mode = "inbox"
             read.id = "r2"

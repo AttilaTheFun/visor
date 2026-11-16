@@ -6,6 +6,7 @@
 // beside the system's own. A session it isn't on for is started as before.
 
 import Foundation
+import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 import Testing
@@ -49,7 +50,9 @@ extension ServerTests {
     }
 
     @Test func testItIsSetWithThePasswordNeverAnAgentsToken() {
-        #expect(set(["url": "http://192.168.131.1:7441", "token": "tok"], bearer: server.agentToken).status == 403)
+        server.sessions = [SessionRecord(info: SessionInfo(id: "S", agent: .claude, cwd: "/tmp", title: "S", created: 0),
+                                         process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])]
+        #expect(set(["url": "http://192.168.131.1:7441", "token": "tok"], bearer: server.agentToken(for: "S")).status == 403)
         #expect(set(["url": "http://192.168.131.1:7441", "token": "tok", "authority": authority, "sessions": ["S"]]).status == 200)
         #expect(server.settings.githubProxy == "http://192.168.131.1:7441")
         #expect(server.settings.githubProxySessions == ["S"])

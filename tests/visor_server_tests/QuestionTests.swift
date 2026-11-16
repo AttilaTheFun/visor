@@ -78,7 +78,7 @@ extension ServerTests {
         server.sessions = [record]
         // As the shim sends it: the questions as Claude Code gave them.
         let asked = #"""
-            {"type":"approval_request","token":"\#(server.agentToken)","session":"q","id":"r1","text":"AskUserQuestion","prompt":"Which color?",
+            {"type":"approval_request","token":"\#(server.agentToken(for: "q"))","session":"q","id":"r1","text":"AskUserQuestion","prompt":"Which color?",
              "questions":[{"question":"Which color?","header":"Color","options":[{"label":"Red","description":"warm"},{"label":"Blue","description":"cool"}],"multiSelect":false}]}
             """#
         let stream = ShimStream()
@@ -128,7 +128,7 @@ extension ServerTests {
         let record = SessionRecord(info: SessionInfo(id: "w", agent: .claude, cwd: "/tmp", title: "w", created: 0), process: QuietAgent())
         server.sessions = [record]
         var asked = Envelope(type: "approval_request")
-        asked.token = server.agentToken
+        asked.token = server.agentToken(for: "w")
         asked.session = "w"
         asked.id = "r3"
         asked.text = "Bash"
@@ -148,7 +148,7 @@ extension ServerTests {
         let record = SessionRecord(info: SessionInfo(id: "p", agent: .claude, cwd: "/tmp", title: "p", created: 0), process: QuietAgent())
         server.sessions = [record]
         var asked = Envelope(type: "approval_request")
-        asked.token = server.agentToken
+        asked.token = server.agentToken(for: "p")
         asked.session = "p"
         asked.id = "r2"
         asked.text = "Bash"
