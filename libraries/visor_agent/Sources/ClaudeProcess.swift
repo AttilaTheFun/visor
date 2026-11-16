@@ -258,7 +258,9 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         // questions come to it; manual, every tool call too. (The
         // OpenRouter CLI has it only in manual mode, as before.)
         let prompt = !skipPermissions || tool == "claude"
-        let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: prompt)
+        // Claude Code's MCP servers inherit its environment, where Visor's
+        // variables are (below); the OpenRouter CLI's are given theirs.
+        let mcp = VisorMCP.claudeConfig(approvalEnvironment, approvals: prompt, inherits: tool == "claude")
         if let mcp { args += ["--mcp-config", mcp] }
         // Manual: edits are accepted, everything else asks the user.
         let mode = Self.permissionMode(skip: skipPermissions, tool: tool, policy: tool == "claude" ? .current : ClaudeManagedPolicy(),

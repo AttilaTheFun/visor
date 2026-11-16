@@ -39,16 +39,34 @@ final class FixtureAgentServer: AgentServer {
     }
 
     func unsubscribe(_ session: String) {}
-    func signIn(_ session: String, code: String) {}
+
+    /// The sign-in-code screen's sign-in has had its code: it waits no more.
+    private var signedIn = false
+
+    /// A sign-in's code, taken as a server takes it: the sign-in ends, and
+    /// the session is told so — here with the code it was given, so a test
+    /// sees what reached the sign-in, and by which way (a message for the
+    /// agent goes nowhere in the fixture).
+    func signIn(_ session: String, code: String) {
+        guard let onEvent else { return }
+        signedIn = true
+        let reply = Self.wire(.ephemeral(session: session, streams: [], status: [], activity: nil, busy: false,
+                                         approval: nil, queued: [], notice: "Signed in to Claude again with the code \(code).",
+                                         signIn: nil))
+        Task { onEvent(.session(reply)) }
+    }
 
     func subscribe(_ session: String) {
         guard let onEvent else { return }
-        // The chat waits on a tool call; on the question screen, on a question.
-        let approval: ApprovalRequest? = session != VisorFixture.chatSession ? nil
+        // The chat waits on a tool call; on the question screen, on a
+        // question; on the sign-in-code screen, on Claude's sign-in.
+        let signingIn = session == VisorFixture.chatSession && VisorFixture.screen == "sign-in-code" && !signedIn
+        let approval: ApprovalRequest? = session != VisorFixture.chatSession || signingIn ? nil
             : VisorFixture.screen == "question" ? VisorFixture.question
             : ApprovalRequest(id: "fixture-approval", tool: "Bash", summary: "swift test --filter SyncTests")
         let reply = Self.wire(.ephemeral(session: session, streams: [], status: [], activity: nil, busy: false,
-                                         approval: approval, queued: [], notice: nil))
+                                         approval: approval, queued: [], notice: nil,
+                                         signIn: signingIn ? VisorFixture.signInPage : nil))
         Task { onEvent(.session(reply)) }
     }
 
