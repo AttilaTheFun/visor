@@ -128,7 +128,8 @@ extension ServerTests {
         #expect(said.scope == ["messages", "approvals", "mcp"])
         #expect(said.exp - said.iat == 24 * 3600, "a day")
         #expect(!said.jti.isEmpty)
-        #expect(try claims(try #require(b["VISOR_TOKEN"])).sub == "B")
+        let bToken = try #require(b["VISOR_TOKEN"])
+        #expect(try claims(bToken).sub == "B")
         #expect(a["VISOR_TOKEN"] != b["VISOR_TOKEN"])
 
         // Its file: where it is told, this user's alone, its own session's.
@@ -157,7 +158,8 @@ extension ServerTests {
         let a = server.agentToken(for: "A")
         let pieces = a.split(separator: ".").map(String.init)
         // Its payload changed to B's, its signature kept: a forgery.
-        var forged = try #require(JSONSerialization.jsonObject(with: try #require(JWT.data(base64URL: pieces[1]))) as? [String: Any])
+        let payload = try #require(JWT.data(base64URL: pieces[1]))
+        var forged = try #require(try JSONSerialization.jsonObject(with: payload) as? [String: Any])
         forged["sub"] = "B"
         let forgedPayload = JWT.base64URL(try JSONSerialization.data(withJSONObject: forged))
         let wrong = [

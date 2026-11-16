@@ -9,6 +9,7 @@
 // `keys rotate` reach the running server over its trusted socket.
 
 import Foundation
+@testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
 @testable import VisorServerCLI

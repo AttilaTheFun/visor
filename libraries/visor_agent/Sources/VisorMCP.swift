@@ -50,8 +50,12 @@ enum VisorMCP {
     /// CLI's `--mcp-config`), which any `ps` shows, and the rest is what
     /// agents/<kind>.env gives the agent itself — its sign-ins among it
     /// (git's, say).
+    /// With its token file (VISOR_TOKEN_FILE), which the script reads on
+    /// each call, the token itself stays off the command line; and the
+    /// admin token is never here (AgentEnvironment).
     static func scriptEnvironment(_ environment: [String: String], approvals: Bool) -> [String: String] {
-        var env = environment.filter { $0.key.hasPrefix("VISOR_") }
+        var env = environment.filter { $0.key.hasPrefix("VISOR_") && !AgentEnvironment.withheld.contains($0.key) }
+        if !(env["VISOR_TOKEN_FILE"] ?? "").isEmpty { env["VISOR_TOKEN"] = nil }
         if approvals { env["VISOR_APPROVALS"] = "1" }
         return env
     }

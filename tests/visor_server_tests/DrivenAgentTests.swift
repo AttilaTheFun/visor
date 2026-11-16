@@ -342,9 +342,10 @@ extension ServerTests {
         let claims = try server.agentTokens.verify(first, as: .runnerAgent, agent: job.agent.uuid).get()
         #expect(claims.sub == record.info.id && claims.agent == job.agent.uuid)
         let second = await eventually { self.freshTokens(wrapper).count >= 2 ? self.freshTokens(wrapper)[1] : nil }
-        #expect(second != nil && second != first, "and again before that one ends")
+        let next = try #require(second, "and again before that one ends")
+        #expect(next != first)
         // Its next connection, with the fresh one, is let in.
-        #expect(jobs.access(job.agent.uuid, bearer: try #require(second)) == .granted)
+        #expect(jobs.access(job.agent.uuid, bearer: next) == .granted)
         wrapper.finish()
     }
 
