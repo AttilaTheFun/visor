@@ -22,12 +22,23 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 object VisorAndroidServices {
-    /** `intent`: the launch intent, whose `fixture` / `fixture.screen` extras
-     *  (the snapshot tests': `am start --es fixture snapshot --es
-     *  fixture.screen chat`) stand in for those settings for this launch. */
+    /** The settings a launch intent may give, by their own names: the
+     *  headless client's and the iPhone's launch settings
+     *  (libraries/visor_services' VisorLaunchSettings.keys, the same list),
+     *  none of them secret. Isomer's Android launcher passes a test's
+     *  KEY=VALUE settings as these extras. */
+    val launchKeys = listOf(
+        "fixture", "fixture.screen", "fixture.appearance", "fixture.orientation", "fixture.go",
+        "account", "probe.open",
+    )
+
+    /** `intent`: the launch intent, whose extras named in [launchKeys] (the
+     *  snapshot tests': `am start --es fixture snapshot --es fixture.screen
+     *  chat`; a driver test's `--es account fixture`) stand in for those
+     *  settings for this launch. */
     fun install(intent: android.content.Intent? = null) {
         PreferencesSettings.launchOverrides.clear()
-        for (key in listOf("fixture", "fixture.screen")) {
+        for (key in launchKeys) {
             intent?.getStringExtra(key)?.let { PreferencesSettings.launchOverrides[key] = it }
         }
         SwiftUIBridge.installVisorBridges(

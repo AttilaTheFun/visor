@@ -11,7 +11,7 @@ extension FeatureMapTests {
         func addsAComputer() throws {
             let app = try VisorLaunch.fixture("sessions")
             defer { app.quit() }
-            FeatureMapNode.addComputer.expectShown(on: try app.tap("add-computer"))
+            FeatureMapNode.addComputer.expectShown(on: try app.tap(id: "add-computer", else: "Add Computer…"))
         }
 
         @Test("Sessions → Search results: type “Search sessions” ‹text›")
@@ -46,7 +46,7 @@ extension FeatureMapTests {
             defer { app.quit() }
             let screen = try app.tap(id: "session-fixture-chat", else: "Offline sync", .listRow)
             FeatureMapNode.chat.expectShown(on: screen)
-            #expect(screen.texts.first == "Offline sync", "\(screen.summary)")
+            #expect(screen.titled("Offline sync"), "\(screen.summary)")
         }
 
         @Test("Session chat → Sessions: back (a phone's stack)")
@@ -69,9 +69,12 @@ extension FeatureMapTests {
             let app = try VisorLaunch.fixture("search")
             defer { app.quit() }
             try app.screen { FeatureMapNode.search.isShown(on: $0) }
-            let screen = try app.tap(id: "session-fixture-chat", else: "Offline sync ⚑", .listRow)
+            // The row by its title and flag (Isomer's runtime) or its title
+            // and state (the iPhone): not the message hit, "Agent · Offline sync".
+            let row = try app.screen().element("Offline sync ⚑") != nil ? "Offline sync ⚑" : "Offline sync Working"
+            let screen = try app.tap(id: "session-fixture-chat", else: row, .listRow)
             FeatureMapNode.chat.expectShown(on: screen)
-            #expect(screen.texts.first == "Offline sync", "\(screen.summary)")
+            #expect(screen.titled("Offline sync"), "\(screen.summary)")
         }
 
         @Test("Search results → Session chat: tap message-hit")
@@ -81,7 +84,7 @@ extension FeatureMapTests {
             try app.screen { FeatureMapNode.search.isShown(on: $0) }
             let screen = try app.tap(id: "message-hit", else: "Agent · Offline sync", .listRow)
             FeatureMapNode.chat.expectShown(on: screen)
-            #expect(screen.texts.first == "Offline sync", "\(screen.summary)")
+            #expect(screen.titled("Offline sync"), "\(screen.summary)")
         }
     }
 }
