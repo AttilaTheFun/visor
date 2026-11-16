@@ -1,6 +1,6 @@
 #!/bin/bash
 # A proposal's draft release (docs/CI_POLICY.md in AttilaTheFun/reviews),
-# made by CI's alpha job once the commit's Alphas are published: tag
+# made by CI's alpha job once Shireworks has signed the commit's Alphas: tag
 # v<version> on the commit (named, not made: a draft's tag is made only when
 # Logan presses Release in Reviews), marked pre-release for a `prerelease`
 # run, its notes naming the Alphas and, for a `release` run, the run that
@@ -9,19 +9,20 @@
 # or a tag: the run's token does (contents: write). Only curl and Python:
 # the runners' image has no gh.
 #
-#   tools/ci/propose_release.sh prerelease|release <version> <published.txt>
+#   tools/ci/propose_release.sh prerelease|release <version> <builds.json>
 #
-# <published.txt>: tools/ci/publish_from_ci.sh's "Published …" lines.
+# <builds.json>: the signed Alphas, as tools/ci/sign_from_ci.sh --download
+# describes them (release_assets.sh): their lines name them in the notes.
 #
 #   GH_TOKEN           the job's token (contents: write)
 #   GITHUB_REPOSITORY, GITHUB_SHA, GITHUB_SERVER_URL, GITHUB_RUN_ID
 #                      a job has them
 set -euo pipefail
 me="$(basename "$0")"
-usage="usage: $me prerelease|release <version> <published.txt>"
+usage="usage: $me prerelease|release <version> <builds.json>"
 kind="${1:?$usage}"
 version="${2:?$usage}"
-published="${3:?$usage}"
+builds="${3:?$usage}"
 case "$kind" in
     prerelease) prerelease=true; title="Pre-release" ;;
     release) prerelease=false; title="Release" ;;
@@ -30,7 +31,7 @@ esac
 case "$version" in
     *[!0-9.]* | "" | *.0) echo "$me: not a build's version: $version" >&2; exit 1 ;;
 esac
-[ -f "$published" ] || { echo "$me: no such file: $published" >&2; exit 1; }
+[ -f "$builds" ] || { echo "$me: no such file: $builds" >&2; exit 1; }
 for name in GH_TOKEN GITHUB_REPOSITORY GITHUB_SHA GITHUB_SERVER_URL GITHUB_RUN_ID; do
     [ -n "${!name:-}" ] || { echo "$me: no $name" >&2; exit 1; }
 done
@@ -70,7 +71,13 @@ print(json.dumps([r for p in sys.argv[1:] for r in json.load(open(p))]))' "$work
     echo "$title proposed: $version, of ${GITHUB_SHA:0:7}."
     echo
     echo "Alphas, in Applications:"
-    grep '^Published ' "$published" | sed 's/^Published /- /' || { echo "$me: no Alphas were published" >&2; exit 1; }
+    # A line each: the app, its version and bundle id, its variant, and
+    # its file among the draft's assets.
+    python3 -I -c 'import json, sys
+builds = json.load(open(sys.argv[1]))
+for b in builds:
+    print("- %s %s (%s), %s for %s: %s" % (b.get("app"), b.get("version"), b.get("bundleID"), b.get("variant"), b.get("platform"), b.get("file")))
+sys.exit(0 if builds else 1)' "$builds" || { echo "$me: no Alphas were signed" >&2; exit 1; }
     echo
     if [ "$kind" = release ]; then
         echo "Verified by $run (its tests, and the proof as its \`proof\` artifact)."

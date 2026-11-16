@@ -126,6 +126,11 @@ public final class SessionRecord {
     /// Run under agent_protocol's wrapper, with this server as its driver
     /// (VisorDriver): its rows come over the wrapper's stream.
     package var driven = false
+    /// A driven session's move to a runner: the agent that carries it on
+    /// there, its conversation and folder here, where it works there. Kept
+    /// with the session (sessions.json) while it is driven; only moveBack
+    /// clears it.
+    package var move: AgentJobMove?
 
     var mailbox = Mailbox() {
         didSet {
@@ -273,7 +278,8 @@ public final class SessionRecord {
                              watchedSubagents: watchedSubagents.isEmpty ? nil : watchedSubagents.sorted(),
                              closedSubagents: closedSubagents.isEmpty ? nil : closedSubagents.sorted(),
                              mcpSwitched: mcpSwitched.isEmpty ? nil : mcpSwitched,
-                             mailbox: mailbox.isEmpty ? nil : mailbox, driven: driven ? true : nil)
+                             mailbox: mailbox.isEmpty ? nil : mailbox, driven: driven ? true : nil,
+                             move: driven ? move : nil)
     }
 
     /// The agent's host as it stands, for the next launch to pick up (or

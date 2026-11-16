@@ -9,7 +9,9 @@ import VisorProtocol
 import VisorServer
 
 struct DriverService: AgentProtocol_V1_AgentDriver.SimpleServiceProtocol {
-    let server: VisorServer
+    /// The server, once it is served (a wrapper that dials a server still
+    /// reading its sessions waits for it).
+    let listening: VisorDriver.Listening
     /// Where moved sessions' conversations are known (JobQueue.move).
     let jobs: JobQueue
 
@@ -19,12 +21,21 @@ struct DriverService: AgentProtocol_V1_AgentDriver.SimpleServiceProtocol {
         guard let first = try await messages.next(), case .hello(var hello) = first.message else {
             throw RPCError(code: .failedPrecondition, message: "A wrapper's first message is its hello.")
         }
+        let server = await listening.ready()
         // The session is the agent's id as the dispatcher issued it, however
         // the wrapper spells it; a moved session's agent, the session's own.
-        hello.agent.uuid = await jobs.session(of: hello.agent.uuid)
+        let agent = hello.agent.uuid
+        hello.agent.uuid = await jobs.session(of: agent)
         guard !hello.agent.uuid.isEmpty else { throw RPCError(code: .invalidArgument, message: "The hello names no agent.") }
+        // An earlier agent of a session since restarted or stopped, on its
+        // way out, isn't taken for the session's.
+        guard await server.carriesDriven(hello.agent.uuid, agent: agent) else {
+            VisorServer.log("driver: \(agent) dialled in for \(hello.agent.uuid), which another agent carries on now: refused")
+            throw RPCError(code: .failedPrecondition, message: "This agent no longer carries its session on.")
+        }
+        // Alive: a job queued again for it meanwhile is its own.
+        await jobs.heard(agent)
         let (outgoing, sending) = AsyncStream<AgentProtocol_V1_DriverMessage>.makeStream()
-        let server = self.server
         let (process, connection) = await MainActor.run { () -> (DrivenProcess, UUID) in
             let process = (server.session(hello.agent.uuid)?.process as? DrivenProcess) ?? DrivenProcess()
             server.takeDriven(Self.info(hello), process: process)
@@ -56,6 +67,7 @@ struct DriverService: AgentProtocol_V1_AgentDriver.SimpleServiceProtocol {
     /// each of its files in pieces, its place for the folder it will work in.
     func conversation(request: AgentProtocol_V1_ConversationRequest, response: RPCWriter<AgentProtocol_V1_ConversationFile>,
                       context: ServerContext) async throws {
+        _ = await listening.ready()
         guard let move = await jobs.move(of: request.agent) else {
             VisorServer.log("driver: \(request.agent.uuid) asked for a conversation, but it wasn't moved here")
             return

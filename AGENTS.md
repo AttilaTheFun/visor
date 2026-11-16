@@ -12,9 +12,11 @@ its rules, and its local CI, end-to-end and snapshot harnesses
 This repo is public. Every change to `main` goes through a pull request:
 `main` is protected, direct pushes are rejected, and CI's one check,
 `container` (the rules, then every app, library and server built on
-Linux), must pass on main's head before a pull request can merge. No test
-runs on its own: the tests and the proof run by hand (`run: verify`), and
-every release proposal runs them (docs/DEVELOPMENT.md, CI). Run the tests
+Linux, and the client's screens walked headless through Isomer's driver,
+FEATURE_MAP.md's `//tests/feature_map_tests`), must pass on main's head
+before a pull request can merge; each commit on main runs the same. The
+rest of the tests and the proof run by hand (`run: verify`), and every
+release proposal runs them (docs/DEVELOPMENT.md, CI). Run the tests
 that touch your change before you push. Keep each pull request to one focused change, and say in it how the
 change was verified.
 
@@ -35,9 +37,9 @@ request's commits. A rule that matters and can be checked goes there too.
   (re-resolve with `swift package resolve`, delete `.build`), swift_sql in
   the root Package.swift too (the SwiftPM server). Versions are
   `MAJOR.MINOR.BUILD` (from 0.38; no point releases): the plists and
-  MODULE.bazel say `0.59.0`, CI stamps each build's own (`0.59.N`, build
+  MODULE.bazel say `0.61.0`, CI stamps each build's own (`0.61.N`, build
   number 1; Android's versionCode MAJOR×1,000,000 + MINOR×1,000 + BUILD),
-  and a release is tagged `v0.59.N`, the build it releases.
+  and a release is tagged `v0.61.N`, the build it releases.
   A branch in development may pin a revision of something not yet
   released; a release may not: CI's `pins` job (tools/released_pins.sh)
   fails on main's commits until every pin is a released version, and

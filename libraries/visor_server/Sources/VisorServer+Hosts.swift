@@ -49,8 +49,12 @@ extension VisorServer {
     }
 
     /// Lets every hosted agent go on without this server, which is going
-    /// for a restart, and writes down where each is; ends the rest. What a
-    /// relaunch does in place of `endAll`.
+    /// for a restart, and writes down where each is; ends the rest, but for
+    /// driven sessions' agents: those run on their runners, and their
+    /// wrappers dial the next launch's driver when this one's stream
+    /// closes (visor#424: the relaunch told each to stop, and every
+    /// session moved to a container ended). What a relaunch does in place
+    /// of `endAll`.
     func leaveAgents() async {
         // No more is heard from the hosts, so what is written down is
         // where each next launch picks up; a moment for what is already
@@ -61,7 +65,7 @@ extension VisorServer {
         for record in sessions where record.info.busy { record.interrupted = true }
         saveArchiveNow()
         for record in sessions { record.stopListening() }
-        let ending = sessions.filter { record in !leaving.contains { $0 === record } }
+        let ending = sessions.filter { record in !record.driven && !leaving.contains { $0 === record } }
             .map { record in Task { await record.process.end(within: .seconds(4)) } }
         for task in ending { await task.value }
         agentsEnded = true

@@ -1,8 +1,8 @@
 #!/bin/bash
 # A proof (tools/ci/proof_make.sh's: proof.zip, or its folder as the run's
 # `proof` artifact downloads) as proof.zip saying the version it is a proof
-# of: verify makes it before the version is known, and alpha, which asks
-# Applications Server for it, sets it as it puts the proof among the
+# of: verify makes it before the version is known, and alpha, which takes
+# it from the repository's releases, sets it as it puts the proof among the
 # release's assets (AttilaTheFun/reviews' docs/PROOF_FORMAT.md). The rest,
 # files and all, is kept as it was.
 #

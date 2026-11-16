@@ -1,6 +1,6 @@
 #!/bin/bash
-# Checks, before a Mac app's .zip is published, that what Applications Server
-# signs it from is there: the server signs each piece of code again with the
+# Checks, before a Mac app's .zip is signed, that what Shireworks' signing
+# signs it from is there: it signs each piece of code again with the
 # entitlements its signature already carries (`codesign -d --entitlements`),
 # so an app built unsigned would lose them (the microphone, Visor.app's).
 # rules_apple signs the app ad hoc with its entitlements, on Linux too (the

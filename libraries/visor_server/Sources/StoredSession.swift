@@ -49,6 +49,9 @@ struct StoredSession: Codable {
     /// server as its driver: its process is the wrapper's stream, never a
     /// harness started here.
     var driven: Bool?
+    /// A driven session's move: the agent that carries it on, its
+    /// conversation and folder here (SessionRecord.move).
+    var move: AgentJobMove?
     static let currentShape = 2
 
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
@@ -56,7 +59,7 @@ struct StoredSession: Codable {
          queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil,
          head: String? = nil, leaf: String? = nil, otherBranch: String? = nil, branchKept: Bool? = nil,
          fork: PendingFork? = nil, watchedSubagents: [String]? = nil, closedSubagents: [String]? = nil, mcpSwitched: [String: Bool]? = nil,
-         mailbox: Mailbox? = nil, driven: Bool? = nil) {
+         mailbox: Mailbox? = nil, driven: Bool? = nil, move: AgentJobMove? = nil) {
         self.info = info
         self.entries = entries
         self.resumeID = resumeID
@@ -78,6 +81,7 @@ struct StoredSession: Codable {
         self.mcpSwitched = mcpSwitched
         self.mailbox = mailbox
         self.driven = driven
+        self.move = move
     }
 
     /// Every field but the session itself is optional, so a file written
@@ -104,5 +108,10 @@ struct StoredSession: Codable {
         closedSubagents = try c.decodeIfPresent([String].self, forKey: .closedSubagents)
         mcpSwitched = try c.decodeIfPresent([String: Bool].self, forKey: .mcpSwitched)
         mailbox = try c.decodeIfPresent(Mailbox.self, forKey: .mailbox)
+        // Read back too: without it, every session moved to a runner came
+        // back from a restart as this computer's, and the next message
+        // started a native agent in its runner's folder (visor#424).
+        driven = try c.decodeIfPresent(Bool.self, forKey: .driven)
+        move = try c.decodeIfPresent(AgentJobMove.self, forKey: .move)
     }
 }

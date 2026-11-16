@@ -1,0 +1,115 @@
+load("@rules_swift//swift:swift.bzl", "swift_test")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# The feature map (FEATURE_MAP.md) walked through Isomer's driver: every
+# screen reached and recognised, every way between them the driver can take
+# taken, on the client built headless (//applications/visor_headless) in
+# its fixture. In a Linux container, with the headless flag:
+#
+#   bazel test --config=headless //tests/feature_map_tests/...
+#
+# Without the flag it is skipped (incompatible), so `bazel build //...`
+# and `bazel test //...` pass it by.
+swift_test(
+    name = "feature_map_tests",
+    srcs = glob(["*.swift"]),
+    copts = STRICT_SWIFT,
+    data = ["//applications/visor_headless"],
+    module_name = "VisorFeatureMapTests",
+    target_compatible_with = select({
+        "@isomer//headless:on": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = ["@isomer//headless/isomer_headless"],
+)
+
+# What the suite and the proof share: how a test launches Visor, finds an
+# element and tells which screen it is on.
+_SUPPORT = [
+    "FeatureMapNode.swift",
+    "HeadlessApp+FeatureMap.swift",
+    "HeadlessScreen+FeatureMap.swift",
+    "IsomerGap.swift",
+    "VisorLaunch.swift",
+]
+
+# Headful: each platform's app built with --config=drive, started fresh
+# (its data cleared: fresh_launcher.sh) by Isomer's launcher for the
+# platform (@isomer//drive/launchers), which dials it out to the test's hub
+# and takes its pictures. The app is installed where the test's environment
+# says, as Isomer's launchers read it:
+#
+#   ios      ISOMER_SIMULATOR=<a booted simulator's UDID>, Visor installed on it
+#   android  ADB=<adb> ANDROID_SERIAL=<serial>, blue Visor installed on it
+#   macos    ISOMER_MAC_APP=<Visor.app>
+#
+# Manual, in invocations of their own, where the simulator, the emulator's
+# adb or the Mac's screen is (the regular width's suite is headless alone):
+#
+#   bazel test --test_env=ISOMER_SIMULATOR=<udid> //tests/feature_map_tests:feature_map_headful_ios_test
+#   bazel test --test_env=ADB=<adb> --test_env=ANDROID_SERIAL=<serial> //tests/feature_map_tests:feature_map_headful_android_test
+_PLATFORMS = ["ios", "android", "macos"]
+
+[
+    swift_test(
+        name = "feature_map_headful_%s_test" % platform,
+        size = "medium",
+        # A launch a test, each with a minute or two to attach.
+        timeout = "eternal",
+        srcs = glob(["*.swift"]),
+        copts = STRICT_SWIFT,
+        data = [
+            ":fresh_launcher.sh",
+            "@isomer//drive/launchers:%s" % platform,
+            "@isomer//drive/launchers:%s_launcher.sh" % platform,
+        ],
+        env = {
+            "ISOMER_ANDROID_PACKAGE": "com.loganshire.visor",
+            "ISOMER_BUNDLE_ID": "com.LoganShire.Visor",
+            "ISOMER_HEADFUL_LAUNCHER": "$(rootpath :fresh_launcher.sh)",
+            "VISOR_LAUNCHER": "$(rootpath @isomer//drive/launchers:%s_launcher.sh)" % platform,
+        },
+        module_name = "VisorFeatureMapHeadful%sTests" % platform.capitalize(),
+        tags = [
+            "manual",
+            "no-sandbox",
+        ],
+        deps = ["@isomer//headless/isomer_headless"],
+    )
+    for platform in _PLATFORMS
+]
+
+# The release's proof through the driver (proof/FeatureMapProof.swift): one
+# launch of the fixture walking to the proof's screens and picturing each
+# (HeadlessApp.picture: screens/<platform>/<device>/<screen>.png under
+# ISOMER_PROOF), and a launch for each screen whose fixture's data differs
+# (the question waiting, the computers' machines, …). Its screens are
+# VISOR_PROOF_SCREENS: tools/ci/proof_ios.sh, proof_android.sh and
+# proof_mac.sh run it and make the proof's parts of its pictures.
+[
+    swift_test(
+        name = "feature_map_proof_%s" % platform,
+        size = "medium",
+        timeout = "long",
+        srcs = _SUPPORT + glob(["proof/*.swift"]),
+        copts = STRICT_SWIFT,
+        data = [
+            ":fresh_launcher.sh",
+            "@isomer//drive/launchers:%s" % platform,
+            "@isomer//drive/launchers:%s_launcher.sh" % platform,
+        ],
+        env = {
+            "ISOMER_ANDROID_PACKAGE": "com.loganshire.visor",
+            "ISOMER_BUNDLE_ID": "com.LoganShire.Visor",
+            "ISOMER_HEADFUL_LAUNCHER": "$(rootpath :fresh_launcher.sh)",
+            "VISOR_LAUNCHER": "$(rootpath @isomer//drive/launchers:%s_launcher.sh)" % platform,
+        },
+        module_name = "VisorFeatureMapProof%s" % platform.capitalize(),
+        tags = [
+            "manual",
+            "no-sandbox",
+        ],
+        deps = ["@isomer//headless/isomer_headless"],
+    )
+    for platform in _PLATFORMS
+]
