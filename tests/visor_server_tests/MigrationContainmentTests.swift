@@ -30,8 +30,7 @@ extension ServerTests {
         let made = FileManager.default.temporaryDirectory.appendingPathComponent("visor-migration-containment-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: made, withIntermediateDirectories: true)
         root = URL(fileURLWithPath: String(cString: try #require(realpath(made.path, nil))), isDirectory: true)
-        VisorServer.storeRoot = root.appendingPathComponent("store", isDirectory: true)
-        try FileManager.default.createDirectory(at: VisorServer.storeRoot, withIntermediateDirectories: true)
+        VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         savedHome = ClaudeSessionFiles.home
         home = root.appendingPathComponent("home", isDirectory: true)
@@ -233,7 +232,10 @@ extension ServerTests {
                                               MigrationFile(id: "memory", place: "", size: 1, packed: true)],
                                       projects: [MigrationProject(path: home.appendingPathComponent("Developer/app").path)]))
         #expect(honest.plan != nil, Comment(rawValue: honest.message ?? ""))
-        #expect(everything().allSatisfy { !$0.hasSuffix("/x") && !$0.hasSuffix("settings.json") })
+        // The agent's settings are never written (the server's own are its).
+        let config = ClaudeSessionFiles.configDirectory(home: home).path
+        let stray = everything().filter { $0.hasSuffix("/x") || ($0.hasSuffix("settings.json") && $0 != VisorServer.settingsURL.path) || $0.hasPrefix(config + "/") }
+        #expect(stray.isEmpty, "\(stray)")
         try outsideIsAsItWas()
     }
 
@@ -272,6 +274,7 @@ extension ServerTests {
 
     @Test func testAHostileArchiveIsRefusedAndNothingIsWrittenOutside() async throws {
         let target = home.appendingPathComponent("Developer/copied", isDirectory: true)
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         let hostile: [(String, [Entry])] = [
             ("../evil", [Entry(name: "ok.txt", text: "fine"), Entry(name: "../evil", text: "evil")]),
             ("deep ../", [Entry(name: "a/../../../../outside/evil", text: "evil")]),
