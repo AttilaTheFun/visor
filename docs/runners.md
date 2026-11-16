@@ -216,10 +216,19 @@ agent_protocol#9, #10 and #12.
     switches say: the driver's bridge doesn't list, watch or call them
     (a call of one is refused), and the server answers a driven
     session's `mcp_tools` with none and refuses its `mcp_call`.
-  - **Shireworks'**: from the container itself, through its own Claude
-    configuration and the container network's agent-proxy
-    (`/mcp/shireworks`); Claude loads it beside the wrapper's `visor`
-    server, which adds no other.
+  - **Shireworks'**: from the container itself, at
+    `http://shireworks.agent.internal/mcp/shireworks`, through the
+    container network's agent-proxy, which adds Shireworks' key to each
+    request: the container holds no token for it. Claude finds it in an
+    `mcpServers` entry of the primary container's Claude user config,
+    which Shireworks provides once shireworks#451 ships:
+
+    ```json
+    {"mcpServers":{"shireworks":{"type":"http","url":"http://shireworks.agent.internal/mcp/shireworks"}}}
+    ```
+
+    Claude loads it beside the wrapper's `visor` server, which adds no
+    other.
   - **GitHub**: no MCP. `gh` is the plain CLI over HTTPS, through the
     container network and agent-proxy, which adds logan-shire-agent's
     credentials.
@@ -236,9 +245,20 @@ agent_protocol#9, #10 and #12.
   session's own setting; a job queued by `POST /api/jobs` asks unless it
   says `skipPermissions: true`. A session moved into a container still
   starts acting without asking (it touches only its volumes); set to ask
-  (Permissions), its next agent's job asks. A runner passes it on in
-  `AGENT_JOB` as `skipPermissions`. Shireworks' runner always passes
-  `--skip-permissions` until it reads the field.
+  (Permissions), its next agent's job asks.
+  - The field is an `optional bool` with presence (agent_protocol#12).
+    Absent is a dispatcher that predates it (Visor 0.59.1 and earlier):
+    the runner keeps passing `--skip-permissions`, so its agents act. False
+    is manual approvals; true is bypass.
+  - So Visor says it on every job it queues, false included:
+    `queueStart`, `resumeJob` (`queueResume`, and so `resumeDriven` and a
+    move into a container, and the claims `adopt` holds), and the jobs
+    jobs.json keeps (`StoredJob`), so a restarted server's jobs still
+    say. A job left unset would read as an old dispatcher's and act.
+  - A runner puts `skipPermissions` in `AGENT_JOB` only when the job has
+    it, and passes `--skip-permissions` only when it is absent or true.
+    The native runner puts it there when the job has it (always, from
+    Visor's dispatcher) and never passes `--skip-permissions`.
 
 ## Logan's answers (11 Nov, later)
 
