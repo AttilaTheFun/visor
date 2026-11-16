@@ -30,12 +30,14 @@ public struct SessionFolders: Sendable, Equatable {
 
     /// Where a repository a moved session works in goes here: under the
     /// sources by its own folder's name. Nil without sources, or for a
-    /// path with no name.
+    /// path with no name, or one (`.`, `..`) that would lead elsewhere than
+    /// a folder of its own inside them.
     public func source(for path: String) -> String? {
         guard let sources else { return nil }
         let name = (Self.trimmed(path) as NSString).lastPathComponent
-        guard !name.isEmpty, name != "/" else { return nil }
-        return "\(sources)/\(name)"
+        guard !name.isEmpty, name != "/", name != ".", name != ".." else { return nil }
+        let source = "\(sources)/\(name)"
+        return SessionPathName.isInside(URL(fileURLWithPath: source), URL(fileURLWithPath: sources)) ? source : nil
     }
 
     /// The agent's part of a session's folder.

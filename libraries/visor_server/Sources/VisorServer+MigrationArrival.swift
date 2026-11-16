@@ -20,6 +20,12 @@ extension VisorServer {
         guard let offer = body.offer, let harness = harnesses.harness(for: offer.session.agent) else {
             return .error("This server does not run that kind of session.")
         }
+        // The offer is the other server's word: its ids, places and folders
+        // are taken only as plain names and full paths
+        // (VisorServer+MigrationContainment).
+        if let problem = Self.unsafeOffer(offer) {
+            return .error("The move from \(offer.from.isEmpty ? "the other computer" : offer.from) was refused: \(problem).")
+        }
         let home = SessionCatalog.home.path
         let shared = ServerPlatform.current.host.sharedFolders()
         let folders = sessionFolders
@@ -58,7 +64,7 @@ extension VisorServer {
             } else {
                 place = here(project.path)
             }
-            guard let path = place else { continue }
+            guard let path = place, Self.isPlainPath(path) else { continue }
             var step = await Self.step(for: project, at: path)
             // The session's own folder always; the others it works in
             // most, unless the user says not.
@@ -108,10 +114,10 @@ extension VisorServer {
     /// `offset`: the first piece starts it, each next one follows on.
     func migrationWrite(_ body: Envelope) -> Envelope {
         guard let id = body.migration, let move = migrationsIn[id] else { return .error("That move has ended; start it again.") }
-        guard let file = body.file?.id, !file.contains("/"), !file.hasPrefix("."), let data = body.data.flatMap({ Data(base64Encoded: $0) }) else {
+        guard let file = body.file?.id, let data = body.data.flatMap({ Data(base64Encoded: $0) }) else {
             return .error("A file and its bytes are required")
         }
-        let url = move.folder.appendingPathComponent(file, isDirectory: false)
+        guard let url = Self.carried(file, in: move.folder) else { return .error("“\(file)” is not a name a move's file has.") }
         let offset = body.offset ?? 0
         // The last piece sent again (its answer lost on the way back): what
         // is here already ends with the same bytes, so it is taken as written.
@@ -141,14 +147,22 @@ extension VisorServer {
     func migrationClone(_ body: Envelope) async -> Envelope {
         guard let id = body.migration, let move = migrationsIn[id] else { return .error("That move has ended; start it again.") }
         guard let step = body.steps?.first, let planned = move.plan.steps.first(where: { $0.path == step.path }),
-              let project = move.offer.projects.first(where: { $0.path == planned.project }), let remote = project.remote else {
+              planned.action == .clone, let project = move.offer.projects.first(where: { $0.path == planned.project }),
+              let remote = project.remote else {
             return .error("That project is not one to clone.")
+        }
+        if let problem = notAProjectPlace(planned.path) { return .error(problem) }
+        // The remote and branch are the other server's word: never read by
+        // git as options.
+        guard !remote.hasPrefix("-"), project.branch?.hasPrefix("-") != true else {
+            return .error("\(remote) is not a remote to clone from.")
         }
         guard !FileManager.default.fileExists(atPath: planned.path) else { return .error("\(planned.path) is here already.") }
         try? FileManager.default.createDirectory(at: URL(fileURLWithPath: planned.path).deletingLastPathComponent(), withIntermediateDirectories: true)
         let git = ToolPath.resolve("git") ?? "/usr/bin/git"
         var arguments = ["clone"]
         if let branch = project.branch { arguments += ["--branch", branch] }
+        arguments.append("--")
         // Into the sources, GitHub over HTTPS (the proxy's way, with no SSH
         // key here) for a remote named for SSH.
         let source = sessionFolders?.sources == nil ? remote : Self.overHTTPS(remote)
@@ -166,22 +180,29 @@ extension VisorServer {
     /// (`steps`): somewhere with nothing there yet.
     func migrationUnpack(_ body: Envelope) async -> Envelope {
         guard let id = body.migration, let move = migrationsIn[id] else { return .error("That move has ended; start it again.") }
+        // A copy, or a clone that failed (the client then copies the project).
         guard let step = body.steps?.first, let planned = move.plan.steps.first(where: { $0.path == step.path }),
-              let file = body.file?.id, !file.contains("/") else { return .error("That project is not one to copy.") }
+              [.copy, .clone].contains(planned.action), let file = body.file?.id else { return .error("That project is not one to copy.") }
+        guard let archive = Self.carried(file, in: move.folder) else { return .error("“\(file)” is not a name a move's file has.") }
+        if let problem = notAProjectPlace(planned.path) { return .error(problem) }
         // Repositories in the sources are clones from GitHub, never copies.
         if let sources = sessionFolders?.sources, planned.path == sources || planned.path.hasPrefix(sources + "/") {
             return .error("\(planned.path) is cloned from GitHub here, never copied: push it, then move the session again.")
         }
-        let archive = move.folder.appendingPathComponent(file, isDirectory: false)
         let target = URL(fileURLWithPath: planned.path, isDirectory: true)
         if let inside = try? FileManager.default.contentsOfDirectory(atPath: target.path), !inside.isEmpty {
             return .error("\(planned.path) is here already.")
         }
-        try? FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-        let tar = ToolPath.resolve("tar") ?? "/usr/bin/tar"
-        guard let result = await Command.output(tar, ["-xzf", archive.path, "-C", target.path], errors: true) else { return .error("tar could not be started") }
+        let made = !FileManager.default.fileExists(atPath: target.path)
+        let problem = await Self.unpack(archive, into: target)
         try? FileManager.default.removeItem(at: archive)
-        guard result.status == 0 else { return .error("Could not unpack \(planned.path): \(result.text)") }
+        if let problem {
+            // What this made goes again: an empty folder of its, nothing more.
+            if made, (try? FileManager.default.contentsOfDirectory(atPath: target.path))?.isEmpty == true {
+                try? FileManager.default.removeItem(at: target)
+            }
+            return .error("Could not unpack \(planned.path): \(problem)")
+        }
         return Envelope(type: "migration")
     }
 
@@ -194,6 +215,8 @@ extension VisorServer {
     func migrationFinish(_ body: Envelope) async -> Envelope {
         guard let id = body.migration, let move = migrationsIn[id] else { return .error("That move has ended; start it again.") }
         let offer = move.offer
+        // Held again here, before anything is made, whatever the plan took.
+        if let problem = Self.unsafeOffer(offer) { return .error("The move was refused: \(problem).") }
         var plan = move.plan
         // Where the server keeps a folder for each session, the session's
         // is the plan's, whatever the client chose.
@@ -211,18 +234,22 @@ extension VisorServer {
             try? files.createDirectory(atPath: step.path, withIntermediateDirectories: true)
         }
         try? files.createDirectory(atPath: plan.cwd, withIntermediateDirectories: true)
-        for file in offer.files where !file.place.isEmpty {
-            let carried = move.folder.appendingPathComponent(file.id, isDirectory: false)
+        // A packed folder first: unpacked whole or not at all, so one that
+        // is refused leaves the conversation's file where it was carried.
+        for file in offer.files.filter(\.packed) + offer.files.filter({ !$0.packed }) where !file.place.isEmpty {
+            guard let carried = Self.carried(file.id, in: move.folder) else { return .error("“\(file.id)” is not a name a move's file has.") }
             guard Self.fileSize(carried) == file.size else { return .error("Not all of the conversation was carried here; start the move again.") }
-            guard let destination = SessionCatalog.destination(of: file.place, agent: offer.session.agent, cwd: plan.cwd) else {
+            guard let destination = SessionCatalog.destination(of: file.place, agent: offer.session.agent, cwd: plan.cwd, resume: offer.resumeID) else {
                 return .error("Nowhere to put \(file.place)")
             }
             try? files.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? files.removeItem(at: destination)
             if file.packed {
-                let tar = ToolPath.resolve("tar") ?? "/usr/bin/tar"
-                _ = await Command.output(tar, ["-xzf", carried.path, "-C", destination.deletingLastPathComponent().path], errors: true)
+                // The folder by its own name alone, replacing what was there.
+                if let problem = await Self.unpack(carried, into: destination.deletingLastPathComponent(), only: destination.lastPathComponent) {
+                    return .error("Could not put the conversation at \(destination.path): \(problem)")
+                }
             } else {
+                try? files.removeItem(at: destination)
                 do { try files.moveItem(at: carried, to: destination) } catch {
                     return .error("Could not put the conversation at \(destination.path): \(error.localizedDescription)")
                 }

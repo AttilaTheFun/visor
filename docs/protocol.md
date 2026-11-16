@@ -217,6 +217,26 @@ at a time (read from the one, written to the other), has projects cloned
 session where it was is left as it was, for the user to remove. A refusal
 at any step is a 400 with an `error` envelope saying why.
 
+The offer is the other server's word, held to what a move takes
+(`VisorServer+MigrationContainment.swift`): a plan (and a restore, and the
+finish again) refuses an offer whose `resumeID` or file `id`s are not plain
+names (1 to 64 letters, digits, `-` and `_`, not starting with `-`; ids are
+unique), whose session `cwd` or project `path`s are not full paths with
+nothing to resolve (no `.`, `..` or empty part), or whose `place`s are not
+where the agent keeps that conversation (Claude's
+`projects/{project}/<resumeID>.jsonl` and the folder `<resumeID>` beside it,
+Codex's `sessions/…/…<resumeID>….jsonl`, OpenRouter's
+`sessions/<resumeID>.json` or `.jsonl`). `write` and `unpack` take a file
+`id` only as a plain name, kept in the move's own folder. Every archive (a
+project, the conversation's folder, Claude's memory, a backup's) is listed
+before anything is written and refused for an entry at an absolute path or
+through `..`, unpacked into a folder of its own inside where it goes
+(`--no-same-owner --no-same-permissions`), refused for a link that leads
+outside it, a hard link to a file outside it or anything but files, folders
+and links, and only then moved into place; the conversation's folder and the
+memory must hold that folder alone. A clone's remote and branch never start
+with `-`, and come after `--`.
+
 A client asks `GET /sessions` once a minute as the backup for the socket:
 the list is taken as a `sessions` broadcast would be, and an answer while
 the socket is down reopens it at once.

@@ -187,6 +187,11 @@ extension VisorServer {
             result.outcome = "Not restored: its files are not in the backup."
             return result
         }
+        // A backup may come from another computer: held to what a move takes.
+        if let problem = Self.unsafeOffer(offer) {
+            result.outcome = "Not restored: \(problem)"
+            return result
+        }
         let home = SessionCatalog.home.path
         let cwd = Self.path(offer.session.cwd, from: offer.home, to: home)
         var put: [String] = []
@@ -209,7 +214,7 @@ extension VisorServer {
         }
         for file in offer.files where !file.place.isEmpty {
             let kept = folder.appendingPathComponent(Self.backupName(of: file), isDirectory: false)
-            guard let destination = SessionCatalog.destination(of: file.place, agent: offer.session.agent, cwd: cwd) else {
+            guard let destination = SessionCatalog.destination(of: file.place, agent: offer.session.agent, cwd: cwd, resume: offer.resumeID) else {
                 result.outcome = "Not restored: nowhere to put \(file.place)."
                 return result
             }
@@ -217,7 +222,7 @@ extension VisorServer {
             if file.packed {
                 // A folder (subagents' records): put back only when gone.
                 guard !files.fileExists(atPath: destination.path) else { continue }
-                if let problem = await Self.unpack(kept, into: destination.deletingLastPathComponent()) {
+                if let problem = await Self.unpack(kept, into: destination.deletingLastPathComponent(), only: destination.lastPathComponent) {
                     result.outcome = "Not restored: could not unpack \(file.place): \(problem)"
                     return result
                 }
@@ -291,13 +296,6 @@ extension VisorServer {
             return "could not copy \(source.path): \(error.localizedDescription)"
         }
         return left == 0 ? nil : "\(source.path) is shorter than it was"
-    }
-
-    /// A gzipped tar unpacked into `folder`.
-    static func unpack(_ archive: URL, into folder: URL) async -> String? {
-        let tar = ToolPath.resolve("tar") ?? "/usr/bin/tar"
-        guard let result = await Command.output(tar, ["-xzf", archive.path, "-C", folder.path], errors: true) else { return "tar could not be started" }
-        return result.status == 0 ? nil : result.text
     }
 
     static func write(_ json: JSONValue, to url: URL) throws {

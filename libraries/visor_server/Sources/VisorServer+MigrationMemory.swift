@@ -32,8 +32,7 @@ extension VisorServer {
     func putMemory(of move: IncomingMigration, cwd: String) async {
         guard move.offer.session.agent == .claude,
               let file = move.offer.files.first(where: { $0.id == Self.memoryFileID }) else { return }
-        let carried = move.folder.appendingPathComponent(file.id, isDirectory: false)
-        guard Self.fileSize(carried) == file.size else {
+        guard let carried = Self.carried(file.id, in: move.folder), Self.fileSize(carried) == file.size else {
             Self.log("the memory of \(move.offer.session.title) was not all carried: left behind")
             return
         }
@@ -43,8 +42,8 @@ extension VisorServer {
             Self.log("the memory of \(move.offer.session.title) not put: \(memory.path) has one already")
             return
         }
-        try? FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
-        if let problem = await Self.unpack(carried, into: project) {
+        // The folder `memory` alone, in place of an empty one.
+        if let problem = await Self.unpack(carried, into: project, only: "memory") {
             Self.log("the memory of \(move.offer.session.title) could not be unpacked: \(problem)")
         }
     }

@@ -50,14 +50,28 @@ extension SessionCatalog {
         }
     }
 
-    /// Where a file the move carried goes here, for a session in `cwd`;
-    /// nil for a place that would lead out of the agent's folder.
-    package static func destination(of place: String, agent: AgentKind, cwd: String) -> URL? {
-        guard let root = agentFolder(agent), !place.isEmpty else { return nil }
-        let resolved = place.replacingOccurrences(of: "{project}", with: ClaudeSessionFiles.projectDirectoryName(for: cwd))
-        let parts = resolved.split(separator: "/").map(String.init)
-        guard !parts.isEmpty, !parts.contains(where: { $0 == ".." || $0 == "." }) else { return nil }
-        return parts.reduce(root) { $0.appendingPathComponent($1, isDirectory: false) }
+    /// Where a file the move carried goes here, for a session in `cwd` on
+    /// the conversation `resume`: under the agent's folder, and only where
+    /// the agent keeps that conversation, as conversationFiles names it
+    /// (Claude's `projects/{project}/<resume>.jsonl` and the folder
+    /// `<resume>` beside it, Codex's `sessions/…/rollout-…<resume>….jsonl`,
+    /// OpenRouter's `sessions/<resume>.json` or `.jsonl`). Nil for any other
+    /// place, such as the agent's settings or credentials, and for one that
+    /// would lead out of its folder: a place is the other server's word.
+    package static func destination(of place: String, agent: AgentKind, cwd: String, resume: String) -> URL? {
+        guard let root = agentFolder(agent), !resume.isEmpty else { return nil }
+        let parts = place.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        let shaped = switch agent {
+        case .claude: parts.count == 3 && parts[0] == "projects" && parts[1] == "{project}" && [resume, resume + ".jsonl"].contains(parts[2])
+        case .codex: parts.count >= 2 && parts[0] == "sessions" && parts.last.map { $0.hasSuffix(".jsonl") && $0.contains(resume) } == true
+        case .openrouter: parts.count == 2 && parts[0] == "sessions" && [resume + ".json", resume + ".jsonl"].contains(parts[1])
+        }
+        guard shaped else { return nil }
+        let resolved = parts.map { $0 == "{project}" ? ClaudeSessionFiles.projectDirectoryName(for: cwd) : $0 }
+        guard resolved.allSatisfy({ !$0.isEmpty && !$0.hasPrefix(".") && !$0.contains("\0") }) else { return nil }
+        let url = resolved.reduce(root) { $0.appendingPathComponent($1, isDirectory: false) }
+        let inner = url.standardizedFileURL.pathComponents, outer = root.standardizedFileURL.pathComponents
+        return inner.count > outer.count && Array(inner.prefix(outer.count)) == outer ? url : nil
     }
 
     private static func relative(_ file: URL, to root: URL) -> String? {
