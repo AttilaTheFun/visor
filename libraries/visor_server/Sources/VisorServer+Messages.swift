@@ -209,8 +209,16 @@ extension VisorServer {
         record.setPermissions(skip: skip)
         // Claude's mode is a launch flag: the process restarts (resumed by
         // session id) once idle. Codex spawns per turn and just picks it up.
+        // A driven session's agent is restarted on its runner instead:
+        // stopped, it would end its job there (resumeDriven).
         if record.info.agent == .claude {
-            if record.info.busy { record.restartWhenIdle = true } else { record.process.stop() }
+            if record.info.busy {
+                record.restartWhenIdle = true
+            } else if record.driven {
+                resumeDriven(record, why: "restarting, for its new settings, the agent of")
+            } else {
+                record.process.stop()
+            }
         }
         broadcastSessions()
     }
@@ -260,8 +268,16 @@ extension VisorServer {
         record.setSettings(model: model, effort: effort)
         saveArchive()
         // Claude's flags are launch flags: restart (resumed) once idle.
+        // A driven session's agent is restarted on its runner instead:
+        // stopped, it would end its job there (resumeDriven).
         if record.info.agent == .claude {
-            if record.info.busy { record.restartWhenIdle = true } else { record.process.stop() }
+            if record.info.busy {
+                record.restartWhenIdle = true
+            } else if record.driven {
+                resumeDriven(record, why: "restarting, for its new settings, the agent of")
+            } else {
+                record.process.stop()
+            }
         }
         broadcastSessions()
     }

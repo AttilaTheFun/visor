@@ -68,7 +68,7 @@ extension ServerTests {
         #expect(!record.driven)
         #expect(record.info.cwd == "/Users/a/Developer")
         #expect(record.process !== runner)
-        #expect(record.notice == "Back on this computer: the clone failed")
+        #expect(record.notice?.hasPrefix("Back on this computer: the clone failed (") == true, "dated")
         #expect(!record.info.skipPermissions, "prompts skipped only in a container: asked again here")
     }
 

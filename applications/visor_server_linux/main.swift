@@ -9,7 +9,7 @@
 //   (VISOR_AGENT_PROTOCOL_HOST, 127.0.0.1 unless given), known to wrappers
 //   and runners as VISOR_AGENT_PROTOCOL_URL (http://<host>:<port> unless
 //   given), and to containers as VISOR_AGENT_PROTOCOL_CONTAINER_URL when
-//   set (MultiPass's dial-in), its jobs' harness VISOR_JOB_HARNESS (claude unless given; echo
+//   set (Shireworks' agent-proxy: http://visor.agent.internal:<port>), its jobs' harness VISOR_JOB_HARNESS (claude unless given; echo
 //   for a test without a model);
 // - VISOR_NATIVE_RUNNER_WRAPPER: a native runner on this computer, pulling
 //   from that dispatcher and running agents under that agent-wrapper.
@@ -29,12 +29,19 @@ if CommandLine.arguments.first.map({ URL(fileURLWithPath: $0).lastPathComponent 
 }
 
 let environment = ProcessInfo.processInfo.environment
-let status = await ServerCommand(system: LinuxSystem(), onServer: { server in
-    guard let port = environment["VISOR_AGENT_PROTOCOL_PORT"].flatMap(Int.init), port > 0 else { return }
+let agentProtocol = environment["VISOR_AGENT_PROTOCOL_PORT"].flatMap(Int.init).flatMap { port -> VisorDriver.Listening? in
+    guard port > 0 else { return nil }
     let host = environment["VISOR_AGENT_PROTOCOL_HOST"] ?? "127.0.0.1"
-    let url = environment["VISOR_AGENT_PROTOCOL_URL"] ?? "http://\(host):\(port)"
-    _ = VisorDriver.start(server, host: host, port: port, url: url, containerURL: environment["VISOR_AGENT_PROTOCOL_CONTAINER_URL"],
-                          harness: environment["VISOR_JOB_HARNESS"] ?? "claude")
+    return VisorDriver.Listening(host: host, port: port, url: environment["VISOR_AGENT_PROTOCOL_URL"] ?? "http://\(host):\(port)",
+                                 containerURL: environment["VISOR_AGENT_PROTOCOL_CONTAINER_URL"],
+                                 harness: environment["VISOR_JOB_HARNESS"] ?? "claude")
+}
+// The driver's port open before the sessions are read (the wrappers and
+// runners of sessions moved to runners redial it), then the server served.
+let status = await ServerCommand(system: LinuxSystem(), beforeServer: { agentProtocol?.listen() }, onServer: { server in
+    guard let agentProtocol else { return }
+    agentProtocol.serve(server)
+    let url = agentProtocol.url
     if let wrapper = environment["VISOR_NATIVE_RUNNER_WRAPPER"], !wrapper.isEmpty,
        let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: ProcessInfo.processInfo.hostName,
                                  log: { VisorServer.log($0) }) {

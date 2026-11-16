@@ -1,13 +1,17 @@
-// agent_protocol's AgentDispatcher, served by Visor's server over JobQueue.
+// agent_protocol's AgentDispatcher, served by Visor's server over JobQueue:
+// each call once the server is served (VisorDriver.Listening), so a
+// restarted server's queue knows its driven sessions' moves first.
 
 import AgentProtocol
 import Foundation
 import GRPCCore
 
 struct DispatcherService: AgentProtocol_V1_AgentDispatcher.SimpleServiceProtocol {
+    let listening: VisorDriver.Listening
     let jobs: JobQueue
 
     func claim(request: AgentProtocol_V1_ClaimRequest, context: ServerContext) async throws -> AgentProtocol_V1_ClaimResponse {
+        _ = await listening.ready()
         let wait = Duration.seconds(min(max(Int(request.waitSeconds), 0), 60))
         var answer = AgentProtocol_V1_ClaimResponse()
         if let job = await jobs.claim(request, wait: wait) { answer.job = job }
@@ -15,11 +19,13 @@ struct DispatcherService: AgentProtocol_V1_AgentDispatcher.SimpleServiceProtocol
     }
 
     func report(request: AgentProtocol_V1_JobReport, context: ServerContext) async throws -> AgentProtocol_V1_ReportResponse {
+        _ = await listening.ready()
         await jobs.report(request)
         return .init()
     }
 
     func renew(request: AgentProtocol_V1_RenewRequest, context: ServerContext) async throws -> AgentProtocol_V1_RenewResponse {
+        _ = await listening.ready()
         var answer = AgentProtocol_V1_RenewResponse()
         if let expires = await jobs.renew(request.agent) { answer.claimExpires = .init(date: expires) }
         return answer
