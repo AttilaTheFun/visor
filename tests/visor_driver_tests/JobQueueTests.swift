@@ -396,6 +396,10 @@ import Testing
         let acting = try #require(JSONSerialization.jsonObject(with: Data(tokenedJob.utf8)) as? [String: Any])
         #expect((acting["skipPermissions"] as? Bool) == true)
         #expect(NativeRunner.metadata(job)[stringValues: "authorization"].map { $0 } == ["Bearer t0k3n"], "its renewals and releases show it")
+        #expect(NativeRunner.metadata(job, runnerToken: "r1")[stringValues: "authorization"].map { $0 } == ["Bearer t0k3n", "Bearer r1"],
+                "and the runner's own token beside it")
+        #expect(NativeRunner.metadata(runnerToken: "r1")[stringValues: "authorization"].map { $0 } == ["Bearer r1"], "its claims show its own")
+        #expect(NativeRunner.metadata()[stringValues: "authorization"].map { $0 }.isEmpty)
     }
 
     /// Each agent's own token (Job.token): minted when its job is queued,

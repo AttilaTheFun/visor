@@ -12,7 +12,8 @@
 //   set (Shireworks' agent-proxy: http://visor.agent.internal:<port>), its jobs' harness VISOR_JOB_HARNESS (claude unless given; echo
 //   for a test without a model);
 // - VISOR_NATIVE_RUNNER_WRAPPER: a native runner on this computer, pulling
-//   from that dispatcher and running agents under that agent-wrapper.
+//   from that dispatcher and running agents under that agent-wrapper, with
+//   a runner token of its own (minted at each start, in memory).
 
 import Foundation
 import VisorAgentHost
@@ -42,8 +43,10 @@ let status = await ServerCommand(system: LinuxSystem(), beforeServer: { agentPro
     guard let agentProtocol else { return }
     agentProtocol.serve(server)
     let url = agentProtocol.url
+    // Its own runner token, so it claims when runner tokens are required.
+    let name = ProcessInfo.processInfo.hostName
     if let wrapper = environment["VISOR_NATIVE_RUNNER_WRAPPER"], !wrapper.isEmpty,
-       let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: ProcessInfo.processInfo.hostName,
+       let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: name, token: agentProtocol.runnerToken(for: name),
                                  log: { VisorServer.log($0) }) {
         Task { await runner.run() }
         VisorServer.log("native runner: pulling from \(url), running agents under \(wrapper)")

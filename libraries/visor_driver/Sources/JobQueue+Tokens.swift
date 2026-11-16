@@ -58,12 +58,24 @@ extension JobQueue {
 
     /// Whether a call for `agent` that shows `bearer` is the agent's.
     func access(_ agent: String, bearer: String?) -> Access {
+        access(agent, bearers: bearer.map { [$0] } ?? [])
+    }
+
+    /// Whether a call for `agent` that shows `bearers` is the agent's: one
+    /// of them is its token (a runner's renewal may show its own beside it).
+    func access(_ agent: String, bearers: [String]) -> Access {
         let id = Self.key(agent)
         guard let held = tokens[id] else { return .unknown }
-        guard let bearer, !bearer.isEmpty else { return .refused("The call shows no token (authorization: Bearer <Job.token>).") }
-        guard bearer != held else { return .granted }
-        if tokens.contains(where: { $0.value == bearer }) { return .refused("That token is another agent's.") }
+        let shown = bearers.filter { !$0.isEmpty }
+        guard !shown.isEmpty else { return .refused("The call shows no token (authorization: Bearer <Job.token>).") }
+        guard !shown.contains(held) else { return .granted }
+        if shown.contains(where: { bearer in tokens.values.contains(bearer) }) { return .refused("That token is another agent's.") }
         return .refused("That token isn't this agent's.")
+    }
+
+    /// The runner whose claim on `agent`'s job is held, if one is.
+    func holder(of agent: String) -> String? {
+        claimed[Self.key(agent)]?.runner
     }
 
     private func keepTokens() {

@@ -140,6 +140,9 @@ public final class VisorServer {
     /// permission shim): kept from launch to launch, since an agent under
     /// its host outlives the server that started it.
     let agentToken: String
+    /// The runners' own tokens, which agent_protocol's Claim asks
+    /// (RunnerTokens): kept with the secrets.
+    package let runnerTokens: RunnerTokens
 
     /// Sessions this launch was asked to bring back into a running state:
     /// they were mid-turn when the app went away, and were named on the
@@ -150,6 +153,7 @@ public final class VisorServer {
         self.port = port
         password = Self.keptPassword()
         agentToken = Self.keptAgentToken()
+        runnerTokens = RunnerTokens(secrets: Self.secrets)
         applyAgentDetaching()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         loadSessions()

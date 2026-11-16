@@ -105,6 +105,14 @@ extension VisorDriver {
             }
         }
 
+        /// A runner token for this server's own runner, named `runner` (the
+        /// native runner, in this process): held in memory, new each start,
+        /// so it claims whether or not the server requires runner tokens.
+        /// Nil before the server is served.
+        public func runnerToken(for runner: String) -> String? {
+            server?.runnerTokens.issueOwn(for: runner)
+        }
+
         /// No longer listening, and its claims no longer lapsing: for a test
         /// that serves a server of its own.
         func stop() {
