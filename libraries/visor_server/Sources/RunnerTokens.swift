@@ -167,8 +167,11 @@ package final class RunnerTokens {
     }
 
     /// Whether two tokens are the same, compared in a time that doesn't
-    /// say how much of them matched.
-    private static func same(_ a: String, _ b: String) -> Bool {
+    /// say how much of them matched: the runners' tokens here, the agents'
+    /// in the driver (JobQueue+Tokens). SecretToken.same (visor#441) does
+    /// the same for the sessions' tokens; this goes to it once both are on
+    /// main.
+    package static func same(_ a: String, _ b: String) -> Bool {
         let x = Array(a.utf8), y = Array(b.utf8)
         guard x.count == y.count else { return false }
         var difference: UInt8 = 0

@@ -68,8 +68,12 @@ extension JobQueue {
         guard let held = tokens[id] else { return .unknown }
         let shown = bearers.filter { !$0.isEmpty }
         guard !shown.isEmpty else { return .refused("The call shows no token (authorization: Bearer <Job.token>).") }
-        guard !shown.contains(held) else { return .granted }
-        if shown.contains(where: { bearer in tokens.values.contains(bearer) }) { return .refused("That token is another agent's.") }
+        // Each compared in constant time (RunnerTokens.same): how much of
+        // a guess matched takes no longer to find.
+        guard !shown.contains(where: { RunnerTokens.same($0, held) }) else { return .granted }
+        if shown.contains(where: { bearer in tokens.values.contains { RunnerTokens.same(bearer, $0) } }) {
+            return .refused("That token is another agent's.")
+        }
         return .refused("That token isn't this agent's.")
     }
 

@@ -430,6 +430,10 @@ import Testing
         #expect(jobs.access(a, bearer: nil) == .refused("The call shows no token (authorization: Bearer <Job.token>)."))
         #expect(jobs.access(a, bearer: jobB.token) == .refused("That token is another agent's."))
         #expect(jobs.access(a, bearer: "guess") == .refused("That token isn't this agent's."))
+        // Only the whole token, compared byte by byte (constant time).
+        #expect(jobs.access(a, bearer: String(jobA.token.dropLast())) == .refused("That token isn't this agent's."), "a prefix")
+        #expect(jobs.access(a, bearer: jobA.token + "0") == .refused("That token isn't this agent's."), "longer")
+        #expect(jobs.access(a, bearers: ["guess", jobA.token]) == .granted, "among others shown")
         #expect(jobs.access("nobody", bearer: jobA.token) == .unknown)
         #expect(!(secrets.get(JobQueue.tokensKey) ?? "").isEmpty, "kept with the secrets")
         #expect(!jobs.stored.claimed.contains { "\($0)".contains(jobA.token) }, "never in jobs.json")
