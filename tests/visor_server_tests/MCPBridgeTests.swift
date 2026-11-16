@@ -289,6 +289,36 @@ extension ServerTests {
         #expect(MCPWebSocketFrames.read([0x81, 127, 0xFF, 0, 0, 0, 0, 0, 0, 0]) == .invalid, "larger than any message")
     }
 
+    /// Claude's MCP config no longer carries VISOR_PORT, VISOR_SESSION and
+    /// VISOR_TOKEN (visor#423): Claude Code passes them on from the agent's
+    /// environment. Without them, every request is refused with why.
+    @Test func testAMissingEnvironmentIsSaidToEveryRequest() {
+        let given = ["VISOR_PORT": "7433", "VISOR_SESSION": "A", "VISOR_TOKEN": "t"]
+        #expect(MCPMissingEnvironment(given) == nil)
+        #expect(MCPMissingEnvironment(given.merging(["VISOR_APPROVALS": "1"]) { a, _ in a }) == nil)
+        #expect(MCPMissingEnvironment([:])?.names == ["VISOR_PORT", "VISOR_SESSION", "VISOR_TOKEN"])
+        #expect(MCPMissingEnvironment(["VISOR_PORT": "7433", "VISOR_SESSION": "A", "VISOR_TOKEN": ""])?.names == ["VISOR_TOKEN"])
+        #expect(MCPMissingEnvironment(["VISOR_URL": "ws://host:7433", "VISOR_SESSION": "A", "VISOR_TOKEN": "t"]) == nil,
+                "a server given by its URL needs no port")
+        #expect(MCPMissingEnvironment(["VISOR_URL": "ws://host:7433"])?.names == ["VISOR_SESSION", "VISOR_TOKEN"])
+
+        let missing = MCPMissingEnvironment(["VISOR_APPROVALS": "1", "VISOR_PORT": "7433"])
+        #expect(missing?.names == ["VISOR_SESSION", "VISOR_TOKEN"])
+        let said = Said()
+        missing?.answer(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#, to: said)
+        missing?.answer(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#, to: said)
+        missing?.answer(#"{"jsonrpc":"2.0","id":"two","method":"tools/list"}"#, to: said)
+        #expect(said.all.count == 2, "notifications get no answer")
+        let first = said.all.first
+        #expect(first?["id"] == .number(1))
+        #expect(first?["result"].isNull ?? false)
+        let message = first?["error"]["message"].string ?? ""
+        #expect(message.contains("VISOR_SESSION, VISOR_TOKEN"), Comment(rawValue: message))
+        #expect(message.contains("Claude Code must pass the agent's environment to its MCP servers"), Comment(rawValue: message))
+        #expect(said.all.last?["id"] == .string("two"))
+        #expect(said.all.last?["error"]["code"] == .number(-32002))
+    }
+
     /// A real call, on a real WebSocket, to a real server: the sessions
     /// listed to an agent with the server's token; refused without it.
     @MainActor
