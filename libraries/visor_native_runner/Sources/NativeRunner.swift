@@ -173,8 +173,12 @@ public actor NativeRunner {
                              ("resumeSessionID", job.resumeSessionID)] where !value.isEmpty {
             object[key] = value
         }
-        // Job.skip_permissions: the agent acts (true) or asks through the driver.
-        object["skipPermissions"] = job.skipPermissions
+        // Job.skip_permissions, which has presence: the agent acts (true)
+        // or asks through the driver (false), there only when the job says
+        // (agent_protocol's README). Visor's dispatcher always says; this
+        // runner never passes --skip-permissions, so a job that didn't
+        // would ask.
+        if job.hasSkipPermissions { object["skipPermissions"] = job.skipPermissions }
         if !job.sources.isEmpty {
             object["sources"] = job.sources.map { ["repository": $0.repository, "ref": $0.ref, "name": $0.name] }
         }

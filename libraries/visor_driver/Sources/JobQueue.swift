@@ -125,7 +125,10 @@ final class JobQueue: AgentJobQueue {
         job.prompt = request.text ?? ""
         job.driverURL = driverURL
         // Asks before acting unless the request says otherwise: the
-        // session it becomes takes the same (DriverService.info).
+        // session it becomes takes the same (DriverService.info). Always
+        // said, false included: Job.skip_permissions has presence, and a
+        // job without it reads as an old dispatcher's, whose runner
+        // passes --skip-permissions.
         job.skipPermissions = request.skipPermissions ?? false
         if let kind = request.runsOn?.trimmingCharacters(in: .whitespaces), !kind.isEmpty {
             job.labels.append(Self.runsOn + kind)
@@ -182,6 +185,7 @@ final class JobQueue: AgentJobQueue {
         job.driverURL = driverURL
         job.resumeSessionID = move.resumeOnRunner
         job.workingDirectory = move.workingDirectory
+        // Always said, false included (queueStart).
         job.skipPermissions = move.skipPermissions
         job.sources = move.sources.map { source in .with { $0.repository = source.repository; $0.ref = source.ref; $0.name = source.name } }
         if !move.runsOn.isEmpty { job.labels.append(Self.runsOn + move.runsOn) }

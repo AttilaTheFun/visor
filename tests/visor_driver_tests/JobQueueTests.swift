@@ -384,7 +384,7 @@ import Testing
         #expect((given["workingDirectory"] as? String) == "/w")
         #expect((given["prompt"] as? String) == "P")
         #expect((given["model"]) == nil, "nothing for what the job doesn't say")
-        #expect((given["skipPermissions"] as? Bool) == false, "it asks unless the job says otherwise")
+        #expect((given["skipPermissions"]) == nil, "a job that doesn't say has none in AGENT_JOB")
         #expect(environment["AGENT_TOKEN"] == nil, "a job with no token gives none")
 
         job.token = "t0k3n"
@@ -400,6 +400,15 @@ import Testing
                 "and the runner's own token beside it")
         #expect(NativeRunner.metadata(runnerToken: "r1")[stringValues: "authorization"].map { $0 } == ["Bearer r1"], "its claims show its own")
         #expect(NativeRunner.metadata()[stringValues: "authorization"].map { $0 }.isEmpty)
+
+        // A manual session's job, as Visor's dispatcher gives it out: false, said.
+        let jobs = queue()
+        var manual = start("Manual")
+        manual.skipPermissions = false
+        _ = try jobs.queueStart(manual).get()
+        let claimed = try #require(await jobs.claim(claim(), wait: .zero))
+        let manualJob = try #require(await runner.environment(for: claimed)["AGENT_JOB"])
+        #expect(manualJob.contains("\"skipPermissions\":false"), Comment(rawValue: manualJob))
     }
 
     /// Each agent's own token (Job.token): minted when its job is queued,
@@ -448,14 +457,52 @@ import Testing
         acting.skipPermissions = true
         _ = try jobs.queueStart(acting).get()
         _ = try jobs.queueStart(start("Asks")).get()
-        let first = await jobs.claim(claim(), wait: .zero)
-        let second = await jobs.claim(claim(), wait: .zero)
-        #expect((first?.skipPermissions) == true)
-        #expect((second?.skipPermissions) == false)
+        var manual = start("Manual")
+        manual.skipPermissions = false
+        _ = try jobs.queueStart(manual).get()
+        // Said either way, false included: Job.skip_permissions has
+        // presence, and a job without it reads as an old dispatcher's,
+        // whose runner passes --skip-permissions.
+        for (title, skips) in [("Acts", true), ("Asks", false), ("Manual", false)] {
+            let job = try #require(await jobs.claim(claim(), wait: .zero))
+            #expect(job.title == title)
+            #expect(job.hasSkipPermissions, "\(title): said")
+            #expect(job.skipPermissions == skips, "\(title)")
+        }
         var move = AgentJobMove(session: "s-m", title: "M", resume: "c-m", cwd: "/tmp", runsOn: "native")
         move.skipPermissions = true
-        #expect(jobs.resumeJob(move, agent: "m1").skipPermissions)
+        let skip = jobs.resumeJob(move, agent: "m1")
+        #expect(skip.hasSkipPermissions && skip.skipPermissions)
         move.skipPermissions = false
-        #expect(!jobs.resumeJob(move, agent: "m1").skipPermissions)
+        let asks = jobs.resumeJob(move, agent: "m1")
+        #expect(asks.hasSkipPermissions && !asks.skipPermissions)
+
+        // A moved session's job (queueResume), as claimed.
+        #expect(jobs.queueResume(move) == .success("s-m"))
+        let resumed = try #require(await jobs.claim(claim(), wait: .zero))
+        #expect(resumed.hasSkipPermissions && !resumed.skipPermissions)
+    }
+
+    /// Job.skip_permissions across a restart (jobs.json): a waiting job and
+    /// a claimed one come back saying what they said, false included.
+    @Test func aRestartedQueueKeepsWhetherItsJobsAsk() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("jobs-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let before = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", file: file, log: { _ in })
+        var acting = start("Acts")
+        acting.skipPermissions = true
+        _ = try before.queueStart(acting).get()
+        let claimed = try #require(await before.claim(claim(), wait: .zero))
+        var manual = start("Manual")
+        manual.skipPermissions = false
+        _ = try before.queueStart(manual).get()
+
+        let after = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", file: file, log: { _ in })
+        let held = try #require(after.claimed[claimed.agent.uuid]?.job)
+        #expect(held.hasSkipPermissions && held.skipPermissions)
+        let waiting = try #require(after.waiting.first)
+        #expect(waiting.title == "Manual")
+        #expect(waiting.hasSkipPermissions, "false kept, not dropped")
+        #expect(!waiting.skipPermissions)
     }
 }

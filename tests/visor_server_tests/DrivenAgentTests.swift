@@ -461,8 +461,13 @@ extension ServerTests {
         // A job queued as such.
         _ = try jobs.queueStart(start("Acts", skip: true)).get()
         _ = try jobs.queueStart(start("Asks")).get()
-        #expect((try await claimed()?.skipPermissions) == true)
-        #expect((try await claimed()?.skipPermissions) == false, "asks unless it says otherwise")
+        // Said either way, false included, as the runner reads it off the
+        // wire: a job without it is an old dispatcher's, and would act.
+        let acts = try #require(try await claimed())
+        #expect(acts.hasSkipPermissions && acts.skipPermissions)
+        let asks = try #require(try await claimed())
+        #expect(asks.hasSkipPermissions, "false is said, not left out")
+        #expect(!asks.skipPermissions, "asks unless it says otherwise")
 
         // A driven session's next agent: as the session is set.
         let record = server.takeDriven(SessionInfo(id: "moved", agent: .claude, cwd: "/tmp", title: "Moved", skipPermissions: true, created: 0),
@@ -473,6 +478,7 @@ extension ServerTests {
         manual.skipPermissions = false
         server.perform(manual, from: nil)
         let asking = try #require(try await claimed())
+        #expect(asking.hasSkipPermissions, "a manual session's job says false")
         #expect(!asking.skipPermissions && asking.resumeSessionID == "c-1" && !asking.token.isEmpty)
         #expect(jobs.session(of: asking.agent.uuid) == "moved")
 
@@ -480,7 +486,7 @@ extension ServerTests {
         auto.skipPermissions = true
         server.perform(auto, from: nil)
         let acting = try #require(try await claimed())
-        #expect(acting.skipPermissions && acting.agent.uuid != asking.agent.uuid)
+        #expect(acting.hasSkipPermissions && acting.skipPermissions && acting.agent.uuid != asking.agent.uuid)
         #expect(record.move?.skipPermissions == true)
     }
 }
