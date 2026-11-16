@@ -171,7 +171,8 @@ agent_protocol#9, #10 and #12.
   kept with the server's secrets (`runnerTokens`; never in sessions.json,
   jobs.json or the log) and shown once, when minted. The computer's owner
   mints, lists and revokes them over REST (the password, a `hello` token,
-  or the socket file; refused, 403, with an agent's token):
+  or the socket file; refused, 403, with any session's agent token, a
+  native session's own included):
   - `POST /api/runners/tokens {"runner": "container@mini"}` →
     `{"runner", "token", "created", "replaced"}`: the token, this once (a
     runner that had one gets a new one; the old stops working);
@@ -200,7 +201,15 @@ agent_protocol#9, #10 and #12.
   and beside its jobs' tokens on its renewals and releases, so it claims
   with tokens required.
 - **What MCP a container session gets** (Logan, 16 Nov, via Manager):
-  Visor's and Shireworks', and nothing of the computer's.
+  Visor's and Shireworks', and nothing of the computer's. "In a container"
+  is the job's: it asks for a container runner (`runs-on:container`, as a
+  move into a container's does), or, asking for no kind, the runner that
+  claimed it says `container` among its capabilities (Shireworks' does);
+  not known (a claim from before the server's restart, by a runner that
+  said neither), it is taken to be. A session on **Visor's own native
+  runner** (`runs-on:native`, or claimed by a runner that says `native`)
+  runs on this computer, and keeps the computer's passed-on servers as
+  any native session does: the rest of this item is a container's.
   - **Visor's**: the agent's MCP server `visor`, which its wrapper starts
     (`--mcp-config`) and relays over its connection to this driver
     (`WrapperMessage.mcp`, agent_protocol#10). It is answered here by
@@ -214,8 +223,12 @@ agent_protocol#9, #10 and #12.
     sessions (`GET`/`PUT /api/mcp`: gh, shireworks, …, the
     `mcp__visor__<endpoint>__*` tools), whatever the session's per-server
     switches say: the driver's bridge doesn't list, watch or call them
-    (a call of one is refused), and the server answers a driven
+    (a call of one is refused), and the server answers a container
     session's `mcp_tools` with none and refuses its `mcp_call`.
+  - Its asks (`list_sessions`, `send_message`, …) are answered as its
+    session by the driver, which knows it by its job's token: the agent
+    is never given a session token of the server's, which would be a
+    REST credential (docs/protocol.md, "Approvals and questions").
   - **Shireworks'**: from the container itself, at
     `http://shireworks.agent.internal/mcp/shireworks`, through the
     container network's agent-proxy, which adds Shireworks' key to each

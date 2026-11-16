@@ -51,6 +51,7 @@ extension JobQueue {
             dropped += before - waiting.count
             restored.remove(agent)
             returns[agent] = nil
+            claimCapabilities[agent] = nil
             // Its token too: its runner's next renewal is told the claim
             // isn't its own, its wrapper can't dial in again, and its
             // reports are no longer taken.

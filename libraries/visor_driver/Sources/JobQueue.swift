@@ -56,6 +56,10 @@ final class JobQueue: AgentJobQueue {
     static let attempts = 3
     /// Claimed jobs by agent id, with their runner and expiry.
     var claimed: [String: (job: AgentProtocol_V1_Job, runner: String, expires: Date)] = [:]
+    /// The capabilities of the runner that claimed each job, by agent id,
+    /// as it said them this launch: whether it runs its agents in
+    /// containers (JobQueue+Containers).
+    var claimCapabilities: [String: [String]] = [:]
     /// Claims taken up when this server started (from jobs.json, or from a
     /// driven session's move in sessions.json: adopt), until their runner
     /// renews one or its agent starts again: a lapse or a release of one
@@ -206,6 +210,7 @@ final class JobQueue: AgentJobQueue {
     func forget(agent: String) {
         waiting.removeAll { $0.agent.uuid == agent }
         claimed[agent] = nil
+        claimCapabilities[Self.key(agent)] = nil
         moves[agent] = nil
         movedSessions[agent] = nil
         returns[agent] = nil
@@ -238,6 +243,7 @@ final class JobQueue: AgentJobQueue {
                 // build before tokens): the runner hands it to the wrapper.
                 job.token = token(for: job.agent.uuid)
                 claimed[job.agent.uuid] = (job, request.runner, expires)
+                claimCapabilities[Self.key(job.agent.uuid)] = request.capabilities
                 save()
                 log("dispatcher: \(request.runner) claimed \(job.agent.uuid)")
                 return addressed(job, for: request.capabilities)

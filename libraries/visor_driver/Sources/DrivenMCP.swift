@@ -3,13 +3,15 @@
 // (VisorMCPBridge's MCPBridge, as a session here runs it), answering for
 // the session the wrapper's token says it is. One bridge for each of the
 // wrapper's MCP connections (`client`), for as long as the wrapper's
-// connection lasts. Its tools are only Visor's own (the other sessions,
-// their messages, its inbox): never the MCP servers this computer passes
-// on to its native sessions (gh, shireworks, …), whatever the session's
-// switches say (Logan, 2026-11-16: a container's agent gets Visor's MCP
-// from here and Shireworks' from its container). Not `approve` either,
-// which the wrapper offers and turns into WrapperMessage.approval
-// (DrivenProcess).
+// connection lasts. For an agent in a container (JobQueue.runsInContainer),
+// its tools are only Visor's own (the other sessions, their messages, its
+// inbox): never the MCP servers this computer passes on to its native
+// sessions (gh, shireworks, …), whatever the session's switches say (Logan,
+// 2026-11-16: a container's agent gets Visor's MCP from here and
+// Shireworks' from its container). An agent on Visor's own native runner
+// runs on this computer, and gets them as any native session does. Not
+// `approve` either, which the wrapper offers and turns into
+// WrapperMessage.approval (DrivenProcess).
 
 import AgentProtocol
 import Foundation
@@ -21,13 +23,17 @@ actor DrivenMCP {
     private let session: String
     private let server: VisorServer
     private let send: @Sendable (AgentProtocol_V1_DriverMessage) -> Void
+    /// Whether the computer's passed-on MCP servers are offered: not to an
+    /// agent in a container.
+    private let passesOn: Bool
     private var bridges: [String: (bridge: MCPBridge, output: DrivenMCPOutput)] = [:]
 
     /// For the driven session `session`; what it answers goes to `send`
     /// (down the wrapper's connection).
-    init(session: String, server: VisorServer, send: @escaping @Sendable (AgentProtocol_V1_DriverMessage) -> Void) {
+    init(session: String, server: VisorServer, passesOn: Bool, send: @escaping @Sendable (AgentProtocol_V1_DriverMessage) -> Void) {
         self.session = session
         self.server = server
+        self.passesOn = passesOn
         self.send = send
     }
 
@@ -59,10 +65,11 @@ actor DrivenMCP {
     private func connection(_ client: String) -> (MCPBridge, DrivenMCPOutput) {
         if let open = bridges[client] { return open }
         let output = DrivenMCPOutput(client: client, deliver: send)
-        // No `approve` (the wrapper's own), no passed-on servers, and what
-        // a session on this computer is told at `initialize`.
+        // No `approve` (the wrapper's own), the passed-on servers only off
+        // containers, and what a session on this computer is told at
+        // `initialize`.
         let bridge = MCPBridge(link: DrivenMCPLink(session: session, server: server), output: output, approvals: false, contained: false,
-                               passesOn: false)
+                               passesOn: passesOn)
         bridges[client] = (bridge, output)
         return (bridge, output)
     }

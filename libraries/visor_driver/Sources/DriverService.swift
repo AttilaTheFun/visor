@@ -67,15 +67,21 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         // Alive: a job queued again for it meanwhile is its own.
         await jobs.heard(agent)
         let (outgoing, sending) = AsyncStream<AgentProtocol_V1_DriverMessage>.makeStream()
+        // In a container (its job's kind, or its runner's), or on a native
+        // runner: which MCP servers its session gets.
+        let inContainer = await jobs.runsInContainer(agent)
         let (process, connection) = await MainActor.run { () -> (DrivenProcess, UUID) in
             let process = (server.session(hello.agent.uuid)?.process as? DrivenProcess) ?? DrivenProcess()
-            server.takeDriven(Self.info(hello), process: process)
+            let record = server.takeDriven(Self.info(hello), process: process)
+            record.runsInContainer = inContainer
             let connection = process.attach { sending.yield($0) }
             return (process, connection)
         }
         // The agent's MCP server ("visor", through its wrapper), as its
-        // session's: this connection's, as the wrapper's relay is.
-        let mcp = DrivenMCP(session: hello.agent.uuid, server: server) { sending.yield($0) }
+        // session's: this connection's, as the wrapper's relay is. In a
+        // container, Visor's own tools alone; on a native runner, the
+        // computer's passed-on servers too, as a native session has.
+        let mcp = DrivenMCP(session: hello.agent.uuid, server: server, passesOn: !inContainer) { sending.yield($0) }
         VisorServer.log("driver: \(hello.agent.uuid) connected from \(hello.hostName.isEmpty ? "a wrapper" : hello.hostName)")
         // Down the stream, as the session sends: a task of its own, ended
         // with the connection.

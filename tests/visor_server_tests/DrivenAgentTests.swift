@@ -107,7 +107,7 @@ private final class PassedOnEndpoint: HTTPFetching {
 }
 
 /// A native session's MCP server reaching this server, as its own
-/// (VisorServer.answerAgent, with the server's agent token).
+/// (VisorServer.answerAgent, with its session's own agent token).
 private struct NativeLink: MCPServerLink {
     let session: String
     let server: VisorServer
@@ -117,7 +117,7 @@ private struct NativeLink: MCPServerLink {
             Task { @MainActor in
                 var message = fields
                 message["type"] = .string("agent")
-                message["token"] = .string(server.agentToken)
+                message["token"] = .string(server.agentToken(for: session))
                 message["client"] = .string(session)
                 message["id"] = .string(UUID().uuidString)
                 guard let envelope = Envelope.decode(JSONValue.object(message).encoded()) else {
@@ -215,8 +215,10 @@ extension ServerTests {
     }
 
     /// The next job a native runner is given, if any (claimed over gRPC).
-    private func claimed() async throws -> AgentProtocol_V1_Job? {
-        let answer = try await dispatcher { try await $0.claim(.with { $0.runner = "Test"; $0.capabilities = ["native", "harness:echo"] }) }
+    /// The next job, claimed by a runner of these capabilities: a native
+    /// one unless told.
+    private func claimed(_ capabilities: [String] = ["native", "harness:echo"]) async throws -> AgentProtocol_V1_Job? {
+        let answer = try await dispatcher { try await $0.claim(.with { $0.runner = "Test"; $0.capabilities = capabilities }) }
         return answer.hasJob ? answer.job : nil
     }
 
@@ -252,9 +254,10 @@ extension ServerTests {
 
     /// The job `title`'s agent dialled in as its wrapper, with its token:
     /// its job, its connection, and its session.
-    private func driven(_ title: String) async throws -> (AgentProtocol_V1_Job, FakeWrapper, SessionRecord) {
+    private func driven(_ title: String, runner capabilities: [String] = ["native", "harness:echo"])
+        async throws -> (AgentProtocol_V1_Job, FakeWrapper, SessionRecord) {
         _ = try jobs.queueStart(start(title)).get()
-        let job = try #require(try await claimed())
+        let job = try #require(try await claimed(capabilities))
         let wrapper = FakeWrapper()
         wrapper.connect(port: port, token: job.token)
         wrapper.send(Self.hello(job.agent.uuid, title: title))
@@ -323,7 +326,9 @@ extension ServerTests {
 
     @Test func aWrappersMCPIsAnsweredAsItsSession() async throws {
         server.takeDriven(SessionInfo(id: "other-session", agent: .claude, cwd: "/tmp", title: "Other", created: 0), process: DrivenProcess())
-        let (job, wrapper, _) = try await driven("Asker")
+        // In a container: Visor's own tools, answered as its session by
+        // its driver, never with a session token (a REST credential).
+        let (job, wrapper, _) = try await driven("Asker", runner: ["container", "harness:echo"])
         func request(_ id: String, _ json: String) -> AgentProtocol_V1_WrapperMessage {
             .with { $0.mcp = .with { $0.id = id; $0.json = json; $0.client = "c1" } }
         }
@@ -353,6 +358,7 @@ extension ServerTests {
         #expect(call["result"]["isError"] == .bool(false), Comment(rawValue: text))
         #expect(text.contains("other-session"), Comment(rawValue: text))
         #expect(!text.contains(job.agent.uuid), "its own session isn't another: it asks as itself")
+        #expect(server.sessionAgentTokens[job.agent.uuid] == nil, "no session token minted for a runner's agent")
 
         let refusing = try #require(await wrapper.mcp("w4"))
         let unreadable = try #require(parseJSON(refusing.json))
@@ -363,13 +369,15 @@ extension ServerTests {
 
     /// Logan (2026-11-16): a container's agent gets Visor's MCP through its
     /// wrapper and Shireworks' from its container, never this computer's
-    /// passed-on servers, whatever its session's switches say. A native
-    /// session beside it still has them.
-    @Test func aWrapperGetsVisorsOwnToolsNotThePassedOn() async throws {
+    /// passed-on servers, whatever its session's switches say. A session
+    /// on Visor's own native runner, and a native session, still have them.
+    @Test func aContainersWrapperGetsVisorsOwnToolsNotThePassedOn() async throws {
         let endpoint = PassedOnEndpoint()
         ServerPlatform.current.fetching = endpoint
         server.settings.mcpEndpoints = [MCPEndpoint(name: "gh", url: "http://127.0.0.1:7470/mcp")]
-        let (_, wrapper, record) = try await driven("Contained")
+        let (job, wrapper, record) = try await driven("Contained", runner: ["container", "harness:echo"])
+        #expect(jobs.runsInContainer(job.agent.uuid))
+        #expect(record.runsInContainer)
         #expect(record.info.mcp == [MCPSwitch(name: "gh", on: true)], "its switch says on")
         func request(_ id: String, _ json: String) -> AgentProtocol_V1_WrapperMessage {
             .with { $0.mcp = .with { $0.id = id; $0.json = json; $0.client = "c1" } }
@@ -391,6 +399,20 @@ extension ServerTests {
         #expect(text.contains("isn't one of Visor's tools"), Comment(rawValue: text))
         #expect(endpoint.heard.withLock { $0.isEmpty }, "the endpoint never asked on its behalf")
         wrapper.finish()
+
+        // Driven, on Visor's own native runner: on this computer, as any
+        // native session, so it has them.
+        let (nativeJob, nativeWrapper, nativeRecord) = try await driven("On the native runner")
+        #expect(!jobs.runsInContainer(nativeJob.agent.uuid))
+        #expect(await eventually { nativeRecord.runsInContainer ? nil : true } == true)
+        nativeWrapper.send(request("n1", #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#))
+        let nativeListing = try #require(await nativeWrapper.mcp("n1"))
+        let nativeRunnerTools = parseJSON(nativeListing.json)?["result"]["tools"].array?.compactMap { $0["name"].string } ?? []
+        #expect(nativeRunnerTools.contains("gh__pr_create"), "a native runner's session lists them: \(nativeRunnerTools)")
+        nativeWrapper.send(request("n2", #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"gh__pr_create","arguments":{}}}"#))
+        let nativeCall = try #require(await nativeWrapper.mcp("n2"))
+        #expect((parseJSON(nativeCall.json)?["result"]["content"][0]["text"].string) == "made")
+        nativeWrapper.finish()
 
         // A native session, through Visor's MCP as it runs one here.
         let native = SessionRecord(info: SessionInfo(id: "native-session", agent: .claude, cwd: "/tmp", title: "Native", created: 0),

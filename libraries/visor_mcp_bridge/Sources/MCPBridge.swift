@@ -5,7 +5,7 @@ import VisorProtocol
 /// them: `initialize`, the tools' list (Visor's own, `approve` where asked
 /// for, and the MCP servers the computer passes on to the session, looked
 /// at again every 30 s and the agent told when they change; none for an
-/// agent on a runner), their calls (to the server, or for `approve` to the
+/// agent in a container), their calls (to the server, or for `approve` to the
 /// person), `ping`. Every call goes
 /// to the server through its link; what the agent is told goes out a line
 /// at a time.
@@ -17,7 +17,7 @@ package actor MCPBridge {
     /// Whether the agent runs in a container (VISOR_URL set).
     private let contained: Bool
     /// Whether the computer's passed-on MCP servers are offered. An agent
-    /// on a runner (VisorDriver's DrivenMCP) gets only Visor's own tools:
+    /// in a container (VisorDriver's DrivenMCP) gets only Visor's own tools:
     /// none of them listed, watched or called.
     private let passesOn: Bool
     private let timing: MCPTiming
@@ -139,10 +139,10 @@ package actor MCPBridge {
         }
     }
 
-    /// Why an agent on a runner can't call `name`: it isn't one of Visor's
+    /// Why an agent in a container can't call `name`: it isn't one of Visor's
     /// own tools, and the computer's passed-on servers aren't its.
     static func notPassedOn(_ name: String) -> String {
-        "\(name) isn't one of Visor's tools. An agent on a runner gets only Visor's own tools here, not the MCP servers this computer passes on to its own sessions; its other MCP servers are its container's."
+        "\(name) isn't one of Visor's tools. An agent in a container gets only Visor's own tools here, not the MCP servers this computer passes on to its own sessions; its other MCP servers are its container's."
     }
 
     /// A passed-on tool: the server passes it on, and its result comes back

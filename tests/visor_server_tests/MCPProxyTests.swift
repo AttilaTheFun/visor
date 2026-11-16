@@ -176,9 +176,10 @@ extension ServerTests {
         #expect(record.stored.mcpSwitched == nil)
     }
 
-    /// A driven session (its agent on a runner) gets none of them, though
-    /// its switch is on; a native one beside it still has them.
-    @Test func testADrivenSessionHasNoPassedOnServers() async throws {
+    /// A driven session in a container gets none of them, though its
+    /// switch is on; one on Visor's own native runner, and a native one
+    /// beside it, still have them.
+    @Test func testAContainerSessionHasNoPassedOnServers() async throws {
         #expect(setEndpoints(gh).status == 200)
         let driven = SessionRecord(info: SessionInfo(id: "D1", agent: .claude, cwd: "/tmp", title: "Runner", created: 0),
                                    process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
@@ -195,8 +196,17 @@ extension ServerTests {
         let listed = await ask("mcp_tools", as: driven)
         #expect(listed.text == "[]")
         let called = await ask("mcp_call", as: driven, text: #"{"tool":"gh__pr_create","arguments":{"title":"Sub-sessions"}}"#)
-        #expect(called.error?.contains("runs on a runner") ?? false, Comment(rawValue: called.error ?? "no error"))
+        #expect(called.error?.contains("runs in a container") ?? false, Comment(rawValue: called.error ?? "no error"))
         #expect(endpoint.heard.withLock { $0.isEmpty }, "the endpoint never asked for it")
+
+        // Driven, on Visor's own native runner: as any native session.
+        let onNativeRunner = SessionRecord(info: SessionInfo(id: "D2", agent: .claude, cwd: "/tmp", title: "Native runner", created: 0),
+                                           process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil), entries: [])
+        onNativeRunner.driven = true
+        onNativeRunner.runsInContainer = false
+        server.sessions.append(onNativeRunner)
+        let nativeRunner = await ask("mcp_tools", as: onNativeRunner)
+        #expect((parseJSON(nativeRunner.text ?? "")?.array?.map { $0["name"].string }) == ["gh__pr_create"], "a native runner's session has them")
 
         let native = try await self.ask("mcp_tools")
         #expect((parseJSON(native.text ?? "")?.array?.map { $0["name"].string }) == ["gh__pr_create"], "a native session's are unchanged")
