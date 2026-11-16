@@ -774,6 +774,30 @@ no longer in Visor.
   driver doesn't list an identifier the map names, the test finds the
   element by its label and records a known issue (`IsomerGap.swift`).
   "Driving the client" below has the rest.
+- The same suite headful, against an app built with `--config=drive`:
+  `//tests/feature_map_tests:feature_map_headful_{ios,android,macos}_test`
+  (manual: each in an invocation of its own, where the simulator, the
+  emulator's adb or the Mac's screen is; never on this Mac's own disk or
+  screen). Each launch goes through `fresh_launcher.sh`, which clears the
+  app's data (a headful app keeps the computer a test added) and runs
+  Isomer's launcher for the platform (`@isomer//drive/launchers`), which
+  passes a test's settings as `KEY=VALUE` (the iPhone's simulator gets them
+  as `SIMCTL_CHILD_`, which the iPhone app reads: `VisorLaunchSettings`)
+  or as Android's intent extras. On a Shireworks Mac slot with a simulator
+  of its own (the slot's user can create and boot one), with Visor's
+  `--config=drive` build installed:
+
+  ```sh
+  bazel test --test_env=ISOMER_SIMULATOR=<udid> //tests/feature_map_tests:feature_map_headful_ios_test
+  # an `android` lease, `adb connect`ed (from a slot: <the VM's gateway>:<port>)
+  bazel test --test_env=ADB=<adb> --test_env=ANDROID_SERIAL=<serial> \
+      //tests/feature_map_tests:feature_map_headful_android_test
+  ```
+
+  The regular width's suite is headless alone (a device's width is its
+  own). Where Isomer's Apple driver lists no identifier (most SwiftUI
+  controls in a List or Form row on the iPhone), the test takes the label
+  and records `IsomerGap.appleIdentifier`.
 - Try a server build against real agents without touching the installed
   one: `bazel run //tools/staging_server -- [port] [password]` (7533,
   `staging`) runs a `VisorServer` of its own — its own ports, a scratch
@@ -1055,7 +1079,15 @@ accessibility identifier or its label). Two builds can be driven:
   Isomer's accessibility driver. Launched with `ISO_DRIVER=<a hub's ws://
   URL>` (Android: `-e ISO_DRIVER …`; a simulator: `SIMCTL_CHILD_ISO_DRIVER`)
   the app dials out to it; without it, to `iso hub` on its machine. Never
-  in a release: such an app obeys whoever its launch names.
+  in a release: such an app obeys whoever its launch names. Every client
+  takes the launch settings (`VisorLaunchSettings.keys`: `fixture`,
+  `fixture.screen`, `fixture.appearance`, `fixture.orientation`,
+  `fixture.go`, `account`, `probe.open`; none secret) the same way: the
+  iPhone and Mac apps from their environment (`fixture=snapshot` or
+  `visor.fixture=snapshot`; on a simulator `SIMCTL_CHILD_fixture=snapshot`)
+  before UserDefaults (the `-visor.<key> <value>` launch arguments), and
+  Android from its launch intent's extras (`--es fixture snapshot --es
+  account fixture`).
 
 An agent finding its way around the client, in a leased Linux container
 with the repository cloned:
@@ -1152,31 +1184,70 @@ repository's own (`visor-jit`, which a fork never reaches, with
 own runners, which a public repository has for free, so Shireworks'
 machines are left to CI and the agents (Logan, 5 Nov 2026):
 
-Five jobs side by side, as Isomer's proof pictures its stories: the
-iPhone and Android, each upright and on its side, and the Mac. Each opens
-the fixture's screens one by one and pictures each once it has settled.
+Five jobs side by side: the iPhone and Android, each upright and on its
+side, and the Mac. The iPhone's and Android's take their pictures through
+Isomer's driver, from apps built with `--config=drive` (the proof's builds
+alone, never a release's): `//tests/feature_map_tests:feature_map_proof_ios`
+and `…_android` (`proof/FeatureMapProof.swift`), built on the job's runner
+by Bazel while its simulator or emulator boots. One launch of the fixture
+walks FEATURE_MAP.md to the screens it reaches by a tap (Sessions, Add
+Computer and its MultiPass sign-in, New Session, the chat, its details,
+the goal's chat), and each screen whose fixture's data differs (the
+question, the machines, the Runner's accounts, the earlier rows) or that
+the fixture opens without a tap (the model sheet over the chat's approval,
+"/" in the composer, the search's words: a field typed into shows its
+caret and keyboard) is a launch of its own. Each is pictured
+(`HeadlessApp.picture`, by Isomer's launcher: simctl's masked screenshot,
+adb's screencap) once the driver has found the screen's node (its
+"you're there when") and two pictures in a row are the same. The screens
+and their ids are as before (proof_ios.sh's SCREENS, snapshots.py's for
+Android), and each script names its pictures as the proof's parts are
+named, so `proof_make.sh` is unchanged. A walk that stops (an element not
+found) leaves its screens to launches of their own, and fails the test.
 
 - The iPhone (`tools/ci/proof_ios.sh <apps> <out> portrait|landscape`, on
   an `xcode-27` Mac): the app on an iPhone 17 simulator of iOS 27.2, made
   for the run, its status bar held still, keyboard suggestions off and the
   light look. GitHub rolls a new image out over days, and the older one had
   iOS 27.0 alone, whose pictures differ from 27.2's in most screens: where
-  the image hasn't got 27.2, it is downloaded. Each screen is a `simctl
-  launch` with the fixture's arguments, pictured with `simctl io
-  screenshot --mask=black` once two pictures in a row match. No XCUITest:
-  its launches made the proof take 26 minutes and, on a slow runner, fail.
-  On its side the app turns itself (`-visor.fixture.orientation
-  landscape`, which its delegate answers with landscapeRight alone), and
-  the picture, the device's upright frame, is turned to stand.
+  the image hasn't got 27.2, it is downloaded. No XCUITest: its launches
+  made the proof take 26 minutes and, on a slow runner, fail. On its side
+  the app turns itself (its `fixture.orientation` setting, which its
+  delegate answers with landscapeRight alone), and the picture, the
+  device's upright frame, is turned to stand.
 - The Mac (`tools/ci/proof_mac.sh`, on another `xcode-27` Mac):
   Visor.app, signed ad hoc as a build on Linux is, opened on each of the
   fixture's screens in the light look and pictured cropped to its window.
+  Not through the driver yet: Isomer's Mac launcher takes no launch
+  arguments (the caret held lit, visor#244) and its screen is the
+  runner's 1024 by 768 unless the script makes it 1920 by 1080.
 - Android (`tools/ci/proof_android.sh <apps> <out> portrait|landscape`, on
   Ubuntu): blue Visor's APK, built for x86_64, on an emulator under the
   runner's KVM, made as Isomer's hermetic one is (API 34, 1080 by 1920 at
   420 dpi), its status bar held still by System UI's demo mode, and on its
-  side turned a quarter (auto-rotate off). Each of snapshots.py's screens
-  is opened with its intent and cut below the status bar.
+  side turned a quarter (auto-rotate off, held so while the test runs).
+  Each picture is cut below the status bar. By hand, against a device adb
+  already reaches (a Shireworks `android` lease): `PROOF_ANDROID_SERIAL=<serial>
+  ADB=<adb> tools/ci/proof_android.sh <apps> <out>`.
+
+The driver's proof takes about as long as the launches it replaced on the
+iPhone, and less on Android (15 Nov 2026; the screens alone, the test
+built): on a Shireworks Mac slot the iPhone's 13 screens took 130 s
+upright and 151 s on its side, against the old script's 136 s and 142 s
+on the same slot; on an `android`
+lease Android's 11 took 77 s upright and 78 s on its side, where the old
+script's fixed eight seconds a screen took 108 s and 139 s on GitHub's
+runner. Isomer's picture (a request its launcher polls for, then simctl's
+or adb's) and a launch's attaching (about 5 s on the iPhone, 1 s on
+Android) cost what the fixed waits did. On its side the iPhone walks
+nothing: the app turns itself on an upright simulator, where Isomer's
+Apple driver's taps on a list's rows don't take, so each screen is a
+launch of its own. The gains are that a screen is pictured once it is
+there rather than after a guess (the search's 20 s are gone), that the
+walk is the feature map's, and the pictures are the same: upright on the
+iPhone, the walked screens differ from the launched ones by a few hundred
+pixels at most (the sheet's Cancel or Done, as a tap leaves it), the
+others not at all.
 
 The iPhone's UI cases are not in the proof: `tools/ios_ui_tests.sh` runs
 them, by hand.
