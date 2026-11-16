@@ -275,19 +275,22 @@ extension ServerTests {
         #expect(hello["result"]["serverInfo"]["name"].string == "visor")
         #expect(hello["result"]["protocolVersion"].string == "2025-06-18")
 
-        let listed = try #require(parseJSON(try #require(await wrapper.mcp("w2")).json))
+        let listing = try #require(await wrapper.mcp("w2"))
+        let listed = try #require(parseJSON(listing.json))
         #expect(listed["id"] == .string("two"), "the agent's own id, whatever its kind")
         let tools = listed["result"]["tools"].array?.compactMap { $0["name"].string } ?? []
         #expect(tools.contains("list_sessions") && tools.contains("send_message") && tools.contains("read_inbox"))
         #expect(!tools.contains("approve"), "the wrapper's own")
 
-        let call = try #require(parseJSON(try #require(await wrapper.mcp("w3")).json))
+        let calling = try #require(await wrapper.mcp("w3"))
+        let call = try #require(parseJSON(calling.json))
         let text = call["result"]["content"][0]["text"].string ?? ""
         #expect(call["result"]["isError"] == .bool(false), Comment(rawValue: text))
         #expect(text.contains("other-session"), Comment(rawValue: text))
         #expect(!text.contains(job.agent.uuid), "its own session isn't another: it asks as itself")
 
-        let unreadable = try #require(parseJSON(try #require(await wrapper.mcp("w4")).json))
+        let refusing = try #require(await wrapper.mcp("w4"))
+        let unreadable = try #require(parseJSON(refusing.json))
         #expect(unreadable["error"]["code"] == .number(-32700))
         #expect(!wrapper.down.contains { $0.mcp.id.isEmpty && $0.mcp.json.contains("notifications/initialized") }, "a notification isn't answered")
         wrapper.finish()
