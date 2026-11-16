@@ -107,7 +107,7 @@ import Testing
 
     @Test func testAContainerRunnerIsGivenTheAddressContainersReach() async throws {
         let jobs = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434",
-                            containerURL: "http://visor.multipass.internal:7434", log: { _ in })
+                            containerURL: VisorDriver.containerURL(port: 7434), log: { _ in })
         _ = jobs.queueStart(start("Native"))
         _ = jobs.queueStart(start("Contained"))
         let nativeClaim = await jobs.claim(claim(["native", "harness:claude"]), wait: .zero)
@@ -116,8 +116,8 @@ import Testing
         #expect(native.driverURL == "http://127.0.0.1:7434")
         let containedClaim = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
         let contained = try #require(containedClaim)
-        #expect(contained.agent.dispatcherURL == "http://visor.multipass.internal:7434")
-        #expect(contained.driverURL == "http://visor.multipass.internal:7434")
+        #expect(contained.agent.dispatcherURL == "http://visor.agent.internal:7434")
+        #expect(contained.driverURL == "http://visor.agent.internal:7434")
         #expect((jobs.claimed[contained.agent.uuid]?.job.driverURL) == "http://127.0.0.1:7434", "the job kept keeps its own")
     }
 
@@ -251,6 +251,115 @@ import Testing
         }
         #expect(back.count == 2)
         #expect(back.last?.hasPrefix("s13 c-13 /Users/b: ") == true, Comment(rawValue: back.last ?? ""))
+    }
+
+    /// A restart whose jobs.json lacks a moved session's agent (missing,
+    /// or from a build before it): the move kept on the session is adopted,
+    /// so its runner's renewal, report and redial are the session's, not
+    /// dropped (visor#424).
+    @Test func aMoveKeptOnTheSessionIsAdoptedWithoutJobsJson() async throws {
+        let jobs = queue()
+        let move = AgentJobMove(agent: "A1B2C3D4-0000-4000-8000-000000000001", session: "s20", title: "Moved", resume: "c-20",
+                                cwd: "/Users/a", runsOn: "container", workingDirectory: "/Volumes/Sessions/claude/a1", conversation: "c-21")
+        jobs.adopt([move], expected: [move.agent])
+        let agent = AgentProtocol_V1_AgentID.with { $0.uuid = move.agent }
+        #expect(jobs.session(of: move.agent) == "s20")
+        #expect((jobs.move(of: agent)?.resume) == "c-20", "its conversation here, for the Conversation call")
+        #expect(jobs.renew(agent) != nil, "its runner's renewal is taken")
+        #expect(jobs.restored.isEmpty, "renewed: its runner is back")
+        let held = try #require(jobs.claimed[Self.lower(move.agent)])
+        #expect(held.job.resumeSessionID == "c-21")
+        #expect(held.job.workingDirectory == "/Volumes/Sessions/claude/a1")
+        #expect(held.job.labels == ["runs-on:container"])
+        var started: [String] = []
+        jobs.moveStarted = { session, agent, conversation in started.append("\(session) \(agent) \(conversation)") }
+        jobs.report(.with { $0.agent = agent; $0.started = .with { $0.runner = "primary"; $0.sessionID = "c-22" } })
+        #expect(started == ["s20 \(Self.lower(move.agent)) c-22"])
+        #expect(jobs.queueResume(move) == .failure(AgentJobRefusal("The session is moving to a runner already.")))
+    }
+
+    private static func lower(_ id: String) -> String { id.lowercased() }
+
+    /// One whose runner never comes back after the restart: given out
+    /// again once its grace is over, not counted, its session told.
+    @Test func anAdoptedClaimThatLapsesIsQueuedAgainUncountedAndSaysSo() async throws {
+        let jobs = queue()
+        var told: [String] = []
+        var back: [String] = []
+        jobs.moveRequeued = { session, why in told.append("\(session): \(why)") }
+        jobs.moveFailed = { session, _, _, _ in back.append(session) }
+        let move = AgentJobMove(agent: "b1", session: "s21", title: "Moved", resume: "c-21", cwd: "/tmp", runsOn: "container")
+        jobs.adopt([move], expected: ["b1"])
+        #expect(jobs.restored == ["b1"])
+        for _ in 0..<(JobQueue.attempts + 1) {
+            jobs.releaseLapsed(now: Date().addingTimeInterval(JobQueue.redialGrace + 1))
+            if told.isEmpty { Issue.record("not told") }
+            let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+            let job = try #require(claimed, "given out again")
+            #expect(job.agent.uuid == "b1")
+            #expect(job.resumeSessionID == "c-21")
+            jobs.claimed["b1"]?.expires = Date().addingTimeInterval(-1)
+            jobs.restored.insert("b1")
+        }
+        #expect(back.isEmpty, "never given up for a restart")
+        #expect(told.first?.hasPrefix("s21: Its runner's agent didn't come back after Visor restarted") == true, Comment(rawValue: told.first ?? ""))
+        #expect((jobs.returns["b1"] ?? 0) == 0)
+    }
+
+    /// A release because the dispatcher or driver was out of reach, or the
+    /// host restarted, isn't a failed start; anything else still is.
+    @Test func unreachableOrRestartReleasesAreNotCounted() async throws {
+        let jobs = queue()
+        var back: [String] = []
+        jobs.moveFailed = { session, _, _, _ in back.append(session) }
+        #expect(jobs.queueResume(AgentJobMove(session: "s22", title: "A", resume: "c-22", cwd: "/tmp", runsOn: "container")) == .success("s22"))
+        let reasons = ["the dispatcher was unreachable", "the driver couldn't be reached: connection refused", "its host is restarting",
+                       "the primary container is released: probe failed", "its claim wasn't renewed by 2026-11-16T18:00:00Z"]
+        for reason in reasons + reasons {
+            let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+            let job = try #require(claimed, "still given out after \(reason)")
+            jobs.report(.with { $0.agent = job.agent; $0.released = .with { $0.reason = reason } })
+        }
+        #expect(back.isEmpty)
+        #expect(jobs.returns.values.allSatisfy { $0 == 0 })
+        #expect(JobQueue.mayBeStartFailure("its agent ended (status 1) without saying how it went"))
+        #expect(JobQueue.mayBeStartFailure("the runner couldn't start its agent: no such file"))
+        #expect(!JobQueue.mayBeStartFailure("Unreachable"))
+    }
+
+    /// Stop Agent lets the job go but keeps the session moved; the agent
+    /// failing on its way out doesn't bring the session back.
+    @Test func aStoppedAgentsJobGoesButItsSessionStaysMoved() async throws {
+        let jobs = queue()
+        var back: [String] = []
+        jobs.moveFailed = { session, _, _, _ in back.append(session) }
+        #expect(jobs.queueResume(AgentJobMove(agent: "c1", session: "s23", title: "A", resume: "c-23", cwd: "/tmp", runsOn: "container")) == .success("s23"))
+        let claimed = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        let job = try #require(claimed)
+        #expect(job.agent.uuid == "c1", "the agent the server chose")
+        jobs.stopJobs(of: "s23")
+        #expect(jobs.renew(job.agent) == nil, "its runner's renewal is refused")
+        #expect(jobs.session(of: "c1") == "s23", "still the session's")
+        jobs.report(.with { $0.agent = job.agent; $0.failed = .with { $0.reason = "terminated" } })
+        #expect(back.isEmpty)
+        let kept = try #require(jobs.kept(session: "s23"))
+        #expect(kept.agent == "c1" && kept.resume == "c-23" && kept.runsOn == "container")
+        #expect(jobs.queueResume(AgentJobMove(agent: "c2", session: "s23", title: "A", resume: "c-23", cwd: "/tmp", runsOn: "container")) == .success("s23"))
+    }
+
+    /// A job queued again while its agent was in fact alive (its runner
+    /// slow to come back) is that agent's again when it renews or its
+    /// wrapper dials in: never given to a second agent.
+    @Test func aJobQueuedAgainIsTakenBackByItsLiveAgent() async throws {
+        let jobs = queue()
+        jobs.adopt([AgentJobMove(agent: "d1", session: "s24", title: "A", resume: "c-24", cwd: "/tmp", runsOn: "container")], expected: ["d1"])
+        jobs.releaseLapsed(now: Date().addingTimeInterval(JobQueue.redialGrace + 1))
+        #expect(jobs.waiting.map(\.agent.uuid) == ["d1"])
+        jobs.heard("D1")
+        #expect(jobs.waiting.isEmpty)
+        #expect(jobs.claimed["d1"] != nil)
+        let other = await jobs.claim(claim(["container", "harness:claude"]), wait: .zero)
+        #expect(other == nil, "not given out twice")
     }
 
     @Test func testTheNativeRunnerGivesItsWrapperTheJob() async throws {

@@ -19,12 +19,18 @@ extension VisorServer {
                 record.process = process
             }
             record.driven = true
-            // A session moved to a runner: where it works there now.
-            if info.cwd != "~", !info.cwd.isEmpty, record.info.cwd != info.cwd { record.info.cwd = info.cwd }
+            // A session moved to a runner: where it works there now, which
+            // a later agent of the session works in too (resumeDriven).
+            if info.cwd != "~", !info.cwd.isEmpty {
+                if record.info.cwd != info.cwd { record.info.cwd = info.cwd }
+                record.move?.workingDirectory = info.cwd
+            }
             if !record.isBound { bind(record) }
             if record.info.archived { record.setArchived(false) }
             setAgentState(record, .running)
             handOverInbox(record)
+            // What waited for its agent (a start, a restart) goes over now.
+            release(record)
             saveArchiveNow()
             broadcastSessions()
             return record
@@ -42,13 +48,34 @@ extension VisorServer {
 
     /// At the driver's start: every session a runner's agent runs, as the
     /// archive kept it, given its driven process again (the archive was
-    /// read before there was a driver, and gave it one of this computer's).
-    /// Its wrapper dials back and carries on; nothing starts it here.
+    /// read before there was a driver, and gave it one that starts
+    /// nothing), and its move known to the dispatcher again, whatever
+    /// jobs.json kept: its runner's renewals and reports, and its wrapper's
+    /// redial, are its session's. Its wrapper dials back and carries on;
+    /// nothing starts it here. One whose agent doesn't come back has its
+    /// job queued again (JobQueue.redialGrace), and says so.
     package func takeUpDrivenSessions() {
         guard let drivenProcess else { return }
+        var moves: [AgentJobMove] = []
+        var expected: Set<String> = []
         for record in sessions where record.driven {
             record.replaceProcess(drivenProcess(record.info))
+            if record.move == nil, let kept = jobs?.kept(session: record.info.id) {
+                record.move = kept
+                Self.log("driven session \(record.info.title) (\(record.info.id)): its move taken from the dispatcher's jobs (agent \(kept.agent))")
+            }
+            guard let move = record.move, !move.agent.isEmpty else {
+                Self.log("driven session \(record.info.title) (\(record.info.id)): which runner's agent carries it on isn't known here; "
+                    + "it waits for its wrapper, or POST /api/sessions/\(record.info.id)/moveBack {resume} brings it back")
+                record.notice = Self.dated("Visor doesn't know which runner's agent carries this session on. If it doesn't come back, "
+                    + "move it back to this computer.")
+                continue
+            }
+            moves.append(move)
+            if !record.info.archived, record.info.agentState != .stopped { expected.insert(move.agent) }
         }
+        jobs?.adopt(moves, expected: expected)
+        if !moves.isEmpty || sessions.contains(where: \.driven) { saveArchiveNow() }
     }
 
     /// A job for a runner, from a client (an envelope as for a session: its
@@ -92,8 +119,9 @@ extension VisorServer {
             guard let remote = project.remote.flatMap(Self.cloneURL) else { return nil }
             return AgentJobSource(repository: remote, ref: project.branch ?? "", name: (project.path as NSString).lastPathComponent)
         }
-        let move = AgentJobMove(session: record.info.id, title: record.info.title, model: record.info.model ?? "",
-                                effort: record.info.effort ?? "", resume: resume, cwd: cwd, sources: sources, runsOn: runsOn)
+        let move = AgentJobMove(agent: UUID().uuidString.lowercased(), session: record.info.id, title: record.info.title,
+                                model: record.info.model ?? "", effort: record.info.effort ?? "", resume: resume, cwd: cwd,
+                                sources: sources, runsOn: runsOn)
         // The agent here goes first, then the session waits for the runner.
         let old = record.process
         await old.end(within: .seconds(5))
@@ -107,6 +135,10 @@ extension VisorServer {
             Self.log("moving \(record.info.title) to a runner: \(refusal.reason)")
             return .failure(refusal)
         }
+        record.move = move
+        // What an earlier move, or its coming back, said is past: a stale
+        // notice is what misled visor#424.
+        record.notice = nil
         setAgentState(record, .starting)
         Self.log("moving \(record.info.title) (\(record.info.id)) to a \(runsOn) runner, carrying on \(resume), with \(sources.count) repositories")
         saveArchiveNow()
@@ -119,8 +151,10 @@ extension VisorServer {
     /// `cwd`, with a notice saying why. What a move that fails or is given
     /// up does on its own (VisorDriver's JobQueue), and `POST
     /// /api/sessions/<id>/moveBack {resume, cwd}` for one left waiting.
+    /// Unless `loud` is false (asked for by the person), every device that
+    /// takes pushes is told too: a session never comes back unannounced.
     @discardableResult
-    package func moveBack(_ id: String, resume: String, cwd: String, why: String) -> Result<Void, AgentJobRefusal> {
+    package func moveBack(_ id: String, resume: String, cwd: String, why: String, loud: Bool = true) -> Result<Void, AgentJobRefusal> {
         guard let record = session(id) else { return .failure(AgentJobRefusal("No such session.")) }
         guard record.driven else { return .failure(AgentJobRefusal("“\(record.info.title)” runs on this computer already.")) }
         guard !resume.isEmpty else {
@@ -129,13 +163,15 @@ extension VisorServer {
         jobs?.forget(session: id)
         record.process.stop()
         record.driven = false
+        record.move = nil
         if !cwd.isEmpty { record.info.cwd = cwd }
         // Prompts skipped only in a container: here they are asked again,
         // before its agent starts (Claude takes the mode at launch).
         record.setPermissions(skip: false)
         record.replaceProcess(makeProcess(record.info, resume: resume))
-        record.notice = "Back on this computer: \(why)"
+        record.notice = Self.dated("Back on this computer: \(why)")
         Self.log("moved \(record.info.title) (\(id)) back to this computer, carrying on \(resume): \(why)")
+        if loud { push(Self.pushName(for: record.info), "Back on this computer: \(why)", session: id, kind: "failed") }
         launchAgent(record)
         release(record)
         saveArchiveNow()
@@ -150,7 +186,7 @@ extension VisorServer {
         let id = call.parts[1]
         let current = session(id)?.info.cwd ?? ""
         let cwd = call.body.cwd ?? (current.hasPrefix("/Volumes/") ? "" : current)
-        switch moveBack(id, resume: call.body.resume ?? "", cwd: cwd, why: "moved back by request") {
+        switch moveBack(id, resume: call.body.resume ?? "", cwd: cwd, why: "moved back by request", loud: false) {
         case .success: return .json(Envelope.sessions(session(id).map { [$0.info] } ?? []).encoded())
         case .failure(let refusal): return HTTPResponse(400, Envelope.error(refusal.reason).encoded())
         }

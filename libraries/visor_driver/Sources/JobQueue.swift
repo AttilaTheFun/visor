@@ -20,7 +20,7 @@ final class JobQueue: AgentJobQueue {
     /// The driver the jobs' wrappers dial (this server's).
     let driverURL: String
     /// This server's driver and dispatcher as a container reaches them
-    /// (through MultiPass's dial-in: `http://visor.multipass.internal:7434`),
+    /// (through Shireworks' agent-proxy: `http://visor.agent.internal:7434`),
     /// given to a runner whose capabilities say `container` in place of
     /// both; nil, and containers are given the same addresses as the rest.
     let containerURL: String?
@@ -51,11 +51,28 @@ final class JobQueue: AgentJobQueue {
     static let attempts = 3
     /// Claimed jobs by agent id, with their runner and expiry.
     var claimed: [String: (job: AgentProtocol_V1_Job, runner: String, expires: Date)] = [:]
+    /// Claims taken up when this server started (from jobs.json, or from a
+    /// driven session's move in sessions.json: adopt), until their runner
+    /// renews one or its agent starts again: a lapse or a release of one
+    /// is this server's restart, not an agent that failed to start, and
+    /// isn't counted toward `attempts` (JobQueue+Restart).
+    var restored: Set<String> = []
+    /// How long a claim taken up at a start holds before its runner renews
+    /// it: its renewals, and its wrapper's redial (with backoff), have this
+    /// long to come back before its job is given out again (and its session
+    /// told so: moveRequeued).
+    static let redialGrace: TimeInterval = 180
     private var pollers: [UUID: CheckedContinuation<Void, Never>] = [:]
     /// A move whose job failed or was given up: its session, the
     /// conversation it carries on, where it worked here, and why (the
     /// server brings it back: VisorServer.moveBack).
     var moveFailed: (@MainActor (_ session: String, _ resume: String, _ cwd: String, _ why: String) -> Void)?
+    /// A moved session's agent started on its runner: the harness's own
+    /// session there (Started's), which a later agent resumes.
+    var moveStarted: (@MainActor (_ session: String, _ agent: String, _ conversation: String) -> Void)?
+    /// A moved session's job given out again because its runner's agent
+    /// didn't come back after this server restarted, and why.
+    var moveRequeued: (@MainActor (_ session: String, _ why: String) -> Void)?
 
     /// `file`: where the jobs are kept, and taken up from at start.
     init(dispatcherURL: String, driverURL: String, containerURL: String? = nil, harness: String = "claude", file: URL? = nil,
@@ -68,11 +85,14 @@ final class JobQueue: AgentJobQueue {
         self.log = log
         guard let kept = Self.read(file) else { return }
         waiting = kept.waiting.map(\.job)
-        let expires = Date().addingTimeInterval(Self.claimLength)
+        // Long enough for the runner, and the wrapper redialling, to find
+        // this server again; restored, so their going isn't a failed start.
+        let expires = Date().addingTimeInterval(Self.redialGrace)
         for claim in kept.claimed {
             var job = claim.job.job
             job.claimExpires = .init(date: expires)
             claimed[claim.job.uuid] = (job, claim.runner, expires)
+            restored.insert(claim.job.uuid)
         }
         for move in kept.moves {
             moves[move.agent] = (move.resume, move.cwd)
@@ -113,23 +133,15 @@ final class JobQueue: AgentJobQueue {
         guard !agents.contains(where: { agent in waiting.contains { $0.agent.uuid == agent } || claimed[agent] != nil }) else {
             return .failure(AgentJobRefusal("The session is moving to a runner already."))
         }
-        let id = UUID().uuidString.lowercased()
-        var job = AgentProtocol_V1_Job()
-        job.agent.uuid = id
-        job.agent.dispatcherURL = dispatcherURL
-        job.harness = harness
-        job.title = move.title
-        job.model = move.model
-        job.effort = move.effort
-        job.driverURL = driverURL
-        job.resumeSessionID = move.resume
-        job.sources = move.sources.map { source in .with { $0.repository = source.repository; $0.ref = source.ref; $0.name = source.name } }
-        if !move.runsOn.isEmpty { job.labels.append(Self.runsOn + move.runsOn) }
+        let id = move.agent.isEmpty ? UUID().uuidString.lowercased() : Self.key(move.agent)
+        let job = resumeJob(move, agent: id)
         moves[id] = (move.resume, move.cwd)
         movedSessions[id] = session
+        returns[id] = nil
         waiting.append(job)
         save()
-        log("dispatcher: queued \(id) for \(session) (\(job.title)), carrying on \(move.resume) on a \(move.runsOn.isEmpty ? "any" : move.runsOn) runner")
+        log("dispatcher: queued \(id) for \(session) (\(job.title)), carrying on \(job.resumeSessionID) on a \(move.runsOn.isEmpty ? "any" : move.runsOn) runner"
+            + (move.workingDirectory.isEmpty ? "" : " in \(move.workingDirectory)"))
         wake()
         return .success(session)
     }
@@ -143,6 +155,25 @@ final class JobQueue: AgentJobQueue {
         if dropped > 0 { log("dispatcher: \(session) ended: its job dropped") }
     }
 
+    /// The job that carries `move` on as `agent`: its conversation (the
+    /// runner's own, once known), in the folder its agent worked in there,
+    /// with its repositories, on a runner of its kind.
+    func resumeJob(_ move: AgentJobMove, agent: String) -> AgentProtocol_V1_Job {
+        var job = AgentProtocol_V1_Job()
+        job.agent.uuid = agent
+        job.agent.dispatcherURL = dispatcherURL
+        job.harness = harness
+        job.title = move.title
+        job.model = move.model
+        job.effort = move.effort
+        job.driverURL = driverURL
+        job.resumeSessionID = move.resumeOnRunner
+        job.workingDirectory = move.workingDirectory
+        job.sources = move.sources.map { source in .with { $0.repository = source.repository; $0.ref = source.ref; $0.name = source.name } }
+        if !move.runsOn.isEmpty { job.labels.append(Self.runsOn + move.runsOn) }
+        return job
+    }
+
     /// A moved agent that won't carry its session on: the session told to
     /// come back, and the move forgotten.
     private func endMove(of agent: String, why: String) {
@@ -154,12 +185,13 @@ final class JobQueue: AgentJobQueue {
 
     /// An agent's job gone, waiting or claimed (its runner's next renewal
     /// is refused), and what was kept for it.
-    private func forget(agent: String) {
+    func forget(agent: String) {
         waiting.removeAll { $0.agent.uuid == agent }
         claimed[agent] = nil
         moves[agent] = nil
         movedSessions[agent] = nil
         returns[agent] = nil
+        restored.remove(agent)
     }
 
     /// The session an agent is: a moved session's, else the agent's own id
@@ -201,11 +233,15 @@ final class JobQueue: AgentJobQueue {
     }
 
     /// A claim kept: its new expiry, or nil when it isn't held any more.
+    /// One whose job was queued again meanwhile (its claim lapsed while
+    /// this server restarted) is its runner's again, not given out twice.
     func renew(_ agent: AgentProtocol_V1_AgentID) -> Date? {
         let id = Self.key(agent.uuid)
+        takeBack(id, why: "renewed")
         guard let held = claimed[id] else { return nil }
         let expires = Date().addingTimeInterval(Self.claimLength)
         claimed[id] = (held.job, held.runner, expires)
+        restored.remove(id)
         return expires
     }
 
@@ -215,9 +251,12 @@ final class JobQueue: AgentJobQueue {
         let id = Self.key(report.agent.uuid)
         switch report.event {
         case .started(let started):
+            takeBack(id, why: "started")
             returns[id] = nil
+            restored.remove(id)
             save()
             log("dispatcher: \(id) started by \(started.runner) (session \(started.sessionID))")
+            if let session = movedSessions[id], !started.sessionID.isEmpty { moveStarted?(session, id, started.sessionID) }
         case .progress(let progress):
             log("dispatcher: \(id): \(progress.text)")
         case .blocked(let blocked):
@@ -227,12 +266,16 @@ final class JobQueue: AgentJobQueue {
             save()
             log("dispatcher: \(id) completed\(completed.summary.isEmpty ? "" : ": \(completed.summary.prefix(120))")")
         case .failed(let failed):
-            claimed[id] = nil
+            // Only the job the session holds brings it back: an agent let
+            // go (Stop Agent, a restart) failing on its way out doesn't.
+            let held = claimed.removeValue(forKey: id) != nil
+            restored.remove(id)
             save()
-            log("dispatcher: \(id) failed: \(failed.reason)")
-            endMove(of: id, why: failed.reason)
+            log("dispatcher: \(id) failed: \(failed.reason)" + (held ? "" : " (its job had been let go: nothing more)"))
+            if held { endMove(of: id, why: failed.reason) }
         case .released(let released):
-            requeue(id, why: "released: \(released.reason)")
+            let counts = !restored.contains(id) && Self.mayBeStartFailure(released.reason)
+            requeue(id, why: "released: \(released.reason)", counts: counts)
         case .none:
             break
         }
@@ -272,13 +315,46 @@ final class JobQueue: AgentJobQueue {
         return job.harness.isEmpty || capabilities.contains("harness:\(job.harness)")
     }
 
-    /// Claims not renewed in time, released.
-    private func releaseLapsed(now: Date = Date()) {
-        for (id, held) in claimed where held.expires < now { requeue(id, why: "its claim lapsed") }
+    /// Claims not renewed in time, released. One taken up at this server's
+    /// start whose runner never came back is given out again, uncounted,
+    /// and its session told (moveRequeued).
+    func releaseLapsed(now: Date = Date()) {
+        for (id, held) in claimed where held.expires < now {
+            let afterRestart = restored.contains(id)
+            requeue(id, why: afterRestart ? "its runner didn't renew it within \(Int(Self.redialGrace / 60)) minutes of this server's restart"
+                                          : "its claim lapsed", counts: !afterRestart)
+            if afterRestart, let session = movedSessions[id], waiting.contains(where: { $0.agent.uuid == id }) {
+                moveRequeued?(session, "Its runner's agent didn't come back after Visor restarted: its job is queued again for a runner, "
+                    + "carrying its conversation on.")
+            }
+        }
     }
 
-    private func requeue(_ id: String, why: String) {
-        guard let held = claimed.removeValue(forKey: id) else { return }
+    /// A claimed job back at the front of the queue. `counts`: as one that
+    /// came back without starting (`attempts`); a release caused by this
+    /// server's restart, or by the dispatcher or driver being out of reach,
+    /// doesn't (mayBeStartFailure).
+    func requeue(_ id: String, why: String, counts: Bool = true) {
+        guard let held = claimed.removeValue(forKey: id) else {
+            if waiting.contains(where: { $0.agent.uuid == id }) {
+                log("dispatcher: \(id) \(why), but it is queued already")
+            } else if let session = movedSessions[id] {
+                log("dispatcher: \(id) (\(session)) \(why), but its job had been let go")
+            } else {
+                log("dispatcher: \(id) \(why), but this dispatcher holds no job of that agent")
+            }
+            return
+        }
+        restored.remove(id)
+        guard counts else {
+            var job = held.job
+            job.clearClaimExpires()
+            waiting.insert(job, at: 0)
+            save()
+            log("dispatcher: \(id) \(why): queued again (not counted as a failed start)")
+            wake()
+            return
+        }
         let returned = (returns[id] ?? 0) + 1
         returns[id] = returned
         guard returned < Self.attempts else {
