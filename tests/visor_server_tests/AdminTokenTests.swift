@@ -181,6 +181,7 @@ extension ServerTests {
         #expect(server.adminToken.admits(first))
         let again = try await LocalServerCall(method: "POST", path: "/api/admin-token").send(through: system, socket: path)
         #expect(again.status == 409)
+        #expect(ServerCommand.why(again) == AdminToken.Refusal.exists.message, "the CLI says why")
 
         let unshown = try await LocalServerCall(method: "POST", path: "/api/admin-token/rotate").send(through: system, socket: path)
         #expect(unshown.status == 403, "the socket doesn't rotate it without the current one")

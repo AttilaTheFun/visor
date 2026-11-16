@@ -67,6 +67,7 @@ extension ServerCommand {
 
     /// What a refused answer says.
     static func why(_ answer: (status: Int, body: String)) -> String {
-        parseJSON(answer.body)?["error"].string ?? "the server answered \(answer.status)"
+        let said = parseJSON(answer.body)
+        return said?["message"].string ?? said?["error"].string ?? "the server answered \(answer.status)"
     }
 }
