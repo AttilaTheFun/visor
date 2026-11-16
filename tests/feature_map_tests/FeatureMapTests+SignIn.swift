@@ -34,10 +34,15 @@ extension FeatureMapTests {
             screen.presented.contains { $0.title == "Sign In to Claude" } || screen.has(label: "Open Sign-In Page")
         }
 
-        /// The prompt, from the alert: the page opened, and the code asked for.
+        /// The prompt, from the alert: the page opened, Visor come back to
+        /// from it, and the code asked for.
         @discardableResult
         private func prompt(_ app: HeadlessApp) throws -> HeadlessScreen {
             try app.tap("Open Sign-In Page")
+            // On a phone the page opens in the browser, in front of Visor:
+            // back to Visor, as from the page (headless, where Visor never
+            // leaves, it's active already and asks a moment after).
+            if !VisorLaunch.headless { try app.scene(.active) }
             let screen = try app.screen { FeatureMapNode.signInCode.isShown(on: $0) }
             FeatureMapNode.signInCode.expectShown(on: screen)
             return screen
