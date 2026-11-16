@@ -187,6 +187,18 @@ public final class SessionTranscript {
             changed()
         }
     }
+    /// The sign-in page (`signIn`) whose code has been sent, from the
+    /// composer or the prompt that asks for it: nothing more to ask for
+    /// while the sign-in ends.
+    @ObservationIgnored private var _signInCodeSent: String? = nil
+    public var signInCodeSent: String? {
+        get { _ = tick; return _signInCodeSent }
+        set {
+            guard newValue != _signInCodeSent else { return }
+            _signInCodeSent = newValue
+            changed()
+        }
+    }
     /// A tool call waiting for Allow or Deny.
     @ObservationIgnored private var _pendingApproval: ApprovalRequest? = nil
     public var pendingApproval: ApprovalRequest? {

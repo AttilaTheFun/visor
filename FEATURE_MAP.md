@@ -39,6 +39,7 @@ flowchart TD
     Chat["Session chat"]
     Approval["Approval controls<br/>(in the chat)"]
     Question["Question sheet"]
+    SignInCode["Sign-in code prompt"]
     Model["Model sheet"]
     AllModels["All Models"]
     Details["Session details<br/>(inspector)"]
@@ -83,6 +84,8 @@ flowchart TD
     Approval -->|"tap answer"| Question
     Chat -.->|"the agent asks a question"| Question
     Question -->|"tap approval-‹option›, tap question-send"| Chat
+    Chat -.->|"the agent asks for Claude's sign-in"| SignInCode
+    SignInCode -->|"tap sign-in-send or tap sign-in-cancel"| Chat
     Chat -->|"tap “Made N tool calls”"| ToolCalls
     Chat -->|"tap attachment-‹file›"| Preview
     Chat -->|"type /fork, /branch or /btw, tap “Send”"| SubPage
@@ -113,6 +116,7 @@ that opens it directly (see "Driving it" below).
 | Session chat | `session-title` and "Send" listed (on the iPhone, with the composer empty, "Dictate" stands where "Send" is); in `commands` the iPhone shows the slash commands in a popover over the chat, and the driver lists only the popover | `session-title` ("Session details"), `attach`, `model` and `goal` (not while an approval or question waits: Approval controls take their place), `loop`, `queued`, "Send", `busy-actions`, `dictate`, `copy-message`, `branch-message`, `share-message`, `attachment-‹file›`, `new-rows-pill`, `suggestion-/‹command›` | `chat`, `goal`, `earlier`, `commands` |
 | Approval controls | `allow` and `deny`, or `answer`, listed | `allow`, `deny`, `answer` | `chat` (a Bash approval is pending) |
 | Question sheet | a sheet; `question-skip` listed (`question-send` only once every question has an answer); on the iPhone, "Skip" and "Send" by label | `approval-‹option›`, `question-own`, `question-skip` ("Skip"), `question-send` ("Send") | `question` |
+| Sign-in code prompt | a sheet; text "Paste the code Claude showed after you signed in." or `sign-in-paste` listed (on the iPhone, "Paste" and "Cancel" by label) | `sign-in-code` (the "Code from the sign-in page" field), `sign-in-paste` ("Paste"), `sign-in-send` ("Send", listed once a code is typed), `sign-in-cancel` ("Cancel") | `sign-in-code` opens the chat with its Claude Code waiting on a sign-in, under the "Sign In to Claude" alert: tap "Open Sign-In Page", and the prompt opens when Visor is back in front (where nothing says it left for the page, as headless, a second later). It opens again on each return while the code is awaited, not once it's sent or the sign-in has ended. The code goes as the composer sends it, which still takes it ("Later", then type it there); the fixture's computer answers a code with the notice "Signed in to Claude again with the code ‹code›." |
 | Model sheet | a sheet; `all-models` or `approval-Auto Approve` listed | `approval-Auto Approve`, `approval-Manually Approve`, `all-models`, `compact` | `models` |
 | All Models | `model-search` listed | `model-search` | none (`all-models` appears only for a long catalog; the fixture's catalogs are short) |
 | Session details | text "About" | `details-title`, `details-copy-resume`, `stop-agent`, `start-agent`, `restart-agent`, `details-archive`, `details-end`, `details-done` (a phone's sheet) | `inspector` |
