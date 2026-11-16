@@ -247,24 +247,33 @@ extension ServerTests {
         server.settings.runnerTokensRequired = true
         let id = try queue("Native")
         let url = "http://127.0.0.1:\(port)"
+        // A wrapper that runs a while: a runner with room for one claims no
+        // more meanwhile, so it is stopped with no call in flight.
+        let wrapper = root.appendingPathComponent("wrapper.sh").path
+        try "#!/bin/sh\nexec sleep 5\n".write(toFile: wrapper, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper)
 
         // Without a token of its own, it is given nothing.
-        let made = NativeRunner(dispatcher: url, wrapper: "/bin/true", name: "Native", harnesses: ["echo"], log: { _ in })
+        let made = NativeRunner(dispatcher: url, wrapper: wrapper, name: "Native", capacity: 1, harnesses: ["echo"], log: { _ in })
         let tokenless = try #require(made)
         let refused = Task { await tokenless.run() }
         try await Task.sleep(for: .milliseconds(1500))
         refused.cancel()
+        await refused.value
         #expect(waiting == [id], "refused: still waiting")
 
         // With the one the server gives its own runner at its start, it is.
         let own = try #require(listening.runnerToken(for: "Native"))
         #expect(server.runnerTokens.listed.contains { $0.runner == "Native" && $0.own })
-        let given = NativeRunner(dispatcher: url, wrapper: "/bin/true", name: "Native", token: own, harnesses: ["echo"], log: { _ in })
+        let given = NativeRunner(dispatcher: url, wrapper: wrapper, name: "Native", token: own, capacity: 1, harnesses: ["echo"], log: { _ in })
         let runner = try #require(given)
         let running = Task { await runner.run() }
-        defer { running.cancel() }
         #expect(await eventually { self.jobs.holder(of: id) } == "Native", "claimed by the native runner")
         #expect(VisorServer.secrets.get(RunnerTokens.key) == nil, "its token held in memory alone")
+        // Stopped while it waits for room, before the server stops.
+        try await Task.sleep(for: .milliseconds(300))
+        running.cancel()
+        await running.value
     }
 }
 }
