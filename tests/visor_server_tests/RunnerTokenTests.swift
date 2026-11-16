@@ -249,7 +249,8 @@ extension ServerTests {
         let url = "http://127.0.0.1:\(port)"
 
         // Without a token of its own, it is given nothing.
-        let tokenless = try #require(NativeRunner(dispatcher: url, wrapper: "/bin/true", name: "Native", harnesses: ["echo"], log: { _ in }))
+        let made = NativeRunner(dispatcher: url, wrapper: "/bin/true", name: "Native", harnesses: ["echo"], log: { _ in })
+        let tokenless = try #require(made)
         let refused = Task { await tokenless.run() }
         try await Task.sleep(for: .milliseconds(1500))
         refused.cancel()
@@ -258,7 +259,8 @@ extension ServerTests {
         // With the one the server gives its own runner at its start, it is.
         let own = try #require(listening.runnerToken(for: "Native"))
         #expect(server.runnerTokens.listed.contains { $0.runner == "Native" && $0.own })
-        let runner = try #require(NativeRunner(dispatcher: url, wrapper: "/bin/true", name: "Native", token: own, harnesses: ["echo"], log: { _ in }))
+        let given = NativeRunner(dispatcher: url, wrapper: "/bin/true", name: "Native", token: own, harnesses: ["echo"], log: { _ in })
+        let runner = try #require(given)
         let running = Task { await runner.run() }
         defer { running.cancel() }
         #expect(await eventually { self.jobs.holder(of: id) } == "Native", "claimed by the native runner")

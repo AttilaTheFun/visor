@@ -158,14 +158,47 @@ agent_protocol#9, #10 and #12.
   the agent's (none, a wrong one, or another agent's: the hello's agent
   must be the token's), and the dispatcher a `Report` or `Renew` the
   same: the runner shows its job's token on its renewals and releases
-  too. A `Claim` shows none: it is how a runner is given a job and its
-  token. These tokens are only the gRPC port's: the server's REST and
+  too. A `Claim` shows the runner's own token (below), not an agent's: it
+  is how a runner is given a job and its token. These tokens are only the gRPC port's: the server's REST and
   WebSocket side never takes one. A token goes with its agent's job: when
   its session ends, its move fails or is given up, or its agent is
   stopped (`stopJobs`); then its runner's renewal is told the claim isn't
   its own (so the runner ends its agent), its reports are let go, and its
   wrapper can't dial in. Not yet: a fresh token pushed to a running
   wrapper (`DriverMessage.token`); a token lives as long as its agent.
+- **The runner's own token, on Claim.** Visor mints a token for each
+  runner name (`container@<computer>`, as the runner's claims say it),
+  kept with the server's secrets (`runnerTokens`; never in sessions.json,
+  jobs.json or the log) and shown once, when minted. The computer's owner
+  mints, lists and revokes them over REST (the password, a `hello` token,
+  or the socket file; refused, 403, with an agent's token):
+  - `POST /api/runners/tokens {"runner": "container@mini"}` →
+    `{"runner", "token", "created", "replaced"}`: the token, this once (a
+    runner that had one gets a new one; the old stops working);
+  - `GET /api/runners/tokens` → `{"required", "runners": [{"runner",
+    "created", "own"?}]}`: names, never tokens;
+  - `DELETE /api/runners/tokens/<runner>` (the name percent-encoded) →
+    `{"runner", "revoked": true}`, 404 for a runner with none;
+  - `PUT /api/runners/tokens {"required": true|false}`: the server's
+    `runnerTokensRequired` setting (settings.json), as `GET` answers.
+
+  A `Claim` shows it as `authorization: Bearer <runner token>`, and its
+  `runner` must be the name it was minted for: a token that isn't a
+  runner's of this server (or was revoked) is refused UNAUTHENTICATED,
+  another runner's PERMISSION_DENIED. A `Renew` or a `Report` (Released,
+  say) shows the job's agent token as before; a runner token shown beside
+  it (a second `authorization: Bearer` value, either order) must be the
+  runner's that holds the claim (PERMISSION_DENIED otherwise).
+  `runnerTokensRequired` is off until the runners that claim here send
+  one: off, a claim with none is let in (logged once per runner name), a
+  wrong one refused all the same; on, a claim with none is refused
+  UNAUTHENTICATED. The order: agent_protocol released; Shireworks' runner
+  sends `AGENT_TOKEN` and the bearers, its runner token on Claim; then the
+  setting turned on. Visor's own native runner (in the server's process,
+  on loopback) is given a token for its name at each start, held in
+  memory alone (listed with `"own": true`), and shows it on its claims
+  and beside its jobs' tokens on its renewals and releases, so it claims
+  with tokens required.
 - **Visor's MCP tools.** The agent's MCP server `visor` is relayed by its
   wrapper (`WrapperMessage.mcp`) and answered here by Visor's own MCP
   bridge (libraries/visor_mcp_bridge, as `visor-agent-host mcp` runs it

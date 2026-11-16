@@ -45,7 +45,9 @@ reads the same under a mount path a front forwards whole
 
 A runner's agent's token (agent_protocol's `Job.token`, docs/runners.md)
 is never taken here: it is only the driver's and dispatcher's, on their
-gRPC port, which ask it of every call made for that agent.
+gRPC port, which ask it of every call made for that agent. Nor is a
+runner's own token (the one its `Claim` shows as `authorization: Bearer`,
+minted with `POST /runners/tokens`): it too is only the dispatcher's.
 
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
@@ -101,6 +103,10 @@ under `/api`.
 | `POST /jobs` | `agent` (claude, for now), `title`, `text` (its first prompt), `cwd`, `model`, `effort`, `runsOn` (the kind of runner that may take it: `native`, `container`; absent for any), `skipPermissions` (true: its agent acts without asking; absent or false: it asks, its prompts this server's) | `job` with `id`: its agent's id, queued on this server's agent_protocol dispatcher (docs/runners.md) for a runner to claim; the session appears once the runner's agent-wrapper dials the server. 404 when the server has no dispatcher, 400 with `error` for a job no runner can run. From 0.51 |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
 | `POST /sessions/<id>/contain` | `container` (true: into a container on its computer; false: out of it) | Removed in 0.50: a server of 0.50 or later answers 410 with `error`. (Before: `sessions` with that one, once its agent had moved.) |
+| `GET /runners/tokens` | | `required`: whether agent_protocol's `Claim` must show its runner's token (the `runnerTokensRequired` setting; off unless turned on), and `runners`: each `runner` name with a token, when it was `created`, and `own: true` for this server's own native runner's (held in memory, new each start). Never the tokens. Refused (403) with an agent's token. |
+| `POST /runners/tokens` | `runner`: the name its claims say (`container@mini`; no slash) | `runner`, `token` (shown this once: kept with the server's secrets), `created`, `replaced` (it had one, which no longer works). The runner shows it on `Claim` as `authorization: Bearer <token>`, with its `runner` field the same name (docs/runners.md). Refused (403) with an agent's token. |
+| `PUT /runners/tokens` | `required` (true or false) | as `GET /runners/tokens`: on, a `Claim` with no runner token is refused (UNAUTHENTICATED); off, it is let in and logged once per runner. A token that isn't a runner's, or is another runner's, is refused either way. Refused (403) with an agent's token. |
+| `DELETE /runners/tokens/<runner>` | | `runner`, `revoked: true`: its token no longer claims; 404 for a runner with none. Refused (403) with an agent's token. |
 | `GET /mcp` | | `endpoints`: the MCP servers passed on to the sessions' agents (see Proxied MCP servers), each `name`, `url`, `onByDefault` and `headers` (`name`, `secret`, and `value`, or for a secret one only `kept`) |
 | `PUT /mcp` | `endpoints`: all of them, each `name`, `url`, `onByDefault`?, `headers` (`name`, `value`?, `secret`?) | as `GET /mcp`. A secret header's `value` is kept with the server's secrets; sent without one, the value kept stays. Refused (403) with an agent's token. |
 | `POST /push` | `deviceToken`, `platform` (`ios`, `macos`, …), `pushEnvironment` (`sandbox`, `production`), `pushTopic` (the app's bundle id), `pushMuted`? (the kinds it doesn't want, of `waiting`, `failed`, `goal`, `turn`; from 0.48) | `exists`: whether this server sends pushes. Kept per token, replacing an earlier registration; a silent state push for the widget goes whatever is muted. A server before 0.48 ignores `pushMuted` and sends every kind; a client before it sends none, and is sent every kind |
