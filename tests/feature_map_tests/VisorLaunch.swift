@@ -38,9 +38,10 @@ struct VisorLaunch {
     }
 
     /// The canned computer (VisorFixture), opened on `screen` ("" for the
-    /// app's own first screen: Sessions).
-    static func fixture(_ screen: String = "", width: Width = .compact) throws -> HeadlessApp {
-        var environment = ["fixture": "snapshot"]
+    /// app's own first screen: Sessions), with `settings` too (the proof's
+    /// `fixture.orientation`).
+    static func fixture(_ screen: String = "", width: Width = .compact, settings: [String: String] = [:]) throws -> HeadlessApp {
+        var environment = settings.merging(["fixture": "snapshot"]) { $1 }
         if !screen.isEmpty { environment["fixture.screen"] = screen }
         return try launch(environment, width: width)
     }
@@ -57,11 +58,19 @@ struct VisorLaunch {
     }
 
     /// `settings` are the client's settings for this launch, by their own
-    /// names (`fixture`, `fixture.screen`, `account`): the headless client's
-    /// environment, Android's launch intent's extras.
+    /// names (`fixture`, `fixture.screen`, `account`: VisorLaunchSettings):
+    /// the headless client's environment as they are. A headful app gets
+    /// them from its launcher as `visor.<key>`, the names a native app
+    /// takes from its environment (the iPhone's simulator's SIMCTL_CHILD_,
+    /// the Mac app's); fresh_launcher.sh gives Android's launch intent's
+    /// extras their own names back.
     private static func launch(_ settings: [String: String], width: Width) throws -> HeadlessApp {
         if let launcher {
-            return try HeadlessApp(launcher: launcher, environment: settings)
+            let start = ContinuousClock.now
+            let environment = Dictionary(uniqueKeysWithValues: settings.map { ("visor." + $0.key, $0.value) })
+            let app = try HeadlessApp(launcher: launcher, environment: environment)
+            print("[launch] \(settings["fixture.screen"] ?? settings["fixture"] ?? "empty"): attached in \(ContinuousClock.now - start)")
+            return app
         }
         let environment = ProcessInfo.processInfo.environment
         let root = "\(environment["TEST_SRCDIR"] ?? "")/\(environment["TEST_WORKSPACE"] ?? "_main")"

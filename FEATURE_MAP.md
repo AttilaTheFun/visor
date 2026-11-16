@@ -89,7 +89,7 @@ flowchart TD
     SubPage -->|"back"| Chat
 
     Settings -->|"tap settings-computer-‹name›"| Computer
-    Settings -->|"tap settings-add-computer"| AddComputer
+    Settings -->|"tap settings-add-computer (iPhone: once Settings closes)"| AddComputer
     Settings -->|"tap settings-done or settings-back"| Sessions
 ```
 
@@ -103,24 +103,24 @@ that opens it directly (see "Driving it" below).
 |---|---|---|---|
 | Onboarding | text "Welcome to Visor" | `add-computer`, `settings` | `onboarding` |
 | Sign in to Visor | text "Sign in to Visor" | `account-sign-in` | none: launch with the setting `account=fixture` and no `fixture` (the fixture skips the account) |
-| Sessions | `add-computer` listed, and the rows "Snapshot Mac", "Offline sync" (`computer-‹name›` and `session-‹id›` on Apple; not yet on Isomer, see below) | `session-‹id›` (its `place-`, `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field | `sessions`, `machines` |
+| Sessions | the navigation title "Sessions", and the rows "Snapshot Mac", "Offline sync" (`computer-‹name›` and `session-‹id›` on Apple's SwiftUI; not yet through Isomer's drivers, see below); `add-computer` too, but on the iPhone on its side, or after an account's sign-in, it can be below the fold | `session-‹id›` (its `place-`, `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field | `sessions`, `machines` |
 | Search results | text "Messages" or `message-hit` | `message-hit`, `session-‹id›` | `search` (types "sync") |
 | Archived Sessions | text "Archived Sessions" | `archived-session-‹id›` | none (the fixture has no archived sessions) |
 | Add Computer | a sheet; `host` and `connect` listed | `host`, `paste-code`, `password`, `authentication`, `connect`, `runner`, `provider-‹id›` (several providers), `copy-ssh-key`, `show-key-qr` (an SSH address) | `connect` |
 | Sign in to a MultiPass | `multipass-code` or `runner-url` listed | `multipass-code`, `multipass-pair`, `runner-url`, `github-sign-in`, `github-code`, `runner-username`, `runner-password`, `runner-sign-in`, `use-connection-code` | `runner` |
 | New Session | a sheet; text "New Session" | `computer` (several computers), `choice`, `project`, `project-chosen`, `resume-id`, `title`, `first-message`, `start-error`, `start` | `new-session` |
 | Choose a folder | text "Choose a folder" | `folder-path`, `choose-folder` | none |
-| Session chat | `session-title` and "Send" listed | `session-title` ("Session details"), `attach`, `model` and `goal` (not while an approval or question waits: Approval controls take their place), `loop`, `queued`, "Send", `busy-actions`, `dictate`, `copy-message`, `branch-message`, `share-message`, `attachment-‹file›`, `new-rows-pill`, `suggestion-/‹command›` | `chat`, `goal`, `earlier`, `commands` |
+| Session chat | `session-title` and "Send" listed (on the iPhone, with the composer empty, "Dictate" stands where "Send" is); in `commands` the iPhone shows the slash commands in a popover over the chat, and the driver lists only the popover | `session-title` ("Session details"), `attach`, `model` and `goal` (not while an approval or question waits: Approval controls take their place), `loop`, `queued`, "Send", `busy-actions`, `dictate`, `copy-message`, `branch-message`, `share-message`, `attachment-‹file›`, `new-rows-pill`, `suggestion-/‹command›` | `chat`, `goal`, `earlier`, `commands` |
 | Approval controls | `allow` and `deny`, or `answer`, listed | `allow`, `deny`, `answer` | `chat` (a Bash approval is pending) |
-| Question sheet | a sheet; `question-skip` listed (`question-send` only once every question has an answer) | `approval-‹option›`, `question-own`, `question-skip`, `question-send` | `question` |
+| Question sheet | a sheet; `question-skip` listed (`question-send` only once every question has an answer); on the iPhone, "Skip" and "Send" by label | `approval-‹option›`, `question-own`, `question-skip` ("Skip"), `question-send` ("Send") | `question` |
 | Model sheet | a sheet; `all-models` or `approval-Auto Approve` listed | `approval-Auto Approve`, `approval-Manually Approve`, `all-models`, `compact` | `models` |
 | All Models | `model-search` listed | `model-search` | none (`all-models` appears only for a long catalog; the fixture's catalogs are short) |
 | Session details | text "About" | `details-title`, `details-copy-resume`, `stop-agent`, `start-agent`, `restart-agent`, `details-archive`, `details-end`, `details-done` (a phone's sheet) | `inspector` |
 | Tool calls | text "Tool calls" | "Done" | none |
-| Attachment preview | a sheet with "Done" | "Done", "Share" | none |
+| Attachment preview | a sheet with "Done"; on the iPhone it is Quick Look, whose button is "close" | "Done" ("close" on the iPhone), "Share" | none (the `chat` fixture's two attachments are both labelled "Open the attachment": tap them by `attachment-‹file›`) |
 | Fork, Branch, Side Questions, Subagent | its title: "Fork of …", "Branch of …", "Side Questions", or the subagent's description | the chat's | none |
 | Settings | `settings-appearance` listed | `settings-computer-‹name›`, `settings-add-computer`, `settings-notify-waiting`, `-failed`, `-goal`, `-turn`, `settings-appearance`, `account-sign-out`, `runner-sign-out`, `runner-sign-in-again`, `runner-remove`, `settings-done` (a sheet) or `settings-back` (a pane) | `settings` (Mac's proof) |
-| Computer settings | `share-log` listed | `use-ssh`, `relay-toggle`, `back-up-sessions`, `show-qr`, `qr-code`, `copy-http-code`, `copy-https-code`, `copy-ssh-code`, `share-log` | none |
+| Computer settings | `share-log` or "Network paths" listed | `use-ssh`, `relay-toggle`, `back-up-sessions`, `show-qr`, `qr-code`, `copy-http-code`, `copy-https-code`, `copy-ssh-code`, `share-log` | none |
 
 The fixture's canned data: one computer, "Snapshot Mac", with the sessions
 `fixture-chat` ("Offline sync", Claude, a goal and a pending Bash
@@ -144,6 +144,9 @@ The graph is the same everywhere; what a node is differs with the width:
   Session details closes by tapping `session-title` again, Settings by
   tapping `settings` again; from a computer's page, `settings-back`
   returns to Settings. "New session" is in the toolbar (`new-session`).
+  Android on its side (1080×2400 at 420 dpi, the proof's and the
+  suite's emulator) is regular width too: the list sits beside the chat,
+  and `back` from the chat has nothing to go back from.
 - **The Mac only:** the menu bar's Visor menu and Visor Server's own
   Settings window (password, network paths, push) are outside this
   graph: neither is part of `VisorRootView`.
@@ -207,11 +210,26 @@ the app dialling the driver's hub (`iso hub`, `ws://127.0.0.1:7710`):
 - **Android** (emulator or the device lab's phone):
   `adb reverse tcp:7710 tcp:7710`, then
   `adb shell am start -n com.loganshire.visor/.MainActivity --es fixture snapshot --es fixture.screen chat -e ISO_DRIVER ws://127.0.0.1:7710 -e ISO_DRIVER_NAME android`.
-- **iPhone simulator:**
-  `SIMCTL_CHILD_ISO_DRIVER=ws://127.0.0.1:7710 xcrun simctl launch <udid> com.LoganShire.Visor -visor.fixture snapshot -visor.fixture.screen chat`
-  (the fixture is read from launch arguments, which Isomer's
-  `ios_launcher.sh` doesn't pass: launch it like this, or from a hosted
-  XCTest).
+  Every launch setting is an extra (`--es account fixture`,
+  `--es fixture.appearance dark`, `--es fixture.orientation landscape`, …).
+- **iPhone simulator:** the app reads its launch settings from its
+  environment as `visor.<key>` (a bare `fixture` or `account` is left
+  alone), so simctl's `SIMCTL_CHILD_` prefix passes them, as Isomer's
+  `ios_launcher.sh` does:
+  `env SIMCTL_CHILD_ISO_DRIVER=ws://127.0.0.1:7710 SIMCTL_CHILD_visor.fixture=snapshot SIMCTL_CHILD_visor.fixture.screen=chat xcrun simctl launch <udid> com.LoganShire.Visor`
+  (`env`, because a shell won't take a name with a dot as an
+  assignment); or as launch arguments, after the bundle id:
+  `-visor.fixture snapshot -visor.fixture.screen chat`.
+
+The launch settings are `fixture`, `fixture.screen`,
+`fixture.appearance`, `fixture.orientation`, `fixture.go`, `account` and
+`probe.open` (libraries/visor_services, `VisorLaunchSettings`); the
+headless client takes the same list under the bare names, as
+Android's extras do. The suite runs headful on the
+iPhone and Android through Isomer's launchers
+(`//tests/feature_map_tests:feature_map_headful_{ios,android,macos}_test`,
+manual), and the iPhone's and Android's release proofs walk this map
+through the driver (`//tests/feature_map_tests:feature_map_proof_‹platform›`).
 
 ## Not wired yet
 
@@ -223,8 +241,23 @@ What this map assumes that Visor doesn't do yet:
   `goal`, `loop`, `attach`, `queued`, `use-connection-code`), a
   `List(selection:)` row's (`session-‹id›`, `message-hit`,
   `archived-‹name›`), a combined element's (`computer-‹name›`), and a
-  toggle's (`settings-notify-…`, `relay-toggle`). On Apple's driver they
-  all work.
+  toggle's (`settings-notify-…`, `relay-toggle`). Through Isomer's Apple
+  driver on the iPhone it's worse, not better: it lists almost none of
+  the identifiers on SwiftUI controls in List and Form rows (`add-computer`,
+  `runner`, `connect`, `allow`, `question-send`, …), on text fields
+  (`host`) or on the navigation title's button (`session-title`), and
+  gives the composer (a multi-line `TextField`) no label; the suite falls
+  back to labels there (`IsomerGap.appleIdentifier`). XCUITest reads them
+  all.
+- **`dismiss` on the iPhone:** Isomer's Apple driver's `dismiss` doesn't
+  close most of Visor's sheets (Add Computer, Tool calls, Quick Look, the
+  question sheet), though a swipe down does; the suite taps the sheet's
+  own Cancel, Done or close instead (`IsomerGap.appleDismiss`), and the
+  question sheet, which has none, can't be put away.
+- **Settings → Add Computer on the iPhone:** Add Computer shows only once
+  Settings is closed (`settings-add-computer` leaves Settings up for
+  seconds). It may be how the app presents it there (a second sheet from
+  the root while Settings is up); not yet checked against XCUITest.
 - **`back` in a sheet:** on Isomer, `back` on a page pushed inside a
   sheet (Settings → a computer's page) closes the whole sheet.
 - **Steps the driver can't take:** context menus (a session's Rename,
@@ -236,14 +269,12 @@ What this map assumes that Visor doesn't do yet:
 - **Not in the fixture:** Archived Sessions, All Models, a fork, a branch
   and a subagent can't be reached in fixture mode; their tests are
   disabled until it has them.
-- **The rest of the tests don't use the driver yet:** the proofs open
-  each fixture screen with a fresh launch and take its picture
-  (tools/ci/proof_ios.sh, proof_android.sh, proof_mac.sh); the iPhone's
-  UI tests are XCUITest (tests/ios_probe), Android's use UI Automator
-  (tools/isomer/uitests/android_flow.py). They move onto the driver
-  next, headful on the iPhone and Android through Isomer's launchers.
-  (The iPhone app reads its fixture from launch arguments, which
-  Isomer's iOS launcher doesn't pass.)
+- **The rest of the tests don't use the driver yet:** the iPhone's and
+  Android's proofs and the suite headful on both do, but the Mac's proof
+  still opens each fixture screen with a fresh launch
+  (tools/ci/proof_mac.sh), the iPhone's UI tests are XCUITest
+  (tests/ios_probe), and Android's use UI Automator
+  (tools/isomer/uitests/android_flow.py).
 
 When a screen, a way between screens or an identifier above changes,
 change this map with it.
