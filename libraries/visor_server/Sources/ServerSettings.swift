@@ -87,6 +87,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
+             frontPaths, clientsKeepMessages, detachAgents, mcpEndpoints, pushProxy, runnerTokensRequired
     }
 
     public func encode(to encoder: Encoder) throws {
