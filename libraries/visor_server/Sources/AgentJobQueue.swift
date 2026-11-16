@@ -12,10 +12,30 @@ package protocol AgentJobQueue: AnyObject {
     func queueResume(_ move: AgentJobMove) -> Result<String, AgentJobRefusal>
     /// The session ended: any job carrying it on, waiting or claimed, goes.
     func forget(session: String)
+    /// The session's agent stopped (Stop Agent, or before Restart Agent):
+    /// its job, waiting or claimed, goes (its runner's next renewal is
+    /// refused, so the runner ends it), but the session stays moved: its
+    /// agents are still its own, and a resume job carries it on again.
+    func stopJobs(of session: String)
+    /// The moves sessions.json keeps for driven sessions, at the driver's
+    /// start: each one the queue doesn't know is known again (its agent is
+    /// its session's), and, for those in `expected`, a claim is held for its
+    /// runner to renew, or its job is queued again once that claim lapses.
+    /// jobs.json may be missing, older or behind (14 Nov: a server from
+    /// before jobs.json, and every moved session dropped).
+    func adopt(_ moves: [AgentJobMove], expected: Set<String>)
+    /// What the queue keeps of the session's latest move, if anything: for
+    /// a driven session whose record has none (one moved by an older build).
+    func kept(session: String) -> AgentJobMove?
 }
 
-/// A session moved to a runner, as its resume job carries it.
-package struct AgentJobMove: Equatable, Sendable {
+/// A session moved to a runner, as its resume job carries it; kept on the
+/// session's record (sessions.json) while it is driven, so a restart knows
+/// which agent carries it on even without the dispatcher's jobs.json.
+package struct AgentJobMove: Codable, Equatable, Sendable {
+    /// The agent its job is for (a UUID, as runners hold an agent's id to
+    /// be): "" for the queue to make one.
+    package var agent: String = ""
     /// The session's id, which its agent keeps on the runner.
     package var session: String
     package var title: String
@@ -29,9 +49,22 @@ package struct AgentJobMove: Equatable, Sendable {
     package var sources: [AgentJobSource]
     /// The kind of runner that takes it ("container", "native").
     package var runsOn: String
+    /// Where its agent works on the runner, once its wrapper has said ("":
+    /// where the runner puts a new job). A resume job for a later agent of
+    /// the session works there too, so it finds the conversation as the
+    /// runner's agent left it, and the repositories cloned.
+    package var workingDirectory: String = ""
+    /// The harness's own session on the runner, once its agent has started
+    /// (agent_protocol's Started): what a later agent resumes. "": `resume`.
+    package var conversation: String = ""
 
-    package init(session: String, title: String, model: String = "", effort: String = "", resume: String, cwd: String,
-                 sources: [AgentJobSource] = [], runsOn: String) {
+    /// What a later agent of the session resumes: the runner's own
+    /// conversation once known, else the one moved.
+    package var resumeOnRunner: String { conversation.isEmpty ? resume : conversation }
+
+    package init(agent: String = "", session: String, title: String, model: String = "", effort: String = "", resume: String, cwd: String,
+                 sources: [AgentJobSource] = [], runsOn: String, workingDirectory: String = "", conversation: String = "") {
+        self.agent = agent
         self.session = session
         self.title = title
         self.model = model
@@ -40,12 +73,31 @@ package struct AgentJobMove: Equatable, Sendable {
         self.cwd = cwd
         self.sources = sources
         self.runsOn = runsOn
+        self.workingDirectory = workingDirectory
+        self.conversation = conversation
+    }
+
+    /// What sessions.json kept: the session, its conversation and folder
+    /// here, and its runner's kind; the rest as far as it was known.
+    package init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        agent = try c.decodeIfPresent(String.self, forKey: .agent) ?? ""
+        session = try c.decode(String.self, forKey: .session)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        model = try c.decodeIfPresent(String.self, forKey: .model) ?? ""
+        effort = try c.decodeIfPresent(String.self, forKey: .effort) ?? ""
+        resume = try c.decode(String.self, forKey: .resume)
+        cwd = try c.decode(String.self, forKey: .cwd)
+        sources = try c.decodeIfPresent([AgentJobSource].self, forKey: .sources) ?? []
+        runsOn = try c.decodeIfPresent(String.self, forKey: .runsOn) ?? ""
+        workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory) ?? ""
+        conversation = try c.decodeIfPresent(String.self, forKey: .conversation) ?? ""
     }
 }
 
 /// A repository a moved session works in: its clone URL, its branch, and
 /// its folder's name.
-package struct AgentJobSource: Equatable, Sendable {
+package struct AgentJobSource: Codable, Equatable, Sendable {
     package var repository: String
     package var ref: String
     package var name: String

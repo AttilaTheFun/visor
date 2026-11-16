@@ -90,8 +90,10 @@ extension VisorServer {
             // session, so it goes before anything resumes into it.
             // One left under its host is picked up instead (pickUp).
             if item.host == nil, let pid = item.agentPID { orphans.append((info.id, pid, item.resumeID)) }
-            // Running when we went away, so running again now.
-            if item.host == nil, item.interrupted == true, !asked.contains("none"),
+            // Running when we went away, so running again now. Not a
+            // driven session's: its agent runs on its runner, and went on
+            // working while this server was away.
+            if item.host == nil, item.driven != true, item.interrupted == true, !asked.contains("none"),
                asked.contains(info.id) || asked.contains("all") {
                 pendingResumes.append(info.id)
             }
@@ -109,12 +111,15 @@ extension VisorServer {
             // A contained session always auto-approves (VisorServer+Permissions).
             info = withPermissions(info)
             // A driven agent's process is its wrapper's stream, which comes
-            // back when the wrapper dials again (VisorDriver).
+            // back when the wrapper dials again (VisorDriver). Until the
+            // driver is there, one that starts nothing here: a driven
+            // session never quietly becomes this computer's (visor#424).
             let driven = item.driven == true
-            let process = driven ? (drivenProcess?(info) ?? makeProcess(info, resume: item.resumeID)) : makeProcess(info, resume: item.resumeID)
+            let process = driven ? (drivenProcess?(info) ?? AwaitingDriverProcess()) : makeProcess(info, resume: item.resumeID)
             let record = SessionRecord(info: info, process: process, entries: entries,
                                        shownPrompts: item.shownPrompts ?? [], notice: item.notice)
             record.driven = driven
+            record.move = driven ? item.move : nil
             record.refreshResume()
             record.interrupted = item.interrupted ?? false
             record.reportedUsage = item.reportedUsage

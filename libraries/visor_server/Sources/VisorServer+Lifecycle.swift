@@ -36,7 +36,10 @@ extension VisorServer {
 
     /// Ends every session (the app is quitting). What was running is
     /// written down as running, so the next launch can carry it on: this is
-    /// the record of the shutdown, however the app was quit.
+    /// the record of the shutdown, however the app was quit. A driven
+    /// session's agent isn't this computer's to end: it works on on its
+    /// runner, and its wrapper dials back when the server is here again
+    /// (Stop Agent, or ending the session, is how it is stopped).
     public func endAll() async {
         for record in sessions where record.info.busy { record.interrupted = true }
         saveArchiveNow()
@@ -46,7 +49,7 @@ extension VisorServer {
         // Waited for, not merely asked: an agent that outlives the app
         // runs on with nobody at the other end of its pipes. All at once:
         // each has its own few seconds to go.
-        let ending = sessions.map { record in Task { await record.process.end(within: .seconds(4)) } }
+        let ending = sessions.filter { !$0.driven }.map { record in Task { await record.process.end(within: .seconds(4)) } }
         for task in ending { await task.value }
         agentsEnded = true
     }

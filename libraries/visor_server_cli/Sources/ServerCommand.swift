@@ -13,12 +13,18 @@ public struct ServerCommand {
     /// Called with the server once it is made, before it serves: what the
     /// binary adds beside it (agent_protocol's driver and runner).
     let onServer: (@MainActor (VisorServer) -> Void)?
+    /// Called once this computer's system is set and the server this one
+    /// replaces has gone, before the server is made (its sessions read):
+    /// what should listen as early as it can (agent_protocol's driver,
+    /// which wrappers and runners redial after a restart).
+    let beforeServer: (@MainActor () -> Void)?
 
     /// `arguments` without the program's own name.
     public init(system: any CommandLineSystem, arguments: [String] = Array(CommandLine.arguments.dropFirst()),
-                onServer: (@MainActor (VisorServer) -> Void)? = nil) {
+                beforeServer: (@MainActor () -> Void)? = nil, onServer: (@MainActor (VisorServer) -> Void)? = nil) {
         self.system = system
         self.arguments = arguments
+        self.beforeServer = beforeServer
         self.onServer = onServer
     }
 

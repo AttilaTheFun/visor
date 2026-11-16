@@ -592,6 +592,28 @@ it and keeps it ended, through a launch too, what is sent meanwhile
 waiting in the queue (`SessionRecord.waits`) until Start (`startAgent`).
 Hosts log to `hosts/hosts.log` in the data folder.
 
+**Sessions on runners across a restart** (visor#424). A session moved to
+a runner (`moveToRunner`) is `driven`, and keeps its move on its record in
+sessions.json (`SessionRecord.move`: the agent id its job is for, its
+conversation and folder here, its folder and conversation on the runner
+once its wrapper and Started say). Only `moveBack` makes it this
+computer's again, with a dated notice and a push. A relaunch (`leaveAgents`)
+and a quit (`endAll`) leave its runner's agent working: the driver's
+stream closes and the wrapper redials. The new process opens 7434 before
+it reads its sessions (`VisorDriver.Listening.listen`), and serves calls
+once `serve` has handed the queue the moves kept on the sessions
+(`takeUpDrivenSessions` → `JobQueue.adopt`). jobs.json may lack them.
+A claim taken up at a start holds for three minutes
+(`JobQueue.redialGrace`). If its runner hasn't renewed it by then, its
+job goes out again and the session says so. Neither that, nor a release
+whose words say the dispatcher or driver was out of reach or something
+restarted (`JobQueue.mayBeStartFailure`), counts toward the three
+returns. Start Agent and Restart Agent on a driven session queue a resume
+job for a runner of its kind (`resumeDriven`), under a new agent id, with
+the runner's conversation in the folder it worked in there. Settings that
+restart Claude do the same. Stop Agent lets its job go (`stopDriven`), so
+its runner ends it. None of them starts an agent here.
+
 **Moving a session.** "Migrate…" in a session's menu lists the other
 computers connected now. The client (`SessionMigration`) asks the
 session's server for an offer (VisorServer+Migration.swift: the agent's

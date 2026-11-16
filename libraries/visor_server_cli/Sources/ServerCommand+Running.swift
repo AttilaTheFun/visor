@@ -28,6 +28,7 @@ extension ServerCommand {
         for (name, value) in options.settings { try apply(name, value) }
         try? Data("\(ProcessInfo.processInfo.processIdentifier) \(port)\n".utf8).write(to: pidFile)
 
+        beforeServer?()
         let server = VisorServer(port: port)
         // The proxy given with the run: pushes and the named MCP servers
         // through it, from now on.

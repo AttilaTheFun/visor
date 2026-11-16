@@ -37,6 +37,10 @@ struct VisorMacApp: App {
         // server, before anything asks for it.
         ServerCache.shared = .open(named: "messages", in: MacPlaces.folder("Server"))
         ServerPlatform.current = .apple(secrets: KeychainSecrets(service: MacPlaces.serverService))
+        // agent_protocol's port open before the sessions are read: the
+        // wrappers and runners of sessions moved to runners redial it.
+        let agentProtocol = Self.agentProtocol()
+        agentProtocol.listen()
         server = VisorServer.shared
         // An unattended setup (a leased test VM, tools/e2e): the first
         // password from the environment (launchctl setenv, so it's on no
@@ -45,7 +49,7 @@ struct VisorMacApp: App {
         if server.password.isEmpty, let given = ProcessInfo.processInfo.environment["VISOR_SETUP_PASSWORD"], !given.isEmpty {
             server.password = given
         }
-        Self.startAgentProtocol(server)
+        Self.startAgentProtocol(agentProtocol, serving: server)
         // The client's own: its cache and its keychain items. Then its
         // services, which the store connects through.
         AgentServerConnection.cache = .open(named: "messages", in: MacPlaces.folder("Client"))
@@ -70,15 +74,24 @@ struct VisorMacApp: App {
     /// and dispatcher on loopback, and the native runner, which runs each
     /// job's agent under the agent-wrapper in this app's Helpers. Its jobs'
     /// harness is the `AgentJobHarness` default (claude unless set; echo
-    /// for a test without a model). `AgentProtocolContainerURL`, when set,
-    /// is how containers reach them (MultiPass's dial-in:
-    /// `http://visor.multipass.internal:7434`).
-    private static func startAgentProtocol(_ server: VisorServer) {
-        let port = 7434
-        let url = "http://127.0.0.1:\(port)"
+    /// for a test without a model). Containers reach them as
+    /// `AgentProtocolContainerURL` says, else through Shireworks'
+    /// agent-proxy (`http://visor.agent.internal:7434`).
+    private static func agentProtocol() -> VisorDriver.Listening {
+        let port = agentProtocolPort
         let harness = UserDefaults.standard.string(forKey: "AgentJobHarness") ?? "claude"
-        let containerURL = UserDefaults.standard.string(forKey: "AgentProtocolContainerURL")
-        _ = VisorDriver.start(server, host: "127.0.0.1", port: port, url: url, containerURL: containerURL, harness: harness)
+        let set = UserDefaults.standard.string(forKey: "AgentProtocolContainerURL") ?? ""
+        let containerURL = set.isEmpty ? VisorDriver.containerURL(port: port) : set
+        return VisorDriver.Listening(host: "127.0.0.1", port: port, url: agentProtocolURL, containerURL: containerURL, harness: harness)
+    }
+
+    private static let agentProtocolPort = 7434
+    private static var agentProtocolURL: String { "http://127.0.0.1:\(agentProtocolPort)" }
+
+    /// The server served, and the native runner pulling from it.
+    private static func startAgentProtocol(_ agentProtocol: VisorDriver.Listening, serving server: VisorServer) {
+        agentProtocol.serve(server)
+        let url = agentProtocolURL
         let wrapper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/agent-wrapper").path
         guard FileManager.default.isExecutableFile(atPath: wrapper),
               let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: Host.current().localizedName ?? "Mac",
