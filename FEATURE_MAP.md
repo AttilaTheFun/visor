@@ -109,17 +109,18 @@ that opens it directly (see "Driving it" below).
 |---|---|---|---|
 | Onboarding | text "Welcome to Visor" | `add-computer`, `settings` | `onboarding` |
 | Sign in to Visor | text "Sign in to Visor" | `account-sign-in` | none: launch with the setting `account=fixture` and no `fixture` (the fixture skips the account) |
-| Sessions | the navigation title "Sessions", and the rows "Snapshot Mac", "Offline sync" (`computer-‹name›` and `session-‹id›` on Apple's SwiftUI; not yet through Isomer's drivers, see below); `add-computer` too, but on the iPhone on its side, or after an account's sign-in, it can be below the fold | `session-‹id›` (its `place-`, `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field | `sessions`, `machines` |
+| Sessions | the navigation title "Sessions", and the rows "Snapshot Mac", "Offline sync" (`computer-‹name›` and `session-‹id›`); `add-computer` too, but on the iPhone on its side, or after an account's sign-in, it can be below the fold | `session-‹id›` (its `place-`, `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field | `sessions`, `machines` |
 | Search results | text "Messages" or `message-hit` | `message-hit`, `session-‹id›` | `search` (types "sync") |
 | Archived Sessions | text "Archived Sessions" | `archived-session-‹id›` | none (the fixture has no archived sessions) |
+| Project settings | the project's page, titled by its name: "Copy folder path" listed | "Rename in Visor…", "Copy folder path", "Archived Sessions (‹n›)", "Remove Project" | none: `longpress session-fixture-chat` on `sessions`, then tap "Project Settings" (not on the iPhone yet: see "Not wired yet") |
 | Add Computer | a sheet; `host` and `connect` listed | `host`, `paste-code`, `password`, `authentication`, `connect`, `runner`, `provider-‹id›` (several providers), `copy-ssh-key`, `show-key-qr` (an SSH address) | `connect` |
 | Sign in to a MultiPass | `multipass-code` or `runner-url` listed | `multipass-code`, `multipass-pair`, `runner-url`, `github-sign-in`, `github-code`, `runner-username`, `runner-password`, `runner-sign-in`, `use-connection-code` | `runner` |
 | New Session | a sheet; text "New Session" | `computer` (several computers), `choice`, `project`, `project-chosen`, `resume-id`, `title`, `first-message`, `start-error`, `start` | `new-session` |
 | Choose a folder | text "Choose a folder" | `folder-path`, `choose-folder` | none |
 | Session chat | `session-title` and "Send" listed (on the iPhone, with the composer empty, "Dictate" stands where "Send" is); in `commands` the iPhone shows the slash commands in a popover over the chat, and the driver lists only the popover | `session-title` ("Session details"), `attach`, `model` and `goal` (not while an approval or question waits: Approval controls take their place), `loop`, `queued`, "Send", `busy-actions`, `dictate`, `copy-message`, `branch-message`, `share-message`, `attachment-‹file›`, `new-rows-pill`, `suggestion-/‹command›` | `chat`, `goal`, `earlier`, `commands` |
 | Approval controls | `allow` and `deny`, or `answer`, listed | `allow`, `deny`, `answer` | `chat` (a Bash approval is pending) |
-| Question sheet | a sheet; `question-skip` listed (`question-send` only once every question has an answer); on the iPhone, "Skip" and "Send" by label | `approval-‹option›`, `question-own`, `question-skip` ("Skip"), `question-send` ("Send") | `question` |
-| Sign-in code prompt | a sheet; text "Paste the code Claude showed after you signed in." or `sign-in-paste` listed (on the iPhone, "Paste" and "Cancel" by label) | `sign-in-code` (the "Code from the sign-in page" field), `sign-in-paste` ("Paste"), `sign-in-send` ("Send", listed once a code is typed), `sign-in-cancel` ("Cancel") | `sign-in-code` opens the chat with its Claude Code waiting on a sign-in, under the "Sign In to Claude" alert: tap "Open Sign-In Page", and the prompt opens when Visor is back in front (where nothing says it left for the page, as headless, a second later). It opens again on each return while the code is awaited, not once it's sent or the sign-in has ended. The code goes as the composer sends it, which still takes it ("Later", then type it there); the fixture's computer answers a code with the notice "Signed in to Claude again with the code ‹code›." |
+| Question sheet | a sheet; `question-skip` listed (`question-send` enabled only once every question has an answer) | `approval-‹option›`, `question-own`, `question-skip` ("Skip"), `question-send` ("Send") | `question` |
+| Sign-in code prompt | a sheet; text "Paste the code Claude showed after you signed in." or `sign-in-paste` listed | `sign-in-code` (the "Code from the sign-in page" field), `sign-in-paste` ("Paste"), `sign-in-send` ("Send", listed once a code is typed), `sign-in-cancel` ("Cancel") | `sign-in-code` opens the chat with its Claude Code waiting on a sign-in, under the "Sign In to Claude" alert: tap "Open Sign-In Page", and the prompt opens when Visor is back in front (where nothing says it left for the page, as headless, a second later). It opens again on each return while the code is awaited (`scene background`, then `scene active`), not once it's sent or the sign-in has ended. The code goes as the composer sends it, which still takes it ("Later", then type it there); the fixture's computer answers a code with the notice "Signed in to Claude again with the code ‹code›." |
 | Model sheet | a sheet; `all-models` or `approval-Auto Approve` listed | `approval-Auto Approve`, `approval-Manually Approve`, `all-models`, `compact` | `models` |
 | All Models | `model-search` listed | `model-search` | none (`all-models` appears only for a long catalog; the fixture's catalogs are short) |
 | Session details | text "About" | `details-title`, `details-copy-resume`, `stop-agent`, `start-agent`, `restart-agent`, `details-archive`, `details-end`, `details-done` (a phone's sheet) | `inspector` |
@@ -241,42 +242,39 @@ through the driver (`//tests/feature_map_tests:feature_map_proof_‹platform›`
 
 ## Not wired yet
 
-What this map assumes that Visor doesn't do yet:
+What this map assumes that Visor doesn't do yet. (Isomer's driver lists
+every identifier above, on Isomer's runtime and through its Apple driver
+on the iPhone, and its `dismiss` closes Visor's sheets and Quick Look,
+since isomer#228 and #231; the suite takes them all by identifier.)
 
-- **Identifiers Isomer's driver doesn't see yet** (raised with Isomer;
-  the suite taps their labels meanwhile and records a known issue): one
-  set outside a wrapping modifier (`allow`, `deny`, `answer`, `model`,
-  `goal`, `loop`, `attach`, `queued`, `use-connection-code`), a
-  `List(selection:)` row's (`session-‹id›`, `message-hit`,
-  `archived-‹name›`), a combined element's (`computer-‹name›`), and a
-  toggle's (`settings-notify-…`, `relay-toggle`). Through Isomer's Apple
-  driver on the iPhone it's worse, not better: it lists almost none of
-  the identifiers on SwiftUI controls in List and Form rows (`add-computer`,
-  `runner`, `connect`, `allow`, `question-send`, …), on text fields
-  (`host`) or on the navigation title's button (`session-title`), and
-  gives the composer (a multi-line `TextField`) no label; the suite falls
-  back to labels there (`IsomerGap.appleIdentifier`). XCUITest reads them
-  all.
-- **`dismiss` on the iPhone:** Isomer's Apple driver's `dismiss` doesn't
-  close most of Visor's sheets (Add Computer, Tool calls, Quick Look, the
-  question sheet), though a swipe down does; the suite taps the sheet's
-  own Cancel, Done or close instead (`IsomerGap.appleDismiss`), and the
-  question sheet, which has none, can't be put away.
+- **Alerts on the iPhone:** Isomer's Apple driver lists a SwiftUI
+  `.alert` as presented (its title and message) but none of its buttons,
+  so "Sign In to Claude"'s "Open Sign-In Page" and "Later" can't be
+  tapped there, and the sign-in code prompt's tests fail on the iPhone
+  (raised with Isomer).
+- **`longpress` on the iPhone:** Isomer's Apple driver doesn't open a
+  context menu yet; the Project Settings test records a known issue there
+  (`IsomerGap.appleLongPress`). On Isomer's runtime (headless, Android)
+  it does.
 - **Settings → Add Computer on the iPhone:** Add Computer shows only once
-  Settings is closed (`settings-add-computer` leaves Settings up for
-  seconds). It may be how the app presents it there (a second sheet from
-  the root while Settings is up); not yet checked against XCUITest.
+  Settings is closed (`settings-add-computer` leaves Settings up). That is
+  the app's own: Add Computer's sheet is presented from the root view,
+  which can't present a second sheet while Settings is up, so SwiftUI
+  presents it once Settings has gone; on Isomer's runtime the two stack.
+  Its test fails on the iPhone until the app presents Add Computer from
+  Settings itself.
+- **What the iPhone lists is what is on its screen:** a control below the
+  fold (the onboarding's `add-computer`, Computer settings' `relay-toggle`
+  and `share-log`) isn't in `ls` until it is scrolled to, though `tap`
+  finds it.
 - **`back` in a sheet:** on Isomer, `back` on a page pushed inside a
   sheet (Settings → a computer's page) closes the whole sheet.
-- **Steps the driver can't take:** context menus (a session's Rename,
-  Migrate…, Project Settings, Remove…) and swipe actions (Archive,
-  Unarchive) need a long press or a swipe on a row, which the protocol
-  doesn't have.
 - **Elements without an identifier:** the composer's text field, which
-  lives in AgentUI (found by its "Message ‹Agent›…" label).
-- **Not in the fixture:** Archived Sessions, All Models, a fork, a branch
-  and a subagent can't be reached in fixture mode; their tests are
-  disabled until it has them.
+  lives in AgentUI (found by its "Message ‹Agent›…" placeholder).
+- **Not in the fixture:** Archived Sessions (and so Unarchive), Migrate (a
+  second computer that migrates), All Models, a fork, a branch and a
+  subagent can't be reached in fixture mode; their tests are disabled
+  until it has them.
 - **The rest of the tests don't use the driver yet:** the iPhone's and
   Android's proofs and the suite headful on both do, but the Mac's proof
   still opens each fixture screen with a fresh launch

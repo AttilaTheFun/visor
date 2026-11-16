@@ -791,11 +791,12 @@ no longer in Visor.
   Shireworks container (the build from its cache, two minutes more the
   first time). Its own invocation: `--config=headless` doesn't go with
   `--config=drive` (isomer's AGENTS.md), and without it the targets are
-  skipped (incompatible), so `//...` builds pass them by. What the driver
-  can't take yet (a context menu, a swipe action, the agent asking) is a
-  disabled test in `FeatureMapTests+Gaps.swift` saying why; where Isomer's
-  driver doesn't list an identifier the map names, the test finds the
-  element by its label and records a known issue (`IsomerGap.swift`).
+  skipped (incompatible), so `//...` builds pass them by. What can't be
+  taken (the agent asking, what the fixture hasn't: an archived session,
+  a second computer, a fork) is a disabled test in
+  `FeatureMapTests+Gaps.swift` saying why; a step Isomer's driver can't
+  take on one platform yet (a long press on the iPhone) is a known issue
+  there (`IsomerGap.swift`).
   "Driving the client" below has the rest.
 - The same suite headful, against an app built with `--config=drive`:
   `//tests/feature_map_tests:feature_map_headful_{ios,android,macos}_test`
@@ -821,9 +822,9 @@ no longer in Visor.
   ```
 
   The regular width's suite is headless alone (a device's width is its
-  own). Where Isomer's Apple driver lists no identifier (most SwiftUI
-  controls in a List or Form row on the iPhone), the test takes the label
-  and records `IsomerGap.appleIdentifier`.
+  own). Every element is taken by the identifier the map names, on every
+  platform (isomer#228 and #231); FEATURE_MAP.md's "Not wired yet" has
+  what still fails on the iPhone.
 - Try a server build against real agents without touching the installed
   one: `bazel run //tools/staging_server -- [port] [password]` (7533,
   `staging`) runs a `VisorServer` of its own — its own ports, a scratch
