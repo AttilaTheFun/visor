@@ -794,9 +794,9 @@ no longer in Visor.
   skipped (incompatible), so `//...` builds pass them by. What can't be
   taken (the agent asking, what the fixture hasn't: an archived session,
   a second computer, a fork) is a disabled test in
-  `FeatureMapTests+Gaps.swift` saying why; a step Isomer's driver can't
-  take on one platform yet (a long press on the iPhone) is a known issue
-  there (`IsomerGap.swift`).
+  `FeatureMapTests+Gaps.swift` saying why. Every step runs on every
+  platform: since isomer#234 a long press and an alert's buttons are
+  driven on the iPhone too.
   "Driving the client" below has the rest.
 - The same suite headful, against an app built with `--config=drive`:
   `//tests/feature_map_tests:feature_map_headful_{ios,android,macos}_test`

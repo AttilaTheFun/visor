@@ -29,7 +29,6 @@ _SUPPORT = [
     "FeatureMapNode.swift",
     "HeadlessApp+FeatureMap.swift",
     "HeadlessScreen+FeatureMap.swift",
-    "IsomerGap.swift",
     "VisorLaunch.swift",
 ]
 

@@ -247,15 +247,15 @@ every identifier above, on Isomer's runtime and through its Apple driver
 on the iPhone, and its `dismiss` closes Visor's sheets and Quick Look,
 since isomer#228 and #231; the suite takes them all by identifier.)
 
-- **Alerts on the iPhone:** Isomer's Apple driver lists a SwiftUI
-  `.alert` as presented (its title and message) but none of its buttons,
-  so "Sign In to Claude"'s "Open Sign-In Page" and "Later" can't be
-  tapped there, and the sign-in code prompt's tests fail on the iPhone
-  (raised with Isomer).
-- **`longpress` on the iPhone:** Isomer's Apple driver doesn't open a
-  context menu yet; the Project Settings test records a known issue there
-  (`IsomerGap.appleLongPress`). On Isomer's runtime (headless, Android)
-  it does.
+- **The sign-in page on the iPhone:** "Open Sign-In Page" opens the page
+  in Safari, in front of Visor, and iOS suspends Visor there. The tests
+  come back with `scene(.active)`, but Isomer's iOS launcher has no
+  `scene` of its own, so the driver only moves the app's phase from
+  inside the suspended app: the next command waits for an answer that
+  doesn't come until Visor is brought to the front. The sign-in code
+  prompt's cancel and leave-and-come-back tests hang on the iPhone there
+  (Isomer's to fix in its launcher). Its alert's buttons, the prompt's
+  field and a long press are all driven there since isomer#234.
 - **Settings → Add Computer on the iPhone:** Add Computer shows only once
   Settings is closed (`settings-add-computer` leaves Settings up). That is
   the app's own: Add Computer's sheet is presented from the root view,
