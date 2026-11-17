@@ -171,21 +171,22 @@ bazel_dep(name = "isomer", version = "0.55.0")
 # `@isomer//android/maven:androidx` flags stay at their defaults, which find it.
 bazel_dep(name = "isomer_android_maven", version = "0.55.0")
 
-# Until isomer 0.56 is released: isomer's main at #231 (the Apple driver's
-# identifiers, dismiss, landscape taps and scene phase; launchers that start
-# an app fresh and stop at once), which the feature map's headful suite
+# Until isomer 0.56 is released: isomer#234's head, on isomer's main at #231
+# (the Apple driver's identifiers, dismiss, landscape taps and scene phase;
+# launchers that start an app fresh and stop at once; #234: alerts' buttons
+# and fields, and long press on iOS), which the feature map's headful suite
 # needs. A branch may pin an unreleased revision; a release may not
 # (tools/released_pins.sh). Back to the registry's version, both modules and
 # third_party/swift_packages' isomer, once 0.56 is tagged.
 git_override(
     module_name = "isomer",
-    commit = "262098292e89b03e427a30a965acbad7a394640b",
+    commit = "4b1a715a27c179371aef40580a3dfcdd719f3bc2",
     remote = "https://github.com/AttilaTheFun/isomer.git",
 )
 
 git_override(
     module_name = "isomer_android_maven",
-    commit = "262098292e89b03e427a30a965acbad7a394640b",
+    commit = "4b1a715a27c179371aef40580a3dfcdd719f3bc2",
     remote = "https://github.com/AttilaTheFun/isomer.git",
     strip_prefix = "android/maven_module",
 )

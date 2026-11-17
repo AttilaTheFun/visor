@@ -1090,7 +1090,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 607b0f5b12300f3effa969ba403293e4a4528325a8f3d9c2f6b852c28b8bf896"
+          "FILE:@@//third_party/swift_packages/Package.resolved 100433d6f8f92b8c9c50ac8d5e96c86e48b0c8d82f5e4b793e807e90b85ff845"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1142,7 +1142,7 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_isomer",
-              "commit": "262098292e89b03e427a30a965acbad7a394640b",
+              "commit": "4b1a715a27c179371aef40580a3dfcdd719f3bc2",
               "remote": "https://github.com/AttilaTheFun/isomer.git",
               "env": {},
               "env_inherit": [],
