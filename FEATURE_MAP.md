@@ -92,7 +92,7 @@ flowchart TD
     SubPage -->|"back"| Chat
 
     Settings -->|"tap settings-computer-‹name›"| Computer
-    Settings -->|"tap settings-add-computer (iPhone: once Settings closes)"| AddComputer
+    Settings -->|"tap settings-add-computer"| AddComputer
     Settings -->|"tap settings-done or settings-back"| Sessions
 ```
 
@@ -258,10 +258,6 @@ What this map assumes that Visor doesn't do yet:
   question sheet), though a swipe down does; the suite taps the sheet's
   own Cancel, Done or close instead (`IsomerGap.appleDismiss`), and the
   question sheet, which has none, can't be put away.
-- **Settings → Add Computer on the iPhone:** Add Computer shows only once
-  Settings is closed (`settings-add-computer` leaves Settings up for
-  seconds). It may be how the app presents it there (a second sheet from
-  the root while Settings is up); not yet checked against XCUITest.
 - **`back` in a sheet:** on Isomer, `back` on a page pushed inside a
   sheet (Settings → a computer's page) closes the whole sheet.
 - **Steps the driver can't take:** context menus (a session's Rename,

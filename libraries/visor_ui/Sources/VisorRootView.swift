@@ -84,7 +84,10 @@ public struct VisorRootView: View {
         store.noteViewing(serverID: session?.serverID, sessionID: session?.sessionID)
     }
 
-    /// Settings with its title and Done, where it is a sheet.
+    /// Settings with its title and Done, where it is a sheet. Add Computer
+    /// opens over it from here: on the iPhone a view whose sheet is up
+    /// presents no other, so the root's waited until Settings closed.
+    /// Connected or cancelled, Settings is there again.
     private var settingsSheet: some View {
         NavigationStack {
             VisorSettingsView(computer: $settingsComputer, inSheet: true)
@@ -94,6 +97,32 @@ public struct VisorRootView: View {
                             .accessibilityIdentifier("settings-done")
                     }
                 }
+        }
+        .sheet(isPresented: addingServer(fromSettings: true)) { addComputer }
+    }
+
+    /// Whether Settings is up as a sheet: on a phone's width, and wherever
+    /// the onboarding opens it (it has no pane).
+    private var settingsIsSheet: Bool {
+        pane == .settings && (compact || onboarding)
+    }
+
+    /// Whether Add Computer is open from Settings' sheet (`fromSettings`)
+    /// or from the root: `store.addingServer` from the one Settings being
+    /// a sheet says, so it opens once.
+    private func addingServer(fromSettings: Bool) -> Binding<Bool> {
+        Binding(get: { store.addingServer && settingsIsSheet == fromSettings }, set: { open in
+            if open || settingsIsSheet == fromSettings { store.addingServer = open }
+        })
+    }
+
+    /// Add Computer: the computer added and kept, or nothing.
+    private var addComputer: some View {
+        AddAgentServerSheet { record in
+            store.add(record)
+            store.addingServer = false
+        } cancel: {
+            store.addingServer = false
         }
     }
 
@@ -170,18 +199,16 @@ public struct VisorRootView: View {
             // Settings › Appearance; screenshots: one look, whatever the
             // device's.
             .preferredColorScheme(colorScheme)
-            .sheet(isPresented: Binding(get: { store.addingServer }, set: { store.addingServer = $0 })) {
-                AddAgentServerSheet { record in
-                    store.add(record)
-                    store.addingServer = false
-                } cancel: {
-                    store.addingServer = false
-                }
-            }
+            .sheet(isPresented: addingServer(fromSettings: false)) { addComputer }
+    }
+
+    /// The onboarding is on screen (the app's, or the fixture's).
+    private var onboarding: Bool {
+        VisorFixture.screen == "onboarding" || VisorOnboardings.current.isNeeded(store)
     }
 
     @ViewBuilder private var root: some View {
-        if VisorFixture.screen == "onboarding" || VisorOnboardings.current.isNeeded(store) {
+        if onboarding {
             // No split view yet, so no pane: Settings is a sheet, opened by
             // the onboarding's own Settings button (the trailing pane in its
             // environment), as every tab of a host has its gear.
