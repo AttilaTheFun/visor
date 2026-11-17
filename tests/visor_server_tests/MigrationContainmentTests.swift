@@ -7,8 +7,9 @@
 // folder and nothing in it leads out of it; nothing is written outside the
 // move's folder, the agent's place for the conversation, or the session's
 // new folder. An archive's own links that stay inside it still come. And an
-// archive unpacks to no more than a move carries: refused before when its
-// listing says more, stopped while it unpacks when it writes more.
+// archive unpacks to no more than a move carries, in bytes and in entries:
+// refused before when its listing says more, stopped while it unpacks when
+// it writes more.
 
 import ClaudeTranscript
 import Foundation
@@ -171,7 +172,7 @@ extension ServerTests {
     /// `entries` packed as the folder `target` (each name under its name,
     /// an absolute one as it is) and unpacked as that folder alone where it
     /// goes, as the conversation's folder or the memory is: what went wrong.
-    private func unpack(_ entries: [Entry], into target: URL) async throws -> String? {
+    private func unpack(_ entries: [Entry], into target: URL, limits: VisorServer.UnpackLimits = VisorServer.UnpackLimits()) async throws -> String? {
         let name = target.lastPathComponent
         let named = entries.map { entry in
             var entry = entry
@@ -183,7 +184,7 @@ extension ServerTests {
         let archive = root.appendingPathComponent("archive-" + UUID().uuidString + ".tgz")
         try await tarball(named).write(to: archive)
         defer { try? FileManager.default.removeItem(at: archive) }
-        return await VisorServer.unpack(archive, into: target.deletingLastPathComponent(), only: name)
+        return await VisorServer.unpack(archive, into: target.deletingLastPathComponent(), only: name, limits: limits)
     }
 
     // MARK: Ids
@@ -655,10 +656,89 @@ extension ServerTests {
             let staging = try tree("staging-" + UUID().uuidString)
             let bound = VisorServer.unpackBound(4 << 10, limits, in: staging)
             let stopped = await VisorServer.extract(root.appendingPathComponent("none.tgz"), into: staging, tar: fake.path, bound: bound,
-                                                    every: .milliseconds(50))
+                                                    entries: VisorServer.entryBound(10, limits), every: .milliseconds(50))
             #expect(stopped?.contains(says) == true, Comment(rawValue: stopped ?? "not stopped"))
             #expect(stopped?.hasSuffix("and was stopped") == true, Comment(rawValue: stopped ?? "not stopped"))
             #expect(VisorServer.unpackedBytes(staging) < 128 << 20, "stopped before it was done")
+            VisorServer.removeTree(staging)
+        }
+        #expect(ContinuousClock.now - started < .seconds(30), "never waited for it to end of itself")
+    }
+
+    // MARK: How many entries an archive unpacks to
+
+    /// Each name is an entry, and so is each folder one lies in, listed or
+    /// not; a name listed twice counts twice; the count stops past `most`.
+    @Test func testAnArchivesEntriesAreItsNamesAndTheFoldersTheyLieIn() {
+        func count(_ names: [Substring], most: Int = 100) -> Int { VisorServer.listedEntries(names, most: most) }
+        #expect(count(["memory/", "memory/a", "./memory/b"]) == 3)
+        #expect(count(["memory/b/c/d"]) == 4, "memory, memory/b and memory/b/c are made too")
+        #expect(count(["memory/", "memory/a", "memory/a"]) == 3, "the names, when they are more")
+        #expect(count([]) == 0)
+        #expect(count([Substring("memory/" + Array(repeating: "d", count: 1000).joined(separator: "/"))], most: 50) == 51,
+                "a deep name counted no further than past the cap")
+        #expect(count(Array(repeating: "memory/a", count: 60), most: 50) == 60, "too many names, not looked at")
+        #expect(VisorServer.UnpackLimits().entries == VisorServer.unpackEntryCap)
+        #expect(VisorServer.unpackEntryCap == 200_000)
+    }
+
+    /// Empty files, or folders a name lies in, take no bytes but an inode
+    /// each: past the cap (lowered here) an archive is refused before
+    /// anything is made, and under it, it comes.
+    @Test func testAnArchiveOfMoreEntriesThanTheCapIsRefusedBeforeItIsUnpacked() async throws {
+        let parent = home.appendingPathComponent("Developer", isDirectory: true)
+        let empties = [Entry(name: "", folder: true)] + (0..<30).map { Entry(name: "empty-\($0)") }
+        // One name, thirty folders deep: one line of the listing, 31 entries.
+        let deep = [Entry(name: Array(repeating: "d", count: 29).joined(separator: "/") + "/f")]
+        let before = everything()
+        for (entries, says) in [(empties, "it holds 31 entries"), (deep, "it holds 31 entries")] {
+            let refused = try await unpack(entries, into: parent.appendingPathComponent("copied", isDirectory: true),
+                                           limits: VisorServer.UnpackLimits(entries: 20))
+            #expect(refused?.hasPrefix(says) == true, Comment(rawValue: refused ?? "unpacked"))
+            #expect(refused?.hasSuffix("an archive may hold at most 20") == true, Comment(rawValue: refused ?? "unpacked"))
+            // Nothing made, not even the folder it would have unpacked into.
+            #expect(everything() == before)
+        }
+        // At the cap, and under the one a move has, each comes whole.
+        for (index, entries) in [empties, deep].enumerated() {
+            for limits in [VisorServer.UnpackLimits(entries: 31), VisorServer.UnpackLimits()] {
+                let target = parent.appendingPathComponent("copied-\(index)-\(limits.entries)", isDirectory: true)
+                let unpacked = try await unpack(entries, into: target, limits: limits)
+                #expect(unpacked == nil, Comment(rawValue: unpacked ?? ""))
+                #expect(VisorServer.unpacked(target).entries == 30)
+            }
+        }
+    }
+
+    /// The listing's count is the archive's word too: a tar that makes more
+    /// entries than it declared, or than the cap, each an empty file (a
+    /// stand-in, as no honest archive does), is stopped while it makes
+    /// them, well before it is done.
+    @Test func testAnUnpackingThatMakesMoreEntriesThanItDeclaredIsStopped() async throws {
+        let fake = root.appendingPathComponent("fake-tar-entries")
+        // Asked to unpack into `-C <folder>` (its last argument), it makes
+        // up to 100,000 empty files, then waits.
+        try Data("""
+            #!/bin/sh
+            for last; do :; done
+            mkdir -p "$last/copied"
+            i=0
+            while [ $i -lt 100000 ]; do : > "$last/copied/f$i"; i=$((i + 1)); done
+            exec sleep 30
+
+            """.utf8).write(to: fake)
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: fake.path)
+        let started = ContinuousClock.now
+        for (declared, limits, says) in [(10, VisorServer.UnpackLimits(), "more than the 10 entries its listing declared"),
+                                         (50_000, VisorServer.UnpackLimits(entries: 500), "more than the 500 entries an archive may hold")] {
+            let staging = try tree("staging-" + UUID().uuidString)
+            let stopped = await VisorServer.extract(root.appendingPathComponent("none.tgz"), into: staging, tar: fake.path,
+                                                    bound: VisorServer.unpackBound(4 << 10, limits, in: staging),
+                                                    entries: VisorServer.entryBound(declared, limits), every: .milliseconds(50))
+            #expect(stopped?.contains(says) == true, Comment(rawValue: stopped ?? "not stopped"))
+            #expect(stopped?.hasSuffix("and was stopped") == true, Comment(rawValue: stopped ?? "not stopped"))
+            #expect(VisorServer.unpacked(staging).entries < 100_000, "stopped before it was done")
+            #expect(VisorServer.unpackedBytes(staging) == 0)
             VisorServer.removeTree(staging)
         }
         #expect(ContinuousClock.now - started < .seconds(30), "never waited for it to end of itself")
