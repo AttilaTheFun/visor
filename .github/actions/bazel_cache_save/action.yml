@@ -1,0 +1,34 @@
+# Bazel's caches saved to GitHub's cache after a build on main (the populate
+# jobs alone): the disk cache trimmed first to its group's share of GitHub's
+# 10 GB a repository (tools/ci/ci_bazel.sh trim), then saved under this
+# commit's key; the repository cache saved only when its key wasn't found
+# (a key is written once).
+name: Bazel's cache, saved
+description: Trims and saves the job group's Bazel caches
+inputs:
+  group:
+    description: ubuntu or apple
+    required: true
+  gigabytes:
+    description: The disk cache's size at most, in GB
+    required: true
+  repository-hit:
+    description: bazel_cache's repository-hit output
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: The disk cache, trimmed
+      shell: bash
+      env:
+        GIGABYTES: ${{ inputs.gigabytes }}
+      run: tools/ci/ci_bazel.sh trim "${VISOR_BAZEL_CACHE:-$HOME/.cache/visor-bazel}" "$GIGABYTES"
+    - uses: actions/cache/save@v4
+      with:
+        path: ${{ env.VISOR_BAZEL_CACHE || '~/.cache/visor-bazel' }}/disk
+        key: bazel-disk-${{ inputs.group }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'Package.resolved') }}-${{ github.sha }}
+    - if: inputs.repository-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ env.VISOR_BAZEL_CACHE || '~/.cache/visor-bazel' }}/repository
+        key: bazel-repository-${{ inputs.group }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'Package.resolved') }}

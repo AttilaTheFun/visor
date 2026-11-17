@@ -22,13 +22,14 @@ Targets:
                held in portrait, however the phone lies
   android-lab-landscape  the same, held in landscape (references of its own)
   web-desktop  the web client in desktop Safari, on a Mac leased from
-               Shireworks (tools/ci/shireworks.sh, with SHIREWORKS_SERVERS
+               Shireworks (tools/shireworks/shireworks.sh, with SHIREWORKS_SERVERS
                and a key or token), driven by safaridriver there
   macos        the macOS app, on the same lease, its window cropped from the
                machine's screenshot
 
-In CI (tools/ci/blue_ios_lease.sh) web-mobile runs on an iOS lease of
-Shireworks', the web site built on Linux: VISOR_SNAPSHOT_IOS_LEASE names the
+On an iOS lease of Shireworks' (by hand; CI has no job for it since it
+runs on GitHub's runners alone), the web site built on Linux:
+VISOR_SNAPSHOT_IOS_LEASE names the
 lease it drives (`shireworks.sh simctl`, its screenshots), and
 VISOR_SNAPSHOT_WEB_BASE where the lease's simulator reaches the site,
 served on a Mac slot beside it (serve_site.py), which a lease needs;
@@ -135,14 +136,14 @@ def bazel_output(target, *flags, suffix=""):
 
 # --- the web site, served on the loopback (to a simulator, or the leased Mac over SSH)
 
-# CI's (tools/ci/blue_ios_lease.sh): the iOS lease web-mobile drives, and
+# On an iOS lease (by hand): the iOS lease web-mobile drives, and
 # where the lease's simulator reaches the web site, served on a Mac slot
 # beside it (serve_site.py), or the site itself, served here.
 IOS_LEASE = os.environ.get("VISOR_SNAPSHOT_IOS_LEASE", "")
 WEB_BASE = os.environ.get("VISOR_SNAPSHOT_WEB_BASE", "").rstrip("/")
 WEB_SITE = os.environ.get("VISOR_SNAPSHOT_WEB_SITE", "")
 # Shireworks' REST API, through the script every repository's CI copies.
-SHIREWORKS = ["sh", os.path.join(ROOT, "tools", "ci", "shireworks.sh")]
+SHIREWORKS = ["sh", os.path.join(ROOT, "tools", "shireworks", "shireworks.sh")]
 
 @functools.lru_cache(None)
 def web_site():
@@ -428,7 +429,7 @@ class AndroidLabLandscape(AndroidLab):
         return []
 
 # --- a Mac leased from Shireworks (desktop Safari and the Mac app): through
-# tools/ci/shireworks.sh, with this computer's SHIREWORKS_SERVERS and key or
+# tools/shireworks/shireworks.sh, with this computer's SHIREWORKS_SERVERS and key or
 # token; one lease for the run, its SSH by a key of the run's own, released
 # when it ends
 

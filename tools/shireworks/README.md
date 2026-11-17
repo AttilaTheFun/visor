@@ -3,7 +3,7 @@
 Shireworks ([AttilaTheFun/shireworks](https://github.com/AttilaTheFun/shireworks))
 makes vanilla machines; what Visor's sessions need on top of them, when
 they lease them (through the Shireworks MCP tools their Visor server passes
-on, or tools/ci/shireworks.sh), is here, built on the Shireworks server's
+on, or tools/shireworks/shireworks.sh), is here, built on the Shireworks server's
 Mac with Shireworks' own image builds. (The image Visor's sessions'
 containers are made from is tools/containers: the container host makes
 each one.)
