@@ -16,9 +16,9 @@ let package = Package(
         // its release's tag: its own dependencies are by revision and branch,
         // so SwiftPM won't take it by version (tools/released_pins.sh allows
         // this one). Until isomer 0.56 is tagged, the commit MODULE.bazel's
-        // git_override pins (isomer's main at #236), which a release may not
+        // git_override pins (isomer's main at #237), which a release may not
         // have.
-        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "572b07a7d7130a293a8e976a88de060ebcb2b11e"),
+        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "6e567c79d0d1bac1d0251cf292e17fb95442f44c"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
             exact: "0.51.0"

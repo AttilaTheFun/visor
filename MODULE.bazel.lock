@@ -724,7 +724,7 @@
     "@@isomer+//tools/android:extensions.bzl%android_tools": {
       "os:linux,arch:aarch64": {
         "bzlTransitiveDigest": "fQQ4tcvpXIll2SShkelhgy80kaCU2XOZbujRrEXigtI=",
-        "usagesDigest": "GigN1cpJry+2znWNv4oxXsXYZUYyzhTEwwkJDTSCKSI=",
+        "usagesDigest": "HNiUQ6vjrP4TQrP/mdK8LjwurpI4MK/+Z/VxFq8hXwM=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -868,7 +868,7 @@
     "@@isomer+//tools/wasm:extensions.bzl%wasm_tools": {
       "general": {
         "bzlTransitiveDigest": "4sWkWFiytNpozmcCtTYcMkDIhtiS5kjbFGlOVWEzFp8=",
-        "usagesDigest": "+C4SJ4C9uHY5/HdK/BxZT9W3uTCXxXkTnt3M3179AvU=",
+        "usagesDigest": "j1ZG6M7tDRWKjFRNTlnqExVka3TAz84M8x4vkZs8Cbk=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -1087,12 +1087,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "B2aTY3dA0RubUZkTqFdg+fxS3ocQQeeog6AzCPaqDXY=",
-        "usagesDigest": "6dy9brIA6WRWM9RCy95kdy9IqlnTiiaCfIrnnaVK8pk=",
+        "usagesDigest": "5VBFp+2q8GDCbG6TLpgTHXvOlusAOzZuHsg0LdO+U+M=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved dc7d8d00cbdee2bc1a884f3869a9fbc97e7012dff49fec4afa975befacacc5e3"
+          "FILE:@@//third_party/swift_packages/Package.resolved 52b3f1471c58f2be3a5fc2d7b53d532d5f17481ec7fecd805cf3142227800dc2"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1142,7 +1142,7 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_isomer",
-              "commit": "572b07a7d7130a293a8e976a88de060ebcb2b11e",
+              "commit": "6e567c79d0d1bac1d0251cf292e17fb95442f44c",
               "remote": "https://github.com/AttilaTheFun/isomer.git",
               "env": {},
               "env_inherit": [],

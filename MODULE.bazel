@@ -163,32 +163,34 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.55.0")
+bazel_dep(name = "isomer", version = "0.56.0")
 
 # Isomer's AndroidX (the Android runtime's Compose and AndroidX), a module of
 # its own since isomer 0.54, at isomer's version (isomer's
 # docs/android_maven.md): Visor has no AndroidX of its own, so isomer's
 # `@isomer//android/maven:androidx` flags stay at their defaults, which find it.
-bazel_dep(name = "isomer_android_maven", version = "0.55.0")
+bazel_dep(name = "isomer_android_maven", version = "0.56.0")
 
-# Until isomer 0.56 is released: isomer's main at #236 (#231: the Apple
-# driver's identifiers, dismiss, landscape taps and scene phase; launchers
-# that start an app fresh and stop at once; #234: alerts' buttons and
-# fields, and long press on iOS; #236: the iPhone launcher's `scene`, which
-# wakes a suspended app, and HeadlessApp's commands time out), which the
-# feature map's headful suite needs. It has 0.56's Foundation in the Swift
+# Until isomer 0.56 is released: isomer's main at #237, the commit 0.56's
+# release run is of (#231: the Apple driver's identifiers, dismiss, landscape
+# taps and scene phase; launchers that start an app fresh and stop at once;
+# #234: alerts' buttons and fields, and long press on iOS; #236: the iPhone
+# launcher's `scene`, which wakes a suspended app, and HeadlessApp's commands
+# time out; #237: scene(.active) after the launcher brings the app back
+# steps the phase from the one iOS last told SwiftUI), which the feature
+# map's headful suite needs. It has 0.56's Foundation in the Swift
 # SDKs (#232) too: the SDKs below. A branch may pin an unreleased revision; a release may not
 # (tools/released_pins.sh). Back to the registry's version, both modules and
 # third_party/swift_packages' isomer, once 0.56 is tagged.
 git_override(
     module_name = "isomer",
-    commit = "572b07a7d7130a293a8e976a88de060ebcb2b11e",
+    commit = "6e567c79d0d1bac1d0251cf292e17fb95442f44c",
     remote = "https://github.com/AttilaTheFun/isomer.git",
 )
 
 git_override(
     module_name = "isomer_android_maven",
-    commit = "572b07a7d7130a293a8e976a88de060ebcb2b11e",
+    commit = "6e567c79d0d1bac1d0251cf292e17fb95442f44c",
     remote = "https://github.com/AttilaTheFun/isomer.git",
     strip_prefix = "android/maven_module",
 )
