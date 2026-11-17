@@ -252,9 +252,10 @@ since isomer#228 and #231; the suite takes them all by identifier.)
   come back with `scene(.active)`, but Isomer's iOS launcher has no
   `scene` of its own, so the driver only moves the app's phase from
   inside the suspended app: the next command waits for an answer that
-  doesn't come until Visor is brought to the front. The sign-in code
-  prompt's cancel and leave-and-come-back tests hang on the iPhone there
-  (Isomer's to fix in its launcher). Its alert's buttons, the prompt's
+  doesn't come until Visor is brought to the front. So the sign-in code
+  prompt's tests after the page opens (send, cancel, leave and come back)
+  hang on the iPhone whenever iOS suspends Visor before they're done,
+  which is most runs (Isomer's to fix: a `scene` in its iOS launcher). Its alert's buttons, the prompt's
   field and a long press are all driven there since isomer#234.
 - **Settings → Add Computer on the iPhone:** Add Computer shows only once
   Settings is closed (`settings-add-computer` leaves Settings up). That is
