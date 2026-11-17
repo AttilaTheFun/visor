@@ -94,7 +94,10 @@ extension ServerTests {
         #expect(parseJSON(rest("GET", "/api/admin-token").body)?["exists"].bool == true)
         // It is a REST credential; a guess isn't.
         #expect(rest("GET", "/api/sessions", bearer: first).status == 200)
-        #expect(rest("GET", "/api/sessions", bearer: String(first.dropLast()) + "0").status == 401)
+        // A guess one character off (changed, never kept: a token ending in
+        // "0" made this the token itself, one run in sixteen).
+        let guess = String(first.dropLast()) + (first.hasSuffix("0") ? "1" : "0")
+        #expect(rest("GET", "/api/sessions", bearer: guess).status == 401)
         // Kept across a launch, as its hash.
         let next = VisorServer(port: ServerTestCase.freePort())
         defer { next.stop() }
