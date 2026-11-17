@@ -198,6 +198,9 @@ extension VisorServer {
         let cwd = sessionFolders?.folder(agent: offer.session.agent, id: offer.session.id)
             ?? Self.path(offer.session.cwd, from: offer.home, to: SessionCatalog.home.path)
         var put: [String] = []
+        // What each packed file unpacked to, which counts against the
+        // restore's total in its place for what is unpacked after it.
+        var landed: [String: Int] = [:]
         // The folder first: the agent starts in it.
         if !files.fileExists(atPath: cwd) {
             try? files.createDirectory(atPath: cwd, withIntermediateDirectories: true)
@@ -213,10 +216,13 @@ extension VisorServer {
             if file.packed {
                 // A folder (subagents' records): put back only when gone.
                 guard !files.fileExists(atPath: destination.path) else { continue }
-                if let problem = await Self.unpack(kept, into: destination.deletingLastPathComponent(), only: destination.lastPathComponent) {
+                let into = destination.deletingLastPathComponent()
+                let limits = unpackLimits(file, of: offer.files, landed: landed, in: into)
+                if let problem = await Self.unpack(kept, into: into, only: destination.lastPathComponent, limits: limits) {
                     result.outcome = "Not restored: could not unpack \(file.place): \(problem)"
                     return result
                 }
+                landed[file.id] = Self.unpackedBytes(destination)
                 put.append(destination.lastPathComponent)
                 continue
             }
@@ -236,7 +242,8 @@ extension VisorServer {
         }
         // Claude's memory, where the folder's project has none.
         if let memory = offer.files.first(where: { $0.id == Self.memoryFileID }),
-           await Self.putMemory(folder.appendingPathComponent(Self.backupName(of: memory), isDirectory: false), of: offer.session.title, cwd: cwd) {
+           await Self.putMemory(folder.appendingPathComponent(Self.backupName(of: memory), isDirectory: false), of: offer.session.title, cwd: cwd,
+                                limits: unpackLimits(memory, of: offer.files, landed: landed, in: Self.memoryProject(cwd))) {
             put.append("memory")
         }
         if let here = session(offer.session.id) {

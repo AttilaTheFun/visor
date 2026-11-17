@@ -75,12 +75,14 @@ extension VisorServer {
     /// A gzipped tar of the folder `name` (the conversation's folder, the
     /// memory) unpacked into `folder` (made when missing): every entry's
     /// name checked first (never absolute, never through `..`, always under
-    /// `name`), then unpacked into a folder of its own inside `folder`,
+    /// `name`), and the sizes it declares held to `limits`
+    /// (VisorServer+MigrationUnpackSize); then unpacked into a folder of its
+    /// own inside `folder`, measured as it goes and stopped past them,
     /// walked (unsafeTree), and only then moved into place, where nothing
     /// is by that name but an empty folder (never over what is there). What
     /// went wrong, if anything; the folder it was unpacked into goes either
     /// way.
-    static func unpack(_ archive: URL, into folder: URL, only name: String) async -> String? {
+    static func unpack(_ archive: URL, into folder: URL, only name: String, limits: UnpackLimits = UnpackLimits()) async -> String? {
         guard isCarriedName(name) else { return "\(name) is not a name to unpack as" }
         let destination = folder.appendingPathComponent(name, isDirectory: false)
         if let there = try? FileManager.default.attributesOfItem(atPath: destination.path) {
@@ -92,9 +94,17 @@ extension VisorServer {
         // checked are the archive's own.
         guard let listed = await Command.output(tar, ["-t", "-P", "-z", "-f", archive.path]) else { return "tar could not be started" }
         guard listed.status == 0 else { return "it is not an archive tar can read" }
-        for entry in listed.text.split(separator: "\n") where !entry.isEmpty {
+        let names = listed.text.split(separator: "\n").filter { !$0.isEmpty }
+        for entry in names {
             if let problem = unsafeEntry(String(entry), only: name) { return problem }
         }
+        // Each entry's size as it declares it (`-v`), and so all of them,
+        // held to the limits before anything is unpacked.
+        guard let verbose = await Command.output(tar, ["-t", "-v", "-P", "-z", "--numeric-owner", "-f", archive.path]), verbose.status == 0,
+              let declared = listedBytes(verbose.text), declared.entries == names.count else {
+            return "the sizes of what it holds could not be read"
+        }
+        if let problem = unpackRefusal(declared.bytes, limits, in: folder) { return problem }
         let files = FileManager.default
         try? files.createDirectory(at: folder, withIntermediateDirectories: true)
         let staging = folder.appendingPathComponent(".visor-unpacking-" + UUID().uuidString.lowercased(), isDirectory: true)
@@ -102,9 +112,8 @@ extension VisorServer {
             return "could not make a folder to unpack into in \(folder.path)"
         }
         defer { removeTree(staging) }
-        guard let result = await Command.output(tar, ["--no-same-owner", "--no-same-permissions", "-xzf", archive.path, "-C", staging.path],
-                                                errors: true) else { return "tar could not be started" }
-        guard result.status == 0 else { return result.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let bound = unpackBound(declared.bytes, limits, in: folder)
+        if let problem = await extract(archive, into: staging, tar: tar, bound: bound, every: limits.every) { return problem }
         let top = ((try? files.contentsOfDirectory(atPath: staging.path)) ?? []).sorted()
         guard top == [name] else { return "it holds \(top.joined(separator: ", ")), not \(name) alone" }
         // The folder itself is the root of the walk: a link in it that
@@ -115,6 +124,9 @@ extension VisorServer {
             return "it holds \(name), which is not a folder"
         }
         if let problem = unsafeTree(unpacked) { return problem }
+        // Measured once more whole, every folder opened: past the bound
+        // between two measures, or in one that couldn't be looked in then.
+        guard unpackedBytes(unpacked) <= bound.bytes else { return bound.why }
         guard SessionPathName.isInside(destination, folder) else { return "\(name) would lead out of \(folder.path)" }
         // The empty folder by that name, the one thing it may take the place of.
         try? files.removeItem(at: destination)

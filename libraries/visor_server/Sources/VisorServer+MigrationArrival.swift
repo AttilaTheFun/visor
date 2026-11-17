@@ -124,6 +124,9 @@ extension VisorServer {
         if let problem = Self.notComingBack(placed.map { ($0.file, $0.carried, $0.there) }) { return .error("The move was refused: \(problem).") }
         try? files.createDirectory(atPath: cwd, withIntermediateDirectories: true)
         let stamp = Self.backupStamp(Date())
+        // What each packed file unpacked to, which counts against the
+        // move's total in its place for what is unpacked after it.
+        var landed: [String: Int] = [:]
         for (file, carried, destination, there) in placed {
             try? files.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
             // The same conversation come back: its log here, the start of
@@ -139,10 +142,13 @@ extension VisorServer {
             if file.packed {
                 // The folder by its own name alone, where nothing is; what
                 // was set aside for it back again when it can't be.
-                if let problem = await Self.unpack(carried, into: destination.deletingLastPathComponent(), only: destination.lastPathComponent) {
+                let into = destination.deletingLastPathComponent()
+                let limits = unpackLimits(file, of: offer.files, landed: landed, in: into)
+                if let problem = await Self.unpack(carried, into: into, only: destination.lastPathComponent, limits: limits) {
                     if let aside { try? files.moveItem(at: aside.to, to: aside.from) }
                     return .error("Could not put the conversation at \(destination.path): \(problem)")
                 }
+                landed[file.id] = Self.unpackedBytes(destination)
             } else {
                 try? files.removeItem(at: destination)
                 do { try files.moveItem(at: carried, to: destination) } catch {
@@ -151,7 +157,7 @@ extension VisorServer {
             }
         }
         let notice = "Moved here from \(offer.from.isEmpty ? "another computer" : offer.from). The session there is as it was: remove it once this one works."
-        await putMemory(of: move, cwd: cwd)
+        await putMemory(of: move, cwd: cwd, landed: landed)
         guard let record = startCarried(offer, id: move.sessionID, cwd: cwd, notice: notice) else {
             return .error("The session could not be started here.")
         }

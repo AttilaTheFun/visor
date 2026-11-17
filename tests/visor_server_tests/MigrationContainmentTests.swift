@@ -6,7 +6,9 @@
 // conversation's folder, the memory) is refused unless it holds that one
 // folder and nothing in it leads out of it; nothing is written outside the
 // move's folder, the agent's place for the conversation, or the session's
-// new folder. An archive's own links that stay inside it still come.
+// new folder. An archive's own links that stay inside it still come. And an
+// archive unpacks to no more than a move carries: refused before when its
+// listing says more, stopped while it unpacks when it writes more.
 
 import ClaudeTranscript
 import Foundation
@@ -545,6 +547,140 @@ extension ServerTests {
         try Data().write(to: day.appendingPathComponent("rollout-2026-11-16T09-00-00-aaaaaaaa-2222-3333-4444-555555555555.jsonl"))
         #expect((SessionCatalog.codexRollout(id: conversation, in: codex)?.lastPathComponent) == name)
         for id in ["a", "rollout", "2026", "5555"] { #expect(SessionCatalog.codexRollout(id: id, in: codex) == nil, "\(id)") }
+    }
+
+    // MARK: How much an archive unpacks to
+
+    /// GNU tar's listing (Linux's) and bsdtar's (the Mac's, Windows's):
+    /// names with spaces, numbers, dates and arrows in them, a link, a hard
+    /// link, a device; anything else not read at all.
+    @Test func testBothTarsListingsSizesAreRead() {
+        let gnu = """
+            drwxr-xr-x 501/20            0 2026-11-16 10:00 memory/
+            -rw-r--r-- 501/20         1234 2026-11-16 10:00 memory/a file 99999 2026-11-16 10:00.txt
+            lrwxrwxrwx 501/20            0 2026-11-16 10:00 memory/l 777 -> 888 -> target
+            hrw-r--r-- 501/20            0 2026-11-16 10:00 memory/h link to memory/a file 99999 2026-11-16 10:00.txt
+            -rw-r--r-- 0/0          100000 1970-01-01 00:00 memory/big
+            crw-r--r-- 0/0             1,3 1970-01-01 00:00 memory/null
+
+            """
+        #expect(VisorServer.listedBytes(gnu).map { [$0.entries, $0.bytes] } == [6, 101_234])
+        let bsd = """
+            drw-r--r--  0 501    20          0 Dec 31  1969 memory/
+            -rw-r--r--  0 501    20       1234 Dec 31  1969 memory/a file 99999 Nov 16 10:00.txt
+            lrw-r--r--  0 501    20          0 Nov 16 10:00 memory/l 777 -> 888 -> target
+            hrw-r--r--  0 501    20          0 Nov 16 10:00 memory/h link to memory/a file 99999 Nov 16 10:00.txt
+            -rw-r--r--  0 501    20     100000 Dec 31  1969 memory/big
+            crw-r--r--  0 0      0         1,3 Dec 31  1969 memory/null
+            """
+        #expect(VisorServer.listedBytes(bsd).map { [$0.entries, $0.bytes] } == [6, 101_234])
+        #expect(VisorServer.listedBytes("").map { [$0.entries, $0.bytes] } == [0, 0])
+        for line in ["memory/a", "-rw-r--r-- 501/20 12 memory", "-rw-r--r-- 501/20 x 2026-11-16 10:00 memory/a",
+                     "-rw-r--r-- 501/20 -5 2026-11-16 10:00 memory/a", "-rw-r--r-- 501/20 99999999999999999999 2026-11-16 10:00 memory/a",
+                     "-rw-r--r--  0 a b c  g 1 2       1234 Dec 31  1969 memory/a", "-rw-r--r--  0 501 20 x Dec 31  1969 memory/a"] {
+            #expect(VisorServer.listedBytes(line) == nil, "\(line)")
+        }
+        let past = "-rw-r--r-- 0/0 \(Int.max) 2026-11-16 10:00 memory/a\n-rw-r--r-- 0/0 1 2026-11-16 10:00 memory/b"
+        #expect(VisorServer.listedBytes(past) == nil, "past counting")
+    }
+
+    /// The tar here (GNU's on Linux, bsdtar on a Mac) lists what is read.
+    @Test func testThisTarsListingIsRead() async throws {
+        let archive = root.appendingPathComponent("listed.tgz")
+        try await tarball([Entry(name: "memory", folder: true), Entry(name: "memory/a file 12 34.txt", text: String(repeating: "x", count: 1234)),
+                           Entry(name: "memory/l -> 5", link: "a file 12 34.txt"), Entry(name: "memory/h", link: "memory/a file 12 34.txt", kind: "1"),
+                           Entry(name: "memory/b", text: String(repeating: "y", count: 100))]).write(to: archive)
+        let listed = await run("tar", ["-t", "-v", "-P", "-z", "--numeric-owner", "-f", archive.path])
+        #expect(listed.status == 0, Comment(rawValue: listed.text))
+        #expect(VisorServer.listedBytes(listed.text).map { [$0.entries, $0.bytes] } == [5, 1334], Comment(rawValue: listed.text))
+    }
+
+    /// 256 KB of one character, which gzip makes a few hundred bytes of.
+    private func compressible(into target: URL) async throws -> URL {
+        let archive = root.appendingPathComponent("zeros-" + UUID().uuidString + ".tgz")
+        let data = try await tarball([Entry(name: target.lastPathComponent + "/zeros", text: String(repeating: "0", count: 256 << 10))])
+        #expect(data.count < 4 << 10, "\(data.count) bytes")
+        try data.write(to: archive)
+        return archive
+    }
+
+    @Test func testASmallArchiveThatUnpacksPastALimitIsRefusedBeforeItIsUnpacked() async throws {
+        let target = home.appendingPathComponent("Developer/copied", isDirectory: true)
+        let archive = try await compressible(into: target)
+        let before = everything()
+        let limits: [(VisorServer.UnpackLimits, String)] = [
+            (VisorServer.UnpackLimits(fileCap: 64 << 10), "a move carries at most 64 KB of a file"),
+            (VisorServer.UnpackLimits(budget: 64 << 10), "64 KB is left once its other files are counted"),
+            (VisorServer.UnpackLimits(budget: -5), "nothing is left once its other files are counted"),
+            (VisorServer.UnpackLimits(free: 300 << 10, margin: 100 << 10), "has 300 KB free, which must keep 100 KB to spare"),
+        ]
+        for (limit, says) in limits {
+            let refused = await VisorServer.unpack(archive, into: target.deletingLastPathComponent(), only: target.lastPathComponent, limits: limit)
+            #expect(refused?.hasPrefix("it unpacks to 256 KB, and ") == true, Comment(rawValue: refused ?? "unpacked"))
+            #expect(refused?.contains(says) == true, Comment(rawValue: refused ?? "unpacked"))
+            // Nothing made, not even the folder it would have unpacked into.
+            #expect(everything() == before)
+        }
+        // Under every limit, it comes.
+        let unpacked = await VisorServer.unpack(archive, into: target.deletingLastPathComponent(), only: target.lastPathComponent,
+                                                limits: VisorServer.UnpackLimits(fileCap: 256 << 10, budget: 256 << 10, free: 1 << 20, margin: 768 << 10))
+        #expect(unpacked == nil, Comment(rawValue: unpacked ?? ""))
+        #expect(VisorServer.fileSize(target.appendingPathComponent("zeros")) == 256 << 10)
+        #expect(VisorServer.unpackedBytes(target) == 256 << 10)
+        #expect((try FileManager.default.contentsOfDirectory(atPath: target.deletingLastPathComponent().path)) == ["copied"], "no folder of the unpacking's left")
+    }
+
+    /// The listing is the archive's word: a tar that writes more than it
+    /// declared (a stand-in, as no honest archive does) is stopped while it
+    /// writes, well before it is done.
+    @Test func testAnUnpackingThatRunsPastWhatItDeclaredIsStopped() async throws {
+        let fake = root.appendingPathComponent("fake-tar")
+        // Asked to unpack into `-C <folder>` (its last argument), it writes
+        // 64 KB at a time, up to 128 MB, then waits.
+        try Data("""
+            #!/bin/sh
+            for last; do :; done
+            mkdir -p "$last/copied"
+            i=0
+            while [ $i -lt 2048 ]; do head -c 65536 /dev/zero >> "$last/copied/big"; i=$((i + 1)); done
+            exec sleep 30
+
+            """.utf8).write(to: fake)
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: fake.path)
+        let started = ContinuousClock.now
+        for (limits, says) in [(VisorServer.UnpackLimits(), "more than the 4 KB its listing declared"),
+                               (VisorServer.UnpackLimits(fileCap: 2 << 20, slack: 64 << 20), "more than the 2.0 MB a move carries of a file"),
+                               (VisorServer.UnpackLimits(budget: 3 << 20, slack: 64 << 20), "more than the 3.0 MB left of what a move carries in all"),
+                               (VisorServer.UnpackLimits(free: 6 << 20, margin: 1 << 20, slack: 64 << 20), "has free with 1.0 MB to spare")] {
+            let staging = try tree("staging-" + UUID().uuidString)
+            let bound = VisorServer.unpackBound(4 << 10, limits, in: staging)
+            let stopped = await VisorServer.extract(root.appendingPathComponent("none.tgz"), into: staging, tar: fake.path, bound: bound,
+                                                    every: .milliseconds(50))
+            #expect(stopped?.contains(says) == true, Comment(rawValue: stopped ?? "not stopped"))
+            #expect(stopped?.hasSuffix("and was stopped") == true, Comment(rawValue: stopped ?? "not stopped"))
+            #expect(VisorServer.unpackedBytes(staging) < 128 << 20, "stopped before it was done")
+            VisorServer.removeTree(staging)
+        }
+        #expect(ContinuousClock.now - started < .seconds(30), "never waited for it to end of itself")
+    }
+
+    /// What a move's (or a restore's) archive may unpack to: what is left
+    /// of the total once its other files are counted, each as carried or as
+    /// it unpacked to, and the room where it unpacks.
+    @Test func testAnArchivesLimitsCountTheMovesOtherFiles() {
+        let files = [MigrationFile(id: "conversation-0", place: "projects/{project}/\(conversation).jsonl", size: 1 << 30, packed: false),
+                     MigrationFile(id: "conversation-1", place: "projects/{project}/\(conversation)", size: 100 << 20, packed: true),
+                     MigrationFile(id: "memory", place: "", size: 1 << 20, packed: true)]
+        server.freeBytes = { url in url.path == "/there" ? 5 << 30 : nil }
+        let folder = server.unpackLimits(files[1], of: files, landed: [:], in: URL(fileURLWithPath: "/there"))
+        #expect(folder.fileCap == VisorServer.migrationFileCap)
+        #expect(folder.budget == VisorServer.migrationTotalCap - (1 << 30) - (1 << 20))
+        #expect(folder.free == 5 << 30)
+        #expect(folder.margin == VisorServer.migrationFreeMargin)
+        // The memory after the folder: the folder as it unpacked.
+        let memory = server.unpackLimits(files[2], of: files, landed: ["conversation-1": 900 << 20], in: URL(fileURLWithPath: "/elsewhere"))
+        #expect(memory.budget == VisorServer.migrationTotalCap - (1 << 30) - (900 << 20))
+        #expect(memory.free == nil)
     }
 
     // MARK: Backups
