@@ -58,10 +58,10 @@ extension ServerTests {
         server.stop()
     }
 
-    private func record(_ id: String, _ title: String, agent: QuietAgent = QuietAgent(), busy: Bool = false) -> SessionRecord {
+    private func record(_ id: String, _ title: String, agent: QuietAgent? = nil, busy: Bool = false) -> SessionRecord {
         var info = SessionInfo(id: id, agent: .claude, cwd: "/tmp", title: title, created: 0)
         info.busy = busy
-        let record = SessionRecord(info: info, process: agent,
+        let record = SessionRecord(info: info, process: agent ?? QuietAgent(),
                                    entries: [TranscriptEntry(id: id + "-u1", role: .user, text: "Build it"),
                                              TranscriptEntry(id: id + "-a1", role: .assistant, text: "Built.")])
         record.noteLatest(at: 0)
