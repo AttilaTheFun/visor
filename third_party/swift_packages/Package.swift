@@ -15,10 +15,8 @@ let package = Package(
         // platforms; Foundation is in Isomer's Swift SDKs since 0.56), by
         // its release's tag: its own dependencies are by revision and branch,
         // so SwiftPM won't take it by version (tools/released_pins.sh allows
-        // this one). Until isomer 0.56 is tagged, the commit MODULE.bazel's
-        // git_override pins (isomer's main at #237), which a release may not
-        // have.
-        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "6e567c79d0d1bac1d0251cf292e17fb95442f44c"),
+        // this one).
+        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.56.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
             exact: "0.51.0"
