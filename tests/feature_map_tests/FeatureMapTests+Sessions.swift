@@ -11,7 +11,7 @@ extension FeatureMapTests {
         func addsAComputer() throws {
             let app = try VisorLaunch.fixture("sessions")
             defer { app.quit() }
-            FeatureMapNode.addComputer.expectShown(on: try app.tap(id: "add-computer", else: "Add Computer…"))
+            FeatureMapNode.addComputer.expectShown(on: try app.tap("add-computer"))
         }
 
         @Test("Sessions → Search results: type “Search sessions” ‹text›")
@@ -27,24 +27,15 @@ extension FeatureMapTests {
         func startsASession() throws {
             let app = try VisorLaunch.fixture("sessions")
             defer { app.quit() }
-            // The bottom bar's compose, by its title (IsomerGap.bottomBarTitle).
-            let target: String
-            if try app.screen().element("New session") != nil {
-                target = "New session"
-            } else {
-                withKnownIssue(Comment(rawValue: IsomerGap.bottomBarTitle.rawValue)) {
-                    Issue.record("no element “New session”: found by “✎”")
-                }
-                target = "✎"
-            }
-            FeatureMapNode.newSession.expectShown(on: try app.tap(target))
+            // The bottom bar's compose, by its title.
+            FeatureMapNode.newSession.expectShown(on: try app.tap("New session"))
         }
 
         @Test("Sessions → Session chat: tap session-‹id›")
         func opensAChat() throws {
             let app = try VisorLaunch.fixture("sessions")
             defer { app.quit() }
-            let screen = try app.tap(id: "session-fixture-chat", else: "Offline sync", .listRow)
+            let screen = try app.tap("session-fixture-chat")
             FeatureMapNode.chat.expectShown(on: screen)
             #expect(screen.titled("Offline sync"), "\(screen.summary)")
         }
@@ -55,6 +46,18 @@ extension FeatureMapTests {
             defer { app.quit() }
             try app.screen { FeatureMapNode.chat.isShown(on: $0) }
             FeatureMapNode.sessions.expectShown(on: try app.back())
+        }
+
+        @Test("Sessions → Project settings: longpress session-‹id›, tap “Project Settings”")
+        func projectSettings() throws {
+            let app = try VisorLaunch.fixture("sessions")
+            defer { app.quit() }
+            try app.screen { FeatureMapNode.sessions.isShown(on: $0) }
+            // The row's context menu, its items the screen's buttons (on the
+            // iPhone too, since isomer#234's long press).
+            let menu = try app.longPress("session-fixture-chat")
+            #expect(menu.element("Project Settings") != nil, "no context menu: \(menu.summary)")
+            FeatureMapNode.project.expectShown(on: try app.tap("Project Settings"))
         }
 
         @Test("Sessions → Settings: tap settings")
@@ -69,10 +72,7 @@ extension FeatureMapTests {
             let app = try VisorLaunch.fixture("search")
             defer { app.quit() }
             try app.screen { FeatureMapNode.search.isShown(on: $0) }
-            // The row by its title and flag (Isomer's runtime) or its title
-            // and state (the iPhone): not the message hit, "Agent · Offline sync".
-            let row = try app.screen().element("Offline sync ⚑") != nil ? "Offline sync ⚑" : "Offline sync Working"
-            let screen = try app.tap(id: "session-fixture-chat", else: row, .listRow)
+            let screen = try app.tap("session-fixture-chat")
             FeatureMapNode.chat.expectShown(on: screen)
             #expect(screen.titled("Offline sync"), "\(screen.summary)")
         }
@@ -82,7 +82,7 @@ extension FeatureMapTests {
             let app = try VisorLaunch.fixture("search")
             defer { app.quit() }
             try app.screen { FeatureMapNode.search.isShown(on: $0) }
-            let screen = try app.tap(id: "message-hit", else: "Agent · Offline sync", .listRow)
+            let screen = try app.tap("message-hit")
             FeatureMapNode.chat.expectShown(on: screen)
             #expect(screen.titled("Offline sync"), "\(screen.summary)")
         }

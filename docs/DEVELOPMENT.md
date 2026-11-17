@@ -799,23 +799,25 @@ no longer in Visor.
   Shireworks container (the build from its cache, two minutes more the
   first time). Its own invocation: `--config=headless` doesn't go with
   `--config=drive` (isomer's AGENTS.md), and without it the targets are
-  skipped (incompatible), so `//...` builds pass them by. What the driver
-  can't take yet (a context menu, a swipe action, the agent asking) is a
-  disabled test in `FeatureMapTests+Gaps.swift` saying why; where Isomer's
-  driver doesn't list an identifier the map names, the test finds the
-  element by its label and records a known issue (`IsomerGap.swift`).
+  skipped (incompatible), so `//...` builds pass them by. What can't be
+  taken (the agent asking, what the fixture hasn't: an archived session,
+  a second computer, a fork) is a disabled test in
+  `FeatureMapTests+Gaps.swift` saying why. Every step runs on every
+  platform: since isomer#234 a long press and an alert's buttons are
+  driven on the iPhone too.
   "Driving the client" below has the rest.
 - The same suite headful, against an app built with `--config=drive`:
   `//tests/feature_map_tests:feature_map_headful_{ios,android,macos}_test`
   (manual: each in an invocation of its own, where the simulator, the
   emulator's adb or the Mac's screen is; never on this Mac's own disk or
-  screen). Each launch goes through `fresh_launcher.sh`, which clears the
-  app's data (a headful app keeps the computer a test added) and runs
-  Isomer's launcher for the platform (`@isomer//drive/launchers`), which
-  passes a test's settings as `visor.<key>=<value>` (the iPhone's simulator
-  gets them as `SIMCTL_CHILD_visor.<key>`, which the iPhone app reads:
+  screen). Each launch is Isomer's launcher for the platform
+  (`@isomer//drive/launchers`), started fresh (`HeadlessApp(…, fresh:
+  true)`, the launcher's `ISOMER_FRESH`: the app's data cleared, as a
+  headful app keeps the computer a test added), which passes a test's
+  settings as `visor.<key>=<value>` (the iPhone's simulator gets them as
+  `SIMCTL_CHILD_visor.<key>`, which the iPhone app reads:
   `VisorLaunchSettings`) or, by their own names, as Android's intent
-  extras (`fresh_launcher.sh` drops the `visor.`). On a Shireworks Mac
+  extras (VisorLaunch.swift leaves out the `visor.` there). On a Shireworks Mac
   slot with a simulator of its own (the slot's user can create and boot
   one), with Visor's
   `--config=drive` build installed:
@@ -828,9 +830,9 @@ no longer in Visor.
   ```
 
   The regular width's suite is headless alone (a device's width is its
-  own). Where Isomer's Apple driver lists no identifier (most SwiftUI
-  controls in a List or Form row on the iPhone), the test takes the label
-  and records `IsomerGap.appleIdentifier`.
+  own). Every element is taken by the identifier the map names, on every
+  platform (isomer#228 and #231); FEATURE_MAP.md's "Not wired yet" has
+  what still fails on the iPhone.
 - Try a server build against real agents without touching the installed
   one: `bazel run //tools/staging_server -- [port] [password]` (7533,
   `staging`) runs a `VisorServer` of its own — its own ports, a scratch

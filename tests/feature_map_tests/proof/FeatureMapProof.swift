@@ -85,11 +85,6 @@ struct FeatureMapProof {
     private func walk(wanted: Set<String>, taken: inout Set<String>) throws {
         let reached = ["sessions", "connect", "runner", "new-session", "chat", "inspector", "goal"]
         guard !wanted.isDisjoint(with: reached) else { return }
-        // The iPhone's app on its side turns itself on an upright simulator
-        // (fixture.orientation), where Isomer's Apple driver's taps on a
-        // list's rows don't take (IsomerGap.appleLandscapeTap): each screen
-        // a launch of its own there.
-        guard Self.settings["fixture.orientation"] != "landscape" else { return }
         let app = try VisorLaunch.fixture("sessions", settings: Self.settings)
         defer { app.quit() }
         func take(_ screen: String) throws {
@@ -100,52 +95,39 @@ struct FeatureMapProof {
         try arrive(app, at: "sessions")
         try take("sessions")
 
-        // Sessions → Add Computer → Sign in to a MultiPass; put away. Where
-        // the tap doesn't take (IsomerGap.appleLandscapeTap), both are
-        // launches of their own, and the walk goes on from Sessions.
+        // Sessions → Add Computer → Sign in to a MultiPass; put away.
         if wanted.contains("connect") || wanted.contains("runner") {
-            var opened = true
-            do {
-                try app.tap(id: "add-computer", else: "Add Computer…")
-            } catch {
-                opened = false
-                withKnownIssue(Comment(rawValue: IsomerGap.appleLandscapeTap.rawValue)) {
-                    Issue.record(error, "Add Computer: a launch of its own")
-                }
+            try app.tap("add-computer")
+            try arrive(app, at: "connect")
+            try take("connect")
+            if wanted.contains("runner") {
+                try app.tap("runner")
+                try arrive(app, at: "runner")
+                try take("runner")
             }
-            if opened {
-                try arrive(app, at: "connect")
-                try take("connect")
-                if wanted.contains("runner") {
-                    try app.tap(id: "runner", else: "Sign In to a MultiPass…")
-                    try arrive(app, at: "runner")
-                    try take("runner")
-                }
-                try app.putAway()
-                try arrive(app, at: "sessions")
-            }
+            try app.dismiss()
+            try arrive(app, at: "sessions")
         }
 
         // Sessions → New Session (the bottom bar's compose); put away.
         if wanted.contains("new-session") {
-            let compose = try app.screen().element("New session") != nil ? "New session" : "✎"
-            try app.tap(compose)
+            try app.tap("New session")
             try arrive(app, at: "new-session")
             try take("new-session")
-            try app.putAway()
+            try app.dismiss()
             try arrive(app, at: "sessions")
         }
 
         // Sessions → the chat → its details, and back to Sessions.
         if wanted.contains("chat") || wanted.contains("inspector") {
-            try app.tap(id: "session-fixture-chat", else: "Offline sync", .listRow)
+            try app.tap("session-fixture-chat")
             try arrive(app, at: "chat")
             try take("chat")
             if wanted.contains("inspector") {
-                try app.tap(id: "session-title", else: "Session details")
+                try app.tap("session-title")
                 try arrive(app, at: "inspector")
                 try take("inspector")
-                try app.tap(id: "details-done", else: "Done")
+                try app.tap("details-done")
                 try arrive(app, at: "chat")
             }
             // A phone's stack goes back to Sessions; a wide window (Android
@@ -160,7 +142,7 @@ struct FeatureMapProof {
 
         // Sessions → the goal's chat.
         if wanted.contains("goal") {
-            try app.tap(id: "session-fixture-docs", else: "Release notes", .listRow)
+            try app.tap("session-fixture-docs")
             try arrive(app, at: "goal")
             try take("goal")
         }
@@ -184,14 +166,11 @@ struct FeatureMapProof {
         print("[proof] \(screen): there in \(ContinuousClock.now - start)")
     }
 
-    /// The picture, as the platform's device calls it: Android's on its
-    /// side is `phone-landscape`, as the proof's ids have it (Isomer's
-    /// `picture` calls every Android picture `phone`).
+    /// The picture, as the platform's device calls it (`phone`, or on its
+    /// side `phone-landscape`: HeadlessApp.picture's).
     private func shoot(_ app: HeadlessApp, _ screen: String) throws {
-        let info = try app.info()
-        let device: String? = info.platform.lowercased() == "android" && info.width > info.height ? "phone-landscape" : nil
         let start = ContinuousClock.now
-        let tries = try app.steadyPicture(screen, device: device)
+        let tries = try app.steadyPicture(screen)
         print("[proof] \(screen): \(tries) pictures in \(ContinuousClock.now - start)")
     }
 }

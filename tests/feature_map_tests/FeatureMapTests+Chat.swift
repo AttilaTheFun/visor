@@ -12,15 +12,6 @@ extension FeatureMapTests {
         /// (AgentUI's DraftField).
         static let composer = "Message Claude Code"
 
-        /// The composer as the driver names it: by its placeholder, or on
-        /// the iPhone, where Isomer's Apple driver gives it no label, the
-        /// chat's one text field by its name.
-        private func composer(_ app: HeadlessApp) throws -> String {
-            let screen = try app.screen()
-            if screen.element(Self.composer) != nil { return Self.composer }
-            return screen.elements.first { $0.role == "textField" }?.name ?? Self.composer
-        }
-
         /// The fixture's `screen`, once its chat is up.
         private func chat(_ screen: String = "chat") throws -> HeadlessApp {
             let app = try VisorLaunch.fixture(screen)
@@ -32,8 +23,8 @@ extension FeatureMapTests {
         func details() throws {
             let app = try chat()
             defer { app.quit() }
-            FeatureMapNode.details.expectShown(on: try app.tap(id: "session-title", else: "Session details"))
-            FeatureMapNode.chat.expectShown(on: try app.tap(id: "details-done", else: "Done"))
+            FeatureMapNode.details.expectShown(on: try app.tap("session-title"))
+            FeatureMapNode.chat.expectShown(on: try app.tap("details-done"))
         }
 
         @Test("Session chat → Model sheet: tap model")
@@ -43,19 +34,19 @@ extension FeatureMapTests {
             // approval in its place).
             let app = try chat("goal")
             defer { app.quit() }
-            let screen = try app.tap(id: "model", else: "Sonnet 5", .wrappedControl)
+            let screen = try app.tap("model")
             FeatureMapNode.model.expectShown(on: screen)
-            FeatureMapNode.chat.expectShown(on: try app.putAway())
+            FeatureMapNode.chat.expectShown(on: try app.dismiss())
         }
 
-        @Test("Approval controls → Session chat: tap allow or deny", arguments: [("allow", "Allow"), ("deny", "Deny")])
-        func approval(id: String, label: String) throws {
+        @Test("Approval controls → Session chat: tap allow or deny", arguments: ["allow", "deny"])
+        func approval(id: String) throws {
             let app = try chat()
             defer { app.quit() }
             FeatureMapNode.approval.expectShown(on: try app.screen())
             // The fixture's computer answers no approval: the request stays,
             // and the chat is where the tap leaves it.
-            FeatureMapNode.chat.expectShown(on: try app.tap(id: id, else: label, .wrappedControl))
+            FeatureMapNode.chat.expectShown(on: try app.tap(id))
         }
 
         @Test("Approval controls → Question sheet: tap answer")
@@ -65,9 +56,9 @@ extension FeatureMapTests {
             let app = try VisorLaunch.fixture("question")
             defer { app.quit() }
             try app.screen { FeatureMapNode.question.isShown(on: $0) }
-            let chat = try app.putAway()
+            let chat = try app.dismiss()
             FeatureMapNode.approval.expectShown(on: chat)
-            FeatureMapNode.question.expectShown(on: try app.tap(id: "answer", else: "Answer", .wrappedControl))
+            FeatureMapNode.question.expectShown(on: try app.tap("answer"))
         }
 
         @Test("Question sheet → Session chat: tap approval-‹option›, tap question-send")
@@ -75,9 +66,9 @@ extension FeatureMapTests {
             let app = try VisorLaunch.fixture("question")
             defer { app.quit() }
             try app.screen { FeatureMapNode.question.isShown(on: $0) }
-            let chosen = try app.tap(id: "approval-On reconnect", else: "On reconnect")
+            let chosen = try app.tap("approval-On reconnect")
             #expect(chosen.has(id: "question-send") || chosen.has(label: "Send"), "\(chosen.summary)")
-            FeatureMapNode.chat.expectShown(on: try app.tap(id: "question-send", else: "Send"))
+            FeatureMapNode.chat.expectShown(on: try app.tap("question-send"))
         }
 
         @Test("Session chat → Tool calls: tap “Made N tool calls”")
@@ -85,15 +76,15 @@ extension FeatureMapTests {
             let app = try chat()
             defer { app.quit() }
             FeatureMapNode.toolCalls.expectShown(on: try app.tap("Made 2 tool calls"))
-            FeatureMapNode.chat.expectShown(on: try app.putAway())
+            FeatureMapNode.chat.expectShown(on: try app.dismiss())
         }
 
         @Test("Session chat → Attachment preview: tap attachment-‹file›")
         func attachment() throws {
             let app = try chat()
             defer { app.quit() }
-            FeatureMapNode.preview.expectShown(on: try app.tap(id: "attachment-layout.png", else: "Open the attachment"))
-            try app.putAway()
+            FeatureMapNode.preview.expectShown(on: try app.tap("attachment-layout.png"))
+            try app.dismiss()
             // (Quick Look's preview, on the iPhone, goes a moment after.)
             FeatureMapNode.chat.expectShown(on: try app.screen { FeatureMapNode.chat.isShown(on: $0) })
         }
@@ -102,7 +93,7 @@ extension FeatureMapTests {
         func sideQuestions() throws {
             let app = try chat()
             defer { app.quit() }
-            try app.type(try composer(app), "/btw Which tests cover the sync?")
+            try app.type(Self.composer, "/btw Which tests cover the sync?")
             FeatureMapNode.subPage.expectShown(on: try app.tap("Send"))
             let back = try app.back()
             FeatureMapNode.chat.expectShown(on: back)

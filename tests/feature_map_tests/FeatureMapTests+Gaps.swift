@@ -1,28 +1,24 @@
 // What FEATURE_MAP.md has that these tests can't take yet, each a test that
-// doesn't run, with why: a step the driver protocol has no command for (a
-// context menu, a swipe action), one that happens by itself (the agent
-// asking), or one the fixture's computer doesn't answer. Each says how it
-// could be taken once that changes.
+// doesn't run, with why: a step that happens by itself (the agent asking),
+// or one the fixture's computer doesn't have or answer (a second computer
+// to migrate to, an archived session, a fork). Each says how it could be
+// taken once that changes.
 
 import Testing
 
 extension FeatureMapTests {
     @Suite("Not driven yet")
     struct Gaps {
-        @Test("Sessions ⇢ Project settings: context menu “Project Settings”",
-              .disabled("a context menu needs a long press, which the driver protocol (isomer's headless.proto) has no command for"))
-        func projectSettings() {}
-
-        @Test("Sessions ⇢ Migrate sheet: context menu “Migrate…”",
-              .disabled("a context menu needs a long press, which the driver protocol has no command for; and the fixture has one computer to migrate to"))
+        @Test("Sessions → Migrate sheet: longpress session-‹id›, “Migrate…”",
+              .disabled("the context menu opens (Sessions' projectSettings takes it), but it offers Migrate… only with a second connected computer that migrates: the fixture has one, whose computer doesn't migrate"))
         func migrate() {}
 
         @Test("Sessions → Archived Sessions: tap archived-‹name›",
-              .disabled("the fixture has no archived session, and its computer doesn't answer Session details' Archive (the row stays): no archived-‹name› row to tap"))
+              .disabled("the fixture has no archived session, and its computer doesn't answer Session details' Archive or a row's swipe “Archive” (the row stays): no archived-‹name› row to tap"))
         func archived() {}
 
-        @Test("Archived Sessions ⇢ Sessions: swipe “Unarchive”",
-              .disabled("a List row's swipe action: the driver's swipe drags a view, it doesn't open a row's swipe actions; and Archived Sessions isn't reached (above)"))
+        @Test("Archived Sessions → Sessions: swipe “Unarchive”",
+              .disabled("the driver's swipe takes a row's swipe actions now (swipe <row> left, “Unarchive”), but Archived Sessions isn't reached (above)"))
         func unarchive() {}
 
         @Test("Model sheet → All Models: tap all-models",

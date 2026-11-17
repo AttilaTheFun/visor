@@ -13,12 +13,12 @@ bazel_dep(name = "bazel_skylib", version = "1.9.2")
 # has the fix the older one was patched for.
 bazel_dep(name = "apple_support", version = "2.11.0")
 # rules_swift from the project's registry (AttilaTheFun/bazel_registry,
-# before the BCR in .bazelrc), as isomer asks for: 4.2.2.isomer.3 is
-# upstream's 4.2.2 with isomer's pull requests (the wasm SDK's clang
-# resource directory, Swift/C++ interop on Android, Android targets down to
-# the Swift SDK's own minimum). It sorts above the 4.2.2 rules_applecross
-# asks for, so no override holds it.
-bazel_dep(name = "rules_swift", version = "4.2.2.isomer.3")
+# before the BCR in .bazelrc), as isomer asks for: 4.3.0.isomer.1 is
+# upstream's 4.3.0 (which takes `swift.android_sdk(url = …)`, for Isomer's
+# Swift SDKs) with isomer's pull requests (Swift/C++ interop on Android,
+# Android targets down to the Swift SDK's own minimum). It sorts above the
+# 4.2.2 rules_applecross asks for, so no override holds it.
+bazel_dep(name = "rules_swift", version = "4.3.0.isomer.1")
 
 # The server's one C file (libraries/visor_server_posix/c); already in the
 # graph at this version through rules_applecross.
@@ -163,7 +163,13 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.52.1")
+bazel_dep(name = "isomer", version = "0.56.1")
+
+# Isomer's AndroidX (the Android runtime's Compose and AndroidX), a module of
+# its own since isomer 0.54, at isomer's version (isomer's
+# docs/android_maven.md): Visor has no AndroidX of its own, so isomer's
+# `@isomer//android/maven:androidx` flags stay at their defaults, which find it.
+bazel_dep(name = "isomer_android_maven", version = "0.56.1")
 
 
 # isomer's Android cross-compile toolchains. The extension insists on a
@@ -196,10 +202,19 @@ swift.toolchain(
     name = "swift_toolchain",
     swift_version = "6.4.2",
 )
-swift.wasm_sdk()
+# Isomer's Swift SDKs, whose Foundation is Isomer's (since isomer 0.56: its
+# README, "Upgrading isomer"): the -i18n ones, as the client formats dates
+# and numbers (.bazelrc's --@isomer//foundation:internationalization).
+swift.wasm_sdk(
+    url = "https://github.com/AttilaTheFun/isomer_hermetic_toolchains/releases/download/isomer-6.4.2.1/swift-6.4.2-RELEASE_wasm-i18n.artifactbundle.tar.gz",
+    sha256 = "cc3423d1dfa969e1fb255ed324af6a9e3c7dedc06b75d90a3ff74adcce10877c",
+)
 # No wasi-threads SDK beside it since isomer 0.41: it returns with Swift 6.5
 # (isomer's TODO.md), and nothing of Visor's builds for it.
-swift.android_sdk()
+swift.android_sdk(
+    url = "https://github.com/AttilaTheFun/isomer_hermetic_toolchains/releases/download/isomer-6.4.2.1/swift-6.4.2-RELEASE_android-i18n.artifactbundle.tar.gz",
+    sha256 = "9ed7cd5051cc276acd14a5210d72311f2b4b7984c4bdaa77dd25bafad2170d93",
+)
 use_repo(swift, "swift_toolchain")
 
 register_toolchains(
@@ -251,10 +266,11 @@ bazel_dep(name = "rules_go", version = "0.62.0")
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.24.12")
 
-# Maven: none of Visor's own. Isomer pins its AndroidX (`@isomer_maven`) and
-# rules_android's tools (`@rules_android_maven`) with its own lock files
-# (isomer's docs/android_maven.md); Visor's Kotlin, if it ever uses AndroidX,
-# depends on `@isomer//android/maven:androidx`.
+# Maven: none of Visor's own. isomer_android_maven pins Isomer's AndroidX
+# (`@isomer_maven`) with its own lock file (isomer's docs/android_maven.md);
+# rules_android resolves its own tools (`@rules_android_maven`), which isomer
+# no longer pins for its consumers (0.54). Visor's Kotlin, if it ever uses
+# AndroidX, depends on `@isomer//android/maven:androidx`.
 
 android_tools = use_extension("@isomer//tools/android:extensions.bzl", "android_tools")
 use_repo(

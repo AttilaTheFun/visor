@@ -11,11 +11,12 @@ let package = Package(
     name: "visor_swift_packages",
     platforms: [.iOS("18.0"), .macOS("15.0")],
     dependencies: [
-        // Isomer's Swift (Foundation and SwiftUI off Apple's platforms), by
+        // Isomer's Swift (SwiftUI and the frameworks beneath it off Apple's
+        // platforms; Foundation is in Isomer's Swift SDKs since 0.56), by
         // its release's tag: its own dependencies are by revision and branch,
         // so SwiftPM won't take it by version (tools/released_pins.sh allows
         // this one).
-        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.52.1"),
+        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.56.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
             exact: "0.51.0"

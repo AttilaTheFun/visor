@@ -17,7 +17,7 @@ extension FeatureMapTests {
         func computer() throws {
             let app = try settings()
             defer { app.quit() }
-            FeatureMapNode.computer.expectShown(on: try app.tap(id: "settings-computer-Snapshot Mac", else: "Snapshot Mac, Connected"))
+            FeatureMapNode.computer.expectShown(on: try app.tap("settings-computer-Snapshot Mac"))
         }
 
         @Test("Settings → Add Computer: tap settings-add-computer")
@@ -26,9 +26,9 @@ extension FeatureMapTests {
             defer { app.quit() }
             // A sheet over Settings' sheet, at once: on the iPhone too, where
             // it is presented from Settings' sheet, not from under it.
-            FeatureMapNode.addComputer.expectShown(on: try app.tap(id: "settings-add-computer", else: "Add Computer…"))
-            // Cancel: Settings again, still open.
-            let screen = try app.tap("Cancel")
+            FeatureMapNode.addComputer.expectShown(on: try app.tap("settings-add-computer"))
+            // Put away: Settings again, still open.
+            let screen = try app.dismiss()
             FeatureMapNode.settings.expectShown(on: screen)
             #expect(!FeatureMapNode.addComputer.isShown(on: screen), "\(screen.summary)")
         }
@@ -37,7 +37,7 @@ extension FeatureMapTests {
         func done() throws {
             let app = try settings()
             defer { app.quit() }
-            FeatureMapNode.sessions.expectShown(on: try app.tap(id: "settings-done", else: "Done"))
+            FeatureMapNode.sessions.expectShown(on: try app.tap("settings-done"))
         }
     }
 }
