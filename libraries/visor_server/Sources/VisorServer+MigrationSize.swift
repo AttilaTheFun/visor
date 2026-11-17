@@ -17,10 +17,16 @@
 // - migrationFreeMargin, 1 GiB: what is left free beyond the files where
 //   they land, for the agent, the server and the archive's unpacking
 //   beside it.
+// - unpackEntryCap, 200,000 entries: what one archive (the conversation's
+//   folder, the memory) may unpack to in files, folders and links, each an
+//   inode whether it holds bytes or none, so that millions of empty ones
+//   can't use up a filesystem's fixed count of them. A conversation's
+//   folder holds a file or two for each subagent and long tool result, a
+//   few thousand at the most.
 //
 // An archive among them (the conversation's folder, the memory) is held to
-// the same caps by what it unpacks to, before and while it is unpacked
-// (VisorServer+MigrationUnpackSize).
+// the same caps by what it unpacks to, and to unpackEntryCap, before and
+// while it is unpacked (VisorServer+MigrationUnpackSize).
 
 import Foundation
 import VisorAgent
@@ -33,6 +39,9 @@ extension VisorServer {
     nonisolated static let migrationTotalCap = 4 << 30
     /// The room left free, beyond a move's files, where they land.
     nonisolated static let migrationFreeMargin = 1 << 30
+    /// The most entries (files, folders, links) one archive of a move (or
+    /// a backup) may unpack to.
+    nonisolated static let unpackEntryCap = 200_000
 
     /// Why `files` are more than a move carries: nil when they aren't.
     static func oversized(_ files: [MigrationFile]) -> String? {

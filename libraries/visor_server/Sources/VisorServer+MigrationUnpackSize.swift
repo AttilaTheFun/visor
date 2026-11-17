@@ -1,20 +1,24 @@
 // How much an archive a move (or a restore) carries may unpack to: the
 // conversation's folder and Claude's memory come packed, and a small
 // archive can say it holds, or hold, far more than it is (a file of zeros
-// compresses a thousandfold). Held to the caps of VisorServer+MigrationSize
-// twice over:
+// compresses a thousandfold, and a million empty files or folders take a
+// million inodes and no bytes). Held to the caps of
+// VisorServer+MigrationSize twice over:
 //
 // - before: its listing (`tar -tv`) is read for each entry's size, and
 //   their sum is refused past a file's cap (migrationFileCap), past what is
 //   left of the move's total (migrationTotalCap, less its other files: each
 //   as carried, or as it unpacked to once it has), or past the room where
 //   it unpacks less migrationFreeMargin. A hard link or a sparse file counts
-//   at the size it declares, never less.
+//   at the size it declares, never less. Its entries (`tar -t`'s lines, and
+//   the folders their names lie in, listed or not) are refused past
+//   unpackEntryCap.
 // - during: what the listing says is the archive's word, so the unpacking
 //   itself is measured every 200 ms (each file once, however many names it
-//   has) and tar killed when it runs past the sum declared (and a little
-//   slack) or a cap; once more when it is done. Its folder is removed
-//   either way (VisorServer+MigrationContainment).
+//   has; every entry counted) and tar killed when it runs past the sum or
+//   the count declared (and a little slack) or a cap; once more when it is
+//   done. Its folder is removed either way
+//   (VisorServer+MigrationContainment).
 //
 // The listing is asked for with `--numeric-owner`, so that an owner's name
 // (the archive's to say, and free to hold spaces) never stands where the
@@ -40,6 +44,11 @@ extension VisorServer {
         /// How far past what its listing declared it may run before it is
         /// stopped.
         var slack = 1 << 20
+        /// The most entries (files, folders, links) it may make.
+        var entries = VisorServer.unpackEntryCap
+        /// How many more entries than its listing declared it may make
+        /// before it is stopped.
+        var entrySlack = 16
         /// How often it is measured while it unpacks.
         var every: Duration = .milliseconds(200)
     }
@@ -83,6 +92,40 @@ extension VisorServer {
         return (entries, bytes)
     }
 
+    /// How many entries unpacking an archive makes, by its `tar -t` names:
+    /// each path named, and each folder a name lies in whether it is listed
+    /// or not (`a/b/c` alone makes `a` and `a/b` too), counted once; or how
+    /// many names there are, when that is more (one listed twice). Counted
+    /// no further than past `most`.
+    nonisolated static func listedEntries(_ names: [Substring], most: Int) -> Int {
+        guard names.count <= most else { return names.count }
+        // The paths as a tree of their parts (a name's parts are never
+        // copied, however deep it goes): every node but the root an entry.
+        var children: [[Substring: Int]] = [[:]]
+        for name in names {
+            var node = 0
+            for part in name.split(separator: "/") where part != "." {
+                if let child = children[node][part] {
+                    node = child
+                    continue
+                }
+                children.append([:])
+                children[node][part] = children.count - 1
+                node = children.count - 1
+                if children.count - 1 > most { return children.count - 1 }
+            }
+        }
+        return max(names.count, children.count - 1)
+    }
+
+    /// Why an archive that makes `entries` (listedEntries: counted no
+    /// further than past the cap) can't be unpacked within `limits`: nil
+    /// when it can.
+    static func entryRefusal(_ entries: Int, _ limits: UnpackLimits) -> String? {
+        guard entries > limits.entries else { return nil }
+        return "it holds more entries (files, folders and links) than the \(limits.entries) an archive may hold"
+    }
+
     /// Why an archive that declares `bytes` can't be unpacked in `folder`
     /// within `limits`: which limit it is past. Nil when it can.
     static func unpackRefusal(_ bytes: Int, _ limits: UnpackLimits, in folder: URL) -> String? {
@@ -116,18 +159,36 @@ extension VisorServer {
         return bound
     }
 
+    /// The most entries an archive whose listing declares `declared` may
+    /// make while it unpacks before it is stopped, and why it is stopped
+    /// there: the less of what it declared (and the slack) and the cap.
+    static func entryBound(_ declared: Int, _ limits: UnpackLimits) -> (entries: Int, why: String) {
+        let past = declared.addingReportingOverflow(limits.entrySlack)
+        if limits.entries < (past.overflow ? Int.max : past.partialValue) {
+            return (limits.entries, "it unpacked to more than the \(limits.entries) entries an archive may hold")
+        }
+        return (past.partialValue, "it unpacked to more than the \(declared) entries its listing declared")
+    }
+
     /// The bytes of the files under `root`, each counted once however many
     /// names it has; links and folders count nothing, and a folder that
     /// can't be looked in is passed by (the walk after the unpacking, which
-    /// opens each, refuses one). Measured while tar writes, off the main
-    /// actor.
+    /// opens each, refuses one).
     nonisolated static func unpackedBytes(_ root: URL) -> Int {
+        unpacked(root).bytes
+    }
+
+    /// What is under `root`: how many entries (files, folders, links,
+    /// anything) and the bytes of its files, as unpackedBytes counts them.
+    /// Measured while tar writes, off the main actor.
+    nonisolated static func unpacked(_ root: URL) -> (entries: Int, bytes: Int) {
         let files = FileManager.default
         var seen: Set<NSNumber> = []
-        var total = 0
+        var total = 0, entries = 0
         var folders = [root.path]
         while let folder = folders.popLast() {
             for item in (try? files.contentsOfDirectory(atPath: folder)) ?? [] {
+                entries += 1
                 let path = folder + "/" + item
                 guard let attributes = try? files.attributesOfItem(atPath: path), let type = attributes[.type] as? FileAttributeType else { continue }
                 if type == .typeDirectory {
@@ -140,18 +201,24 @@ extension VisorServer {
                 total += (attributes[.size] as? NSNumber)?.intValue ?? 0
             }
         }
-        return total
+        return (entries, total)
     }
 
     /// The archive unpacked by `tar` into `staging`, measured as it goes
-    /// and stopped past `bound` (unpackBound): what went wrong, if anything.
-    static func extract(_ archive: URL, into staging: URL, tar: String, bound: (bytes: Int, why: String), every interval: Duration) async -> String? {
-        let limit = bound.bytes
+    /// and stopped past `bound` (unpackBound) or `entries` (entryBound):
+    /// what went wrong, if anything.
+    static func extract(_ archive: URL, into staging: URL, tar: String, bound: (bytes: Int, why: String),
+                        entries: (entries: Int, why: String), every interval: Duration) async -> String? {
+        let limit = bound.bytes, most = entries.entries
         guard let result = await Command.output(tar, ["--no-same-owner", "--no-same-permissions", "-xzf", archive.path, "-C", staging.path],
-                                                errors: true, every: interval, stopping: { unpackedBytes(staging) > limit }) else {
+                                                errors: true, every: interval, stopping: {
+                                                    let now = unpacked(staging)
+                                                    return now.bytes > limit || now.entries > most
+                                                }) else {
             return "tar could not be started"
         }
-        if result.stopped { return bound.why + ", and was stopped" }
+        // Which it ran past: what is there only grows, so measured again.
+        if result.stopped { return (unpacked(staging).entries > most ? entries.why : bound.why) + ", and was stopped" }
         guard result.status == 0 else { return result.text.trimmingCharacters(in: .whitespacesAndNewlines) }
         return nil
     }

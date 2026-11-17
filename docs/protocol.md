@@ -253,7 +253,11 @@ cap — and a piece is
 refused past its file's declared size. A plan is refused unless the
 files' size and 1 GiB to spare are free where the move keeps them as they
 come and under the agent's own folder (when the system says how much is
-free).
+free). An archive among them (the conversation's folder, the memory) is
+held to the same caps by what it unpacks to, and to 200,000 entries
+(files, folders and links: each an inode, bytes or none): refused before
+it is unpacked when its listing says more, and stopped while it unpacks
+when it makes more than it declared or a cap.
 
 The finish writes over nothing but the same conversation come back: where
 a file of it is here already (for Codex, its thread's rollout anywhere

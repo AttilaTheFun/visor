@@ -75,7 +75,7 @@ extension VisorServer {
     /// A gzipped tar of the folder `name` (the conversation's folder, the
     /// memory) unpacked into `folder` (made when missing): every entry's
     /// name checked first (never absolute, never through `..`, always under
-    /// `name`), and the sizes it declares held to `limits`
+    /// `name`), and the sizes it declares and its entries held to `limits`
     /// (VisorServer+MigrationUnpackSize); then unpacked into a folder of its
     /// own inside `folder`, measured as it goes and stopped past them,
     /// walked (unsafeTree), and only then moved into place, where nothing
@@ -95,6 +95,10 @@ extension VisorServer {
         guard let listed = await Command.output(tar, ["-t", "-P", "-z", "-f", archive.path]) else { return "tar could not be started" }
         guard listed.status == 0 else { return "it is not an archive tar can read" }
         let names = listed.text.split(separator: "\n").filter { !$0.isEmpty }
+        // How many entries it makes, held to the cap before anything else
+        // is asked of its names.
+        let entries = listedEntries(names, most: limits.entries)
+        if let problem = entryRefusal(entries, limits) { return problem }
         for entry in names {
             if let problem = unsafeEntry(String(entry), only: name) { return problem }
         }
@@ -113,7 +117,8 @@ extension VisorServer {
         }
         defer { removeTree(staging) }
         let bound = unpackBound(declared.bytes, limits, in: folder)
-        if let problem = await extract(archive, into: staging, tar: tar, bound: bound, every: limits.every) { return problem }
+        let entryLimit = entryBound(entries, limits)
+        if let problem = await extract(archive, into: staging, tar: tar, bound: bound, entries: entryLimit, every: limits.every) { return problem }
         let top = ((try? files.contentsOfDirectory(atPath: staging.path)) ?? []).sorted()
         guard top == [name] else { return "it holds \(top.joined(separator: ", ")), not \(name) alone" }
         // The folder itself is the root of the walk: a link in it that
@@ -124,9 +129,13 @@ extension VisorServer {
             return "it holds \(name), which is not a folder"
         }
         if let problem = unsafeTree(unpacked) { return problem }
-        // Measured once more whole, every folder opened: past the bound
+        // Measured once more whole, every folder opened: past a bound
         // between two measures, or in one that couldn't be looked in then.
-        guard unpackedBytes(unpacked) <= bound.bytes else { return bound.why }
+        // (The unpacking holds that folder alone, so it is that folder and
+        // what is in it.)
+        let measured = Self.unpacked(staging)
+        guard measured.bytes <= bound.bytes else { return bound.why }
+        guard measured.entries <= entryLimit.entries else { return entryLimit.why }
         guard SessionPathName.isInside(destination, folder) else { return "\(name) would lead out of \(folder.path)" }
         // The empty folder by that name, the one thing it may take the place of.
         try? files.removeItem(at: destination)
