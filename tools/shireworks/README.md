@@ -24,5 +24,6 @@ each one.)
   The Xcode build's last lines say what it has (`xcode:`, `ios:`, `git:`,
   `bazelisk:`): the Xcode and iOS versions must be the config's. (With
   `VISOR_XCODE_VERSION` in its environment, the script checks both itself.)
-  `xcode_27_2` is the Xcode config CI's Mac jobs lease (tools/ci/mac_vm.sh);
-  the older `xcode-27.0` image is gone.
+  `xcode_27_2` is the Xcode config an agent's Mac lease asks for (CI no
+  longer leases: it runs on GitHub's runners alone); the older `xcode-27.0`
+  image is gone.

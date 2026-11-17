@@ -10,11 +10,15 @@ its rules, and its local CI, end-to-end and snapshot harnesses
 ## Changes
 
 This repo is public. Every change to `main` goes through a pull request:
-`main` is protected, direct pushes are rejected, and CI's one check,
-`container` (the rules, then every app, library and server built on
-Linux, and the client's screens walked headless through Isomer's driver,
-FEATURE_MAP.md's `//tests/feature_map_tests`), must pass on main's head
-before a pull request can merge; each commit on main runs the same. The
+`main` is protected, direct pushes are rejected, and CI's required check,
+`container` (on GitHub's own Ubuntu runner: the rules, then the Linux
+client and the Android app built, and the client's screens walked
+headless through Isomer's driver, FEATURE_MAP.md's
+`//tests/feature_map_tests`), must pass on main's head before a pull
+request can merge, with `container-apple` (the iPhone and Mac apps,
+libraries and servers built on GitHub's `xcode-27` Mac) beside it; each
+commit on main runs the same. CI runs on GitHub's runners and cache alone,
+none of Shireworks'. The
 rest of the tests and the proof run by hand (`run: verify`), and every
 release proposal runs them (docs/DEVELOPMENT.md, CI). Run the tests
 that touch your change before you push. Keep each pull request to one focused change, and say in it how the

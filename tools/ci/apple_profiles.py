@@ -108,7 +108,8 @@ def described(profiles, bundle, certificate, now):
 
 
 def bundle_info(bundle):
-    for relative in ("Contents/Info.plist", "Info.plist"):
+    # A Mac app's, an iPhone app's or framework's, a Mac framework's (Versions/Current/Resources, by its link).
+    for relative in ("Contents/Info.plist", "Info.plist", "Resources/Info.plist"):
         path = os.path.join(bundle, relative)
         if os.path.isfile(path):
             with open(path, "rb") as file:
