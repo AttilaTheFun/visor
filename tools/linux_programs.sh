@@ -57,6 +57,9 @@ ln -s visor-server "$OUT/visor-agent-host"
 # Static, and both of its names answer.
 ! ldd "$OUT/visor-server" > /dev/null 2>&1 || { echo "$me: $OUT/visor-server is linked dynamically" >&2; exit 1; }
 "$OUT/visor-agent-host" --version > /dev/null || { echo "$me: visor-agent-host does not run" >&2; exit 1; }
-answer="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"ping"}' | "$OUT/visor-agent-host" mcp)"
+# The MCP server answers nothing without a session's variables (visor#442):
+# stand-ins, as a ping reaches no server.
+answer="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"ping"}' |
+    VISOR_PORT=1 VISOR_SESSION=linux-programs VISOR_TOKEN=linux-programs "$OUT/visor-agent-host" mcp)"
 case "$answer" in *'"result":{}'*) ;; *) echo "$me: visor-agent-host mcp answered: $answer" >&2; exit 1 ;; esac
 ls -l "$OUT"
