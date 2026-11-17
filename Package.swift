@@ -51,8 +51,11 @@ let shared: [Target] = [
     // transcripts and catalogs of their sessions.
     .target(name: "VisorAgent", dependencies: ["AgentHostWire", "ClaudeTranscript", "MessageCache", "VisorProtocol", "VisorSystem"],
             path: "libraries/visor_agent/Sources", swiftSettings: strict),
+    // swift-crypto: HMAC-SHA256 for the agents' tokens (JWT), SHA-256 for
+    // the admin token's hash.
     .target(name: "VisorServer",
-            dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire", "VisorSystem", "VisorAgent"],
+            dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire", "VisorSystem", "VisorAgent",
+                           .product(name: "Crypto", package: "swift-crypto")],
             path: "libraries/visor_server/Sources", swiftSettings: strict),
     .target(name: "VisorServerCLI", dependencies: ["VisorServer", "VisorProtocol", "VisorSystem"],
             path: "libraries/visor_server_cli/Sources", swiftSettings: strict),
@@ -95,7 +98,7 @@ let system: [Target] = [
                            .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport")],
             path: "libraries/visor_driver/Sources", swiftSettings: strict),
     .target(name: "VisorNativeRunner",
-            dependencies: [.product(name: "AgentProtocol", package: "agent_protocol"),
+            dependencies: ["VisorSystem", .product(name: "AgentProtocol", package: "agent_protocol"),
                            .product(name: "GRPCCore", package: "grpc-swift-2"),
                            .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport")],
             path: "libraries/visor_native_runner/Sources", swiftSettings: strict),
@@ -122,7 +125,9 @@ let package = Package(
     name: "visor",
     platforms: [.macOS(.v15), .iOS(.v18)],
     products: [.executable(name: "visor-server", targets: ["VisorServerMain"])] + agentHost,
-    // swift_sql at its release, as third_party/swift_packages pins it.
-    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0")] + runnerPackages,
+    // swift_sql at its release, as third_party/swift_packages pins it; and
+    // swift-crypto at the version its graph resolves.
+    dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0"),
+                   .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2")] + runnerPackages,
     targets: services + shared + system + tests
 )

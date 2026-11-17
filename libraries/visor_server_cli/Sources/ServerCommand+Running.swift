@@ -6,11 +6,20 @@ import VisorProtocol
 import VisorServer
 
 extension ServerCommand {
+    /// Where the command-line server is given its admin token.
+    static let adminTokenVariable = "VISOR_ADMIN_TOKEN"
+
     /// Runs the server in this process until it is asked to stop. In a
     /// terminal it says what it does there, and how a client adds this
     /// computer; with `--log`, it says it to the file.
     @MainActor
     func run(_ options: ServerOptions) async throws {
+        // The admin token, read (ServerOptions), is out of this process's
+        // environment before anything is started: no child (an agent's
+        // host, git, a tool) inherits it. On Linux /proc/<pid>/environ
+        // still shows the environment the server was started with, to its
+        // own user: unsetenv changes only the C library's copy.
+        system.setEnvironment(Self.adminTokenVariable, nil)
         let log = CommandLineLog(path: options.log)
         let pidFile = self.pidFile
         let cleanUp: @Sendable () -> Void = { Self.removePidFile(pidFile) }
@@ -30,6 +39,9 @@ extension ServerCommand {
 
         beforeServer?()
         let server = VisorServer(port: port)
+        // The admin token given at launch, its hash in memory alone; or
+        // none, and the log says so.
+        server.useAdminTokenGivenAtLaunch(options.adminToken)
         // The proxy given with the run: pushes and the named MCP servers
         // through it, from now on.
         if let proxy = options.proxy {
@@ -121,6 +133,7 @@ extension ServerCommand {
 
     /// Runs the server in the background, logging to a file.
     func start(_ options: ServerOptions) throws {
+        if let problem = options.backgroundProblem { throw CommandLineError.usage(problem) }
         let platform = quietPlatform()
         if let pid = runningProcess(platform) {
             print("The server is already running (process \(pid)).")

@@ -14,6 +14,10 @@
 //     <folder>/backup.json             what it holds (SessionBackup)
 //     <folder>/<session>/offer.json    the session, as a move offers it
 //     <folder>/<session>/<file>        its files (backupName)
+//
+// <session> is the id as SessionPathName names it (itself, for a UUID), so
+// an id of `.` or `..` never names the backup's folder or its parent, which
+// a failed item's folder is removed as.
 
 import Foundation
 import VisorAgent
@@ -67,7 +71,7 @@ extension VisorServer {
         let chosenRecords = ids.map { wanted in sessions.filter { wanted.contains($0.info.id) } } ?? sessions.filter { !$0.info.archived }
         var items: [SessionBackupItem] = []
         for record in chosenRecords {
-            items.append(await backUp(record, projects: projects, into: folder.appendingPathComponent(record.info.id, isDirectory: true)))
+            items.append(await backUp(record, projects: projects, into: folder.appendingPathComponent(SessionPathName.of(record.info.id), isDirectory: true)))
         }
         let backup = SessionBackup(path: folder.path, created: now.timeIntervalSince1970, from: hostName, sessions: items,
                                    size: Self.folderSize(folder))
@@ -162,7 +166,7 @@ extension VisorServer {
         backup.path = folder.path
         var items: [SessionBackupItem] = []
         for item in backup.sessions where item.kept && (ids?.contains(item.id) ?? true) {
-            items.append(await restore(item, from: folder.appendingPathComponent(item.id, isDirectory: true), made: backup.created))
+            items.append(await restore(item, from: folder.appendingPathComponent(SessionPathName.of(item.id), isDirectory: true), made: backup.created))
         }
         backup.sessions = items
         Self.log("restored from \(folder.path): " + items.map { "\($0.title) (\($0.id)): \($0.outcome)" }.joined(separator: "; "))

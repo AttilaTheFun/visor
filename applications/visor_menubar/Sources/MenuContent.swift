@@ -52,6 +52,12 @@ struct MenuContent: View {
             }
             Button("Copy session table") { copy(server.sessionTable()) }
             Divider()
+            // The admin token is reset, and the signing keys dropped in an
+            // emergency, from here alone on a Mac (TokenAlerts).
+            Button("Reset Admin Token…") { TokenAlerts.reset(server) }
+            Button("Rotate Signing Keys") { TokenAlerts.rotateKeys(server, emergency: false) }
+            Button("Emergency Key Rotation…") { TokenAlerts.rotateKeys(server, emergency: true) }
+            Divider()
             // Not SettingsLink: it opens the window behind other apps'.
             Button("Settings…") { AppDelegate.openSettings() }
                 .keyboardShortcut(",")

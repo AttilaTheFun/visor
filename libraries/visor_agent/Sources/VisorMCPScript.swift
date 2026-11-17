@@ -21,7 +21,9 @@ enum VisorMCPScript {
 // yet" after 25 minutes by an agent that takes no progress, and is let go
 // of, the prompt with it, if the agent gives up on it.
 //
-// Env: VISOR_PORT, VISOR_TOKEN (the app's agent-side secret), VISOR_SESSION,
+// Env: VISOR_PORT, VISOR_TOKEN_FILE (the session's token, kept fresh by the
+// server: read on each call), VISOR_TOKEN (the token the agent started
+// with, where there is no file), VISOR_SESSION,
 // VISOR_APPROVALS ("1": offer `approve`; for Claude always, so that its
 // questions (AskUserQuestion) come to the user, and in manual mode every
 // tool call too), and VISOR_URL where the server is not this computer's
@@ -33,7 +35,18 @@ enum VisorMCPScript {
 // tells the agent when they changed (tools/list_changed).
 const port = process.env.VISOR_PORT || "7433";
 const serverURL = process.env.VISOR_URL || `ws://127.0.0.1:${port}`;
-const token = process.env.VISOR_TOKEN || "";
+const startToken = process.env.VISOR_TOKEN || "";
+const tokenFile = process.env.VISOR_TOKEN_FILE || "";
+// The token to show now: the file's (re-minted hourly), else VISOR_TOKEN.
+function currentToken() {
+  if (!tokenFile) return startToken;
+  try {
+    const read = require("fs").readFileSync(tokenFile, "utf8").trim();
+    return read || startToken;
+  } catch (e) {
+    return startToken;
+  }
+}
 const session = process.env.VISOR_SESSION || "";
 const approvals = process.env.VISOR_APPROVALS === "1";
 
@@ -263,7 +276,7 @@ function call(fields) {
     try { ws = new WebSocket(serverURL); } catch { resolve({ ok: false, text: "Visor is not reachable." }); return; }
     let settled = false;
     const done = (result) => { if (settled) return; settled = true; try { ws.close(); } catch {} resolve(result); };
-    ws.onopen = () => ws.send(JSON.stringify({ type: "agent", token, client: session, id: requestID, ...fields }));
+    ws.onopen = () => ws.send(JSON.stringify({ type: "agent", token: currentToken(), client: session, id: requestID, ...fields }));
     ws.onmessage = (m) => {
       let e; try { e = JSON.parse(m.data); } catch { return; }
       if (e.type === "agent_result" && e.id === requestID) done(e.error ? { ok: false, text: e.error } : { ok: true, text: e.text || "" });
@@ -287,7 +300,7 @@ function ask(args) {
     cancel = (reason) => done({ allow: false, reason });
     const questions = args.tool_name === "AskUserQuestion" ? args.input?.questions : undefined;
     ws.onopen = () => ws.send(JSON.stringify({
-      type: "approval_request", token, session, id: requestID,
+      type: "approval_request", token: currentToken(), session, id: requestID,
       text: args.tool_name || "tool", prompt: questions ? (questions[0]?.question || "") : summary(args.input),
       ...(questions ? { questions } : {}),
     }));

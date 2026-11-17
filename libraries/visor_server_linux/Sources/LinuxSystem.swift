@@ -77,6 +77,14 @@ public struct LinuxSystem: CommandLineSystem {
         POSIXStopSignals.onStop(stop)
     }
 
+    public func setEnvironment(_ name: String, _ value: String?) {
+        if let value { setenv(name, value, 1) } else { unsetenv(name) }
+    }
+
+    @MainActor public func connect(unixPath path: String) async -> (any ByteStream)? {
+        await POSIXUnixSocket.connect(path)
+    }
+
     /// A copy beside it, then renamed over it: the running program keeps
     /// the file it was started from.
     public func install(_ build: String, over executable: String) -> String? {

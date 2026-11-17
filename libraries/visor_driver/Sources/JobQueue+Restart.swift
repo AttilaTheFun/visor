@@ -52,10 +52,9 @@ extension JobQueue {
             restored.remove(agent)
             returns[agent] = nil
             claimCapabilities[agent] = nil
-            // Its token too: its runner's next renewal is told the claim
-            // isn't its own, its wrapper can't dial in again, and its
-            // reports are no longer taken.
-            forgetToken(of: agent)
+            // Its job gone, its token is no longer taken (JobQueue+Tokens):
+            // its runner's next renewal is told the claim isn't its own, its
+            // wrapper can't dial in again, and its reports are let go.
         }
         save()
         if dropped > 0 { log("dispatcher: \(session)'s agent stopped: its job let go") }

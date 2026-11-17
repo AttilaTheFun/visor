@@ -9,10 +9,22 @@ struct MCPWebSocketLink: MCPServerLink {
     /// `ws://host:port`: this computer's server, or the computer a
     /// container's agent runs on.
     let url: String
-    /// The session's agent token (VISOR_TOKEN).
+    /// The session's agent token as the agent was started with it
+    /// (VISOR_TOKEN): taken only when there is no token file, or it can't
+    /// be read (a server too old to write one).
     let token: String
     /// The session the agent is (VISOR_SESSION).
     let session: String
+    /// Where the server keeps the session's token fresh (VISOR_TOKEN_FILE):
+    /// read on each call, since it is re-minted hourly.
+    var tokenFile: String? = nil
+
+    /// The token to show now: the file's, else VISOR_TOKEN.
+    var currentToken: String {
+        guard let tokenFile, !tokenFile.isEmpty, let data = FileManager.default.contents(atPath: tokenFile) else { return token }
+        let read = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return read.isEmpty ? token : read
+    }
 
     func call(_ fields: [String: JSONValue]) async -> MCPReply {
         let unreachable = MCPReply(ok: false, text: "Visor is not reachable.")
@@ -21,7 +33,7 @@ struct MCPWebSocketLink: MCPServerLink {
         let id = Self.requestID()
         var message = fields
         message["type"] = .string("agent")
-        message["token"] = .string(token)
+        message["token"] = .string(currentToken)
         message["client"] = .string(session)
         message["id"] = .string(id)
         guard socket.send(JSONValue.object(message).encoded()) else { return unreachable }
@@ -40,7 +52,7 @@ struct MCPWebSocketLink: MCPServerLink {
         let id = Self.requestID()
         var message = request
         message["type"] = .string("approval_request")
-        message["token"] = .string(token)
+        message["token"] = .string(currentToken)
         message["session"] = .string(session)
         message["id"] = .string(id)
         guard socket.send(JSONValue.object(message).encoded()) else { return .no }

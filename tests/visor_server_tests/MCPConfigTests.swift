@@ -17,6 +17,11 @@ extension ServerTests {
         let session = ["VISOR_PORT": "7433", "VISOR_TOKEN": "agents", "VISOR_SESSION": "s1",
                        "CLAUDE_CODE_OAUTH_TOKEN": "sign-in", "GH_TOKEN": "git", "PATH": "/usr/bin"]
         #expect(VisorMCP.scriptEnvironment(session, approvals: true) == ["VISOR_PORT": "7433", "VISOR_TOKEN": "agents", "VISOR_SESSION": "s1", "VISOR_APPROVALS": "1"])
+        // With its token file, the token stays off the command line (Codex's
+        // `-c`, which `ps` shows); the admin token is never given.
+        let filed = session.merging(["VISOR_TOKEN_FILE": "/data/hosts/s1/token", "VISOR_ADMIN_TOKEN": "admin"]) { _, new in new }
+        #expect(VisorMCP.scriptEnvironment(filed, approvals: false)
+                == ["VISOR_PORT": "7433", "VISOR_TOKEN_FILE": "/data/hosts/s1/token", "VISOR_SESSION": "s1"])
     }
 
     /// The MCP server is this computer's agent host run as `mcp`, where it

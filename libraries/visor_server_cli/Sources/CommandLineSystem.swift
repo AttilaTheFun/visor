@@ -1,5 +1,6 @@
 import Foundation
 import VisorServer
+import VisorSystem
 
 /// What the command-line server asks of the system it runs on, beyond what
 /// the server itself does (ServerPlatform): where it keeps things before a
@@ -22,4 +23,17 @@ public protocol CommandLineSystem: Sendable {
     /// Puts the program at `build` where `executable` is, while this one
     /// runs. What went wrong, or nil.
     func install(_ build: String, over executable: String) -> String?
+    /// A connection to the socket file at `path` (the running server's
+    /// trusted socket, VisorServer.socketPath); nil where nothing listens,
+    /// or the system has no socket files.
+    @MainActor func connect(unixPath path: String) async -> (any ByteStream)?
+    /// Sets `name` in this process's own environment, or unsets it (nil):
+    /// what the processes it starts from then on inherit.
+    func setEnvironment(_ name: String, _ value: String?)
+}
+
+public extension CommandLineSystem {
+    @MainActor func connect(unixPath path: String) async -> (any ByteStream)? { nil }
+    /// Left as it is where the system says nothing (Windows, for now).
+    func setEnvironment(_ name: String, _ value: String?) {}
 }

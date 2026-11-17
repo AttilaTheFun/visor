@@ -26,8 +26,6 @@ public struct POSIXAgentHosting: AgentHosting {
     }
 
     @MainActor public func connect(_ path: String) async -> (any ByteStream)? {
-        let descriptor = await blocking { visor_connect_unix(path) }
-        guard descriptor >= 0 else { return nil }
-        return POSIXSocketStream(POSIXSocket(descriptor))
+        await POSIXUnixSocket.connect(path)
     }
 }

@@ -22,9 +22,10 @@ public struct SessionFolders: Sendable, Equatable {
         self.sources = sources.map(Self.trimmed)
     }
 
-    /// The folder of the session `id` of `agent`: <sessions>/Claude/<id>.
+    /// The folder of the session `id` of `agent`: <sessions>/Claude/<id>
+    /// (the id as SessionPathName names it: itself, for a UUID).
     public func folder(agent: AgentKind, id: String) -> String {
-        "\(sessions)/\(Self.name(of: agent))/\(id)"
+        "\(sessions)/\(Self.name(of: agent))/\(SessionPathName.of(id))"
     }
 
     /// Where a repository a moved session works in goes here: under the

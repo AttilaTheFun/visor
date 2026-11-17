@@ -27,7 +27,7 @@ extension VisorServer {
     /// asking session, `session` (and `server`) the one it is about,
     /// `messageID` the message a status is asked of.
     func answerAgent(_ envelope: Envelope, reply: @escaping (Envelope) -> Void) {
-        guard let caller = agentSession(envelope.client, presenting: envelope.token) else {
+        guard let caller = agentSession(envelope.client, presenting: envelope.token, for: Self.scope(of: envelope)) else {
             return reply(agentReply(envelope))
         }
         answerAgent(envelope, caller: caller, reply: reply)

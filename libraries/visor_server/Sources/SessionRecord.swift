@@ -179,6 +179,10 @@ public final class SessionRecord {
     /// build from before each session had its own): while it runs, the
     /// shared token is taken from this session (VisorServer+AgentTokens).
     weak var sharedTokenChild: HostedChild?
+    /// The agent 0.60 or 0.61 left under its host, holding its session's
+    /// random token rather than a JWT: while it runs, that token is taken
+    /// from this session alone (VisorServer+AgentTokens).
+    weak var randomTokenChild: HostedChild?
 
     /// The agent that ran before this one has been told to go and is not
     /// yet gone: what is said waits, so that two agents never hold the
@@ -293,8 +297,9 @@ public final class SessionRecord {
     /// the one an earlier launch left, until it is picked up).
     var host: StoredHost? {
         guard let hostable = process as? HostableProcess, let child = hostable.hostedChild else { return leftHost }
+        let older = child === sharedTokenChild || child === randomTokenChild
         return StoredHost(socket: child.socket, line: child.nextLine, carried: hostable.carried,
-                          ownToken: child === sharedTokenChild ? nil : true)
+                          ownToken: child === sharedTokenChild ? nil : true, jwt: older ? nil : true)
     }
 
     /// The session's resume command, refreshed from the process (the id is

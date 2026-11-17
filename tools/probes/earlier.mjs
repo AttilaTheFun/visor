@@ -2,7 +2,7 @@
 import { execSync } from 'node:child_process';
 // The server's port: the installed one's, or a staging server's (VISOR_PORT).
 const PORT = Number(process.env.VISOR_PORT ?? 7433);
-const PW = process.env.VISOR_TOKEN || execSync('security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w').toString().trim();
+const PW = process.env.VISOR_ADMIN_TOKEN || (() => { console.error('VISOR_ADMIN_TOKEN is unset: give the server\'s admin token (or a staging server\'s password). A session\'s own VISOR_TOKEN is for its own actions only.'); process.exit(2); })();
 const id = process.argv[2];
 const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
 let first = null, pages = 0;

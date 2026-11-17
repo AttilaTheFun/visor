@@ -10,6 +10,8 @@ package(default_visibility = ["//visibility:public"])
 # (sockets, signals, secrets, pushes, …) is given by the binary that runs
 # it, as a ServerPlatform (visor_server_apple for the menu bar app; the
 # Linux and Windows command-line servers build with SwiftPM, Package.swift).
+# Its one package beyond the repository's own: swift-crypto (Crypto), for
+# the agents' tokens and the admin token.
 swift_library(
     name = "visor_server",
     copts = STRICT_SWIFT,
@@ -25,5 +27,8 @@ swift_library(
         "//libraries/visor_agent",
         "//libraries/visor_protocol",
         "//libraries/visor_system",
+        # HMAC-SHA256 and SHA-256 for the agents' tokens (JWT) and the admin
+        # token's hash: CryptoKit's API, on every system.
+        "@swiftpkg_swift_crypto//:Crypto",
     ],
 )

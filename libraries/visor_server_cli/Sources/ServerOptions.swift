@@ -9,6 +9,9 @@ import VisorServer
 ///   VISOR_LISTEN            --listen all|loopback (the LAN and a VPN, or
 ///                           this computer alone)
 ///   VISOR_PASSWORD_FILE     --password-file (the password, from a file)
+///   VISOR_ADMIN_TOKEN       --admin-token-file <file>|- (the admin token:
+///                           itself in the environment, or from a file or
+///                           standard input; never an argument's value)
 ///   VISOR_FRONT             --front (where clients reach it, comma-separated)
 ///   VISOR_PROXY             --proxy (where its pushes and MCP servers go)
 ///   VISOR_PROXY_TOKEN_FILE  --proxy-token-file (its token for the proxy)
@@ -43,6 +46,11 @@ struct ServerOptions: Sendable {
     var settings: [(String, String)] = []
     /// The password to set before it runs.
     var password: String?
+    /// The admin token given at launch (its hash alone is kept, in memory:
+    /// VisorServer.useAdminTokenGivenAtLaunch), and the file it was read
+    /// from, passed on to a run started from this one.
+    var adminToken: String?
+    private var adminTokenFile: String?
     /// The proxy given at start, its token, and the MCP servers of it to
     /// pass on (VisorServer.useProxy).
     var proxy: String?
@@ -88,6 +96,9 @@ struct ServerOptions: Sendable {
             case "--resume-sessions": resume = value
             case "--password": password = value
             case "--password-file": password = try Self.read(value, for: flag); passwordFile = value
+            case "--admin-token-file":
+                adminToken = try value == "-" ? Self.readStandardInput(for: flag) : Self.read(value, for: flag)
+                adminTokenFile = value
             case "--listen": settings += try Self.listening(value)
             case "--proxy": proxy = value
             case "--proxy-token-file": proxyToken = try Self.read(value, for: flag); proxyTokenFile = value
@@ -100,6 +111,8 @@ struct ServerOptions: Sendable {
             case "--user-header": userHeader = value
             case "--user-name-header": userNameHeader = value
             case "--device-header": deviceHeader = value
+            case "--admin-token":
+                throw .usage("the admin token never goes on the command line: give VISOR_ADMIN_TOKEN, or --admin-token-file <file>|-")
             case "--auth", "--lan", "--vpn", "--ssh", "--address", "--standalone", "--front", "--keep-messages":
                 settings.append((String(flag.dropFirst(2)), value))
             default: throw .usage("unknown option \(flag)")
@@ -147,6 +160,7 @@ struct ServerOptions: Sendable {
         }
         if let value = given("VISOR_LISTEN") { settings += try Self.listening(value) }
         if let value = given("VISOR_PASSWORD_FILE") { password = try Self.read(value, for: "VISOR_PASSWORD_FILE"); passwordFile = value }
+        if let value = given("VISOR_ADMIN_TOKEN") { adminToken = value }
         if let value = given("VISOR_FRONT") { settings.append(("front", value)) }
         if let value = given("VISOR_PROXY") { proxy = value }
         if let value = given("VISOR_PROXY_TOKEN_FILE") { proxyToken = try Self.read(value, for: "VISOR_PROXY_TOKEN_FILE"); proxyTokenFile = value }
@@ -186,6 +200,28 @@ struct ServerOptions: Sendable {
         return value
     }
 
+    /// A secret's one line from standard input (`--admin-token-file -`).
+    static func readStandardInput(for name: String) throws(CommandLineError) -> String {
+        let data = FileHandle.standardInput.readDataToEndOfFile()
+        let value = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { throw .usage("\(name) -: nothing on standard input") }
+        return value
+    }
+
+    /// The admin token as a run started from this one (a relaunch) is
+    /// given it, in its environment: one this run was given in its own
+    /// environment or on standard input; nil for one in a file, which the
+    /// new run reads itself (`arguments`).
+    var adminTokenForEnvironment: String? {
+        adminTokenFile == nil || adminTokenFile == "-" ? adminToken : nil
+    }
+
+    /// Why these can't be passed on to a run in the background, if they
+    /// can't: a token read from standard input has no file to name.
+    var backgroundProblem: String? {
+        adminTokenFile == "-" ? "start reads no standard input: give the admin token in VISOR_ADMIN_TOKEN, or --admin-token-file <file>" : nil
+    }
+
     /// `shireworks, gh` as names.
     static func names(_ value: String) -> [String] {
         value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -199,6 +235,8 @@ struct ServerOptions: Sendable {
         if let after { out += ["--after", String(after)] }
         if let resume { out += ["--resume-sessions", resume] }
         if let passwordFile { out += ["--password-file", passwordFile] } else if let password { out += ["--password", password] }
+        // A token from the environment stays there (the run inherits it).
+        if let adminTokenFile, adminTokenFile != "-" { out += ["--admin-token-file", adminTokenFile] }
         for (name, value) in settings { out += ["--" + name, value] }
         if let proxy { out += ["--proxy", proxy] }
         if let proxyTokenFile { out += ["--proxy-token-file", proxyTokenFile] }
