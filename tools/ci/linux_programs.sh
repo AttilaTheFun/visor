@@ -18,7 +18,8 @@ case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-git -C "$ROOT" archive --format=tar HEAD | tar -x -C "$work"
+# The checkout may be another user's (a job's container): safe here.
+git -c safe.directory="$ROOT" -C "$ROOT" archive --format=tar HEAD | tar -x -C "$work"
 mkdir -p "$work/out"
 (cd "$work" && tools/linux_programs.sh "$work/out")
 tar -c -f "$OUT" -C "$work/out" visor-server visor-agent-host

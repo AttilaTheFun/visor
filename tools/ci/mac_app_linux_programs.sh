@@ -6,8 +6,8 @@
 # containers it makes. The tar is
 # tools/ci/linux_programs.sh's (CI's linux-programs job). The entries are
 # appended to the .zip as it is, with their Unix modes; nothing Bazel built
-# is unpacked or packed again. Shireworks' signing service then signs the
-# app around them (tools/ci/sign_from_ci.sh).
+# is unpacked or packed again. CI's signing job then signs the app around
+# them (tools/ci/sign_builds.sh).
 #
 #   tools/ci/mac_app_linux_programs.sh <Mac app .zip> <linux-programs .tar>
 #

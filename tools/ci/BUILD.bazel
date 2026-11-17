@@ -1,15 +1,14 @@
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
-# CI's build of the apps in a Linux container leased from the runner's Mac's
-# Shireworks (ci.yml's container job).
+# CI's build of the apps where their tools run: Linux's on Linux, Apple's
+# on a Mac (ci.yml's container and container-apple jobs).
 sh_binary(
     name = "container_build",
     srcs = ["container_build.sh"],
 )
 
-# Blue Visor's web client built, tested and checked in headless Chromium, in
-# a Linux container leased from the runner's Mac's Shireworks (ci.yml's
-# blue-web job).
+# Blue Visor's web client built, tested and checked in headless Chromium,
+# on Linux (ci.yml's blue-web job).
 sh_binary(
     name = "container_blue_web",
     srcs = ["container_blue_web.sh"],

@@ -62,7 +62,7 @@ enum MacScreenshots {
         // tracking) is captured all the same, and the tool always ends.
         let number = window.windowNumber
         // `hold`: the window kept up for a minute, pictured from outside (a
-        // VM's screen, through its lease: tools/ci/mac_vm_screenshots.sh),
+        // VM's screen, through a Shireworks lease, by hand),
         // where nothing in the VM may capture the screen.
         if hold {
             // At the top of the screen, clear of the Dock, which a picture
