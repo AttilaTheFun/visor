@@ -1,8 +1,9 @@
-// The projects a session works in, as the server it is on sees them, for
-// moving it to another computer: its own folder, and the git repositories
-// under the home folder its conversation names most — each with what git
-// says of it (where it can be cloned from, and whether it holds anything
-// that remote does not), and packed for copying when it cannot be cloned.
+// The repositories a session works in, as the server it is on sees them,
+// for moving it to a runner (VisorServer+Driven), which clones each there:
+// its own folder's, and those under the home folder its conversation
+// worked in — each with what git says of it (where it can be cloned from,
+// and whether it holds anything that remote does not). A move to another
+// server carries none: its agent clones what it needs.
 
 import Foundation
 import VisorProtocol
@@ -10,19 +11,17 @@ import VisorSystem
 
 enum ProjectSurvey {
     /// The session's folder (its repository, when it is in one) first,
-    /// then the repositories the conversation names, most named first; or,
-    /// `worked`, only those it worked in (`workedIn`): a move to a runner
-    /// clones each, where a migration offers them to choose from.
+    /// then the repositories the conversation worked in (`workedIn`), most
+    /// worked in first.
     @concurrent
-    static func projects(cwd: String, conversation: URL?, home: String, limit: Int = 12, worked: Bool = false) async -> [MigrationProject] {
+    static func projects(cwd: String, conversation: URL?, home: String, limit: Int = 12) async -> [MigrationProject] {
         let folder = HostFolders.resolve(cwd)
         let own = await repository(at: folder) ?? MigrationProject(path: folder)
         var found = [own]
         guard let conversation else { return found }
         var counts: [String: Int] = [:]
         var tops: [String: String?] = [:]
-        let named = worked ? workedIn(conversation, under: home) : mentions(in: conversation, under: home)
-        for (named, count) in named.sorted(by: { $0.value > $1.value }).prefix(300) {
+        for (named, count) in workedIn(conversation, under: home).sorted(by: { $0.value > $1.value }).prefix(300) {
             guard let directory = existingFolder(named, under: home) else { continue }
             let top: String?
             if let known = tops[directory] {
@@ -34,44 +33,14 @@ enum ProjectSurvey {
             guard let top, top != home, top != own.path, top.hasPrefix(home + "/") else { continue }
             counts[top, default: 0] += count
         }
-        for (path, count) in counts.sorted(by: { $0.value > $1.value }).prefix(limit) {
-            guard var project = await repository(at: path) else { continue }
-            project.mentions = count
+        for (path, _) in counts.sorted(by: { $0.value > $1.value }).prefix(limit) {
+            guard let project = await repository(at: path) else { continue }
             found.append(project)
         }
         return found
     }
 
-    // MARK: What the conversation names
-
-    /// How often the file names each place under `home`, by the place's
-    /// first three parts ("/Users/x/Developer/visor/Sources"), skipping the
-    /// home folder's hidden folders and its `kept` ones. Read a piece at a
-    /// time: a conversation runs to hundreds of megabytes.
-    static func mentions(in file: URL, under home: String) -> [String: Int] {
-        guard let handle = try? FileHandle(forReadingFrom: file) else { return [:] }
-        defer { try? handle.close() }
-        let needle = Data((home + "/").utf8)
-        let reach = 400
-        var counts: [String: Int] = [:]
-        var carried = Data()
-        while true {
-            let piece = (try? handle.read(upToCount: 8 << 20)) ?? Data()
-            let last = piece.isEmpty
-            let text = carried + piece
-            // A name that starts too near the end waits for the next piece,
-            // where it is whole.
-            let end = last ? text.endIndex : max(text.startIndex, text.endIndex - reach)
-            var from = text.startIndex
-            while let found = text.range(of: needle, in: from..<text.endIndex), found.lowerBound < end {
-                if let place = place(in: text, after: found.upperBound, home: home) { counts[place, default: 0] += 1 }
-                from = found.upperBound
-            }
-            if last { break }
-            carried = Data(text[end...])
-        }
-        return counts
-    }
+    // MARK: Where the conversation worked
 
     /// The places under `home` the conversation worked in, by their first
     /// three parts, with how often: files its agent edited or wrote, and
@@ -185,41 +154,6 @@ enum ProjectSurvey {
         let branch = await git(["symbolic-ref", "--short", "-q", "HEAD"], in: top).flatMap { $0.isEmpty ? nil : $0 }
         let changes = await git(["status", "--porcelain"], in: top).map { !$0.isEmpty } ?? true
         let unpushed = await git(["rev-list", "-n", "1", "HEAD", "--not", "--remotes"], in: top).map { !$0.isEmpty } ?? true
-        var size = folderSize(top + "/.git")
-        for file in await carried(in: top) { size += Self.size(of: top + "/" + file) }
-        return MigrationProject(path: top, remote: remote, branch: branch, commit: commit, unshared: remote == nil || changes || unpushed,
-                                size: size)
-    }
-
-    /// The files a copy of the repository carries, relative to it: what git
-    /// tracks and what it does not ignore, that is there.
-    static func carried(in top: String) async -> [String] {
-        guard let listed = await Command.output(git, ["-C", top, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-                                                environment: ToolPath.environment()), listed.status == 0 else { return [] }
-        let names = Set(listed.text.split(separator: "\0").map(String.init))
-        return names.sorted().filter { FileManager.default.fileExists(atPath: top + "/" + $0) }
-    }
-
-    /// A copy of the repository packed as one file (a gzipped tar of what
-    /// `carried` names and its .git), at `archive`.
-    static func pack(_ top: String, into archive: URL) async -> String? {
-        let list = archive.deletingPathExtension().appendingPathExtension("list")
-        let names = await carried(in: top) + [".git"]
-        do { try Data(names.joined(separator: "\0").utf8).write(to: list) } catch { return error.localizedDescription }
-        defer { try? FileManager.default.removeItem(at: list) }
-        guard let result = await Command.output(ToolPath.resolve("tar") ?? "/usr/bin/tar", ["-czf", archive.path, "-C", top, "--null", "-T", list.path], errors: true)
-        else { return "tar could not be started" }
-        return result.status == 0 ? nil : result.text
-    }
-
-    private static func size(of path: String) -> Int {
-        ((try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? NSNumber)?.intValue ?? 0
-    }
-
-    static func folderSize(_ path: String) -> Int {
-        guard let walk = FileManager.default.enumerator(at: URL(fileURLWithPath: path), includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
-        var total = 0
-        for case let url as URL in walk { total += (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
-        return total
+        return MigrationProject(path: top, remote: remote, branch: branch, commit: commit, unshared: remote == nil || changes || unpushed)
     }
 }

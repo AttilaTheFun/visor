@@ -10,7 +10,7 @@ import VisorProtocol
 
 extension SessionCatalog {
     /// The agent's own folder, which a file's place is under.
-    static func agentFolder(_ agent: AgentKind) -> URL? {
+    package static func agentFolder(_ agent: AgentKind) -> URL? {
         switch agent {
         case .claude: ClaudeSessionFiles.configDirectory()
         case .codex: codexRoot()

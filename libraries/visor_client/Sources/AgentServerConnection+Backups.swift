@@ -8,10 +8,10 @@ extension AgentServerConnection {
     /// Whether this computer's server backs its sessions up.
     public var backsUp: Bool { server.backsUp }
 
-    /// Backs up every session not archived (their conversations; the
+    /// Backs up every session not archived (their agents' files; the
     /// projects stay where they are): the backup.
     public func backUpSessions() async throws -> SessionBackup {
-        try await server.backUp(sessions: nil, projects: false)
+        try await server.backUp(sessions: nil)
     }
 
     /// The backups kept on the computer, newest first.

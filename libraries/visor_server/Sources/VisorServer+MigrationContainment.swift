@@ -1,16 +1,19 @@
 // What a move here takes from the server it comes from, held to where it
-// belongs. The offer's ids, places, folders and archives are the other
-// server's words, and a server compromised or wrong could name `..`, an
-// absolute path, a `/` inside an id, or an archive whose entries lead out:
-// a move takes ids only as plain names (SessionPathName: letters, digits,
-// `-` and `_`), the conversation's id only as one an agent makes (a UUID),
-// and full paths only with nothing to resolve (no `.`, `..` or empty
-// part); writes nothing outside the move's own folder, the agent's place
-// for that conversation, or the folder a project's step names; and unpacks
-// an archive only into a folder of its own inside where it goes, every
-// entry's name and every link it makes checked to stay there, before
-// anything is moved into place. A clone is walked the same way before it
-// is kept: a repository can check out links too.
+// belongs. Peers are only the user's own paired servers, but the offer's
+// ids, places and archives are still the other server's words, and a
+// server compromised or wrong could name `..`, an absolute path, a `/`
+// inside an id, or an archive whose entries lead out. A move takes ids
+// only as plain names (SessionPathName: letters, digits, `-` and `_`), the
+// conversation's id only as one an agent makes (a UUID), a file only as one
+// of the agent's own for that conversation (its place shaped as the agent
+// keeps it, or Claude's memory), and no path of the other server's at all:
+// every destination is made here, of the agent, the conversation's id and
+// the session's new folder (VisorServer+MigrationArrival). It writes
+// nothing outside the move's own folder, the agent's place for that
+// conversation, the memory of the new folder's project, and that folder;
+// and unpacks an archive (the conversation's folder, the memory) only into
+// a folder of its own inside where it goes, every entry's name and every
+// link it makes checked to stay there, before anything is moved into place.
 
 import Foundation
 import VisorAgent
@@ -43,51 +46,45 @@ extension VisorServer {
     }
 
     /// Why the offer (a move's, or a backup's) can't come here as it is:
-    /// nil when it can.
+    /// nil when it can. Each file must be one of the agent's own for the
+    /// conversation — at a place shaped as the agent keeps it
+    /// (SessionCatalog.destination), or Claude's memory, packed with no
+    /// place — and within what a move carries (oversized).
     static func unsafeOffer(_ offer: MigrationOffer) -> String? {
         guard SessionCatalog.isConversationID(offer.resumeID) else {
             return "its conversation's id, “\(offer.resumeID)”, is not one an agent makes"
         }
         guard isPlainPath(offer.session.cwd) else { return "the session's folder, \(offer.session.cwd), is not a full path" }
-        var ids: Set<String> = []
+        var ids: Set<String> = [], places: Set<String> = []
         for file in offer.files {
             guard isCarriedName(file.id), ids.insert(file.id).inserted else { return "it names a file “\(file.id)”" }
-            guard file.place.isEmpty || SessionCatalog.destination(of: file.place, agent: offer.session.agent, cwd: offer.session.cwd,
-                                                                    resume: offer.resumeID) != nil else {
+            guard places.insert(file.place).inserted else { return "it names a place twice, \(file.place.isEmpty ? "the memory's" : file.place)" }
+            if file.place.isEmpty {
+                guard file.id == memoryFileID, file.packed, offer.session.agent == .claude else {
+                    return "it carries “\(file.id)”, which is not one of the agent's own files for the conversation"
+                }
+            } else if SessionCatalog.destination(of: file.place, agent: offer.session.agent, cwd: offer.session.cwd, resume: offer.resumeID) == nil {
                 return "it would put a file at \(file.place), which is not where the agent keeps its conversation"
             }
         }
-        for project in offer.projects where !isPlainPath(project.path) {
-            return "a project of its, \(project.path), is not a full path"
-        }
-        return nil
-    }
-
-    /// Why `path`, a project's step's, is no place to clone or unpack a
-    /// project into: nil when it is. A full path with nothing to resolve,
-    /// never the root; where repositories are kept apart, inside them.
-    func notAProjectPlace(_ path: String) -> String? {
-        guard Self.isPlainPath(path), path.contains(where: { $0 != "/" }) else { return "\(path) is not a full path to put a project at." }
-        if let sources = sessionFolders?.sources,
-           !SessionPathName.isInside(URL(fileURLWithPath: path, isDirectory: true), URL(fileURLWithPath: sources, isDirectory: true)) {
-            return "\(path) is not in \(sources), where repositories are kept here."
-        }
-        return nil
+        return oversized(offer.files)
     }
 
     // MARK: Unpacking
 
-    /// A gzipped tar unpacked into `folder` (made when missing): every
-    /// entry's name checked first (never absolute, never through `..`;
-    /// under `name` alone when one is given), then unpacked into a folder of
-    /// its own inside `folder`, walked (unsafeTree), and only then moved
-    /// into place: `name` where nothing is by that name but an empty folder
-    /// (never over what is there), or everything into `folder`. What went
-    /// wrong, if anything; the folder it was unpacked into goes either way.
-    static func unpack(_ archive: URL, into folder: URL, only name: String? = nil) async -> String? {
-        if let name, !isCarriedName(name) { return "\(name) is not a name to unpack as" }
-        if let name, let there = try? FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent(name).path) {
-            let empty = (try? FileManager.default.contentsOfDirectory(atPath: folder.appendingPathComponent(name).path))?.isEmpty == true
+    /// A gzipped tar of the folder `name` (the conversation's folder, the
+    /// memory) unpacked into `folder` (made when missing): every entry's
+    /// name checked first (never absolute, never through `..`, always under
+    /// `name`), then unpacked into a folder of its own inside `folder`,
+    /// walked (unsafeTree), and only then moved into place, where nothing
+    /// is by that name but an empty folder (never over what is there). What
+    /// went wrong, if anything; the folder it was unpacked into goes either
+    /// way.
+    static func unpack(_ archive: URL, into folder: URL, only name: String) async -> String? {
+        guard isCarriedName(name) else { return "\(name) is not a name to unpack as" }
+        let destination = folder.appendingPathComponent(name, isDirectory: false)
+        if let there = try? FileManager.default.attributesOfItem(atPath: destination.path) {
+            let empty = (try? FileManager.default.contentsOfDirectory(atPath: destination.path))?.isEmpty == true
             guard there[.type] as? FileAttributeType == .typeDirectory, empty else { return "\(name) is in \(folder.path) already" }
         }
         let tar = ToolPath.resolve("tar") ?? "/usr/bin/tar"
@@ -108,34 +105,36 @@ extension VisorServer {
         guard let result = await Command.output(tar, ["--no-same-owner", "--no-same-permissions", "-xzf", archive.path, "-C", staging.path],
                                                 errors: true) else { return "tar could not be started" }
         guard result.status == 0 else { return result.text.trimmingCharacters(in: .whitespacesAndNewlines) }
-        if let problem = unsafeTree(staging) { return problem }
         let top = ((try? files.contentsOfDirectory(atPath: staging.path)) ?? []).sorted()
-        if let name {
-            guard top == [name] else { return "it holds \(top.joined(separator: ", ")), not \(name) alone" }
+        guard top == [name] else { return "it holds \(top.joined(separator: ", ")), not \(name) alone" }
+        // The folder itself is the root of the walk: a link in it that
+        // leads out of it (to the conversation beside it, say) is refused,
+        // not only one that leads out of the unpacking.
+        let unpacked = staging.appendingPathComponent(name, isDirectory: true)
+        guard (try? files.attributesOfItem(atPath: unpacked.path))?[.type] as? FileAttributeType == .typeDirectory else {
+            return "it holds \(name), which is not a folder"
         }
-        for item in top {
-            let destination = folder.appendingPathComponent(item, isDirectory: false)
-            guard SessionPathName.isInside(destination, folder) else { return "\(item) would lead out of \(folder.path)" }
-            // The empty folder by that name, the one thing it may take the place of.
-            if name != nil { try? files.removeItem(at: destination) }
-            do { try files.moveItem(at: staging.appendingPathComponent(item, isDirectory: false), to: destination) } catch {
-                return "could not put \(item) in \(folder.path): \(error.localizedDescription)"
-            }
+        if let problem = unsafeTree(unpacked) { return problem }
+        guard SessionPathName.isInside(destination, folder) else { return "\(name) would lead out of \(folder.path)" }
+        // The empty folder by that name, the one thing it may take the place of.
+        try? files.removeItem(at: destination)
+        do { try files.moveItem(at: staging.appendingPathComponent(name, isDirectory: false), to: destination) } catch {
+            return "could not put \(name) in \(folder.path): \(error.localizedDescription)"
         }
         return nil
     }
 
     /// Why an archive's entry (as `tar -t` lists it) can't be unpacked: an
-    /// absolute name, one through `..`, or one not under `only`.
-    static func unsafeEntry(_ entry: String, only name: String?) -> String? {
+    /// absolute name, one through `..`, or one not under `name`.
+    static func unsafeEntry(_ entry: String, only name: String) -> String? {
         guard !entry.hasPrefix("/") else { return "it holds an entry at an absolute path, \(entry)" }
         let parts = entry.split(separator: "/", omittingEmptySubsequences: true).filter { $0 != "." }
         guard !parts.contains("..") else { return "it holds an entry that leads out, \(entry)" }
-        if let name, let first = parts.first, first != name { return "it holds \(entry), not under \(name)" }
+        if let first = parts.first, first != name { return "it holds \(entry), not under \(name)" }
         return nil
     }
 
-    /// Why what was unpacked or cloned at `root` can't be kept: a link
+    /// Why what was unpacked at `root` can't be kept: a link
     /// that leads, followed as the system would, anywhere outside `root`
     /// (an absolute one always); a hard link to a file outside it; anything
     /// but files, folders and links (a device, a fifo, a socket); or a
@@ -188,7 +187,7 @@ extension VisorServer {
     }
 
     /// What is at `url` removed, every folder in it opened first (an
-    /// archive's or a clone's folder of mode 0000 can't be emptied as it is).
+    /// archive's folder of mode 0000 can't be emptied as it is).
     static func removeTree(_ url: URL) {
         let files = FileManager.default
         var folders = [url.path]

@@ -620,19 +620,22 @@ restart Claude do the same. Stop Agent lets its job go (`stopDriven`), so
 its runner ends it. None of them starts an agent here.
 
 **Moving a session.** "Migrate…" in a session's menu lists the other
-computers connected now. The client (`SessionMigration`) asks the
-session's server for an offer (VisorServer+Migration.swift: the agent's
-own files for the conversation, found by `SessionCatalog+Migration`, and
-the projects — its folder's repository, and the repositories its
-conversation names most, by `ProjectSurvey`), the other for a plan
-(VisorServer+MigrationArrival.swift: each project here already, cloned
-from its remote when it has nothing the remote does not, copied when it
-does or has no remote, or made), and carries the files across a piece at
-a time. Paths under one home folder land under the other's; in a
-container its computer shares folders with (`HostDetails.sharedFolders`),
-a path in one stays where it is, and a session in none is refused. The new
-session resumes the same conversation; the old one is left for the user
-to remove.
+computers connected now; the user picks one, and nothing else. The client
+(`SessionMigration`) asks the session's server for an offer
+(VisorServer+Migration.swift: the agent's own files for the conversation,
+found by `SessionCatalog+Migration` — its transcript, the folder beside
+it, Claude's memory — and nothing else: no project, working tree or
+clone), the other for a plan (VisorServer+MigrationArrival.swift: a new,
+empty folder of that server's choosing, `<sessions>/<Agent>/<id>`, under
+`VISOR_SESSIONS_DIR` or its data folder's `Sessions`), and carries the
+files across a piece at a time. The receiver makes every destination of
+the agent, the conversation's id and that folder, holds the offer to the
+containment rules and the size caps (VisorServer+MigrationContainment,
++MigrationSize; docs/protocol.md), and in a container whose computer
+shares folders with it (`HostDetails.sharedFolders`) refuses a folder in
+none. The new session resumes the same conversation and clones what it
+needs; the old one is left for the user to remove. Backups carry the
+same files.
 
 **The server on every system.** `libraries/visor_server` has no
 conditional compilation and imports nothing of a system: what differs —

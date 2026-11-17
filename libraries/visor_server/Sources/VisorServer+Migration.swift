@@ -1,13 +1,17 @@
 // Moving a session to another server, through a client connected to both
 // (`POST /api/migration/<step>`; the client's side is SessionMigration).
-// Where the session is: an offer of it — the agent's own files for its
-// conversation, and the projects it works in — read a piece at a time,
-// with a project packed for copying when it cannot be cloned. Where it
-// goes (VisorServer+MigrationArrival.swift): a plan of what will be done
-// with each project, the files written, projects cloned or unpacked, and
-// at the end the session started on the same conversation. The session it
-// came from is left as it is, for the user to remove once the new one
-// works.
+// A move carries the agent's own files for the conversation and nothing
+// else (Logan, 17 Nov): its transcript, the folder the agent keeps beside
+// it (Claude's subagents and long tool results), and Claude's memory. No
+// project, working tree or clone: the session runs in a new, empty folder
+// there, and its agent clones what it needs. Where the session is: an
+// offer of it, read a piece at a time. Where it goes
+// (VisorServer+MigrationArrival.swift): a plan (the new folder), the files
+// written, and at the end the session started on the same conversation.
+// The session it came from is left as it is, for the user to remove once
+// the new one works. Peers are only the user's own paired servers
+// (docs/protocol.md); what one offers is held to what a move takes all the
+// same (VisorServer+MigrationContainment.swift).
 
 import Foundation
 import VisorAgent
@@ -21,6 +25,11 @@ extension VisorServer {
     /// for it.
     static let migrationLifetime: TimeInterval = 6 * 60 * 60
 
+    /// What a client before 0.61 is told when it asks for a project to be
+    /// packed, cloned or unpacked.
+    static let projectStepsRemoved = "Moving a session's projects was removed in Visor 0.61: a move carries the agent's own files, "
+        + "and the session's agent clones what it needs on the other computer. Update Visor on this device."
+
     static var migrationsFolder: URL { storeURL.deletingLastPathComponent().appendingPathComponent("migrations", isDirectory: true) }
 
     func routeMigration(_ step: String, body: Envelope, respond: @escaping (HTTPResponse) -> Void) {
@@ -29,12 +38,11 @@ extension VisorServer {
             switch step {
             case "offer": reply = await migrationOffer(body)
             case "read": reply = migrationRead(body)
-            case "pack": reply = await migrationPack(body)
             case "plan": reply = await migrationPlan(body)
             case "write": reply = migrationWrite(body)
-            case "clone": reply = await migrationClone(body)
-            case "unpack": reply = await migrationUnpack(body)
             case "finish": reply = await migrationFinish(body)
+            // A client before 0.61 asks these to bring a session's projects.
+            case "pack", "clone", "unpack": return respond(HTTPResponse(410, Envelope.error(Self.projectStepsRemoved).encoded()))
             default: return respond(HTTPResponse(404, Envelope.error("No such step").encoded()))
             }
             respond(reply.type == "error" ? HTTPResponse(400, reply.encoded()) : .json(reply.encoded()))
@@ -44,7 +52,7 @@ extension VisorServer {
     // MARK: Where the session is
 
     /// The session (`session`) offered for moving: its conversation's files
-    /// (a folder packed), and its projects.
+    /// (a folder packed).
     func migrationOffer(_ body: Envelope) async -> Envelope {
         ageMigrations()
         guard let record = session(body.session) else { return .error("No such session") }
@@ -67,8 +75,9 @@ extension VisorServer {
 
     /// A session as a move offers it (or a backup keeps it): its
     /// conversation's files — each by an id, where it is here, a folder
-    /// packed into `folder` first, a file to its last whole line — and the
-    /// projects it works in.
+    /// packed into `folder` first, a file to its last whole line — and
+    /// Claude's memory with them; refused when a file, or all of them, is
+    /// more than a move carries (migrationFileCap, migrationTotalCap).
     func offer(of record: SessionRecord, resume: String, token: String,
                packingInto folder: URL) async -> Result<(offer: MigrationOffer, urls: [String: URL]), MigrationFailure> {
         var files: [MigrationFile] = []
@@ -97,11 +106,12 @@ extension VisorServer {
         guard files.contains(where: { !$0.packed }) else {
             return .failure(MigrationFailure(message: "The agent's own record of “\(record.info.title)” is not on this computer."))
         }
-        let home = SessionCatalog.home.path
-        let projects = await ProjectSurvey.projects(cwd: record.info.cwd, conversation: urls["conversation-0"], home: home)
+        if let problem = Self.oversized(files) {
+            return .failure(MigrationFailure(message: "“\(record.info.title)” is too large to move: \(problem)."))
+        }
         var info = record.info
         info.cwd = (info.cwd as NSString).expandingTildeInPath
-        let offer = MigrationOffer(token: token, from: hostName, session: info, resumeID: resume, home: home, files: files, projects: projects)
+        let offer = MigrationOffer(token: token, from: hostName, session: info, resumeID: resume, home: SessionCatalog.home.path, files: files)
         return .success((offer, urls))
     }
 
@@ -124,23 +134,6 @@ extension VisorServer {
         } catch {
             return .error("Could not read \(url.path): \(error.localizedDescription)")
         }
-    }
-
-    /// A project of the offer's (`path`) packed for copying: the file to
-    /// read it from.
-    func migrationPack(_ body: Envelope) async -> Envelope {
-        guard let token = body.migration, var offer = migrationsOut[token] else { return .error("That move has ended; start it again.") }
-        guard let path = body.path, let top = await ProjectSurvey.toplevel(of: path), top == path else {
-            return .error("\(body.path ?? "That") is not a git repository here.")
-        }
-        let id = "project-\(offer.files.count)"
-        let archive = offer.folder.appendingPathComponent(id + ".tgz", isDirectory: false)
-        if let problem = await ProjectSurvey.pack(top, into: archive) { return .error("Could not pack \(top): \(problem)") }
-        offer.files[id] = archive
-        migrationsOut[token] = offer
-        var e = Envelope(type: "migration")
-        e.file = MigrationFile(id: id, place: "", size: Self.fileSize(archive), packed: true)
-        return e
     }
 
     // MARK: Keeping

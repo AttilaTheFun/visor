@@ -1,11 +1,12 @@
 // A move's offer is the other server's word, and a server compromised or
 // wrong could name `..`, an absolute path, a `/` inside an id, an empty or
 // overlong id, a place that is the agent's settings, or an archive whose
-// entries lead out or whose links do: the plan refuses such an offer, each
-// step refuses such an id or archive with an error, and nothing is written
-// outside the move's folder, the agent's place for the conversation, or the
-// folder a project's step names. A project's own links that stay inside it
-// still come.
+// entries lead out or whose links do: the plan refuses such an offer, a
+// write refuses such an id, the finish such a place, and an archive (the
+// conversation's folder, the memory) is refused unless it holds that one
+// folder and nothing in it leads out of it; nothing is written outside the
+// move's folder, the agent's place for the conversation, or the session's
+// new folder. An archive's own links that stay inside it still come.
 
 import ClaudeTranscript
 import Foundation
@@ -73,18 +74,19 @@ extension ServerTests {
         SessionInfo(id: "S", agent: .claude, cwd: cwd, title: "Moving", created: 0)
     }
 
-    private func offer(resume: String? = nil, cwd: String? = nil, files: [MigrationFile] = [], projects: [MigrationProject] = []) -> MigrationOffer {
+    private func offer(resume: String? = nil, cwd: String? = nil, files: [MigrationFile] = []) -> MigrationOffer {
         MigrationOffer(token: "t", from: "Elsewhere", session: info(cwd: cwd ?? home.appendingPathComponent("Developer/app").path),
-                       resumeID: resume ?? conversation, home: home.path, files: files, projects: projects)
+                       resumeID: resume ?? conversation, home: home.path, files: files)
     }
 
     /// A move as a plan leaves it, made here directly (as if a plan had
-    /// taken it), so each step's own checks are what is tried.
-    private func move(_ offer: MigrationOffer, steps: [MigrationStep] = []) throws -> URL {
+    /// taken it), so each step's own checks are what is tried: the
+    /// session's new folder is the offer's folder here.
+    private func move(_ offer: MigrationOffer) throws -> URL {
         let folder = VisorServer.migrationsFolder.appendingPathComponent("in-p", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        server.migrationsIn["p"] = IncomingMigration(offer: offer, plan: MigrationPlan(id: "p", cwd: offer.session.cwd, agentInstalled: true, steps: steps),
-                                                     folder: folder, created: Date())
+        server.migrationsIn["p"] = IncomingMigration(offer: offer, plan: MigrationPlan(id: "p", cwd: offer.session.cwd, agentInstalled: true),
+                                                     folder: folder, created: Date(), sessionID: "moved")
         return folder
     }
 
@@ -164,38 +166,35 @@ extension ServerTests {
         return try Data(contentsOf: file)
     }
 
-    /// `archive` carried as the move's file `project-1` and unpacked as a
-    /// copy into `target`.
-    private func unpack(_ archive: Data, into target: URL) async throws -> Envelope {
-        let step = MigrationStep(project: "/Elsewhere/copied", path: target.path, action: .copy, note: "", chosen: true)
-        _ = try move(offer(projects: [MigrationProject(path: "/Elsewhere/copied", commit: "abc", unshared: true)]), steps: [step])
-        #expect(write("project-1", archive).type != "error")
-        var unpacking = Envelope(type: "migration")
-        unpacking.migration = "p"
-        unpacking.file = MigrationFile(id: "project-1", place: "", size: archive.count, packed: true)
-        unpacking.steps = [step]
-        return await server.migrationUnpack(unpacking)
+    /// `entries` packed as the folder `target` (each name under its name,
+    /// an absolute one as it is) and unpacked as that folder alone where it
+    /// goes, as the conversation's folder or the memory is: what went wrong.
+    private func unpack(_ entries: [Entry], into target: URL) async throws -> String? {
+        let name = target.lastPathComponent
+        let named = entries.map { entry in
+            var entry = entry
+            if !entry.name.hasPrefix("/") { entry.name = name + "/" + entry.name }
+            // A hard link names the file it links to as the archive does.
+            if entry.kind == "1", let link = entry.link, !link.hasPrefix("/"), !link.hasPrefix("..") { entry.link = name + "/" + link }
+            return entry
+        }
+        let archive = root.appendingPathComponent("archive-" + UUID().uuidString + ".tgz")
+        try await tarball(named).write(to: archive)
+        defer { try? FileManager.default.removeItem(at: archive) }
+        return await VisorServer.unpack(archive, into: target.deletingLastPathComponent(), only: name)
     }
 
     // MARK: Ids
 
-    @Test func testAHostileFileIdIsRefusedByWriteAndUnpackAndNothingIsWritten() async throws {
-        let folder = try move(offer())
+    @Test func testAHostileFileIdIsRefusedByWriteAndNothingIsWritten() async throws {
+        // Even an id the offer names (as a hostile offer past the plan
+        // would) is taken only as a plain name.
+        let place = "projects/{project}/\(conversation).jsonl"
+        let folder = try move(offer(files: (hostileIDs + ["conversation-0"]).map { MigrationFile(id: $0, place: place, size: 4, packed: false) }))
         let before = everything()
         for id in hostileIDs {
             let written = write(id, Data("evil".utf8))
             #expect(written.type == "error", "write took \(id.prefix(40))")
-        }
-        let target = home.appendingPathComponent("Developer/copied", isDirectory: true)
-        let step = MigrationStep(project: "/Elsewhere/copied", path: target.path, action: .copy, note: "", chosen: true)
-        server.migrationsIn["p"]?.plan.steps = [step]
-        for id in hostileIDs {
-            var unpacking = Envelope(type: "migration")
-            unpacking.migration = "p"
-            unpacking.file = MigrationFile(id: id, place: "", size: 0, packed: true)
-            unpacking.steps = [step]
-            let unpacked = await server.migrationUnpack(unpacking)
-            #expect(unpacked.type == "error", "unpack took \(id.prefix(40))")
         }
         #expect(everything() == before, "nothing made, nothing removed (`..` once removed the migrations folder)")
         #expect(FileManager.default.fileExists(atPath: folder.path))
@@ -222,10 +221,6 @@ extension ServerTests {
             let refused = await plan(offer(cwd: cwd))
             #expect(refused.plan == nil, "cwd \(cwd)")
         }
-        for path in ["/Users/a/../../etc/cron.d", "x", "/a/b/.."] {
-            let refused = await plan(offer(projects: [MigrationProject(path: path)]))
-            #expect(refused.plan == nil, "project \(path)")
-        }
         for hostile in ["settings.json", ".credentials.json", "projects/{project}/../../settings.json", "/etc/passwd", "../x",
                         "projects/{project}/other.jsonl", "projects/elsewhere/\(conversation).jsonl", "projects/{project}/.\(conversation)",
                         "projects/{project}/\(conversation).jsonl/../../../x", "projects/{project}/\(conversation)/x", "projects/{project}"] {
@@ -236,8 +231,7 @@ extension ServerTests {
         // An honest offer still plans.
         let honest = await plan(offer(files: [MigrationFile(id: "conversation-0", place: place, size: 1, packed: false),
                                               MigrationFile(id: "conversation-1", place: "projects/{project}/\(conversation)", size: 1, packed: true),
-                                              MigrationFile(id: "memory", place: "", size: 1, packed: true)],
-                                      projects: [MigrationProject(path: home.appendingPathComponent("Developer/app").path)]))
+                                              MigrationFile(id: "memory", place: "", size: 1, packed: true)]))
         #expect(honest.plan != nil, Comment(rawValue: honest.message ?? ""))
         // The agent's settings are never written (the server's own are its).
         let config = ClaudeSessionFiles.configDirectory(home: home).path
@@ -289,14 +283,14 @@ extension ServerTests {
             ("absolute link", [Entry(name: "link", link: outside.path), Entry(name: "link/evil", text: "evil")]),
             ("link up", [Entry(name: "up", link: "../../../outside")]),
             ("link out, through a link to itself", [Entry(name: "here", link: "."), Entry(name: "out", link: "here/../outside")]),
+            ("link out of the folder, to what is beside it", [Entry(name: "beside", link: "../\(conversation).jsonl")]),
         ]
         for (what, entries) in hostile {
             let before = everything()
-            let unpacked = try await unpack(try await tarball(entries), into: target)
-            #expect(unpacked.type == "error", "\(what) unpacked")
-            #expect(unpacked.message?.hasPrefix("Could not unpack") == true, Comment(rawValue: unpacked.message ?? ""))
-            #expect(!FileManager.default.fileExists(atPath: target.path), "\(what): the folder it made is gone again")
-            let made = everything().subtracting(before).filter { !$0.hasPrefix(VisorServer.migrationsFolder.path) }
+            let unpacked = try await unpack(entries, into: target)
+            #expect(unpacked != nil, "\(what) unpacked")
+            #expect(!FileManager.default.fileExists(atPath: target.path), "\(what): nothing put in its place")
+            let made = everything().subtracting(before)
             #expect(made.isEmpty, "\(what) made \(made)")
             try outsideIsAsItWas()
             #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("evil").path))
@@ -304,21 +298,18 @@ extension ServerTests {
         }
     }
 
-    @Test func testAProjectsOwnLinksThatStayInsideItStillCome() async throws {
+    @Test func testAnArchivesOwnLinksThatStayInsideItStillCome() async throws {
         let target = home.appendingPathComponent("Developer/copied", isDirectory: true)
-        let archive = try await tarball([
+        let unpacked = try await unpack([
             Entry(name: "README.md", text: "read me"),
             Entry(name: "docs", folder: true),
             Entry(name: "docs/readme", link: "../README.md"),
-            Entry(name: ".git", folder: true),
-            Entry(name: ".git/HEAD", text: "ref: refs/heads/main\n"),
-        ])
-        let unpacked = try await unpack(archive, into: target)
-        #expect(unpacked.type != "error", Comment(rawValue: unpacked.message ?? ""))
+        ], into: target)
+        #expect(unpacked == nil, Comment(rawValue: unpacked ?? ""))
         #expect((try String(contentsOf: target.appendingPathComponent("docs/readme"), encoding: .utf8)) == "read me")
         #expect((try FileManager.default.destinationOfSymbolicLink(atPath: target.appendingPathComponent("docs/readme").path)) == "../README.md")
-        #expect(FileManager.default.fileExists(atPath: target.appendingPathComponent(".git/HEAD").path))
-        #expect((try FileManager.default.contentsOfDirectory(atPath: target.path)).sorted() == [".git", "README.md", "docs"], "no folder of the unpacking's left")
+        #expect((try FileManager.default.contentsOfDirectory(atPath: target.path)).sorted() == ["README.md", "docs"])
+        #expect((try FileManager.default.contentsOfDirectory(atPath: target.deletingLastPathComponent().path)) == ["copied"], "no folder of the unpacking's left")
     }
 
     @Test func testAConversationsFolderOrMemoryHoldsThatFolderAlone() async throws {
@@ -330,53 +321,18 @@ extension ServerTests {
         try await tarball([Entry(name: "memory/../\(conversation).jsonl", text: "evil")]).write(to: archive)
         #expect(await VisorServer.unpack(archive, into: project, only: "memory") != nil, "through ..")
         #expect((try FileManager.default.contentsOfDirectory(atPath: project.path)).isEmpty)
+        // The folder itself a link, or a file: refused.
+        try await tarball([Entry(name: "memory", link: "../outside")]).write(to: archive)
+        #expect(await VisorServer.unpack(archive, into: project, only: "memory") != nil, "a link")
+        try await tarball([Entry(name: "memory", text: "a file")]).write(to: archive)
+        #expect(await VisorServer.unpack(archive, into: project, only: "memory") != nil, "a file")
+        #expect((try FileManager.default.contentsOfDirectory(atPath: project.path)).isEmpty)
         try await tarball([Entry(name: "memory/MEMORY.md", text: "index")]).write(to: archive)
         #expect(await VisorServer.unpack(archive, into: project, only: "memory") == nil)
         #expect((try String(contentsOf: project.appendingPathComponent("memory/MEMORY.md"), encoding: .utf8)) == "index")
     }
 
-    // MARK: Projects
-
-    @Test func testACloneNeverTakesTheRemoteOrBranchAsAnOption() async throws {
-        let target = home.appendingPathComponent("Developer/cloned", isDirectory: true)
-        let hostile: [(remote: String, branch: String?)] = [("--upload-pack=touch \(outside.path)/evil", nil),
-                                                            ("https://example.com/x.git", "--upload-pack=touch")]
-        for (remote, branch) in hostile {
-            let step = MigrationStep(project: "/Elsewhere/cloned", path: target.path, action: .clone, note: "", chosen: true)
-            _ = try move(offer(projects: [MigrationProject(path: "/Elsewhere/cloned", remote: remote, branch: branch, commit: "abc")]), steps: [step])
-            var cloning = Envelope(type: "migration")
-            cloning.migration = "p"
-            cloning.steps = [step]
-            let cloned = await server.migrationClone(cloning)
-            #expect(cloned.type == "error")
-            #expect(!FileManager.default.fileExists(atPath: target.path))
-        }
-        try outsideIsAsItWas()
-    }
-
-    @Test func testARepositoryInTheSourcesIsAlwaysAFolderOfItsOwnThere() {
-        let folders = SessionFolders(sessions: "/Volumes/Sessions", sources: "/Volumes/Sources")
-        #expect(folders.source(for: "/Users/a/..") == nil)
-        #expect(folders.source(for: "/Users/a/.") == nil)
-        #expect(folders.source(for: "/") == nil)
-        #expect(folders.source(for: "/Users/a/visor") == "/Volumes/Sources/visor")
-        #expect(server.notAProjectPlace("/") != nil)
-        #expect(server.notAProjectPlace("/a/../b") != nil)
-        #expect(server.notAProjectPlace(home.appendingPathComponent("Developer/x").path) == nil)
-    }
-
-    @Test func testACopyIsNeverUnpackedOutsideTheSources() async throws {
-        let sources = root.appendingPathComponent("sources").path
-        server.sessionFolders = SessionFolders(sessions: root.appendingPathComponent("sessions").path, sources: sources)
-        let target = home.appendingPathComponent("Developer/copied", isDirectory: true)
-        let unpacked = try await unpack(try await tarball([Entry(name: "README.md", text: "read me")]), into: target)
-        #expect(unpacked.type == "error")
-        #expect(unpacked.message?.contains("is not in \(sources)") == true, Comment(rawValue: unpacked.message ?? ""))
-        #expect(!FileManager.default.fileExists(atPath: target.path))
-        try outsideIsAsItWas()
-    }
-
-    // MARK: Walking what was unpacked or cloned
+    // MARK: Walking what was unpacked
 
     /// A folder of the test's own, to walk.
     private func tree(_ name: String) throws -> URL {
@@ -396,16 +352,16 @@ extension ServerTests {
     @Test func testAHardLinkInsideComesAndOneToAFileOutsideIsRefused() async throws {
         // Inside: both names come, the same file.
         let target = home.appendingPathComponent("Developer/copied", isDirectory: true)
-        let inside = try await unpack(try await tarball([Entry(name: "a.txt", text: "same"), Entry(name: "b.txt", link: "a.txt", kind: "1")]), into: target)
-        #expect(inside.type != "error", Comment(rawValue: inside.message ?? ""))
+        let inside = try await unpack([Entry(name: "a.txt", text: "same"), Entry(name: "b.txt", link: "a.txt", kind: "1")], into: target)
+        #expect(inside == nil, Comment(rawValue: inside ?? ""))
         #expect((try String(contentsOf: target.appendingPathComponent("b.txt"), encoding: .utf8)) == "same")
         #expect(links(target.appendingPathComponent("a.txt")) == 2)
         try FileManager.default.removeItem(at: target)
         // Outside: tar may refuse to make it, or the walk refuses what it made.
         let sentinel = outside.appendingPathComponent("sentinel")
         for link in [sentinel.path, "../../outside/sentinel", "../../../outside/sentinel"] {
-            let unpacked = try await unpack(try await tarball([Entry(name: "evil", link: link, kind: "1")]), into: target)
-            #expect(unpacked.type == "error", "a hard link to \(link) unpacked")
+            let unpacked = try await unpack([Entry(name: "evil", link: link, kind: "1")], into: target)
+            #expect(unpacked != nil, "a hard link to \(link) unpacked")
             #expect(!FileManager.default.fileExists(atPath: target.path))
             #expect(links(sentinel) == 1, "nothing left linked to the file outside")
         }
@@ -427,12 +383,11 @@ extension ServerTests {
     @Test func testAnUnreadableFolderIsWalkedAndItsLinkOutRefused() async throws {
         let target = home.appendingPathComponent("Developer/copied", isDirectory: true)
         for mode in [0o000, 0o111] {
-            let archive = try await tarball([Entry(name: "locked", folder: true, mode: mode),
-                                             Entry(name: "locked/x", link: "../../../../outside")])
-            let unpacked = try await unpack(archive, into: target)
-            #expect(unpacked.type == "error", "a folder of mode \(String(mode, radix: 8)) unpacked")
-            #expect(unpacked.message?.hasPrefix("Could not unpack") == true, Comment(rawValue: unpacked.message ?? ""))
-            #expect(!FileManager.default.fileExists(atPath: target.path), "the folder it made, and the unpacking's, gone again")
+            let unpacked = try await unpack([Entry(name: "locked", folder: true, mode: mode), Entry(name: "locked/x", link: "../../../../outside")],
+                                            into: target)
+            #expect(unpacked != nil, "a folder of mode \(String(mode, radix: 8)) unpacked")
+            #expect(!FileManager.default.fileExists(atPath: target.path), "nothing put in its place")
+            #expect((try FileManager.default.contentsOfDirectory(atPath: target.deletingLastPathComponent().path)).isEmpty, "the unpacking's folder gone again")
             try outsideIsAsItWas()
 
             // The walk itself, on a folder made so here.
@@ -447,9 +402,8 @@ extension ServerTests {
             #expect(!FileManager.default.fileExists(atPath: walked.path), "removed, unreadable folder and all")
         }
         // One that is only read-only still comes, opened to its owner.
-        let archive = try await tarball([Entry(name: "kept", folder: true, mode: 0o555), Entry(name: "kept/a.txt", text: "fine")])
-        let unpacked = try await unpack(archive, into: target)
-        #expect(unpacked.type != "error", Comment(rawValue: unpacked.message ?? ""))
+        let unpacked = try await unpack([Entry(name: "kept", folder: true, mode: 0o555), Entry(name: "kept/a.txt", text: "fine")], into: target)
+        #expect(unpacked == nil, Comment(rawValue: unpacked ?? ""))
         #expect((try String(contentsOf: target.appendingPathComponent("kept/a.txt"), encoding: .utf8)) == "fine")
     }
 
@@ -458,9 +412,8 @@ extension ServerTests {
         // Unpacked: tar makes a fifo; a device it makes only as root, and
         // fails otherwise. Refused either way.
         for (what, entry) in [("a fifo", Entry(name: "pipe", kind: "6")), ("a device", Entry(name: "null", kind: "3"))] {
-            let unpacked = try await unpack(try await tarball([Entry(name: "ok.txt", text: "fine"), entry]), into: target)
-            #expect(unpacked.type == "error", "\(what) unpacked")
-            #expect(unpacked.message?.hasPrefix("Could not unpack") == true, Comment(rawValue: unpacked.message ?? ""))
+            let unpacked = try await unpack([Entry(name: "ok.txt", text: "fine"), entry], into: target)
+            #expect(unpacked != nil, "\(what) unpacked")
             #expect(!FileManager.default.fileExists(atPath: target.path))
         }
         // The walk itself.
@@ -477,47 +430,6 @@ extension ServerTests {
         } else {
             print("MigrationContainmentTests: the device walk skipped, mknod refused here: \(node.text)")
         }
-    }
-
-    // MARK: Clones
-
-    /// A repository on this disk to clone from, holding a link to `target`.
-    private func remote(_ name: String, linkingTo target: String) async throws -> URL {
-        let folder = root.appendingPathComponent("remotes/\(name)", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try Data("read me".utf8).write(to: folder.appendingPathComponent("README.md"))
-        try FileManager.default.createSymbolicLink(atPath: folder.appendingPathComponent("link").path, withDestinationPath: target)
-        _ = await ProjectSurvey.git(["init", "-q"], in: folder.path)
-        _ = await ProjectSurvey.git(["add", "."], in: folder.path)
-        _ = await ProjectSurvey.git(["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "First"], in: folder.path)
-        return folder
-    }
-
-    private func clone(_ remote: URL, into target: URL) throws -> Envelope {
-        let step = MigrationStep(project: "/Elsewhere/cloned", path: target.path, action: .clone, note: "", chosen: true)
-        _ = try move(offer(projects: [MigrationProject(path: "/Elsewhere/cloned", remote: remote.path, commit: "abc")]), steps: [step])
-        var cloning = Envelope(type: "migration")
-        cloning.migration = "p"
-        cloning.steps = [step]
-        return cloning
-    }
-
-    @Test func testACloneThatChecksOutALinkOutIsRemoved() async throws {
-        let target = home.appendingPathComponent("Developer/cloned", isDirectory: true)
-        for (name, link) in [("absolute", outside.path), ("up", "../outside"), ("home", "/Users/logan/.ssh")] {
-            let cloning = try clone(try await remote(name, linkingTo: link), into: target)
-            let cloned = await server.migrationClone(cloning)
-            #expect(cloned.type == "error", "a link to \(link) cloned")
-            #expect(cloned.message?.contains("The clone was removed") == true, Comment(rawValue: cloned.message ?? ""))
-            #expect(!FileManager.default.fileExists(atPath: target.path))
-        }
-        try outsideIsAsItWas()
-        // A link that stays inside it still comes, and the clone's objects
-        // are its own (no hard links into the remote's).
-        let cloning = try clone(try await remote("inside", linkingTo: "README.md"), into: target)
-        let cloned = await server.migrationClone(cloning)
-        #expect(cloned.type != "error", Comment(rawValue: cloned.message ?? ""))
-        #expect((try String(contentsOf: target.appendingPathComponent("link"), encoding: .utf8)) == "read me")
     }
 
     // MARK: A conversation's id
@@ -640,14 +552,20 @@ extension ServerTests {
     /// A backup written by hand, as a hostile server would make one, or one
     /// changed where it lies: its backup.json for the session `S`, and that
     /// session's offer and files.
-    private func backup(_ offer: MigrationOffer, files: [String: Data] = [:]) throws -> URL {
+    private func backup(_ offer: MigrationOffer, files: [String: Data] = [:], projects: JSONValue? = nil) throws -> URL {
         let folder = root.appendingPathComponent("backup-" + UUID().uuidString, isDirectory: true)
         let kept = folder.appendingPathComponent("S", isDirectory: true)
         try FileManager.default.createDirectory(at: kept, withIntermediateDirectories: true)
         let made = SessionBackup(path: folder.path, created: 0, from: "Elsewhere",
                                  sessions: [SessionBackupItem(id: "S", title: "Moving", outcome: "Backed up.", kept: true)], size: 0)
         try VisorServer.write(made.json, to: folder.appendingPathComponent("backup.json"))
-        try VisorServer.write(offer.json, to: kept.appendingPathComponent("offer.json"))
+        // A backup from before 0.61 lists the session's projects too.
+        var json = offer.json
+        if let projects, case .object(var fields) = json {
+            fields["projects"] = projects
+            json = .object(fields)
+        }
+        try VisorServer.write(json, to: kept.appendingPathComponent("offer.json"))
         for (name, data) in files { try data.write(to: kept.appendingPathComponent(name)) }
         return folder
     }
@@ -680,48 +598,47 @@ extension ServerTests {
         let elsewhere = await restored(try backup(other))
         #expect(elsewhere.hasPrefix("Not restored: its files are of another session"), Comment(rawValue: elsewhere))
 
-        // A project whose archive links out.
-        let project = MigrationProject(path: cwd.path, commit: "abc", unshared: true)
-        let linkOut = try await tarball([Entry(name: "README.md", text: "x"), Entry(name: "up", link: "../../../outside")])
-        let linked = await restored(try backup(offer(cwd: cwd.path, files: [MigrationFile(id: "project-0", place: "", size: linkOut.count, packed: true)],
-                                                     projects: [project]),
-                                               files: ["project-0.tgz": linkOut]))
+        // The conversation's folder linking out of itself.
+        let linkOut = try await tarball([Entry(name: "\(conversation)/up", link: "../../../outside")])
+        let linked = await restored(try backup(offer(cwd: cwd.path, files: [MigrationFile(id: "conversation-1", place: "projects/{project}/\(conversation)",
+                                                                                      size: linkOut.count, packed: true)]),
+                                               files: ["conversation-1.tgz": linkOut]))
         #expect(linked.hasPrefix("Not restored: could not unpack"), Comment(rawValue: linked))
-        #expect(!FileManager.default.fileExists(atPath: cwd.path), "the folder it made gone again")
+        #expect(!FileManager.default.fileExists(atPath: memory.deletingLastPathComponent().appendingPathComponent(conversation).path))
 
-        // A project where a move would never unpack one.
-        let sources = root.appendingPathComponent("sources").path
-        server.sessionFolders = SessionFolders(sessions: root.appendingPathComponent("sessions").path, sources: sources)
-        let honest = try await tarball([Entry(name: "README.md", text: "x")])
-        let agents = home.appendingPathComponent("Library/LaunchAgents")
-        let placed = await restored(try backup(offer(cwd: agents.path, files: [MigrationFile(id: "project-0", place: "", size: honest.count, packed: true)],
-                                                     projects: [MigrationProject(path: agents.path, commit: "abc", unshared: true)]),
-                                               files: ["project-0.tgz": honest]))
-        #expect(placed.contains("is not in \(sources)"), Comment(rawValue: placed))
-        #expect(!FileManager.default.fileExists(atPath: agents.path))
-        server.sessionFolders = nil
+        // A file that is not the agent's, with no place.
+        let notes = await restored(try backup(offer(cwd: cwd.path, files: [MigrationFile(id: "notes", place: "", size: 1, packed: false)]),
+                                              files: ["notes.data": Data("x".utf8)]))
+        #expect(notes.hasPrefix("Not restored: it carries “notes”"), Comment(rawValue: notes))
 
         #expect(server.sessions.isEmpty, "nothing started")
         try outsideIsAsItWas()
     }
 
-    /// A project the conversation names seldom is one a move doesn't tick,
-    /// and a restore leaves it out too; the session's own still comes.
-    @Test func testARestoreBringsBackOnlyTheProjectsAMoveWouldTick() async throws {
+    /// A backup from before 0.61 holds projects packed beside the agent's
+    /// files (`project-<n>`), and lists them: they are left out, said in the
+    /// log, and the rest restored, the session's folder made empty.
+    @Test func testAnOlderBackupsProjectArchivesAreLeftOut() async throws {
         let cwd = home.appendingPathComponent("Developer/app")
-        let often = home.appendingPathComponent("Developer/often")
-        let seldom = home.appendingPathComponent("Developer/seldom")
+        let other = home.appendingPathComponent("Developer/other")
         let archive = try await tarball([Entry(name: "README.md", text: "x")])
-        let projects = [MigrationProject(path: cwd.path, commit: "abc", unshared: true),
-                        MigrationProject(path: often.path, commit: "abc", unshared: true, mentions: 10),
-                        MigrationProject(path: seldom.path, commit: "abc", unshared: true, mentions: 1)]
-        let files = (0..<3).map { MigrationFile(id: "project-\($0)", place: "", size: archive.count, packed: true) }
-        let outcome = await restored(try backup(offer(cwd: cwd.path, files: files, projects: projects),
-                                                files: Dictionary(uniqueKeysWithValues: (0..<3).map { ("project-\($0).tgz", archive) })))
+        let log = "{\"type\":\"user\"}\n"
+        let files = [MigrationFile(id: "conversation-0", place: "projects/{project}/\(conversation).jsonl", size: log.utf8.count, packed: false),
+                     MigrationFile(id: "project-0", place: "", size: archive.count, packed: true),
+                     MigrationFile(id: "project-1", place: "", size: archive.count, packed: true)]
+        let projects: JSONValue = .array([.object(["path": .string(cwd.path), "commit": .string("abc"), "unshared": .bool(true), "mentions": .number(0)]),
+                                          .object(["path": .string(other.path), "commit": .string("abc"), "unshared": .bool(true), "mentions": .number(9)])])
+        let outcome = await restored(try backup(offer(cwd: cwd.path, files: files),
+                                                files: ["conversation-0.jsonl": Data(log.utf8), "project-0.tgz": archive, "project-1.tgz": archive],
+                                                projects: projects))
         #expect(outcome == "Restored.", Comment(rawValue: outcome))
-        #expect(FileManager.default.fileExists(atPath: cwd.appendingPathComponent("README.md").path))
-        #expect(FileManager.default.fileExists(atPath: often.appendingPathComponent("README.md").path))
-        #expect(!FileManager.default.fileExists(atPath: seldom.path))
+        #expect((try FileManager.default.contentsOfDirectory(atPath: cwd.path)).isEmpty, "its folder made, empty: no project unpacked")
+        #expect(!FileManager.default.fileExists(atPath: other.path))
+        let placed = ClaudeSessionFiles.projectsRoot(home: home)
+            .appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd.path), isDirectory: true)
+            .appendingPathComponent(conversation + ".jsonl")
+        #expect((try String(contentsOf: placed, encoding: .utf8)) == log)
+        #expect(server.session("S")?.process.resumeID == conversation)
     }
 }
 }

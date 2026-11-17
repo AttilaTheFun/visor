@@ -17,7 +17,7 @@ import VisorServer
 ///   VISOR_PROXY_TOKEN_FILE  --proxy-token-file (its token for the proxy)
 ///   VISOR_MCP               --mcp (the proxy's MCP servers to pass on)
 ///   VISOR_SESSIONS_DIR      --sessions-dir (a folder for each session there)
-///   VISOR_SOURCES_DIR       --sources-dir (where moved sessions' repositories go)
+///   VISOR_SOURCES_DIR       --sources-dir (taken, not used since 0.61)
 ///
 /// Behind a front with a sign-in of its own (docs/server-proxy.md, "Auth"),
 /// which sets the auth to `none`:
@@ -56,8 +56,9 @@ struct ServerOptions: Sendable {
     var proxy: String?
     var proxyToken: String?
     var mcp: [String] = []
-    /// A folder for each session under `sessionsDir`, and the repositories
-    /// under `sourcesDir` (SessionFolders).
+    /// A folder for each session under `sessionsDir` (SessionFolders).
+    /// `sourcesDir`, where moved sessions' repositories went until 0.61, is
+    /// taken and passed on, and not used.
     var sessionsDir: String?
     var sourcesDir: String?
     /// The front given at start (VisorServer.front), once its trust is

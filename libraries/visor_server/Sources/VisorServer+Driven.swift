@@ -111,7 +111,7 @@ extension VisorServer {
         }
         let cwd = (record.info.cwd as NSString).expandingTildeInPath
         let conversation = SessionCatalog.conversationFiles(agent: .claude, id: resume, cwd: cwd).first { !$0.folder }?.url
-        let projects = await ProjectSurvey.projects(cwd: cwd, conversation: conversation, home: SessionCatalog.home.path, worked: true)
+        let projects = await ProjectSurvey.projects(cwd: cwd, conversation: conversation, home: SessionCatalog.home.path)
         if let unpushed = projects.first(where: { $0.unshared }) {
             return .failure(AgentJobRefusal("\(unpushed.path) has work that isn't pushed: push it first, so the runner's clone has it."))
         }
