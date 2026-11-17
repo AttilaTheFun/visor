@@ -118,11 +118,12 @@ extension VisorServer {
         return max(names.count, children.count - 1)
     }
 
-    /// Why an archive that makes `entries` can't be unpacked within
-    /// `limits`: nil when it can.
+    /// Why an archive that makes `entries` (listedEntries: counted no
+    /// further than past the cap) can't be unpacked within `limits`: nil
+    /// when it can.
     static func entryRefusal(_ entries: Int, _ limits: UnpackLimits) -> String? {
         guard entries > limits.entries else { return nil }
-        return "it holds \(entries) entries (files, folders and links), and an archive may hold at most \(limits.entries)"
+        return "it holds more entries (files, folders and links) than the \(limits.entries) an archive may hold"
     }
 
     /// Why an archive that declares `bytes` can't be unpacked in `folder`

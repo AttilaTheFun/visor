@@ -691,11 +691,11 @@ extension ServerTests {
         // One name, thirty folders deep: one line of the listing, 31 entries.
         let deep = [Entry(name: Array(repeating: "d", count: 29).joined(separator: "/") + "/f")]
         let before = everything()
-        for (entries, says) in [(empties, "it holds 31 entries"), (deep, "it holds 31 entries")] {
+        for entries in [empties, deep] {
             let refused = try await unpack(entries, into: parent.appendingPathComponent("copied", isDirectory: true),
                                            limits: VisorServer.UnpackLimits(entries: 20))
-            #expect(refused?.hasPrefix(says) == true, Comment(rawValue: refused ?? "unpacked"))
-            #expect(refused?.hasSuffix("an archive may hold at most 20") == true, Comment(rawValue: refused ?? "unpacked"))
+            #expect(refused == "it holds more entries (files, folders and links) than the 20 an archive may hold",
+                    Comment(rawValue: refused ?? "unpacked"))
             // Nothing made, not even the folder it would have unpacked into.
             #expect(everything() == before)
         }
