@@ -4,38 +4,25 @@
 // session moved here, a folder of its own there, <dir>/<agent>/<id>, so
 // that each agent's conversation and memory, which Claude Code keys by
 // the folder, are its own; and the instructions at the folder's root
-// (its AGENTS.md) are every session's. The repositories they work in are
-// apart (VISOR_SOURCES_DIR): a moved session's go there by name.
+// (its AGENTS.md) are every session's. A session moved here brings no
+// repositories: its agent clones what it needs into its folder.
 
 import Foundation
 import VisorProtocol
 
-/// Where a server's sessions work, and the repositories with them.
+/// Where a server's sessions work.
 public struct SessionFolders: Sendable, Equatable {
     /// The sessions' root: /Volumes/Sessions.
     public var sessions: String
-    /// The repositories': /Volumes/Sources; nil where they aren't kept apart.
-    public var sources: String?
 
-    public init(sessions: String, sources: String? = nil) {
+    public init(sessions: String) {
         self.sessions = Self.trimmed(sessions)
-        self.sources = sources.map(Self.trimmed)
     }
 
     /// The folder of the session `id` of `agent`: <sessions>/Claude/<id>
     /// (the id as SessionPathName names it: itself, for a UUID).
     public func folder(agent: AgentKind, id: String) -> String {
         "\(sessions)/\(Self.name(of: agent))/\(SessionPathName.of(id))"
-    }
-
-    /// Where a repository a moved session works in goes here: under the
-    /// sources by its own folder's name. Nil without sources, or for a
-    /// path with no name.
-    public func source(for path: String) -> String? {
-        guard let sources else { return nil }
-        let name = (Self.trimmed(path) as NSString).lastPathComponent
-        guard !name.isEmpty, name != "/" else { return nil }
-        return "\(sources)/\(name)"
     }
 
     /// The agent's part of a session's folder.

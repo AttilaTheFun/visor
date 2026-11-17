@@ -1,9 +1,10 @@
 // Sessions backed up to a folder and restored from it, on one server: the
-// backup holds each session's conversation (to its last whole line) beside
-// the session as a move offers it, and, asked for, a project a move would
-// copy; a restore starts a session that is gone again under its own id on
-// the same conversation, puts back a conversation file that is missing or
-// shorter (the shorter set aside), and leaves one that has gone on since.
+// backup holds each session's conversation (to its last whole line) and
+// Claude's memory beside the session as a move offers it, and no project;
+// a restore starts a session that is gone again under its own id on the
+// same conversation, in its folder (made empty when gone), puts back a
+// conversation file that is missing or shorter (the shorter set aside) and
+// a memory that is gone, and leaves one that has gone on since.
 
 import ClaudeTranscript
 import Foundation
@@ -62,7 +63,7 @@ extension ServerTests {
 
     @Test func testASessionThatIsGoneIsRestoredUnderItsOwnID() async throws {
         let (_, file) = try session("s1")
-        let made = await server.backUp(nil, projects: false, to: nil)
+        let made = await server.backUp(nil, to: nil)
         let backup = try #require(made.backup, Comment(rawValue: made.message ?? ""))
         #expect(backup.sessions.map(\.id) == ["s1"])
         #expect((backup.sessions.first?.kept) == true)
@@ -87,7 +88,7 @@ extension ServerTests {
 
     @Test func testAConversationThatWentOnStaysAndAShorterOneIsSetAside() async throws {
         let (_, file) = try session("s2")
-        let made = await server.backUp(["s2"], projects: false, to: nil)
+        let made = await server.backUp(["s2"], to: nil)
         let backup = try #require(made.backup)
         let folder = URL(fileURLWithPath: backup.path)
 
@@ -110,26 +111,24 @@ extension ServerTests {
     @Test func testASessionWithNoConversationIsSaidNotBackedUp() async throws {
         server.sessions = [SessionRecord(info: SessionInfo(id: "new", agent: .claude, cwd: "/tmp", title: "New", created: 0),
                                          process: ClaudeProcess(cwd: "/tmp", skipPermissions: true, resume: nil))]
-        let made = await server.backUp(nil, projects: false, to: nil)
+        let made = await server.backUp(nil, to: nil)
         let backup = try #require(made.backup)
         #expect((backup.sessions.first?.kept) == false)
         #expect((backup.sessions.first?.outcome) == "Not backed up: it has no conversation yet.")
     }
 
-    /// On the wire: a backup and the backups kept, the sessions a request
-    /// is about and whether projects come too.
+    /// On the wire: a backup and the backups kept, and the sessions a
+    /// request is about.
     @Test func testABackupOnTheWire() throws {
         var e = Envelope(type: "backup")
         e.backup = SessionBackup(path: "/b/1", created: 5, from: "Mac", sessions: [SessionBackupItem(id: "s", title: "App", outcome: "Restored.", kept: true)],
                                  size: 9)
         e.backups = [e.backup!]
         e.sessionIDs = ["s"]
-        e.projects = true
         let back = try #require(Envelope.decode(e.encoded(), defaultType: "reply"))
         #expect(back.backup == e.backup)
         #expect(back.backups == e.backups)
         #expect(back.sessionIDs == ["s"])
-        #expect(back.projects == true)
     }
 
     @Test func testABackupGoesIntoAFolderOfItsOwn() async throws {
@@ -137,28 +136,40 @@ extension ServerTests {
         let taken = root.appendingPathComponent("taken", isDirectory: true)
         try FileManager.default.createDirectory(at: taken, withIntermediateDirectories: true)
         try Data("x".utf8).write(to: taken.appendingPathComponent("other"))
-        let refused = await server.backUp(nil, projects: false, to: taken)
+        let refused = await server.backUp(nil, to: taken)
         #expect(refused.type == "error")
     }
 
-    /// Asked for, a project a move would copy (no remote) is kept packed,
-    /// and unpacked where it was when it is gone.
-    @Test func testAProjectWithNoRemoteComesBackWhenAsked() async throws {
-        _ = try session("s4")
+    /// A backup carries the agent's files and no project, even one with
+    /// no remote (as a request from before 0.61 could ask): restored with
+    /// its project gone, the session's folder is made empty, and its
+    /// memory comes back.
+    @Test func testABackupCarriesTheAgentsFilesAndNoProject() async throws {
+        let (_, file) = try session("s4")
         let project = home.appendingPathComponent("Developer/app")
         try Data("let a = 1\n".utf8).write(to: project.appendingPathComponent("main.swift"))
         _ = await ProjectSurvey.git(["init", "-q"], in: project.path)
         _ = await ProjectSurvey.git(["add", "."], in: project.path)
         _ = await ProjectSurvey.git(["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "First"], in: project.path)
-        let made = await server.backUp(["s4"], projects: true, to: nil)
+        let memory = file.deletingLastPathComponent().appendingPathComponent("memory", isDirectory: true)
+        try FileManager.default.createDirectory(at: memory, withIntermediateDirectories: true)
+        try Data("remember".utf8).write(to: memory.appendingPathComponent("MEMORY.md"))
+
+        let old = try #require(Envelope.decode(#"{"type":"backup","sessionIDs":["s4"],"projects":true}"#, defaultType: "backup"))
+        let made = await server.backUp(old.sessionIDs, to: nil)
         let backup = try #require(made.backup)
         #expect((backup.sessions.first?.outcome) == "Backed up.")
+        let kept = URL(fileURLWithPath: backup.path).appendingPathComponent("s4")
+        #expect((try FileManager.default.contentsOfDirectory(atPath: kept.path)).sorted() == ["conversation-0.jsonl", "memory.tgz", "offer.json"])
 
         server.sessions = []
         try FileManager.default.removeItem(at: project)
+        try FileManager.default.removeItem(at: memory)
         let restored = await server.restore(from: URL(fileURLWithPath: backup.path), only: nil)
         #expect((restored.backup?.sessions.first?.outcome) == "Restored.", Comment(rawValue: restored.message ?? ""))
-        #expect((try String(contentsOf: project.appendingPathComponent("main.swift"), encoding: .utf8)) == "let a = 1\n")
+        #expect((try FileManager.default.contentsOfDirectory(atPath: project.path)).isEmpty, "made empty: no project in a backup")
+        #expect((try String(contentsOf: memory.appendingPathComponent("MEMORY.md"), encoding: .utf8)) == "remember")
+        #expect(server.session("s4")?.info.cwd == project.path)
     }
 }
 }

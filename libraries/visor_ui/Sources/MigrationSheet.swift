@@ -3,21 +3,18 @@ import SwiftUI
 import VisorClient
 import VisorProtocol
 
-/// Moving a session to another computer (SessionMigration): what the move
-/// will do there — where the session runs, and for each project whether it
-/// is there already, is cloned, copied or made — the projects to bring
-/// chosen, then the move with its progress. The session it came from is
-/// left as it was.
+/// Moving a session to another computer (SessionMigration), the computer
+/// chosen from the session's menu: what the move carries (the agent's own
+/// files for the conversation) and where the session runs there (a new,
+/// empty folder that computer chooses), then the move with its progress.
+/// No project comes: the agent clones what it needs there. The session it
+/// came from is left as it was.
 @MainActor
 struct MigrationSheet: View {
     let migration: SessionMigration
     /// Opens the session where it moved.
     let open: (String) -> Void
     @Environment(\.dismiss) private var dismiss
-    /// The user is typing the folder the session runs in.
-    @State private var typing = false
-    /// The picker's choice for a folder typed: no path begins so.
-    private static let other = "other"
 
     var body: some View {
         NavigationStack {
@@ -64,50 +61,21 @@ struct MigrationSheet: View {
             Section {
                 LabeledContent("From", value: migration.from.record.name)
                 LabeledContent("To", value: migration.to.record.name)
-                // Where it runs there: where it ran, or one of the projects
-                // it brings (a session started in the home folder can live
-                // in its repository from here on), or a folder typed.
-                Picker("Runs In", selection: Binding(get: { typing || !migration.folders.contains(migration.cwd) ? Self.other : migration.cwd },
-                                                     set: { choice in
-                                                         typing = choice == Self.other
-                                                         if !typing { migration.cwd = choice }
-                                                     })) {
-                    ForEach(migration.folders, id: \.self) { folder in Text(folder).tag(folder) }
-                    Text("Other…").tag(Self.other)
-                }
-                if typing || !migration.folders.contains(migration.cwd) {
-                    TextField("A folder on \(migration.to.record.name)", text: Binding(get: { migration.cwd }, set: { migration.cwd = $0 }))
-                        .autocorrectionDisabled()
-                        .keyboardTypeURL()
-                }
                 LabeledContent("Conversation", value: Self.size(offer.size))
+                LabeledContent("Runs In", value: plan.cwd)
             } footer: {
-                if !plan.agentInstalled {
-                    Text("\(migration.session.agent.title) is not installed on \(migration.to.record.name): install it there before the session can carry on.")
-                }
-            }
-            Section {
-                ForEach(migration.steps.indices, id: \.self) { index in
-                    let step = migration.steps[index]
-                    if migration.isOptional(step) {
-                        Toggle(isOn: Binding(get: { migration.steps[index].chosen }, set: { migration.steps[index].chosen = $0 })) { row(step) }
-                    } else {
-                        row(step)
-                    }
-                }
-            } header: {
-                Text("Projects")
-            } footer: {
-                Text("The session on \(migration.from.record.name) stays as it is; remove it once the one on \(migration.to.record.name) works.")
+                Text(footnote(agentInstalled: plan.agentInstalled))
             }
         }
     }
 
-    private func row(_ step: MigrationStep) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(SessionMigration.name(of: step))
-            Text(step.note).font(.caption).foregroundStyle(.secondary)
-        }
+    /// What the move carries and leaves, and whether the agent is there.
+    private func footnote(agentInstalled: Bool) -> String {
+        let from = migration.from.record.name, to = migration.to.record.name
+        var said = agentInstalled ? "" : "\(migration.session.agent.title) is not installed on \(to): install it there before the session can carry on. "
+        said += "The agent's own files for the conversation come (Claude's memory too); projects don't: the session starts in a new, empty folder on \(to), "
+            + "and its agent clones what it needs there. The session on \(from) stays as it is; remove it once the one on \(to) works."
+        return said
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {

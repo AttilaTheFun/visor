@@ -4,8 +4,9 @@ public struct MigrationFile: Codable, Equatable, Sendable {
     public var id: String
     /// Where it goes under the agent's own folder (~/.claude, ~/.codex) on
     /// the server the session moves to; `{project}` stands for the folder
-    /// the agent keeps the session's project under there. Empty for a
-    /// project's copy, which goes where its step says.
+    /// the agent keeps the session's project under there. Empty for
+    /// Claude's memory (id `memory`), which goes under the project of the
+    /// session's new folder there.
     public var place: String
     public var size: Int
     /// A folder packed as one file (a gzipped tar), unpacked where it goes.

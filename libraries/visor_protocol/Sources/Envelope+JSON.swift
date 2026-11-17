@@ -92,13 +92,11 @@ extension Envelope {
         e.migration = value["migration"].string
         e.offer = MigrationOffer(json: value["offer"])
         e.plan = MigrationPlan(json: value["plan"])
-        e.steps = value["steps"].array?.compactMap(MigrationStep.init(json:))
         e.file = MigrationFile(json: value["file"])
         e.offset = value["offset"].int
         e.backup = SessionBackup(json: value["backup"])
         e.backups = value["backups"].array?.compactMap(SessionBackup.init(json:))
         e.sessionIDs = value["sessionIDs"].array?.compactMap(\.string)
-        e.projects = value["projects"].bool
         e.commands = value["commands"].array?.compactMap { item in
             item["name"].string.map { SlashCommand(name: $0, description: item["description"].string ?? "", argumentHint: item["argumentHint"].string ?? "") }
         }
@@ -169,13 +167,11 @@ extension Envelope {
         if let migration { o["migration"] = .string(migration) }
         if let offer { o["offer"] = offer.json }
         if let plan { o["plan"] = plan.json }
-        if let steps { o["steps"] = .array(steps.map(\.json)) }
         if let file { o["file"] = file.json }
         if let offset { o["offset"] = .number(Double(offset)) }
         if let backup { o["backup"] = backup.json }
         if let backups { o["backups"] = .array(backups.map(\.json)) }
         if let sessionIDs { o["sessionIDs"] = .array(sessionIDs.map(JSONValue.string)) }
-        putBool("projects", projects)
         if let commands {
             o["commands"] = .array(commands.map { .object(["name": .string($0.name), "description": .string($0.description), "argumentHint": .string($0.argumentHint)]) })
         }

@@ -6,10 +6,9 @@ import VisorProtocol
 extension VisorAgentServer {
     public var backsUp: Bool { true }
 
-    public func backUp(sessions: [String]?, projects: Bool) async throws -> SessionBackup {
+    public func backUp(sessions: [String]?) async throws -> SessionBackup {
         var body = Envelope(type: "backup")
         body.sessionIDs = sessions
-        body.projects = projects
         guard let backup = try await backupCall("POST", "/backups", body).backup else { throw AgentServerError.message("No backup came back") }
         return backup
     }

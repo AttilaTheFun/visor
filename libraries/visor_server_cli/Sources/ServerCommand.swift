@@ -97,11 +97,12 @@ public struct ServerCommand {
                        input; never on the command line. Its hash is held in
                        memory alone. Without it (or VISOR_ADMIN_TOKEN), there
                        is none: admin REST takes the password and the socket.
-          --sessions-dir <folder> [--sources-dir <folder>]
+          --sessions-dir <folder>
                        A folder of its own for each session, new or moved
                        here: <folder>/Claude/<id> (Codex/, OpenRouter/),
-                       whatever folder a client asks for; and where a moved
-                       session's repositories go, by name.
+                       whatever folder a client asks for. (--sources-dir is
+                       taken and not used since 0.61: a moved session brings
+                       no repositories.)
           --proxy <url> --proxy-token-file <file> --mcp <name>,…
                        The proxy its pushes go through (<url>/apns/…) and the
                        MCP servers of it its agents are given (<url>/mcp/<name>),

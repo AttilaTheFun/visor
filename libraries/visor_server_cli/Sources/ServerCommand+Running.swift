@@ -59,11 +59,16 @@ extension ServerCommand {
             }
             log.write("auth none: it takes \(why)" + (front.userHeader.map { ", the person from \($0)" } ?? ", everyone as owner"))
         }
-        // A folder for each session, the repositories apart.
+        // A folder for each session.
         if let sessions = options.sessionsDir {
-            server.sessionFolders = SessionFolders(sessions: sessions, sources: options.sourcesDir)
-            log.write("each session works in a folder of its own under \(sessions)"
-                + (options.sourcesDir.map { ", the repositories of sessions moved here under \($0)" } ?? ""))
+            server.sessionFolders = SessionFolders(sessions: sessions)
+            log.write("each session works in a folder of its own under \(sessions)")
+        }
+        // Taken still, so that a server started with it starts, but used
+        // for nothing since 0.61: a session moved here brings no
+        // repositories.
+        if let sources = options.sourcesDir {
+            log.write("--sources-dir (VISOR_SOURCES_DIR) \(sources) is not used: a session moved here brings no repositories")
         }
         onServer?(server)
         system.onStop {

@@ -162,36 +162,28 @@ public protocol AgentServer: AnyObject {
 
     /// Whether sessions move to and from this server.
     var migrates: Bool { get }
-    /// A session offered for moving elsewhere: its conversation's files and
-    /// its projects.
+    /// A session offered for moving elsewhere: its agent's files for its
+    /// conversation.
     func migrationOffer(for session: String) async throws -> MigrationOffer
     /// Up to `length` bytes of one of an offer's files from `offset`,
     /// base64, and where the next piece starts.
     func migrationRead(_ offer: String, file: String, offset: Int, length: Int) async throws -> (data: String, next: Int)
-    /// A project of an offer's, packed for copying.
-    func migrationPack(_ offer: String, project: String) async throws -> MigrationFile
     /// What this server will do with a session offered by another.
     func migrationPlan(for offer: MigrationOffer) async throws -> MigrationPlan
     /// A piece of a file carried here for a move, at `offset`.
     func migrationWrite(_ plan: String, file: String, offset: Int, data: String) async throws
-    /// Clones a project the plan said to clone.
-    func migrationClone(_ plan: String, step: MigrationStep) async throws
-    /// Unpacks a project carried here where its step says.
-    func migrationUnpack(_ plan: String, file: String, step: MigrationStep) async throws
-    /// Ends a move here, making the chosen steps' folders, the session run
-    /// in `cwd` (the plan's when nil): the new session's id, and the
-    /// server's sessions.
-    func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo])
+    /// Ends a move here, the session started in the plan's new folder: the
+    /// new session's id, and the server's sessions.
+    func migrationFinish(_ plan: String) async throws -> (session: String, sessions: [SessionInfo])
 
     // MARK: Backing sessions up (`/api/backups`)
 
     /// Whether this server backs its sessions up to a folder and restores
     /// them from one.
     var backsUp: Bool { get }
-    /// Backs up the sessions named (every one not archived, when nil), the
-    /// projects a move would copy too when `projects`: the backup, with
-    /// what became of each session.
-    func backUp(sessions: [String]?, projects: Bool) async throws -> SessionBackup
+    /// Backs up the sessions named (every one not archived, when nil): the
+    /// backup, with what became of each session.
+    func backUp(sessions: [String]?) async throws -> SessionBackup
     /// The backups kept on the server's computer, newest first.
     func backups() async throws -> [SessionBackup]
     /// Puts back the sessions of the backup at `path` (those named, or
@@ -243,16 +235,13 @@ public extension AgentServer {
     func migrationRead(_ offer: String, file: String, offset: Int, length: Int) async throws -> (data: String, next: Int) {
         throw AgentServerError.unsupported
     }
-    func migrationPack(_ offer: String, project: String) async throws -> MigrationFile { throw AgentServerError.unsupported }
     func migrationPlan(for offer: MigrationOffer) async throws -> MigrationPlan { throw AgentServerError.unsupported }
     func migrationWrite(_ plan: String, file: String, offset: Int, data: String) async throws { throw AgentServerError.unsupported }
-    func migrationClone(_ plan: String, step: MigrationStep) async throws { throw AgentServerError.unsupported }
-    func migrationUnpack(_ plan: String, file: String, step: MigrationStep) async throws { throw AgentServerError.unsupported }
-    func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo]) {
+    func migrationFinish(_ plan: String) async throws -> (session: String, sessions: [SessionInfo]) {
         throw AgentServerError.unsupported
     }
     var backsUp: Bool { false }
-    func backUp(sessions: [String]?, projects: Bool) async throws -> SessionBackup { throw AgentServerError.unsupported }
+    func backUp(sessions: [String]?) async throws -> SessionBackup { throw AgentServerError.unsupported }
     func backups() async throws -> [SessionBackup] { throw AgentServerError.unsupported }
     func restore(_ path: String, sessions: [String]?) async throws -> (backup: SessionBackup, sessions: [SessionInfo]) {
         throw AgentServerError.unsupported

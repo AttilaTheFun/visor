@@ -84,13 +84,15 @@ public final class VisorServer {
     /// moving here, by their plans' ids (VisorServer+Migration.swift).
     var migrationsOut: [String: OutgoingMigration] = [:]
     var migrationsIn: [String: IncomingMigration] = [:]
+    /// The bytes free on the disk a URL is on, which a move here must fit
+    /// (VisorServer+MigrationSize.swift): the system's word, or a test's.
+    var freeBytes: (URL) -> Int? = { VisorServer.systemFreeBytes($0) }
     /// The agent shims' connections waiting for an approval's answer: by
     /// session, then by request id. The server's, not the session's: a
     /// connection is a client of this server.
     var approvalWaiters: [String: [String: ClientConnection]] = [:]
-    /// A folder for each session, and the repositories apart
-    /// (VISOR_SESSIONS_DIR, VISOR_SOURCES_DIR): nil where sessions work
-    /// where they are asked to.
+    /// A folder for each session (VISOR_SESSIONS_DIR): nil where sessions
+    /// work where they are asked to.
     public var sessionFolders: SessionFolders?
     /// The front this server sits behind when its auth is `none`
     /// (VISOR_TRUST and the headers it names): why a request is let in,

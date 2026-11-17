@@ -197,25 +197,82 @@ under `/api`.
 | `GET /account?agent=` | | `account` (`agent`, `account`): the agent's account as it stands now — Codex asked afresh by a `codex app-server` of its own (a read begun in the last 30 s is shared), the others as their sessions last said. A change also goes out to every channel as `account`. Clients ask whenever the inspector shows a session |
 | `POST /restart` | `path` (a new build to install over this one, optional), `session` (one to carry on besides the busy ones) | `restart`: the sessions carried on; the server then relaunches |
 | `POST /quit` | | `quit`; the server then ends its agents (what was running is written down as running, for the next start) and exits — how `visor-server stop` stops it |
-| `POST /migration/offer` | `session` | `migration` with `offer`: the session (`cwd` absolute), the agent's own id for its conversation (`resumeID`), the computer's name (`from`) and home folder, the conversation's `files` (`id`, `place` under the agent's folder — `{project}` for Claude's project folder — `size`, `packed`), and its `projects` (the session's own folder first, then the git repositories under the home folder its conversation names most: `remote`, `branch`, `commit`, `unshared`, `size`, `mentions`) |
+| `POST /migration/offer` | `session` | `migration` with `offer`: the session (`cwd` absolute), the agent's own id for its conversation (`resumeID`), the computer's name (`from`) and home folder, and the agent's own files for the conversation (`files`: `id`, `place` under the agent's folder — `{project}` for Claude's project folder — `size`, `packed`): its transcript, the folder beside it (Claude's subagents and long tool results, packed), and Claude's memory (id `memory`, packed, no place). Refused when a file is over 2 GiB or they come to over 4 GiB. (A server before 0.61 also listed the session's `projects`, which a server of 0.61 or later passes over.) |
 | `POST /migration/read` | `migration` (the offer's `token`), `file` (`id`, and in `size` how much is wanted), `offset` | `migration` with `data` (base64, at most 4 MB) and `offset` (where the next piece starts) |
-| `POST /migration/pack` | `migration`, `path` (a project of the offer's) | `migration` with `file`: the project packed (what git tracks and does not ignore, and its `.git`), to read like the others |
-| `POST /migration/plan` | `offer` | `migration` with `plan`: its `id`, where the session runs here (`cwd`: the same place under this home folder), `agentInstalled`, and a `step` per project — `present`, `clone`, `copy` or `create`, with a `note` and whether it is `chosen` |
-| `POST /migration/write` | `migration` (the plan's `id`), `file`, `offset`, `data` | `migration` with the next `offset`; a piece must follow on from the last |
-| `POST /migration/clone` | `migration`, `steps` (the one) | `migration`, or the git error (the client then copies the project instead) |
-| `POST /migration/unpack` | `migration`, `file`, `steps` (the one) | `migration`, once the project is unpacked where its step says |
-| `POST /migration/finish` | `migration`, `steps` (those chosen), `cwd` (the folder the session runs in there, when the user chose one rather than the plan's: one of its projects, or another) | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here looks for them, the chosen folders made, and the session started resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from |
-| `POST /backups` | `sessionIDs` (else every session not archived), `projects` (also back up the projects a move would copy rather than clone), `path` (a folder of its own, else a new one under Visor's data folder's `backups`, by when it was made) | `backup`: its `path`, `created`, `from` (the computer's name), `size`, and its `sessions`, each with whether it was `kept` and its `outcome`. Each session's folder holds its offer (`offer.json`, as `POST /migration/offer` makes it) and its conversation's files, to their last whole line: one half of a move, written to a folder |
+| `POST /migration/pack` | | Removed in 0.61: a server of 0.61 or later answers 410 with `error`. (Before: a project of the offer's packed for copying.) |
+| `POST /migration/plan` | `offer` | `migration` with `plan`: its `id`, where the session runs here (`cwd`: a new, empty folder this server chooses — `<sessions>/<Agent>/<id>` where it keeps a folder for each session, else under its data folder's `Sessions` — never a path of the offer's), and `agentInstalled`. Refused for an offer that is not only the agent's own files for one conversation, is over the caps, or would not fit: the files' size and 1 GiB more must be free where the move keeps them as they come and under the agent's folder. (A server before 0.61 also gave a `step` per project.) |
+| `POST /migration/write` | `migration` (the plan's `id`), `file`, `offset`, `data` | `migration` with the next `offset`; a piece must follow on from the last, be of a file the offer named, and end within the size it was offered as |
+| `POST /migration/clone` | | Removed in 0.61: 410 with `error`. (Before: a project cloned where its step said.) |
+| `POST /migration/unpack` | | Removed in 0.61: 410 with `error`. (Before: a project carried as an archive unpacked where its step said.) |
+| `POST /migration/finish` | `migration` | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here keeps that conversation for the plan's folder, Claude's memory under that folder's project (when it has none), the folder made, new and empty, and the session started there resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from. (A client before 0.61 also sent the projects' `steps` and a `cwd` of its choosing, which are passed over.) |
+| `POST /backups` | `sessionIDs` (else every session not archived), `path` (a folder of its own, else a new one under Visor's data folder's `backups`, by when it was made) | `backup`: its `path`, `created`, `from` (the computer's name), `size`, and its `sessions`, each with whether it was `kept` and its `outcome`. Each session's folder holds its offer (`offer.json`, as `POST /migration/offer` makes it) and the agent's own files for its conversation, to their last whole line: one half of a move, written to a folder. No project: since 0.61 a backup carries what a move carries, and a request's `projects` is passed over |
 | `GET /backups` | | `backups`: those under the data folder's `backups`, newest first |
-| `POST /backups/restore` | `path` (a backup's folder), `sessionIDs` (else all it kept) | `backup`, each session's `outcome` saying what was done, and `sessions`. The other half of a move, read from the folder: a project missing here is unpacked where it was (or the session's own folder made); a conversation file missing or shorter here is put back (a shorter one set aside as `.before-restore-<time>`, never removed), one as long or longer left as it is; a session gone from here is started again under its own id on the same conversation, told it was restored, and one still here is left as it is |
+| `POST /backups/restore` | `path` (a backup's folder), `sessionIDs` (else all it kept) | `backup`, each session's `outcome` saying what was done, and `sessions`. The other half of a move, read from the folder, and held to what a move takes: the offer as a plan checks it (and the session's own, by its id), its archives checked and walked as a move's are. The session's folder (the server's own for it, where it keeps one; else where it was, under this home folder) is made empty when it is gone; a conversation file missing or shorter here is put back (a shorter one set aside as `.before-restore-<time>`, never removed), one as long or longer left as it is; Claude's memory is put back where the folder's project has none; a session gone from here is started again under its own id on the same conversation, told it was restored, and one still here is left as it is. The project archives a backup from before 0.61 holds (`project-<n>`) are left out, said in the server's log |
 
-Moving a session (`SessionMigration` in the client): the client asks the
-session's server for an offer and the other for a plan, the user chooses
-which projects to bring, and the client carries each file across a piece
-at a time (read from the one, written to the other), has projects cloned
-(or packed, carried and unpacked when they cannot be), then finishes. The
-session where it was is left as it was, for the user to remove. A refusal
-at any step is a 400 with an `error` envelope saying why.
+Moving a session (`SessionMigration` in the client): the user chooses only
+the computer. The client asks the session's server for an offer and the
+other for a plan, carries each file across a piece at a time (read from
+the one, written to the other), then finishes. A move carries the agent's
+own files for the conversation and nothing else (Logan, 2026-11-17): its
+transcript, the folder the agent keeps beside it, and Claude's memory —
+no project, working tree, archive of one or clone URL. The session runs
+in a new, empty folder there; if its agent needs a repository, it clones
+one itself. The session where it was is left as it was, for the user to
+remove. A refusal at any step is a 400 with an `error` envelope saying
+why.
+
+Peers are only the user's own paired servers: a move goes between two
+servers the same client is signed in to, and nothing else offers or plans
+one. Claude Code runs a project's hooks by default, which is accepted for
+that reason (and most sessions are moving into containers); with no
+project files carried, a peer can't bring hooks along anyway.
+
+The offer is still the other server's word, held to what a move takes
+(`VisorServer+MigrationContainment.swift`): a plan (and a restore, and the
+finish again) refuses an offer whose `resumeID` is not a UUID (as Claude
+Code, Codex and the openrouter CLI make a conversation's id, so never
+`memory` or `rollout`), whose file `id`s are not plain names (1 to 64
+letters, digits, `-` and `_`, not starting with `-`; ids are unique), whose
+session `cwd` is not a full path with nothing to resolve (no `.`, `..` or
+empty part), or whose files are not the agent's own for that conversation:
+each at a `place` where the agent keeps it (Claude's
+`projects/{project}/<resumeID>.jsonl` and the folder `<resumeID>` beside
+it, Codex's `sessions/<year>/<month>/<day>/rollout-<stamp>-<resumeID>.jsonl`
+exactly, OpenRouter's `sessions/<resumeID>.json` or `.jsonl`), or Claude's
+memory (`memory`, packed, no place). No path of the peer's is used: the
+receiver makes every destination of the agent, the `resumeID` and the
+session's new folder (`{project}` is that folder's project). `write` takes
+a file `id` only as a plain name the offer named, kept in the move's own
+folder.
+
+Sizes (`VisorServer+MigrationSize.swift`): a file of a move (or a backup)
+is at most 2 GiB and all of them at most 4 GiB — a long Claude transcript
+runs to hundreds of megabytes, so the per-file cap is several times the
+longest seen; a move has at most three files, so the total is two at the
+cap — and a piece is
+refused past its file's declared size. A plan is refused unless the
+files' size and 1 GiB to spare are free where the move keeps them as they
+come and under the agent's own folder (when the system says how much is
+free).
+
+The finish writes over nothing but the same conversation come back: where
+a file of it is here already (for Codex, its thread's rollout anywhere
+under `sessions`), the move goes on only when every log carried (`.jsonl`)
+is here as the start of the one carried, the same agent's under the same
+id gone on since; then a log is replaced and anything else (the
+conversation's folder, OpenRouter's `.json`, a rollout of another day) set
+aside as `<name>.before-move-<time>`. Otherwise the move is refused before
+anything is made. Every archive (the conversation's folder, Claude's
+memory, a backup's) is listed before anything is written and refused for
+an entry at an absolute path, through `..` or outside the one folder it
+holds, unpacked into a folder of its own inside where it goes
+(`--no-same-owner --no-same-permissions`), walked — each folder opened to
+its owner (`u+rwx`) before it is listed, and one that still can't be
+listed refused — and refused for a link that leads outside it (an
+absolute one always), a hard link to a file outside it or anything but
+files, folders and links (a device, a fifo), and only then moved into
+place; it must hold that folder alone, and never takes the place of one
+there.
 
 A client asks `GET /sessions` once a minute as the backup for the socket:
 the list is taken as a `sessions` broadcast would be, and an answer while

@@ -198,25 +198,26 @@ public struct Envelope: Codable, Sendable {
     /// Moving a session to another server (VisorServer+Migration.swift):
     /// the move it is part of (an offer's token where the session was, a
     /// plan's id where it goes), what the session's server offers, what
-    /// the other will do, the steps chosen or the one taken, the file read
-    /// or written, and where in it (`data` holds the bytes, base64).
+    /// the other will do, the file read or written, and where in it
+    /// (`data` holds the bytes, base64). A client before 0.61 also sent the
+    /// projects' `steps`, which a server of 0.61 or later passes over.
     /// `hello`: the server's version and build, as installed and running
     /// ("0.31 (8)").
     public var version: String?
     public var migration: String?
     public var offer: MigrationOffer?
     public var plan: MigrationPlan?
-    public var steps: [MigrationStep]?
     public var file: MigrationFile?
     public var offset: Int?
     /// Sessions backed up to a folder and restored from one
     /// (`/api/backups`): the backup made or restored from, those kept on
-    /// the computer, the sessions a request is about (all when none), and
-    /// whether the projects a move would copy are backed up too.
+    /// the computer, and the sessions a request is about (all when none).
+    /// (A client before 0.61 could ask for `projects` too, which a server
+    /// of 0.61 or later passes over: a backup carries the agent's own files
+    /// only.)
     public var backup: SessionBackup?
     public var backups: [SessionBackup]?
     public var sessionIDs: [String]?
-    public var projects: Bool?
 
     public init(type: String) { self.type = type }
 
