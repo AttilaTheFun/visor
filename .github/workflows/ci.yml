@@ -1,66 +1,49 @@
 name: CI
 # Visor's CI, as Reviews' policy for Logan's protected repositories has it
-# (AttilaTheFun/reviews, docs/CI_POLICY.md; Logan, 7 Nov 2026):
+# (AttilaTheFun/reviews, docs/CI_POLICY.md; Logan, 7 Nov 2026), on GitHub's
+# own standard runners and cache alone, as every public app repository's
+# (Logan, 15 Nov 2026): nothing of Shireworks' at run time, no runner of
+# its, no lease, no cache, no files, no signing service.
 #
 # Automated CI only builds (Logan, 7 Nov 2026), but for the client's
 # screens: walked headless through Isomer's driver (FEATURE_MAP.md,
 # //tests/feature_map_tests), they run before and after every merge
 # (Logan, 15 Nov 2026).
 #
-# - A pull request runs one job, `container`, the required check: in one of
-#   Shireworks' single-use Linux containers (visor-jit, a runner of Visor's
-#   agent image), leasing nothing, it checks the rules, builds every app,
-#   the Mac's test bundles, libraries and servers on Linux, walks the
-#   client's screens headless, and builds the command-line server with
-#   SwiftPM. Its Bazel reads Shireworks' cache and
-#   never writes it. A pull request of documentation alone checks the rules
-#   and stops there. A newer push cancels its run. A fork's pull request
-#   runs nothing here: no self-hosted runner ever runs a fork's code.
-# - Each commit on main runs `populate`: the merged tree built as
-#   `container` builds it, and its screens walked headless (nothing
-#   published), the one job that writes the cache.
-# - Every test runs only by hand (workflow_dispatch on main, `run`):
-#   - `verify`: the Mac's tests (their bundles built on Linux, run on
-#     GitHub's own xcode-27 Macs), the command-line server's tests on Linux
-#     (linux), blue Visor's web client (blue-web), and the proof: the
-#     iPhone's, Visor.app's and blue Visor on Android's screens, on GitHub's
-#     own runners. Its last job, `verify`, keeps them as the `proof`
-#     artifact (proof.zip, AttilaTheFun/reviews' format 2, which Reviews
-#     compares with the prior release's), and its success is the commit's
-#     tests passing. Run on a
-#     branch pushed at an earlier commit, it bisects a regression;
-#   - `prerelease`: no tests or proof. The commit's version taken from the
-#     repository's releases and tags, its apps built as Alphas and signed
-#     by Shireworks (the Mac's notarized there, stapled on a Mac slot), and
-#     a draft release marked pre-release proposed with them attached
-#     (alpha), then the agent image of that version published if
-#     tools/containers/ changed since the release before (agent-image);
-#   - `release`: verify first, and the pins; only once they pass, alpha and
-#     agent-image as above, the draft not marked pre-release, naming the run
-#     that verified it;
-#   - `agent-image`: Visor's toolchain image alone, built and pushed.
-# - Logan's Release in Reviews publishes a proposed release's draft, which
-#   makes its tag: `release` checks the commit is on main and was verified,
-#   then has Shireworks stamp the Alphas its proposal attached Production
-#   and sign them again (the Mac's with its disk image); release-assets
-#   attaches the Production builds and the proof to the release.
-#   A branch's builds are experiments only (Logan, 12 Nov 2026): nothing
-#   publishes them.
+# Each platform builds where its tools run (tools/ci/container_build.sh):
+# Linux and Android on x86_64 `ubuntu-24.04` in Swift's image
+# (tools/ci/job_tools.sh), the Apple targets on `xcode-27` Macs. Bazel's
+# caches: GitHub's (.github/actions/bazel_cache), written by main's builds
+# alone, and BuildBuddy's, its key (BUILDBUDDY_API_KEY) handed only to
+# main's builds and the alpha and release jobs (tools/ci/ci_bazel.sh).
+# docs/DEVELOPMENT.md, "CI", has the whole.
 #
-# The policy's verify leases a Mac; Visor's runs on GitHub's own runners
-# instead, free for a public repository, leaving Shireworks' Mac slots to
-# the agents (Logan, 5 Nov 2026). The command-line server on Windows and
-# blue Visor on the iPhone stay off until the Mac Studio (Logan, 5 Nov
-# 2026: "scope visor down to just ios, macos and android"): their jobs
-# are verify's, skipped (`if: false`), their scripts run by hand.
+# - A pull request runs `container`, the required check (Linux: the rules,
+#   the Linux client and blue Visor's Android APK built, the client's
+#   screens walked headless, the command-line server built with SwiftPM),
+#   and `container-apple` beside it (the iPhone and Mac apps, the Mac's
+#   test bundles, libraries and servers, built). A pull request of
+#   documentation alone checks the rules and stops there. A newer push
+#   cancels its run. A fork's pull request runs them too, on GitHub's
+#   runners: no secret reaches it, and it writes no cache.
+# - Each commit on main runs `populate` and `populate-apple`: the merged
+#   tree built as the pull request's jobs build it, and its screens walked
+#   headless (nothing published), into GitHub's cache and BuildBuddy's.
+# - By hand (workflow_dispatch on main, `run`): `verify` (the tests and
+#   the proof, its last job `verify` keeping the `proof` artifact),
+#   `prerelease` (Alphas built, signed in alpha with the environment
+#   `release`'s keys, tools/ci/sign_builds.sh, and a draft pre-release),
+#   `release` (verify and pins first, then as prerelease, a draft release),
+#   `agent-image` (Visor's toolchain image).
+# - A published release (Logan's Release in Reviews): Production built from
+#   the tag (`--config=prod`: release-apple, release-android), then
+#   release checks it is a verified main commit and signs them, and
+#   release-assets attaches them. Android never holds Apple's back.
 #
-# Runners, by label: visor-jit (12 GB) for a build (the agent image's too,
-# with buildah), visor-jit-small (2 GB) for a job that only runs a script;
-# GitHub's own for the headful proofs alone (the
-# iPhone's, the Mac's, the emulator's), and until they are Isomer tests,
-# the Mac's XCTest bundles (test). Every other job runs in a container
-# (Logan, 8 Nov 2026), verify too: it makes the proof, and Reviews compares
-# it.
+# The signing keys (the environment `release`: main and v* tags) reach the
+# Sign steps of alpha and release alone; no other job names the
+# environment. The screenshot proof never runs on a push or a pull request:
+# only in a run by hand (verify, release).
 on:
   pull_request:
   push:
@@ -94,23 +77,32 @@ defaults:
   run:
     shell: bash
 # Visor for Android's release certificate (SHA-256): the APK signed with the
-# key in the GitHub environment `release`'s secrets (alpha's and
-# release-android's signing steps) must carry it (tools/ci/android_sign.sh),
-# so a key that isn't Visor's signs nothing.
+# key in the GitHub environment `release`'s secrets (alpha's and release's
+# Sign steps) must carry it (tools/ci/android_sign.sh), so a key that isn't
+# Visor's signs nothing.
 env:
   VISOR_ANDROID_PIN: 779E6428CC219033DA3A0086DAB3CE21F8D3D35806E4199E8BAC7D58D86B18A5
 jobs:
   # ---- Pull requests -------------------------------------------------------
 
+  # Linux: Swift's image (6.4.0, by digest) on x86_64 Ubuntu, Bazel's tree
+  # on the runner's second disk.
   container:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, visor-jit]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca
+      volumes: ["/mnt:/mnt"]
     timeout-minutes: 120
+    env:
+      VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+      - name: The job's tools
+        run: tools/ci/job_tools.sh
       # Whether it changes anything but documentation (docs/, .notes/,
       # Markdown).
       - id: changes
@@ -127,16 +119,16 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: python3 tools/check_rules.py --commits "$BASE..HEAD"
-      # The cache is read here, never written: populate alone writes it.
-      - name: The cache, read only
+      # GitHub's cache alone, read: no BuildBuddy key reaches a pull request.
+      - uses: ./.github/actions/bazel_cache
         if: steps.changes.outputs.code == 'true'
-        run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
-      # Every app (the iPhone's, the Mac's, the Linux client, blue Visor's
-      # Android APK), the Mac's test bundles, libraries and servers, in this
-      # container (tools/ci/container_build.sh builds where it runs).
+        with:
+          group: ubuntu
+      # The Linux client and blue Visor's Android APK
+      # (tools/ci/container_build.sh builds where it runs).
       - name: The apps
         if: steps.changes.outputs.code == 'true'
-        run: tools/ci/container_build.sh "$GITHUB_JOB"
+        run: tools/ci/container_build.sh
       # The client's screens, walked headless through Isomer's driver
       # (FEATURE_MAP.md; the client in fixture mode, nothing drawn).
       - name: The client's screens, headless
@@ -155,56 +147,107 @@ jobs:
           swift build --product visor-server
           swift build --target VisorServices
 
-  # ---- main ----------------------------------------------------------------
-
-  # The cache's one writer (Shireworks' `ci.populate` grants this job the
-  # write): what a pull request's container job builds, for main's merged
-  # tree, so the next pull request's build is mostly cache hits; and the
-  # client's screens walked headless, as container does. Nothing published.
-  populate:
-    if: github.event_name == 'push'
-    runs-on: [self-hosted, visor-jit]
+  # The Apple targets, on an xcode-27 Mac with its own Xcode.
+  container-apple:
+    if: github.event_name == 'pull_request'
+    runs-on: xcode-27
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - id: changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          files="$(git diff --name-only "$BASE" HEAD)"
+          if printf '%s\n' "$files" | awk '!/^([Dd]ocs\/|\.notes\/)|\.md$/ { code = 1 } END { exit !code }'; then code=true; else code=false; fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/bazel_cache
+        if: steps.changes.outputs.code == 'true'
+        with:
+          group: apple
+      # The iPhone and iPad app, Visor.app, the Mac client and Visor Server,
+      # the Mac's test bundles, then the libraries and servers for the Mac.
+      - name: The Apple apps
+        if: steps.changes.outputs.code == 'true'
+        run: tools/ci/container_build.sh
+
+  # ---- main ----------------------------------------------------------------
+
+  # What a pull request's jobs build, for main's merged tree, into GitHub's
+  # cache (its one writer) and BuildBuddy's, so the next pull request's
+  # build is mostly cache hits; and the client's screens walked headless, as
+  # container does. Nothing published.
+  populate:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca
+      volumes: ["/mnt:/mnt"]
+    timeout-minutes: 120
+    env:
+      VISOR_BAZEL_ROOT: /mnt/bazel
+    steps:
+      - uses: actions/checkout@v5
+      - name: The job's tools
+        run: tools/ci/job_tools.sh
+      - id: cache
+        uses: ./.github/actions/bazel_cache
+        with:
+          group: ubuntu
+          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
       - name: The apps
-        run: tools/ci/container_build.sh "$GITHUB_JOB"
+        run: tools/ci/container_build.sh
       - name: The client's screens, headless
         run: bazel test --config=headless --test_output=errors //tests/feature_map_tests/...
+      - uses: ./.github/actions/bazel_cache_save
+        if: ${{ !cancelled() }}
+        with:
+          group: ubuntu
+          gigabytes: 5
+          repository-hit: ${{ steps.cache.outputs.repository-hit }}
+
+  populate-apple:
+    if: github.event_name == 'push'
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - id: cache
+        uses: ./.github/actions/bazel_cache
+        with:
+          group: apple
+          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+      - name: The Apple apps
+        run: tools/ci/container_build.sh
+      - uses: ./.github/actions/bazel_cache_save
+        if: ${{ !cancelled() }}
+        with:
+          group: apple
+          gigabytes: 3
+          repository-hit: ${{ steps.cache.outputs.repository-hit }}
 
   # ---- By hand: verify -----------------------------------------------------
 
   # The tests that need a Mac (the server's Apple side, the client, its
-  # views, SSH): their .xctest bundles built on Linux
-  # (tools/ci/mac_tests_build.sh), then run on one of GitHub's Macs (test).
-  build-tests:
-    if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
-    runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
-      - run: tools/ci/mac_tests_build.sh "$RUNNER_TEMP/mac-tests.tar.gz"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mac-tests
-          path: ${{ runner.temp }}/mac-tests.tar.gz
-          if-no-files-found: error
-          retention-days: 1
-
-  # The bundles, on an xcode-27 runner (tools/ci/mac_tests_run.sh: `xcrun
-  # xctest`, Xcode 27.2).
+  # views, SSH): their .xctest bundles built (tools/ci/build_mac_tests.sh)
+  # and run (tools/ci/mac_tests_run.sh: `xcrun xctest`, Xcode 27.2) on an
+  # xcode-27 Mac.
   test:
-    needs: build-tests
+    if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
     runs-on: xcode-27
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/bazel_cache
         with:
-          name: mac-tests
-          path: ${{ runner.temp }}
-      - run: tools/ci/mac_tests_run.sh "$RUNNER_TEMP/mac-tests.tar.gz" --logs "$RUNNER_TEMP/test-logs"
+          group: apple
+      - name: The test bundles
+        run: tools/ci/build_mac_tests.sh "$RUNNER_TEMP/mac-tests.tar.gz"
+      - name: The tests
+        run: tools/ci/mac_tests_run.sh "$RUNNER_TEMP/mac-tests.tar.gz" --logs "$RUNNER_TEMP/test-logs"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -212,17 +255,19 @@ jobs:
           path: ${{ runner.temp }}/test-logs
 
   # The proof's apps: the iPhone app for Apple silicon's simulator, and
-  # Visor.app (signed ad hoc, as a build on Linux is), with Isomer's driver
-  # in them (--config=drive: the proof's builds alone, never a release's).
+  # Visor.app (signed ad hoc), with Isomer's driver in them (--config=drive:
+  # the proof's builds alone, never a release's), on an xcode-27 Mac.
   build-apple:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
-    runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 45
+    runs-on: xcode-27
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: apple
       - run: |
-          VISOR_CI_PACKAGE=.ci/proof-apps tools/ci/container_build.sh "$GITHUB_JOB" \
+          VISOR_CI_PACKAGE=.ci/proof-apps tools/ci/container_build.sh \
             --config=drive --macos_cpus=arm64 --ios_multi_cpus=sim_arm64 \
             //applications/visor_ios //applications/visor_mac
       - uses: actions/upload-artifact@v4
@@ -242,13 +287,22 @@ jobs:
   # driver in it (--config=drive, as build-apple's).
   build-android:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
-    runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca
+      volumes: ["/mnt:/mnt"]
+    timeout-minutes: 60
+    env:
+      VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
       - uses: actions/checkout@v5
-      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
+      - name: The job's tools
+        run: tools/ci/job_tools.sh
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: ubuntu
       - run: |
-          VISOR_CI_PACKAGE=.ci/proof-apps tools/ci/container_build.sh "$GITHUB_JOB" \
+          VISOR_CI_PACKAGE=.ci/proof-apps tools/ci/container_build.sh \
             --config=drive --compilation_mode=opt --android_platforms=@rules_android//:x86_64 \
             //applications/visor_android:visor_android_apk
       - uses: actions/upload-artifact@v4
@@ -362,18 +416,29 @@ jobs:
           path: ${{ runner.temp }}/part
           retention-days: 7
 
-  # The command-line server on Linux with SwiftPM: built, its tests run,
-  # and the server tried, a throwaway session over its WebSocket
-  # (tools/ci/linux_tests.sh, in the job's own container).
+  # Linux: Bazel's swift_test targets (//tests:linux), the client's screens
+  # walked headless, then the command-line server with SwiftPM, built, its
+  # tests run, and the server tried, a throwaway session over its WebSocket
+  # (tools/ci/linux_tests.sh, with Node 22 for the probe).
   linux:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
-    runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca
+      volumes: ["/mnt:/mnt"]
+    timeout-minutes: 90
+    env:
+      VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
-      - uses: actions/checkout@v4
-      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
-      # The Linux tests, Bazel's swift_test targets in Swift Testing
-      # (//tests:linux).
+      - uses: actions/checkout@v5
+      - name: The job's tools
+        run: tools/ci/job_tools.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: ubuntu
       - name: The tests
         run: bazel test --test_output=errors //tests:linux
       - name: The client's screens, headless
@@ -388,12 +453,21 @@ jobs:
   # the end-to-end test in headless Chromium.
   blue-web:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
-    runs-on: [self-hosted, visor-jit]
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca
+      volumes: ["/mnt:/mnt"]
     timeout-minutes: 60
+    env:
+      VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
-      - uses: actions/checkout@v4
-      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
-      - run: tools/ci/container_blue_web.sh "$GITHUB_JOB" review --build-only
+      - uses: actions/checkout@v5
+      - name: The job's tools
+        run: tools/ci/job_tools.sh
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: ubuntu
+      - run: tools/ci/container_blue_web.sh review --build-only
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -401,53 +475,18 @@ jobs:
           path: review
           if-no-files-found: ignore
 
-  # The command-line server on Windows, in a Windows VM leased from
-  # Shireworks (tools/ci/windows_vm_tests.sh). Off until the Mac Studio (a
-  # 16 GB VM). To bring it back: verify's `if`, and in verify's needs.
-  windows:
-    if: false
-    runs-on: [self-hosted, visor-jit-small]
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      # exec: the runner's cancel reaches the script's trap, which releases the VM.
-      - run: exec tools/ci/windows_vm_tests.sh
-
-  # Blue Visor's web client on the iPhone: built in the job's container,
-  # served on a Mac slot, pictured in an iOS lease's Mobile Safari
-  # (tools/ci/blue_ios_lease.sh), against tests/snapshots. Off until the Mac
-  # Studio. To bring it back: verify's `if`, and in verify's needs.
-  blue-ios:
-    if: false
-    runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v5
-      # exec: the runner's cancel reaches the script's trap, which releases
-      # the leases.
-      - name: Built on Linux, pictured on iOS leases
-        run: |
-          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
-          exec tools/ci/blue_ios_lease.sh --image "ghcr.io/attilathefun/visor-agent:${line%.*}" --run "$RUNNER_TEMP/blue-ios"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: blue-ios-snapshots
-          path: ${{ runner.temp }}/blue-ios
-          if-no-files-found: ignore
-
   # The proof, from what the platforms pictured: each screen an item under
   # a stable id, in proof.zip (tools/ci/proof_make.sh; AttilaTheFun/reviews'
   # docs/PROOF_FORMAT.md, format 2), kept as the `proof` artifact. Nothing is
   # compared here: Reviews compares it with the prior release's, item by item
-  # (Logan, 8 Nov 2026), so it runs in a container. It passes only when the
-  # Mac's tests, Linux's, the web client and every platform's part did: its
-  # success is the commit verified, which a release's alpha and the release
-  # job ask for.
+  # (Logan, 8 Nov 2026). It passes only when the Mac's tests, Linux's, the
+  # web client and every platform's part did: its success is the commit
+  # verified, which a release's alpha and the release job ask for
+  # (tools/ci/verified_run.sh, by this job's name).
   verify:
-    needs: [build-tests, test, linux, blue-web, build-apple, build-android, proof-ios, proof-mac, proof-android]
+    needs: [test, linux, blue-web, build-apple, build-android, proof-ios, proof-mac, proof-android]
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release') }}
-    runs-on: [self-hosted, visor-jit-small]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -487,34 +526,38 @@ jobs:
           MAC: ${{ needs.proof-mac.result }}
           ANDROID: ${{ needs.proof-android.result }}
 
-  # ---- By hand: proposals and AdHoc ----------------------------------------
+  # ---- By hand: proposals --------------------------------------------------
 
   # Ready to release: every dependency pinned to a released version
   # (tools/released_pins.sh). A release's alone: a pre-release may still pin
-  # a revision. In a container, as every job but the headful proofs
-  # (Logan, 8 Nov 2026).
+  # a revision.
   pins:
     if: github.event_name == 'workflow_dispatch' && inputs.run == 'release'
-    runs-on: [self-hosted, visor-jit-small]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: tools/released_pins.sh
 
   # Visor's own Linux programs (tools/linux_programs.sh: visor-server, also
-  # the agents' host, linked fully static), which alpha seals into
-  # Visor.app for the containers it makes: built in a container of Visor's
-  # agent image leased from Shireworks (tools/ci/linux_programs.sh) and
-  # handed over as a tar. It needs no version, so it runs beside verify.
+  # the agents' host, linked fully static for arm64 with Swift's Static
+  # Linux SDK), which the signing job seals into Visor.app for the
+  # containers it makes: built on GitHub's arm64 Ubuntu, in Visor's agent
+  # image (0.58, by digest: the Swift 6.4.0 the SDK is for), which checks
+  # both programs run, and handed over as a tar
+  # (tools/ci/linux_programs.sh). It needs no version, so it runs beside
+  # verify, and for a release beside its builds.
   linux-programs:
     if: >-
-      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
-      (inputs.run == 'prerelease' || inputs.run == 'release')
-    runs-on: [self-hosted, visor-jit]
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+       (inputs.run == 'prerelease' || inputs.run == 'release')) ||
+      (github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04-arm
+    container: ghcr.io/attilathefun/visor-agent@sha256:092ad17868052d61f8958d432499a494cbfd61769b4ffc46456a2e849f15a152
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - run: exec tools/ci/linux_programs.sh "$RUNNER_TEMP/linux-programs.tar"
+      - uses: actions/checkout@v5
+      - run: tools/ci/linux_programs.sh "$RUNNER_TEMP/linux-programs.tar"
       - run: tar -tvf "$RUNNER_TEMP/linux-programs.tar"
       - uses: actions/upload-artifact@v4
         with:
@@ -522,51 +565,26 @@ jobs:
           path: ${{ runner.temp }}/linux-programs.tar
           retention-days: 7
 
-  # The proposal (prerelease, or release once verify and pins passed), on
-  # main: its version from the repository's releases and tags (0.N.M: one
-  # past the line's highest, or the same again for a commit that already
-  # has one, so a run again burns no number) and stamped in
-  # (tools/ci/version_from_tags.sh); the iPhone and iPad app and Visor.app
-  # built on Linux in the job's own container, optimized, as a release
-  # promotes this very build. The iPhone's is a device build signed ad hoc
-  # with a placeholder profile (--config=ci_device, CI holds none of the
-  # team's); Visor.app is given Visor's Linux programs. Shireworks' signing
-  # service signs each again with its bundle id's own identity and profile
-  # (tools/ci/sign_from_ci.sh), and notarizes the Mac's, whose ticket is
-  # stapled on a Mac slot. Visor for Android, arm64, is built beside them
-  # with the same version (tools/ci/stamp_android.sh) and signed here with
-  # its private release key (tools/ci/sign_android.sh: the key from the
-  # GitHub environment `release`'s secrets, given to that step alone, its
-  # certificate pinned), then checked by Shireworks (its signature, its
-  # package pinned), which never signs an .apk again. Then the draft release
-  # (tools/ci/propose_release.sh), with the signed builds and builds.json
-  # attached (tools/ci/attach_release.sh): what Applications lists
-  # (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The job's OIDC
-  # token says what it is, and Shireworks' policy checks it (its ref,
-  # repository and workflow claims, which an environment leaves as they
-  # are); no Apple key, profile or password here.
-  alpha:
-    needs: [verify, pins, linux-programs]
+  # The proposal's Apple builds (prerelease, or release once verify and
+  # pins passed), on main, on an xcode-27 Mac: its version from the
+  # repository's releases and tags (tools/ci/version_from_tags.sh), the
+  # iPhone app (--config=ci_device) and Visor.app, optimized, for alpha to
+  # sign.
+  alpha-apple:
+    needs: [verify, pins]
     if: >-
       always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
-      needs.linux-programs.result == 'success' &&
       (inputs.run == 'prerelease' ||
        (inputs.run == 'release' && needs.verify.result == 'success' && needs.pins.result == 'success'))
-    runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 90
-    # Android's signing key: the environment's secrets (deployments from
-    # main and v* tags alone), for the Sign Android step.
-    environment: release
+    runs-on: xcode-27
+    timeout-minutes: 120
     permissions:
-      # The draft release (and the drafts version_from_tags.sh reads).
+      # The releases' drafts, which the version is counted from.
       contents: write
-      # The OIDC token Shireworks' signing checks.
-      id-token: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
-      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
       # 0.N.M, the next of the committed line after every release and tag on
       # it (the same again for the same commit), stamped into the checkout's
       # Info.plists and never committed. No version is no proposal.
@@ -589,10 +607,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: tools/ci/check_version_line.sh "$VERSION"
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: apple
+          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
       # The app group shared with Applications, and Applications' bundle ids
       # on a Mac (UpdateKit; tools/signing), from the repository's secrets,
       # so neither the public source nor a log names them. A build published
       # without the group would never check for updates, so none is made.
+      # After Bazel's settings, which write .bazelrc.user afresh.
       - name: Update settings
         env:
           UPDATE_APP_GROUP: ${{ secrets.VISOR_UPDATE_APP_GROUP }}
@@ -604,54 +627,102 @@ jobs:
           fi
           printf 'common --repo_env=VISOR_UPDATE_APP_GROUP=%s\ncommon --repo_env=VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS=%s\n' \
             "$UPDATE_APP_GROUP" "$UPDATE_APPLICATIONS_BUNDLE_IDS" >> .bazelrc.user
-      # The line's released agent image (MAJOR.MINOR), named, unused in the
-      # job's own container.
+          # No build event stream to BuildBuddy here: it would carry these
+          # options. Its remote cache stays.
+          echo 'common --bes_backend=' >> .bazelrc.user
       - name: Build
         env:
           VISOR_CI_PACKAGE: .ci/packages
-        run: |
-          line="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
-          exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${line%.*}" \
-            --config=alpha --config=ci_device --compilation_mode=opt //applications/visor_ios //applications/visor_mac
-      # Shireworks signs it again keeping the entitlements it carries: built
+        run: >-
+          tools/ci/container_build.sh --config=alpha --config=ci_device --compilation_mode=opt
+          //applications/visor_ios //applications/visor_mac
+      # The signing keeps the entitlements its signature carries: built
       # unsigned, it would lose the microphone.
-      - name: Visor.app signed with its entitlements
+      - name: Visor.app signed ad hoc with its entitlements
         run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alpha-apple
+          path: |
+            .ci/packages/*.ipa
+            .ci/packages/visor_mac.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  # The proposal: Visor for Android with the same version
+  # (tools/ci/stamp_android.sh), Visor.app given Visor's Linux programs, and
+  # every build signed in the Sign step, the one the environment `release`'s
+  # keys reach (tools/ci/sign_builds.sh); then the draft release
+  # (tools/ci/propose_release.sh) and its assets (tools/ci/attach_release.sh),
+  # what Applications lists (AttilaTheFun/applications' docs/RELEASE_ASSETS.md).
+  alpha:
+    needs: [alpha-apple, linux-programs]
+    if: ${{ !cancelled() && needs.alpha-apple.result == 'success' && needs.linux-programs.result == 'success' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca
+      volumes: ["/mnt:/mnt"]
+    timeout-minutes: 120
+    environment: release
+    permissions:
+      # The draft release (and the drafts it is found among).
+      contents: write
+      # This run's proof artifact.
+      actions: read
+    env:
+      VISOR_BAZEL_ROOT: /mnt/bazel
+    steps:
+      - uses: actions/checkout@v5
+      - name: The job's tools
+        run: tools/ci/job_tools.sh
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: ubuntu
+          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+      # Into a folder of its own (container_build.sh empties the one it is
+      # given).
+      - name: Build Android
+        env:
+          VISOR_CI_PACKAGE: .ci/android
+          VERSION: ${{ needs.alpha-apple.outputs.version }}
+        run: |
+          tools/ci/stamp_android.sh "$VERSION"
+          tools/ci/container_build.sh --config=alpha --compilation_mode=opt //applications/visor_android:visor_android_apk
+      - uses: actions/download-artifact@v4
+        with:
+          name: alpha-apple
+          path: .ci/packages
       - uses: actions/download-artifact@v4
         with:
           name: linux-programs
           path: ${{ runner.temp }}/linux-programs
       - name: Visor's Linux programs into Visor.app
         run: tools/ci/mac_app_linux_programs.sh .ci/packages/visor_mac.zip "$RUNNER_TEMP/linux-programs/linux-programs.tar"
-      # Visor for Android with the same version (its versionName and
-      # versionCode), arm64, optimized, into a folder of its own
-      # (container_build.sh empties the one it is given).
-      - name: Build Android
-        env:
-          VISOR_CI_PACKAGE: .ci/android
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          tools/ci/stamp_android.sh "$VERSION"
-          exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${VERSION%.*}" \
-            --config=alpha --compilation_mode=opt //applications/visor_android:visor_android_apk
-      # Its release key's signature in place of its build's debug key's,
-      # checked against the pin.
-      - name: Sign Android
+      # The keys reach this step alone. Each build signed, and saved for the
+      # draft with builds.json: Visor-<version>-ios.ipa, -macos.zip and
+      # -android.apk.
+      - name: Sign
         env:
           ANDROID_SIGNING_KEYSTORE: ${{ secrets.ANDROID_SIGNING_KEYSTORE }}
           ANDROID_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
-        run: tools/ci/sign_android.sh --pin "$VISOR_ANDROID_PIN" .ci/android/*.apk .ci/android-release/visor_android.apk
-      # Each build as Shireworks signed it (the .apk: checked), and
-      # builds.json, saved for the draft: Visor-<version>-ios.ipa,
-      # -macos.zip and -android.apk.
-      - name: Sign
-        run: tools/ci/sign_from_ci.sh --app Visor --download "$RUNNER_TEMP/assets" .ci/packages/*.ipa .ci/packages/visor_mac.zip .ci/android-release/*.apk
+          APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          APPLE_DEVELOPER_ID_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_PASSWORD }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+          APPLE_DEVELOPMENT_P12: ${{ secrets.APPLE_DEVELOPMENT_P12 }}
+          APPLE_DEVELOPMENT_PASSWORD: ${{ secrets.APPLE_DEVELOPMENT_PASSWORD }}
+          APPLE_PROFILES: ${{ secrets.APPLE_PROFILES }}
+        run: >-
+          tools/ci/sign_builds.sh --variant Alpha --out "$RUNNER_TEMP/assets"
+          --ipa-kind development --android-pin "$VISOR_ANDROID_PIN"
+          .ci/packages/*.ipa .ci/packages/visor_mac.zip .ci/android/*.apk
       # Untrusted text reaches the shell through env, never ${{ }} in run.
       - name: The draft release
         env:
           GH_TOKEN: ${{ github.token }}
           KIND: ${{ inputs.run }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.alpha-apple.outputs.version }}
         run: tools/ci/propose_release.sh "$KIND" "$VERSION" "$RUNNER_TEMP/assets/builds.json"
       # A release's proposal: the proof verify made of this commit, saying
       # the version, among the assets, so the draft and the release keep it
@@ -664,7 +735,7 @@ jobs:
       - name: The proof among the assets
         if: inputs.run == 'release'
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.alpha-apple.outputs.version }}
         run: |
           tools/ci/proof_version.sh "$RUNNER_TEMP/proof" "$VERSION" "$RUNNER_TEMP/assets/proof.zip"
           if [ -f "$RUNNER_TEMP/proof/proof-diff.json" ]; then cp "$RUNNER_TEMP/proof/proof-diff.json" "$RUNNER_TEMP/assets/"; fi
@@ -674,38 +745,32 @@ jobs:
       - name: The builds on the draft
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.alpha-apple.outputs.version }}
         run: tools/ci/attach_release.sh "v$VERSION" "$RUNNER_TEMP/assets"
 
-  # Visor's images (tools/containers/visor-agent/Dockerfile) of the
-  # proposal's version, built with buildah in a visor-jit container, as every
-  # job but the headful proofs (Logan, 8 Nov 2026), and pushed to GitHub's
-  # registry as that version, its MAJOR.MINOR and latest:
-  # the runtime target as ghcr.io/attilathefun/visor, which a Visor server of
-  # that version makes sessions' containers from, and the build target, with
-  # the toolchains, as ghcr.io/attilathefun/visor-agent, CI's containers' and
-  # the co-tenant's.
-  # Whether Visor's toolchain image is to be built: by hand (`run:
-  # agent-image`), or in a release whose tools/containers/ changed since the
-  # release before it. Not in every release: it changes rarely, and building
-  # it took ten minutes and a 12 GB runner of each. On the small runner.
+  # Visor's toolchain image (tools/containers/visor-agent/Dockerfile's build
+  # target, ghcr.io/attilathefun/visor-agent), which Shireworks' primary
+  # container runs, as do CI's linux-programs job and Isomer's CI: whether
+  # it is to be built, by hand (`run: agent-image`), or in a release whose
+  # tools/containers/ changed since the release before it. Not in every
+  # release: it changes rarely.
   agent-image-wanted:
-    needs: alpha
+    needs: [alpha-apple, alpha]
     if: ${{ !cancelled() && (inputs.run == 'agent-image' || needs.alpha.result == 'success') }}
-    runs-on: [self-hosted, visor-jit-small]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       build: ${{ steps.changed.outputs.build }}
       version: ${{ steps.changed.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           fetch-tags: true
       - id: changed
         env:
           RUN: ${{ inputs.run }}
-          VERSION: ${{ needs.alpha.outputs.version }}
+          VERSION: ${{ needs.alpha-apple.outputs.version }}
         run: |
           previous="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2> /dev/null || true)"
           # By hand, between releases: the last release's version and this
@@ -717,60 +782,151 @@ jobs:
             echo "tools/containers/ hasn't changed since $previous: the image stays as it is"
           fi
 
-  # Visor's toolchain image (ghcr.io/attilathefun/visor-agent), which CI's
-  # containers and Shireworks' primary container run, when wanted.
+  # The image, when wanted, built with buildah as root on GitHub's arm64
+  # Ubuntu (arm64 alone, as the containers that run it: no emulated
+  # architecture) and pushed to GitHub's registry as that version, its
+  # MAJOR.MINOR and latest (tools/containers/publish_agent_image.sh).
   agent-image:
     needs: [alpha, agent-image-wanted]
     if: ${{ !cancelled() && needs.agent-image-wanted.outputs.build == 'true' }}
-    runs-on: [self-hosted, visor-jit]
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - run: tools/containers/publish_agent_image.sh "$VERSION"
+      - uses: actions/checkout@v5
+      - run: sudo --preserve-env=GHCR_USER,GHCR_TOKEN,VISOR_REF tools/containers/publish_agent_image.sh "$VERSION"
         env:
           VERSION: ${{ needs.agent-image-wanted.outputs.version }}
+          VISOR_REF: ${{ github.sha }}
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}
 
   # ---- Released ------------------------------------------------------------
 
   # Production, when Logan releases a proposed release in Reviews (never a
-  # pre-release). Nothing Apple is built: the commit must be on main and verified
-  # (tools/ci/verified_run.sh: a run by hand whose verify passed and kept its
-  # proof), then the Alphas its proposal attached, of this commit, the
-  # builds Logan tested (tools/ci/release_alphas.sh), are stamped Production
-  # and signed again by Shireworks (tools/ci/sign_from_ci.sh --promote,
-  # AttilaTheFun/applications' docs/CI.md, "Signing"), the Mac's notarized,
-  # with its disk image made on a Mac slot, signed, notarized and stapled.
-  # The token's v* tag, released by a releaser, is the permission. Android's
-  # is the release's own production build, signed with its release key
-  # (release-android), which Shireworks checks as production. Android never
-  # holds Apple's back (New Container Helper, 2026-11-15): whatever
-  # release-android's result, Apple's are promoted (tools/ci/promote_release.sh),
-  # the APK with them only when it was built and signed, and
-  # release-android-result fails the run afterwards when it wasn't. Re-running
-  # the failed jobs then promotes the APK alone, Apple's left as they are.
-  # The Production builds are handed to release-assets.
+  # pre-release), built from the tag's commit with --config=prod and the
+  # tag's version (not the Alphas stamped again): release-apple and
+  # release-android. release checks it is a verified main commit and signs
+  # them in its Sign step. Android never holds Apple's back
+  # (tools/ci/promote_release.sh): Apple's are signed whatever
+  # release-android's result, and release-android-result fails the run
+  # afterwards; re-running the failed jobs signs the APK alone.
+  release-apple:
+    if: github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v')
+    runs-on: xcode-27
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      # The tag's version, found as the proposal found it (the release made
+      # at this commit), and checked against the tag.
+      - name: Version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist
+          version="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
+          [ "v$version" = "$TAG" ] || { echo "::error::the version stamped, $version, isn't $TAG's"; exit 1; }
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: apple
+          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+      - name: Update settings
+        env:
+          UPDATE_APP_GROUP: ${{ secrets.VISOR_UPDATE_APP_GROUP }}
+          UPDATE_APPLICATIONS_BUNDLE_IDS: ${{ secrets.VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS }}
+        run: |
+          if [ -z "$UPDATE_APP_GROUP" ] || [ -z "$UPDATE_APPLICATIONS_BUNDLE_IDS" ]; then
+            echo "::error::No VISOR_UPDATE_APP_GROUP or VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS secret: a build published without them never checks for updates"
+            exit 1
+          fi
+          printf 'common --repo_env=VISOR_UPDATE_APP_GROUP=%s\ncommon --repo_env=VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS=%s\n' \
+            "$UPDATE_APP_GROUP" "$UPDATE_APPLICATIONS_BUNDLE_IDS" >> .bazelrc.user
+          # No build event stream to BuildBuddy here: it would carry these
+          # options. Its remote cache stays.
+          echo 'common --bes_backend=' >> .bazelrc.user
+      - name: Build
+        env:
+          VISOR_CI_PACKAGE: .ci/packages
+        run: >-
+          tools/ci/container_build.sh --config=prod --config=ci_device --compilation_mode=opt
+          //applications/visor_ios //applications/visor_mac
+      - name: Visor.app signed ad hoc with its entitlements
+        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apple
+          path: |
+            .ci/packages/*.ipa
+            .ci/packages/visor_mac.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  # A release's Android app, built for production (--config=prod) from the
+  # tag's commit with the tag's version, as AttilaTheFun/reviews' release
+  # does; signed by the release job.
+  release-android:
+    if: github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca
+      volumes: ["/mnt:/mnt"]
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      VISOR_BAZEL_ROOT: /mnt/bazel
+    steps:
+      - uses: actions/checkout@v5
+      - name: The job's tools
+        run: tools/ci/job_tools.sh
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: ubuntu
+          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+      - name: Build
+        env:
+          VISOR_CI_PACKAGE: .ci/android
+          TAG: ${{ github.ref_name }}
+        run: |
+          tools/ci/stamp_android.sh "${TAG#v}"
+          tools/ci/container_build.sh --config=prod --compilation_mode=opt //applications/visor_android:visor_android_apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: .ci/android/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
   release:
-    needs: release-android
-    if: ${{ !cancelled() && github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: [self-hosted, visor-jit-small]
-    timeout-minutes: 90
+    needs: [release-apple, release-android, linux-programs]
+    if: >-
+      ${{ !cancelled() && github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v') &&
+      needs.release-apple.result == 'success' && needs.linux-programs.result == 'success' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca
+      volumes: ["/mnt:/mnt"]
+    timeout-minutes: 120
+    environment: release
     permissions:
       contents: read
       actions: read
-      # The OIDC token Shireworks' signing checks.
-      id-token: write
     outputs:
       verified: ${{ steps.verified.outputs.run }}
+    env:
+      VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
       # The release's commit, with main's history beside it.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - name: The job's tools
+        run: tools/ci/job_tools.sh
       # A release is a main commit: a tag on any other stops here.
       - name: The release is a main commit
         run: git merge-base --is-ancestor HEAD origin/main || { echo "::error::$GITHUB_REF_NAME's commit is not on main"; exit 1; }
@@ -781,22 +937,57 @@ jobs:
         # An assignment, so that the script's failure fails the step.
         run: |
           run="$(tools/ci/verified_run.sh "$(git rev-parse HEAD)")" \
-            || { echo "::error::$GITHUB_REF_NAME's commit was not verified: nothing promoted"; exit 1; }
+            || { echo "::error::$GITHUB_REF_NAME's commit was not verified: nothing signed"; exit 1; }
           echo "Verified by run $run"
           echo "run=$run" >> "$GITHUB_OUTPUT"
-      # Visor for Android, signed with its release key, when release-android
-      # made it.
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apple
+          path: ${{ runner.temp }}/apple
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-programs
+          path: ${{ runner.temp }}/linux-programs
+      - name: Visor's Linux programs into Visor.app
+        run: tools/ci/mac_app_linux_programs.sh "$RUNNER_TEMP/apple/visor_mac.zip" "$RUNNER_TEMP/linux-programs/linux-programs.tar"
+      # Visor for Android, when release-android built it.
       - if: needs.release-android.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: release-android
           path: ${{ runner.temp }}/android
-      # Nothing Apple is built: the Alphas the proposal attached, of this
-      # commit (unless a run before promoted them), and the APK if there is one.
-      - name: Promote
+      # The JDK and build tools the APK is signed with, by Bazel.
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: ubuntu
+          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+      # What to sign: Apple's (unless a run before signed them) and the APK
+      # if there is one.
+      - name: The builds to sign
         env:
           GH_TOKEN: ${{ github.token }}
-        run: tools/ci/promote_release.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/assets" "$RUNNER_TEMP/android"
+        run: tools/ci/promote_release.sh plan "$GITHUB_REF_NAME" "$RUNNER_TEMP/plan" "$RUNNER_TEMP/apple" "$RUNNER_TEMP/android"
+      # The keys reach this step alone.
+      - name: Sign
+        env:
+          ANDROID_SIGNING_KEYSTORE: ${{ secrets.ANDROID_SIGNING_KEYSTORE }}
+          ANDROID_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+          APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          APPLE_DEVELOPER_ID_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_PASSWORD }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+          APPLE_DEVELOPMENT_P12: ${{ secrets.APPLE_DEVELOPMENT_P12 }}
+          APPLE_DEVELOPMENT_PASSWORD: ${{ secrets.APPLE_DEVELOPMENT_PASSWORD }}
+          APPLE_PROFILES: ${{ secrets.APPLE_PROFILES }}
+        run: |
+          mapfile -t packages < "$RUNNER_TEMP/plan/packages"
+          if [ ${#packages[@]} -gt 0 ]; then
+            exec tools/ci/sign_builds.sh --variant Production --out "$RUNNER_TEMP/assets" \
+              --ipa-kind production --dmg --android-pin "$VISOR_ANDROID_PIN" "${packages[@]}"
+          fi
+      - name: builds.json
+        run: tools/ci/promote_release.sh merge "$RUNNER_TEMP/plan" "$RUNNER_TEMP/assets"
       - uses: actions/upload-artifact@v4
         with:
           name: release-assets
@@ -804,56 +995,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # A release's Android app, built for production (--config=prod) from the
-  # tag's commit with the tag's version, as AttilaTheFun/reviews' release
-  # does, and signed here with its private release key, from the GitHub
-  # environment `release`'s secrets, given to the Sign step alone
-  # (tools/ci/sign_android.sh, checked against the pin). Shireworks only
-  # checks an .apk (sign_from_ci.sh --promote, in release), so no Alpha of
-  # it is promoted. On the large runner, so that release, which reaches
-  # Shireworks' signing, builds nothing.
-  release-android:
-    if: github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v')
-    runs-on: [self-hosted, visor-jit]
-    timeout-minutes: 45
-    # Android's signing key: the environment's secrets (deployments from
-    # main and v* tags alone), for the Sign step.
-    environment: release
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v5
-      - run: echo 'build --noremote_upload_local_results' >> ~/.bazelrc
-      - name: Build
-        env:
-          VISOR_CI_PACKAGE: .ci/android
-          TAG: ${{ github.ref_name }}
-        run: |
-          version="${TAG#v}"
-          tools/ci/stamp_android.sh "$version"
-          exec tools/ci/container_build.sh "ghcr.io/attilathefun/visor-agent:${version%.*}" \
-            --config=prod --compilation_mode=opt //applications/visor_android:visor_android_apk
-      - name: Sign
-        env:
-          ANDROID_SIGNING_KEYSTORE: ${{ secrets.ANDROID_SIGNING_KEYSTORE }}
-          ANDROID_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
-        run: tools/ci/sign_android.sh --pin "$VISOR_ANDROID_PIN" .ci/android/*.apk .ci/android-release/visor_android.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-android
-          path: .ci/android-release/*.apk
-          if-no-files-found: error
-          retention-days: 1
-
   # Red when Visor for Android wasn't built and signed for this release,
   # once Apple's Production builds are attached (release-assets): Re-run
-  # failed jobs then builds it again (release-android) and promotes it alone
+  # failed jobs then builds it again (release-android) and signs it alone
   # (release: Apple's, Production already, are left as they are), and
   # release-assets attaches only the APK and builds.json.
   release-android-result:
     needs: [release-android, release-assets]
     if: ${{ !cancelled() && github.event_name == 'release' && !github.event.release.prerelease && startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: [self-hosted, visor-jit-small]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     steps:
@@ -874,15 +1024,14 @@ jobs:
   # -android.apk, the notarized -macos.dmg (Logan, 5 Nov 2026) and
   # builds.json, which Applications reads. Then the proof that verified it
   # (tools/ci/release_proof.sh), for the next release's to be compared
-  # with. A job of its own, so that the one reaching Shireworks' signing
-  # (release) keeps a read-only token; in a container, as every job but the
-  # headful proofs (Logan, 8 Nov 2026). gh as gh_ready.sh installs it.
+  # with. A job of its own, so that the one holding the signing keys
+  # (release) keeps a read-only token.
   release-assets:
     needs: release
     # release-android's failure (upstream, through release) doesn't skip it:
-    # Apple's are attached whenever release promoted them.
+    # Apple's are attached whenever release signed them.
     if: ${{ !cancelled() && needs.release.result == 'success' }}
-    runs-on: [self-hosted, visor-jit-small]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
