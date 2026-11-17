@@ -247,19 +247,6 @@ every identifier above, on Isomer's runtime and through its Apple driver
 on the iPhone, and its `dismiss` closes Visor's sheets and Quick Look,
 since isomer#228 and #231; the suite takes them all by identifier.)
 
-- **Coming back to Visor on the iPhone:** since isomer#236 the iPhone's
-  launcher moves the scene itself (`scene(.background)` sends Visor home,
-  `scene(.active)` brings it back, waking it if iOS suspended it), so the
-  sign-in tests no longer hang behind Safari. But on a simulator with no
-  Simulator.app (a Shireworks Mac slot), a scene brought back from the
-  home screen stays inactive: SwiftUI's phase stops at `.inactive`, and
-  the launcher answers `ok` without leaving the last step to the driver.
-  Visor asks for the code again only on `.active`, so "Sign-in code
-  prompt, again: leave Visor and come back" fails there in most runs
-  (Isomer's to fix). Coming back from the sign-in page (send, cancel)
-  passes: there the launcher leaves the phase to the driver. Its alert's
-  buttons, the prompt's field and a long press are all driven there since
-  isomer#234.
 - **What the iPhone lists is what is on its screen:** a control below the
   fold (the onboarding's `add-computer`, Computer settings' `relay-toggle`
   and `share-log`) isn't in `ls` until it is scrolled to, though `tap`
