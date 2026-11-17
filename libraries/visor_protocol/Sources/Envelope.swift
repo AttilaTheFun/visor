@@ -7,7 +7,7 @@
 
 /// Every message, both directions, is one envelope; `type` says which
 /// fields are set. Client → server: login, start, send, stop, subscribe,
-/// permissions, settings, approve, archive, unarchive, end. Agent side
+/// permissions, notifications, settings, approve, archive, unarchive, end. Agent side
 /// (the permission MCP shim, with the app's token): approval_request;
 /// the app answers approval_result. Server → client: welcome, error, sessions, transcript, delta,
 /// entry, activity, busy, failure.
@@ -185,6 +185,8 @@ public struct Envelope: Codable, Sendable {
     /// Gone in 0.50: a server of 0.50 or later answers `start` with it, and
     /// `contain`, with an error, and never says it can.
     public var container: Bool?
+    /// `notifications`: the session's notifications on (true) or off.
+    public var on: Bool?
     /// A device's push token, hex (`push`), with its kind ("ios", "macos")
     /// and service ("sandbox", "production").
     public var deviceToken: String?
@@ -317,6 +319,11 @@ extension Envelope {
     }
     public static func unsubscribe(session: String) -> Envelope {
         var e = Envelope(type: "unsubscribe"); e.session = session; return e
+    }
+    /// The session's notifications on or off (`SessionInfo.notifications`),
+    /// for every device.
+    public static func notifications(session: String, on: Bool) -> Envelope {
+        var e = Envelope(type: "notifications"); e.session = session; e.on = on; return e
     }
     public static func permissions(session: String, skipPermissions: Bool) -> Envelope {
         var e = Envelope(type: "permissions"); e.session = session; e.skipPermissions = skipPermissions; return e

@@ -70,6 +70,7 @@ extension VisorServer {
         case "unsubscribe": performUnsubscribe(envelope, from: client)
         case "signIn": performSignIn(envelope)
         case "permissions": performPermissions(envelope)
+        case "notifications": performNotifications(envelope)
         case "approve": performApprove(envelope)
         case "settings": performSettings(envelope)
         case "rename": performRename(envelope)

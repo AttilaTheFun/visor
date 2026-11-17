@@ -375,7 +375,7 @@ extension VisorServer {
 
     private func restSessionAction(_ call: RESTCall) -> HTTPResponse {
         let action = call.parts[2]
-        guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "stopAgent", "startAgent", "keepBranch", "continueBranch", "permissions", "settings",
+        guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "stopAgent", "startAgent", "keepBranch", "continueBranch", "permissions", "notifications", "settings",
                "approve", "rename", "acknowledge", "signIn", "fork", "side", "endSide", "toSubagent", "closeSubagent", "mcp"].contains(action) else {
             return HTTPResponse(404, "{\"error\":\"unknown action\"}")
         }

@@ -27,6 +27,25 @@ extension FeatureMapTests {
             FeatureMapNode.chat.expectShown(on: try app.tap("details-done"))
         }
 
+        /// The session's notifications switch: on unless switched off, and
+        /// kept where it was put (the fixture's computer keeps it, as a
+        /// computer keeps it for every device), on Session details still.
+        @Test("Session details: set details-notifications off, and on again")
+        func notifications() throws {
+            let app = try VisorLaunch.fixture("inspector")
+            defer { app.quit() }
+            let details = try app.screen { FeatureMapNode.details.isShown(on: $0) }
+            FeatureMapNode.details.expectShown(on: details)
+            #expect(details.element("details-notifications")?.value == "1", "on by default: \(details.summary)")
+            try app.set("details-notifications", "0")
+            let off = try app.screen { $0.element("details-notifications")?.value == "0" }
+            #expect(off.element("details-notifications")?.value == "0", "switched off: \(off.summary)")
+            FeatureMapNode.details.expectShown(on: off)
+            try app.set("details-notifications", "1")
+            let on = try app.screen { $0.element("details-notifications")?.value == "1" }
+            #expect(on.element("details-notifications")?.value == "1", "on again: \(on.summary)")
+        }
+
         @Test("Session chat → Model sheet: tap model")
         func model() throws {
             // The goal's session: nothing waits for approval, so the

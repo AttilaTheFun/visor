@@ -69,7 +69,7 @@ extension SessionRecord {
     }
 
     func noteLatest(at time: Double = Date().timeIntervalSince1970) {
-        guard let preview = entries.reversed().lazy.compactMap(Self.preview(of:)).first else { return }
+        guard let preview = Self.latestPreview(in: entries) else { return }
         guard preview != info.preview else { return }
         info.preview = preview
         info.updated = time
@@ -95,7 +95,7 @@ extension SessionRecord {
             let url = ClaudeSessionFiles.expectedURL(sessionID: id, cwd: info.cwd)
             if let modified = try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date {
                 let tail = TranscriptAssembler.rows(in: ClaudeTranscriptParser.tailRecords(contentsOf: url))
-                if let preview = tail.reversed().lazy.compactMap(Self.preview(of:)).first {
+                if let preview = Self.latestPreview(in: tail) {
                     info.preview = preview
                     info.updated = modified.timeIntervalSince1970
                     return
@@ -108,6 +108,35 @@ extension SessionRecord {
         info.preview = nil
         noteLatest(at: info.updated ?? info.created)
         if info.preview == nil { info.preview = saved }
+    }
+
+    /// The session's summary from its rows: the latest that says something
+    /// to or from the person — never mail. A turn's rows are the prompt
+    /// that began it and what follows until the next, so a turn of mail
+    /// (`TurnOrigin.isMail`: its prompt is in one of the forms the server
+    /// hands mail over in) is passed over whole, the agent's reply in it
+    /// too; so is a reply that is itself a message to another session
+    /// (`@@to`). The rows carry no origin of their own: the prompt's form
+    /// is the record of which turns were mail, kept wherever the rows are
+    /// (the store, the agent's own file), so it holds across a restart.
+    static func latestPreview<Rows: BidirectionalCollection>(in rows: Rows) -> String? where Rows.Element == TranscriptEntry {
+        // The latest words of the turn being walked back through, said
+        // once its prompt is known not to be mail.
+        var reply: String?
+        for row in rows.reversed() {
+            if row.role == .user {
+                if TurnOrigin.isMail(row.text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    reply = nil
+                    continue
+                }
+                if let reply { return reply }
+                if let said = preview(of: row) { return said }
+                continue
+            }
+            if reply == nil, !TurnOrigin.isMailReply(row.text) { reply = preview(of: row) }
+        }
+        // The rows begin inside a turn whose prompt is not among them.
+        return reply
     }
 
     /// What a row says, in a line or two: its words, else the pictures it

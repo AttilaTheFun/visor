@@ -102,7 +102,7 @@ extension VisorServer {
         pendingResumes = []
         for id in ids {
             guard let record = session(id), !record.info.archived else { continue }
-            deliver(Self.resumeNudge, to: record)
+            deliver(Self.resumeNudge, to: record, origin: .system)
         }
         // What was waiting when the app went away goes now; behind a nudge
         // it waits for that turn to end, as any queued message does.
@@ -158,7 +158,7 @@ extension VisorServer {
         let working = record.info.busy
         if record.driven {
             if resumeDriven(record, why: "restarting the agent of"), working {
-                record.enqueue(Self.restartNudge, images: [], first: true)
+                record.enqueue(Self.restartNudge, images: [], first: true, origin: .system)
                 saveArchive()
             }
             broadcastSessions()
@@ -167,7 +167,7 @@ extension VisorServer {
         setAgentState(record, .stopping)
         rebuild(record) { [weak self] in self?.launchAgent(record) }
         if working {
-            record.enqueue(Self.restartNudge, images: [], first: true)
+            record.enqueue(Self.restartNudge, images: [], first: true, origin: .system)
             saveArchive()
         }
         broadcastSessions()
@@ -279,7 +279,7 @@ extension VisorServer {
         while !record.waits, !record.info.busy, !record.info.archived, let next = record.takeNextQueued() {
             let waiting = record.info.queued.count
             broadcastSessions()
-            deliver(next.text, to: record, images: next.images)
+            deliver(next.text, to: record, images: next.images, origin: next.origin)
             // Put back rather than taken: nothing more now.
             if record.info.queued.count > waiting { return }
             guard !record.info.queued.isEmpty else { return }
@@ -290,7 +290,13 @@ extension VisorServer {
         }
     }
 
-    func deliver(_ text: String, to record: SessionRecord, images: [String] = []) {
+    /// Words for the session's agent, from `origin`: the person (a
+    /// client's `send`), another session (mail, or the notice of it) or
+    /// the server itself. The turn they start is that origin's
+    /// (`info.turnOrigin`), which decides whether its end is told
+    /// (VisorServer+Push, a client's own notifications); waiting in the
+    /// queue, they keep it.
+    func deliver(_ text: String, to record: SessionRecord, images: [String] = [], origin: TurnOrigin = .user) {
         // `/btw`, `/fork` and `/branch` are Visor's: a side question goes
         // at once, working or not, and a fork or branch is a new session.
         if images.isEmpty, performSubSessionCommand(text, on: record) { return }
@@ -310,16 +316,17 @@ extension VisorServer {
             // waiting, and the turn working toward the goal is stopped now
             // rather than run to its end.
             let clearsGoal = SessionRecord.clearsGoal(text)
-            record.enqueue(text, images: images, first: clearsGoal)
+            record.enqueue(text, images: images, first: clearsGoal, origin: origin)
             saveArchive()
             broadcastSessions()
             if clearsGoal, record.info.busy, !record.waits { record.process.interrupt() }
             return
         }
-        record.appendUser(text, images: images)
+        record.appendUser(text, images: images, origin: origin)
         // A command the agent's process takes itself is no turn of its own:
         // the session works only once the agent says a turn began.
         let turn = record.process.startsTurn(text)
+        if turn { record.info.turnOrigin = origin }
         // Written down before the turn runs: if the app is killed while the
         // agent is working, the message the user sent is still here when it
         // comes back (the store is otherwise written at the end of a turn),
@@ -382,6 +389,10 @@ extension VisorServer {
     /// to whoever watches it.
     func handle(_ event: AgentEvent, from record: SessionRecord) {
         let reported = record.info.reportedModel
+        // A turn the agent began itself, nothing having been handed to it
+        // (a goal's next step, a loop waking): the server's, not the
+        // person's — and not the mail's it may follow.
+        if case .busy(true) = event, !record.info.busy { record.info.turnOrigin = .system }
         // Nothing to say is nothing sent.
         broadcast(record.apply(event), session: record)
         noteSubagents(after: event, of: record)
