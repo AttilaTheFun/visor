@@ -13,12 +13,12 @@ bazel_dep(name = "bazel_skylib", version = "1.9.2")
 # has the fix the older one was patched for.
 bazel_dep(name = "apple_support", version = "2.11.0")
 # rules_swift from the project's registry (AttilaTheFun/bazel_registry,
-# before the BCR in .bazelrc), as isomer asks for: 4.2.2.isomer.3 is
-# upstream's 4.2.2 with isomer's pull requests (the wasm SDK's clang
-# resource directory, Swift/C++ interop on Android, Android targets down to
-# the Swift SDK's own minimum). It sorts above the 4.2.2 rules_applecross
-# asks for, so no override holds it.
-bazel_dep(name = "rules_swift", version = "4.2.2.isomer.3")
+# before the BCR in .bazelrc), as isomer asks for: 4.3.0.isomer.1 is
+# upstream's 4.3.0 (which takes `swift.android_sdk(url = …)`, for Isomer's
+# Swift SDKs) with isomer's pull requests (Swift/C++ interop on Android,
+# Android targets down to the Swift SDK's own minimum). It sorts above the
+# 4.2.2 rules_applecross asks for, so no override holds it.
+bazel_dep(name = "rules_swift", version = "4.3.0.isomer.1")
 
 # The server's one C file (libraries/visor_server_posix/c); already in the
 # graph at this version through rules_applecross.
@@ -171,22 +171,24 @@ bazel_dep(name = "isomer", version = "0.55.0")
 # `@isomer//android/maven:androidx` flags stay at their defaults, which find it.
 bazel_dep(name = "isomer_android_maven", version = "0.55.0")
 
-# Until isomer 0.56 is released: isomer#234's head, on isomer's main at #231
-# (the Apple driver's identifiers, dismiss, landscape taps and scene phase;
-# launchers that start an app fresh and stop at once; #234: alerts' buttons
-# and fields, and long press on iOS), which the feature map's headful suite
-# needs. A branch may pin an unreleased revision; a release may not
+# Until isomer 0.56 is released: isomer's main at #236 (#231: the Apple
+# driver's identifiers, dismiss, landscape taps and scene phase; launchers
+# that start an app fresh and stop at once; #234: alerts' buttons and
+# fields, and long press on iOS; #236: the iPhone launcher's `scene`, which
+# wakes a suspended app, and HeadlessApp's commands time out), which the
+# feature map's headful suite needs. It has 0.56's Foundation in the Swift
+# SDKs (#232) too: the SDKs below. A branch may pin an unreleased revision; a release may not
 # (tools/released_pins.sh). Back to the registry's version, both modules and
 # third_party/swift_packages' isomer, once 0.56 is tagged.
 git_override(
     module_name = "isomer",
-    commit = "4b1a715a27c179371aef40580a3dfcdd719f3bc2",
+    commit = "572b07a7d7130a293a8e976a88de060ebcb2b11e",
     remote = "https://github.com/AttilaTheFun/isomer.git",
 )
 
 git_override(
     module_name = "isomer_android_maven",
-    commit = "4b1a715a27c179371aef40580a3dfcdd719f3bc2",
+    commit = "572b07a7d7130a293a8e976a88de060ebcb2b11e",
     remote = "https://github.com/AttilaTheFun/isomer.git",
     strip_prefix = "android/maven_module",
 )
@@ -222,10 +224,19 @@ swift.toolchain(
     name = "swift_toolchain",
     swift_version = "6.4.2",
 )
-swift.wasm_sdk()
+# Isomer's Swift SDKs, whose Foundation is Isomer's (since isomer 0.56: its
+# README, "Upgrading isomer"): the -i18n ones, as the client formats dates
+# and numbers (.bazelrc's --@isomer//foundation:internationalization).
+swift.wasm_sdk(
+    url = "https://github.com/AttilaTheFun/isomer_hermetic_toolchains/releases/download/isomer-6.4.2.1/swift-6.4.2-RELEASE_wasm-i18n.artifactbundle.tar.gz",
+    sha256 = "cc3423d1dfa969e1fb255ed324af6a9e3c7dedc06b75d90a3ff74adcce10877c",
+)
 # No wasi-threads SDK beside it since isomer 0.41: it returns with Swift 6.5
 # (isomer's TODO.md), and nothing of Visor's builds for it.
-swift.android_sdk()
+swift.android_sdk(
+    url = "https://github.com/AttilaTheFun/isomer_hermetic_toolchains/releases/download/isomer-6.4.2.1/swift-6.4.2-RELEASE_android-i18n.artifactbundle.tar.gz",
+    sha256 = "9ed7cd5051cc276acd14a5210d72311f2b4b7984c4bdaa77dd25bafad2170d93",
+)
 use_repo(swift, "swift_toolchain")
 
 register_toolchains(

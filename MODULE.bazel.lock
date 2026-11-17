@@ -60,7 +60,8 @@
     "https://bcr.bazel.build/modules/bazel_features/1.46.0/MODULE.bazel": "3371af60ed64c67aa05401c08005e6b0418433b2a18712994e17300f0a610b2a",
     "https://bcr.bazel.build/modules/bazel_features/1.50.0/MODULE.bazel": "2083ef9c7a469f520890483ccf8e0189d6e71e2117e7752e15e6554433d5ae3e",
     "https://bcr.bazel.build/modules/bazel_features/1.51.0/MODULE.bazel": "8e1310d09db6ee2e4f19f9994e360aca941ddc32083edc8d9bdc19c83c94cee4",
-    "https://bcr.bazel.build/modules/bazel_features/1.51.0/source.json": "d5af1f1748d2b4ace5f04087030c0a1cfd93f5be6bdf0b5c1beb24ed0fd24955",
+    "https://bcr.bazel.build/modules/bazel_features/1.54.0/MODULE.bazel": "d66f1b55fb577dc6aa0775efdbac1a4561f9968d4fded09c6dbc8f1d4c95cfca",
+    "https://bcr.bazel.build/modules/bazel_features/1.54.0/source.json": "1d8a9713d12e82707ed7937a014d2015c5eba91ba35d193c511df04165fbb4c2",
     "https://bcr.bazel.build/modules/bazel_features/1.9.0/MODULE.bazel": "885151d58d90d8d9c811eb75e3288c11f850e1d6b481a8c9f766adee4712358b",
     "https://bcr.bazel.build/modules/bazel_features/1.9.1/MODULE.bazel": "8f679097876a9b609ad1f60249c49d68bfab783dd9be012faf9d82547b14815a",
     "https://bcr.bazel.build/modules/bazel_lib/3.0.0-rc.0/MODULE.bazel": "d6e00979a98ac14ada5e31c8794708b41434d461e7e7ca39b59b765e6d233b18",
@@ -425,6 +426,7 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/bazel_features/1.46.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/bazel_features/1.50.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/bazel_features/1.51.0/MODULE.bazel": "not found",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/bazel_features/1.54.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/bazel_features/1.9.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/bazel_features/1.9.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/bazel_lib/3.0.0-rc.0/MODULE.bazel": "not found",
@@ -655,9 +657,9 @@
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/3.5.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/3.6.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/4.1.1/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/4.2.2.isomer.3/MODULE.bazel": "8aa1373ce3b1b362a11883bb1cfa125373f9a3b964073f83d6656498d669c93f",
-    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/4.2.2.isomer.3/source.json": "6105615cf2f6f3e670095f79bf54e7955c71126d452e6a7e78544b134dfec440",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/4.2.2/MODULE.bazel": "not found",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/4.3.0.isomer.1/MODULE.bazel": "5f2d238c68210b00f26d77480f0b7d1d16c64b5741ed6723024283622fdce220",
+    "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift/4.3.0.isomer.1/source.json": "c4ee977665dd193ad4d227d1f787a2f68b9866953bb4a11fd2a370ea74a180fc",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift_package_manager/1.25.0.isomer.1/MODULE.bazel": "134f32424542cf0bdcbc7f2df122b49970aa7a0857c32c01506137c206a76879",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_swift_package_manager/1.25.0.isomer.1/source.json": "22413374e03022d2d8448402a72c5b128a3c3a45adbf761300a3dac57e4e290d",
     "https://raw.githubusercontent.com/AttilaTheFun/bazel_registry/main/modules/rules_xcodeproj/4.1.0/MODULE.bazel": "not found",
@@ -983,7 +985,7 @@
     },
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
-        "bzlTransitiveDigest": "RLG7zr/kF//LWJjFzsaxQDAWXmh7/zWAS5VT3ku89lI=",
+        "bzlTransitiveDigest": "oyYy8cnTR2kIjRK9j7Fuwd3yG/85ziub42dq2MY6h48=",
         "usagesDigest": "mmLNAT+h+2AXm8tYOlbKKT2bNcaYI5DdzlBV9/oQl9I=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
@@ -1085,12 +1087,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "B2aTY3dA0RubUZkTqFdg+fxS3ocQQeeog6AzCPaqDXY=",
-        "usagesDigest": "/CS5seD7IQi5gQK3BVDVHsDUR8Cutq30CALdv6KPLQ4=",
+        "usagesDigest": "6dy9brIA6WRWM9RCy95kdy9IqlnTiiaCfIrnnaVK8pk=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 100433d6f8f92b8c9c50ac8d5e96c86e48b0c8d82f5e4b793e807e90b85ff845"
+          "FILE:@@//third_party/swift_packages/Package.resolved dc7d8d00cbdee2bc1a884f3869a9fbc97e7012dff49fec4afa975befacacc5e3"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1117,8 +1119,6 @@
                 "swiftpkg_swift_certificates",
                 "swiftpkg_swift_collections",
                 "swiftpkg_swift_crypto",
-                "swiftpkg_swift_foundation",
-                "swiftpkg_swift_foundation_icu",
                 "swiftpkg_swift_http_structured_headers",
                 "swiftpkg_swift_http_types",
                 "swiftpkg_swift_log",
@@ -1142,7 +1142,7 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_isomer",
-              "commit": "4b1a715a27c179371aef40580a3dfcdd719f3bc2",
+              "commit": "572b07a7d7130a293a8e976a88de060ebcb2b11e",
               "remote": "https://github.com/AttilaTheFun/isomer.git",
               "env": {},
               "env_inherit": [],
@@ -1160,9 +1160,6 @@
               "publicly_expose_all_targets": false,
               "replace_scm_with_registry": false,
               "target_deps": {
-                "Foundation": [
-                  "@isomer//foundation/internationalization"
-                ],
                 "IsomerSwiftUI": [
                   "@isomer//shared/wire:tree_messages"
                 ],
@@ -1316,23 +1313,9 @@
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
-              "init_submodules": false,
               "make_files_read_only": false,
-              "recursive_init_submodules": true,
-              "patch_args": [
-                "-p0"
-              ],
-              "patch_cmds": [],
-              "patch_cmds_win": [],
-              "patch_tool": "",
-              "patches": [],
-              "publicly_expose_all_targets": false,
               "replace_scm_with_registry": false,
-              "target_deps": {
-                "SwiftProtobuf": [
-                  "@isomer//foundation:for_swift_packages"
-                ]
-              },
+              "target_deps": {},
               "module_aliases": {},
               "dep_module_aliases": "",
               "bazel_target_mods": "",
@@ -1552,57 +1535,6 @@
               "patch_tool": "",
               "patches": [],
               "publicly_expose_all_targets": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": "",
-              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
-            }
-          },
-          "swiftpkg_swift_foundation": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_swift_foundation",
-              "commit": "e4049b2d77e2d5d70c4cfcc99fd5eca32e1bcb06",
-              "remote": "https://github.com/swiftlang/swift-foundation.git",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "init_submodules": false,
-              "make_files_read_only": false,
-              "recursive_init_submodules": true,
-              "patch_args": [
-                "-p1"
-              ],
-              "patch_cmds": [],
-              "patch_cmds_win": [],
-              "patch_tool": "",
-              "patches": [
-                "@@isomer+//tools/patches:swift_foundation_create_directory_root.patch",
-                "@@isomer+//tools/patches:swift_foundation_apple_interface.patch",
-                "@@isomer+//tools/patches:swift_foundation_package_helpers.patch",
-                "@@isomer+//tools/patches:swift_foundation_sdk_icu.patch"
-              ],
-              "publicly_expose_all_targets": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": "",
-              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
-            }
-          },
-          "swiftpkg_swift_foundation_icu": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_swift_foundation_icu",
-              "commit": "f986d0728da0766cf81f371521b909d4a11681d2",
-              "remote": "https://github.com/apple/swift-foundation-icu",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
               "replace_scm_with_registry": false,
               "target_deps": {},
               "module_aliases": {},

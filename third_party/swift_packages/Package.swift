@@ -11,12 +11,14 @@ let package = Package(
     name: "visor_swift_packages",
     platforms: [.iOS("18.0"), .macOS("15.0")],
     dependencies: [
-        // Isomer's Swift (Foundation and SwiftUI off Apple's platforms), by
+        // Isomer's Swift (SwiftUI and the frameworks beneath it off Apple's
+        // platforms; Foundation is in Isomer's Swift SDKs since 0.56), by
         // its release's tag: its own dependencies are by revision and branch,
         // so SwiftPM won't take it by version (tools/released_pins.sh allows
         // this one). Until isomer 0.56 is tagged, the commit MODULE.bazel's
-        // git_override pins (isomer#234's head), which a release may not have.
-        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "4b1a715a27c179371aef40580a3dfcdd719f3bc2"),
+        // git_override pins (isomer's main at #236), which a release may not
+        // have.
+        .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "572b07a7d7130a293a8e976a88de060ebcb2b11e"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
             exact: "0.51.0"
