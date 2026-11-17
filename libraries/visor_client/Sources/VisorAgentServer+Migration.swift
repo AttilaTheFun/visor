@@ -23,14 +23,6 @@ extension VisorAgentServer {
         return (data, next)
     }
 
-    public func migrationPack(_ offer: String, project: String) async throws -> MigrationFile {
-        var body = Envelope(type: "migration")
-        body.migration = offer
-        body.path = project
-        guard let file = try await step("pack", body).file else { throw AgentServerError.message("Nothing was packed") }
-        return file
-    }
-
     public func migrationPlan(for offer: MigrationOffer) async throws -> MigrationPlan {
         var body = Envelope(type: "migration")
         body.offer = offer
@@ -47,26 +39,9 @@ extension VisorAgentServer {
         _ = try await step("write", body)
     }
 
-    public func migrationClone(_ plan: String, step chosen: MigrationStep) async throws {
+    public func migrationFinish(_ plan: String) async throws -> (session: String, sessions: [SessionInfo]) {
         var body = Envelope(type: "migration")
         body.migration = plan
-        body.steps = [chosen]
-        _ = try await step("clone", body)
-    }
-
-    public func migrationUnpack(_ plan: String, file: String, step chosen: MigrationStep) async throws {
-        var body = Envelope(type: "migration")
-        body.migration = plan
-        body.file = MigrationFile(id: file, place: "", size: 0, packed: true)
-        body.steps = [chosen]
-        _ = try await step("unpack", body)
-    }
-
-    public func migrationFinish(_ plan: String, steps: [MigrationStep], cwd: String?) async throws -> (session: String, sessions: [SessionInfo]) {
-        var body = Envelope(type: "migration")
-        body.migration = plan
-        body.steps = steps
-        body.cwd = cwd
         let reply = try await step("finish", body)
         guard let session = reply.session else { throw AgentServerError.message("No session was started") }
         return (session, reply.sessions ?? [])

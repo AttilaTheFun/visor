@@ -372,7 +372,17 @@ import Testing
         job.harness = "echo"
         job.workingDirectory = "/w"
         job.driverURL = "http://127.0.0.1:7434"
+        // What a runner's agent is never given from the server's own
+        // environment: the admin token, Shireworks' session.
+        setenv("VISOR_ADMIN_TOKEN", "admin", 1)
+        setenv("SHIREWORKS_SESSION", "lease", 1)
+        defer {
+            unsetenv("VISOR_ADMIN_TOKEN")
+            unsetenv("SHIREWORKS_SESSION")
+        }
         let environment = await runner.environment(for: job)
+        #expect(environment["VISOR_ADMIN_TOKEN"] == nil && environment["SHIREWORKS_SESSION"] == nil)
+        #expect(!(environment["AGENT_JOB"] ?? "").contains("admin"), "nor in its job")
         #expect((environment["AGENT_ID"]) == "u1@http://127.0.0.1:7434")
         #expect((environment["AGENT_DISPATCHER_URL"]) == "http://127.0.0.1:7434")
         #expect((environment["AGENT_DRIVER_URL"]) == "http://127.0.0.1:7434")
@@ -411,12 +421,14 @@ import Testing
         #expect(manualJob.contains("\"skipPermissions\":false"), Comment(rawValue: manualJob))
     }
 
-    /// Each agent's own token (Job.token): minted when its job is queued,
-    /// on the job a runner claims, the agent's alone, kept with the
-    /// server's secrets across a restart, and gone with its job.
+    /// Each agent's own token (Job.token): a JWT for `visor.runner-agent`,
+    /// its `sub` the session it carries on and its `agent` its own id,
+    /// minted for an hour when its job is claimed; the agent's alone, with
+    /// no table of them kept; and refused once its job is gone.
     @Test func eachAgentHasATokenOfItsOwn() async throws {
         let secrets = MemorySecrets()
-        let jobs = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", secrets: secrets, log: { _ in })
+        let tokens = AgentTokens(secrets: secrets, issuer: "server-1")
+        let jobs = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", tokens: tokens, log: { _ in })
         let a = try jobs.queueStart(start("A")).get()
         #expect(jobs.queueResume(AgentJobMove(agent: "b1", session: "s-b", title: "B", resume: "c-b", cwd: "/tmp", runsOn: "native")) == .success("s-b"))
         let first = await jobs.claim(claim(), wait: .zero)
@@ -424,33 +436,57 @@ import Testing
         let jobA = try #require(first)
         let jobB = try #require(second)
         #expect(jobA.agent.uuid == a && jobB.agent.uuid == "b1")
-        #expect(jobA.token.count == 64 && jobB.token.count == 64 && jobA.token != jobB.token)
+        #expect(JWT.isShaped(jobA.token) && JWT.isShaped(jobB.token) && jobA.token != jobB.token)
+        let claimsA = try tokens.verify(jobA.token, as: .runnerAgent, agent: a).get()
+        #expect(claimsA.iss == "server-1" && claimsA.aud == "visor.runner-agent" && claimsA.sub == a && claimsA.agent == a)
+        #expect(claimsA.scope == ["messages", "approvals", "mcp", "job"])
+        #expect(claimsA.exp - claimsA.iat == 3600, "an hour")
+        let claimsB = try tokens.verify(jobB.token, as: .runnerAgent, agent: "b1").get()
+        #expect(claimsB.sub == "s-b" && claimsB.agent == "b1", "a moved session's agent acts as its session")
         #expect(jobs.access(a, bearer: jobA.token) == .granted)
         #expect(jobs.access(a.uppercased(), bearer: jobA.token) == .granted, "however the agent's id is spelt")
         #expect(jobs.access(a, bearer: nil) == .refused("The call shows no token (authorization: Bearer <Job.token>)."))
         #expect(jobs.access(a, bearer: jobB.token) == .refused("That token is another agent's."))
         #expect(jobs.access(a, bearer: "guess") == .refused("That token isn't this agent's."))
-        // Only the whole token, compared byte by byte (constant time).
-        #expect(jobs.access(a, bearer: String(jobA.token.dropLast())) == .refused("That token isn't this agent's."), "a prefix")
-        #expect(jobs.access(a, bearer: jobA.token + "0") == .refused("That token isn't this agent's."), "longer")
+        #expect(jobs.access(a, bearer: String(jobA.token.dropLast())) == .refused("That token isn't this agent's."), "its signature cut")
         #expect(jobs.access(a, bearers: ["guess", jobA.token]) == .granted, "among others shown")
         #expect(jobs.access("nobody", bearer: jobA.token) == .unknown)
-        #expect(!(secrets.get(JobQueue.tokensKey) ?? "").isEmpty, "kept with the secrets")
+        #expect(secrets.get("runnerAgentTokens") == nil, "no table kept")
         #expect(!jobs.stored.claimed.contains { "\($0)".contains(jobA.token) }, "never in jobs.json")
 
-        // A restart keeps them; a requeue keeps the agent's own.
-        let again = JobQueue(dispatcherURL: "http://127.0.0.1:7434", driverURL: "http://127.0.0.1:7434", secrets: secrets, log: { _ in })
-        #expect(again.access("b1", bearer: jobB.token) == .granted)
+        // A session's token (not a runner's agent's) is refused here.
+        #expect(jobs.access(a, bearer: tokens.mint(.session, session: a)) == .refused(AgentTokenRefusal.wrongAudience.message))
+        // Another server's is refused.
+        let other = AgentTokens(secrets: MemorySecrets(), issuer: "server-2")
+        #expect(jobs.access(a, bearer: other.mint(.runnerAgent, session: a, agent: a)) != .granted)
+
+        // Expired: refused on the driver, taken on a runner's Renew and
+        // Release within its grace, and no longer.
+        let old = tokens.mint(.runnerAgent, session: a, agent: a, now: Date().addingTimeInterval(-7200))
+        #expect(jobs.access(a, bearer: old) == .expired)
+        #expect(jobs.access(a, bearer: old, withinGrace: true) == .granted)
+        let ancient = tokens.mint(.runnerAgent, session: a, agent: a, now: Date().addingTimeInterval(-3600 - AgentTokens.expiredTokenGrace - 60))
+        #expect(jobs.access(a, bearer: ancient, withinGrace: true) == .expired, "past its grace")
+        #expect(jobs.access(a, bearer: old, withinGrace: true, now: Date().addingTimeInterval(AgentTokens.expiredTokenGrace)) == .expired,
+                "its grace runs out")
+
+        // An archived session's agent is refused.
+        jobs.liveSession = { $0 == a ? false : nil }
+        #expect(jobs.access(a, bearer: jobA.token) == .refused(AgentTokenRefusal.archived.message))
+        jobs.liveSession = nil
+
+        // A requeued job's claim mints a fresh one, the same agent's.
         jobs.report(.with { $0.agent = jobB.agent; $0.released = .with { $0.reason = "its runner restarted" } })
-        let requeued = await jobs.claim(claim(), wait: .zero)
-        #expect((requeued?.token) == jobB.token)
+        let requeued = try #require(await jobs.claim(claim(), wait: .zero))
+        #expect(requeued.token != jobB.token)
+        #expect(jobs.access("b1", bearer: requeued.token) == .granted)
+        #expect(jobs.access("b1", bearer: jobB.token) == .granted, "and the one before, until it ends")
 
         // Gone with its job: an ended session's, a stopped agent's.
         jobs.forget(session: a)
         #expect(jobs.access(a, bearer: jobA.token) == .unknown)
         jobs.stopJobs(of: "s-b")
-        #expect(jobs.access("b1", bearer: jobB.token) == .unknown)
-        #expect(secrets.get(JobQueue.tokensKey) == nil)
+        #expect(jobs.access("b1", bearer: requeued.token) == .unknown)
     }
 
     /// Job.skip_permissions: a started job's from its request (asking when

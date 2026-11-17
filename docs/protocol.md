@@ -30,8 +30,9 @@ SSH as that user reaches it there (running `nc -U ~/.visor/server.sock`
 per connection) and is already signed in.
 
 A request is answered when `Authorization: Bearer` is the password from
-the menu bar app, or a token from `hello` — or when it came on the
-socket file, where no bearer is needed — or when the server is set to
+the menu bar app, a token from `hello`, or the admin token (below) — or
+when it came on the socket file, where no bearer is needed — or when the
+server is set to
 ask nothing (`authentication: none` in its settings; `visor-server auth
 none`), the path being the proof: a LAN or VPN of one's own, SSH alone,
 or a front that signs users in before requests reach Visor. On the
@@ -43,11 +44,75 @@ in the same way, with the password the connection code carries. The API
 reads the same under a mount path a front forwards whole
 (`/visor/api/sessions`).
 
-A runner's agent's token (agent_protocol's `Job.token`, docs/runners.md)
-is never taken here: it is only the driver's and dispatcher's, on their
-gRPC port, which ask it of every call made for that agent. Nor is a
-runner's own token (the one its `Claim` shows as `authorization: Bearer`,
-minted with `POST /runners/tokens`): it too is only the dispatcher's.
+No agent's token is ever taken here, on any route (401, saying so),
+even where the server asks nothing: not a native session's (below,
+"Agents' tokens"), and not a runner's agent's (agent_protocol's
+`Job.token`, docs/runners.md), which is only the driver's and
+dispatcher's, on their gRPC port. Every REST route is the computer's
+owner's: none is a session's own, so none takes a session's token. Nor is
+a runner's own token (the one its `Claim` shows as `authorization:
+Bearer`, minted with `POST /runners/tokens`) taken here: it too is only
+the dispatcher's.
+
+### The admin token
+
+An opaque random secret (32 bytes, as 64 hex digits; not a JWT), a REST
+credential beside the password and the socket file (`Authorization:
+Bearer <admin token>`), and taken by the socket's `login` as the password
+or the token too. Every REST route takes it: restarts, backups, approving
+or ending any session, settings, runner tokens, the MCP and push proxy
+settings. Only its SHA-256 is held, and there is one at a time: rotating
+replaces it, and the old one stops working at once. It is compared in
+constant time. Tools that need the admin side (a deploy, a restart, a
+backup, the probes) read it from `$VISOR_ADMIN_TOKEN`, which Visor never
+gives an agent (it is stripped from every agent's environment, and a
+runner's agent's loses `SHIREWORKS_SESSION` too); a native session finds
+it only where its owner's own shell sets it.
+
+- **The menu bar app (and Visor on the Mac):** its hash is kept with the
+  server's secrets (the keychain). The first one is made only when there
+  is none, by `POST /admin-token` (`visor-server admin-token` over the
+  socket file, or Settings › Create Admin Token…), and shown once. It is
+  rotated only by presenting it: `POST /admin-token/rotate` with
+  `Authorization: Bearer <current>` (`visor-server admin-token rotate`
+  reads `$VISOR_ADMIN_TOKEN`), which answers the new one once. Without it,
+  only the menu's Reset Admin Token… replaces it: no REST route, CLI or
+  socket call does.
+- **The command-line server (Linux, and a headless Mac):** it is given at
+  launch, in `VISOR_ADMIN_TOKEN` or `--admin-token-file <file>|-` (`-`:
+  standard input), never as an argument's value. Its hash is held in
+  memory alone and never written. Launched without one, there is none, and
+  the log says so: admin REST takes only the password and the socket file.
+  A new one is a relaunch with it; `visor-server admin-token generate`
+  prints a fresh one and keeps nothing.
+- **`hello` tokens:** `GET /api/hello` answers a token for the socket's
+  login that lasts as long as the server runs (it is a REST credential
+  too). Those handed out to a request the admin token let in (or one of
+  those tokens) go when the admin token is rotated or reset, so the old
+  token's holder keeps no way in through them; those the password led to
+  stay.
+- **The command-line server's environment:** it unsets `VISOR_ADMIN_TOKEN`
+  from its own environment as soon as it has read it, so nothing it starts
+  (an agent's host, git, a tool) inherits it; a relaunch (an update) is
+  given it back for its start alone. On Linux, `/proc/<server>/environ`
+  still shows the environment it was started with, to its own user:
+  `unsetenv` changes only the C library's copy (agent_protocol#13 is the
+  same finding for the wrapper's `AGENT_TOKEN`). `--admin-token-file`
+  keeps it out of the environment altogether.
+- **The menu bar's Copy:** the token shown once can be copied; it is
+  marked concealed (`org.nspasteboard.ConcealedType`) so clipboard
+  managers that honour that don't keep it, but it is on the pasteboard,
+  for any process of the user's to read, until something else is copied.
+- **Its limit:** where agents run as the server's own user (every native
+  session's agent shares Logan's uid), they can read the signing keys (in
+  the secrets file on Linux), forging sessions' tokens; any other
+  session's token file (mode 600 is the same user's); the server's
+  environment through /proc on Linux; and they can reach the trusted
+  socket file, which is the full admin REST side: `POST /api/admin-token`
+  while there is none, key rotation, everything. The admin token protects
+  against containers, the network and other devices, not against a native
+  agent of the same user; running the server as a user of its own is
+  optional hardening.
 
 A client connects in two steps: `GET /api/hello` (with whatever password
 it has, possibly none) — 401 means "this device needs the password";
@@ -80,7 +145,7 @@ server or its front gives it, or a bare name meaning HTTPS at the root
 (`ServerAddress`): the socket is `ws(s)://` at that root, the REST side
 under `/api`.
 
-## REST (`https://<host>/api`, `Authorization: Bearer <password or token>`)
+## REST (`https://<host>/api`, `Authorization: Bearer <password, token or admin token>`)
 
 | method and path | body | answer |
 |---|---|---|
@@ -103,15 +168,20 @@ under `/api`.
 | `POST /jobs` | `agent` (claude, for now), `title`, `text` (its first prompt), `cwd`, `model`, `effort`, `runsOn` (the kind of runner that may take it: `native`, `container`; absent for any), `skipPermissions` (true: its agent acts without asking; absent or false: it asks, its prompts this server's) | `job` with `id`: its agent's id, queued on this server's agent_protocol dispatcher (docs/runners.md) for a runner to claim; the session appears once the runner's agent-wrapper dials the server. 404 when the server has no dispatcher, 400 with `error` for a job no runner can run. From 0.51 |
 | `POST /sessions/{id}/send` | `text` | `sessions` with that one |
 | `POST /sessions/<id>/contain` | `container` (true: into a container on its computer; false: out of it) | Removed in 0.50: a server of 0.50 or later answers 410 with `error`. (Before: `sessions` with that one, once its agent had moved.) |
-| `GET /runners/tokens` | | `required`: whether agent_protocol's `Claim` must show its runner's token (the `runnerTokensRequired` setting; off unless turned on), and `runners`: each `runner` name with a token, when it was `created`, and `own: true` for this server's own native runner's (held in memory, new each start). Never the tokens. Refused (403) with an agent's token. |
-| `POST /runners/tokens` | `runner`: the name its claims say (`container@mini`; no slash) | `runner`, `token` (shown this once: kept with the server's secrets), `created`, `replaced` (it had one, which no longer works). The runner shows it on `Claim` as `authorization: Bearer <token>`, with its `runner` field the same name (docs/runners.md). Refused (403) with an agent's token. |
-| `PUT /runners/tokens` | `required` (true or false) | as `GET /runners/tokens`: on, a `Claim` with no runner token is refused (UNAUTHENTICATED); off, it is let in and logged once per runner. A token that isn't a runner's, or is another runner's, is refused either way. Refused (403) with an agent's token. |
-| `DELETE /runners/tokens/<runner>` | | `runner`, `revoked: true`: its token no longer claims; 404 for a runner with none. Refused (403) with an agent's token. |
+| `GET /admin-token` | | `exists`: whether there is an admin token; `holding`: `kept` (with the secrets: the menu bar app's) or `givenAtLaunch` (the command-line server's, in memory). Never the token. |
+| `POST /admin-token` | | 201 `token`: the first admin token, shown this once; only where it is `kept` and there is none (409 otherwise, saying why). |
+| `POST /admin-token/rotate` | (the current admin token as the bearer) | `token`: its replacement, shown this once; the old one stops working at once. 403 when the bearer isn't the current one (the password and the socket file don't rotate it); 409 where it is given at launch. |
+| `GET /keys` | | `current`: the signing key's id (`kid`) agents' tokens are signed with now; `kids`: the keys that verify every token they signed (the current one, and those rotated out less than a day ago); `grace`: those rotated out a day to two days ago, which verify only a runner's Renew and Release (Agents' tokens, below); `problem`: why the kept keys can't be used, while they can't. Never the keys. |
+| `POST /keys/rotate` | `dropPrevious`? | as `GET /keys`, with a new current key; the one before is kept a day, as long as the tokens it signed last, then a day more for a runner's Renew and Release alone. 503 while the kept keys can't be read, but for an emergency rotation, which replaces them. `dropPrevious: true` (an emergency) drops every other key at once, and every token signed with one: only on the command-line server (`visor-server keys rotate --drop-previous`); the menu bar app answers 403, its menu's Emergency Key Rotation… being the only way. Native sessions' token files are re-minted at once; after an emergency, each runner's agent is restarted on a new job. Never the admin token. |
+| `GET /runners/tokens` | | `required`: whether agent_protocol's `Claim` must show its runner's token (the `runnerTokensRequired` setting; off unless turned on), and `runners`: each `runner` name with a token, when it was `created`, and `own: true` for this server's own native runner's (held in memory, new each start). Never the tokens. |
+| `POST /runners/tokens` | `runner`: the name its claims say (`container@mini`; no slash) | `runner`, `token` (shown this once: kept with the server's secrets), `created`, `replaced` (it had one, which no longer works). The runner shows it on `Claim` as `authorization: Bearer <token>`, with its `runner` field the same name (docs/runners.md). |
+| `PUT /runners/tokens` | `required` (true or false) | as `GET /runners/tokens`: on, a `Claim` with no runner token is refused (UNAUTHENTICATED); off, it is let in and logged once per runner. A token that isn't a runner's, or is another runner's, is refused either way. |
+| `DELETE /runners/tokens/<runner>` | | `runner`, `revoked: true`: its token no longer claims; 404 for a runner with none. |
 | `GET /mcp` | | `endpoints`: the MCP servers passed on to the sessions' agents (see Proxied MCP servers), each `name`, `url`, `onByDefault` and `headers` (`name`, `secret`, and `value`, or for a secret one only `kept`) |
-| `PUT /mcp` | `endpoints`: all of them, each `name`, `url`, `onByDefault`?, `headers` (`name`, `value`?, `secret`?) | as `GET /mcp`. A secret header's `value` is kept with the server's secrets; sent without one, the value kept stays. Refused (403) with an agent's token. |
+| `PUT /mcp` | `endpoints`: all of them, each `name`, `url`, `onByDefault`?, `headers` (`name`, `value`?, `secret`?) | as `GET /mcp`. A secret header's `value` is kept with the server's secrets; sent without one, the value kept stays. |
 | `POST /push` | `deviceToken`, `platform` (`ios`, `macos`, …), `pushEnvironment` (`sandbox`, `production`), `pushTopic` (the app's bundle id), `pushMuted`? (the kinds it doesn't want, of `waiting`, `failed`, `goal`, `turn`; from 0.48) | `exists`: whether this server sends pushes. Kept per token, replacing an earlier registration; a silent state push for the widget goes whatever is muted. A server before 0.48 ignores `pushMuted` and sends every kind; a client before it sends none, and is sent every kind |
 | `GET /push-proxy` | | `url`: where pushes go when this server has no APNs key of its own (empty for nowhere), and `kept`: whether its token for the proxy is kept |
-| `PUT /push-proxy` | `url` (empty for none, which forgets the token too), `token`? | as `GET /push-proxy`. The token is kept with the server's secrets; sent without one, the token kept stays. Refused (403) with an agent's token. |
+| `PUT /push-proxy` | `url` (empty for none, which forgets the token too), `token`? | as `GET /push-proxy`. The token is kept with the server's secrets; sent without one, the token kept stays. |
 | `POST /sessions/{id}/stop` `…/archive` `…/unarchive` | | same |
 | `POST /sessions/{id}/restartAgent` | | same: a running agent (`agentState` `running`) is ended and a new one made and started on the same conversation (`stopping`, then `starting`, then `running`); a turn it was working on is carried on by a nudge that goes first. A stopped agent is started (what a client of 0.34 or before means by it) |
 | `POST /sessions/{id}/stopAgent` `…/startAgent` | | same: a running agent is ended (`stopping`, then `stopped`) and kept so, through a launch of the server too, its turn in flight cut short and not carried on; what is sent meanwhile waits in `queued`. A stopped one is started (`starting`, then `running`, its process up at once) and what waited goes over. Anything else is left as it is |
@@ -127,25 +197,86 @@ under `/api`.
 | `GET /account?agent=` | | `account` (`agent`, `account`): the agent's account as it stands now — Codex asked afresh by a `codex app-server` of its own (a read begun in the last 30 s is shared), the others as their sessions last said. A change also goes out to every channel as `account`. Clients ask whenever the inspector shows a session |
 | `POST /restart` | `path` (a new build to install over this one, optional), `session` (one to carry on besides the busy ones) | `restart`: the sessions carried on; the server then relaunches |
 | `POST /quit` | | `quit`; the server then ends its agents (what was running is written down as running, for the next start) and exits — how `visor-server stop` stops it |
-| `POST /migration/offer` | `session` | `migration` with `offer`: the session (`cwd` absolute), the agent's own id for its conversation (`resumeID`), the computer's name (`from`) and home folder, the conversation's `files` (`id`, `place` under the agent's folder — `{project}` for Claude's project folder — `size`, `packed`), and its `projects` (the session's own folder first, then the git repositories under the home folder its conversation names most: `remote`, `branch`, `commit`, `unshared`, `size`, `mentions`) |
+| `POST /migration/offer` | `session` | `migration` with `offer`: the session (`cwd` absolute), the agent's own id for its conversation (`resumeID`), the computer's name (`from`) and home folder, and the agent's own files for the conversation (`files`: `id`, `place` under the agent's folder — `{project}` for Claude's project folder — `size`, `packed`): its transcript, the folder beside it (Claude's subagents and long tool results, packed), and Claude's memory (id `memory`, packed, no place). Refused when a file is over 2 GiB or they come to over 4 GiB. (A server before 0.61 also listed the session's `projects`, which a server of 0.61 or later passes over.) |
 | `POST /migration/read` | `migration` (the offer's `token`), `file` (`id`, and in `size` how much is wanted), `offset` | `migration` with `data` (base64, at most 4 MB) and `offset` (where the next piece starts) |
-| `POST /migration/pack` | `migration`, `path` (a project of the offer's) | `migration` with `file`: the project packed (what git tracks and does not ignore, and its `.git`), to read like the others |
-| `POST /migration/plan` | `offer` | `migration` with `plan`: its `id`, where the session runs here (`cwd`: the same place under this home folder), `agentInstalled`, and a `step` per project — `present`, `clone`, `copy` or `create`, with a `note` and whether it is `chosen` |
-| `POST /migration/write` | `migration` (the plan's `id`), `file`, `offset`, `data` | `migration` with the next `offset`; a piece must follow on from the last |
-| `POST /migration/clone` | `migration`, `steps` (the one) | `migration`, or the git error (the client then copies the project instead) |
-| `POST /migration/unpack` | `migration`, `file`, `steps` (the one) | `migration`, once the project is unpacked where its step says |
-| `POST /migration/finish` | `migration`, `steps` (those chosen), `cwd` (the folder the session runs in there, when the user chose one rather than the plan's: one of its projects, or another) | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here looks for them, the chosen folders made, and the session started resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from |
-| `POST /backups` | `sessionIDs` (else every session not archived), `projects` (also back up the projects a move would copy rather than clone), `path` (a folder of its own, else a new one under Visor's data folder's `backups`, by when it was made) | `backup`: its `path`, `created`, `from` (the computer's name), `size`, and its `sessions`, each with whether it was `kept` and its `outcome`. Each session's folder holds its offer (`offer.json`, as `POST /migration/offer` makes it) and its conversation's files, to their last whole line: one half of a move, written to a folder |
+| `POST /migration/pack` | | Removed in 0.61: a server of 0.61 or later answers 410 with `error`. (Before: a project of the offer's packed for copying.) |
+| `POST /migration/plan` | `offer` | `migration` with `plan`: its `id`, where the session runs here (`cwd`: a new, empty folder this server chooses — `<sessions>/<Agent>/<id>` where it keeps a folder for each session, else under its data folder's `Sessions` — never a path of the offer's), and `agentInstalled`. Refused for an offer that is not only the agent's own files for one conversation, is over the caps, or would not fit: the files' size and 1 GiB more must be free where the move keeps them as they come and under the agent's folder. (A server before 0.61 also gave a `step` per project.) |
+| `POST /migration/write` | `migration` (the plan's `id`), `file`, `offset`, `data` | `migration` with the next `offset`; a piece must follow on from the last, be of a file the offer named, and end within the size it was offered as |
+| `POST /migration/clone` | | Removed in 0.61: 410 with `error`. (Before: a project cloned where its step said.) |
+| `POST /migration/unpack` | | Removed in 0.61: 410 with `error`. (Before: a project carried as an archive unpacked where its step said.) |
+| `POST /migration/finish` | `migration` | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here keeps that conversation for the plan's folder, Claude's memory under that folder's project (when it has none), the folder made, new and empty, and the session started there resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from. (A client before 0.61 also sent the projects' `steps` and a `cwd` of its choosing, which are passed over.) |
+| `POST /backups` | `sessionIDs` (else every session not archived), `path` (a folder of its own, else a new one under Visor's data folder's `backups`, by when it was made) | `backup`: its `path`, `created`, `from` (the computer's name), `size`, and its `sessions`, each with whether it was `kept` and its `outcome`. Each session's folder holds its offer (`offer.json`, as `POST /migration/offer` makes it) and the agent's own files for its conversation, to their last whole line: one half of a move, written to a folder. No project: since 0.61 a backup carries what a move carries, and a request's `projects` is passed over |
 | `GET /backups` | | `backups`: those under the data folder's `backups`, newest first |
-| `POST /backups/restore` | `path` (a backup's folder), `sessionIDs` (else all it kept) | `backup`, each session's `outcome` saying what was done, and `sessions`. The other half of a move, read from the folder: a project missing here is unpacked where it was (or the session's own folder made); a conversation file missing or shorter here is put back (a shorter one set aside as `.before-restore-<time>`, never removed), one as long or longer left as it is; a session gone from here is started again under its own id on the same conversation, told it was restored, and one still here is left as it is |
+| `POST /backups/restore` | `path` (a backup's folder), `sessionIDs` (else all it kept) | `backup`, each session's `outcome` saying what was done, and `sessions`. The other half of a move, read from the folder, and held to what a move takes: the offer as a plan checks it (and the session's own, by its id), its archives checked and walked as a move's are. The session's folder (the server's own for it, where it keeps one; else where it was, under this home folder) is made empty when it is gone; a conversation file missing or shorter here is put back (a shorter one set aside as `.before-restore-<time>`, never removed), one as long or longer left as it is; Claude's memory is put back where the folder's project has none; a session gone from here is started again under its own id on the same conversation, told it was restored, and one still here is left as it is. The project archives a backup from before 0.61 holds (`project-<n>`) are left out, said in the server's log |
 
-Moving a session (`SessionMigration` in the client): the client asks the
-session's server for an offer and the other for a plan, the user chooses
-which projects to bring, and the client carries each file across a piece
-at a time (read from the one, written to the other), has projects cloned
-(or packed, carried and unpacked when they cannot be), then finishes. The
-session where it was is left as it was, for the user to remove. A refusal
-at any step is a 400 with an `error` envelope saying why.
+Moving a session (`SessionMigration` in the client): the user chooses only
+the computer. The client asks the session's server for an offer and the
+other for a plan, carries each file across a piece at a time (read from
+the one, written to the other), then finishes. A move carries the agent's
+own files for the conversation and nothing else (Logan, 2026-11-17): its
+transcript, the folder the agent keeps beside it, and Claude's memory —
+no project, working tree, archive of one or clone URL. The session runs
+in a new, empty folder there; if its agent needs a repository, it clones
+one itself. The session where it was is left as it was, for the user to
+remove. A refusal at any step is a 400 with an `error` envelope saying
+why.
+
+Peers are only the user's own paired servers: a move goes between two
+servers the same client is signed in to, and nothing else offers or plans
+one. Claude Code runs a project's hooks by default, which is accepted for
+that reason (and most sessions are moving into containers); with no
+project files carried, a peer can't bring hooks along anyway.
+
+The offer is still the other server's word, held to what a move takes
+(`VisorServer+MigrationContainment.swift`): a plan (and a restore, and the
+finish again) refuses an offer whose `resumeID` is not a UUID (as Claude
+Code, Codex and the openrouter CLI make a conversation's id, so never
+`memory` or `rollout`), whose file `id`s are not plain names (1 to 64
+letters, digits, `-` and `_`, not starting with `-`; ids are unique), whose
+session `cwd` is not a full path with nothing to resolve (no `.`, `..` or
+empty part), or whose files are not the agent's own for that conversation:
+each at a `place` where the agent keeps it (Claude's
+`projects/{project}/<resumeID>.jsonl` and the folder `<resumeID>` beside
+it, Codex's `sessions/<year>/<month>/<day>/rollout-<stamp>-<resumeID>.jsonl`
+exactly, OpenRouter's `sessions/<resumeID>.json` or `.jsonl`), or Claude's
+memory (`memory`, packed, no place). No path of the peer's is used: the
+receiver makes every destination of the agent, the `resumeID` and the
+session's new folder (`{project}` is that folder's project). `write` takes
+a file `id` only as a plain name the offer named, kept in the move's own
+folder.
+
+Sizes (`VisorServer+MigrationSize.swift`): a file of a move (or a backup)
+is at most 2 GiB and all of them at most 4 GiB — a long Claude transcript
+runs to hundreds of megabytes, so the per-file cap is several times the
+longest seen; a move has at most three files, so the total is two at the
+cap — and a piece is
+refused past its file's declared size. A plan is refused unless the
+files' size and 1 GiB to spare are free where the move keeps them as they
+come and under the agent's own folder (when the system says how much is
+free). An archive among them (the conversation's folder, the memory) is
+held to the same caps by what it unpacks to, and to 200,000 entries
+(files, folders and links: each an inode, bytes or none): refused before
+it is unpacked when its listing says more, and stopped while it unpacks
+when it makes more than it declared or a cap.
+
+The finish writes over nothing but the same conversation come back: where
+a file of it is here already (for Codex, its thread's rollout anywhere
+under `sessions`), the move goes on only when every log carried (`.jsonl`)
+is here as the start of the one carried, the same agent's under the same
+id gone on since; then a log is replaced and anything else (the
+conversation's folder, OpenRouter's `.json`, a rollout of another day) set
+aside as `<name>.before-move-<time>`. Otherwise the move is refused before
+anything is made. Every archive (the conversation's folder, Claude's
+memory, a backup's) is listed before anything is written and refused for
+an entry at an absolute path, through `..` or outside the one folder it
+holds, unpacked into a folder of its own inside where it goes
+(`--no-same-owner --no-same-permissions`), walked — each folder opened to
+its owner (`u+rwx`) before it is listed, and one that still can't be
+listed refused — and refused for a link that leads outside it (an
+absolute one always), a hard link to a file outside it or anything but
+files, folders and links (a device, a fifo), and only then moved into
+place; it must hold that folder alone, and never takes the place of one
+there.
 
 A client asks `GET /sessions` once a minute as the backup for the socket:
 the list is taken as a `sessions` broadcast would be, and an answer while
@@ -165,7 +296,7 @@ and `subscribe` and stream the rest.
 
 | type | fields | meaning |
 |---|---|---|
-| `login` | `token` (from `hello`) or `password`; neither on the socket file | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
+| `login` | `token` (from `hello`, or the admin token) or `password` (or the admin token); neither on the socket file | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
 | `start` | `id`, `agent` (`claude`/`codex`/`openrouter`), `cwd`, `title`, `skipPermissions` | Create a session (the client picks the id; an empty title means the agent's name, numbered). Nothing is spawned until the first `send`. The client is subscribed to it. With `container: true` (a session in a container of its own, removed in 0.50), answered with `error` and nothing made. |
 | `contain` | `session`, `container` | Removed in 0.50 (it moved a session's agent into a container of its own, or out of it): answered with `error`. |
 | `fork` | `id`, `parent`, `origin` (`fork`/`branch`/`subagent`), `at`?, `text`?, `title`?, `subagent`? | A fork or branch of `parent` (docs/sub-sessions.md): a session of its own on the parent's folder, computer, agent, model and permissions, showing the parent's conversation (up to `at`, a row's id, for a branch). Its agent copies the conversation under an id of its own when it starts: with `text` at once (a fork's prompt), else with the first `send`. An empty title means "Fork of …" / "Branch of …". With the `subagent` origin, the conversation is that of `subagent`, one of the parent's subagents that has finished (Claude Code's: a copy of its transcript made a session of its own; Codex's: its own thread, resumed), titled with what the subagent was sent to do; it takes the subagent's place under the parent, and `text` is said to it at once. |
@@ -291,13 +422,11 @@ user's. Codex asks through its app server instead (`item/tool/requestUserInput`,
 an experimental request: the server runs Codex with
 `features.default_mode_request_user_input` and initializes with
 `experimentalApi`); the server shows it as the same `approval` (id `codex-<n>`,
-tool `request_user_input`) and answers Codex by its question ids. Each session's agent has a token of its own (from 0.60; before, one
-token for every agent), kept with the server's secrets from launch to launch, and
-not the password: the server takes it only as that session, so one session's agent
-can't ask or be answered as another's. An agent a build before 0.60 left under its
-host holds that build's one token, which is taken as its session until that agent
-ends. Codex's headless runs never ask; its manual mode is the
-workspace-write sandbox.
+tool `request_user_input`) and answers Codex by its question ids. The
+token is the session's own (below, "Agents' tokens"), taken only as that
+session, so one session's agent can't ask or be answered as another's.
+Codex's headless runs never ask; its manual mode is the workspace-write
+sandbox.
 
 A runner's agent (one run under agent_protocol's wrapper, whose driver
 this server is) asks the same way through its wrapper: its
@@ -310,26 +439,102 @@ other tools are answered by the driver as its session's: Visor's own
 tools, never the proxied MCP servers below, whatever the session's `mcp`
 switches say (docs/runners.md).
 
-What a session's token does not separate (as of 0.60): it is a token of 32
-random bytes, compared in constant time, and taken only while its session is
-live (not archived). But any live session's token is also a REST
-credential, as the password is (Logan, 2026-11-14: sessions running natively
-may use the admin side), so session A's agent can still act on session B
-over REST (`POST /api/sessions/B/…`). And every native agent runs as the
-same Unix user, which can read the others' environments and Visor's secrets,
-so the tokens keep sessions apart by name, not against an agent that sets
-out to cross. The next step, for Logan to approve: REST scoped by the
-session token (a session's token acts on its own session, the admin routes
-take the password).
+### Agents' tokens
+
+A native session's agent, and a runner's agent through its wrapper, each
+hold a JWT of the server's: compact JWS, HS256 (HMAC-SHA256), verified
+with the server's signing keys alone, no table of tokens kept.
+
+- **Header:** `alg` (`HS256`; a token saying anything else, `none`
+  included, is refused), `typ` (`JWT`), `kid` (the signing key's id).
+- **Claims:** `iss` (the server's id), `aud` (`visor.session` for a native
+  session's agent, `visor.runner-agent` for a runner's), `sub` (the
+  session it acts as), `agent` (a runner's agent's id, which its wrapper's
+  hello must name; absent from a session's), `scope` (an array:
+  `messages` for the sessions' messages, `approvals` for its permission
+  prompts, `mcp` for the passed-on MCP servers, and `job` for a runner's
+  agent's own Connect, Conversation, Report and Renew), `iat`, `exp`,
+  `jti`.
+- **Verified:** its signature by `kid`; `iss` is this server; `aud` is the
+  use's; `exp` hasn't passed; its `sub` session exists and isn't archived
+  (or, for a runner's agent whose wrapper hasn't dialled in yet, its job
+  is held); `agent` is the hello's; its `scope` allows the call. An
+  envelope's own `client` (an `agent` ask) or `session` (an
+  `approval_request`) must be the token's `sub`.
+- **A session's:** lasts a day. The server writes it to
+  `<Visor's data>/hosts/<name>/token` (the folder 700, the file 600),
+  where `<name>` is the session's id when that is 1 to 64 letters,
+  digits, `-` and `_` (every UUID), and otherwise `+` and 32 hex digits of
+  its SHA-256: a client's id of `.`, `..`, empty or holding a `/` never
+  names `hosts/` itself, anything outside it, or another session's folder.
+  Nothing is written or removed unless its path is strictly inside
+  `hosts/`; removing it removes the `token` file alone, then its folder
+  only if nothing else is in it. A failed write leaves no staged
+  `token.*.new` behind. It is re-minted every hour, and the agent is given the path as
+  `VISOR_TOKEN_FILE`; `visor-agent-host mcp` (and the Node script on
+  Windows) reads it on each call, taking `VISOR_TOKEN` (the token as the
+  agent started) only where there is no file. Codex's `-c` overrides carry
+  the file's path, never the token. Archiving a session removes its file;
+  ending it does too.
+- **A runner's agent's:** `Job.token`, lasting an hour, minted when its
+  job is queued and again when it is claimed, and sent fresh over its
+  driver stream (`DriverMessage.token`) a sixth of its life before each
+  ends (ten minutes of an hour); docs/runners.md. Past its `exp` it is
+  taken only by the dispatcher, only on its runner's `Renew` and its
+  `Released` report, and only for a day after (`expiredTokenGrace`), a
+  stopgap until runners read agent_protocol's `RenewResponse.token`.
+- **Signing keys:** random 32-byte keys, each named by a `kid`, kept with
+  the server's secrets (the keychain on a Mac, the secrets file elsewhere)
+  as one set with a current key. Rotating (`visor-server keys rotate`,
+  `POST /keys/rotate`, the menu's Rotate Signing Keys) makes a new current
+  key and keeps the one before for a day, the longest a token it signed
+  lasts; then, for the grace a day more, it verifies only a runner's
+  `Renew` and `Released` report (as an expired token is taken), so an
+  ordinary rotation never ends a long job sooner than its token's own end
+  would; then it is dropped. A key is never signed with once it isn't
+  current. Keys are made only when the secrets hold none: kept keys that
+  can't be read (the keychain refused) or decoded are never written over;
+  nothing is minted, and the log says why, until they read again or an
+  emergency rotation replaces them. An emergency rotation (`--drop-previous`, the
+  menu's Emergency Key Rotation… on a Mac) drops every other key at once:
+  every session's and runner's agent's token is refused from then on,
+  native sessions are given new ones in their files, and runners' agents
+  are restarted on new jobs. It never touches the admin token.
+- **Agents from before:** an agent a build before this one left under its
+  host keeps the token it was started with, taken only as its own session
+  and only until that agent is gone: the shared token of 0.59 and earlier,
+  and each session's random token of 0.60 and 0.61. Its host's record
+  (`sessions.json`) says which it holds. A restarted agent holds a JWT.
+- **What they don't separate:** every native agent runs as the same Unix
+  user (Logan's), which can read the signing keys (on Linux, the secrets
+  file), every other session's token file (600 is that same user's), the
+  others' environments, and on Linux the server's own through
+  `/proc/<server>/environ`; and which can reach the server's trusted
+  socket file, the full admin REST side (`POST /api/admin-token` while
+  there is none, key rotation, everything). So a native agent that sets
+  out to act as another session, or as the admin, can. The tokens keep
+  sessions apart by name, and containers, other devices and the network
+  apart for real.
+- **What isn't checked yet:** `jti` and `iat` are carried but not
+  checked, and there is no denylist: a token is good until its `exp`
+  whatever happened since, so a session archived and then unarchived takes
+  its old tokens again until they end. `scope` is checked, but every
+  token of an audience is granted every scope of it today, so scopes
+  separate audiences and restrict nothing within one yet. A runner's
+  agent's token is taken while its job is held even when its session isn't
+  known to the server (`liveSession` answers nil: a job whose wrapper
+  hasn't dialled in yet, or a queue without a server); a session that ends
+  takes its jobs, and so its tokens, with it.
 
 ## Sessions messaging each other
 
 Every Claude and Codex session the menu bar app starts gets the same MCP
 server (Claude by `--mcp-config`, Codex by `-c mcp_servers.visor.*`). Claude's
-MCP servers inherit its environment, which has `VISOR_PORT`, `VISOR_TOKEN` and
-`VISOR_SESSION`, so its `--mcp-config` carries only `VISOR_APPROVALS` and the
-token never shows in `ps`; Codex gives a stdio MCP server only an allowlist of
-its environment, so its `-c` overrides still carry them. Should Claude Code
+MCP servers inherit its environment, which has `VISOR_PORT`, `VISOR_TOKEN_FILE`,
+`VISOR_TOKEN` and `VISOR_SESSION`, so its `--mcp-config` carries only
+`VISOR_APPROVALS` and the token never shows in `ps`; Codex gives a stdio MCP
+server only an allowlist of its environment, so its `-c` overrides still carry
+them, the token file's path in place of the token. Should Claude Code
 stop passing its environment on, the MCP server (`visor-agent-host mcp`)
 answers every request with a JSON-RPC error (-32002) naming the missing
 variables and saying that Claude Code must pass the agent's environment to

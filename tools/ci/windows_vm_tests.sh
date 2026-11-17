@@ -96,7 +96,7 @@ printf '%s\r\n' \
     '$password = & $server password' \
     'Start-Process -FilePath $server -ArgumentList "run","--port","7633" -NoNewWindow -RedirectStandardOutput server.log -RedirectStandardError server-errors.log' \
     'Start-Sleep 3' \
-    '$env:VISOR_PORT = "7633"; $env:VISOR_TOKEN = $password; $env:QUIT = "1"' \
+    '$env:VISOR_PORT = "7633"; $env:VISOR_ADMIN_TOKEN = $password; $env:QUIT = "1"' \
     'node tools/probes/server.mjs' \
     '$probe = $LASTEXITCODE' \
     'Get-Content server.log, server-errors.log' \

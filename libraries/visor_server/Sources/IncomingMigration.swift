@@ -9,7 +9,7 @@ struct IncomingMigration {
     var plan: MigrationPlan
     var folder: URL
     var created: Date
-    /// The session's id here, fixed with the plan where its folder is made
-    /// of it (SessionFolders); nil: a new one at the end.
-    var sessionID: String? = nil
+    /// The session's id here, fixed with the plan: its new folder (the
+    /// plan's `cwd`) is made of it.
+    var sessionID: String
 }

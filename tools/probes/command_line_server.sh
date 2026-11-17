@@ -28,7 +28,7 @@ check test ${#PW} -ge 12
 # In the terminal, stopped through the REST side.
 $BIN run --port $PORT > /tmp/visor-server-run.log 2>&1 &
 sleep 2
-export VISOR_PORT=$PORT VISOR_TOKEN="$PW"
+export VISOR_PORT=$PORT VISOR_ADMIN_TOKEN="$PW"
 check env QUIT=1 node tools/probes/server.mjs
 sleep 1
 check grep -q "session started: probe-server" /tmp/visor-server-run.log

@@ -84,13 +84,15 @@ public final class VisorServer {
     /// moving here, by their plans' ids (VisorServer+Migration.swift).
     var migrationsOut: [String: OutgoingMigration] = [:]
     var migrationsIn: [String: IncomingMigration] = [:]
+    /// The bytes free on the disk a URL is on, which a move here must fit
+    /// (VisorServer+MigrationSize.swift): the system's word, or a test's.
+    var freeBytes: (URL) -> Int? = { VisorServer.systemFreeBytes($0) }
     /// The agent shims' connections waiting for an approval's answer: by
     /// session, then by request id. The server's, not the session's: a
     /// connection is a client of this server.
     var approvalWaiters: [String: [String: ClientConnection]] = [:]
-    /// A folder for each session, and the repositories apart
-    /// (VISOR_SESSIONS_DIR, VISOR_SOURCES_DIR): nil where sessions work
-    /// where they are asked to.
+    /// A folder for each session (VISOR_SESSIONS_DIR): nil where sessions
+    /// work where they are asked to.
     public var sessionFolders: SessionFolders?
     /// The front this server sits behind when its auth is `none`
     /// (VISOR_TRUST and the headers it names): why a request is let in,
@@ -127,6 +129,9 @@ public final class VisorServer {
     /// Tokens handed out by `hello` to clients the path (or the password)
     /// let in, for the socket's login; new each launch.
     var tokens: [String] = []
+    /// Those of `tokens` handed out to a request the admin token let in (or
+    /// one of these): gone when the admin token is rotated or reset.
+    var adminHelloTokens: Set<String> = []
 
     public let port: UInt16
 
@@ -137,16 +142,36 @@ public final class VisorServer {
     var connections: [ObjectIdentifier: ClientConnection] = [:]
 
     /// The one token every agent was given before each session had its
-    /// own (0.59 and earlier): kept from launch to launch, and taken only
-    /// from a session whose agent, left under its host, was started with
-    /// it (VisorServer+AgentTokens).
-    let sharedAgentToken: String
+    /// own (0.59 and earlier), as kept (none if no build before kept one):
+    /// taken only from a session whose agent, left under its host, was
+    /// started with it (VisorServer+AgentTokens).
+    let sharedAgentToken: String?
 
-    /// Each session's own token, by session id: what its agent presents
-    /// instead of the password (its tools, the permission shim). Kept with
-    /// the secrets from launch to launch, since an agent under its host
-    /// outlives the server that started it.
+    /// Each session's random token of 0.60 and 0.61 (#421, #441), by
+    /// session id, as kept: taken only from a session whose agent, left
+    /// under its host, was started with it, until that agent is gone. New
+    /// agents hold JWTs (`agentTokens`), kept nowhere.
     var sessionAgentTokens: [String: String]
+    /// The agents' tokens, minted and verified with the signing keys kept
+    /// with the secrets (AgentTokens): native sessions' and runners'
+    /// agents'.
+    package let agentTokens: AgentTokens
+    /// The admin token's hash: kept with the secrets (the menu bar app's),
+    /// or given at launch (the command-line server's:
+    /// useAdminTokenGivenAtLaunch).
+    package var adminToken: AdminToken
+    /// Whether an emergency rotation of the signing keys (every other key
+    /// dropped) may be asked over REST (`POST /api/keys/rotate
+    /// {dropPrevious}`, `visor-server keys rotate --drop-previous`): the
+    /// command-line server's, where there is no menu bar. Off in the menu
+    /// bar app, whose menu is the only way (rotateSigningKeys).
+    public var emergencyRotationOverREST = false
+    /// Re-mints the native sessions' token files hourly
+    /// (VisorServer+SessionTokenFiles).
+    var sessionTokenRefresh: Task<Void, Never>?
+    /// When each driven session's agent was last restarted for a wrapper
+    /// that dialled in with an expired token (resumeAfterExpiredToken).
+    var expiredTokenResumes: [String: Date] = [:]
     /// The runners' own tokens, which agent_protocol's Claim asks
     /// (RunnerTokens): kept with the secrets.
     package let runnerTokens: RunnerTokens
@@ -162,9 +187,13 @@ public final class VisorServer {
         sharedAgentToken = Self.keptSharedAgentToken()
         sessionAgentTokens = Self.keptSessionAgentTokens()
         runnerTokens = RunnerTokens(secrets: Self.secrets)
+        adminToken = AdminToken(keptIn: Self.secrets)
+        // Its issuer is this server's id, made below the first time.
+        agentTokens = AgentTokens(secrets: Self.secrets, issuer: "")
         Self.forgetRetiredSecrets()
         applyAgentDetaching()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
+        agentTokens.issuer = id
         loadSessions()
         takeRollbackNote()
     }
@@ -177,7 +206,12 @@ public final class VisorServer {
     /// Deletes the secrets no part of the server reads any more.
     static func forgetRetiredSecrets() {
         secrets.set(retiredGitHubProxyTokenKey, nil)
+        secrets.set(retiredRunnerAgentTokensKey, nil)
     }
+
+    /// The runners' agents' random tokens #438 kept before they were JWTs
+    /// (never deployed): nothing reads them.
+    static let retiredRunnerAgentTokensKey = "runnerAgentTokens"
 
     /// A server apart from the user's own: its own port, a folder of its
     /// own for what it keeps, the password given and held in memory, and

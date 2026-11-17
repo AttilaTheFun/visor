@@ -12,6 +12,8 @@ swift_library(
     module_name = "VisorNativeRunner",
     deps = [
         "//:foundation",
+        # What a runner's agent is never given (AgentEnvironment).
+        "//libraries/visor_system",
         "@swiftpkg_agent_protocol//:AgentProtocol",
         "@swiftpkg_grpc_swift_2//:GRPCCore",
         "@swiftpkg_grpc_swift_nio_transport//:GRPCNIOTransportHTTP2",

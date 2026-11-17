@@ -95,7 +95,7 @@ flowchart TD
     SubPage -->|"back"| Chat
 
     Settings -->|"tap settings-computer-‹name›"| Computer
-    Settings -->|"tap settings-add-computer (iPhone: once Settings closes)"| AddComputer
+    Settings -->|"tap settings-add-computer"| AddComputer
     Settings -->|"tap settings-done or settings-back"| Sessions
 ```
 
@@ -257,13 +257,6 @@ since isomer#228 and #231; the suite takes them all by identifier.)
   hang on the iPhone whenever iOS suspends Visor before they're done,
   which is most runs (Isomer's to fix: a `scene` in its iOS launcher). Its alert's buttons, the prompt's
   field and a long press are all driven there since isomer#234.
-- **Settings → Add Computer on the iPhone:** Add Computer shows only once
-  Settings is closed (`settings-add-computer` leaves Settings up). That is
-  the app's own: Add Computer's sheet is presented from the root view,
-  which can't present a second sheet while Settings is up, so SwiftUI
-  presents it once Settings has gone; on Isomer's runtime the two stack.
-  Its test fails on the iPhone until the app presents Add Computer from
-  Settings itself.
 - **What the iPhone lists is what is on its screen:** a control below the
   fold (the onboarding's `add-computer`, Computer settings' `relay-toggle`
   and `share-log`) isn't in `ls` until it is scrolled to, though `tap`

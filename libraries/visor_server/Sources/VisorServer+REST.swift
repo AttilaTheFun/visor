@@ -167,6 +167,8 @@ extension VisorServer {
         case ("POST", 1, "sessions"): restStartSession(call)
         case ("POST", 1, "jobs"): restQueueJob(call)
         case (_, 2...3, "runners") where parts[1] == "tokens": restRunnerTokens(call)
+        case (_, 1...2, "admin-token"): restAdminToken(call)
+        case (_, 1...2, "keys"): restSigningKeys(call)
         case ("DELETE", 2, "sessions"): restEndSession(call)
         case ("POST", 3, "sessions"): restSessionAction(call)
         default: HTTPResponse(404, "{\"error\":\"not found\"}")
@@ -189,7 +191,7 @@ extension VisorServer {
     /// name for this computer, whose it is, and a token to log
     /// the socket in with.
     private func restHello(_ call: RESTCall) -> HTTPResponse {
-        var e = Envelope.hello(host: hostName, login: "", token: issueToken())
+        var e = Envelope.hello(host: hostName, login: "", token: issueToken(byAdmin: isAdminBearer(call.request.authorization)))
         e.id = id
         e.version = Self.version
         if !settings.clientsKeepMessages { e.keepMessages = false }

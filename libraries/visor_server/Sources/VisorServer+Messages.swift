@@ -16,7 +16,7 @@ extension VisorServer {
         // The permission shim: one request per connection, answered later.
         if envelope.type == "approval_request" || envelope.type == "agent" { client.agent = true }
         if envelope.type == "approval_request" {
-            guard let record = agentSession(envelope.session, presenting: envelope.token), let id = envelope.id else {
+            guard let record = agentSession(envelope.session, presenting: envelope.token, for: .approvals), let id = envelope.id else {
                 client.sendLast(.error("Not an agent of this host"))
                 return
             }
@@ -38,9 +38,12 @@ extension VisorServer {
             guard envelope.type == "login" else { client.send(.error("Log in first")); return }
             let token = envelope.token ?? ""
             let byPassword = !password.isEmpty && (envelope.password ?? "") == password
+            // The admin token too, as the password or the token (the
+            // probes' and tools' login): it is the REST side's admin already.
+            let byAdminToken = adminToken.admits(envelope.password) || adminToken.admits(token)
             client.clientID = envelope.client
             let vouched = settings.asksNothing && (front?.admits(client.headers) ?? true)
-            guard client.trusted || vouched || byPassword || (!token.isEmpty && tokens.contains(token)) else {
+            guard client.trusted || vouched || byPassword || byAdminToken || (!token.isEmpty && tokens.contains(token)) else {
                 Self.log("\(describe(client)) was refused: wrong password or token")
                 client.sendLast(.error("Wrong password"))
                 return
@@ -378,9 +381,9 @@ extension VisorServer {
     /// What an agent asked of the other sessions, answered: `mode` is the
     /// ask, `client` the asking session, `session` the one it is about.
     /// Only the agents this server started hold a token, each its own
-    /// session's: one can't ask as another.
+    /// session's (its JWT's `sub`): one can't ask as another.
     func agentReply(_ envelope: Envelope) -> Envelope {
-        guard let caller = agentSession(envelope.client, presenting: envelope.token) else {
+        guard let caller = agentSession(envelope.client, presenting: envelope.token, for: Self.scope(of: envelope)) else {
             var reply = Envelope(type: "agent_result")
             reply.id = envelope.id
             reply.error = "Not an agent of this computer"

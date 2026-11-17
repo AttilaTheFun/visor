@@ -30,6 +30,8 @@ struct SettingsPane: View {
     @State private var keyID = ""
     @State private var teamID = ""
     @State private var pushMessage: String?
+    /// Counts up when an admin token is made here, so the section says so.
+    @State private var adminTokenMade = 0
 
     var body: some View {
         Form {
@@ -94,6 +96,18 @@ struct SettingsPane: View {
                     .font(.caption).foregroundColor(.secondary)
             } header: {
                 Text("Password")
+            }
+            Section {
+                let exists = adminTokenMade >= 0 && server.hasAdminToken
+                Button("Create Admin Token…") { if TokenAlerts.create(server) { adminTokenMade += 1 } }
+                    .disabled(exists)
+                Text(exists
+                     ? "There is an admin token. Rotate it with the current one (visor-server admin-token rotate), or reset it from the menu."
+                     : "A token for the admin side over REST (Authorization: Bearer), beside the password: for deploys, restarts and backups. "
+                        + "Shown once; only its hash is kept.")
+                    .font(.caption).foregroundColor(.secondary)
+            } header: {
+                Text("Admin token")
             }
             Section {
                 let addresses = NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) }

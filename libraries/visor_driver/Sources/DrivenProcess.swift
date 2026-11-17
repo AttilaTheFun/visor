@@ -61,6 +61,9 @@ final class DrivenProcess: AgentProcess {
 
     // MARK: - The wrapper's side
 
+    /// Whether a wrapper is connected now: its stream is live.
+    var isAttached: Bool { down != nil }
+
     /// A wrapper connected: what it is sent from now on, and what waited.
     func attach(_ send: @escaping (AgentProtocol_V1_DriverMessage) -> Void) -> UUID {
         let id = UUID()

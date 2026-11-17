@@ -9,6 +9,24 @@ package enum Command {
     @concurrent
     package static func output(_ executable: String, _ arguments: [String], environment: [String: String]? = nil,
                        errors: Bool = false, input: Data? = nil) async -> (status: Int32, text: String)? {
+        guard let ran = await run(executable, arguments, environment: environment, errors: errors, input: input, watch: nil) else { return nil }
+        return (ran.status, ran.text)
+    }
+
+    /// As output, with `stop` asked every `interval` while the command
+    /// runs: once it says so, the command is killed (which ends its output
+    /// too) and `stopped` is true. For a command that could otherwise run
+    /// on too long or too far (tar unpacking an archive that says less
+    /// than it holds).
+    @concurrent
+    package static func output(_ executable: String, _ arguments: [String], errors: Bool = false, every interval: Duration,
+                               stopping stop: @escaping @Sendable () -> Bool) async -> (status: Int32, text: String, stopped: Bool)? {
+        await run(executable, arguments, environment: nil, errors: errors, input: nil, watch: (interval, stop))
+    }
+
+    @concurrent
+    private static func run(_ executable: String, _ arguments: [String], environment: [String: String]?, errors: Bool, input: Data?,
+                            watch: (interval: Duration, stop: @Sendable () -> Bool)?) async -> (status: Int32, text: String, stopped: Bool)? {
         let process = Process()
         let command = SystemPlatform.current.tools.command(executable, arguments)
         process.executableURL = URL(fileURLWithPath: command.executable)
@@ -31,11 +49,27 @@ package enum Command {
                 try? writer.close()
             }
         }
+        let pid = process.processIdentifier
+        let watcher = watch.map { interval, stop in
+            Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: interval)
+                    guard !Task.isCancelled else { break }
+                    if stop() {
+                        SystemPlatform.current.processes.kill(pid)
+                        return true
+                    }
+                }
+                return false
+            }
+        }
         var data = Data()
         for await chunk in chunks { data.append(chunk) }
         var status: Int32 = -1
         for await value in statuses { status = value }
-        return (status, String(decoding: data, as: UTF8.self))
+        watcher?.cancel()
+        let stopped = await watcher?.value ?? false
+        return (status, String(decoding: data, as: UTF8.self), stopped)
     }
 
     /// Starts a command, says `lines` to it, and reads what it says back,

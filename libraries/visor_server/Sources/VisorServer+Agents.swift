@@ -27,7 +27,13 @@ extension VisorServer {
         // Visor's own, and this computer's agents/<kind>.env: its paths and
         // git sign-in. Nothing else: Visor proxies nothing for its agents
         // (Logan, 14 Nov 2026), so they reach GitHub as `claude` would.
-        let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": agentToken(for: info.id), "VISOR_SESSION": info.id]
+        // Its token: a JWT for its session alone, in a file re-minted
+        // hourly (VISOR_TOKEN_FILE, which its MCP bridge reads on each
+        // call), and as it stands now in VISOR_TOKEN, for a host too old to
+        // read the file. Never the admin token (ToolPath.environment).
+        let token = info.archived ? agentToken(for: info.id) : writeSessionToken(of: info.id)
+        let own = ["VISOR_PORT": String(port), "VISOR_TOKEN": token,
+                   "VISOR_TOKEN_FILE": Self.sessionTokenFile(of: info.id).path, "VISOR_SESSION": info.id]
         process.approvalEnvironment = AgentEnvironmentFile.read(info.agent).merging(own) { _, ours in ours }
         return process
     }
@@ -71,6 +77,7 @@ extension VisorServer {
         record.process.stop()
         record.refreshResume()
         record.setArchived(true)
+        removeSessionTokenFile(of: record.info.id)
         record.restartWhenIdle = false
         // Archived means no process and nothing owed: it must not come back
         // running on the next launch.
@@ -82,6 +89,7 @@ extension VisorServer {
 
     func unarchive(_ record: SessionRecord) {
         record.setArchived(false)
+        if !record.driven { writeSessionToken(of: record.info.id) }
         saveArchiveNow()
         broadcastSessions()
     }

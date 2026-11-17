@@ -24,6 +24,12 @@ struct CommandLineLifecycle: ServerLifecycle {
         next.resume = sessions.isEmpty ? "all" : sessions
         let log = options.log ?? system.dataDirectory.appendingPathComponent("visor-server.log").path
         next.log = log
+        // An admin token given in the environment (or on standard input)
+        // was unset from it when this run began: given back for the new
+        // run's start alone, then unset again.
+        let inherited = options.adminTokenForEnvironment
+        if let inherited { system.setEnvironment(ServerCommand.adminTokenVariable, inherited) }
+        defer { if inherited != nil { system.setEnvironment(ServerCommand.adminTokenVariable, nil) } }
         do {
             _ = try system.startDetached(system.executable, ["run"] + next.arguments, log: log)
         } catch {

@@ -130,12 +130,19 @@ package final class HostedChild: AgentChild {
     }
 
     /// A socket's path in `folder`, which must fit the system's limit on
-    /// one (104 bytes on a Mac).
+    /// one (104 bytes on a Mac). The session's id is a client's: any
+    /// character of it but a letter, a digit, `-` or `_` is `_` here, so
+    /// the socket is always a file of `folder`'s own (the random tag keeps
+    /// two sessions' apart).
     static func socketPath(for session: String, in folder: URL) -> String {
         let tag = String(UUID().uuidString.prefix(6)).lowercased()
-        let path = folder.appendingPathComponent("\(session)-\(tag).sock", isDirectory: false).path
+        let name = String(decoding: session.utf8.map { byte -> UInt8 in
+            let kept = (0x30...0x39).contains(byte) || (0x41...0x5a).contains(byte) || (0x61...0x7a).contains(byte) || byte == 0x2d
+            return kept || byte == 0x5f ? byte : 0x5f
+        }, as: UTF8.self)
+        let path = folder.appendingPathComponent("\(name)-\(tag).sock", isDirectory: false).path
         if path.utf8.count < 100 { return path }
-        return folder.appendingPathComponent("\(session.prefix(8))-\(tag).sock", isDirectory: false).path
+        return folder.appendingPathComponent("\(name.prefix(8))-\(tag).sock", isDirectory: false).path
     }
 
     private func begin(_ stream: any ByteStream, from line: UInt64) {

@@ -2,8 +2,13 @@
 // each call once the server is served (VisorDriver.Listening), so a
 // restarted server's queue knows its driven sessions' moves first. A report
 // or a renewal is for one agent, and shows that agent's token (Job.token,
-// as `authorization: Bearer`; JobQueue+Tokens): the wrapper's reports and
-// the runner's renewals and releases alike. A claim shows the runner's own
+// as `authorization: Bearer`; JobQueue+Tokens). The wrapper's reports
+// (Started, Progress, Blocked, Completed, Failed) must show a live one: its
+// token is refreshed over its driver stream. The runner's Renew and its
+// Release report show the token its claim gave it, which it can't refresh,
+// so they take it up to AgentTokens.expiredTokenGrace past its end, and no
+// further (a stopgap, until runners read agent_protocol's
+// RenewResponse.token). A claim shows the runner's own
 // token (RunnerTokens), minted for the name it claims as: required once
 // the server's `runnerTokensRequired` is on, and a wrong one refused
 // whether or not. A runner token shown beside an agent's, on a renewal or
@@ -29,18 +34,22 @@ struct DispatcherService: AgentProtocol_V1_AgentDispatcher.ServiceProtocol {
     }
 
     /// A report for an agent whose job is gone is let go, unread; one that
-    /// doesn't show its agent's token is refused.
+    /// doesn't show its agent's token is refused, and so is one whose token
+    /// has ended, but for a Release within its grace.
     func report(request: ServerRequest<AgentProtocol_V1_JobReport>,
                 context: ServerContext) async throws -> ServerResponse<AgentProtocol_V1_ReportResponse> {
         let server = await listening.ready()
         let agent = request.message.agent.uuid
         let bearers = AgentBearer.tokens(in: request.metadata)
-        switch await jobs.access(agent, bearers: bearers) {
+        switch await jobs.access(agent, bearers: bearers, withinGrace: Self.takesEndedToken(request.message)) {
         case .granted:
             try await runnerMatches(agent, bearers, server, "a report")
             await jobs.report(request.message)
         case .unknown:
             VisorServer.log("dispatcher: a report for \(agent), whose job it no longer holds: let go")
+        case .expired:
+            VisorServer.log("dispatcher: a report for \(agent) refused: its token has ended")
+            throw AgentBearer.refusal(AgentTokenRefusal.expired.message)
         case .refused(let why):
             VisorServer.log("dispatcher: a report for \(agent) refused: \(why)")
             throw AgentBearer.refusal(why)
@@ -48,21 +57,36 @@ struct DispatcherService: AgentProtocol_V1_AgentDispatcher.ServiceProtocol {
         return ServerResponse(message: .init())
     }
 
-    /// A renewal for an agent whose job is gone is told the claim isn't its
-    /// runner's (so the runner ends its agent); one that doesn't show its
-    /// agent's token is refused.
+    /// Whether `report` may show a token past its end (within its grace):
+    /// the runner's Release alone. Every other kind is its wrapper's, whose
+    /// token its driver stream keeps fresh.
+    static func takesEndedToken(_ report: AgentProtocol_V1_JobReport) -> Bool {
+        if case .released? = report.event { return true }
+        return false
+    }
+
+    /// A renewal for an agent whose job is gone, or whose token ended more
+    /// than its grace ago, is told the claim isn't its runner's (so the
+    /// runner ends its agent); one that doesn't show its agent's token is
+    /// refused.
     func renew(request: ServerRequest<AgentProtocol_V1_RenewRequest>,
                context: ServerContext) async throws -> ServerResponse<AgentProtocol_V1_RenewResponse> {
         let server = await listening.ready()
         let agent = request.message.agent.uuid
         var answer = AgentProtocol_V1_RenewResponse()
         let bearers = AgentBearer.tokens(in: request.metadata)
-        switch await jobs.access(agent, bearers: bearers) {
+        // Its claim's token, up to its grace past its end.
+        switch await jobs.access(agent, bearers: bearers, withinGrace: true) {
         case .granted:
             try await runnerMatches(agent, bearers, server, "a renewal")
             if let expires = await jobs.renew(request.message.agent) { answer.claimExpires = .init(date: expires) }
         case .unknown:
             break
+        case .expired:
+            // Past its grace: answered with no claim, as a gone job's is,
+            // so its runner ends its agent; its claim lapses and its job is
+            // given out again, with a fresh token.
+            VisorServer.log("dispatcher: a renewal for \(agent) not renewed: its token ended more than its grace ago")
         case .refused(let why):
             VisorServer.log("dispatcher: a renewal for \(agent) refused: \(why)")
             throw AgentBearer.refusal(why)

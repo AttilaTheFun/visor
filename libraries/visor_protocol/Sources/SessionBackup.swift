@@ -1,8 +1,7 @@
 /// Sessions backed up to a folder on a server's computer (`/api/backups`):
 /// what a move to another server would carry of each — the agent's own
-/// files for its conversation, the session as it was, and (asked for) the
-/// projects a move would copy rather than clone — kept there to be
-/// restored from. One half of a move each way (MigrationOffer), with a
+/// files for its conversation and the session as it was, never its
+/// projects — kept there to be restored from. One half of a move each way (MigrationOffer), with a
 /// folder in the middle, for an update that might lose sessions.
 public struct SessionBackup: Codable, Equatable, Sendable {
     /// The folder, on the server's computer.

@@ -1,12 +1,10 @@
 // A folder for each session (VISOR_SESSIONS_DIR, Shireworks' primary
 // container): a new session works in <dir>/<agent>/<id> whatever folder it
-// asked for, one that resumes a conversation keeps its own; a session moved
-// here gets its folder with its id when the move is planned, whatever the
-// client chooses, its conversation under that folder's project and its
-// Claude memory with it, never over a memory already there; and its
-// repositories go to the sources by name (VISOR_SOURCES_DIR), a folder
-// that isn't one staying behind, each cloned from its remote and never
-// copied: a session whose checkout has what its remote doesn't is refused.
+// asked for, one that resumes a conversation keeps its own; and a session
+// moved here gets its folder with its id when the move is planned,
+// whatever the client chooses: new and empty, wherever it worked before
+// (no repository comes), its conversation under that folder's project and
+// its Claude memory with it, never over a memory already there.
 
 import ClaudeTranscript
 import Foundation
@@ -44,7 +42,6 @@ extension ServerTests {
     }
 
     private var sessions: String { root.appendingPathComponent("Sessions").path }
-    private var sources: String { root.appendingPathComponent("Sources").path }
 
     private func project(_ cwd: String) -> URL {
         ClaudeSessionFiles.projectsRoot(home: home).appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd), isDirectory: true)
@@ -105,7 +102,7 @@ extension ServerTests {
         ask.session = "S"
         let offered = await server.migrationOffer(ask)
         let offer = try #require(offered.offer, Comment(rawValue: offered.message ?? "no offer"))
-        server.sessionFolders = SessionFolders(sessions: sessions + "/", sources: sources)
+        server.sessionFolders = SessionFolders(sessions: sessions + "/")
         var planning = Envelope(type: "migration")
         planning.offer = offer
         let planned = await server.migrationPlan(planning)
@@ -116,7 +113,6 @@ extension ServerTests {
         for file in offer.files { carry(file, offer: offer.token, plan: plan.id) }
         var finishing = Envelope(type: "migration")
         finishing.migration = plan.id
-        finishing.steps = plan.steps.filter(\.chosen)
         finishing.cwd = cwd
         let finished = await server.migrationFinish(finishing)
         #expect(finished.type != "error", Comment(rawValue: finished.message ?? ""))
@@ -125,12 +121,11 @@ extension ServerTests {
 
     // MARK: Tests
 
-    @Test func testAFolderIsTheAgentsThenTheSessionsAndARepositoryGoesToTheSourcesByName() {
-        let folders = SessionFolders(sessions: "/Volumes/Sessions/", sources: "/Volumes/Sources")
+    @Test func testAFolderIsTheAgentsThenTheSessions() {
+        let folders = SessionFolders(sessions: "/Volumes/Sessions/")
         #expect(folders.folder(agent: .claude, id: "abc") == "/Volumes/Sessions/Claude/abc")
         #expect(folders.folder(agent: .codex, id: "abc") == "/Volumes/Sessions/Codex/abc")
-        #expect(folders.source(for: "/Users/logan/Developer/visor/") == "/Volumes/Sources/visor")
-        #expect((SessionFolders(sessions: "/Volumes/Sessions").source(for: "/Users/logan/Developer/visor")) == nil)
+        #expect(folders.folder(agent: .openrouter, id: "..") != "/Volumes/Sessions/OpenRouter/..")
     }
 
     @Test func testANewSessionWorksInAFolderOfItsOwnAndAResumedOneKeepsItsFolder() throws {
@@ -160,8 +155,6 @@ extension ServerTests {
         let (offer, plan) = try await offerAndPlan(cwd: app.path)
         #expect(offer.files.contains { $0.id == VisorServer.memoryFileID && $0.place.isEmpty && $0.packed }, "the memory carried with no place, which an older server leaves be")
         #expect(plan.cwd.hasPrefix(sessions + "/Claude/"), Comment(rawValue: plan.cwd))
-        #expect(plan.steps.map(\.path) == [sources + "/app"], "its repository, by name, under the sources")
-        #expect(plan.steps.map(\.chosen) == [true])
 
         let moved = try await finish(offer, plan, cwd: "/somewhere/else")
         #expect(moved.info.cwd == plan.cwd, "the plan's folder, not the client's")
@@ -171,69 +164,20 @@ extension ServerTests {
         #expect(FileManager.default.fileExists(atPath: placed.appendingPathComponent(conversation + ".jsonl").path))
         #expect((try String(contentsOf: placed.appendingPathComponent("memory/merge-queue.md"), encoding: .utf8)) == "the merge queue")
         #expect((try? String(contentsOf: placed.appendingPathComponent("memory/MEMORY.md"), encoding: .utf8)) != nil)
+        #expect((try FileManager.default.contentsOfDirectory(atPath: plan.cwd)).isEmpty, "new and empty: the repository stays behind")
+        #expect(!FileManager.default.fileExists(atPath: "/somewhere/else"))
     }
 
-    @Test func testAFolderThatIsNotARepositoryStaysBehind() async throws {
-        let plain = home.appendingPathComponent("Developer", isDirectory: true)
-        try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
-        try conversationAndMemory(cwd: plain.path)
-        let (_, plan) = try await offerAndPlan(cwd: plain.path)
-        #expect(plan.steps.isEmpty, "\(plan.steps)")
-        #expect(plan.cwd.hasPrefix(sessions + "/Claude/"))
-    }
-
-    @Test func testASessionWhoseCheckoutHasWhatItsRemoteDoesntIsRefused() async throws {
+    /// A session whose checkout has what its remote doesn't (an untracked
+    /// .env) moves all the same: nothing of the checkout comes.
+    @Test func testACheckoutWithUnsharedWorkStaysBehindAndTheMoveGoesOn() async throws {
         let app = try await repository("app")
         try conversationAndMemory(cwd: app.path)
-        // An untracked file (a .env) is never carried into the sources.
         try Data("SECRET=1\n".utf8).write(to: app.appendingPathComponent(".env"))
-        let info = SessionInfo(id: "S", agent: .claude, cwd: app.path, title: "Moving", created: 0)
-        server.sessions = [SessionRecord(info: info, process: ClaudeProcess(cwd: app.path, skipPermissions: true, resume: conversation))]
-        var ask = Envelope(type: "migration")
-        ask.session = "S"
-        let offered = await server.migrationOffer(ask)
-        let offer = try #require(offered.offer, Comment(rawValue: offered.message ?? "no offer"))
-        server.sessionFolders = SessionFolders(sessions: sessions, sources: sources)
-        var planning = Envelope(type: "migration")
-        planning.offer = offer
-        let planned = await server.migrationPlan(planning)
-        #expect(planned.plan == nil)
-        #expect(planned.message?.contains("commit and push it") == true, Comment(rawValue: planned.message ?? ""))
-    }
-
-    @Test func testNothingIsCopiedIntoTheSources() async throws {
-        let app = try await repository("app")
-        try conversationAndMemory(cwd: app.path)
-        let (_, plan) = try await offerAndPlan(cwd: app.path)
-        #expect(plan.steps.map(\.action) == [.clone])
-        var unpacking = Envelope(type: "migration")
-        unpacking.migration = plan.id
-        unpacking.file = MigrationFile(id: "project-0", place: "", size: 0, packed: true)
-        unpacking.steps = plan.steps
-        let refused = await server.migrationUnpack(unpacking)
-        #expect(refused.type == "error")
-        #expect(refused.message?.contains("never copied") == true, Comment(rawValue: refused.message ?? ""))
-    }
-
-    @Test func testARepositoryComesIntoTheSourcesAsAFreshCloneOfItsRemote() async throws {
-        let app = try await repository("app")
-        try conversationAndMemory(cwd: app.path)
-        let (_, plan) = try await offerAndPlan(cwd: app.path)
-        var cloning = Envelope(type: "migration")
-        cloning.migration = plan.id
-        cloning.steps = plan.steps
-        let cloned = await server.migrationClone(cloning)
-        #expect(cloned.type != "error", Comment(rawValue: cloned.message ?? ""))
-        let clone = URL(fileURLWithPath: sources + "/app", isDirectory: true)
-        #expect(FileManager.default.fileExists(atPath: clone.appendingPathComponent("main.swift").path))
-        let branch = await ProjectSurvey.git(["rev-parse", "--abbrev-ref", "HEAD"], in: clone.path)
-        #expect(branch == "main", "the session's branch")
-    }
-
-    @Test func testGitHubOverSSHIsClonedOverHTTPS() {
-        #expect(VisorServer.overHTTPS("git@github.com:AttilaTheFun/visor.git") == "https://github.com/AttilaTheFun/visor.git")
-        #expect(VisorServer.overHTTPS("ssh://git@github.com/AttilaTheFun/visor") == "https://github.com/AttilaTheFun/visor")
-        #expect(VisorServer.overHTTPS("https://github.com/AttilaTheFun/visor.git") == "https://github.com/AttilaTheFun/visor.git")
+        let (offer, plan) = try await offerAndPlan(cwd: app.path)
+        let moved = try await finish(offer, plan)
+        #expect((try FileManager.default.contentsOfDirectory(atPath: moved.info.cwd)).isEmpty)
+        #expect(FileManager.default.fileExists(atPath: app.appendingPathComponent(".env").path), "left where it was")
     }
 
     @Test func testAMemoryAlreadyThereIsNeverOverwritten() async throws {

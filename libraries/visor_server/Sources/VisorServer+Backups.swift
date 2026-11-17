@@ -3,17 +3,26 @@
 // (VisorServer+Migration.swift), with a folder in the middle, to keep
 // sessions through an update that might lose them. A backup writes, for
 // each session, what a move would carry — the agent's own files for its
-// conversation (to its last whole line), and, asked for, the projects a
-// move would copy rather than clone — beside the session as a move offers
+// conversation (to its last whole line) and Claude's memory, never a
+// project (Logan, 17 Nov: as a move) — beside the session as a move offers
 // it. A restore puts back what is missing here and leaves what is here: a
 // conversation file at least as long as the one kept stays (a shorter one
-// is set aside, never removed), a session still here is left as it is, and
-// one that is gone is started again under its own id on the same
-// conversation.
+// is set aside, never removed), a memory there stays, a session still here
+// is left as it is, and one that is gone is started again under its own
+// id on the same conversation, in its folder (made empty when it is gone
+// too). A backup may come from another computer, or be changed where it
+// lies, so a restore holds it to what a move takes
+// (VisorServer+MigrationContainment): the offer checked, and every archive
+// checked and walked before anything is moved into place. An older
+// backup's project archives are left out, said in the log.
 //
 //     <folder>/backup.json             what it holds (SessionBackup)
 //     <folder>/<session>/offer.json    the session, as a move offers it
 //     <folder>/<session>/<file>        its files (backupName)
+//
+// <session> is the id as SessionPathName names it (itself, for a UUID), so
+// an id of `.` or `..` never names the backup's folder or its parent, which
+// a failed item's folder is removed as.
 
 import Foundation
 import VisorAgent
@@ -36,7 +45,7 @@ extension VisorServer {
                 reply = listed
             case ("POST", 1):
                 let folder = body.path.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
-                reply = await backUp(body.sessionIDs, projects: body.projects ?? false, to: folder)
+                reply = await backUp(body.sessionIDs, to: folder)
             case ("POST", 2) where parts[1] == "restore":
                 guard let path = body.path, !path.isEmpty else { return respond(HTTPResponse(400, Envelope.error("Which backup (path)?").encoded())) }
                 reply = await restore(from: URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true), only: body.sessionIDs)
@@ -52,7 +61,7 @@ extension VisorServer {
     /// Backs up the sessions named (every one not archived, when none) to
     /// `folder` (a new one under backupsFolder, when none): the backup, with
     /// what became of each.
-    func backUp(_ ids: [String]?, projects: Bool, to chosen: URL?) async -> Envelope {
+    func backUp(_ ids: [String]?, to chosen: URL?) async -> Envelope {
         let now = Date()
         let folder = chosen ?? Self.backupsFolder.appendingPathComponent(Self.backupStamp(now), isDirectory: true)
         let files = FileManager.default
@@ -67,7 +76,7 @@ extension VisorServer {
         let chosenRecords = ids.map { wanted in sessions.filter { wanted.contains($0.info.id) } } ?? sessions.filter { !$0.info.archived }
         var items: [SessionBackupItem] = []
         for record in chosenRecords {
-            items.append(await backUp(record, projects: projects, into: folder.appendingPathComponent(record.info.id, isDirectory: true)))
+            items.append(await backUp(record, into: folder.appendingPathComponent(SessionPathName.of(record.info.id), isDirectory: true)))
         }
         let backup = SessionBackup(path: folder.path, created: now.timeIntervalSince1970, from: hostName, sessions: items,
                                    size: Self.folderSize(folder))
@@ -83,13 +92,13 @@ extension VisorServer {
     }
 
     /// One session into its own folder of the backup: its offer and its
-    /// files (and the projects a move would copy, when asked).
-    private func backUp(_ record: SessionRecord, projects: Bool, into folder: URL) async -> SessionBackupItem {
+    /// files.
+    private func backUp(_ record: SessionRecord, into folder: URL) async -> SessionBackupItem {
         let item = { (outcome: String, kept: Bool) in SessionBackupItem(id: record.info.id, title: record.info.title, outcome: outcome, kept: kept) }
         guard let resume = record.process.resumeID, !resume.isEmpty else { return item("Not backed up: it has no conversation yet.", false) }
         let files = FileManager.default
         try? files.createDirectory(at: folder, withIntermediateDirectories: true)
-        var carried: (offer: MigrationOffer, urls: [String: URL])
+        let carried: (offer: MigrationOffer, urls: [String: URL])
         switch await offer(of: record, resume: resume, token: "backup", packingInto: folder) {
         case .success(let made): carried = made
         case .failure(let failure):
@@ -108,28 +117,13 @@ extension VisorServer {
                 return item("Not backed up: \(problem)", false)
             }
         }
-        // The projects a move would copy rather than clone, when asked:
-        // packed as a move packs them (what git tracks, and its .git).
-        var missed: [String] = []
-        if projects {
-            for (index, project) in carried.offer.projects.enumerated() where project.isRepository && (project.remote == nil || project.unshared) {
-                let file = MigrationFile(id: "project-\(index)", place: "", size: 0, packed: true)
-                let archive = folder.appendingPathComponent(Self.backupName(of: file), isDirectory: false)
-                if await ProjectSurvey.pack(project.path, into: archive) != nil {
-                    try? files.removeItem(at: archive)
-                    missed.append(project.path)
-                    continue
-                }
-                carried.offer.files.append(MigrationFile(id: file.id, place: "", size: Self.fileSize(archive), packed: true))
-            }
-        }
         do {
             try Self.write(carried.offer.json, to: folder.appendingPathComponent("offer.json", isDirectory: false))
         } catch {
             try? files.removeItem(at: folder)
             return item("Not backed up: \(error.localizedDescription)", false)
         }
-        return item(missed.isEmpty ? "Backed up." : "Backed up, but not \(missed.joined(separator: ", ")): it could not be packed.", true)
+        return item("Backed up.", true)
     }
 
     /// The backups kept in backupsFolder, newest first.
@@ -162,7 +156,7 @@ extension VisorServer {
         backup.path = folder.path
         var items: [SessionBackupItem] = []
         for item in backup.sessions where item.kept && (ids?.contains(item.id) ?? true) {
-            items.append(await restore(item, from: folder.appendingPathComponent(item.id, isDirectory: true), made: backup.created))
+            items.append(await restore(item, from: folder.appendingPathComponent(SessionPathName.of(item.id), isDirectory: true), made: backup.created))
         }
         backup.sessions = items
         Self.log("restored from \(folder.path): " + items.map { "\($0.title) (\($0.id)): \($0.outcome)" }.joined(separator: "; "))
@@ -173,39 +167,48 @@ extension VisorServer {
     }
 
     /// One session put back: its conversation's files where missing or
-    /// shorter, its projects where missing, and the session itself when it
-    /// is gone.
+    /// shorter, its memory where there is none, its folder where it is
+    /// gone, and the session itself when it is gone.
     private func restore(_ item: SessionBackupItem, from folder: URL, made: Double) async -> SessionBackupItem {
         var result = item
         let files = FileManager.default
         guard let data = files.contents(atPath: folder.appendingPathComponent("offer.json").path),
-              let offer = MigrationOffer(json: parseJSON(String(decoding: data, as: UTF8.self)) ?? .null) else {
+              let stored = MigrationOffer(json: parseJSON(String(decoding: data, as: UTF8.self)) ?? .null) else {
             result.outcome = "Not restored: its files are not in the backup."
             return result
         }
-        let home = SessionCatalog.home.path
-        let cwd = Self.path(offer.session.cwd, from: offer.home, to: home)
+        // A backup from before 0.61 may hold projects packed beside the
+        // agent's files: left out, as a move leaves them.
+        let (offer, projects) = Self.agentFilesOnly(stored)
+        if !projects.isEmpty {
+            Self.log("restore of \(offer.session.title) left out \(projects.map { Self.backupName(of: $0) }.joined(separator: ", ")): "
+                + "projects an older backup packed; a backup carries the agent's own files only")
+        }
+        // A backup may come from another computer: held to what a move takes.
+        if let problem = Self.unsafeOffer(offer) {
+            result.outcome = "Not restored: \(problem)"
+            return result
+        }
+        guard offer.session.id == item.id else {
+            result.outcome = "Not restored: its files are of another session, \(offer.session.id)."
+            return result
+        }
+        // Its folder: the server's own for the session, where it keeps one;
+        // else where it was, under this home folder.
+        let cwd = sessionFolders?.folder(agent: offer.session.agent, id: offer.session.id)
+            ?? Self.path(offer.session.cwd, from: offer.home, to: SessionCatalog.home.path)
         var put: [String] = []
-        // Its projects first: the session's own folder must be there before
-        // its agent starts in it.
-        for (index, project) in offer.projects.enumerated() {
-            let path = Self.path(project.path, from: offer.home, to: home)
-            guard !files.fileExists(atPath: path) else { continue }
-            if let file = offer.files.first(where: { $0.id == "project-\(index)" }) {
-                try? files.createDirectory(atPath: path, withIntermediateDirectories: true)
-                if let problem = await Self.unpack(folder.appendingPathComponent(Self.backupName(of: file)), into: URL(fileURLWithPath: path)) {
-                    result.outcome = "Not restored: could not unpack \(path): \(problem)"
-                    return result
-                }
-                put.append(path)
-            } else if index == 0 {
-                try? files.createDirectory(atPath: path, withIntermediateDirectories: true)
-                put.append(path + " (made empty)")
-            }
+        // What each packed file unpacked to, which counts against the
+        // restore's total in its place for what is unpacked after it.
+        var landed: [String: Int] = [:]
+        // The folder first: the agent starts in it.
+        if !files.fileExists(atPath: cwd) {
+            try? files.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+            put.append(cwd + " (made empty)")
         }
         for file in offer.files where !file.place.isEmpty {
             let kept = folder.appendingPathComponent(Self.backupName(of: file), isDirectory: false)
-            guard let destination = SessionCatalog.destination(of: file.place, agent: offer.session.agent, cwd: cwd) else {
+            guard let destination = SessionCatalog.destination(of: file.place, agent: offer.session.agent, cwd: cwd, resume: offer.resumeID) else {
                 result.outcome = "Not restored: nowhere to put \(file.place)."
                 return result
             }
@@ -213,10 +216,13 @@ extension VisorServer {
             if file.packed {
                 // A folder (subagents' records): put back only when gone.
                 guard !files.fileExists(atPath: destination.path) else { continue }
-                if let problem = await Self.unpack(kept, into: destination.deletingLastPathComponent()) {
+                let into = destination.deletingLastPathComponent()
+                let limits = unpackLimits(file, of: offer.files, landed: landed, in: into)
+                if let problem = await Self.unpack(kept, into: into, only: destination.lastPathComponent, limits: limits) {
                     result.outcome = "Not restored: could not unpack \(file.place): \(problem)"
                     return result
                 }
+                landed[file.id] = Self.unpackedBytes(destination)
                 put.append(destination.lastPathComponent)
                 continue
             }
@@ -234,6 +240,12 @@ extension VisorServer {
             }
             put.append(destination.lastPathComponent)
         }
+        // Claude's memory, where the folder's project has none.
+        if let memory = offer.files.first(where: { $0.id == Self.memoryFileID }),
+           await Self.putMemory(folder.appendingPathComponent(Self.backupName(of: memory), isDirectory: false), of: offer.session.title, cwd: cwd,
+                                limits: unpackLimits(memory, of: offer.files, landed: landed, in: Self.memoryProject(cwd))) {
+            put.append("memory")
+        }
         if let here = session(offer.session.id) {
             result.outcome = put.isEmpty ? "Here already: left as it is."
                 : "Here already; put back what it was missing: \(put.joined(separator: ", "))."
@@ -249,6 +261,16 @@ extension VisorServer {
         }
         result.outcome = "Restored."
         return result
+    }
+
+    /// The offer without the projects a backup from before 0.61 packed
+    /// beside the agent's files (`project-<n>`, with no place), and those
+    /// projects. Anything else stays, for the offer's checks to judge.
+    static func agentFilesOnly(_ offer: MigrationOffer) -> (offer: MigrationOffer, projects: [MigrationFile]) {
+        let isProject = { (file: MigrationFile) in file.place.isEmpty && file.id.hasPrefix("project-") }
+        var agents = offer
+        agents.files = offer.files.filter { !isProject($0) }
+        return (agents, offer.files.filter(isProject))
     }
 
     // MARK: Files
@@ -287,13 +309,6 @@ extension VisorServer {
             return "could not copy \(source.path): \(error.localizedDescription)"
         }
         return left == 0 ? nil : "\(source.path) is shorter than it was"
-    }
-
-    /// A gzipped tar unpacked into `folder`.
-    static func unpack(_ archive: URL, into folder: URL) async -> String? {
-        let tar = ToolPath.resolve("tar") ?? "/usr/bin/tar"
-        guard let result = await Command.output(tar, ["-xzf", archive.path, "-C", folder.path], errors: true) else { return "tar could not be started" }
-        return result.status == 0 ? nil : result.text
     }
 
     static func write(_ json: JSONValue, to url: URL) throws {

@@ -19,7 +19,7 @@ AWAY="${2:-150}"
 OUT="$(mktemp -d)/return"
 mkdir -p "$OUT"
 API=http://127.0.0.1:7433/api
-PW="${VISOR_TOKEN:-$(security find-generic-password -s com.LoganShire.VisorServer.macOS -a password -w 2>/dev/null || true)}"
+PW="${VISOR_ADMIN_TOKEN:?VISOR_ADMIN_TOKEN is unset: give the server's admin token. A session's own VISOR_TOKEN is for its own actions only.}"
 CODE_TEXT="${VISOR_PROBE_CODE:-$(curl -s -H "Authorization: Bearer $PW" $API/code | python3 -c 'import json,sys; print(json.load(sys.stdin)["text"])')}"
 HOST="$(python3 -c 'import json,sys,base64; t=sys.argv[1]; t+="="*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t))["host"])' "$CODE_TEXT")"
 SIM_NAME="BAZEL_TEST_iPhone 17_27.2"

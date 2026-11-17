@@ -74,6 +74,17 @@ public struct ServerCommand {
                    sessions' messages on their disk; `keep-messages off`
                    asks them to hold only the pages they show, in memory,
                    and to ask again for those they let go of.
+          admin-token
+                   Asked of the running server over its socket: `admin-token`
+                   makes the first one where the server keeps it (the
+                   menu bar app's) and there is none, shown once;
+                   `admin-token rotate` replaces $VISOR_ADMIN_TOKEN, shown
+                   once; `admin-token generate` prints a fresh one and keeps
+                   it nowhere, for this server's VISOR_ADMIN_TOKEN.
+          keys     `keys rotate` makes a new signing key for the agents'
+                   tokens, keeping the one before for a day; `keys rotate
+                   --drop-previous` drops every other key at once, and every
+                   agent's token with it (on a Mac, the menu bar's alone).
 
         Options for run and start:
           --port <n>   The port, for the socket and the REST side alike (7433).
@@ -81,17 +92,24 @@ public struct ServerCommand {
                        Every interface (the LAN and a VPN), or this computer alone.
           --password-file <file>
                        The password, read from a file (a container's secret).
-          --sessions-dir <folder> [--sources-dir <folder>]
+          --admin-token-file <file>|-
+                       The admin token, read from a file or (run only) standard
+                       input; never on the command line. Its hash is held in
+                       memory alone. Without it (or VISOR_ADMIN_TOKEN), there
+                       is none: admin REST takes the password and the socket.
+          --sessions-dir <folder>
                        A folder of its own for each session, new or moved
                        here: <folder>/Claude/<id> (Codex/, OpenRouter/),
-                       whatever folder a client asks for; and where a moved
-                       session's repositories go, by name.
+                       whatever folder a client asks for. (--sources-dir is
+                       taken and not used since 0.61: a moved session brings
+                       no repositories.)
           --proxy <url> --proxy-token-file <file> --mcp <name>,…
                        The proxy its pushes go through (<url>/apns/…) and the
                        MCP servers of it its agents are given (<url>/mcp/<name>),
                        with its token for the proxy; kept from then on.
         Each also from the environment, the arguments winning: VISOR_PORT,
-        VISOR_LISTEN, VISOR_PASSWORD_FILE, VISOR_FRONT, VISOR_PROXY,
+        VISOR_LISTEN, VISOR_PASSWORD_FILE, VISOR_ADMIN_TOKEN (the token
+        itself), VISOR_FRONT, VISOR_PROXY,
         VISOR_PROXY_TOKEN_FILE, VISOR_MCP, VISOR_SESSIONS_DIR, VISOR_SOURCES_DIR. GET /api/health answers without
         credentials while the server does.
           --log <file> Where its lines go (start: visor-server.log in its folder).
@@ -149,6 +167,8 @@ public struct ServerCommand {
             case "standalone": try standalone(rest.first)
             case "front": front(Array(rest))
             case "keep-messages": try keepMessages(rest.first)
+            case "admin-token": try await adminToken(rest)
+            case "keys": try await keys(rest)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")
             }

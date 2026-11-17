@@ -2,9 +2,9 @@
 // WebSocket answer, the heartbeat is answered, and a throwaway session is started, followed and
 // ended — nothing is sent to it, so no agent runs. What a Linux or Windows server is first tried
 // with; QUIT=1 then stops the server through /api/quit, as `visor-server stop` does.
-//   VISOR_PORT=7633 VISOR_TOKEN=<password> node tools/probes/server.mjs
+//   VISOR_PORT=7633 VISOR_ADMIN_TOKEN=<admin token or password> node tools/probes/server.mjs
 import http from 'node:http';
-const PORT = Number(process.env.VISOR_PORT ?? 7533), PW = process.env.VISOR_TOKEN ?? 'staging';
+const PORT = Number(process.env.VISOR_PORT ?? 7533), PW = process.env.VISOR_ADMIN_TOKEN || (() => { console.error('VISOR_ADMIN_TOKEN is unset: give the server\'s admin token (or a staging server\'s password). A session\'s own VISOR_TOKEN is for its own actions only.'); process.exit(2); })();
 const t0 = Date.now(); const log = (...a) => console.log(((Date.now() - t0) / 1000).toFixed(2).padStart(6), ...a);
 const failures = []; const check = (what, ok) => { log(what + ':', ok); if (!ok) failures.push(what); };
 const rest = (method, path, body) => new Promise((resolve, reject) => {

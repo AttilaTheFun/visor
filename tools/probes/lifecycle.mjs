@@ -1,6 +1,6 @@
 // Lifecycle check on the staging server: interrupt mid-turn, carry on, end.
 import http from 'node:http';
-const PORT = Number(process.env.VISOR_PORT ?? 7533), PW = process.env.VISOR_TOKEN ?? 'staging';
+const PORT = Number(process.env.VISOR_PORT ?? 7533), PW = process.env.VISOR_ADMIN_TOKEN || (() => { console.error('VISOR_ADMIN_TOKEN is unset: give the server\'s admin token (or a staging server\'s password). A session\'s own VISOR_TOKEN is for its own actions only.'); process.exit(2); })();
 const AGENT = process.env.AGENT ?? 'claude';
 const id = crypto.randomUUID().toUpperCase();
 const t0 = Date.now(); const log = (...a) => console.log(((Date.now() - t0) / 1000).toFixed(2).padStart(6), ...a);

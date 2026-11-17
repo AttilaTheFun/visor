@@ -17,12 +17,24 @@ public final class KeychainSecrets: SecretStore {
     }
 
     public func get(_ key: String) -> String? {
+        guard case .found(let value) = lookup(key) else { return nil }
+        return value
+    }
+
+    /// Absent only for errSecItemNotFound: any other failure (the keychain
+    /// locked, or refusing this build) is unreadable, not absent.
+    public func lookup(_ key: String) -> SecretLookup {
         var query = query(key)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
-        return String(decoding: data, as: UTF8.self)
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return .absent }
+        guard status == errSecSuccess else {
+            return .unreadable("keychain error \(status): \(SecCopyErrorMessageString(status, nil).map { $0 as String } ?? "unknown")")
+        }
+        guard let data = result as? Data else { return .unreadable("the keychain item holds no data") }
+        return .found(String(decoding: data, as: UTF8.self))
     }
 
     public func set(_ key: String, _ value: String?) {

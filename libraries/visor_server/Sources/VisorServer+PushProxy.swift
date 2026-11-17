@@ -26,12 +26,9 @@ extension VisorServer {
 
     /// `PUT /api/push-proxy {url, token?}`: the proxy, or none (an empty
     /// url, which forgets the token too). A token sent is kept with the
-    /// secrets; none sent keeps the one kept. Not with an agent's token: an
-    /// agent that could move the proxy could send the pushes anywhere.
+    /// secrets; none sent keeps the one kept. Never with an agent's token (authorized):
+    /// an agent that could move the proxy could send the pushes anywhere.
     func restSetPushProxy(_ call: RESTCall) -> HTTPResponse {
-        if !call.request.trusted, isAgentToken(call.request.authorization) {
-            return HTTPResponse(403, Envelope.error("An agent can't set this computer's push proxy.").encoded())
-        }
         guard let body = parseJSON(call.request.body), let url = body["url"].string else {
             return HTTPResponse(400, Envelope.error("Send {\"url\": …, \"token\": …}.").encoded())
         }

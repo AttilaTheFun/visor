@@ -48,9 +48,9 @@ extension VisorDriver {
             // Kept beside the sessions, so a restart keeps runners' claims and
             // the moved sessions their agents carry on (JobQueue+Store).
             let file = HostFolders.dataFolder.appendingPathComponent("jobs.json", isDirectory: false)
-            // Its agents' tokens with the server's secrets: never in a file.
-            let jobs = JobQueue(dispatcherURL: url, driverURL: url, containerURL: containerURL, harness: harness, file: file,
-                                secrets: VisorServer.secrets)
+            // Its agents' tokens are minted with the server's signing keys
+            // once it is served (no call is answered before then).
+            let jobs = JobQueue(dispatcherURL: url, driverURL: url, containerURL: containerURL, harness: harness, file: file)
             self.jobs = jobs
             let (host, port, url, containerURL) = (host, port, url, containerURL)
             serving = Task.detached { [self] in
@@ -80,6 +80,8 @@ extension VisorDriver {
             listen()
             guard self.server == nil, let jobs else { return }
             server.jobs = jobs
+            jobs.tokens = server.agentTokens
+            jobs.liveSession = { [weak server] id in server?.session(id).map { !$0.info.archived } }
             jobs.moveFailed = { [weak server] session, resume, cwd, why in
                 server?.moveBack(session, resume: resume, cwd: cwd, why: "the move to a runner failed: \(why)")
             }
