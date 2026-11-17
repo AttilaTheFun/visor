@@ -26,6 +26,9 @@ struct StoredSession: Codable {
     var notice: String?
     /// The files beside each queued message (`info.queued`).
     var queuedImages: [[String]]?
+    /// Where each queued message came from (`info.queued`): nil in a file
+    /// from before it was kept, when each is told by its words.
+    var queuedOrigins: [TurnOrigin]?
     /// The agent's running total as it last reported it.
     var reportedUsage: SessionUsage?
     /// The agent's host, when the agent was left running under one for the
@@ -56,7 +59,7 @@ struct StoredSession: Codable {
 
     init(info: SessionInfo, entries: [TranscriptEntry], resumeID: String?, shape: Int?,
          interrupted: Bool? = nil, agentPID: Int32? = nil, shownPrompts: [String]? = nil, notice: String? = nil,
-         queuedImages: [[String]]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil,
+         queuedImages: [[String]]? = nil, queuedOrigins: [TurnOrigin]? = nil, reportedUsage: SessionUsage? = nil, host: StoredHost? = nil,
          head: String? = nil, leaf: String? = nil, otherBranch: String? = nil, branchKept: Bool? = nil,
          fork: PendingFork? = nil, watchedSubagents: [String]? = nil, closedSubagents: [String]? = nil, mcpSwitched: [String: Bool]? = nil,
          mailbox: Mailbox? = nil, driven: Bool? = nil, move: AgentJobMove? = nil) {
@@ -69,6 +72,7 @@ struct StoredSession: Codable {
         self.shownPrompts = shownPrompts
         self.notice = notice
         self.queuedImages = queuedImages
+        self.queuedOrigins = queuedOrigins
         self.reportedUsage = reportedUsage
         self.host = host
         self.head = head
@@ -97,6 +101,7 @@ struct StoredSession: Codable {
         shownPrompts = try c.decodeIfPresent([String].self, forKey: .shownPrompts)
         notice = try c.decodeIfPresent(String.self, forKey: .notice)
         queuedImages = try c.decodeIfPresent([[String]].self, forKey: .queuedImages)
+        queuedOrigins = (try? c.decodeIfPresent([TurnOrigin].self, forKey: .queuedOrigins)) ?? nil
         reportedUsage = try c.decodeIfPresent(SessionUsage.self, forKey: .reportedUsage)
         host = try c.decodeIfPresent(StoredHost.self, forKey: .host)
         head = try c.decodeIfPresent(String.self, forKey: .head)

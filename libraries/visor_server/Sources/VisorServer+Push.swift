@@ -9,7 +9,9 @@
 // a word (working, waiting, goal, idle) and when, so the device can bring
 // its widget up to date without opening the app. A change of state that
 // is not worth a notification — a turn beginning — goes as a silent push
-// with the same data. Nothing the agent or the user said goes to Apple.
+// with the same data, as does one a session doesn't tell (its
+// notifications switched off, or a turn of mail ending: SessionInfo+
+// Notifications). Nothing the agent or the user said goes to Apple.
 //
 // A computer with no key of its own (a Linux server, one in a container)
 // sends its pushes through a push proxy that holds the key and signs them
@@ -99,25 +101,33 @@ extension VisorServer {
             guard let old else { continue }
             let name = Self.pushName(for: info)
             var said = false
-            if state.waiting, !old.waiting {
+            // An approval or a question is told whatever the turn came
+            // from; a turn's end (finished, failed, a goal met) only for a
+            // turn of the person's or the server's, never one of mail. A
+            // session switched off tells nothing (SessionInfo+Notifications).
+            if state.waiting, !old.waiting, info.tellsApprovals {
                 let asked = info.pendingApproval?.questions?.first.map { "Asks: " + $0.question }
                 push(name, asked ?? "Waiting for approval", session: info.id, kind: "waiting", status: state.status)
                 said = true
             }
             if state.failed, !old.failed {
-                push(name, "Stopped with an error", session: info.id, kind: "failed", status: state.status)
-                said = true
+                if info.tellsTurnEnd {
+                    push(name, "Stopped with an error", session: info.id, kind: "failed", status: state.status)
+                    said = true
+                }
             } else if let goal = old.goal, state.goal == nil {
                 // Met, not cleared by the user: the latest goal row is a met one.
-                if record.goalWasMet(goal) {
+                if record.goalWasMet(goal), info.tellsTurnEnd {
                     let taken = old.goalSince.map { Date().timeIntervalSince1970 - $0 }
                     push(name, "Goal achieved" + (taken.map { " in " + Self.duration($0) } ?? ""), session: info.id, kind: "goal",
                          status: state.status)
                     said = true
                 }
             } else if old.busy, !state.busy, !state.waiting {
-                push(name, "Turn finished", session: info.id, kind: "turn", status: state.status)
-                said = true
+                if info.tellsTurnEnd {
+                    push(name, "Turn finished", session: info.id, kind: "turn", status: state.status)
+                    said = true
+                }
             }
             // A change nothing was said about (a turn beginning, a goal
             // set): the state alone, silently, for the widget.

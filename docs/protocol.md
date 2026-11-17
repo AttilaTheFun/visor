@@ -187,6 +187,7 @@ under `/api`.
 | `POST /sessions/{id}/stopAgent` `…/startAgent` | | same: a running agent is ended (`stopping`, then `stopped`) and kept so, through a launch of the server too, its turn in flight cut short and not carried on; what is sent meanwhile waits in `queued`. A stopped one is started (`starting`, then `running`, its process up at once) and what waited goes over. Anything else is left as it is |
 | `POST /sessions/{id}/keepBranch` `…/continueBranch` | | same: when the conversation went on elsewhere (`otherBranch` in the session's info: the other branch's latest prompt), keep to the branch shown — the next message carries it on, resumed there with `--resume-session-at` — or continue the newest branch: the chat is read again from it (a new generation) and the agent is made again, resuming there |
 | `POST /sessions/{id}/permissions` | `skipPermissions` | same |
+| `POST /sessions/{id}/notifications` | `on` | same: the session's notifications on or off (its info's `notifications`), for every device. From 0.61 |
 | `POST /sessions/{id}/settings` | `model`, `effort` | same |
 | `POST /sessions/{id}/approve` | `id`, `allow`, `answers` | same |
 | `POST /sessions/{id}/rename` | `title` | same |
@@ -309,6 +310,7 @@ and `subscribe` and stream the rest.
 | `signIn` | `session`, `text` | The code the sign-in page showed (`<code>#<state>`), for the session's sign-in (`/login`). `send` of `/login` (with `claude auth login`'s options, `--console`, `--sso`; `/login cancel` to give up) to a Claude session starts one beside the agent, which takes no turn: the session's state (`ephemeral`) carries `signIn`, the page to sign in at, until it ends; signed in, the agent is made again on the new sign-in, and a notice says how it ended. Also `POST /sessions/{id}/signIn`. Visor lists `login` among a Claude session's commands. |
 | `unsubscribe` | `session` | The client left the session: nothing more of it is sent until it subscribes again. A server before 0.33 answers `error` "Unknown message unsubscribe", which a client lets pass. |
 | `permissions` | `session`, `skipPermissions` | Switch the session between auto-approving and manual. On the computer itself auto-approving is Claude Code's own auto mode and Codex in its workspace sandbox, never a bypass; in a container (the server's own, `inContainer`) a session always skips its prompts (Claude's bypassPermissions, Codex's full access), and an ask for manual is refused (from 0.50; before, auto was a bypass everywhere). Codex applies it next turn; Claude's process restarts (resumed by id) once the current turn ends. `sessions` follows. |
+| `notifications` | `session`, `on` | Switch the session's notifications on or off, the session's own setting, kept with it in sessions.json and the same on every device. Off, its server sends it no push (a turn finished, failed or a goal achieved, an approval or a question waiting) but the widget's silent state push, which goes on, and clients make no notifications of their own for it; its list row, preview, unread mail and activity update as ever. `sessions` follows. From 0.61; a server before it answers `error` "Unknown message notifications". |
 | `settings` | `session`, `model`, `effort` | Change the model and/or effort (nil keeps the current one). Codex applies it next turn; Claude restarts (resumed by id) once idle. `sessions` follows. |
 | `approve` | `session`, `id`, `allow`, `answers` | Answer a pending permission request (manual mode), or the agent's questions (`answers`: answer by question; several to one joined with ", "; no answers is a refusal). |
 | `archive` | `session` | End the agent gracefully (stdin closed, then terminated), keep the transcript and the agent's own session id on disk; the session lists as archived with its `resumeCommand`. |
@@ -340,7 +342,7 @@ in its store.
 | `failure` | `session`, `message` | Something went wrong; shown under the transcript until the next user turn. |
 
 `SessionInfo`: `id`, `agent` (`claude`, `codex`, `openrouter`), `cwd`, `title` (given, or the agent's name numbered within the folder),
-`busy`, `ended`, `skipPermissions`, `model`, `effort` (nil: the provider's / model's default; Claude fills `model` with what it actually runs), `archived`, `resumeCommand` (once the agent's own id is known: `cd <cwd> && claude --resume <id>` / `codex resume <id>`), `created`, `agentState` (where its agent is, and so what may be done with it: `starting` and `stopping`, nothing; `running`, `stopAgent` or `restartAgent`; `stopped`, `startAgent`. An archived session's is `stopped`; absent from a server of 0.34 or before, which offers `restartAgent` alone), `contextUsed`/`contextLimit` (the last request's tokens and the model's window), `usage` (what the session has used in all: `input` tokens, cache reads included, `cached`, `output`, and `cost` in dollars where the agent prices its turns — Claude Code at API prices even on a subscription, the openrouter CLI at OpenRouter's), `container` (from a server of 0.49 or before, when its agent ran in a Linux container of its own on the computer: `id`, `image` and `size`; never set by a server of 0.50 or later, which runs a session saved with one on the computer, and still read by clients), `inContainer` (true when its agent runs in a container the server didn't make for it, the server's own, shared by every session there: a co-tenant container), `parent` and `origin` (a fork, a branch or a subagent's conversation gone on with: the session it was made from, and how; a client lists it under that session), `side` (its side questions, each `id`, `question`, `answer` once answered or `failure`, and `asked`), `mcp` (the MCP servers its computer passes on to agents, each `name` and whether this session has it, `on`). Every session (live or archived) persists in `~/Library/Application Support/Visor/sessions.json` on the host, so a relaunch of the menu bar app brings them back idle, resumable by the agent's own id. `TranscriptEntry`: `id`, `role`
+`busy`, `ended`, `skipPermissions`, `model`, `effort` (nil: the provider's / model's default; Claude fills `model` with what it actually runs), `archived`, `resumeCommand` (once the agent's own id is known: `cd <cwd> && claude --resume <id>` / `codex resume <id>`), `created`, `agentState` (where its agent is, and so what may be done with it: `starting` and `stopping`, nothing; `running`, `stopAgent` or `restartAgent`; `stopped`, `startAgent`. An archived session's is `stopped`; absent from a server of 0.34 or before, which offers `restartAgent` alone), `contextUsed`/`contextLimit` (the last request's tokens and the model's window), `usage` (what the session has used in all: `input` tokens, cache reads included, `cached`, `output`, and `cost` in dollars where the agent prices its turns — Claude Code at API prices even on a subscription, the openrouter CLI at OpenRouter's), `container` (from a server of 0.49 or before, when its agent ran in a Linux container of its own on the computer: `id`, `image` and `size`; never set by a server of 0.50 or later, which runs a session saved with one on the computer, and still read by clients), `inContainer` (true when its agent runs in a container the server didn't make for it, the server's own, shared by every session there: a co-tenant container), `parent` and `origin` (a fork, a branch or a subagent's conversation gone on with: the session it was made from, and how; a client lists it under that session), `side` (its side questions, each `id`, `question`, `answer` once answered or `failure`, and `asked`), `mcp` (the MCP servers its computer passes on to agents, each `name` and whether this session has it, `on`), `notifications` (false when its notifications are switched off; absent is on, as from a server before 0.61), `turnOrigin` (where its latest turn — the one running, or the last — came from: `user`, a client's `send`; `mail`, another session's message or the inbox's notice; `system`, the server's own nudge or a turn the agent began itself, a goal's or a loop's; absent before its first turn, and from a server before 0.61, which a client takes as `user`), `preview` and `updated` (the start of its latest message, and when it came: the person's own, or the agent's latest reply, never mail — Turns of mail, below). Every session (live or archived) persists in `~/Library/Application Support/Visor/sessions.json` on the host, so a relaunch of the menu bar app brings them back idle, resumable by the agent's own id. `TranscriptEntry`: `id`, `role`
 (`user`/`assistant`/`tool`), `text`, `activities`, `toolName` — the shape of
 AgentUI's `TranscriptMessage`, which the client maps one to one. Tool
 entries (`toolName: "tool_result"`) carry the first 400 characters of a
@@ -570,6 +572,26 @@ launch left running under its host, until it asks with `version` `"mail"` or
 its agent is made again) is handed the message as before: a new turn of its
 own, headed as above, queued while it works.
 Node must be on the PATH (as it already is for approvals).
+
+### Turns of mail
+
+The server hands an agent every input itself, and tags the turn each starts
+with where it came from (`turnOrigin` in the session's info): `user` for a
+client's `send`, `mail` for the notice above, a message handed over headed
+with its sender or beginning `@@from`, and `system` for its own nudges and a
+turn the agent begins with nothing handed to it. A message waiting in the
+queue keeps its origin (kept with the session), so the person's words sent
+during a turn of mail start a turn of their own, `user`, once it ends.
+
+A turn of mail tells the person nothing when it ends — no push and no
+client notification that it finished, failed or met a goal — and neither
+its prompt nor the agent's reply in it becomes the session's `preview`;
+nor does a reply that is itself a message to another session (`@@to`). An
+approval or a question asked during it is told as any is, and its unread
+mail, activity and state update as ever. The rows carry no origin: the
+preview passes over a turn whose prompt is in one of mail's forms (the
+notice, the header, `@@from`), up to the next prompt, so it holds for rows
+read back from the store or the agent's own file after a restart.
 
 ## Proxied MCP servers
 

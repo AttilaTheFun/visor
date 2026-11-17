@@ -82,6 +82,7 @@ extension Envelope {
         e.standalone = value["standalone"].bool
         e.keepMessages = value["keepMessages"].bool
         e.container = value["container"].bool
+        e.on = value["on"].bool
         e.resumable = value["resumable"].array?.compactMap(ResumableSession.init(json:))
         e.deviceToken = value["deviceToken"].string
         e.platform = value["platform"].string
@@ -157,6 +158,7 @@ extension Envelope {
         putBool("standalone", standalone)
         putBool("keepMessages", keepMessages)
         putBool("container", container)
+        putBool("on", on)
         if let resumable { o["resumable"] = .array(resumable.map(\.json)) }
         if let deviceToken { o["deviceToken"] = .string(deviceToken) }
         if let platform { o["platform"] = .string(platform) }

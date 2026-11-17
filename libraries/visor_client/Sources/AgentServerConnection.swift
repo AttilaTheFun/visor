@@ -203,6 +203,9 @@ public final class AgentServerConnection: Identifiable {
     /// they may not be looking: a turn finished, an agent waiting for
     /// approval, a goal done. Only for a change the server announced:
     /// the first list after connecting says what is, not what happened.
+    /// Nothing of a session whose notifications are off, and nothing of a
+    /// turn of mail ending (SessionInfo+Notifications), as its server's
+    /// pushes do.
     func notifyChanges(from before: [SessionInfo], to after: [SessionInfo]) {
         guard let notifications = VisorHost.notifications, !serverPushes else { return }
         let preferences = VisorPreferences.shared
@@ -215,7 +218,8 @@ public final class AgentServerConnection: Identifiable {
             // The server, the session and what it says: the id replaces an
             // older one, and says where to go when it is opened.
             let id = { (kind: String) in VisorNotificationID(computer: self.record.address, session: new.id, kind: kind).rawValue }
-            if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval, preferences.notifies(.waiting) {
+            if new.pendingApproval != nil, old.pendingApproval == nil, let approval = new.pendingApproval, preferences.notifies(.waiting),
+               new.tellsApprovals {
                 if let question = approval.questions?.first {
                     notifications.notify(id: id("approval"), title: "\(title) asks", body: question.question)
                 } else {
@@ -224,9 +228,9 @@ public final class AgentServerConnection: Identifiable {
                 }
             }
             if let goal = old.goal, new.goal == nil {
-                if preferences.notifies(.goal) { notifications.notify(id: id("goal"), title: "\(title): goal done", body: goal) }
+                if preferences.notifies(.goal), new.tellsTurnEnd { notifications.notify(id: id("goal"), title: "\(title): goal done", body: goal) }
             } else if old.busy, !new.busy {
-                if preferences.notifies(.turn) {
+                if preferences.notifies(.turn), new.tellsTurnEnd {
                     notifications.notify(id: id("turn"), title: "\(title) finished", body: Self.finishedBody(new.preview, prompt: prompt))
                 }
             }
@@ -1489,6 +1493,13 @@ public final class AgentServerConnection: Identifiable {
 
     public func setPermissions(_ sessionID: String, skip: Bool) {
         act(.permissions(skip: skip), on: sessionID)
+    }
+
+    /// Switches the session's notifications on or off: its server's
+    /// pushes and every device's own notifications of it. The session's
+    /// own setting, kept by its server, so every device follows.
+    public func setNotifications(_ sessionID: String, on: Bool) {
+        act(.notifications(on: on), on: sessionID)
     }
 
     public func setSettings(_ sessionID: String, model: String?, effort: String?) {

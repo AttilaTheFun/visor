@@ -31,12 +31,12 @@ extension VisorServer {
         // over as a turn beginning `@@from`, which it answers in kind.
         if marked || target.driven {
             let name = sender.sessionName.isEmpty ? sender.session : sender.sessionName
-            deliver(AgentMessageMarkers.inboundText(from: name, on: sender.serverName, body: text), to: target)
+            deliver(AgentMessageMarkers.inboundText(from: name, on: sender.serverName, body: text), to: target, origin: .mail)
         } else if target.takesMail {
             target.mailbox.receive(message)
             notifyMail(target)
         } else {
-            deliver(Self.agentMessageHeader(from: sender, to: to) + "\n\n" + text, to: target)
+            deliver(Self.agentMessageHeader(from: sender, to: to) + "\n\n" + text, to: target, origin: .mail)
         }
         saveArchive()
         broadcastSessionsSoon()
@@ -48,7 +48,7 @@ extension VisorServer {
     /// (SessionRecord.takeNextQueued).
     func notifyMail(_ target: SessionRecord) {
         guard !target.driven, target.mailbox.unread > 0, !target.info.queued.contains(where: Mailbox.isNotice) else { return }
-        deliver(Mailbox.notice(unread: target.mailbox.unread), to: target)
+        deliver(Mailbox.notice(unread: target.mailbox.unread), to: target, origin: .mail)
     }
 
     /// A session a runner's agent now runs, which has no inbox to read: the
@@ -56,7 +56,7 @@ extension VisorServer {
     /// as new ones are, and marked read (their senders told); a notice of
     /// them waiting in its queue dropped.
     func handOverInbox(_ record: SessionRecord) {
-        record.info.queued.removeAll(where: Mailbox.isNotice)
+        record.dropQueued(where: Mailbox.isNotice)
         let now = Date().timeIntervalSince1970
         var handed = 0
         while record.mailbox.unread > 0 {
@@ -64,7 +64,8 @@ extension VisorServer {
             guard !read.newlyRead.isEmpty else { break }
             for message in read.messages where read.newlyRead.contains(message.id) {
                 let name = message.from.sessionName.isEmpty ? message.from.session : message.from.sessionName
-                deliver(AgentMessageMarkers.inboundText(from: name, on: message.from.serverName, body: message.text), to: record)
+                deliver(AgentMessageMarkers.inboundText(from: name, on: message.from.serverName, body: message.text), to: record,
+                        origin: .mail)
                 if isThisServer(message.from.server) {
                     session(message.from.session)?.mailbox.update(sent: message.id, to: .read, at: now)
                 } else {

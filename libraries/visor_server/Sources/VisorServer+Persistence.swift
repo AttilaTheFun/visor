@@ -139,6 +139,10 @@ extension VisorServer {
             // kept has words and no files).
             let files = item.queuedImages ?? []
             record.queuedImages = info.queued.indices.map { $0 < files.count ? files[$0] : [] }
+            // And where each came from; from before that was kept, told by
+            // its words: mail by its form, the server's nudges by theirs.
+            let origins = item.queuedOrigins ?? []
+            record.queuedOrigins = info.queued.indices.map { $0 < origins.count ? origins[$0] : SessionRecord.origin(of: info.queued[$0]) }
             record.primePreview()
             record.held = item.agentPID != nil || item.host != nil
             if let host = item.host {

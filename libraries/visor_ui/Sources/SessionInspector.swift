@@ -1,6 +1,6 @@
-// The session's inspector, from the title: what it is, where, and the
-// ways out: its agent and model, and what it has used of its context and
-// its account's limits.
+// The session's inspector, from the title: what it is, where, whether it
+// notifies, and the ways out: its agent and model, and what it has used of
+// its context and its account's limits.
 
 import SwiftUI
 import VisorClient
@@ -65,6 +65,16 @@ struct SessionInspector: View {
                         Button { Pasteboard.string = command } label: { Label("Copy resume command", systemImage: "doc.on.doc") }
                             .accessibilityIdentifier("details-copy-resume")
                     }
+                }
+                // The session's own, kept by its computer: every device
+                // follows it. Off mutes a noisy session; its row, its
+                // preview and the widget still update.
+                Section {
+                    Toggle("Notifications", isOn: Binding(get: { session.notifications },
+                                                          set: { host.setNotifications(session.id, on: $0) }))
+                        .accessibilityIdentifier("details-notifications")
+                } footer: {
+                    Text("Off: nothing this session does is pushed or notified, on any device. Approvals still wait for you in the app.")
                 }
                 SessionUsageSection(session: session, account: host.catalog(for: session.agent)?.account)
                 SessionMailSection(host: host, session: session)
