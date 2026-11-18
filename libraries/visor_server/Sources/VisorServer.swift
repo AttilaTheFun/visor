@@ -172,6 +172,17 @@ public final class VisorServer {
     /// When each driven session's agent was last restarted for a wrapper
     /// that dialled in with an expired token (resumeAfterExpiredToken).
     var expiredTokenResumes: [String: Date] = [:]
+    /// Driven sessions moving back whose runners' agents were asked to
+    /// return their conversations, by session id (VisorServer+HandBack).
+    var handingBack: [String: PendingHandBack] = [:]
+    /// How long a move back waits for its runner's agent to begin returning
+    /// its conversation before it carries on without it: 2 minutes.
+    package var handBackWait: Duration = .seconds(120)
+    /// How long it waits for a return that has begun to end: 5 minutes,
+    /// the wrapper's own deadline for it (ConversationReturn.deadline).
+    package var handBackReceiveWait: Duration = .seconds(300)
+    /// How much a returned conversation may bring: a move's caps.
+    package var handBackLimits = HandBackLimits()
     /// The runners' own tokens, which agent_protocol's Claim asks
     /// (RunnerTokens): kept with the secrets.
     package let runnerTokens: RunnerTokens

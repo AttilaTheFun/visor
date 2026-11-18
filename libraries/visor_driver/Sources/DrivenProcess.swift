@@ -6,15 +6,18 @@
 // across the wrapper's reconnections. Its permission prompts (the agent's
 // `mcp__visor__approve`, asked by its wrapper as WrapperMessage.approval)
 // are the session's pending approval, as a prompt here is, and the
-// person's answer goes back as DriverMessage.approval.
+// person's answer goes back as DriverMessage.approval. A wrapper that said
+// protocol 2 or more in its hello takes a hand-back (DriverMessage.hand_back:
+// HandingBackProcess), which moveBack asks of it.
 
 import AgentProtocol
 import Foundation
 import VisorAgent
 import VisorProtocol
+import VisorServer
 
 @MainActor
-final class DrivenProcess: AgentProcess {
+final class DrivenProcess: HandingBackProcess {
     let events: AsyncStream<AgentEvent>
     private let continuation: AsyncStream<AgentEvent>.Continuation
     var skipPermissions = false
@@ -39,6 +42,12 @@ final class DrivenProcess: AgentProcess {
     private var answered: [(id: String, approval: AgentProtocol_V1_Approval)] = []
     /// How many answers are kept for that.
     static let answersKept = 32
+    /// What its wrapper said it understands in its latest hello
+    /// (WrapperHello.protocol): 2, a hand-back too. 0 until one has said.
+    var wrapperProtocol: Int32 = 0
+    /// Whether it was asked to hand its session back: its agent's end is
+    /// then the hand-back's, not a failure.
+    private(set) var handingBack = false
 
     init() {
         (events, continuation) = AsyncStream.makeStream()
@@ -58,6 +67,13 @@ final class DrivenProcess: AgentProcess {
     func stop() { deliver(.with { $0.stop = .init() }) }
 
     func end(within deadline: Duration) async { stop() }
+
+    var takesHandBack: Bool { wrapperProtocol >= 2 }
+
+    func handBack() {
+        handingBack = true
+        deliver(.with { $0.handBack = .init() })
+    }
 
     // MARK: - The wrapper's side
 
@@ -108,7 +124,8 @@ final class DrivenProcess: AgentProcess {
             tell(state)
         case .ended(let why):
             tell(.init())
-            continuation.yield(.failure("The agent ended: \(why)."))
+            // Handed back, its end is the move back's, which says so.
+            if !handingBack { continuation.yield(.failure("The agent ended: \(why).")) }
         case .approval(let request):
             ask(request)
         case .approvalWithdrawn(let id):

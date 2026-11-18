@@ -115,7 +115,7 @@ let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["Vis
 /// gRPC.
 let runnerPackages: [Package.Dependency] = [
     // As third_party/swift_packages pins it.
-    .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", exact: "0.4.0"),
+    .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", exact: "0.5.0"),
     .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
     .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
 ]

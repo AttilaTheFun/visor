@@ -186,6 +186,7 @@ under `/api`.
 | `POST /sessions/{id}/restartAgent` | | same: a running agent (`agentState` `running`) is ended and a new one made and started on the same conversation (`stopping`, then `starting`, then `running`); a turn it was working on is carried on by a nudge that goes first. A stopped agent is started (what a client of 0.34 or before means by it) |
 | `POST /sessions/{id}/stopAgent` `…/startAgent` | | same: a running agent is ended (`stopping`, then `stopped`) and kept so, through a launch of the server too, its turn in flight cut short and not carried on; what is sent meanwhile waits in `queued`. A stopped one is started (`starting`, then `running`, its process up at once) and what waited goes over. Anything else is left as it is |
 | `POST /sessions/{id}/keepBranch` `…/continueBranch` | | same: when the conversation went on elsewhere (`otherBranch` in the session's info: the other branch's latest prompt), keep to the branch shown — the next message carries it on, resumed there with `--resume-session-at` — or continue the newest branch: the chat is read again from it (a new generation) and the agent is made again, resuming there |
+| `POST /sessions/{id}/moveBack` | `resume`?, `cwd`? | same, once the session is back: a session moved to a runner (driven) made native again on this computer, its job let go. Its runner's agent, when its wrapper said protocol 2 or more (agent_protocol's `WrapperHello.protocol`), is asked to hand the session back (`DriverMessage.hand_back`): it ends, and returns its conversation (`AgentDriver.ReturnConversation`), which is put under this computer's key for the session's folder here, and the session resumes on it (`agentState` `stopping` meanwhile). An older wrapper is told to stop, as is one that hasn't begun returning within 2 minutes (or finished within 5 once it has), and then the session carries on from `resume`, its notice saying its turns on the runner (once its agent had begun there) weren't returned. `resume`, unless given, is the conversation known here: the runner's own when this computer has it, else the one it had before it moved, so `{}` does. `cwd`, unless given, is its folder as it is. 400 with `error` for a session that isn't driven, or whose conversation isn't known. From 0.61 |
 | `POST /sessions/{id}/permissions` | `skipPermissions` | same |
 | `POST /sessions/{id}/notifications` | `on` | same: the session's notifications on or off (its info's `notifications`), for every device. From 0.61 |
 | `POST /sessions/{id}/settings` | `model`, `effort` | same |
@@ -440,6 +441,20 @@ prompt it withdraws is cleared (`approval` with none). Its MCP server's
 other tools are answered by the driver as its session's: Visor's own
 tools, never the proxied MCP servers below, whatever the session's `mcp`
 switches say (docs/runners.md).
+
+A session moving back from a runner (`POST /sessions/{id}/moveBack`) is
+handed back by its runner's agent when its wrapper takes it (protocol 2):
+the turns it took there come back with it, its conversation's files
+returned over the driver's `ReturnConversation` with the agent's own token
+and held to a move's rules (Moving to another computer, above): only that
+conversation's own places (`projects/<key>/<session>.jsonl`, and under
+`projects/<key>/<session>/` and `projects/<key>/memory/`, its key and
+session the header's), within a move's caps on each file, all of them and
+how many, and the room free; staged, and put under this computer's key for
+the session's folder only once whole. A file already here that is shorter
+is set aside (`.before-handback-<time>`), never removed; one as long or
+longer is left as it is. Refused, nothing is written, and the session
+carries on from where it was before it moved (docs/runners.md).
 
 ### Agents' tokens
 

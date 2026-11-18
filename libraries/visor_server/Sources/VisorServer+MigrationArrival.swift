@@ -252,7 +252,7 @@ extension VisorServer {
     }
 
     /// "340 KB", "12.5 MB", "1.3 GB".
-    static func megabytes(_ bytes: Int) -> String {
+    nonisolated static func megabytes(_ bytes: Int) -> String {
         guard bytes >= 1 << 20 else { return "\(max(1, bytes >> 10)) KB" }
         let (unit, shift) = bytes >= 1 << 30 ? ("GB", 30) : ("MB", 20)
         let tenths = (bytes * 10 + (1 << (shift - 1))) >> shift
