@@ -1,10 +1,10 @@
 #!/bin/bash
 # A signed build, saved as a GitHub release's asset (docs/RELEASE_ASSETS.md):
-# sourced by sign_from_ci.sh (Applications Server's publish and promote
-# scripts are gone with it, 2026-11-15: `release_asset`, for a build a
-# server answered, stays for a repository still copying them), which calls
-# `release_asset_file` with each package Shireworks signed (or, an .apk,
-# checked, with what Shireworks answered for it). The job then
+# sourced by sign_builds.sh (Applications Server's publish and promote
+# scripts are gone, 2026-11-15: `release_asset`, for a build a server
+# answered, stays for a repository still copying them), which calls
+# `release_asset_file` with each package it signed (an .apk with what
+# aapt2 read of it, as Shireworks' signing service answered). The job then
 # attaches the folder to its release (attach_release.sh). bash, curl and
 # openssl; sha256sum or shasum.
 #

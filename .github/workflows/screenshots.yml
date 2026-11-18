@@ -2,22 +2,27 @@ name: Screenshots
 # The site's pictures (site/): the Mac client and the phone app on the
 # screenshot fixture, in the dark look, kept as this run's artifact to be
 # copied into site/images. Run by hand only (the release Mac's runner starts
-# it for a version's dossier): it leases a VM, which a pull request's CI
-# never does (docs/CI_POLICY.md in AttilaTheFun/reviews), so a change to the
-# Mac's screenshot tool is tried by running this on its branch. In a macOS
-# VM leased from Shireworks, from a runner Shireworks makes for the job
-# (visor-jit-small, a Linux container that only leases): everything Mac,
-# the build too, happens in the VM (tools/ci/mac_vm_screenshots.sh).
+# it for a version's dossier), never on a push or a pull request, so a
+# change to the Mac's screenshot tool is tried by running this on its
+# branch. On one of GitHub's own Macs (`xcode-27`, a desktop session that
+# may picture its screen), everything Mac there, the build too
+# (tools/ci/hosted_screenshots.sh), in place of the macOS VM Shireworks
+# leased for it (Logan, 15 Nov 2026: a public repository's CI on GitHub's
+# runners alone).
 on:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   pictures:
-    runs-on: [self-hosted, visor-jit-small]
-    timeout-minutes: 60
+    runs-on: xcode-27
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      # exec: the runner's cancel reaches the script's trap, which releases the VM.
-      - run: exec tools/ci/mac_vm_screenshots.sh shots
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: apple
+      - run: tools/ci/hosted_screenshots.sh shots
       - uses: actions/upload-artifact@v4
         if: always()
         with:

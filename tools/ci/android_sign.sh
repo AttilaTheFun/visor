@@ -103,7 +103,7 @@ grep -q '^Verified using v2 scheme (APK Signature Scheme v2): true' "$work/verif
 signers="$(grep -c '^Signer #[0-9]* certificate SHA-256 digest:' "$work/verify.txt" || true)"
 [ "$signers" = "1" ] || fail "the signed APK has $signers signers, not one"
 digest="$(sed -n 's/^Signer #1 certificate SHA-256 digest: *//p' "$work/verify.txt" | tr -d ': ' | tr 'A-F' 'a-f')"
-[ "$digest" = "$pin" ] || fail "the signed APK's certificate is $digest, not the pinned $pin: the key in Shireworks isn't $app's"
+[ "$digest" = "$pin" ] || fail "the signing key isn't $app's: its certificate is $digest, not the pinned $pin"
 
 mkdir -p "$(dirname "$output")"
 mv "$work/signed.apk" "$output"

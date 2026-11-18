@@ -3,8 +3,8 @@
 WebAssembly and JavaScript by their own types, and a backlog for the dozen
 runtime modules the page asks for at once (a reset one leaves it blank with
 no error). The standard library alone. snapshots.py serves it so from a
-thread; CI's blue-ios serves it so on a Mac slot beside the iOS lease's
-simulator (tools/ci/blue_ios_lease.sh):
+thread; by hand, it serves it so on a Mac slot beside an iOS lease's
+simulator (snapshots.py's VISOR_SNAPSHOT_WEB_BASE):
 
   serve_site.py <directory> <host> <port>
 """

@@ -36,14 +36,14 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
-  # On Shireworks' single-use runners (visor-jit, a Linux container): the
-  # release's asset fetched with curl, and the site packed into the
-  # `github-pages` artifact deploy-pages takes, with GNU tar as
-  # upload-pages-artifact packs it (links followed). BSD tar's `-cLf`, from
-  # when this ran on a Mac, is GNU tar's tape length: every deploy from
-  # 0.44 on failed there.
+  # On GitHub's own Ubuntu runner (a public repository's CI runs on GitHub's
+  # runners alone: Logan, 15 Nov 2026): the release's asset fetched with
+  # curl, and the site packed into the `github-pages` artifact deploy-pages
+  # takes, with GNU tar as upload-pages-artifact packs it (links followed).
+  # BSD tar's `-cLf`, from when this ran on a Mac, is GNU tar's tape length:
+  # every deploy from 0.44 on failed there.
   deploy:
-    runs-on: [self-hosted, visor-jit]
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

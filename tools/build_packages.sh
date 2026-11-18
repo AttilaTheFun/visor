@@ -3,9 +3,8 @@
 # Visor Server, Developer ID, notarized: tools/release_mac.sh). CI's
 # build job runs it on the release Mac's runner; what is done with the
 # packages then is the runner's ($PIPELINE_CI). The iPhone and iPad app is
-# no longer here: CI's alpha and release jobs build it on Linux and
-# Shireworks' signing service signs it (tools/ci/sign_from_ci.sh). The Mac
-# follows at the switch to Visor.app.
+# no longer here: CI's alpha and release jobs build it on an xcode-27 Mac
+# and sign it on Linux (tools/ci/sign_builds.sh), as they do Visor.app.
 #
 #   tools/build_packages.sh
 set -euo pipefail

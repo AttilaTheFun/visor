@@ -31,7 +31,7 @@ swift_library(
 
 # An .xctest bundle of the Apple system's tests: built anywhere (on Linux too,
 # with rules_applecross), run by hand on a Mac (`bazel test`) or by Shireworks
-# (`tools/ci/shireworks.sh xctest`). Not CI's: the rest run on Linux.
+# (`tools/shireworks/shireworks.sh xctest`). Not CI's: the rest run on Linux.
 macos_unit_test(
     name = "visor_server_tests",
     minimum_os_version = "15.0",

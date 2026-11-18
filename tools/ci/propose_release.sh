@@ -1,6 +1,6 @@
 #!/bin/bash
 # A proposal's draft release (docs/CI_POLICY.md in AttilaTheFun/reviews),
-# made by CI's alpha job once Shireworks has signed the commit's Alphas: tag
+# made by CI's alpha job once it has signed the commit's Alphas: tag
 # v<version> on the commit (named, not made: a draft's tag is made only when
 # Logan presses Release in Reviews), marked pre-release for a `prerelease`
 # run, its notes naming the Alphas and, for a `release` run, the run that
@@ -11,7 +11,7 @@
 #
 #   tools/ci/propose_release.sh prerelease|release <version> <builds.json>
 #
-# <builds.json>: the signed Alphas, as tools/ci/sign_from_ci.sh --download
+# <builds.json>: the signed Alphas, as tools/ci/sign_builds.sh --out
 # describes them (release_assets.sh): their lines name them in the notes.
 #
 #   GH_TOKEN           the job's token (contents: write)

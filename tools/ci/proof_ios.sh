@@ -1,7 +1,7 @@
 #!/bin/bash
 # The iPhone's part of the proof (ci.yml's verify), in one orientation, on
-# one of GitHub's own Macs (`xcode-27`): the app, built on Linux by the
-# proof's build job for Apple silicon's simulator with Isomer's driver in it
+# one of GitHub's own Macs (`xcode-27`): the app, built on another
+# `xcode-27` Mac by the proof's build job for Apple silicon's simulator with Isomer's driver in it
 # (--config=drive: never a release's), on an iPhone 17 of iOS 27.2 (the
 # runtime the pictures it is compared with were taken on: GitHub rolls a
 # new image out over days, and its runners' older one had iOS 27.0 alone,

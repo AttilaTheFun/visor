@@ -1,0 +1,50 @@
+# Bazel's caches for a CI job, from GitHub's cache (actions/cache), and its
+# settings (tools/ci/ci_bazel.sh setup): the repository cache (downloads)
+# and the disk cache (actions' outputs) of the job's group, ubuntu (Linux
+# and Android, built on x86_64 Ubuntu) or apple (the `xcode-27` Macs),
+# keyed by MODULE.bazel, its lock and the SwiftPM graph, the disk cache by
+# commit too, the newest of the group's restored when this commit's isn't
+# there. Only main's builds write them (.github/actions/bazel_cache_save);
+# every other job reads them, a pull request's (a fork's too) included:
+# for a pull request it is the only cache. They live in the home folder,
+# outside the checkout (Bazel 9 refuses a repository contents cache inside
+# the main repository), or where the job's VISOR_BAZEL_CACHE says.
+# BuildBuddy's remote cache too, when the job hands this its key
+# (buildbuddy-api-key, the repository's BUILDBUDDY_API_KEY secret, which
+# the workflow passes only to main's builds and the alpha and release
+# jobs): given to tools/ci/ci_bazel.sh's setup step alone, which keeps it
+# out of the checkout and the log.
+name: Bazel's cache
+description: Restores the job group's Bazel caches and writes Bazel's settings
+inputs:
+  group:
+    description: ubuntu or apple
+    required: true
+  buildbuddy-api-key:
+    description: BuildBuddy's API key (empty, as on a pull request, for GitHub's cache alone)
+    default: ""
+outputs:
+  repository-hit:
+    description: Whether the repository cache's own key was found
+    value: ${{ steps.repository.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: repository
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.VISOR_BAZEL_CACHE || '~/.cache/visor-bazel' }}/repository
+        key: bazel-repository-${{ inputs.group }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'Package.resolved') }}
+        restore-keys: bazel-repository-${{ inputs.group }}-
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.VISOR_BAZEL_CACHE || '~/.cache/visor-bazel' }}/disk
+        key: bazel-disk-${{ inputs.group }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'Package.resolved') }}-${{ github.sha }}
+        restore-keys: |
+          bazel-disk-${{ inputs.group }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'Package.resolved') }}-
+          bazel-disk-${{ inputs.group }}-
+    - name: Bazel's settings
+      shell: bash
+      env:
+        BUILDBUDDY_API_KEY: ${{ inputs.buildbuddy-api-key }}
+      run: tools/ci/ci_bazel.sh setup "${VISOR_BAZEL_CACHE:-$HOME/.cache/visor-bazel}"

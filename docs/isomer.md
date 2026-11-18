@@ -77,22 +77,20 @@ builds with the default; the tools below pass `-c opt` themselves.
 
 ## CI
 
-visor's CI (.github/workflows/ci.yml) builds blue on every pull request and
-every commit to main. Until the Mac Studio (Logan, 5 Nov 2026), Visor is
-iOS, macOS and Android, with Android the only client on Isomer: the web
-client is kept building but not run, and blue's iPhone snapshots are off.
-- `blue-web` (a Linux container of Visor's agent image leased from
-  Shireworks, tools/ci/container_blue_web.sh --build-only): the web client
-  built. Without `--build-only`, by hand, the script goes on to its tests,
-  then the end-to-end test, the transcript layout and the composer
-  checks in headless Chromium (Playwright's arm64 build, pinned).
-- The APK (arm64) is built in the `container` job's build, in a container
-  of Visor's agent image (tools/ci/container_build.sh). The emulator flow and
-  the Android transcript and composer checks are in the local CI for now.
-- `blue-ios` (off; when on, each commit to main only, its snapshots being
-  proof-like): the web site built on Linux, and the snapshots of Mobile
-  Safari on an iOS lease, against tests/snapshots
-  (tools/ci/blue_ios_lease.sh, which also runs by hand).
+visor's CI (.github/workflows/ci.yml), on GitHub's own runners alone,
+builds blue on every pull request and every commit to main. Until the Mac
+Studio (Logan, 5 Nov 2026), Visor is iOS, macOS and Android, with Android
+the only client on Isomer: the web client is kept building but not run.
+- `blue-web` (verify's, on GitHub's x86_64 Ubuntu in Swift's image,
+  tools/ci/container_blue_web.sh --build-only): the web client built.
+  Without `--build-only`, by hand, the script goes on to its tests, then
+  the end-to-end test, the transcript layout and the composer checks in
+  headless Chromium (Playwright's arm64 build, pinned: an arm64 Linux).
+- The APK (arm64) is built in the `container` job's build, on GitHub's
+  x86_64 Ubuntu (tools/ci/container_build.sh). The emulator flow and the
+  Android transcript and composer checks are in the local CI for now.
+- Blue's iPhone snapshots (Mobile Safari against tests/snapshots) have no
+  CI job: by hand, `snapshots.py run --targets web-mobile` on a Mac.
 
 The harnesses take Chrome from `$CHROME` where it isn't at its usual place,
 and `VISOR_SNAPSHOT_RUN_DIR` says where a snapshot run goes.
@@ -167,7 +165,7 @@ flow takes it too.
   their own.
 - `red-ios`, `web-desktop`, `macos`: red's app on the iPhone simulator, and
   desktop Safari and the Mac app on a Mac leased from Shireworks
-  (tools/ci/shireworks.sh, with the computer's key or token), released when the run ends.
+  (tools/shireworks/shireworks.sh, with the computer's key or token), released when the run ends.
   Safari's site goes to the guest, and safaridriver's port comes back, over
   the run's SSH connection; the Mac app's window is cropped from the
   machine's own screenshot. The guest's look is dark, said outright.

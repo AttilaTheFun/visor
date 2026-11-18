@@ -21,21 +21,21 @@
 /tools/sign_mac_app.sh @AttilaTheFun
 /tools/signing/ @AttilaTheFun
 /tools/store_notary_credentials.sh @AttilaTheFun
-# What versions, signs (through Shireworks) and attaches builds to
-# releases (from AttilaTheFun/applications, docs/RELEASE_ASSETS.md), and
-# what reaches Shireworks for them.
+# What versions, signs (in CI's own jobs, with the signers copied from
+# AttilaTheFun/shireworks) and attaches builds to releases (from
+# AttilaTheFun/applications, docs/RELEASE_ASSETS.md), and CI's Bazel
+# settings, which hold BuildBuddy's key.
 /tools/ci/android_sign.sh @AttilaTheFun
+/tools/ci/apple_profiles.py @AttilaTheFun
+/tools/ci/apple_sign.sh @AttilaTheFun
 /tools/ci/attach_release.sh @AttilaTheFun
 /tools/ci/check_version_line.sh @AttilaTheFun
-/tools/ci/mac_slot.sh @AttilaTheFun
+/tools/ci/ci_bazel.sh @AttilaTheFun
+/tools/ci/mac_app_linux_programs.sh @AttilaTheFun
 /tools/ci/promote_release.sh @AttilaTheFun
 /tools/ci/propose_release.sh @AttilaTheFun
-/tools/ci/release_alphas.sh @AttilaTheFun
 /tools/ci/release_assets.sh @AttilaTheFun
-/tools/ci/shireworks.sh @AttilaTheFun
-/tools/ci/shireworks_retry.sh @AttilaTheFun
-/tools/ci/sign_android.sh @AttilaTheFun
-/tools/ci/sign_from_ci.sh @AttilaTheFun
+/tools/ci/sign_builds.sh @AttilaTheFun
 /tools/ci/stamp_android.sh @AttilaTheFun
 /tools/ci/version_from_tags.sh @AttilaTheFun
 

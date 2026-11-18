@@ -10,11 +10,12 @@
 # the session containers Visor made, which it no longer makes: no longer
 # pushed.)
 #
-# CI's agent-image job runs it in a visor-jit container, as every job but the
-# headful proofs (Logan, 8 Nov 2026); until 0.48 it ran on the mini with
-# Apple's container. buildah comes from the distribution's packages when the
-# image has none, and builds as the container's root, which a Shireworks server
-# container's VM makes a root of its own. A package the registry hasn't had
+# CI's agent-image job runs it as root (sudo, with VISOR_REF the commit) on
+# GitHub's arm64 Ubuntu runner (ubuntu-24.04-arm), arm64 as the containers
+# that run the image; until 17 Nov 2026 in a Shireworks container, until 0.48
+# on the mini with Apple's container. buildah comes from the distribution's
+# packages when the machine has none, and builds as root (a Shireworks server
+# container's VM makes a root of its own). A package the registry hasn't had
 # before is private until its owner makes it public, once.
 #
 #   GHCR_USER=<user> GHCR_TOKEN=<token> tools/containers/publish_agent_image.sh 0.48.1

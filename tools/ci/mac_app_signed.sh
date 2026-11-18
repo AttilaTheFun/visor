@@ -1,10 +1,11 @@
 #!/bin/bash
-# Checks, before a Mac app's .zip is signed, that what Shireworks' signing
+# Checks, before a Mac app's .zip is signed, that what CI's signing
+# (tools/ci/sign_builds.sh: apple_sign.sh, copied from AttilaTheFun/shireworks)
 # signs it from is there: it signs each piece of code again with the
-# entitlements its signature already carries (`codesign -d --entitlements`),
-# so an app built unsigned would lose them (the microphone, Visor.app's).
-# rules_apple signs the app ad hoc with its entitlements, on Linux too (the
-# cross toolchain's codesign); this says so or fails. The app's executable
+# entitlements its signature already carries (apple_profiles.py, by
+# rcodesign), so an app built unsigned would lose them (the microphone,
+# Visor.app's). rules_apple signs the app ad hoc with its entitlements (CI's
+# `xcode-27` Mac, --config=ci_device); this says so or fails. The app's executable
 # (its CFBundleExecutable) must have a code signature (LC_CODE_SIGNATURE)
 # holding each entitlement named, and every program in Contents/Helpers a
 # signature of its own.
