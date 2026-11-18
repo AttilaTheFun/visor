@@ -85,6 +85,10 @@ cleanup() {
 }
 trap cleanup EXIT
 mkdir -p "$out/screens" "$out/logs" ${ANDROID_AVD_HOME:+"$ANDROID_AVD_HOME"}
+# rules_swift's Linux toolchain wants clang as the C compiler, and Ubuntu's
+# runner defaults to gcc (the first release run on main, 18 Nov 2026). Set
+# for the test's run below too, so that Bazel keeps one configuration.
+[ "$(uname -s)" != Linux ] || export CC=clang
 # The test, built while the emulator boots (Bazel's own server; the run
 # below waits for it). It links swift.org's Foundation, whose networking
 # wants libcurl's and libxml2's development libraries, which Ubuntu's
