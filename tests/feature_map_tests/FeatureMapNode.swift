@@ -5,7 +5,7 @@ import IsomerHeadless
 import Testing
 
 enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
-    case onboarding, signIn, sessions, search, archived, project, migrate, addComputer, runner
+    case onboarding, signIn, sessions, search, archived, project, migrate, addComputer
     case newSession, folder, chat, approval, question, signInCode, model, allModels, details, toolCalls
     case preview, subPage, settings, computer
 
@@ -31,7 +31,6 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
         case .project: return screen.shows("Copy folder path") || screen.has(label: "Copy folder path")
         case .migrate: return screen.shows("Migrate")
         case .addComputer: return sheet && screen.has(id: "host") && screen.has(id: "connect")
-        case .runner: return screen.has(id: "multipass-code") || screen.has(id: "runner-url")
         case .newSession: return sheet && screen.texts.contains("New Session")
         case .folder: return screen.texts.contains("Choose a folder")
         // Send, or with nothing typed on the iPhone, Dictate in its place;

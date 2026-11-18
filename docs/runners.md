@@ -1,5 +1,10 @@
 # Agents, runners and a server that relays (design, Visor 0.50+)
 
+**18 Nov 2026: MultiPass is retired.** Where this says MultiPass:
+Shireworks' agent-proxy fronts container agents, and clients (a phone,
+another Mac) reach a Mac's Visor server directly, by its connection code
+or address; the client's MultiPass sign-in is removed.
+
 Logan, 11 Nov 2026 (via Manager), in his words:
 
 > the visor server can just be a dumb http server embedded in the mac app

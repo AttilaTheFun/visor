@@ -1,8 +1,9 @@
 // What a wrapped agent reports of its task to the runner that started it,
-// over the runner's MCP (agent → wrapper → MultiPass → runner), which the
-// runner passes on to the server (docs/runners.md, "Shireworks' agent
-// runner and agent jobs": report_progress, report_complete, report_blocked).
-// The session is MultiPass's word of the caller, never the agent's.
+// over the runner's MCP (agent → wrapper → Shireworks' agent-proxy →
+// runner), which the runner passes on to the server (docs/runners.md,
+// "Shireworks' agent runner and agent jobs": report_progress,
+// report_complete, report_blocked). The session is the front's word of the
+// caller, never the agent's.
 
 import Foundation
 

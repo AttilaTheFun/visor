@@ -1,8 +1,8 @@
 // The push proxy (`ServerSettings.pushProxy`): where a computer with no APNs
 // key of its own sends its pushes, unsigned, for the proxy to sign with the
-// key it alone holds (MultiPass's, say: a server in a container keeps no
-// key). Set over REST with the server's password, never
-// an agent's token (`GET`/`PUT /api/push-proxy`), as the MCP servers are.
+// key it alone holds (a server in a container keeps no key). Set over
+// REST with the server's password, never an agent's token (`GET`/`PUT
+// /api/push-proxy`), as the MCP servers are.
 
 import Foundation
 import VisorProtocol

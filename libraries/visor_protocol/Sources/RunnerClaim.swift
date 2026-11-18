@@ -11,8 +11,8 @@ public struct RunnerClaim: Codable, Hashable, Sendable {
     /// The lease's id, which every update about this job carries.
     public var lease: String
     public var expires: Date
-    /// For a start: a one-time token for the session's agent, which
-    /// MultiPass checks when the agent dials in.
+    /// For a start: a one-time token for the session's agent, which the
+    /// front it dials in through (Shireworks' agent-proxy) checks.
     public var agentToken: String?
 
     public init(entry: QueueEntry, lease: String, expires: Date, agentToken: String? = nil) {

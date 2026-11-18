@@ -71,12 +71,12 @@ extension ServerTests {
     @Test func theFrontIsGivenByTheEnvironmentOrTheArguments() throws {
         let file = root.appendingPathComponent("front.token")
         try "front-secret-0123\n".write(to: file, atomically: true, encoding: .utf8)
-        let options = try ServerOptions([], environment: ["VISOR_TRUST": "token", "VISOR_TRUST_HEADER": "MultiPass-Backend",
-                                                          "VISOR_TRUST_TOKEN_FILE": file.path, "VISOR_USER_HEADER": "MultiPass-User-ID",
-                                                          "VISOR_USER_NAME_HEADER": "MultiPass-User"])
+        let options = try ServerOptions([], environment: ["VISOR_TRUST": "token", "VISOR_TRUST_HEADER": "Front-Backend",
+                                                          "VISOR_TRUST_TOKEN_FILE": file.path, "VISOR_USER_HEADER": "Front-User-ID",
+                                                          "VISOR_USER_NAME_HEADER": "Front-User"])
         let front = try #require(try options.front)
-        #expect(front.trust == .token(header: "MultiPass-Backend", value: "front-secret-0123"))
-        #expect(front.userHeader == "MultiPass-User-ID")
+        #expect(front.trust == .token(header: "Front-Backend", value: "front-secret-0123"))
+        #expect(front.userHeader == "Front-User-ID")
         #expect(options.settings.contains { $0 == ("auth", "none") }, "a front means auth none")
         #expect(!options.arguments.contains("front-secret-0123"), "the token goes on as its file")
         #expect(try ServerOptions(options.arguments).front == front, "a run started from this one has the same front")

@@ -3,8 +3,8 @@
 // out at `<proxy>/apns/…`, and each MCP server it is told of (VISOR_MCP) is
 // passed on to its agents at `<proxy>/mcp/<name>`; each with this server's
 // token for the proxy (X-Visor-Proxy), kept with its secrets. What goes
-// where is the proxy's to say, outside the server's environment (Visor
-// Runner today, MultiPass in 0.50): the server asks none of it over its API.
+// where is the proxy's to say, outside the server's environment: the
+// server asks none of it over its API.
 
 import Foundation
 

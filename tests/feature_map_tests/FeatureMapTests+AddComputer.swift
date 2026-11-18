@@ -1,4 +1,4 @@
-// Add Computer and the MultiPass sign-in beside it.
+// Add Computer: a computer connected, or the sheet put away.
 
 import IsomerHeadless
 import Testing
@@ -20,23 +20,6 @@ extension FeatureMapTests {
             let screen = try app.tap("connect")
             FeatureMapNode.sessions.expectShown(on: screen)
             #expect(!screen.shows("Welcome to Visor"), "\(screen.summary)")
-        }
-
-        @Test("Add Computer → Sign in to a MultiPass: tap runner")
-        func signsInToAMultiPass() throws {
-            let app = try VisorLaunch.fixture("connect")
-            defer { app.quit() }
-            try app.screen { FeatureMapNode.addComputer.isShown(on: $0) }
-            FeatureMapNode.runner.expectShown(on: try app.tap("runner"))
-        }
-
-        @Test("Sign in to a MultiPass → Add Computer: tap use-connection-code")
-        func backToAConnectionCode() throws {
-            let app = try VisorLaunch.fixture("runner")
-            defer { app.quit() }
-            try app.screen { FeatureMapNode.runner.isShown(on: $0) }
-            let screen = try app.tap("use-connection-code")
-            FeatureMapNode.addComputer.expectShown(on: screen)
         }
 
         @Test("Add Computer → back where it was: dismiss")

@@ -69,7 +69,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// server's secrets (MCPEndpoint.secretKey).
     public var mcpEndpoints: [MCPEndpoint] = []
     /// Where pushes go when this computer has no APNs key of its own: a
-    /// proxy that holds the key and signs them (MultiPass's, say), at
+    /// proxy that holds the key and signs them, at
     /// `<pushProxy>/apns/…`. Empty for none. Its
     /// token for this server is a secret (`VisorServer.pushProxyTokenKey`).
     public var pushProxy = ""

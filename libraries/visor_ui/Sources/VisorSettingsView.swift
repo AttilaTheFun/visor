@@ -113,7 +113,6 @@ struct VisorSettingsView: View {
                 Text("Computers")
             }
             if let account = VisorAccounts.current { AccountSection(account: account) }
-            ForEach(store.runners) { account in RunnerAccountSection(account: account) }
             notifications
             appearance
             Section {

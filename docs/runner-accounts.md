@@ -1,5 +1,11 @@
 # Signing in to Runners (design)
 
+**18 Nov 2026: removed.** The client's sign-in to a Runner, by then a
+MultiPass account (`RunnerAccount`, `RunnerSignInForm`, the sidebar's and
+Settings' Runner sections), is gone: MultiPass is retired and no client
+used it. A computer is added by its connection code or address alone.
+What follows is the design as it was.
+
 Logan, 7 Nov 2026: "our model should be you log in, connecting to the visor
 runner (Visor.app) with its URL username and password with pluggable auth so
 we could replace that in the fork, and then all of the servers it proxies /
