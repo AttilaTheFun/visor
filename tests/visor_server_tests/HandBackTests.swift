@@ -97,6 +97,7 @@ extension ServerTests {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         savedHome = ClaudeSessionFiles.home
         ClaudeSessionFiles.home = root.appendingPathComponent("home", isDirectory: true)
+        try? FileManager.default.createDirectory(at: ClaudeSessionFiles.home, withIntermediateDirectories: true)
         VisorServer.storeRoot = root
         VisorServer.secrets = MemorySecrets()
         server = VisorServer(port: UInt16(ServerTestCase.freePort()))
@@ -280,6 +281,8 @@ extension ServerTests {
 
     @Test func aProtocolOneWrapperIsToldToStopAndTheSessionSaysItsTurnsWerentReturned() async throws {
         let (_, wrapper, record, here) = try await moved("h4", version: 1)
+        // Its agent had begun there (Started said its session).
+        record.move?.conversation = onRunner
         #expect(took(server.moveBack("h4", resume: before, cwd: here, why: "moved back by request")))
         #expect(await eventually { wrapper.stopped ? true : nil } == true, "told to stop")
         #expect(!wrapper.handedBack)

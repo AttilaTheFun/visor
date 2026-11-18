@@ -380,7 +380,8 @@ the driver.
   isn't among what came: the agent is told to stop (if it wasn't handed
   back), and the session carries on from the conversation it had before it
   moved, its notice saying its turns on the runner weren't returned, and
-  why. A move that failed (its agent has ended) isn't handed back.
+  why (when its agent had begun there: Started said its session). A move
+  that failed (its agent has ended) isn't handed back.
 - **REST's `moveBack` takes `{}`.** `resume`, unless given, is the
   conversation known here: the runner's own (`move.conversation`) when
   this computer has it (Visor's native runner shares its Claude folder),

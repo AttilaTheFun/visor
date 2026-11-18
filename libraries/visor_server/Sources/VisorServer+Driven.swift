@@ -181,11 +181,11 @@ extension VisorServer {
             startHandBack(record, process, resume: resume, cwd: cwd, why: why, loud: loud)
             return .success(())
         }
-        // Its runner's agent had begun there (or its wrapper was asked
-        // nothing it could answer): what it said there stays there.
+        // Its runner's agent had begun there (Started said its session):
+        // what it said there stays there, and the notice says so.
         let started = !(record.move?.conversation ?? "").isEmpty
         bringBack(record, resume: resume, cwd: cwd, why: why, loud: loud,
-                  notReturned: started || handBack ? "its runner's agent can't return its conversation" : nil)
+                  notReturned: started ? "its runner's agent can't return its conversation" : nil)
         return .success(())
     }
 

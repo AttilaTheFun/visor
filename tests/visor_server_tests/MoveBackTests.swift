@@ -92,8 +92,7 @@ extension ServerTests {
                                        process: runner)
         #expect(record.driven)
         record.setPermissions(skip: true)
-        // As a failed move's: its agent has ended, nothing to hand back.
-        let result = server.moveBack("m1", resume: "c-1", cwd: "/Users/a/Developer", why: "the clone failed", handBack: false)
+        let result = server.moveBack("m1", resume: "c-1", cwd: "/Users/a/Developer", why: "the clone failed")
         #expect(took(result))
         #expect(runner.stopped, "the runner's agent is told to stop")
         #expect(!record.driven)

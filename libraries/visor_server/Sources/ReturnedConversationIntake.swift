@@ -313,7 +313,11 @@ package final class ReturnedConversationIntake {
             switch Self.kind(of: folder) {
             case .folder: continue
             case .missing:
-                guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)) != nil else {
+                // Claude's folder with whatever is missing above it (it is
+                // this computer's own, as Visor's agents take it); below
+                // it, a folder at a time.
+                let above = folder == target.claudeFolder
+                guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: above)) != nil else {
                     throw Refusal(.unwritable, "\(folder.path) couldn't be made")
                 }
                 made.append(folder)
