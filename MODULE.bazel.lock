@@ -1096,7 +1096,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved c950f2c7c9cf1cccb5e038cdcfec5ca9cefaad7ab3fcdbe615f3e8403604469d"
+          "FILE:@@//third_party/swift_packages/Package.resolved e45d73f820e71356d0602565abfbcb9c0aa860e72d7b8c47f5b9114a5bb21b28"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1235,8 +1235,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_agent_protocol",
-              "commit": "a044eee65811a16f09cd8a978ec3762afff754f3",
+              "commit": "b1c4c83f1e1793ee6c9eb67fd88c5fc6a7dbfe0c",
               "remote": "https://github.com/AttilaTheFun/agent_protocol.git",
+              "version": "0.5.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",

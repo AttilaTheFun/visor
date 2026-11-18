@@ -22,15 +22,14 @@ let package = Package(
             exact: "0.51.0"
         ),
         // agent_protocol: its services' Swift (VisorDriver, the native
-        // runner) and agent-wrapper (the Mac app's Helpers). Unreleased for
-        // now: agent_protocol#15's head (DriverMessage.hand_back,
-        // ReturnConversation, WrapperHello.protocol 2), on 0.4.0's Job.token,
-        // MCP, approvals and Job.skip_permissions (#9 to #13).
-        // TODO(18 Nov 2026): back to `exact: "0.5.0"` once #15 is released
-        // in it, before this merges (tools/released_pins.sh).
+        // runner) and agent-wrapper (the Mac app's Helpers), by release:
+        // 0.5.0 has the conversation hand-back (DriverMessage.hand_back,
+        // ReturnConversation, WrapperHello.protocol 2; agent_protocol#15)
+        // and RenewResponse.token (#14), on 0.4.0's Job.token, MCP,
+        // approvals and Job.skip_permissions (#9 to #13).
         .package(
             url: "https://github.com/AttilaTheFun/agent_protocol.git",
-            revision: "a044eee65811a16f09cd8a978ec3762afff754f3"
+            exact: "0.5.0"
         ),
         // Its gRPC: the versions Isomer resolves already, and its protobuf.
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),

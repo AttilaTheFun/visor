@@ -323,7 +323,7 @@ carry on here from the conversation it had before it moved: what its
 runner's agent said there stayed there. On the Mini, a container's Claude
 folder is `/Volumes/Sessions/.claude`, which this computer never reads (a
 word told in the container wasn't known after moving back, in the 18 Nov
-pilot). agent_protocol#15 (pinned at its head, `a044eee6`, until 0.5.0)
+pilot). agent_protocol 0.5.0 (#15)
 lets it come back: `DriverMessage.hand_back`, and `ReturnConversation` on
 the driver.
 
