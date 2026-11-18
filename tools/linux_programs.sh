@@ -34,8 +34,23 @@ scratch="${VISOR_LINUX_PROGRAMS_SCRATCH:-$ROOT/.build/linux-programs}"
 # names for C++ targets is a link to the SDK's libc++, first on the library
 # path, or the host's would be linked beside it (agent_protocol's
 # tools/build_static.sh does the same).
-libcxx="$(find "$HOME/.swiftpm/swift-sdks" -path "*${SDK}*" -path "*musl*/aarch64/usr/lib/libc++.a" 2>/dev/null | head -1)"
-[ -n "$libcxx" ] || { echo "$me: no libc++.a for aarch64 in the static SDK" >&2; exit 1; }
+# Where SwiftPM put the SDK: under the home it takes ($HOME, else the
+# account's), in .swiftpm or the XDG config folder. A GitHub job's container
+# sets HOME to /github/home while SwiftPM may use root's: the search found
+# nothing there and, a missing folder failing `find` under pipefail, the job
+# ended with no word of why (the 0.61.2 release run, 18 Nov 2026).
+sdk_homes=("$HOME" "$(getent passwd "$(id -u)" 2> /dev/null | cut -d: -f6)")
+sdk_folders=()
+for home in "${sdk_homes[@]}"; do
+    [ -n "$home" ] || continue
+    for folder in "$home/.swiftpm/swift-sdks" "${XDG_CONFIG_HOME:-$home/.config}/swiftpm/swift-sdks"; do
+        [ -d "$folder" ] && sdk_folders+=("$folder")
+    done
+done
+libcxx=""
+[ "${#sdk_folders[@]}" -eq 0 ] \
+    || libcxx="$(find "${sdk_folders[@]}" -path "*${SDK}*" -path "*musl*/aarch64/usr/lib/libc++.a" 2> /dev/null | head -1 || true)"
+[ -n "$libcxx" ] || { echo "$me: no libc++.a for aarch64 in the static SDK (looked in: ${sdk_folders[*]:-no SDK folder under ${sdk_homes[*]}})" >&2; exit 1; }
 shim="$scratch-libstdcxx"
 mkdir -p "$shim"
 ln -sf "$libcxx" "$shim/libstdc++.a"
