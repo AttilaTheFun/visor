@@ -37,7 +37,10 @@ extension VisorServer {
             return
         }
         if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "moveBack", authorized(request) {
-            respond(restMoveBack(RESTCall(request: request, parts: parts, query: Self.query(request.path), body: Envelope.decodeBody(request.body))))
+            // Answered once the session is back: its runner's agent may hand
+            // it back first (VisorServer+HandBack).
+            let call = RESTCall(request: request, parts: parts, query: Self.query(request.path), body: Envelope.decodeBody(request.body))
+            Task { respond(await restMoveBack(call)) }
             return
         }
         // Sessions backed up to a folder here, and restored from one.

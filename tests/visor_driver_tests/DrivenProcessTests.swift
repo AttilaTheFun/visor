@@ -1,6 +1,7 @@
 // A driven session's process (VisorDriver): what the session sends goes
 // down the wrapper's stream, held while no wrapper is connected; what the
-// wrapper says comes up as a harness's events, a turn's end last.
+// wrapper says comes up as a harness's events, a turn's end last. A wrapper
+// that said protocol 2 takes a hand-back, whose end is no failure.
 
 import AgentProtocol
 @testable import VisorAgent
@@ -154,6 +155,22 @@ import Testing
             }
         }
         return said
+    }
+
+    @Test func testAProtocolTwoWrapperTakesAHandBackWhoseEndIsNoFailure() async {
+        let process = DrivenProcess()
+        #expect(!process.takesHandBack, "no hello yet")
+        process.wrapperProtocol = 1
+        #expect(!process.takesHandBack, "an older wrapper is told to stop")
+        process.wrapperProtocol = 2
+        #expect(process.takesHandBack)
+        process.handBack()
+        var down: [AgentProtocol_V1_DriverMessage] = []
+        _ = process.attach { down.append($0) }
+        #expect(down.count == 1 && { if case .handBack = down[0].message { true } else { false } }(), "held for its wrapper, then sent")
+        let said = await events(of: process, after: [.with { $0.state = .with { $0.busy = true } }, .with { $0.ended = "the harness ended" },
+                                                     .with { $0.state = .with { $0.busy = true } }], count: 3)
+        #expect(said == ["busy true", "busy false", "busy true"], "its end told as idle, never as a failure")
     }
 
     @Test func testAWrappersRowBecomesVisorsRow() {

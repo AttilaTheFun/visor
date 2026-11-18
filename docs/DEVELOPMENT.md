@@ -602,7 +602,9 @@ a runner (`moveToRunner`) is `driven`, and keeps its move on its record in
 sessions.json (`SessionRecord.move`: the agent id its job is for, its
 conversation and folder here, its folder and conversation on the runner
 once its wrapper and Started say). Only `moveBack` makes it this
-computer's again, with a dated notice and a push. A relaunch (`leaveAgents`)
+computer's again, with a dated notice and a push; a wrapper of protocol 2
+hands it back first, its conversation returned and re-keyed here
+(VisorServer+HandBack, docs/runners.md). A relaunch (`leaveAgents`)
 and a quit (`endAll`) leave its runner's agent working: the driver's
 stream closes and the wrapper redials. The new process opens 7434 before
 it reads its sessions (`VisorDriver.Listening.listen`), and serves calls

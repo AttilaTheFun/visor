@@ -83,7 +83,8 @@ extension VisorDriver {
             jobs.tokens = server.agentTokens
             jobs.liveSession = { [weak server] id in server?.session(id).map { !$0.info.archived } }
             jobs.moveFailed = { [weak server] session, resume, cwd, why in
-                server?.moveBack(session, resume: resume, cwd: cwd, why: "the move to a runner failed: \(why)")
+                // Its agent has ended: nothing to hand back.
+                server?.moveBack(session, resume: resume, cwd: cwd, why: "the move to a runner failed: \(why)", handBack: false)
             }
             jobs.moveStarted = { [weak server] session, agent, conversation in
                 server?.drivenAgentStarted(session, agent: agent, conversation: conversation)

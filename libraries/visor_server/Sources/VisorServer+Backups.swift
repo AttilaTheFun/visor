@@ -282,7 +282,7 @@ extension VisorServer {
     }
 
     /// "20261103-013108": a folder's name for when its backup was made.
-    static func backupStamp(_ date: Date) -> String {
+    nonisolated static func backupStamp(_ date: Date) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
         let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
