@@ -53,7 +53,7 @@ package actor MCPBridge {
                 "protocolVersion": .string(version),
                 "capabilities": .object(["tools": .object(["listChanged": .bool(true)])]),
                 "serverInfo": .object(["name": .string("visor"), "version": .string("1.0")]),
-                "instructions": .string(MCPTools.instructions(contained: contained)),
+                "instructions": .string(MCPTools.instructions(contained: contained, passesOn: passesOn)),
             ]))
         case "notifications/initialized":
             if passesOn { watchProxied() }
@@ -209,7 +209,7 @@ package actor MCPBridge {
             asks["prompt"] = .string(questions.first?["question"].string ?? "")
             asks["questions"] = .array(questions)
         } else {
-            asks["prompt"] = .string(MCPTools.summary(input))
+            asks["prompt"] = .string(MCPTools.summary(tool: tool, input: input))
         }
         let request = asks
         let output = self.output

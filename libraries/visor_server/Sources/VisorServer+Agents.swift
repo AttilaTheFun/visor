@@ -449,6 +449,11 @@ extension VisorServer {
     }
 
     package func session(_ id: String?) -> SessionRecord? {
-        sessions.first { $0.info.id == id }
+        guard let id else { return nil }
+        // Its id as given, else in another case: the dispatcher keys a
+        // session in lower case (JobQueue.key), so a runner's agent names
+        // one REST made (Foundation's upper-case UUID) so; found as is, it
+        // was another session (pilot 3, 18 Nov: moved, it was two).
+        return sessions.first { $0.info.id == id } ?? sessions.first { $0.info.id.caseInsensitiveCompare(id) == .orderedSame }
     }
 }

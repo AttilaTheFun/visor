@@ -91,6 +91,14 @@ extension ServerTests {
         let contained = await insideSaid.answer(2)
         #expect((contained?["result"]["protocolVersion"].string) == "2024-11-05", "the protocol's own when the agent says none")
         #expect(contained?["result"]["instructions"].string?.contains("You run in a Linux container") ?? false)
+        #expect(!(answer?["result"]["instructions"].string?.contains("aren't passed on") ?? true))
+
+        // A runner's container agent, with none of the passed-on servers:
+        // told its own tools are still here (pilot 4, 18 Nov).
+        let (runner, _, runnerSaid) = self.bridge(passesOn: false)
+        await runner.handle(#"{"jsonrpc":"2.0","id":3,"method":"initialize","params":{}}"#)
+        let told = await runnerSaid.answer(3)?["result"]["instructions"].string ?? ""
+        #expect(told.contains("send_message") && told.contains("aren't passed on"))
     }
 
     @Test func testTheToolsListedWithTheirOwnAndThePassedOn() async {

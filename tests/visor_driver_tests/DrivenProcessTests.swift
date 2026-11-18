@@ -66,6 +66,17 @@ import Testing
         #expect(down.count == 3, "held again once the wrapper is gone")
     }
 
+    /// A prompt with nothing to show of its input (an MCP tool that takes
+    /// none, pilot 2's Shireworks `status`) names its tool, not a blank line.
+    @Test func testAPromptWithNoInputNamesItsTool() {
+        let status = DrivenProcess.prompt(.with { $0.id = "p1"; $0.tool = "mcp__shireworks__status"; $0.inputJson = "{}" })
+        #expect(status.summary == "shireworks › status")
+        let other = DrivenProcess.prompt(.with { $0.id = "p2"; $0.tool = "Tidy"; $0.inputJson = "{}" })
+        #expect(other.summary == "Tidy")
+        let given = DrivenProcess.prompt(.with { $0.id = "p3"; $0.tool = "mcp__shireworks__lease"; $0.summary = "mac"; $0.inputJson = "{}" })
+        #expect(given.summary == "mac", "the wrapper's own line, when it has one")
+    }
+
     /// The wrapper's permission prompts (agent_protocol#10): each shown
     /// once as the session's pending approval, however often it is asked;
     /// the person's answer down to the wrapper, once, and again to a wrapper
