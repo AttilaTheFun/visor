@@ -5,6 +5,7 @@
 
 import AgentProtocol
 import Foundation
+import VisorMCPBridge
 import VisorProtocol
 
 extension DrivenProcess {
@@ -19,7 +20,9 @@ extension DrivenProcess {
                 return ApprovalRequest(id: request.id, tool: tool, summary: questions[0].question, questions: questions)
             }
         }
-        return ApprovalRequest(id: request.id, tool: tool, summary: request.summary)
+        // The wrapper's line, else one made here as a native prompt's is.
+        let summary = request.summary.isEmpty ? MCPTools.summary(tool: tool, input: input) : request.summary
+        return ApprovalRequest(id: request.id, tool: tool, summary: summary)
     }
 
     /// The answer the wrapper gives Claude: allowed, with an

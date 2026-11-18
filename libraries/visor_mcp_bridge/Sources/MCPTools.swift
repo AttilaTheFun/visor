@@ -4,7 +4,7 @@ import VisorProtocol
 /// (the other sessions: list, message, read, a message's fate), `approve`
 /// for Claude's permission prompt, and the words `initialize` gives, which
 /// Claude Code puts in its system prompt.
-enum MCPTools {
+package enum MCPTools {
     /// The words of `initialize`. In a container the agent is told what is
     /// its own and what is the computer's.
     static func instructions(contained: Bool) -> String {
@@ -102,6 +102,22 @@ enum MCPTools {
       "inputSchema": { "type": "object", "properties": { "tool_name": { "type": "string" }, "input": { "type": "object" }, "tool_use_id": { "type": "string" } } }
     }
     """#) ?? .null
+
+    /// The prompt's line for a tool call: a line of its input, or, for one
+    /// with nothing to show (an MCP tool that takes no input, as
+    /// Shireworks' `status`), the tool itself, never a blank prompt.
+    package static func summary(tool: String, input: JSONValue) -> String {
+        let line = summary(input)
+        return line.isEmpty ? toolName(tool) : line
+    }
+
+    /// A tool as the prompt names it: an MCP server's as "server › tool"
+    /// (`mcp__shireworks__status`), any other as it is.
+    package static func toolName(_ tool: String) -> String {
+        let parts = tool.components(separatedBy: "__")
+        guard parts.count >= 3, parts[0] == "mcp", !parts[1].isEmpty else { return tool }
+        return parts[1] + " › " + parts[2...].joined(separator: "__")
+    }
 
     /// A line of a tool call's input for the prompt: its command, file,
     /// pattern or the like, else its first string.

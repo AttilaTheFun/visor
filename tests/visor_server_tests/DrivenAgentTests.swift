@@ -349,6 +349,19 @@ extension ServerTests {
         wrapper.finish()
     }
 
+    /// A session whose id is upper case (REST's, a Foundation UUID), as its
+    /// runner's agent names it, in lower case (JobQueue.key): the same
+    /// session, carried on, not a second one (pilot 3, 18 Nov).
+    @Test func aSessionIsTheSameWhicheverCaseItsRunnerNamesIt() async throws {
+        let upper = "F4483011-3551-4789-BEEC-BD20E107EC2F"
+        let record = server.takeDriven(SessionInfo(id: upper, agent: .claude, cwd: "/tmp", title: "Upper", created: 0), process: DrivenProcess())
+        let again = server.takeDriven(SessionInfo(id: upper.lowercased(), agent: .claude, cwd: "/tmp", title: "Upper", created: 0),
+                                      process: DrivenProcess())
+        #expect(again === record)
+        #expect(server.sessions.filter { $0.info.id.caseInsensitiveCompare(upper) == .orderedSame }.count == 1)
+        #expect(record.info.id == upper, "its own id kept")
+    }
+
     /// A wrapper away longer than its token lasts is refused when it dials
     /// back in, and its session carried on by a new job with a fresh token
     /// (#437's resume); its runner's renewals were taken meanwhile.

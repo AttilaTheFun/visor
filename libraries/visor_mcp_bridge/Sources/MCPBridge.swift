@@ -209,7 +209,7 @@ package actor MCPBridge {
             asks["prompt"] = .string(questions.first?["question"].string ?? "")
             asks["questions"] = .array(questions)
         } else {
-            asks["prompt"] = .string(MCPTools.summary(input))
+            asks["prompt"] = .string(MCPTools.summary(tool: tool, input: input))
         }
         let request = asks
         let output = self.output
