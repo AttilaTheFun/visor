@@ -238,7 +238,9 @@ extension ServerTests {
         let record = driven("d7", runner: RunnerAgent())
         _ = server.moveBack("d7", resume: "c-1", cwd: "/tmp", why: "test")
         #expect(record.move == nil)
-        #expect(record.notice?.hasPrefix("Back on this computer: test (") == true)
+        // Its runner's agent had begun there, and its wrapper can't hand
+        // back: the notice says its turns there weren't returned.
+        #expect(record.notice?.hasPrefix("Back on this computer: test. Its turns on the runner weren't returned (") == true)
         #expect(record.notice?.hasSuffix(" UTC)") == true)
     }
 }
