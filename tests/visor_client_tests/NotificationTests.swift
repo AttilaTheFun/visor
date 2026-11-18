@@ -3,7 +3,8 @@
 // computer and session whatever the computer's address holds (a URL's
 // slashes), and one made the old way still reads; a turn that finished
 // says the agent's words, or that it is ready, never the user's own
-// message back.
+// message back. A session switched off tells nothing, nor does a turn of
+// mail ending.
 
 @testable import VisorClient
 import VisorProtocol
@@ -107,6 +108,36 @@ final class NotificationTests: XCTestCase {
         host.notifyChanges(from: [asked], to: [replied])
         host.notifyChanges(from: [replied], to: [finished])
         XCTAssertEqual(told.said.last?.body, "Fixed: the import was missing.")
+    }
+
+    /// A session whose notifications are off tells nothing; a turn of mail
+    /// ending tells nothing, but an approval asked in it does.
+    func testASessionSwitchedOffAndATurnOfMailAreNotTold() {
+        let told = Told()
+        VisorHost.notifications = told
+        defer { VisorHost.notifications = nil }
+        let host = AgentServerConnection(record: AgentServerRecord(id: "h", name: "Mac", address: "mac.local", secret: ""))
+        var busy = SessionInfo(id: "s", agent: .claude, cwd: "/tmp", title: "Sync", busy: true, created: 0)
+        busy.turnOrigin = .mail
+        var idle = busy
+        idle.busy = false
+        host.notifyChanges(from: [busy], to: [idle])
+        XCTAssertTrue(told.said.isEmpty, "a turn of mail ending")
+        var waiting = busy
+        waiting.pendingApproval = ApprovalRequest(id: "a", tool: "Bash", summary: "ls")
+        host.notifyChanges(from: [busy], to: [waiting])
+        XCTAssertEqual(told.said.map(\.title), ["Sync is waiting"], "an approval during mail is told")
+
+        var muted = busy
+        muted.turnOrigin = .user
+        muted.notifications = false
+        var mutedIdle = muted
+        mutedIdle.busy = false
+        host.notifyChanges(from: [muted], to: [mutedIdle])
+        var mutedWaiting = muted
+        mutedWaiting.pendingApproval = ApprovalRequest(id: "b", tool: "Bash", summary: "ls")
+        host.notifyChanges(from: [muted], to: [mutedWaiting])
+        XCTAssertEqual(told.said.count, 1, "switched off: neither the turn nor the approval")
     }
 
     func testAnIDNamesItsComputerAndSessionWhateverTheAddressHolds() throws {

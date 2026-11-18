@@ -8,7 +8,8 @@ import VisorServices
 /// something is taken, and nothing changes. What it answers with goes
 /// through the wire's own coding first (`wire`), as a server's answer
 /// does: a screenshot of the fixture is then a run of the decoders too, on
-/// whatever platform it is taken.
+/// whatever platform it is taken. (One setting is kept, for its switch:
+/// a session's notifications.)
 final class FixtureAgentServer: AgentServer {
     private var onEvent: (@MainActor (AgentServerEvent) -> Void)?
 
@@ -88,9 +89,27 @@ final class FixtureAgentServer: AgentServer {
         }
     }
 
-    func sessions() async throws -> [SessionInfo] { Self.welcome.sessions ?? [] }
+    /// The sessions whose notifications were switched off here: the one
+    /// setting the fixture keeps, as a server keeps it, so its switch in
+    /// Session details stays where it was put.
+    private var muted: Set<String> = []
+
+    /// The fixture's sessions, with what was switched here.
+    private func kept(_ sessions: [SessionInfo]) -> [SessionInfo] {
+        sessions.map { info in
+            var info = info
+            info.notifications = !muted.contains(info.id)
+            return info
+        }
+    }
+
+    func sessions() async throws -> [SessionInfo] { kept(Self.welcome.sessions ?? []) }
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
-    func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] { [] }
+    func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] {
+        guard case .notifications(let on) = action else { return [] }
+        if on { muted.remove(session) } else { muted.insert(session) }
+        return kept(Self.welcome.sessions ?? []).filter { $0.id == session }.map { Self.wire(.sessions([$0])).sessions?.first ?? $0 }
+    }
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { [] }
 
     func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope {

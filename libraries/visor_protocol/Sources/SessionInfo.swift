@@ -107,6 +107,16 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// tells an inspector showing them to read them again (`mail`).
     public var unreadMail: Int = 0
     public var mailChanged: Double?
+    /// Whether the session tells the person anything — pushes from its
+    /// server, a client's own notifications: on unless switched off
+    /// (`notifications`), for a noisy session. Its state, preview and the
+    /// widget's silent pushes go on regardless. The session's, kept on its
+    /// server, so every device sees the same.
+    public var notifications: Bool = true
+    /// Where its latest turn came from (the one running, or the last):
+    /// nil before its first, and from a server before 0.61, which a client
+    /// takes as the person's own.
+    public var turnOrigin: TurnOrigin?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -173,5 +183,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         mcp = try c.decodeIfPresent([MCPSwitch].self, forKey: .mcp) ?? []
         unreadMail = try c.decodeIfPresent(Int.self, forKey: .unreadMail) ?? 0
         mailChanged = try c.decodeIfPresent(Double.self, forKey: .mailChanged)
+        notifications = try c.decodeIfPresent(Bool.self, forKey: .notifications) ?? true
+        turnOrigin = (try? c.decodeIfPresent(TurnOrigin.self, forKey: .turnOrigin)) ?? nil
     }
 }

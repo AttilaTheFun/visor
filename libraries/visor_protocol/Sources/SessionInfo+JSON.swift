@@ -32,6 +32,9 @@ extension SessionInfo {
         if !mcp.isEmpty { o["mcp"] = .array(mcp.map(\.json)) }
         if unreadMail > 0 { o["unreadMail"] = .number(Double(unreadMail)) }
         if let mailChanged { o["mailChanged"] = .number(mailChanged) }
+        // Absent is on, as from a server that has no switch.
+        if !notifications { o["notifications"] = .bool(false) }
+        if let turnOrigin { o["turnOrigin"] = .string(turnOrigin.rawValue) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -68,6 +71,8 @@ extension SessionInfo {
         mcp = json["mcp"].array?.compactMap(MCPSwitch.init(json:)) ?? []
         unreadMail = json["unreadMail"].int ?? 0
         mailChanged = json["mailChanged"].double
+        notifications = json["notifications"].bool ?? true
+        turnOrigin = json["turnOrigin"].string.flatMap(TurnOrigin.init(rawValue:))
         preview = json["preview"].string
         updated = json["updated"].double
     }

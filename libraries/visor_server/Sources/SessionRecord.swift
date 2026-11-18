@@ -284,7 +284,7 @@ public final class SessionRecord {
     var stored: StoredSession {
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
-        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
+        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, queuedOrigins: queuedOrigins, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
                              otherBranch: otherBranch, branchKept: branchKept ? true : nil, fork: pendingFork,
                              watchedSubagents: watchedSubagents.isEmpty ? nil : watchedSubagents.sorted(),
                              closedSubagents: closedSubagents.isEmpty ? nil : closedSubagents.sorted(),
@@ -328,6 +328,10 @@ public final class SessionRecord {
     /// each the files it came with (already on this Mac, uploaded before
     /// the message was sent). Written down with the session.
     var queuedImages: [[String]] = []
+    /// Where each queued message came from (the person, mail, the server's
+    /// own nudge), lined up with `info.queued`: the turn it starts takes
+    /// it (`info.turnOrigin`). Written down with the session.
+    var queuedOrigins: [TurnOrigin] = []
 
     /// The folder the session runs in, after the project moved.
     func setCWD(_ cwd: String) { info.cwd = cwd }

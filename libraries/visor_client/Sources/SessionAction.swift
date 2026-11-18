@@ -7,6 +7,9 @@ public enum SessionAction: Equatable, Sendable {
     /// Takes a message out of the queue (every queued one when nil).
     case unqueue(text: String?)
     case permissions(skip: Bool)
+    /// The session's notifications on or off, for every device
+    /// (`SessionInfo.notifications`).
+    case notifications(on: Bool)
     case settings(model: String?, effort: String?)
     /// Answers a tool call waiting on the user: allowed or denied, and a
     /// question's answers (by question) when the call was a question.
