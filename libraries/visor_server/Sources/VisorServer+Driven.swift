@@ -196,8 +196,9 @@ extension VisorServer {
         }
     }
 
-    /// A remote as a runner clones it: https, which goes through MultiPass;
-    /// GitHub's SSH form turned into its https URL. Nil for a local path.
+    /// A remote as a runner clones it: https, which a container's proxy
+    /// (Shireworks') carries; GitHub's SSH form turned into its https URL.
+    /// Nil for a local path.
     static func cloneURL(_ remote: String) -> String? {
         if remote.hasPrefix("https://") || remote.hasPrefix("http://") { return remote }
         if remote.hasPrefix("git@github.com:") { return "https://github.com/" + remote.dropFirst("git@github.com:".count) }

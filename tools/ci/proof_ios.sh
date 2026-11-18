@@ -51,7 +51,7 @@ BAZEL="${PROOF_BAZEL:-bazel}"
 TEST=//tests/feature_map_tests:feature_map_proof_ios
 # The fixture's screens, as the probe pictured them (tests/ios_probe's
 # fixtureShots): their ids are the proof's, kept from release to release.
-SCREENS="sessions machines chat question goal inspector models search connect runner runner-accounts new-session commands"
+SCREENS="sessions machines chat question goal inspector models search connect new-session commands"
 # Not there yet with PROOF_APPS_ARTIFACT: waited for once the simulator is up.
 [ -f "$apps/visor_ios.ipa" ] || [ -n "${PROOF_APPS_ARTIFACT:-}" ] || { echo "$me: no visor_ios.ipa in $apps" >&2; exit 1; }
 if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode_27.2.app ]; then

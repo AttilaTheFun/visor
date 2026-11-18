@@ -1,6 +1,6 @@
 // A front's word, for a server whose auth is `none` (docs/server-proxy.md,
-// "Auth"): a sign-in of its own in front of the server (MultiPass, or a
-// company's reverse proxy) names the person in headers the server is told
+// "Auth"): a sign-in of its own in front of the server (a company's
+// reverse proxy, say) names the person in headers the server is told
 // of, and the server takes that word only for a reason it is told: the
 // front's token on the request, or nothing but the front being able to
 // reach where the server listens. Nothing here names any front.

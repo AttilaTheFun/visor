@@ -1,6 +1,7 @@
 // A wrapped agent's first word when it dials the server (docs/runners.md, "A
-// wrapped agent"): the session it is, and where. Who it is was checked by
-// MultiPass, which passes it on (X-Visor-Caller); nothing here is a secret.
+// wrapped agent"): the session it is, and where. Who it is is checked by
+// the front it dials through (Shireworks' agent-proxy, for a container's
+// agent), which passes it on (X-Visor-Caller); nothing here is a secret.
 
 /// A wrapped agent saying which session it is, on dialing in.
 public struct AgentHello: Codable, Hashable, Sendable {

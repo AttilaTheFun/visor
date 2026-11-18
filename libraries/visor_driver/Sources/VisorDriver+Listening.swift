@@ -56,8 +56,8 @@ extension VisorDriver {
             serving = Task.detached { [self] in
                 let services: [any RegistrableRPCService] = [DriverService(listening: self, jobs: jobs), DispatcherService(listening: self, jobs: jobs)]
                 // A ping every two minutes on a quiet connection: the relays
-                // between a container's wrapper and here (Shireworks' and
-                // MultiPass's) close one that is quiet for ten (13 Nov: a
+                // between a container's wrapper and here (Shireworks'
+                // agent-proxy) close one that is quiet for ten (13 Nov: a
                 // moved session's wrapper redialled every ten minutes).
                 let transport = HTTP2ServerTransport.Posix(address: .ipv4(host: host, port: port), transportSecurity: .plaintext,
                                                            config: .defaults { $0.connection.keepalive.time = .seconds(120) })

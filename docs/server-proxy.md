@@ -1,5 +1,11 @@
 # MultiPass, and a plain server behind it (design, Visor 0.50)
 
+**18 Nov 2026: MultiPass is retired** (AttilaTheFun/multipass archived),
+and the client's MultiPass sign-in is removed: a client adds a computer
+by its connection code or address and reaches it directly. Shireworks'
+agent-proxy fronts container agents. What follows is the design as it
+was.
+
 Logan, 10 and 11 Nov 2026: everything about who a client is, where it
 comes from, and what credentials a request carries leaves Visor (and
 Shireworks) for a standalone app, **MultiPass**. Visor's server becomes a

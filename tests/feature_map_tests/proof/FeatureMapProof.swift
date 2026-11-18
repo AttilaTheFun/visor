@@ -4,9 +4,9 @@
 // (HeadlessApp.picture: `ios/phone/chat`, `ios/phone-landscape/chat`,
 // `android/phone/chat`, `macos/window/chat`). One launch of the fixture
 // walks FEATURE_MAP.md's edges to every screen it reaches (Sessions, Add
-// Computer and its MultiPass sign-in, New Session, a chat, its details,
-// the goal's chat); a screen whose fixture's data differs (the question
-// waiting, the computers' machines, a Runner's accounts, the earlier rows)
+// Computer, New Session, a chat, its details, the goal's chat); a screen
+// whose fixture's data differs (the question waiting, the computers'
+// machines, the earlier rows)
 // or that the fixture opens without a tap (the model sheet over the
 // chat's approval, "/" in the composer, the search's words: no caret
 // blinking in the field) is a launch of its own on that screen.
@@ -41,14 +41,13 @@ struct FeatureMapProof {
     static func node(_ screen: String) -> FeatureMapNode? {
         switch screen {
         case "onboarding": .onboarding
-        case "sessions", "machines", "runner-accounts": .sessions
+        case "sessions", "machines": .sessions
         case "chat", "goal", "earlier", "commands": .chat
         case "question": .question
         case "inspector": .details
         case "models": .model
         case "search": .search
         case "connect": .addComputer
-        case "runner": .runner
         case "new-session": .newSession
         case "settings": .settings
         default: nil
@@ -83,7 +82,7 @@ struct FeatureMapProof {
 
     /// The fixture's Sessions, and the screens reached from it by a tap.
     private func walk(wanted: Set<String>, taken: inout Set<String>) throws {
-        let reached = ["sessions", "connect", "runner", "new-session", "chat", "inspector", "goal"]
+        let reached = ["sessions", "connect", "new-session", "chat", "inspector", "goal"]
         guard !wanted.isDisjoint(with: reached) else { return }
         let app = try VisorLaunch.fixture("sessions", settings: Self.settings)
         defer { app.quit() }
@@ -95,16 +94,11 @@ struct FeatureMapProof {
         try arrive(app, at: "sessions")
         try take("sessions")
 
-        // Sessions → Add Computer → Sign in to a MultiPass; put away.
-        if wanted.contains("connect") || wanted.contains("runner") {
+        // Sessions → Add Computer; put away.
+        if wanted.contains("connect") {
             try app.tap("add-computer")
             try arrive(app, at: "connect")
             try take("connect")
-            if wanted.contains("runner") {
-                try app.tap("runner")
-                try arrive(app, at: "runner")
-                try take("runner")
-            }
             try app.dismiss()
             try arrive(app, at: "sessions")
         }

@@ -13,7 +13,6 @@ extension FeatureMapTests {
             ("machines", .sessions),
             ("search", .search),
             ("connect", .addComputer),
-            ("runner", .runner),
             ("new-session", .newSession),
             ("chat", .chat),
             ("goal", .chat),

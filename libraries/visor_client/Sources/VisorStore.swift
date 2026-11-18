@@ -40,9 +40,6 @@ public final class VisorStore {
     /// false where there is none. While it is not, a view shows the
     /// account's sign-in in place of the computers.
     public internal(set) var accountSignedIn = false
-    /// The Runners signed in to, or signed out of and kept
-    /// (`RunnerAccounts`), in the order they were added.
-    public internal(set) var runners: [RunnerAccount] = []
 
     public init() {
         // Screenshot tests: only the canned server, its rows in memory,
@@ -50,10 +47,9 @@ public final class VisorStore {
         if VisorFixture.active {
             AgentServerProviders.register(FixtureAgentServerProvider())
             MessageCache.storageProvider = { _ in MemoryStorage() }
-            runners = VisorFixture.runners
-            servers = [AgentServerConnection(record: VisorFixture.runnerRecord)]
+            servers = [AgentServerConnection(record: VisorFixture.record)]
             for server in servers { observe(server); server.connect() }
-            addingServer = VisorFixture.screen == "connect" || VisorFixture.screen == "runner"
+            addingServer = VisorFixture.screen == "connect"
             return
         }
         // The computers are kept with the secrets (the keychain on Apple):
@@ -75,7 +71,6 @@ public final class VisorStore {
         }
         for server in servers { observe(server); server.connect() }
         startAccount()
-        startRunners()
         listenForNotifications()
         courier.start()
         AgentServerAuthenticators.whenSignedIn { [weak self] id, serving in self?.signedIn(id, serving: serving) }

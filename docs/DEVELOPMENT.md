@@ -727,10 +727,9 @@ client).
 **MCP servers' keys, pushes and fronts.** A server that shouldn't hold the
 MCP servers' keys or the APNs key (Linux, a container) passes its MCP
 servers and pushes on through its proxy (`VISOR_PROXY`, `VISOR_MCP`), which
-adds them: MultiPass (AttilaTheFun/multipass, `multipass-agent endpoint
-set`, `apns set`, `forward add`; its README and docs/front-door.md). The
-old Visor Runner that did this (`visor-runner-agent`) moved there and is
-no longer in Visor.
+adds them. The old Visor Runner that did this (`visor-runner-agent`) moved
+to MultiPass, which is now retired; Shireworks' agent-proxy fronts
+container agents.
 
 ## 4. The working loop
 
@@ -1095,9 +1094,7 @@ For screenshot tests, the client can show a canned computer instead of
 real ones (`libraries/visor_client/Sources/VisorFixture.swift`). The setting
 `fixture` = `snapshot` turns it on; `fixture.screen` opens a screen:
 `sessions`, `chat`, `question`, `goal`, `inspector`, `models`, `search`,
-`connect`, `runner` (Add Computer's sign-in to a Runner), `runner-accounts`
-(the canned computer a Runner's, its section after it, and a second Runner
-signed out of) or `new-session` (the New Session sheet over the sessions)
+`connect` or `new-session` (the New Session sheet over the sessions)
 (`earlier` is `goal` with a page of earlier rows that loads as its spinner
 row shows). On Apple
 these are `visor.fixture` and `visor.fixture.screen` in UserDefaults, so
@@ -1258,9 +1255,9 @@ alone, never a release's): `//tests/feature_map_tests:feature_map_proof_ios`
 and `…_android` (`proof/FeatureMapProof.swift`), built on the job's runner
 by Bazel while its simulator or emulator boots. One launch of the fixture
 walks FEATURE_MAP.md to the screens it reaches by a tap (Sessions, Add
-Computer and its MultiPass sign-in, New Session, the chat, its details,
-the goal's chat), and each screen whose fixture's data differs (the
-question, the machines, the Runner's accounts, the earlier rows) or that
+Computer, New Session, the chat, its details, the goal's chat), and each
+screen whose fixture's data differs (the question, the machines, the
+earlier rows) or that
 the fixture opens without a tap (the model sheet over the chat's approval,
 "/" in the composer, the search's words: a field typed into shows its
 caret and keyboard) is a launch of its own. Each is pictured
