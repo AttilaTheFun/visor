@@ -277,7 +277,9 @@ jobs:
   proof-ios:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
     runs-on: xcode-27
-    timeout-minutes: 45
+    # A cold build of the driver's test (Isomer and its Swift packages) on a
+    # 3-core runner takes longer than 45 minutes; a warm one about 10.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -285,12 +287,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       # The driver's test's build, kept between runs (GitHub's cache: a
-      # public repository's, as Logan's 15 Nov rule has it).
-      - uses: actions/cache@v4
+      # public repository's, as Logan's 15 Nov rule has it). Restored here
+      # and saved at the end whatever the run's outcome, so a build cut off
+      # by the timeout still leaves what it built for the next run.
+      - id: proof-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/visor-proof-bazel
-          key: proof-ios-${{ hashFiles('MODULE.bazel.lock') }}-${{ github.sha }}
-          restore-keys: proof-ios-${{ hashFiles('MODULE.bazel.lock') }}-
+          key: proof-ios-${{ matrix.orientation }}-${{ hashFiles('MODULE.bazel.lock') }}-${{ github.sha }}
+          restore-keys: |
+            proof-ios-${{ matrix.orientation }}-${{ hashFiles('MODULE.bazel.lock') }}-
+            proof-ios-${{ hashFiles('MODULE.bazel.lock') }}-
       - run: |
           echo "common --disk_cache=$HOME/.cache/visor-proof-bazel/disk" >> ~/.bazelrc
           echo "common --repository_cache=$HOME/.cache/visor-proof-bazel/repository" >> ~/.bazelrc
@@ -307,6 +314,11 @@ jobs:
           name: part-ios${{ matrix.orientation == 'landscape' && '-landscape' || '' }}
           path: ${{ runner.temp }}/part
           retention-days: 7
+      - uses: actions/cache/save@v4
+        if: ${{ always() && steps.proof-cache.outputs.cache-hit != 'true' }}
+        with:
+          path: ~/.cache/visor-proof-bazel
+          key: proof-ios-${{ matrix.orientation }}-${{ hashFiles('MODULE.bazel.lock') }}-${{ github.sha }}
 
   # Visor.app's fixture screens (tools/ci/proof_mac.sh).
   proof-mac:
