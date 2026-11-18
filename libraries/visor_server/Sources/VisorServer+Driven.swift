@@ -150,22 +150,55 @@ extension VisorServer {
         return .success(())
     }
 
-    /// A moved session back on this computer: its runner's agent told to
-    /// stop, the session native again on its conversation (`resume`) in
-    /// `cwd`, with a notice saying why. What a move that fails or is given
-    /// up does on its own (VisorDriver's JobQueue), and `POST
-    /// /api/sessions/<id>/moveBack {resume, cwd}` for one left waiting.
-    /// Unless `loud` is false (asked for by the person), every device that
-    /// takes pushes is told too: a session never comes back unannounced.
+    /// A moved session back on this computer, on its conversation in `cwd`
+    /// ("": its folder as it is), with a notice saying why. Its runner's
+    /// agent, if its wrapper takes it (protocol 2: HandingBackProcess) and
+    /// `handBack` allows, is asked to hand the session back: to end and
+    /// return its conversation, which the session then resumes, re-keyed for
+    /// `cwd` (VisorServer+HandBack); answered at once, the session back once
+    /// the conversation has come or been given up on (handBackEnded).
+    /// Otherwise its agent is told to stop and the session carries on here
+    /// from `resume`, the conversation it had before it moved. What a move
+    /// that fails or is given up does on its own (VisorDriver's JobQueue,
+    /// whose agent has ended: `handBack` false), and `POST
+    /// /api/sessions/<id>/moveBack {resume, cwd}`. Unless `loud` is false
+    /// (asked for by the person), every device that takes pushes is told
+    /// too: a session never comes back unannounced.
     @discardableResult
-    package func moveBack(_ id: String, resume: String, cwd: String, why: String, loud: Bool = true) -> Result<Void, AgentJobRefusal> {
+    package func moveBack(_ id: String, resume: String, cwd: String, why: String, loud: Bool = true,
+                          handBack: Bool = true) -> Result<Void, AgentJobRefusal> {
         guard let record = session(id) else { return .failure(AgentJobRefusal("No such session.")) }
         guard record.driven else { return .failure(AgentJobRefusal("“\(record.info.title)” runs on this computer already.")) }
         guard !resume.isEmpty else {
             return .failure(AgentJobRefusal("Which conversation “\(record.info.title)” carries on isn't known here: give it as `resume`."))
         }
+        // Coming back already: that move back ends it.
+        guard handingBack[record.info.id] == nil else {
+            Self.log("\(record.info.title) (\(id)) is moving back already (\(why))")
+            return .success(())
+        }
+        if handBack, let process = record.process as? HandingBackProcess, process.takesHandBack, !(record.move?.agent ?? "").isEmpty {
+            startHandBack(record, process, resume: resume, cwd: cwd, why: why, loud: loud)
+            return .success(())
+        }
+        // Its runner's agent had begun there (Started said its session):
+        // what it said there stays there, and the notice says so.
+        let started = !(record.move?.conversation ?? "").isEmpty
+        bringBack(record, resume: resume, cwd: cwd, why: why, loud: loud,
+                  notReturned: started ? "its runner's agent can't return its conversation" : nil)
+        return .success(())
+    }
+
+    /// The driven session native again, on `resume` in `cwd`: its job let
+    /// go, its runner's agent told to stop (unless it handed the session
+    /// back, and has ended), a notice saying why, and its agent started
+    /// here. `notReturned`: why its turns on the runner didn't come back,
+    /// said in the notice.
+    func bringBack(_ record: SessionRecord, resume: String, cwd: String, why: String, loud: Bool, handedBack: Bool = false,
+                   notReturned: String? = nil) {
+        let id = record.info.id
         jobs?.forget(session: id)
-        record.process.stop()
+        if !handedBack { record.process.stop() }
         record.driven = false
         record.move = nil
         if !cwd.isEmpty { record.info.cwd = cwd }
@@ -173,25 +206,35 @@ extension VisorServer {
         // before its agent starts (Claude takes the mode at launch).
         record.setPermissions(skip: false)
         record.replaceProcess(makeProcess(record.info, resume: resume))
-        record.notice = Self.dated("Back on this computer: \(why)")
-        Self.log("moved \(record.info.title) (\(id)) back to this computer, carrying on \(resume): \(why)")
+        var said = handedBack ? "Back on this computer, with its turns on the runner: \(why)" : "Back on this computer: \(why)"
+        if let notReturned {
+            said += ". Its turns on the runner weren't returned (\(notReturned)): it carries on from where it was before it moved"
+        }
+        record.notice = Self.dated(said)
+        Self.log("moved \(record.info.title) (\(id)) back to this computer, carrying on \(resume)\(handedBack ? ", handed back" : ""): \(why)")
         if loud { push(Self.pushName(for: record.info), "Back on this computer: \(why)", session: id, kind: "failed") }
         launchAgent(record)
         release(record)
         saveArchiveNow()
         broadcastSessions()
-        return .success(())
     }
 
     /// `POST /api/sessions/<id>/moveBack {resume, cwd}`: a moved session
-    /// back here, its conversation given (`resume`) and, unless given, its
-    /// folder as it is (a runner's folder isn't one here).
-    func restMoveBack(_ call: RESTCall) -> HTTPResponse {
+    /// back here, answered once it is (its runner's agent handing it back
+    /// first, when it can). `resume`, unless given, is the conversation it
+    /// carries on as known here (knownConversation), so `{}` does; the one
+    /// its runner's agent returns, if it does, comes first. Its folder,
+    /// unless given, is as it is (a runner's folder isn't one here).
+    func restMoveBack(_ call: RESTCall) async -> HTTPResponse {
         let id = call.parts[1]
-        let current = session(id)?.info.cwd ?? ""
+        let record = session(id)
+        let current = record?.info.cwd ?? ""
         let cwd = call.body.cwd ?? (current.hasPrefix("/Volumes/") ? "" : current)
-        switch moveBack(id, resume: call.body.resume ?? "", cwd: cwd, why: "moved back by request", loud: false) {
-        case .success: return .json(Envelope.sessions(session(id).map { [$0.info] } ?? []).encoded())
+        let resume = call.body.resume ?? record.map(knownConversation) ?? ""
+        switch moveBack(id, resume: resume, cwd: cwd, why: "moved back by request", loud: false) {
+        case .success:
+            await handBackEnded(id)
+            return .json(Envelope.sessions(session(id).map { [$0.info] } ?? []).encoded())
         case .failure(let refusal): return HTTPResponse(400, Envelope.error(refusal.reason).encoded())
         }
     }

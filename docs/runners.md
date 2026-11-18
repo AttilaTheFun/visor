@@ -315,6 +315,79 @@ agent_protocol#9, #10 and #12.
     The native runner puts it there when the job has it (always, from
     Visor's dispatcher) and never passes `--skip-permissions`.
 
+## Moving back with its conversation: the hand-back (as built, 18 Nov)
+
+A session moved to a runner and moved back (`POST
+/api/sessions/<id>/moveBack`, Move Back, or a move that failed) used to
+carry on here from the conversation it had before it moved: what its
+runner's agent said there stayed there. On the Mini, a container's Claude
+folder is `/Volumes/Sessions/.claude`, which this computer never reads (a
+word told in the container wasn't known after moving back, in the 18 Nov
+pilot). agent_protocol 0.5.0 (#15)
+lets it come back: `DriverMessage.hand_back`, and `ReturnConversation` on
+the driver.
+
+- **Asked of a wrapper that says protocol 2.** The driver keeps what each
+  wrapper's hello said it understands (`WrapperHello.protocol`) with its
+  session's process (DrivenProcess). Moving back a session whose wrapper
+  said 2 or more sends `hand_back` in place of `stop`: the wrapper ends
+  the agent as a stop does, and once its harness has ended returns its
+  conversation. The session waits, `stopping`, for 2 minutes
+  (`handBackWait`) for the return to begin, and once it has, 5 more
+  (`handBackReceiveWait`, the wrapper's own deadline) for it to end.
+- **Who may return it.** `ReturnConversation` shows the agent's own token,
+  as `Connect` does: the header's agent must be the token's `agent`, its
+  job held here and claimed (a runner holds its claim; a runner token
+  beside it must be that runner's), its session moving back and waiting
+  for that agent's conversation (its move's `agent`). Anything else is
+  refused (UNAUTHENTICATED, PERMISSION_DENIED, or FAILED_PRECONDITION for
+  a return nobody asked for), and nothing is written.
+- **What it may return** (held to #444's rules for a move here:
+  ReturnedConversationIntake). The header's harness is Claude's, its
+  session id a UUID (or none, and then no file), its working directory a
+  full path. Each file's place must be exactly
+  `projects/<key>/<session>.jsonl`, or under `projects/<key>/<session>/`
+  or `projects/<key>/memory/`, where `<key>` is the header's working
+  directory as the wrapper keys it (every character but an ASCII letter or
+  digit as `-`, `/Volumes/Sessions/Claude/<agent>` as
+  `-Volumes-Sessions-Claude-<agent>`) and `<session>` the header's: no
+  absolute place, no `.`, `..` or empty part, each place once, a file's
+  pieces together. A key Claude shortened on the runner (a very long
+  path) isn't the header's, and is refused. Its files are held to a
+  move's caps as they come (VisorServer+MigrationSize): 2 GiB a file,
+  4 GiB in all, 200,000 files, and 1 GiB left free beyond them on the
+  disk Claude's folder is on (`handBackLimits`). Past any, it is refused
+  (INVALID_ARGUMENT, RESOURCE_EXHAUSTED) with nothing written.
+- **Where it goes.** Only under the session's own project folder here:
+  Claude's folder (`~/.claude`, or `$CLAUDE_CONFIG_DIR`, as Visor's
+  agents take it), `projects/<this computer's key for the folder the
+  session moves back to>/`, as `claude --resume <session>` run in that
+  folder looks for it (ClaudeSessionFiles.projectDirectoryName, the key a
+  move here and `SessionCatalog.conversationFiles` use). Each file is
+  staged first, in a fresh `.visor-handback-<uuid>` folder inside it,
+  and put in place only once the whole conversation has come, on the
+  server's main actor, so a move back given up meanwhile is never written
+  to. Before anything is moved, every folder on the way and what is at
+  each place are looked at without following a link: a link, or a file
+  where a folder should be, is a refusal. A file already there that is
+  shorter is set aside as `<name>.before-handback-<time>`, never removed;
+  one as long or longer is left as it is. The driver answers how many
+  files it took, and of which session.
+- **The session resumes it.** Once placed, the session is native again on
+  the returned session id, its notice "Back on this computer, with its
+  turns on the runner: …". An older wrapper (protocol 1), a return that
+  doesn't begin or end in time, one refused, or one whose transcript
+  isn't among what came: the agent is told to stop (if it wasn't handed
+  back), and the session carries on from the conversation it had before it
+  moved, its notice saying its turns on the runner weren't returned, and
+  why (when its agent had begun there: Started said its session). A move
+  that failed (its agent has ended) isn't handed back.
+- **REST's `moveBack` takes `{}`.** `resume`, unless given, is the
+  conversation known here: the runner's own (`move.conversation`) when
+  this computer has it (Visor's native runner shares its Claude folder),
+  else the one it had before it moved (`move.resume`); a returned one
+  comes first. It answers once the session is back.
+
 ## Logan's answers (11 Nov, later)
 
 Where this section and the rest of the document differ, this section wins.

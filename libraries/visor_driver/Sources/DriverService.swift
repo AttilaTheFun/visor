@@ -10,7 +10,13 @@
 // connected, it is sent a fresh token before the one it holds ends
 // (DriverMessage.token). The agent's MCP requests over the stream are
 // answered for that session (DrivenMCP), and its permission prompts are the
-// session's (DrivenProcess).
+// session's (DrivenProcess). What its hello says it understands
+// (WrapperHello.protocol) is kept with its process: one that says 2 is
+// asked to hand its session back when it moves back (DriverMessage.hand_back),
+// and returns its conversation (ReturnConversation: the agent's token
+// shown, its runner's claim held, its places held to a move's rules and
+// put under this computer's key for the folder the session comes back to;
+// ReturnedConversationIntake, VisorServer+HandBack).
 
 import AgentProtocol
 import Foundation
@@ -92,6 +98,7 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         let inContainer = await jobs.runsInContainer(agent)
         let (process, connection) = await MainActor.run { () -> (DrivenProcess, UUID) in
             let process = (server.session(hello.agent.uuid)?.process as? DrivenProcess) ?? DrivenProcess()
+            process.wrapperProtocol = hello.protocol
             let record = server.takeDriven(Self.info(hello), process: process)
             record.runsInContainer = inContainer
             let connection = process.attach { sending.yield($0) }
@@ -198,6 +205,99 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
             sent += 1
         }
         VisorServer.log("driver: \(request.agent.uuid)'s conversation (\(move.resume)) sent, \(sent) files, for \(request.workingDirectory)")
+    }
+
+    /// A handed-back session's conversation, returned by its runner's
+    /// wrapper once its agent has ended (DriverMessage.hand_back): the
+    /// header, then its files. Only for the agent whose token the call
+    /// shows, whose runner holds its claim, and whose session is moving
+    /// back and waits for that agent's conversation; each place held to
+    /// what a hand-back returns and to a move's caps, staged as it comes,
+    /// and put under this computer's key for the folder the session comes
+    /// back to (ReturnedConversationIntake). Refused, nothing is written,
+    /// and the session comes back without it.
+    func returnConversation(request: StreamingServerRequest<AgentProtocol_V1_ReturnedConversation>,
+                            context: ServerContext) async throws -> ServerResponse<AgentProtocol_V1_ReturnedConversationAck> {
+        let bearers = AgentBearer.tokens(in: request.metadata)
+        let server = await listening.ready()
+        var messages = request.messages.makeAsyncIterator()
+        guard let first = try await messages.next(), case .header(let header) = first.part else {
+            return ServerResponse(error: RPCError(code: .failedPrecondition, message: "A returned conversation's first message is its header."))
+        }
+        let agent = header.agent.uuid
+        if let refusal = await admitReturn(of: agent, bearers: bearers, server) { return ServerResponse(error: refusal) }
+        let session = await jobs.session(of: agent)
+        guard let target = await MainActor.run(body: { server.handBackArriving(session, agent: agent) }) else {
+            VisorServer.log("driver: \(agent) returned a conversation, but \(session) isn't moving back for it: refused")
+            return ServerResponse(error: RPCError(code: .failedPrecondition, message: "This agent's session isn't moving back for its conversation here."))
+        }
+        var intake: ReturnedConversationIntake?
+        do {
+            let taking = try ReturnedConversationIntake(target: target, harness: header.harness, workingDirectory: header.workingDirectory,
+                                                        sessionID: header.sessionID)
+            intake = taking
+            while let message = try await messages.next() {
+                guard case .file(let piece) = message.part else {
+                    throw ReturnedConversationIntake.Refusal(.unsafe, "it sends something other than a file after its header")
+                }
+                try taking.take(place: piece.place, data: piece.data, last: piece.last)
+            }
+            let staged = try taking.finish()
+            switch await MainActor.run(body: { server.placeReturned(staged) }) {
+            case .success:
+                VisorServer.log("driver: \(agent) returned \(header.sessionID.isEmpty ? "no conversation" : header.sessionID), "
+                    + "\(staged.files.count) files, for \(session)")
+                return ServerResponse(message: .with { $0.files = Int64(staged.files.count); $0.sessionID = header.sessionID })
+            case .failure(let refusal):
+                VisorServer.log("driver: \(agent)'s returned conversation not taken: \(refusal.why)")
+                return ServerResponse(error: Self.error(refusal))
+            }
+        } catch {
+            intake?.discard()
+            let refusal = (error as? ReturnedConversationIntake.Refusal) ?? .init(.unwritable, "its call ended: \(error)")
+            VisorServer.log("driver: \(agent)'s returned conversation refused: \(refusal.why)")
+            await MainActor.run { server.handBackFailed(session, agent: agent, why: refusal.why) }
+            return ServerResponse(error: Self.error(refusal))
+        }
+    }
+
+    /// Why a ReturnConversation for `agent` showing `bearers` isn't let in:
+    /// nil when its token is the agent's own, live, its runner holds its
+    /// claim, and any runner token beside it is that runner's.
+    private func admitReturn(of agent: String, bearers: [String], _ server: VisorServer) async -> RPCError? {
+        switch await jobs.access(agent, bearers: bearers) {
+        case .granted:
+            break
+        case .unknown:
+            VisorServer.log("driver: \(agent) returned a conversation, but this dispatcher holds no job of that agent: refused")
+            return AgentBearer.refusal("This dispatcher holds no job of that agent.")
+        case .expired:
+            VisorServer.log("driver: \(agent) returned a conversation with an expired token: refused")
+            return AgentBearer.refusal(AgentTokenRefusal.expired.message)
+        case .refused(let why):
+            VisorServer.log("driver: \(agent) returned a conversation: refused: \(why)")
+            return AgentBearer.refusal(why)
+        }
+        guard let holder = await jobs.holder(of: agent) else {
+            VisorServer.log("driver: \(agent) returned a conversation, but no runner holds its claim: refused")
+            return RPCError(code: .permissionDenied, message: "No runner holds this agent's claim.")
+        }
+        if let refusal = await MainActor.run(body: { AgentBearer.refusal(server.runnerTokens.admit(callFor: holder, bearers: bearers)) }) {
+            VisorServer.log("driver: \(agent)'s returned conversation refused: \(refusal.message)")
+            return refusal
+        }
+        return nil
+    }
+
+    /// What a returned conversation that isn't taken is refused with.
+    private static func error(_ refusal: ReturnedConversationIntake.Refusal) -> RPCError {
+        let code: RPCError.Code = switch refusal.kind {
+        case .unsafe: .invalidArgument
+        case .tooLarge, .noRoom: .resourceExhausted
+        case .unwritable: .internalError
+        case .ended: .failedPrecondition
+        }
+        return RPCError(code: code, message: "The conversation wasn't taken: \(refusal.why).")
     }
 
     /// A session as a wrapper describes its agent: its id is the agent's.

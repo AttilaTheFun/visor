@@ -37,7 +37,7 @@ extension VisorServer {
 
     /// Whether `path` is a full path with nothing to resolve: absolute, and
     /// no `.`, `..` or empty part (a trailing `/` aside).
-    static func isPlainPath(_ path: String) -> Bool {
+    nonisolated static func isPlainPath(_ path: String) -> Bool {
         guard path.hasPrefix("/"), !path.contains("\0") else { return false }
         var parts = path.split(separator: "/", omittingEmptySubsequences: false).dropFirst()
         while parts.count > 1, parts.last?.isEmpty == true { parts.removeLast() }
@@ -200,7 +200,7 @@ extension VisorServer {
 
     /// The folder at `path` opened to its owner (`u+rwx`), so that it can
     /// be listed, walked through and emptied.
-    static func openUp(_ path: String) {
+    nonisolated static func openUp(_ path: String) {
         let files = FileManager.default
         guard let mode = (try? files.attributesOfItem(atPath: path))?[.posixPermissions] as? NSNumber,
               mode.intValue & 0o700 != 0o700 else { return }
@@ -209,7 +209,7 @@ extension VisorServer {
 
     /// What is at `url` removed, every folder in it opened first (an
     /// archive's folder of mode 0000 can't be emptied as it is).
-    static func removeTree(_ url: URL) {
+    nonisolated static func removeTree(_ url: URL) {
         let files = FileManager.default
         var folders = [url.path]
         while let folder = folders.popLast() {
