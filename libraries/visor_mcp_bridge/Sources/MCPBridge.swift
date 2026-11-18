@@ -53,7 +53,7 @@ package actor MCPBridge {
                 "protocolVersion": .string(version),
                 "capabilities": .object(["tools": .object(["listChanged": .bool(true)])]),
                 "serverInfo": .object(["name": .string("visor"), "version": .string("1.0")]),
-                "instructions": .string(MCPTools.instructions(contained: contained)),
+                "instructions": .string(MCPTools.instructions(contained: contained, passesOn: passesOn)),
             ]))
         case "notifications/initialized":
             if passesOn { watchProxied() }

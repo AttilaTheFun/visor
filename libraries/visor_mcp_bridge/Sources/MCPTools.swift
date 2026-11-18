@@ -7,7 +7,7 @@ import VisorProtocol
 package enum MCPTools {
     /// The words of `initialize`. In a container the agent is told what is
     /// its own and what is the computer's.
-    static func instructions(contained: Bool) -> String {
+    static func instructions(contained: Bool, passesOn: Bool = true) -> String {
         var lines = [
             "You run under Visor: the person follows this session in Visor on a phone or a Mac, not in a terminal.",
             "An image you read with the Read tool (a screenshot, say) is shown in the chat: to show the person an image, read it.",
@@ -17,6 +17,15 @@ package enum MCPTools {
                 "You run in a Linux container on the computer, and see of it only the session's folder, at the same path: files meant for the person go there, not in this container's /tmp, which they cannot open.",
                 "Bazel's output in this container is its own: a checkout's bazel-bin links are the computer's builds, not yours. Find what you built with `bazel cquery --output=files <target>`.",
             ]
+        }
+        if !passesOn {
+            // A runner's container agent (DrivenMCP): moved from this
+            // computer, its Claude Code drops the passed-on tools it had
+            // and calls that "MCP server disconnected" (pilot 4, 18 Nov:
+            // the agent believed it, and didn't send its mail).
+            lines.append("Visor's own tools (list_sessions, send_message, read_messages, message_status, read_inbox, read_outbox) are here. "
+                + "The computer's other MCP servers aren't passed on to you here: a notice that mcp__visor__ tools went away, or that the server "
+                + "disconnected, means those, not these.")
         }
         return lines.joined(separator: "\n")
     }
