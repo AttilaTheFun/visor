@@ -13,6 +13,9 @@
 // the server's `runnerTokensRequired` is on, and a wrong one refused
 // whether or not. A runner token shown beside an agent's, on a renewal or
 // a release, must be the runner's that holds the claim.
+// Deprecated (19 Nov 2026), all of it: agent jobs move to CI, and it is
+// removed once they run there. The first claim in a run from a runner
+// other than Visor's own native one is logged (JobQueue.claim).
 
 import AgentProtocol
 import Foundation

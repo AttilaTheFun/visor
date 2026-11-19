@@ -202,6 +202,7 @@ public final class VisorServer {
         // Its issuer is this server's id, made below the first time.
         agentTokens = AgentTokens(secrets: Self.secrets, issuer: "")
         Self.forgetRetiredSecrets()
+        RetiredFiles.moveAside(in: HostFolders.dataFolder)
         applyAgentDetaching()
         if settings.serverID.isEmpty { settings.serverID = UUID().uuidString.lowercased() }
         agentTokens.issuer = id

@@ -52,6 +52,11 @@ extension VisorDriver {
             // once it is served (no call is answered before then).
             let jobs = JobQueue(dispatcherURL: url, driverURL: url, containerURL: containerURL, harness: harness, file: file)
             self.jobs = jobs
+            // The container driver URL setting still naming MultiPass's
+            // name for this driver: deprecated, as the jobs given it are.
+            if let named = [url, containerURL ?? ""].first(where: JobQueue.namesMultiPass) {
+                Deprecated.multipassName.noted("the driver's address is \(named)")
+            }
             let (host, port, url, containerURL) = (host, port, url, containerURL)
             serving = Task.detached { [self] in
                 let services: [any RegistrableRPCService] = [DriverService(listening: self, jobs: jobs), DispatcherService(listening: self, jobs: jobs)]

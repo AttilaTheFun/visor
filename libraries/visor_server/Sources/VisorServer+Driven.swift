@@ -80,13 +80,15 @@ extension VisorServer {
 
     /// A job for a runner, from a client (an envelope as for a session: its
     /// agent, title, folder, model, and its first prompt as `text`).
+    /// Deprecated (19 Nov 2026): agent jobs move to CI. The first in a run
+    /// is logged, and the answer says so (`deprecated`).
     func restQueueJob(_ call: RESTCall) -> HTTPResponse {
         guard let jobs else { return HTTPResponse(404, Envelope.error("No runners take jobs here.").encoded()) }
         switch jobs.queueStart(call.body) {
         case .success(let id):
-            var e = Envelope(type: "job")
-            e.id = id
-            return .json(e.encoded())
+            Deprecated.queuedJob.noted(id)
+            // The `job` envelope's fields, and the deprecation beside them.
+            return .json(JSONValue.object(["type": .string("job"), "id": .string(id), "deprecated": .string(Deprecated.restNote)]).encoded())
         case .failure(let refusal):
             return HTTPResponse(400, Envelope.error(refusal.reason).encoded())
         }

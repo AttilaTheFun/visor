@@ -1,9 +1,41 @@
 # Agents, runners and a server that relays (design, Visor 0.50+)
 
+**Deprecated (19 Nov 2026): Visor's dispatcher half.** Logan's decisions
+(19 Nov, via Manager): agent jobs become plain CI jobs on Nimbus's
+self-hosted runners and never connect to Visor, and Visor owns a container
+runner of its own for long-lived interactive sessions. So these are
+deprecated now, and removed once agent jobs run on Nimbus CI:
+- agent_protocol's `AgentDispatcher` as Visor serves it: `Claim`,
+  `Report` and `Renew`;
+- `POST /api/jobs`, and the waiting and claimed jobs jobs.json keeps;
+- runner tokens: `/api/runners/tokens` and the `runnerTokensRequired`
+  setting;
+- Visor's NativeRunner, the driven `runs-on:native` runner: a native
+  session is a plain session on this computer;
+- the `visor.multipass.internal` name for this computer's driver
+  (MultiPass is retired, and gone from both Macs): `visor.agent.internal`
+  is the one.
+
+Until then each works as this document says, and the first use of one in
+a server's run is logged as deprecated (a job queued over `POST
+/api/jobs`, a claim from a runner other than Visor's own native one, a
+runner token minted or listed, a connection, job or setting naming
+`visor.multipass.internal`); `/api/jobs` and `/api/runners/tokens` say so
+in their answers too (`deprecated`). Kept: the wrapper↔driver half
+(`Connect`, `Conversation`, `ReturnConversation` and the hand-back, the
+MCP relay, approvals, the agents' JWTs), and moveToRunner and moveBack.
+
 **18 Nov 2026: MultiPass is retired.** Where this says MultiPass:
 Shireworks' agent-proxy fronts container agents, and clients (a phone,
 another Mac) reach a Mac's Visor server directly, by its connection code
-or address; the client's MultiPass sign-in is removed.
+or address; the client's MultiPass sign-in is removed. What it left in
+Visor's data folder (`runner.json`, `runner-secrets.json` and its
+`.lock`, `hosts.jsonl`, `github-proxy-ca.pem`, `containers/`,
+`container-tools/`), none of which Visor reads, is moved aside into
+`<data>/retired-<date>/` (this user's alone, 0700: `runner-secrets.json`
+holds tokens) when the server starts, and logged; never deleted: Logan's
+to delete once he's sure nothing needs them. `visor_mcp.js` stays: Visor still writes and runs it where there
+is no agent host.
 
 Logan, 11 Nov 2026 (via Manager), in his words:
 
@@ -152,6 +184,12 @@ Logan's answers to the plan's questions (12 Nov):
 
 ## A runner's agents, authenticated, with Visor's tools (as built, 15 Nov)
 
+Deprecated (19 Nov 2026), in part: the dispatcher's side of this (a
+job's `Claim`, `Report` and `Renew`, runner tokens, jobs queued over `POST
+/api/jobs`) goes once agent jobs run on Nimbus CI; what the driver gives a
+session (its token, its MCP, approvals) stays, for Visor's own container
+runner.
+
 What a session run by any runner's agent (Visor's native runner, or
 Shireworks' container runner) gets from Visor's driver and dispatcher
 (libraries/visor_driver), over agent_protocol: unmerged, with
@@ -213,7 +251,9 @@ agent_protocol#9, #10 and #12.
     (`VISOR_ADMIN_TOKEN`) or Shireworks' session (`SHIREWORKS_SESSION`)
     from the runner's own environment (Visor's native runner strips both,
     AgentEnvironment); nor is either in its job.
-- **The runner's own token, on Claim.** Visor mints a token for each
+- **The runner's own token, on Claim.** Deprecated (19 Nov 2026), with
+  the dispatcher: agent jobs move to Nimbus CI, and runner tokens are
+  removed once they run there. Visor mints a token for each
   runner name (`container@<computer>`, as the runner's claims say it),
   kept with the server's secrets (`runnerTokens`; never in sessions.json,
   jobs.json or the log) and shown once, when minted. The computer's owner
@@ -447,6 +487,12 @@ The sections below have been brought into line with it.
 
 ## The native runner, and Visor on its own
 
+Deprecated (19 Nov 2026): Visor's NativeRunner, the driven `runs-on:native`
+runner. A native session is a plain session on this computer, as New
+Session starts it; long-lived sessions elsewhere run in Visor's own
+container runner, and agent jobs as Nimbus CI jobs. It is removed once
+agent jobs run on CI.
+
 Logan, 11 Nov: "I think 3rd parties may still want to use the native visor
 agents either because they don't care as much about the purity of the machine
 or their build process is more complex and requires tools that can't work on
@@ -482,6 +528,11 @@ no Shireworks and no MultiPass:
   for those who have them.
 
 ## The runner protocol, for anyone's runner
+
+Deprecated (19 Nov 2026): agent jobs are plain CI jobs on Nimbus's
+runners, which never connect to Visor, so no outside runner pulls from
+Visor's dispatcher (agent_protocol's `AgentDispatcher`, what this became).
+It is removed once agent jobs run on CI.
 
 The runner protocol is a documented, stable interface that anyone's runner
 implements, not a private contract between Visor and Shireworks. Logan wants it
@@ -682,6 +733,10 @@ state for reads and relayed actions for writes. New for clients:
 
 ## The queue
 
+Deprecated (19 Nov 2026): what was built is agent_protocol's queue
+(`POST /api/jobs`, jobs.json's waiting and claimed jobs), removed once
+agent jobs run on Nimbus CI.
+
 Every job is an entry (`QueueEntry`), kept by the server in its SQLite store
 (swift_sql):
 - `id`, `kind` (`start`, `archive`, `copyOut`, `startFromCopy`, `delete`) and
@@ -733,6 +788,11 @@ entries can be cancelled.
   on any runner, as today's restore does.
 
 ## A container runner and agent jobs (Shireworks', for one)
+
+Deprecated (19 Nov 2026): agent jobs become plain CI jobs on Nimbus's
+self-hosted runners, with the logan-shire-agent identity the runner gives
+them, and never touch Visor; the container runner for Visor's sessions is
+Visor's own. What follows is removed once agent jobs run on CI.
 
 Shireworks' runner, as agreed with Shireworks on 11 Nov and placed by Logan's
 answers: any runner that speaks agent_protocol does the same.

@@ -227,6 +227,20 @@ extension ServerTests {
         #expect(parseJSON(rest("PUT", "/api/runners/tokens", body: #"{"required":false}"#).body)?["required"].bool == false)
     }
 
+    /// Deprecated (19 Nov 2026), with the dispatcher: each answer says so,
+    /// beside what it always said.
+    @Test func jobsAndRunnerTokensAnswerThatTheyAreDeprecated() throws {
+        let queued = rest("POST", "/api/jobs", body: #"{"agent":"claude","title":"A","cwd":"/tmp"}"#)
+        #expect(queued.status == 200)
+        let job = try #require(Envelope.decode(queued.body))
+        #expect(job.type == "job" && !(job.id ?? "").isEmpty, "the job envelope as before")
+        #expect(parseJSON(queued.body)?["deprecated"].string == Deprecated.restNote)
+        let made = try #require(parseJSON(rest("POST", "/api/runners/tokens", body: #"{"runner":"container@mini"}"#).body))
+        #expect(made["token"].string != nil && made["deprecated"].string == Deprecated.restNote)
+        #expect(parseJSON(rest("GET", "/api/runners/tokens").body)?["deprecated"].string == Deprecated.restNote)
+        #expect(parseJSON(rest("DELETE", "/api/runners/tokens/container@mini").body)?["deprecated"].string == Deprecated.restNote)
+    }
+
     @Test func agentsCannotSeeOrChangeRunnerTokens() async throws {
         let token = try mint("container@mini")
         _ = try queue("A")
