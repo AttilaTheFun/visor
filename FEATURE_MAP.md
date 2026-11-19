@@ -8,6 +8,10 @@ that takes it. The client is one SwiftUI tree, `VisorRootView`
 (libraries/visor_ui), on every platform: Apple's SwiftUI on the iPhone,
 iPad and Mac, Isomer's on Android and the web.
 
+Visor Disk Utility (applications/visor_disk_utility), the Mac app that
+makes the Sessions and Containers volumes, is a separate app with a window
+of its own, outside that tree: it isn't mapped here.
+
 How to read it:
 
 - **Arrows** are driver commands: `tap <target>`, `type <target> <text>`,

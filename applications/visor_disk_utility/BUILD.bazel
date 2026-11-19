@@ -1,0 +1,46 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load("@rules_apple//apple:macos.bzl", "macos_application")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/variant:defs.bzl", "variant_infoplist")
+
+package(default_visibility = ["//visibility:public"])
+
+BUNDLE_ID = "com.LoganShire.Visor.DiskUtility"
+
+# Which build this is (tools/variant), and its name, as Visor's.
+variant_infoplist(
+    name = "variant_plist",
+    display_name = "Visor Disk Utility",
+)
+
+# Visor Disk Utility: a small app of its own, beside Visor.app (Logan, 19
+# Nov 2026), that makes and adopts the two APFS volumes Visor's container
+# runner uses, Sessions and Containers (libraries/visor_disk_volumes), with
+# macOS's administrator prompt for diskutil, and writes volumes.json for
+# Visor. Its command line (`status`, `create`, `erase-containers`) runs the
+# same code, for scripts and test machines.
+swift_library(
+    name = "disk_utility_lib",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorDiskUtility",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_disk_volumes",
+    ],
+)
+
+macos_application(
+    name = "visor_disk_utility",
+    app_icons = ["//artwork/app-icon:app_icon"],
+    bundle_id = BUNDLE_ID,
+    bundle_name = "Visor Disk Utility",
+    # No entitlements: it's not sandboxed (it runs diskutil and osascript),
+    # and the hardened runtime it's signed with needs none for that.
+    infoplists = [
+        "Info.plist",
+        ":variant_plist",
+    ],
+    minimum_os_version = "15.0",
+    deps = [":disk_utility_lib"],
+)

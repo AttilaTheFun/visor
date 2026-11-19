@@ -7,7 +7,7 @@
 #   APK (Google's Android SDK and NDK tools are x86_64);
 # - on a Mac (GitHub's `xcode-27`, a standard runner, free for a public
 #   repository, with its own Xcode): the iPhone and iPad app, Visor.app, the
-#   Mac client and Visor Server, the Mac's test bundles, then the libraries,
+#   Mac client, Visor Server and Visor Disk Utility, the Mac's test bundles, then the libraries,
 #   the staging server and the command-line server for the Mac. Apple's SDKs
 #   may not be redistributed, so CI never builds the Apple targets on Linux
 #   (.bazelrc's apple_on_linux, for a builder that has the SDK archive). A
@@ -47,6 +47,7 @@ if [ $# -eq 0 ]; then
             //applications/visor_macos \
             //applications/visor_mac \
             //applications/visor_menubar \
+            //applications/visor_disk_utility \
             //tests/visor_server_tests \
             //tests/visor_client_tests \
             //tests/visor_ui_tests \

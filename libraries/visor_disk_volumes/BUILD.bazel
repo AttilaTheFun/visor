@@ -1,0 +1,19 @@
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The two APFS volumes Visor's container runner uses, Sessions and
+# Containers: what `diskutil` says of them (parsed from its plists), whether
+# Visor Disk Utility (applications/visor_disk_utility) adopts one or creates
+# it, the commands it runs, the guard that never lets one erase Sessions,
+# and the status file it leaves for Visor (volumes.json). DiskVolumes, the
+# read-only side, is what Visor's server finds them with. Foundation alone,
+# with nothing run here: the same on Linux, where its tests run.
+swift_library(
+    name = "visor_disk_volumes",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "DiskVolumes",
+    deps = ["//:foundation"],
+)
