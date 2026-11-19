@@ -1,0 +1,22 @@
+load("@rules_swift//swift:swift.bzl", "swift_binary")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# Whether a Visor.app starts for real and stays up: its server answering
+# on 127.0.0.1:7433 and the app still running a minute later. CI runs it on
+# a release's signed Mac app before the release is proposed or its assets
+# attached (ci.yml), on a Mac like the ones it ships to, since 0.62.1
+# (built by Xcode 27.2) passed every fixture-mode proof and aborted at
+# launch on macOS 27.0:
+#
+#   bazel run //tools/ci/launch_check -- <Visor.app or Visor-<version>-macos.zip>
+#
+# It opens the app as a user would, so it runs where nothing else answers
+# on 7433 and no Visor is running: a CI Mac or a leased VM, never a Mac
+# someone is using.
+swift_binary(
+    name = "launch_check",
+    srcs = glob(["Sources/*.swift"]),
+    copts = STRICT_SWIFT,
+    module_name = "LaunchCheck",
+    target_compatible_with = ["@platforms//os:macos"],
+)
