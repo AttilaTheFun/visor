@@ -32,8 +32,9 @@ or address; the client's MultiPass sign-in is removed. What it left in
 Visor's data folder (`runner.json`, `runner-secrets.json` and its
 `.lock`, `hosts.jsonl`, `github-proxy-ca.pem`, `containers/`,
 `container-tools/`), none of which Visor reads, is moved aside into
-`<data>/retired-<date>/` when the server starts, and logged; never
-deleted. `visor_mcp.js` stays: Visor still writes and runs it where there
+`<data>/retired-<date>/` (this user's alone, 0700: `runner-secrets.json`
+holds tokens) when the server starts, and logged; never deleted: Logan's
+to delete once he's sure nothing needs them. `visor_mcp.js` stays: Visor still writes and runs it where there
 is no agent host.
 
 Logan, 11 Nov 2026 (via Manager), in his words:

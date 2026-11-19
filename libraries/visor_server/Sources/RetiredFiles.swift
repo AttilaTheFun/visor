@@ -31,7 +31,10 @@ package enum RetiredFiles {
         guard !present.isEmpty else { return [] }
         let retired = folder.appendingPathComponent("retired-" + day(date), isDirectory: true)
         do {
-            try files.createDirectory(at: retired, withIntermediateDirectories: true)
+            // This user's alone (0700): runner-secrets.json holds tokens, and
+            // each file keeps its own mode when it is moved.
+            try files.createDirectory(at: retired, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: retired.path)
         } catch {
             log("retired files: couldn't make \(retired.path): \(error); left where they are: \(present.joined(separator: ", "))")
             return []

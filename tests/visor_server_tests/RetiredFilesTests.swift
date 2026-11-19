@@ -48,6 +48,8 @@ extension ServerTests {
         #expect(Set(moved) == Set(RetiredFiles.names))
 
         let retired = "retired-2026-11-19/"
+        let mode = (try files.attributesOfItem(atPath: root.appendingPathComponent(retired).path)[.posixPermissions] as? NSNumber)?.intValue
+        #expect(mode == 0o700, "the folder this user's alone: it holds runner-secrets.json")
         for name in ["runner.json", "runner-secrets.json", "runner-secrets.json.lock", "hosts.jsonl", "github-proxy-ca.pem"] {
             #expect(text(name) == nil, "\(name) moved")
             #expect(text(retired + name) == name, "\(name) kept, as it was, in \(retired)")
