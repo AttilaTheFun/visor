@@ -333,7 +333,8 @@ extension ServerTests {
         let returned = ClaudeSessionFiles.expectedURL(sessionID: before, cwd: here)
         #expect(returned != first && FileManager.default.fileExists(atPath: returned.path))
         await record.waitForFile(past: loads)
-        #expect(record.indexer?.url.standardizedFileURL.path == returned.standardizedFileURL.path, "following the file handed back")
+        let following = await record.indexer?.url
+        #expect(following?.standardizedFileURL.path == returned.standardizedFileURL.path, "following the file handed back")
         #expect(record.entries.map(\.text) == ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
 
         // Its agent here answers: the reply is in the transcript and the
