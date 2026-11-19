@@ -12,6 +12,10 @@ swift_test(
     srcs = glob(["proxy/*.swift"]),
     module_name = "VisorAgentProxyTests",
     package_name = "visor",
+    # On Linux, as they ran in Shireworks (//tests:linux): the Mac's tests
+    # are bundles of their own (macos_unit_test), and a bare swift_test
+    # there has no Swift Testing macros under apple_cross_mac.
+    target_compatible_with = ["@platforms//os:linux"],
     deps = [
         "//:foundation",
         "//libraries/visor_agent_proxy",
