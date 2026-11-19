@@ -21,7 +21,7 @@ public final class RedirectListener: Sendable {
     /// can't be had. `destination` reads a connection's original destination
     /// (SO_ORIGINAL_DST unless a test says).
     public init?(port: UInt16, addresses: FakeAddresses, relay: RelayDialer,
-                 destination: @escaping @Sendable (Int32) -> (host: String, port: UInt16)? = RedirectListener.originalDestination,
+                 destination: @escaping @Sendable (Int32) -> (host: String, port: UInt16)? = { RedirectListener.originalDestination($0) },
                  log: @escaping @Sendable (String) -> Void) {
         relay_client_ignore_broken_pipes()
         let listener = relay_client_listen(port, 0)

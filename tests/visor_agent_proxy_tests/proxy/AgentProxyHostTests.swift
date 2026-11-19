@@ -64,7 +64,8 @@ import VisorServer
         #expect(secrets.get("agent-proxy/ca.pem") == "pem")
         #expect(secrets.get("password") == "the server's")
         let ca = try AgentProxyCA.kept(in: store)
-        #expect(secrets.get(AgentProxyCA.keyAccount) != nil && secrets.get(AgentProxyCA.certificateAccount) == (try ca.pem))
+        let pem = try ca.pem
+        #expect(secrets.get(AgentProxyCA.keyAccount) != nil && secrets.get(AgentProxyCA.certificateAccount) == pem)
     }
 
     @Test func aKeptSecretIsReadAgainAndComparedWhole() throws {
