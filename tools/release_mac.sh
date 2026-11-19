@@ -57,7 +57,7 @@ linux_programs() {
   mkdir -p "$WORK/linux"
   tar -x -C "$WORK/linux" -f "$archive"
   [ -f "$WORK/linux/visor-server" ] && [ -x "$WORK/linux/visor-server" ] \
-    && [ "$(readlink "$WORK/linux/visor-agent-host")" = visor-server ] \
+    && [ "$(readlink "$WORK/linux/visor-agent-host")" = visor-server ] && [ -x "$WORK/linux/relay-client" ] \
     || { echo "Visor's Linux programs are not in $archive" >&2; exit 1; }
 }
 

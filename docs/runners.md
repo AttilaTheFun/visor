@@ -37,6 +37,12 @@ holds tokens) when the server starts, and logged; never deleted: Logan's
 to delete once he's sure nothing needs them. `visor_mcp.js` stays: Visor still writes and runs it where there
 is no agent host.
 
+**19 Nov 2026: agent-proxy is Visor's** (docs/agent-proxy.md). Shireworks'
+agent-proxy moved into libraries/visor_agent_proxy: the native sessions'
+MCP pass-through on 7439 and the containers' egress, GitHub gate and DNS,
+run by Visor (off until settings.json has `agentProxy`). Where this says
+Shireworks' agent-proxy, after each Mac's cut-over it is Visor's.
+
 Logan, 11 Nov 2026 (via Manager), in his words:
 
 > the visor server can just be a dumb http server embedded in the mac app

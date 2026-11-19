@@ -1,6 +1,8 @@
 #!/bin/bash
 # Visor's own Linux programs for the containers it makes: visor-server, which is also the agents' host when run
-# as visor-agent-host (a link to it beside it), built for Linux on arm64 and
+# as visor-agent-host (a link to it beside it), and relay-client, agent-proxy's
+# end inside a relayed container (docs/agent-proxy.md; the container runner
+# mounts it at /run/agent-proxy/client), built for Linux on arm64 and
 # linked fully static with Swift's Static Linux SDK (musl): they run in any
 # image, whatever its C library. Visor.app carries the folder in
 # Contents/Resources/Linux, and every container has it read-only at
@@ -10,8 +12,9 @@
 #
 # On Linux with Swift 6.4.0 (Visor's agent image, a CI container): the SDK
 # is installed the first time, by its checksum (285 MB), and its link needs
-# lld, libc++abi and libunwind spelled out. The folder gets the two
-# programs, stripped, checked that they run, and nothing else.
+# lld, libc++abi and libunwind spelled out. The folder gets the programs
+# (visor-server, the visor-agent-host link, relay-client), stripped,
+# checked that they run, and nothing else.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:?the folder for the programs}"
@@ -54,27 +57,34 @@ libcxx=""
 shim="$scratch-libstdcxx"
 mkdir -p "$shim"
 ln -sf "$libcxx" "$shim/libstdc++.a"
-swift build -c release --swift-sdk aarch64-swift-linux-musl \
+for product in visor-server relay-client; do
+    swift build -c release --swift-sdk aarch64-swift-linux-musl \
+        -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
+        -Xswiftc -use-ld=lld -Xlinker -lc++abi -Xlinker -lunwind \
+        --scratch-path "$scratch" --product "$product"
+done
+bin="$(swift build -c release --swift-sdk aarch64-swift-linux-musl \
     -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
-    -Xswiftc -use-ld=lld -Xlinker -lc++abi -Xlinker -lunwind \
-    --scratch-path "$scratch" --product visor-server
-built="$(swift build -c release --swift-sdk aarch64-swift-linux-musl \
-    -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
-    --scratch-path "$scratch" --show-bin-path)/visor-server"
+    --scratch-path "$scratch" --show-bin-path)"
 
 mkdir -p "$OUT"
-rm -f "$OUT/visor-server" "$OUT/visor-agent-host"
-cp "$built" "$OUT/visor-server"
-if command -v llvm-strip > /dev/null; then llvm-strip "$OUT/visor-server"; else strip "$OUT/visor-server"; fi
-chmod 755 "$OUT/visor-server"
+rm -f "$OUT/visor-server" "$OUT/visor-agent-host" "$OUT/relay-client"
+for product in visor-server relay-client; do
+    cp "$bin/$product" "$OUT/$product"
+    if command -v llvm-strip > /dev/null; then llvm-strip "$OUT/$product"; else strip "$OUT/$product"; fi
+    chmod 755 "$OUT/$product"
+    # Static.
+    ! ldd "$OUT/$product" > /dev/null 2>&1 || { echo "$me: $OUT/$product is linked dynamically" >&2; exit 1; }
+done
 ln -s visor-server "$OUT/visor-agent-host"
 
-# Static, and both of its names answer.
-! ldd "$OUT/visor-server" > /dev/null 2>&1 || { echo "$me: $OUT/visor-server is linked dynamically" >&2; exit 1; }
+# Each name answers.
 "$OUT/visor-agent-host" --version > /dev/null || { echo "$me: visor-agent-host does not run" >&2; exit 1; }
 # The MCP server answers nothing without a session's variables (visor#442):
 # stand-ins, as a ping reaches no server.
 answer="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"ping"}' |
     VISOR_PORT=1 VISOR_SESSION=linux-programs VISOR_TOKEN=linux-programs "$OUT/visor-agent-host" mcp)"
 case "$answer" in *'"result":{}'*) ;; *) echo "$me: visor-agent-host mcp answered: $answer" >&2; exit 1 ;; esac
+# relay-client's usage, without the container it's for (no network set up).
+"$OUT/relay-client" help | grep -q "^Usage: relay-client run" || { echo "$me: relay-client does not run" >&2; exit 1; }
 ls -l "$OUT"

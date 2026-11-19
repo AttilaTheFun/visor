@@ -14,9 +14,15 @@
 // - VISOR_NATIVE_RUNNER_WRAPPER: a native runner on this computer, pulling
 //   from that dispatcher and running agents under that agent-wrapper, with
 //   a runner token of its own (minted at each start, in memory).
+//
+// And agent-proxy (docs/agent-proxy.md), inside this process, where
+// settings.json has `agentProxy` (none: nothing starts): started once the
+// server is made, its secrets the server's. `visor-server agent-proxy
+// secret-set <name>` keeps one of them, piped in.
 
 import Foundation
 import VisorAgentHost
+import VisorAgentProxyHost
 import VisorDriver
 import VisorMCPBridge
 import VisorNativeRunner
@@ -40,6 +46,12 @@ let agentProtocol = environment["VISOR_AGENT_PROTOCOL_PORT"].flatMap(Int.init).f
 // The driver's port open before the sessions are read (the wrappers and
 // runners of sessions moved to runners redial it), then the server served.
 let status = await ServerCommand(system: LinuxSystem(), beforeServer: { agentProtocol?.listen() }, onServer: { server in
+    if let settings = server.settings.agentProxy {
+        let places = AgentProxyHost.Places(dataDirectory: ServerPlatform.current.host.dataDirectory)
+        // Its listeners run on threads of their own, holding what they use.
+        _ = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets,
+                                 version: ServerPlatform.current.host.version, log: { VisorServer.log("agent-proxy: \($0)") })
+    }
     guard let agentProtocol else { return }
     agentProtocol.serve(server)
     let url = agentProtocol.url
@@ -51,5 +63,5 @@ let status = await ServerCommand(system: LinuxSystem(), beforeServer: { agentPro
         Task { await runner.run() }
         VisorServer.log("native runner: pulling from \(url), running agents under \(wrapper)")
     }
-}).main()
+}, agentProxy: { arguments, secrets in AgentProxyCommand.main(arguments, secrets: secrets) }).main()
 exit(status)

@@ -1,0 +1,502 @@
+#define _GNU_SOURCE
+#include "relay_client_posix.h"
+
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <sys/wait.h>
+#ifdef __APPLE__
+#include <libproc.h>
+#include <sys/proc_info.h>
+#include <sys/resource.h>
+#include <sys/sysctl.h>
+#else
+#include <dirent.h>
+#endif
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+/// Signal handlers and mask back to their defaults, and every descriptor
+/// above the standard three closed but `keep` (-1 for none): what a child
+/// should start from. Only async-signal-safe calls, in a forked child of a
+/// multithreaded parent.
+static void relay_client_start_clean(int highest, int keep) {
+    sigset_t none;
+    sigemptyset(&none);
+    sigprocmask(SIG_SETMASK, &none, 0);
+    struct sigaction standard;
+    memset(&standard, 0, sizeof standard);
+    standard.sa_handler = SIG_DFL;
+    sigemptyset(&standard.sa_mask);
+    for (int signal = 1; signal < NSIG; signal++) {
+        if (signal == SIGKILL || signal == SIGSTOP) continue;
+        sigaction(signal, &standard, 0);
+    }
+    for (int fd = 3; fd < highest; fd++) if (fd != keep) close(fd);
+}
+
+/// In a forked child that could not start its program: why (errno) written
+/// to the parent's pipe, then gone.
+__attribute__((noreturn)) static void relay_client_child_failed(int told, int status) {
+    int error = errno;
+    (void)!write(told, &error, sizeof error);
+    _exit(status);
+}
+
+static int relay_client_highest_descriptor(void) {
+    long limit = sysconf(_SC_OPEN_MAX);
+    return (limit > 0 && limit < 65536) ? (int)limit : 65536;
+}
+
+pid_t relay_client_spawn_piped(const char *path, char *const argv[], char *const envp[], const char *directory, int pipes[3]) {
+    int input[2], output[2], errors[2];
+    if (pipe(input) != 0) return -1;
+    if (pipe(output) != 0) { close(input[0]); close(input[1]); return -1; }
+    if (pipe(errors) != 0) { close(input[0]); close(input[1]); close(output[0]); close(output[1]); return -1; }
+    int highest = relay_client_highest_descriptor();
+    pid_t pid = fork();
+    if (pid == 0) {
+        // The child.
+        setpgid(0, 0);
+        if (dup2(input[0], 0) < 0 || dup2(output[1], 1) < 0 || dup2(errors[1], 2) < 0) _exit(126);
+        relay_client_start_clean(highest, -1);
+        if (directory) (void)chdir(directory);
+        execve(path, argv, envp);
+        _exit(127);
+    }
+    int error = errno;
+    close(input[0]);
+    close(output[1]);
+    close(errors[1]);
+    if (pid < 0) {
+        close(input[1]);
+        close(output[0]);
+        close(errors[0]);
+        errno = error;
+        return -1;
+    }
+    // Its group from here as well, so a signal to the group straight
+    // after this cannot miss it.
+    setpgid(pid, pid);
+    pipes[0] = input[1];
+    pipes[1] = output[0];
+    pipes[2] = errors[0];
+    for (int i = 0; i < 3; i++) (void)fcntl(pipes[i], F_SETFD, FD_CLOEXEC);
+    return pid;
+}
+
+pid_t relay_client_spawn_inheriting(const char *path, char *const argv[], char *const envp[]) {
+    int highest = relay_client_highest_descriptor();
+    pid_t pid = fork();
+    if (pid == 0) {
+        relay_client_start_clean(highest, -1);
+        execve(path, argv, envp);
+        _exit(127);
+    }
+    return pid;
+}
+
+int relay_client_wait(pid_t pid, int *status, int *signaled) {
+    int raw = 0;
+    pid_t ended;
+    do {
+        ended = waitpid(pid, &raw, 0);
+    } while (ended < 0 && errno == EINTR);
+    if (ended < 0) return -1;
+    *signaled = WIFSIGNALED(raw) ? 1 : 0;
+    *status = WIFSIGNALED(raw) ? WTERMSIG(raw) : WEXITSTATUS(raw);
+    return 0;
+}
+
+#ifdef __APPLE__
+int relay_client_processes(struct relay_client_process *out, int capacity) {
+    int room = proc_listallpids(0, 0) + 64;
+    if (room <= 64) return -1;
+    pid_t *pids = calloc((size_t)room, sizeof(pid_t));
+    if (!pids) return -1;
+    int found = proc_listallpids(pids, room * (int)sizeof(pid_t));
+    int count = 0;
+    for (int i = 0; i < found && count < capacity; i++) {
+        struct proc_bsdinfo info;
+        if (proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &info, sizeof info) != sizeof info) continue;
+        struct rusage_info_v2 usage;
+        unsigned long long memory = 0;
+        if (proc_pid_rusage(pids[i], RUSAGE_INFO_V2, (rusage_info_t *)&usage) == 0) memory = usage.ri_phys_footprint;
+        out[count].pid = pids[i];
+        out[count].parent = (pid_t)info.pbi_ppid;
+        out[count].memory = memory;
+        strncpy(out[count].name, info.pbi_name[0] ? info.pbi_name : info.pbi_comm, sizeof out[count].name - 1);
+        out[count].name[sizeof out[count].name - 1] = 0;
+        count++;
+    }
+    free(pids);
+    return count;
+}
+
+unsigned long long relay_client_physical_memory(void) {
+    unsigned long long memory = 0;
+    size_t size = sizeof memory;
+    if (sysctlbyname("hw.memsize", &memory, &size, 0, 0) != 0) return 0;
+    return memory;
+}
+#else
+int relay_client_processes(struct relay_client_process *out, int capacity) {
+    DIR *proc = opendir("/proc");
+    if (!proc) return -1;
+    long page = sysconf(_SC_PAGESIZE);
+    int count = 0;
+    struct dirent *entry;
+    while ((entry = readdir(proc)) && count < capacity) {
+        char *end;
+        long pid = strtol(entry->d_name, &end, 10);
+        if (*end || pid <= 0) continue;
+        char path[64], line[512];
+        snprintf(path, sizeof path, "/proc/%ld/stat", pid);
+        FILE *file = fopen(path, "r");
+        if (!file) continue;
+        size_t length = fread(line, 1, sizeof line - 1, file);
+        fclose(file);
+        line[length] = 0;
+        // "pid (name) state ppid …": the name may hold spaces and parens.
+        char *open = strchr(line, '('), *close = strrchr(line, ')');
+        if (!open || !close || close < open) continue;
+        char state;
+        int parent;
+        if (sscanf(close + 1, " %c %d", &state, &parent) != 2) continue;
+        unsigned long long memory = 0;
+        snprintf(path, sizeof path, "/proc/%ld/statm", pid);
+        file = fopen(path, "r");
+        if (file) {
+            unsigned long size = 0, resident = 0;
+            if (fscanf(file, "%lu %lu", &size, &resident) == 2) memory = (unsigned long long)resident * (unsigned long long)page;
+            fclose(file);
+        }
+        out[count].pid = (pid_t)pid;
+        out[count].parent = (pid_t)parent;
+        out[count].memory = memory;
+        size_t name = (size_t)(close - open - 1);
+        if (name >= sizeof out[count].name) name = sizeof out[count].name - 1;
+        memcpy(out[count].name, open + 1, name);
+        out[count].name[name] = 0;
+        count++;
+    }
+    closedir(proc);
+    return count;
+}
+
+unsigned long long relay_client_physical_memory(void) {
+    long pages = sysconf(_SC_PHYS_PAGES), size = sysconf(_SC_PAGESIZE);
+    return pages > 0 && size > 0 ? (unsigned long long)pages * (unsigned long long)size : 0;
+}
+#endif
+
+pid_t relay_client_spawn_detached(const char *path, char *const argv[], char *const envp[], int log) {
+    int highest = relay_client_highest_descriptor();
+    int nothing = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    if (nothing < 0) return -1;
+    // Whether the program started: the child writes errno here if it could
+    // not, and the pipe closes without a word once the program runs
+    // (close-on-exec). Nobody else waits for a daemon, so a program that
+    // is not there would otherwise go unnoticed.
+    int told[2];
+    if (pipe(told) != 0) {
+        int error = errno;
+        close(nothing);
+        errno = error;
+        return -1;
+    }
+    (void)fcntl(told[0], F_SETFD, FD_CLOEXEC);
+    (void)fcntl(told[1], F_SETFD, FD_CLOEXEC);
+    pid_t pid = fork();
+    if (pid != 0) {
+        int error = errno;
+        close(nothing);
+        close(told[1]);
+        if (pid < 0) {
+            close(told[0]);
+            errno = error;
+            return -1;
+        }
+        int failed = 0;
+        ssize_t got;
+        do got = read(told[0], &failed, sizeof failed); while (got < 0 && errno == EINTR);
+        close(told[0]);
+        if (got == (ssize_t)sizeof failed) {
+            (void)waitpid(pid, 0, 0);
+            errno = failed;
+            return -1;
+        }
+        return pid;
+    }
+
+    // The child.
+    if (setsid() < 0) relay_client_child_failed(told[1], 126);
+    if (dup2(nothing, 0) < 0 || dup2(log, 1) < 0 || dup2(log, 2) < 0) relay_client_child_failed(told[1], 126);
+    relay_client_start_clean(highest, told[1]);
+    execve(path, argv, envp);
+    relay_client_child_failed(told[1], 127);
+}
+
+int relay_client_listen(unsigned short port, int everywhere) {
+    int listener = socket(AF_INET, SOCK_STREAM, 0);
+    if (listener < 0) return -1;
+    (void)fcntl(listener, F_SETFD, FD_CLOEXEC);
+    int yes = 1;
+    setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof address);
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    address.sin_addr.s_addr = htonl(everywhere ? INADDR_ANY : INADDR_LOOPBACK);
+    if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || listen(listener, 64) != 0) {
+        int error = errno;
+        close(listener);
+        errno = error;
+        return -1;
+    }
+    return listener;
+}
+
+int relay_client_listen6(unsigned short port) {
+    int listener = socket(AF_INET6, SOCK_STREAM, 0);
+    if (listener < 0) return -1;
+    (void)fcntl(listener, F_SETFD, FD_CLOEXEC);
+    int yes = 1;
+    setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
+    setsockopt(listener, IPPROTO_IPV6, IPV6_V6ONLY, &yes, sizeof yes);
+    struct sockaddr_in6 address;
+    memset(&address, 0, sizeof address);
+    address.sin6_family = AF_INET6;
+    address.sin6_port = htons(port);
+    address.sin6_addr = in6addr_any;
+    if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || listen(listener, 64) != 0) {
+        int error = errno;
+        close(listener);
+        errno = error;
+        return -1;
+    }
+    return listener;
+}
+
+int relay_client_listen_unix(const char *path) {
+    struct sockaddr_un address;
+    if (strlen(path) >= sizeof address.sun_path) { errno = ENAMETOOLONG; return -1; }
+    int listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listener < 0) return -1;
+    (void)fcntl(listener, F_SETFD, FD_CLOEXEC);
+    unlink(path);
+    memset(&address, 0, sizeof address);
+    address.sun_family = AF_UNIX;
+    strncpy(address.sun_path, path, sizeof address.sun_path - 1);
+    if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || chmod(path, 0600) != 0 || listen(listener, 64) != 0) {
+        int error = errno;
+        close(listener);
+        errno = error;
+        return -1;
+    }
+    return listener;
+}
+
+int relay_client_connect_unix(const char *path) {
+    struct sockaddr_un address;
+    if (strlen(path) >= sizeof address.sun_path) { errno = ENAMETOOLONG; return -1; }
+    int connection = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (connection < 0) return -1;
+    (void)fcntl(connection, F_SETFD, FD_CLOEXEC);
+    memset(&address, 0, sizeof address);
+    address.sun_family = AF_UNIX;
+    strncpy(address.sun_path, path, sizeof address.sun_path - 1);
+    if (connect(connection, (struct sockaddr *)&address, sizeof address) != 0) {
+        int error = errno;
+        close(connection);
+        errno = error;
+        return -1;
+    }
+    struct timeval patience = {30, 0};
+    setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
+    return connection;
+}
+
+/// Whether an IPv4 address (in network order) is this computer's or
+/// nobody's: 0/8, 127/8, 169.254/16, 224/4 and above.
+static int relay_client_ipv4_local(const unsigned char *a) {
+    return a[0] == 0 || a[0] == 127 || (a[0] == 169 && a[1] == 254) || a[0] >= 224;
+}
+
+/// Whether an address is one a proxied connection may not reach: loopback,
+/// link-local, unspecified or multicast.
+static int relay_client_address_local(const struct sockaddr *address) {
+    if (address->sa_family == AF_INET) {
+        return relay_client_ipv4_local((const unsigned char *)&((const struct sockaddr_in *)address)->sin_addr);
+    }
+    if (address->sa_family == AF_INET6) {
+        const unsigned char *a = ((const struct sockaddr_in6 *)address)->sin6_addr.s6_addr;
+        static const unsigned char zero[16] = {0};
+        // ::, ::1
+        if (memcmp(a, zero, 15) == 0 && (a[15] == 0 || a[15] == 1)) return 1;
+        // fe80::/10, ff00::/8
+        if ((a[0] == 0xfe && (a[1] & 0xc0) == 0x80) || a[0] == 0xff) return 1;
+        // ::ffff:a.b.c.d
+        static const unsigned char mapped[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+        if (memcmp(a, mapped, 12) == 0) return relay_client_ipv4_local(a + 12);
+        return 0;
+    }
+    return 1;
+}
+
+static int relay_client_connect_tcp_checked(const char *host, unsigned short port, int public_only) {
+    struct addrinfo hints, *found = 0;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    char service[8];
+    snprintf(service, sizeof service, "%u", (unsigned)port);
+    int status = getaddrinfo(host, service, &hints, &found);
+    if (status != 0) { errno = EHOSTUNREACH; return -1; }
+    int connection = -1, error = public_only ? EACCES : ECONNREFUSED;
+    for (struct addrinfo *each = found; each; each = each->ai_next) {
+        if (public_only && relay_client_address_local(each->ai_addr)) continue;
+        connection = socket(each->ai_family, each->ai_socktype, each->ai_protocol);
+        if (connection < 0) { error = errno; continue; }
+        (void)fcntl(connection, F_SETFD, FD_CLOEXEC);
+        if (connect(connection, each->ai_addr, each->ai_addrlen) == 0) break;
+        error = errno;
+        close(connection);
+        connection = -1;
+    }
+    freeaddrinfo(found);
+    if (connection < 0) { errno = error; return -1; }
+    struct timeval patience = {30, 0};
+    setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
+    return connection;
+}
+
+int relay_client_connect_tcp(const char *host, unsigned short port) {
+    return relay_client_connect_tcp_checked(host, port, 0);
+}
+
+int relay_client_connect_tcp_public(const char *host, unsigned short port) {
+    return relay_client_connect_tcp_checked(host, port, 1);
+}
+
+int relay_client_unix_answers(const char *path) {
+    struct sockaddr_un address;
+    if (strlen(path) >= sizeof address.sun_path) return 0;
+    int probe = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (probe < 0) return 0;
+    memset(&address, 0, sizeof address);
+    address.sun_family = AF_UNIX;
+    strncpy(address.sun_path, path, sizeof address.sun_path - 1);
+    int answers = connect(probe, (struct sockaddr *)&address, sizeof address) == 0;
+    close(probe);
+    return answers;
+}
+
+void relay_client_local_address(int socket, char *out, size_t size) {
+    if (size == 0) return;
+    out[0] = 0;
+    struct sockaddr_storage address;
+    socklen_t length = sizeof address;
+    if (getsockname(socket, (struct sockaddr *)&address, &length) != 0) return;
+    if (address.ss_family == AF_INET) {
+        inet_ntop(AF_INET, &((struct sockaddr_in *)&address)->sin_addr, out, (socklen_t)size);
+    } else if (address.ss_family == AF_INET6) {
+        inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&address)->sin6_addr, out, (socklen_t)size);
+    }
+}
+
+// The next connection, or -1 once the listener is closed or shut down.
+// Every other failure is a connection's or a passing shortage, not the
+// listener's, and the next one is waited for: Linux hands a pending
+// connection's error (one reset or aborted before it was taken) to
+// accept itself, and a loop that ended there would leave its listener
+// open and unanswered for good (a process killed with connections to it
+// pending is enough). After anything but an interruption or an aborted
+// connection (out of descriptors or memory, say), it waits a moment
+// first, so a failure that keeps coming doesn't spin.
+int relay_client_accept(int listener) {
+    int connection;
+    for (;;) {
+        connection = accept(listener, 0, 0);
+        if (connection >= 0) break;
+        if (errno == EBADF || errno == EINVAL || errno == ENOTSOCK || errno == EFAULT) return -1;
+        if (errno != EINTR && errno != ECONNABORTED && errno != EPROTO) usleep(100 * 1000);
+    }
+    (void)fcntl(connection, F_SETFD, FD_CLOEXEC);
+    struct timeval patience = {30, 0};
+    setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
+    return connection;
+}
+
+void relay_client_shutdown(int socket) {
+    shutdown(socket, SHUT_RDWR);
+}
+
+void relay_client_shutdown_write(int socket) {
+    shutdown(socket, SHUT_WR);
+}
+
+void relay_client_ignore_broken_pipes(void) {
+    signal(SIGPIPE, SIG_IGN);
+}
+
+#ifndef SO_ORIGINAL_DST
+#define SO_ORIGINAL_DST 80
+#endif
+
+int relay_client_original_destination(int socket, char *host, size_t size, unsigned short *port) {
+#ifdef __linux__
+    struct sockaddr_in address;
+    socklen_t length = sizeof address;
+    memset(&address, 0, sizeof address);
+    if (getsockopt(socket, IPPROTO_IP, SO_ORIGINAL_DST, &address, &length) != 0) return -1;
+    if (inet_ntop(AF_INET, &address.sin_addr, host, (socklen_t)size) == NULL) return -1;
+    *port = ntohs(address.sin_port);
+    return 0;
+#else
+    (void)socket; (void)host; (void)size; (void)port;
+    errno = ENOTSUP;
+    return -1;
+#endif
+}
+
+int relay_client_resolve_connect(const char *host, unsigned short port, int seconds, char *address, size_t size) {
+    struct addrinfo hints, *found = NULL;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    char service[8];
+    snprintf(service, sizeof service, "%u", port);
+    if (getaddrinfo(host, service, &hints, &found) != 0 || found == NULL) return -2;
+    struct sockaddr_in *target = (struct sockaddr_in *)found->ai_addr;
+    if (inet_ntop(AF_INET, &target->sin_addr, address, (socklen_t)size) == NULL && size > 0) address[0] = 0;
+    // SOCK_CLOEXEC is Linux's: set it after, as the others here do, so
+    // this builds on a Mac too.
+    int connection = socket(AF_INET, SOCK_STREAM, 0);
+    if (connection < 0) {
+        freeaddrinfo(found);
+        return -1;
+    }
+    (void)fcntl(connection, F_SETFD, FD_CLOEXEC);
+    struct timeval patience = {seconds, 0};
+    setsockopt(connection, SOL_SOCKET, SO_RCVTIMEO, &patience, sizeof patience);
+    setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
+    int made = connect(connection, found->ai_addr, found->ai_addrlen);
+    int error = errno;
+    freeaddrinfo(found);
+    if (made != 0) {
+        close(connection);
+        errno = error;
+        return -1;
+    }
+    return connection;
+}

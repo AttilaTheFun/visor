@@ -3,7 +3,8 @@
 # tools/release_mac.sh puts them in the app it signs: in
 # Contents/Resources/Linux, visor-server and visor-agent-host (a link to
 # it, kept a link), the programs a Visor server mounts read-only into the
-# containers it makes. The tar is
+# containers it makes, and relay-client, agent-proxy's end in a relayed
+# container (docs/agent-proxy.md). The tar is
 # tools/ci/linux_programs.sh's (CI's linux-programs job). The entries are
 # appended to the .zip as it is, with their Unix modes; nothing Bazel built
 # is unpacked or packed again. CI's signing job then signs the app around
@@ -11,7 +12,7 @@
 #
 #   tools/ci/mac_app_linux_programs.sh <Mac app .zip> <linux-programs .tar>
 #
-# Fails if the tar isn't the two programs, or the app has them already.
+# Fails if the tar lacks any of the three, or the app has them already.
 set -euo pipefail
 [ $# -eq 2 ] || { echo "usage: tools/ci/mac_app_linux_programs.sh <Mac app .zip> <linux-programs .tar>" >&2; exit 2; }
 python3 -I - "$1" "$2" <<'PY'
@@ -24,12 +25,15 @@ def fail(message):
 
 with tarfile.open(programs) as tar:
     members = {member.name.removeprefix("./"): member for member in tar.getmembers()}
-    server, host = members.get("visor-server"), members.get("visor-agent-host")
+    server, host, relay = members.get("visor-server"), members.get("visor-agent-host"), members.get("relay-client")
     if server is None or not server.isfile() or not server.mode & 0o111:
         fail(f"{programs} has no visor-server program")
     if host is None or not host.issym() or host.linkname != "visor-server":
         fail(f"{programs}'s visor-agent-host is not a link to visor-server")
+    if relay is None or not relay.isfile() or not relay.mode & 0o111:
+        fail(f"{programs} has no relay-client program")
     server_bytes = tar.extractfile(server).read()
+    relay_bytes = tar.extractfile(relay).read()
 
 with zipfile.ZipFile(app_zip) as archive:
     names = archive.namelist()
@@ -55,5 +59,7 @@ with zipfile.ZipFile(app_zip, "a") as archive:
     # A link is stored as its target, uncompressed.
     archive.writestr(entry(folder + "visor-agent-host", stat.S_IFLNK | 0o777), b"visor-server",
                      compress_type=zipfile.ZIP_STORED)
-print(f"{folder}visor-server and visor-agent-host -> visor-server, into {app_zip}")
+    archive.writestr(entry(folder + "relay-client", stat.S_IFREG | 0o755), relay_bytes,
+                     compress_type=zipfile.ZIP_DEFLATED)
+print(f"{folder}visor-server, visor-agent-host -> visor-server and relay-client, into {app_zip}")
 PY

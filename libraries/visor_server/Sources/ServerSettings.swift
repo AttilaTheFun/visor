@@ -82,12 +82,16 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     // anything reaching the gRPC port can claim a waiting job and read its
     // session's transcript and MCP.
     public var runnerTokensRequired = false
+    /// Visor's agent-proxy (AgentProxySettings, docs/agent-proxy.md): the
+    /// native sessions' MCP pass-through and the containers' egress, GitHub
+    /// gate and DNS. None, the default: no agent-proxy runs.
+    public var agentProxy: AgentProxySettings?
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             frontPaths, clientsKeepMessages, detachAgents, mcpEndpoints, pushProxy, runnerTokensRequired
+             frontPaths, clientsKeepMessages, detachAgents, mcpEndpoints, pushProxy, runnerTokensRequired, agentProxy
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -107,6 +111,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         if !mcpEndpoints.isEmpty { try c.encode(mcpEndpoints, forKey: .mcpEndpoints) }
         if !pushProxy.isEmpty { try c.encode(pushProxy, forKey: .pushProxy) }
         if runnerTokensRequired { try c.encode(runnerTokensRequired, forKey: .runnerTokensRequired) }
+        try c.encodeIfPresent(agentProxy, forKey: .agentProxy)
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -139,6 +144,9 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         mcpEndpoints = try c.decodeIfPresent([MCPEndpoint].self, forKey: .mcpEndpoints) ?? []
         pushProxy = try c.decodeIfPresent(String.self, forKey: .pushProxy) ?? ""
         runnerTokensRequired = try c.decodeIfPresent(Bool.self, forKey: .runnerTokensRequired) ?? false
+        // One that can't be read leaves the rest of the settings as they are
+        // (agent-proxy itself keeps the last it started with: its host).
+        agentProxy = (try? c.decodeIfPresent(AgentProxySettings.self, forKey: .agentProxy)) ?? nil
     }
 
     public func keep(at url: URL) {

@@ -1,0 +1,98 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("@rules_swift//swift:swift_interop_hint.bzl", "swift_interop_hint")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# Visor's agent-proxy (docs/agent-proxy.md; from Shireworks' v0.15.1, 19 Nov
+# 2026): the native sessions' MCP pass-through on loopback (7439), and the
+# relay listener, the containers' way out (egress by an allow-list, the
+# GitHub gate with the auth token Settings keep, DNS, dial-ins, the egress
+# log). Its sockets in C (c/), the proxy (Sources/, VisorAgentProxy), and
+# its host (Host/, VisorAgentProxyHost): ServerSettings' `agentProxy` and
+# the server's secrets, run on a Mac as Visor's own executable with
+# `--agent-proxy` (a launchd job, AgentProxyJob) and on Linux inside
+# visor-server. SwiftNIO and NIOSSL for its resolver and the interceptor,
+# swift-certificates, swift-asn1 and swift-crypto for its authority.
+swift_interop_hint(
+    name = "agent_proxy_c_swift",
+    module_name = "CAgentProxyPOSIX",
+)
+
+cc_library(
+    name = "agent_proxy_c",
+    srcs = ["c/agent_proxy_posix.c"],
+    hdrs = ["c/include/agent_proxy_posix.h"],
+    aspect_hints = [":agent_proxy_c_swift"],
+    strip_include_prefix = "c/include",
+)
+
+swift_library(
+    name = "visor_agent_proxy",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorAgentProxy",
+    deps = [
+        "//:foundation",
+        ":agent_proxy_c",
+        "@swiftpkg_swift_asn1//:SwiftASN1",
+        "@swiftpkg_swift_certificates//:X509",
+        "@swiftpkg_swift_crypto//:Crypto",
+        "@swiftpkg_swift_crypto//:_CryptoExtras",
+        "@swiftpkg_swift_nio//:NIOCore",
+        "@swiftpkg_swift_nio//:NIOHTTP1",
+        "@swiftpkg_swift_nio//:NIOPosix",
+        "@swiftpkg_swift_nio_ssl//:NIOSSL",
+    ],
+)
+
+swift_library(
+    name = "visor_agent_proxy_host",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Host/*.swift"]),
+    module_name = "VisorAgentProxyHost",
+    # The server's `package` members are its to use, as SwiftPM's package.
+    package_name = "visor",
+    deps = [
+        "//:foundation",
+        ":visor_agent_proxy",
+        "//libraries/visor_server",
+        "@swiftpkg_swift_crypto//:Crypto",
+    ],
+)
+
+# relay-client's own (RelayClient/, VisorRelayClient; its C in relay_c/):
+# inside a relayed container, its network set up over netlink and nftables,
+# DNS answered on 127.0.0.1:53, and every TCP connection relayed by name to
+# agent-proxy over the relay's socket. Linux alone: the program is
+# applications/relay_client, static in tools/linux_programs.sh.
+swift_interop_hint(
+    name = "relay_client_c_swift",
+    module_name = "CRelayClientPOSIX",
+)
+
+cc_library(
+    name = "relay_client_c",
+    srcs = [
+        "relay_c/relay_client_netlink.c",
+        "relay_c/relay_client_posix.c",
+    ],
+    hdrs = ["relay_c/include/relay_client_posix.h"],
+    aspect_hints = [":relay_client_c_swift"],
+    strip_include_prefix = "relay_c/include",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+swift_library(
+    name = "visor_relay_client",
+    copts = STRICT_SWIFT,
+    srcs = glob(["RelayClient/*.swift"]),
+    module_name = "VisorRelayClient",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "//:foundation",
+        ":relay_client_c",
+        ":visor_agent_proxy",
+    ],
+)

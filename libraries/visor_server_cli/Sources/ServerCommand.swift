@@ -18,14 +18,19 @@ public struct ServerCommand {
     /// what should listen as early as it can (agent_protocol's driver,
     /// which wrappers and runners redial after a restart).
     let beforeServer: (@MainActor () -> Void)?
+    /// `agent-proxy …`, the binary's where it has agent-proxy (Linux's):
+    /// given what follows and the server's secrets, the exit status.
+    let agentProxy: (@MainActor ([String], any SecretStore) -> Int32)?
 
     /// `arguments` without the program's own name.
     public init(system: any CommandLineSystem, arguments: [String] = Array(CommandLine.arguments.dropFirst()),
-                beforeServer: (@MainActor () -> Void)? = nil, onServer: (@MainActor (VisorServer) -> Void)? = nil) {
+                beforeServer: (@MainActor () -> Void)? = nil, onServer: (@MainActor (VisorServer) -> Void)? = nil,
+                agentProxy: (@MainActor ([String], any SecretStore) -> Int32)? = nil) {
         self.system = system
         self.arguments = arguments
         self.beforeServer = beforeServer
         self.onServer = onServer
+        self.agentProxy = agentProxy
     }
 
     static let usage = """
@@ -85,6 +90,12 @@ public struct ServerCommand {
                    tokens, keeping the one before for a day; `keys rotate
                    --drop-previous` drops every other key at once, and every
                    agent's token with it (on a Mac, the menu bar's alone).
+          agent-proxy
+                   `agent-proxy secret-set <name>` keeps one of agent-proxy's
+                   secrets (docs/agent-proxy.md), its value piped in on
+                   standard input (never a terminal): github-token,
+                   mcp/token, or mcp/<upstream>/<header>;
+                   `agent-proxy secret-remove <name>` removes it. Linux's.
 
         Options for run and start:
           --port <n>   The port, for the socket and the REST side alike (7433).
@@ -169,6 +180,9 @@ public struct ServerCommand {
             case "keep-messages": try keepMessages(rest.first)
             case "admin-token": try await adminToken(rest)
             case "keys": try await keys(rest)
+            case "agent-proxy":
+                guard let agentProxy else { throw CommandLineError.usage("this visor-server has no agent-proxy") }
+                return agentProxy(rest, ServerPlatform.current.secrets)
             case "help", "-h", "--help": print(Self.usage)
             default: throw CommandLineError.usage("unknown command \(command)")
             }

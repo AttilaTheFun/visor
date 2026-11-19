@@ -72,7 +72,24 @@ let system: [Target] = [
 let tests: [Target] = []
 let agentHost: [Product] = []
 let runnerPackages: [Package.Dependency] = []
+let proxyPackages: [Package.Dependency] = []
 #else
+#if os(Linux)
+/// relay-client, inside a relayed container (netlink, nftables,
+/// SO_ORIGINAL_DST: Linux alone), built static beside visor-server
+/// (tools/linux_programs.sh).
+let relayClient: [Target] = [
+    .target(name: "CRelayClientPOSIX", path: "libraries/visor_agent_proxy/relay_c"),
+    .target(name: "VisorRelayClient", dependencies: ["VisorAgentProxy", "CRelayClientPOSIX"],
+            path: "libraries/visor_agent_proxy/RelayClient", swiftSettings: strict),
+    .executableTarget(name: "RelayClientMain", dependencies: ["VisorRelayClient", "VisorAgentProxy"],
+                      path: "applications/relay_client", exclude: ["BUILD.bazel"], swiftSettings: strict),
+]
+let relayClientProduct: [Product] = [.executable(name: "relay-client", targets: ["RelayClientMain"])]
+#else
+let relayClient: [Target] = []
+let relayClientProduct: [Product] = []
+#endif
 /// Linux: POSIX signals and sockets (shared with the Mac), and the agents'
 /// host, built beside the server.
 let system: [Target] = [
@@ -102,15 +119,30 @@ let system: [Target] = [
                            .product(name: "GRPCCore", package: "grpc-swift-2"),
                            .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport")],
             path: "libraries/visor_native_runner/Sources", swiftSettings: strict),
+    // Visor's agent-proxy (docs/agent-proxy.md): its sockets, the proxy, and
+    // its host, which visor-server runs inside itself when `agentProxy` is
+    // set. SwiftNIO, NIOSSL, swift-certificates, swift-asn1 and swift-crypto.
+    .target(name: "CAgentProxyPOSIX", path: "libraries/visor_agent_proxy/c"),
+    .target(name: "VisorAgentProxy",
+            dependencies: ["CAgentProxyPOSIX",
+                           .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOPosix", package: "swift-nio"),
+                           .product(name: "NIOHTTP1", package: "swift-nio"), .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                           .product(name: "X509", package: "swift-certificates"), .product(name: "SwiftASN1", package: "swift-asn1"),
+                           .product(name: "Crypto", package: "swift-crypto"), .product(name: "_CryptoExtras", package: "swift-crypto")],
+            path: "libraries/visor_agent_proxy/Sources", swiftSettings: strict),
+    .target(name: "VisorAgentProxyHost",
+            dependencies: ["VisorAgentProxy", "VisorServer", .product(name: "Crypto", package: "swift-crypto")],
+            path: "libraries/visor_agent_proxy/Host", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain",
-                      dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge", "VisorDriver", "VisorNativeRunner"],
+                      dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge", "VisorDriver", "VisorNativeRunner",
+                                     "VisorAgentProxyHost"],
                       path: "applications/visor_server_linux", exclude: ["BUILD.bazel"], swiftSettings: strict),
-]
+] + relayClient
 /// The tests are Bazel's swift_test targets (//tests:linux), not SwiftPM's.
 let tests: [Target] = []
 /// The agents' host, built with the server: `swift build -c release` puts
 /// both in the same folder, where the server looks for it.
-let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"])]
+let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"])] + relayClientProduct
 /// agent_protocol (its driver, dispatcher and wrapper), by release, and its
 /// gRPC.
 let runnerPackages: [Package.Dependency] = [
@@ -118,6 +150,13 @@ let runnerPackages: [Package.Dependency] = [
     .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", exact: "0.5.0"),
     .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
     .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
+]
+/// agent-proxy's: the versions third_party/swift_packages resolves for Bazel.
+let proxyPackages: [Package.Dependency] = [
+    .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
+    .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.6"),
+    .package(url: "https://github.com/apple/swift-certificates.git", from: "1.21.1"),
+    .package(url: "https://github.com/apple/swift-asn1.git", from: "1.7.3"),
 ]
 #endif
 
@@ -128,6 +167,6 @@ let package = Package(
     // swift_sql at its release, as third_party/swift_packages pins it; and
     // swift-crypto at the version its graph resolves.
     dependencies: [.package(url: "https://github.com/AttilaTheFun/swift_sql.git", exact: "0.35.0"),
-                   .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2")] + runnerPackages,
+                   .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2")] + runnerPackages + proxyPackages,
     targets: services + shared + system + tests
 )
