@@ -12,7 +12,14 @@ name: CI
 #
 # Each platform builds where its tools run (tools/ci/container_build.sh):
 # Linux and Android on x86_64 `ubuntu-24.04` in Swift's image
-# (tools/ci/job_tools.sh), the Apple targets on `xcode-27` Macs. Bazel's
+# (tools/ci/job_tools.sh), the Apple targets on `xcode-27` Macs: a
+# proposal's and a release's Apple apps with rules_applecross's Swift
+# toolchain there (swift.org's Swift 6.4.2, the Mac's Xcode 27.2 for the
+# SDKs and bundling: .bazelrc's apple_cross_mac), never Xcode's own Swift,
+# whose build of 0.62.1 aborted at launch on macOS 27.0
+# (docs/DEVELOPMENT.md, "Release builds"); each is opened for real on an
+# `xcode-27` Mac, signed, before it is proposed or attached
+# (tools/ci/launch_check). Bazel's
 # caches: GitHub's (.github/actions/bazel_cache), written by main's builds
 # alone, and BuildBuddy's, its key (BUILDBUDDY_API_KEY) handed only to
 # main's builds and the alpha and release jobs (tools/ci/ci_bazel.sh).
@@ -32,13 +39,15 @@ name: CI
 # - By hand (workflow_dispatch on main, `run`): `verify` (the tests and
 #   the proof, its last job `verify` keeping the `proof` artifact),
 #   `prerelease` (Alphas built, signed in alpha with the environment
-#   `release`'s keys, tools/ci/sign_builds.sh, and a draft pre-release),
+#   `release`'s keys, tools/ci/sign_builds.sh, the Mac's launched
+#   (alpha-launch), and a draft pre-release: alpha-propose),
 #   `release` (verify and pins first, then as prerelease, a draft release),
 #   `agent-image` (Visor's toolchain image).
 # - A published release (Logan's Release in Reviews): Production built from
 #   the tag (`--config=prod`: release-apple, release-android), then
-#   release checks it is a verified main commit and signs them, and
-#   release-assets attaches them. Android never holds Apple's back.
+#   release checks it is a verified main commit and signs them,
+#   release-launch opens the signed Mac app, and release-assets attaches
+#   them. Android never holds Apple's back.
 #
 # The signing keys (the environment `release`: main and v* tags) reach the
 # Sign steps of alpha and release alone; no other job names the
@@ -581,7 +590,11 @@ jobs:
   # pins passed), on main, on an xcode-27 Mac: its version from the
   # repository's releases and tags (tools/ci/version_from_tags.sh), the
   # iPhone app (--config=ci_device) and Visor.app, optimized, for alpha to
-  # sign.
+  # sign. Built with rules_applecross's Swift toolchain (.bazelrc's
+  # apple_cross_mac: swift.org's Swift 6.4.2 and LLVM's ld64.lld, the Mac's
+  # Xcode 27.2 for the SDKs, actool, ibtool and macros), not with Xcode's
+  # own Swift, whose 0.62.1 aborted at launch on macOS 27.0
+  # (docs/DEVELOPMENT.md, "Release builds").
   alpha-apple:
     needs: [verify, pins]
     if: >-
@@ -647,7 +660,7 @@ jobs:
           VISOR_CI_PACKAGE: .ci/packages
         run: >-
           tools/ci/container_build.sh --config=alpha --config=ci_device --compilation_mode=opt
-          //applications/visor_ios //applications/visor_mac
+          --config=apple_cross_mac //applications/visor_ios //applications/visor_mac
       # The signing keeps the entitlements its signature carries: built
       # unsigned, it would lose the microphone.
       - name: Visor.app signed ad hoc with its entitlements
@@ -661,12 +674,11 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The proposal: Visor for Android with the same version
+  # The proposal's builds: Visor for Android with the same version
   # (tools/ci/stamp_android.sh), Visor.app given Visor's Linux programs, and
   # every build signed in the Sign step, the one the environment `release`'s
-  # keys reach (tools/ci/sign_builds.sh); then the draft release
-  # (tools/ci/propose_release.sh) and its assets (tools/ci/attach_release.sh),
-  # what Applications lists (AttilaTheFun/applications' docs/RELEASE_ASSETS.md).
+  # keys reach (tools/ci/sign_builds.sh), handed to alpha-launch and
+  # alpha-propose.
   alpha:
     needs: [alpha-apple, linux-programs]
     if: ${{ !cancelled() && needs.alpha-apple.result == 'success' && needs.linux-programs.result == 'success' }}
@@ -677,9 +689,7 @@ jobs:
     timeout-minutes: 120
     environment: release
     permissions:
-      # The draft release (and the drafts it is found among).
-      contents: write
-      # This run's proof artifact.
+      contents: read
       actions: read
     env:
       VISOR_BAZEL_ROOT: /mnt/bazel
@@ -729,6 +739,57 @@ jobs:
           tools/ci/sign_builds.sh --variant Alpha --out "$RUNNER_TEMP/assets"
           --ipa-kind development --android-pin "$VISOR_ANDROID_PIN"
           .ci/packages/*.ipa .ci/packages/visor_mac.zip .ci/android/*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alpha-assets
+          path: ${{ runner.temp }}/assets
+          if-no-files-found: error
+          retention-days: 1
+
+  # The signed Visor.app opened for real on an `xcode-27` Mac (macOS 27, as
+  # the Macs it ships to), its server answering and the app still up a
+  # minute later (tools/ci/launch_check), before anything is proposed: the
+  # proofs run the client in fixture mode, with no server, and passed
+  # 0.62.1, which aborted at launch.
+  alpha-launch:
+    needs: alpha
+    if: ${{ !cancelled() && needs.alpha.result == 'success' }}
+    runs-on: xcode-27
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: apple
+          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: alpha-assets
+          path: ${{ runner.temp }}/assets
+      - run: bazel run //tools/ci/launch_check -- "$RUNNER_TEMP"/assets/Visor-*-macos.zip
+
+  # The draft release (tools/ci/propose_release.sh) and its assets
+  # (tools/ci/attach_release.sh), what Applications lists
+  # (AttilaTheFun/applications' docs/RELEASE_ASSETS.md), once the Mac app
+  # launched.
+  alpha-propose:
+    needs: [alpha-apple, alpha, alpha-launch]
+    if: ${{ !cancelled() && needs.alpha.result == 'success' && needs.alpha-launch.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      # The draft release (and the drafts it is found among).
+      contents: write
+      # This run's artifacts (the builds, the proof).
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: alpha-assets
+          path: ${{ runner.temp }}/assets
       # Untrusted text reaches the shell through env, never ${{ }} in run.
       - name: The draft release
         env:
@@ -767,8 +828,8 @@ jobs:
   # tools/containers/ changed since the release before it. Not in every
   # release: it changes rarely.
   agent-image-wanted:
-    needs: [alpha-apple, alpha]
-    if: ${{ !cancelled() && (inputs.run == 'agent-image' || needs.alpha.result == 'success') }}
+    needs: [alpha-apple, alpha-propose]
+    if: ${{ !cancelled() && (inputs.run == 'agent-image' || needs.alpha-propose.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -799,7 +860,7 @@ jobs:
   # architecture) and pushed to GitHub's registry as that version, its
   # MAJOR.MINOR and latest (tools/containers/publish_agent_image.sh).
   agent-image:
-    needs: [alpha, agent-image-wanted]
+    needs: [alpha-propose, agent-image-wanted]
     if: ${{ !cancelled() && needs.agent-image-wanted.outputs.build == 'true' }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
@@ -820,8 +881,10 @@ jobs:
   # Production, when Logan releases a proposed release in Reviews (never a
   # pre-release), built from the tag's commit with --config=prod and the
   # tag's version (not the Alphas stamped again): release-apple and
-  # release-android. release checks it is a verified main commit and signs
-  # them in its Sign step. Android never holds Apple's back
+  # release-android (Apple's with rules_applecross's Swift on an xcode-27
+  # Mac, as alpha-apple's). release checks it is a verified main commit and signs
+  # them in its Sign step, release-launch opens the signed Visor.app, and
+  # release-assets attaches them. Android never holds Apple's back
   # (tools/ci/promote_release.sh): Apple's are signed whatever
   # release-android's result, and release-android-result fails the run
   # afterwards; re-running the failed jobs signs the APK alone.
@@ -866,7 +929,7 @@ jobs:
           VISOR_CI_PACKAGE: .ci/packages
         run: >-
           tools/ci/container_build.sh --config=prod --config=ci_device --compilation_mode=opt
-          //applications/visor_ios //applications/visor_mac
+          --config=apple_cross_mac //applications/visor_ios //applications/visor_mac
       - name: Visor.app signed ad hoc with its entitlements
         run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
       - uses: actions/upload-artifact@v4
@@ -1007,6 +1070,34 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The signed Visor.app opened for real on an `xcode-27` Mac, as
+  # alpha-launch opens a proposal's, before release-assets attaches it.
+  # Not there when a run before signed Apple's and this one the APK alone
+  # (tools/ci/promote_release.sh): that run launched it.
+  release-launch:
+    needs: release
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: xcode-27
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: apple
+          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: ${{ runner.temp }}/assets
+      - run: |
+          for app in "$RUNNER_TEMP"/assets/Visor-*-macos.zip; do
+            [ -e "$app" ] || { echo "No Visor.app signed in this run: launched by the run that signed it"; exit 0; }
+            bazel run //tools/ci/launch_check -- "$app"
+          done
+
   # Red when Visor for Android wasn't built and signed for this release,
   # once Apple's Production builds are attached (release-assets): Re-run
   # failed jobs then builds it again (release-android) and signs it alone
@@ -1039,10 +1130,11 @@ jobs:
   # with. A job of its own, so that the one holding the signing keys
   # (release) keeps a read-only token.
   release-assets:
-    needs: release
+    needs: [release, release-launch]
     # release-android's failure (upstream, through release) doesn't skip it:
-    # Apple's are attached whenever release signed them.
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    # Apple's are attached whenever release signed them and Visor.app
+    # launched.
+    if: ${{ !cancelled() && needs.release.result == 'success' && needs.release-launch.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
