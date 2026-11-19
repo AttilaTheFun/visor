@@ -8,6 +8,9 @@
 //   POST   /api/runners/tokens {runner}   {runner, token, created, replaced}: the token shown this once
 //   PUT    /api/runners/tokens {required} as GET: whether Claim must show one
 //   DELETE /api/runners/tokens/<runner>   {runner, revoked: true}; 404 for a runner with none
+//
+// Deprecated (19 Nov 2026), with the dispatcher: each answer says so
+// (`deprecated`), and the first mint or list in a run is logged.
 
 import Foundation
 import VisorProtocol
@@ -30,15 +33,18 @@ extension VisorServer {
             if listed.own { fields["own"] = .bool(true) }
             return .object(fields)
         }
-        return .json(JSONValue.object(["required": .bool(settings.runnerTokensRequired), "runners": .array(runners)]).encoded())
+        Deprecated.runnerTokens.noted("listed")
+        return .json(JSONValue.object(["required": .bool(settings.runnerTokensRequired), "runners": .array(runners),
+                                       "deprecated": .string(Deprecated.restNote)]).encoded())
     }
 
     private func restMintRunnerToken(_ call: RESTCall) -> HTTPResponse {
         let runner = parseJSON(call.request.body)?["runner"].string ?? ""
         if let problem = RunnerTokens.problem(withName: runner) { return HTTPResponse(400, Envelope.error(problem).encoded()) }
         let made = runnerTokens.mint(for: runner)
+        Deprecated.runnerTokens.noted("minted for \(runner)")
         return .json(JSONValue.object(["runner": .string(runner), "token": .string(made.token), "created": .string(made.created),
-                                       "replaced": .bool(made.replaced)]).encoded())
+                                       "replaced": .bool(made.replaced), "deprecated": .string(Deprecated.restNote)]).encoded())
     }
 
     private func restRequireRunnerTokens(_ call: RESTCall) -> HTTPResponse {
@@ -57,6 +63,6 @@ extension VisorServer {
         guard runnerTokens.revoke(runner) else {
             return HTTPResponse(404, Envelope.error("\(runner) has no runner token.").encoded())
         }
-        return .json(JSONValue.object(["runner": .string(runner), "revoked": .bool(true)]).encoded())
+        return .json(JSONValue.object(["runner": .string(runner), "revoked": .bool(true), "deprecated": .string(Deprecated.restNote)]).encoded())
     }
 }

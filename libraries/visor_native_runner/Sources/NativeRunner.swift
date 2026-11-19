@@ -12,6 +12,9 @@
 // releases.
 // Native agents work as Visor's always have: in the user's own account,
 // reading and writing where the user can (Logan, 12 Nov 2026).
+// Deprecated (19 Nov 2026), with the dispatcher it claims from: native
+// sessions are plain host sessions, agent jobs move to CI, and this goes
+// once they run there.
 
 import AgentProtocol
 import Foundation
