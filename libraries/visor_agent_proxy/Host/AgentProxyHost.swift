@@ -113,7 +113,7 @@ public enum AgentProxyHost {
             failed = failed || nativeMCP == nil
         }
         let serving = [relay == nil ? nil : "the relay listener", nativeMCP == nil ? nil : "the MCP pass-through"].compactMap { $0 }
-        log("\(version), pid \(getpid()): agent-proxy serves " + (serving.isEmpty ? "nothing" : serving.joined(separator: " and "))
+        log((version.isEmpty ? "" : "\(version), ") + "pid \(getpid()): agent-proxy serves " + (serving.isEmpty ? "nothing" : serving.joined(separator: " and "))
             + (failed ? ", not all it was asked for" : ""))
         return Running(relay: relay, nativeMCP: nativeMCP, interceptor: interceptor, complete: !failed)
     }
