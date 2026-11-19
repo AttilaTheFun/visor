@@ -35,6 +35,11 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
     func connect(request: StreamingServerRequest<AgentProtocol_V1_WrapperMessage>,
                  context: ServerContext) async throws -> StreamingServerResponse<AgentProtocol_V1_DriverMessage> {
         let bearer = AgentBearer.token(in: request.metadata)
+        // MultiPass's name for this driver, which its wrapper dialled:
+        // deprecated (MultiPass is retired), logged the first time in a run.
+        if let dialled = request.metadata[stringValues: ":authority"].first(where: JobQueue.namesMultiPass) {
+            Deprecated.multipassName.noted("a wrapper dialled \(dialled)")
+        }
         guard bearer != nil else {
             VisorServer.log("driver: a wrapper dialled in with no token: refused")
             return StreamingServerResponse(error: AgentBearer.refusal("The call shows no token (authorization: Bearer <Job.token>)."))

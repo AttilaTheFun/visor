@@ -26,7 +26,9 @@ public enum VisorDriver {
 
     /// Containers reach this computer's driver through Shireworks'
     /// agent-proxy by this name (it answers MultiPass's older
-    /// `visor.multipass.internal` too, while MultiPass is retired).
+    /// `visor.multipass.internal` too, while MultiPass is retired). That
+    /// older name is deprecated (19 Nov 2026): a connection, a job or the
+    /// setting naming it is logged the first time in a run.
     public static func containerURL(port: Int) -> String {
         "http://visor.agent.internal:\(port)"
     }

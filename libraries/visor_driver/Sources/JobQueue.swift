@@ -4,6 +4,9 @@
 // back at the front of the queue when it is released or lapses. Each job's
 // agent is driven by this server: its wrapper dials `driverURL`, and its
 // session appears as it does.
+// Deprecated (19 Nov 2026): agent jobs move to CI, and the queue's jobs
+// (`POST /api/jobs`, jobs.json's waiting and claimed ones) go once they run
+// there. moveToRunner and moveBack stay.
 
 import AgentProtocol
 import Foundation
@@ -232,8 +235,11 @@ final class JobQueue: AgentJobQueue {
         moves[Self.key(agent.uuid)]
     }
 
-    /// A job for `runner`, now or within `wait`: claimed by it.
+    /// A job for `runner`, now or within `wait`: claimed by it. A claim
+    /// from a runner other than Visor's native one is deprecated (agent
+    /// jobs move to CI): the first in a run is logged.
     func claim(_ request: AgentProtocol_V1_ClaimRequest, wait: Duration) async -> AgentProtocol_V1_Job? {
+        if !request.capabilities.contains(Self.native) { Deprecated.runnerClaim.noted("by \(request.runner)") }
         let deadline = ContinuousClock.now + wait
         while true {
             releaseLapsed()
@@ -249,7 +255,11 @@ final class JobQueue: AgentJobQueue {
                 claimCapabilities[Self.key(job.agent.uuid)] = request.capabilities
                 save()
                 log("dispatcher: \(request.runner) claimed \(job.agent.uuid)")
-                return addressed(job, for: request.capabilities)
+                let given = addressed(job, for: request.capabilities)
+                if Self.namesMultiPass(given.driverURL) || Self.namesMultiPass(given.agent.dispatcherURL) {
+                    Deprecated.multipassName.noted("job \(job.agent.uuid), \(given.driverURL)")
+                }
+                return given
             }
             let left = deadline - .now
             guard left > .zero else { return nil }
@@ -325,6 +335,12 @@ final class JobQueue: AgentJobQueue {
 
     /// The capability of a runner that runs its agents in containers.
     static let container = "container"
+
+    /// Whether an address names MultiPass's retired name for this driver
+    /// (`visor.multipass.internal`), in place of `visor.agent.internal`.
+    nonisolated static func namesMultiPass(_ address: String) -> Bool {
+        address.lowercased().contains(Deprecated.multipassHost)
+    }
 
     /// An agent's id as this dispatcher keys it: the UUID it issued, in
     /// lower case, however a runner or wrapper spells it back (Foundation's
