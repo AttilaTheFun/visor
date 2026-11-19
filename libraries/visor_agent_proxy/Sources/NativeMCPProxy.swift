@@ -166,13 +166,16 @@ public final class NativeMCPProxy: Sendable {
     }
 
     /// The headers a call goes on with: its own (a session sends its plain ones, CLIENT_ID among them), but those of
-    /// the hop, the token and any named as the endpoint's secret ones (the caller's own never sits beside
-    /// agent-proxy's), then the endpoint's secret ones.
+    /// the hop, the token and any named as the endpoint's plain or secret ones (the caller's own never sits beside
+    /// agent-proxy's), then the endpoint's plain ones (Visor's settings name them), then its secret ones.
     func forwarded(_ request: Request, to endpoint: Endpoint, host: String) -> [(name: String, value: String)] {
         let dropped = Set(["host", "connection", "content-length", "transfer-encoding", "keep-alive", Self.tokenHeader.lowercased()]
-            + endpoint.secretHeaders.map { $0.lowercased() })
+            + endpoint.secretHeaders.map { $0.lowercased() } + endpoint.headers.keys.map { $0.lowercased() })
         var headers = request.headers.filter { !dropped.contains($0.name.lowercased()) }
         headers.append(("Host", host))
+        for (name, value) in endpoint.headers.sorted(by: { $0.key < $1.key }) where !value.contains(where: \.isNewline) {
+            headers.append((name, value))
+        }
         for name in endpoint.secretHeaders {
             if let value = secret(endpoint.name, name) { headers.append((name, value)) }
         }
