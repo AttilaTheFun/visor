@@ -1,5 +1,7 @@
 // The diskutil commands Visor Disk Utility runs as an administrator.
 
+import Foundation
+
 /// One `diskutil` command line. Only two kinds are ever made: adding a
 /// volume, and deleting Containers (VolumeGuard checks both again before
 /// anything runs).
@@ -32,10 +34,21 @@ public struct DiskCommand: Equatable, Sendable, CustomStringConvertible {
         return DiskCommand(arguments: arguments)
     }
 
-    /// `diskutil apfs deleteVolume <disk>`, for Containers alone: Sessions
-    /// throws.
-    public static func deleteVolume(_ role: VolumeRole, device: String) throws -> DiskCommand {
-        guard role.isErasable else { throw DiskVolumesError.sessionsNeverErased("diskutil apfs deleteVolume \(device)") }
-        return DiskCommand(arguments: ["apfs", "deleteVolume", device])
+    /// `diskutil apfs deleteVolume <volume UUID>`, for Containers alone:
+    /// Sessions throws. By its APFS volume UUID, never its disk (`disk3s8`):
+    /// disk numbers can change between VolumeGuard's look and the command
+    /// running as root, a UUID can't.
+    public static func deleteVolume(_ role: VolumeRole, uuid: String) throws -> DiskCommand {
+        guard role.isErasable else { throw DiskVolumesError.sessionsNeverErased("diskutil apfs deleteVolume \(uuid)") }
+        guard isVolumeUUID(uuid) else {
+            throw DiskVolumesError.blocked("\(role.volumeName) has no APFS volume UUID (\"\(uuid)\"): it's deleted by its UUID alone.")
+        }
+        return DiskCommand(arguments: ["apfs", "deleteVolume", uuid])
+    }
+
+    /// Whether a target is a volume UUID (`4EF85269-E4B1-4058-A1FA-E9240A971CC9`),
+    /// as diskutil lists them, not a disk, a name or a path.
+    public static func isVolumeUUID(_ target: String) -> Bool {
+        target.count == 36 && UUID(uuidString: target) != nil
     }
 }
