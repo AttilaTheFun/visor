@@ -104,9 +104,9 @@ enum LaunchCheck {
                 break
             }
             if waited >= options.startup {
-                return pid == nil
-                    ? "\(app.executable) never started (\(options.startup) s)"
-                    : "its server didn't answer /api/hello on port \(port) within \(options.startup) s"
+                guard let pid else { return "\(app.executable) never started (\(options.startup) s)" }
+                printHang(pid)
+                return "its server didn't answer /api/hello on port \(port) within \(options.startup) s (\(app.executable) still running, pid \(pid))"
             }
             Thread.sleep(forTimeInterval: 1)
         }
@@ -124,7 +124,10 @@ enum LaunchCheck {
                 missed = 0
             } else {
                 missed += 1
-                if missed >= 3 { return "its server stopped answering /api/hello \(held) s after it first did" }
+                if missed >= 3 {
+                    printHang(process)
+                    return "its server stopped answering /api/hello \(held) s after it first did"
+                }
             }
         }
         return nil

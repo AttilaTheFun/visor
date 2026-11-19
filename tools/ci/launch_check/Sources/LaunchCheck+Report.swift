@@ -37,4 +37,29 @@ extension LaunchCheck {
             print("  \(error)")
         }
     }
+
+    /// Where a running app is stuck, when it runs but doesn't answer: its
+    /// main thread, sampled (`sample`), the top of its call tree. One stuck
+    /// in the keychain is waiting on a dialog: an item a differently signed
+    /// Visor left (a check run before on the same Mac) asks before it is
+    /// read.
+    static func printHang(_ pid: pid_t) {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("launch_check-sample-\(pid).txt")
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard (try? Program.run("/usr/bin/sample", ["\(pid)", "2", "-file", file.path]))?.succeeded == true,
+              let text = try? String(contentsOf: file, encoding: .utf8) else {
+            print("Hang: \(pid) couldn't be sampled")
+            return
+        }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let start = lines.firstIndex(where: { $0.contains("com.apple.main-thread") }) else {
+            print("Hang: no main thread in \(pid)'s sample")
+            return
+        }
+        print("Hang: \(pid)'s main thread (sample):")
+        print(lines[start...].prefix(30).joined(separator: "\n"))
+        if text.contains("SecItemCopyMatching") || text.contains("SecKeychain") {
+            print("  (in the keychain: an item a differently signed Visor left asks first; remove the app's items, `security delete-generic-password -s com.LoganShire.Visor.server`, and run again)")
+        }
+    }
 }
