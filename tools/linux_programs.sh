@@ -85,6 +85,9 @@ ln -s visor-server "$OUT/relay-client"
 answer="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"ping"}' |
     VISOR_PORT=1 VISOR_SESSION=linux-programs VISOR_TOKEN=linux-programs "$OUT/visor-agent-host" mcp)"
 case "$answer" in *'"result":{}'*) ;; *) echo "$me: visor-agent-host mcp answered: $answer" >&2; exit 1 ;; esac
-# relay-client's usage, without the container it's for (no network set up).
-"$OUT/relay-client" help | grep -q "^Usage: relay-client run" || { echo "$me: relay-client does not run" >&2; exit 1; }
+# relay-client's usage, without the container it's for (no network set up):
+# read whole before it is looked at, as grep -q, gone at its first match,
+# can leave the program writing to a closed pipe (status 141, 2 runs in 100).
+usage="$("$OUT/relay-client" help)" || { echo "$me: relay-client does not run" >&2; exit 1; }
+grep -q "^Usage: relay-client run" <<< "$usage" || { echo "$me: relay-client answered: $usage" >&2; exit 1; }
 ls -l "$OUT"
