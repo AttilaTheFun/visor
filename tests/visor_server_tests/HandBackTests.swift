@@ -338,10 +338,11 @@ extension ServerTests {
         #expect(record.entries.map(\.text) == ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
 
         // Its agent here answers: the reply is in the transcript and the
-        // preview, not left on the prompt.
+        // preview, not left on the prompt. (A prompt in the file that this
+        // server didn't send would have the file read again whole.)
         let handle = try FileHandle(forWritingTo: returned)
         handle.seekToEndOfFile()
-        handle.write(Data((line("user", "p3", "a2", "And CHERRY?") + line("assistant", "a3", "p3", "OK-CHERRY")).utf8))
+        handle.write(Data(line("assistant", "a3", "a2", "OK-CHERRY").utf8))
         try handle.close()
         #expect(await eventually { record.entries.last?.text == "OK-CHERRY" ? true : nil } == true,
                 "\(record.entries.map(\.text))")
