@@ -66,7 +66,8 @@ swift_library(
 # inside a relayed container, its network set up over netlink and nftables,
 # DNS answered on 127.0.0.1:53, and every TCP connection relayed by name to
 # agent-proxy over the relay's socket. Linux alone: the program is
-# applications/relay_client, static in tools/linux_programs.sh.
+# applications/relay_client, and visor-server run as relay-client (static
+# in tools/linux_programs.sh).
 swift_interop_hint(
     name = "relay_client_c_swift",
     module_name = "CRelayClientPOSIX",

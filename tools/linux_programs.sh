@@ -1,20 +1,23 @@
 #!/bin/bash
-# Visor's own Linux programs for the containers it makes: visor-server, which is also the agents' host when run
-# as visor-agent-host (a link to it beside it), and relay-client, agent-proxy's
-# end inside a relayed container (docs/agent-proxy.md; the container runner
-# mounts it at /run/agent-proxy/client), built for Linux on arm64 and
-# linked fully static with Swift's Static Linux SDK (musl): they run in any
-# image, whatever its C library. Visor.app carries the folder in
-# Contents/Resources/Linux, and every container has it read-only at
-# /opt/visor/bin.
+# Visor's own Linux programs for the containers it makes: visor-server, which
+# is also the agents' host when run as visor-agent-host, and relay-client,
+# agent-proxy's end inside a relayed container (docs/agent-proxy.md), when
+# run by that name (both links to it beside it), built for Linux on arm64 and
+# linked fully static with Swift's Static Linux SDK (musl): it runs in any
+# image, whatever its C library. One program, not three: each static
+# program carries its own Swift runtime, Foundation (with ICU's data, about
+# 34 MB) and BoringSSL, and a relay-client of its own was 67 MB stripped.
+# Visor.app carries the folder in Contents/Resources/Linux, and every
+# container has it read-only at /opt/visor/bin.
 #
 #   tools/linux_programs.sh <folder>
 #
 # On Linux with Swift 6.4.0 (Visor's agent image, a CI container): the SDK
 # is installed the first time, by its checksum (285 MB), and its link needs
-# lld, libc++abi and libunwind spelled out. The folder gets the programs
-# (visor-server, the visor-agent-host link, relay-client), stripped,
-# checked that they run, and nothing else.
+# lld, libc++abi and libunwind spelled out. The folder gets the program
+# (visor-server, stripped: about 3x smaller, and nothing reads its symbols),
+# the visor-agent-host and relay-client links, checked that each name runs,
+# and nothing else.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:?the folder for the programs}"
@@ -57,26 +60,23 @@ libcxx=""
 shim="$scratch-libstdcxx"
 mkdir -p "$shim"
 ln -sf "$libcxx" "$shim/libstdc++.a"
-for product in visor-server relay-client; do
-    swift build -c release --swift-sdk aarch64-swift-linux-musl \
-        -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
-        -Xswiftc -use-ld=lld -Xlinker -lc++abi -Xlinker -lunwind \
-        --scratch-path "$scratch" --product "$product"
-done
+swift build -c release --swift-sdk aarch64-swift-linux-musl \
+    -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
+    -Xswiftc -use-ld=lld -Xlinker -lc++abi -Xlinker -lunwind \
+    --scratch-path "$scratch" --product visor-server
 bin="$(swift build -c release --swift-sdk aarch64-swift-linux-musl \
     -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
     --scratch-path "$scratch" --show-bin-path)"
 
 mkdir -p "$OUT"
 rm -f "$OUT/visor-server" "$OUT/visor-agent-host" "$OUT/relay-client"
-for product in visor-server relay-client; do
-    cp "$bin/$product" "$OUT/$product"
-    if command -v llvm-strip > /dev/null; then llvm-strip "$OUT/$product"; else strip "$OUT/$product"; fi
-    chmod 755 "$OUT/$product"
-    # Static.
-    ! ldd "$OUT/$product" > /dev/null 2>&1 || { echo "$me: $OUT/$product is linked dynamically" >&2; exit 1; }
-done
+cp "$bin/visor-server" "$OUT/visor-server"
+if command -v llvm-strip > /dev/null; then llvm-strip "$OUT/visor-server"; else strip "$OUT/visor-server"; fi
+chmod 755 "$OUT/visor-server"
+# Static.
+! ldd "$OUT/visor-server" > /dev/null 2>&1 || { echo "$me: $OUT/visor-server is linked dynamically" >&2; exit 1; }
 ln -s visor-server "$OUT/visor-agent-host"
+ln -s visor-server "$OUT/relay-client"
 
 # Each name answers.
 "$OUT/visor-agent-host" --version > /dev/null || { echo "$me: visor-agent-host does not run" >&2; exit 1; }

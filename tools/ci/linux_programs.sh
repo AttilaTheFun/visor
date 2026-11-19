@@ -1,11 +1,11 @@
 #!/bin/bash
 # Visor's own Linux programs (tools/linux_programs.sh: visor-server, also
-# the agents' host as visor-agent-host, and relay-client, linked fully
-# static for arm64 with Swift's Static Linux SDK), built in CI's own job
+# the agents' host as visor-agent-host and relay-client, links to it, linked
+# fully static for arm64 with Swift's Static Linux SDK), built in CI's own job
 # (linux-programs: GitHub's arm64 Ubuntu runner, in a container of Visor's
 # agent image, which has the Swift the SDK is for, and checks that each
 # program runs), and written to
-# <file> as a tar (the link kept a link), for the signing job, which seals
+# <file> as a tar (the links kept links), for the signing job, which seals
 # them into the Mac's app (tools/ci/mac_app_linux_programs.sh) before it is
 # signed. The committed tree is unpacked apart from the checkout, so
 # SwiftPM's .build stays out of it.

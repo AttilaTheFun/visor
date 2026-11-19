@@ -3,7 +3,8 @@
 Visor's agent-proxy is Shireworks' agent-proxy, moved into Visor (Logan, 19
 Nov 2026: "agent-proxy is Visor's now"). It came from shireworks **v0.15.1**
 (`Sources/AgentProxy`, `CAgentProxyPOSIX`, `AgentProxyHost`, `RelayClient`,
-`CRelayClientPOSIX`, `RelayClientMain`, and their tests). It is
+`CRelayClientPOSIX`, `RelayClientMain`, and their tests; relay-client is
+now visor-server run by that name). It is
 `libraries/visor_agent_proxy`, its tests are `tests/visor_agent_proxy_tests`
 (in `//tests:linux`), and it is **off by default**: nothing starts unless
 settings.json has `agentProxy`.
@@ -36,7 +37,9 @@ settings.json has `agentProxy`.
   Each connection is a line of the egress log, a JSON object with no bodies,
   headers or tokens. Nothing of Visor's relays containers to it yet: the
   container runner (step 4 of the container-runner plan) will. That runner
-  mounts `relay-client` at `/run/agent-proxy/client`, carries in
+  runs `relay-client` (in every container at `/opt/visor/bin/relay-client`;
+  mounted elsewhere, its file must still be named `relay-client`, the name
+  visor-server answers to), carries in
   `/run/agent-proxy/relay.sock`, and gives the container no network of its
   own.
 
@@ -150,10 +153,15 @@ started once the server is made, when `agentProxy` is set. A change takes a
 restart of visor-server. This is the simpler choice: no second process, the
 same secrets file, and its lines in the server's log.
 
-**relay-client** is built static for arm64 Linux by
-`tools/linux_programs.sh`, beside visor-server. It is checked to run, and is
-in the linux-programs tar and the Mac app's `Contents/Resources/Linux`, where
-visor-server already is. The container runner mounts it into its containers.
+**relay-client** is visor-server run by that name: a link to it, as
+visor-agent-host is, made by `tools/linux_programs.sh`, which builds
+visor-server static for arm64 Linux. A relay-client of its own was 67 MB
+stripped, most of it the Swift runtime, Foundation's ICU data and BoringSSL
+that visor-server already carries; inside visor-server it costs about
+nothing. It is checked to run, and is in the linux-programs tar and the Mac
+app's `Contents/Resources/Linux`, a link beside visor-server. The container
+runner mounts it into its containers. `//applications/relay_client` is the
+same command on its own, for Bazel.
 
 ## The cut-over, per Mac
 
