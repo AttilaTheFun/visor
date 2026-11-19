@@ -10,9 +10,9 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 #
 #   bazel run //tools/ci/launch_check -- <Visor.app or Visor-<version>-macos.zip>
 #
-# It opens the app as a user would, so it runs where nothing else answers
-# on 7433 and no Visor is running: a CI Mac or a leased VM, never a Mac
-# someone is using.
+# It opens the app as a user would, with a data folder of its own, so it
+# runs where Visor was never set up, nothing else answers on 7433 and no
+# Visor is running: a CI Mac or a leased VM, never a Mac someone is using.
 swift_binary(
     name = "launch_check",
     srcs = glob(["Sources/*.swift"]),

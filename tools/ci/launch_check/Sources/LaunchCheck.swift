@@ -8,9 +8,10 @@ import Foundation
 ///
 ///     bazel run //tools/ci/launch_check -- <Visor.app | Visor-<version>-macos.zip> [--startup <s>] [--hold <s>]
 ///
-/// It puts a stand-in `claude` where the app looks (StandInClaude), opens
-/// the app as a user would (`open`: not fixture mode, so its server
-/// starts), waits for `http://127.0.0.1:7433/api/hello` to answer (any
+/// It puts a stand-in `claude` where the app looks (StandInClaude), gives
+/// the app a fresh data folder whose server asks nothing (AppData: one with
+/// no password never listens), opens the app as a user would (`open`: not
+/// fixture mode, so its server starts), waits for `http://127.0.0.1:7433/api/hello` to answer (any
 /// HTTP answer: the server is up), then checks for `--hold` seconds (60)
 /// that the same process is running and the server still answering, and
 /// quits the app. When it fails it prints the newest crash report the app
@@ -18,9 +19,9 @@ import Foundation
 /// app's own unified-log lines.
 ///
 /// Exits 0 when the app passed, 1 when it didn't, 2 when the check
-/// couldn't be made (the arguments; a Visor already running or 7433
-/// already answering: it runs on a CI Mac or a leased VM, never a Mac
-/// someone is using).
+/// couldn't be made (the arguments; a Visor already running, 7433 already
+/// answering, or a Visor data folder not the check's: it runs on a CI Mac
+/// or a leased VM, never a Mac someone is using).
 @main
 @MainActor
 enum LaunchCheck {
@@ -59,6 +60,8 @@ enum LaunchCheck {
         if let status = try hello() {
             throw LaunchCheckError.setup("something already answers on port \(port) (HTTP \(status)): the check needs it free")
         }
+        let data = try AppData.prepare()
+        defer { data.remove() }
         let claude = try StandInClaude.install(in: work)
         defer { claude.remove() }
 
