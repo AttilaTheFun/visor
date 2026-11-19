@@ -1,8 +1,9 @@
 // visor-server on Linux: the command-line server, given Linux's system.
-// Also the agents' host, when run by that name (visor-agent-host, a link
-// to this program): Visor's Linux programs are one program
-// (tools/linux_programs.sh), so the Swift runtime and Foundation, linked
-// in, are carried once.
+// Also the agents' host and relay-client, when run by those names
+// (visor-agent-host and relay-client, links to this program): Visor's Linux
+// programs are one program (tools/linux_programs.sh), so the Swift runtime,
+// Foundation and its ICU data, NIO and BoringSSL, linked in, are carried
+// once.
 //
 // agent_protocol beside it, from the environment:
 // - VISOR_AGENT_PROTOCOL_PORT: the driver and dispatcher on that port
@@ -29,11 +30,18 @@ import VisorNativeRunner
 import VisorServer
 import VisorServerCLI
 import VisorServerLinux
+#if canImport(VisorRelayClient)
+import VisorRelayClient
+#endif
 
-if CommandLine.arguments.first.map({ URL(fileURLWithPath: $0).lastPathComponent }) == "visor-agent-host" {
+let programName = CommandLine.arguments.first.map { URL(fileURLWithPath: $0).lastPathComponent }
+if programName == "visor-agent-host" {
     if CommandLine.arguments.dropFirst().first == "mcp" { exit(await MCPMain.run(ProcessInfo.processInfo.environment)) }
     exit(await AgentHost.main(CommandLine.arguments))
 }
+#if canImport(VisorRelayClient)
+if programName == "relay-client" { exit(await RelayClientCommand.main(CommandLine.arguments)) }
+#endif
 
 let environment = ProcessInfo.processInfo.environment
 let agentProtocol = environment["VISOR_AGENT_PROTOCOL_PORT"].flatMap(Int.init).flatMap { port -> VisorDriver.Listening? in

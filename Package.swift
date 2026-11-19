@@ -76,19 +76,18 @@ let proxyPackages: [Package.Dependency] = []
 #else
 #if os(Linux)
 /// relay-client, inside a relayed container (netlink, nftables,
-/// SO_ORIGINAL_DST: Linux alone), built static beside visor-server
-/// (tools/linux_programs.sh).
+/// SO_ORIGINAL_DST: Linux alone): visor-server run by that name (a link to
+/// it, tools/linux_programs.sh), so its runtime, Foundation, NIO and
+/// BoringSSL are visor-server's, not a second copy.
 let relayClient: [Target] = [
     .target(name: "CRelayClientPOSIX", path: "libraries/visor_agent_proxy/relay_c"),
     .target(name: "VisorRelayClient", dependencies: ["VisorAgentProxy", "CRelayClientPOSIX"],
             path: "libraries/visor_agent_proxy/RelayClient", swiftSettings: strict),
-    .executableTarget(name: "RelayClientMain", dependencies: ["VisorRelayClient", "VisorAgentProxy"],
-                      path: "applications/relay_client", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ]
-let relayClientProduct: [Product] = [.executable(name: "relay-client", targets: ["RelayClientMain"])]
+let relayClientDependency: [Target.Dependency] = ["VisorRelayClient"]
 #else
 let relayClient: [Target] = []
-let relayClientProduct: [Product] = []
+let relayClientDependency: [Target.Dependency] = []
 #endif
 /// Linux: POSIX signals and sockets (shared with the Mac), and the agents'
 /// host, built beside the server.
@@ -135,14 +134,14 @@ let system: [Target] = [
             path: "libraries/visor_agent_proxy/Host", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain",
                       dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge", "VisorDriver", "VisorNativeRunner",
-                                     "VisorAgentProxyHost"],
+                                     "VisorAgentProxyHost"] + relayClientDependency,
                       path: "applications/visor_server_linux", exclude: ["BUILD.bazel"], swiftSettings: strict),
 ] + relayClient
 /// The tests are Bazel's swift_test targets (//tests:linux), not SwiftPM's.
 let tests: [Target] = []
 /// The agents' host, built with the server: `swift build -c release` puts
 /// both in the same folder, where the server looks for it.
-let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"])] + relayClientProduct
+let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"])]
 /// agent_protocol (its driver, dispatcher and wrapper), by release, and its
 /// gRPC.
 let runnerPackages: [Package.Dependency] = [
