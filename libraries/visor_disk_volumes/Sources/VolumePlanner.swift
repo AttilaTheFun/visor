@@ -55,7 +55,8 @@ public enum VolumePlanner {
         if !info.filesystemName.isEmpty, info.isCaseSensitive != role.wantsCaseSensitive {
             notes.append(caseNote(role))
         }
-        return VolumeState(role: role, plan: .adopt, volume: volume, info: info, container: container, notes: notes)
+        return VolumeState(role: role, plan: .adopt, volume: volume, info: info, container: container, notes: notes,
+                           measuredFree: info.mountPoint.flatMap { survey.freeSpace[$0] })
     }
 
     /// What a case-insensitive volume means for the role.

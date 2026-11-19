@@ -12,13 +12,16 @@ public struct VolumeRecord: Codable, Equatable, Sendable {
     public var format: String
     /// Whether it tells `Foo` from `foo`; nil if unknown.
     public var caseSensitive: Bool?
-    /// Bytes it holds, its quota (0: none) and its reserve (0: none).
+    /// Bytes it holds as APFS lists them (at least its reserve), its quota
+    /// (0: none) and its reserve (0: none).
     public var used: Int64
     public var quota: Int64
     public var reserve: Int64
+    /// Bytes it could still take when this was written; nil if unknown.
+    public var available: Int64?
 
     public init(role: VolumeRole, name: String, path: String?, device: String, format: String, caseSensitive: Bool?,
-                used: Int64, quota: Int64, reserve: Int64) {
+                used: Int64, quota: Int64, reserve: Int64, available: Int64? = nil) {
         self.role = role
         self.name = name
         self.path = path
@@ -28,5 +31,6 @@ public struct VolumeRecord: Codable, Equatable, Sendable {
         self.used = used
         self.quota = quota
         self.reserve = reserve
+        self.available = available
     }
 }

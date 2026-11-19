@@ -19,8 +19,8 @@ struct VolumeCard: View {
                     row("Status", status)
                     row("Path", state?.path ?? role.mountPoint)
                     row("Format", format)
-                    if let volume = state?.volume {
-                        row("Used", ByteSize.describe(volume.used))
+                    if let used = state?.usedDescription {
+                        row("Used", used)
                     }
                     row("Free", state?.available.map(ByteSize.describe) ?? "—")
                     sizeRow("Reserve", text: binding(\.reserve), help: "Space set aside for it alone. Empty for none.")

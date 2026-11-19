@@ -11,15 +11,18 @@ public struct VolumeState: Equatable, Sendable {
     public var container: APFSContainer?
     /// What a person should know about it (its case, where it's mounted).
     public var notes: [String]
+    /// What its filesystem says it can still take, when it's mounted.
+    public var measuredFree: Int64?
 
     public init(role: VolumeRole, plan: VolumePlan, volume: APFSVolume? = nil, info: VolumeInfo? = nil,
-                container: APFSContainer? = nil, notes: [String] = []) {
+                container: APFSContainer? = nil, notes: [String] = [], measuredFree: Int64? = nil) {
         self.role = role
         self.plan = plan
         self.volume = volume
         self.info = info
         self.container = container
         self.notes = notes
+        self.measuredFree = measuredFree
     }
 
     public var exists: Bool { volume != nil }
@@ -36,9 +39,25 @@ public struct VolumeState: Equatable, Sendable {
 
     public var isCaseSensitive: Bool? { info.map(\.isCaseSensitive) }
 
-    /// Bytes it may still take: its container's free space, plus what's
-    /// left of its own reserve, up to its quota.
+    /// Whether what APFS lists as its use is its reserve: its files take
+    /// that much or less.
+    public var isWithinReserve: Bool {
+        guard let volume else { return false }
+        return volume.reserve > 0 && volume.used <= volume.reserve
+    }
+
+    /// Its use for a person: "12.5 GB", or "within its 5 GB reserve".
+    public var usedDescription: String? {
+        guard let volume else { return nil }
+        return isWithinReserve ? "within its \(ByteSize.describe(volume.reserve)) reserve" : ByteSize.describe(volume.used)
+    }
+
+    /// Bytes it may still take: what its filesystem says when it's mounted;
+    /// else its container's free space, plus what's left of its own
+    /// reserve, up to its quota. (APFS lists a volume's use as at least its
+    /// reserve, so an unmounted volume's unused reserve isn't counted.)
     public var available: Int64? {
+        if let measuredFree { return measuredFree }
         guard let container else { return nil }
         guard let volume else { return container.free }
         var room = container.free + max(0, volume.reserve - volume.used)
@@ -71,6 +90,6 @@ public struct VolumeState: Equatable, Sendable {
         guard let volume else { return nil }
         return VolumeRecord(role: role, name: volume.name, path: info?.mountPoint, device: volume.device,
                             format: info?.filesystemName ?? "", caseSensitive: info?.isCaseSensitive,
-                            used: volume.used, quota: volume.quota, reserve: volume.reserve)
+                            used: volume.used, quota: volume.quota, reserve: volume.reserve, available: available)
     }
 }

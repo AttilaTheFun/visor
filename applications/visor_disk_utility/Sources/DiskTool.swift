@@ -29,7 +29,12 @@ enum DiskTool {
                 inTheWay.insert(role.mountPoint)
             }
         }
-        return DiskSurvey(bootContainer: boot, containers: containers, infos: infos, foldersInTheWay: inTheWay)
+        var freeSpace: [String: Int64] = [:]
+        for mountPoint in infos.compactMap(\.mountPoint) {
+            let free = (try? FileManager.default.attributesOfFileSystem(forPath: mountPoint))?[.systemFreeSize] as? NSNumber
+            freeSpace[mountPoint] = free?.int64Value
+        }
+        return DiskSurvey(bootContainer: boot, containers: containers, infos: infos, foldersInTheWay: inTheWay, freeSpace: freeSpace)
     }
 
     /// Runs the commands as an administrator once VolumeGuard has passed

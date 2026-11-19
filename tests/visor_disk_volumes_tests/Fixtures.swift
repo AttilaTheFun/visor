@@ -1,9 +1,9 @@
-// diskutil's own output, from a leased macOS 27.0.1 VM (19 Nov 2026).
-// `apfs list` is trimmed to the boot container's System, Data and Sessions
-// volumes, and one other container; `info` is whole.
+// diskutil's own output, from a leased macOS 27.0.1 VM (19 Nov 2026). The
+// `apfs list` fixtures are trimmed to a few volumes (by Python's plistlib,
+// which writes them as diskutil does); the `info` ones are whole.
 
 enum Fixtures {
-    /// `diskutil apfs list -plist` with a case-insensitive Sessions (disk3s7) made by hand, and no Containers.
+    /// `diskutil apfs list -plist` with a case-insensitive Sessions (disk3s7) made by hand (`diskutil apfs addVolume disk3 APFS Sessions`), and no Containers.
     static let listWithCaseInsensitiveSessions = #"""
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -297,6 +297,556 @@ enum Fixtures {
 	<true/>
 	<key>WritableVolume</key>
 	<true/>
+</dict>
+</plist>
+"""#
+
+    /// `diskutil apfs list -plist` after Visor Disk Utility made both: Sessions (disk3s7, a 5 GB reserve) and Containers (disk3s8, a 20 GB quota).
+    static let listWithBoth = #"""
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Containers</key>
+	<array>
+		<dict>
+			<key>APFSContainerUUID</key>
+			<string>E182B93B-22B1-46FD-9F5C-2B37E7346D1C</string>
+			<key>CapacityCeiling</key>
+			<integer>200265433088</integer>
+			<key>CapacityFree</key>
+			<integer>121671036928</integer>
+			<key>ContainerReference</key>
+			<string>disk3</string>
+			<key>DesignatedPhysicalStore</key>
+			<string>disk0s2</string>
+			<key>PhysicalStores</key>
+			<array>
+				<dict>
+					<key>DeviceIdentifier</key>
+					<string>disk0s2</string>
+					<key>DiskUUID</key>
+					<string>9F421E0B-924C-4B3C-9A3D-5417BE31E56E</string>
+					<key>Size</key>
+					<integer>200265433088</integer>
+				</dict>
+			</array>
+			<key>Volumes</key>
+			<array>
+				<dict>
+					<key>APFSVolumeUUID</key>
+					<string>E6D37FA0-1434-405F-9FFD-9B8DF915DD8C</string>
+					<key>CapacityInUse</key>
+					<integer>13653508096</integer>
+					<key>CapacityQuota</key>
+					<integer>0</integer>
+					<key>CapacityReserve</key>
+					<integer>0</integer>
+					<key>CryptoMigrationOn</key>
+					<false/>
+					<key>DeviceIdentifier</key>
+					<string>disk3s1</string>
+					<key>Encryption</key>
+					<false/>
+					<key>FileVault</key>
+					<false/>
+					<key>Locked</key>
+					<false/>
+					<key>Name</key>
+					<string>Macintosh HD</string>
+					<key>Roles</key>
+					<array>
+						<string>System</string>
+					</array>
+				</dict>
+				<dict>
+					<key>APFSVolumeUUID</key>
+					<string>FC273B18-B69F-4463-9B9C-A57969691538</string>
+					<key>CapacityInUse</key>
+					<integer>47570083840</integer>
+					<key>CapacityQuota</key>
+					<integer>0</integer>
+					<key>CapacityReserve</key>
+					<integer>0</integer>
+					<key>CryptoMigrationOn</key>
+					<false/>
+					<key>DeviceIdentifier</key>
+					<string>disk3s5</string>
+					<key>Encryption</key>
+					<false/>
+					<key>FileVault</key>
+					<false/>
+					<key>Locked</key>
+					<false/>
+					<key>Name</key>
+					<string>Data</string>
+					<key>Roles</key>
+					<array>
+						<string>Data</string>
+					</array>
+				</dict>
+				<dict>
+					<key>APFSVolumeUUID</key>
+					<string>86410F75-D43C-49E6-95C6-B20A5CBB16F2</string>
+					<key>CapacityInUse</key>
+					<integer>5000003584</integer>
+					<key>CapacityQuota</key>
+					<integer>0</integer>
+					<key>CapacityReserve</key>
+					<integer>5000003584</integer>
+					<key>CryptoMigrationOn</key>
+					<false/>
+					<key>DeviceIdentifier</key>
+					<string>disk3s7</string>
+					<key>Encryption</key>
+					<false/>
+					<key>FileVault</key>
+					<false/>
+					<key>Locked</key>
+					<false/>
+					<key>Name</key>
+					<string>Sessions</string>
+					<key>Roles</key>
+					<array/>
+				</dict>
+				<dict>
+					<key>APFSVolumeUUID</key>
+					<string>4EF85269-E4B1-4058-A1FA-E9240A971CC9</string>
+					<key>CapacityInUse</key>
+					<integer>868352</integer>
+					<key>CapacityQuota</key>
+					<integer>20000002048</integer>
+					<key>CapacityReserve</key>
+					<integer>0</integer>
+					<key>CryptoMigrationOn</key>
+					<false/>
+					<key>DeviceIdentifier</key>
+					<string>disk3s8</string>
+					<key>Encryption</key>
+					<false/>
+					<key>FileVault</key>
+					<false/>
+					<key>Locked</key>
+					<false/>
+					<key>Name</key>
+					<string>Containers</string>
+					<key>Roles</key>
+					<array/>
+				</dict>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+"""#
+
+    /// `diskutil info -plist /Volumes/Sessions` of the Sessions it made: `Case-sensitive APFS`.
+    static let infoSessions = #"""
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>APFSContainerFree</key>
+	<integer>121671016448</integer>
+	<key>APFSContainerReference</key>
+	<string>disk3</string>
+	<key>APFSContainerSize</key>
+	<integer>200265433088</integer>
+	<key>APFSPhysicalStores</key>
+	<array>
+		<dict>
+			<key>APFSPhysicalStore</key>
+			<string>disk0s2</string>
+		</dict>
+	</array>
+	<key>APFSSnapshot</key>
+	<false/>
+	<key>Bootable</key>
+	<true/>
+	<key>BooterDeviceIdentifier</key>
+	<string>disk3s2</string>
+	<key>BusProtocol</key>
+	<string></string>
+	<key>CanBeMadeBootable</key>
+	<false/>
+	<key>CanBeMadeBootableRequiresDestroy</key>
+	<false/>
+	<key>CapacityInUse</key>
+	<integer>5000003584</integer>
+	<key>Content</key>
+	<string>41504653-0000-11AA-AA11-00306543ECAC</string>
+	<key>DeviceBlockSize</key>
+	<integer>4096</integer>
+	<key>DeviceIdentifier</key>
+	<string>disk3s7</string>
+	<key>DeviceNode</key>
+	<string>/dev/disk3s7</string>
+	<key>DeviceTreePath</key>
+	<string>IODeviceTree:/arm-io/pcie@30000000/pci106b,1a00@7/AppleVirtIOStorageDevice</string>
+	<key>DiskUUID</key>
+	<string>86410F75-D43C-49E6-95C6-B20A5CBB16F2</string>
+	<key>Ejectable</key>
+	<false/>
+	<key>EjectableMediaAutomaticUnderSoftwareControl</key>
+	<false/>
+	<key>EjectableOnly</key>
+	<false/>
+	<key>Encryption</key>
+	<false/>
+	<key>EncryptionThisVolumeProper</key>
+	<false/>
+	<key>FileVault</key>
+	<false/>
+	<key>FilesystemName</key>
+	<string>Case-sensitive APFS</string>
+	<key>FilesystemType</key>
+	<string>apfs</string>
+	<key>FilesystemUserVisibleName</key>
+	<string>APFS (Case-sensitive)</string>
+	<key>FreeSpace</key>
+	<integer>0</integer>
+	<key>GlobalPermissionsEnabled</key>
+	<true/>
+	<key>IOKitSize</key>
+	<integer>200265433088</integer>
+	<key>IORegistryEntryName</key>
+	<string>Sessions</string>
+	<key>Internal</key>
+	<true/>
+	<key>Locked</key>
+	<false/>
+	<key>MediaName</key>
+	<string></string>
+	<key>MediaType</key>
+	<string></string>
+	<key>MountPoint</key>
+	<string>/Volumes/Sessions</string>
+	<key>OSInternalMedia</key>
+	<false/>
+	<key>ParentWholeDisk</key>
+	<string>disk3</string>
+	<key>PartitionMapPartition</key>
+	<false/>
+	<key>RAIDMaster</key>
+	<false/>
+	<key>RAIDSlice</key>
+	<false/>
+	<key>RecoveryDeviceIdentifier</key>
+	<string>disk3s3</string>
+	<key>Removable</key>
+	<false/>
+	<key>RemovableMedia</key>
+	<false/>
+	<key>RemovableMediaOrExternalDevice</key>
+	<false/>
+	<key>SMARTDeviceSpecificKeysMayVaryNotGuaranteed</key>
+	<dict/>
+	<key>SMARTStatus</key>
+	<string>Not Supported</string>
+	<key>Sealed</key>
+	<string>No</string>
+	<key>Size</key>
+	<integer>200265433088</integer>
+	<key>SolidState</key>
+	<true/>
+	<key>SupportsGlobalPermissionsDisable</key>
+	<true/>
+	<key>SystemImage</key>
+	<false/>
+	<key>TotalSize</key>
+	<integer>200265433088</integer>
+	<key>VolumeAllocationBlockSize</key>
+	<integer>4096</integer>
+	<key>VolumeName</key>
+	<string>Sessions</string>
+	<key>VolumeSize</key>
+	<integer>0</integer>
+	<key>VolumeUUID</key>
+	<string>86410F75-D43C-49E6-95C6-B20A5CBB16F2</string>
+	<key>WholeDisk</key>
+	<false/>
+	<key>Writable</key>
+	<true/>
+	<key>WritableMedia</key>
+	<true/>
+	<key>WritableVolume</key>
+	<true/>
+</dict>
+</plist>
+"""#
+
+    /// `diskutil info -plist /Volumes/Containers` of the Containers it made.
+    static let infoContainers = #"""
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>APFSContainerFree</key>
+	<integer>121671012352</integer>
+	<key>APFSContainerReference</key>
+	<string>disk3</string>
+	<key>APFSContainerSize</key>
+	<integer>200265433088</integer>
+	<key>APFSPhysicalStores</key>
+	<array>
+		<dict>
+			<key>APFSPhysicalStore</key>
+			<string>disk0s2</string>
+		</dict>
+	</array>
+	<key>APFSSnapshot</key>
+	<false/>
+	<key>Bootable</key>
+	<true/>
+	<key>BooterDeviceIdentifier</key>
+	<string>disk3s2</string>
+	<key>BusProtocol</key>
+	<string></string>
+	<key>CanBeMadeBootable</key>
+	<false/>
+	<key>CanBeMadeBootableRequiresDestroy</key>
+	<false/>
+	<key>CapacityInUse</key>
+	<integer>868352</integer>
+	<key>Content</key>
+	<string>41504653-0000-11AA-AA11-00306543ECAC</string>
+	<key>DeviceBlockSize</key>
+	<integer>4096</integer>
+	<key>DeviceIdentifier</key>
+	<string>disk3s8</string>
+	<key>DeviceNode</key>
+	<string>/dev/disk3s8</string>
+	<key>DeviceTreePath</key>
+	<string>IODeviceTree:/arm-io/pcie@30000000/pci106b,1a00@7/AppleVirtIOStorageDevice</string>
+	<key>DiskUUID</key>
+	<string>4EF85269-E4B1-4058-A1FA-E9240A971CC9</string>
+	<key>Ejectable</key>
+	<false/>
+	<key>EjectableMediaAutomaticUnderSoftwareControl</key>
+	<false/>
+	<key>EjectableOnly</key>
+	<false/>
+	<key>Encryption</key>
+	<false/>
+	<key>EncryptionThisVolumeProper</key>
+	<false/>
+	<key>FileVault</key>
+	<false/>
+	<key>FilesystemName</key>
+	<string>Case-sensitive APFS</string>
+	<key>FilesystemType</key>
+	<string>apfs</string>
+	<key>FilesystemUserVisibleName</key>
+	<string>APFS (Case-sensitive)</string>
+	<key>FreeSpace</key>
+	<integer>0</integer>
+	<key>GlobalPermissionsEnabled</key>
+	<true/>
+	<key>IOKitSize</key>
+	<integer>200265433088</integer>
+	<key>IORegistryEntryName</key>
+	<string>Containers</string>
+	<key>Internal</key>
+	<true/>
+	<key>Locked</key>
+	<false/>
+	<key>MediaName</key>
+	<string></string>
+	<key>MediaType</key>
+	<string></string>
+	<key>MountPoint</key>
+	<string>/Volumes/Containers</string>
+	<key>OSInternalMedia</key>
+	<false/>
+	<key>ParentWholeDisk</key>
+	<string>disk3</string>
+	<key>PartitionMapPartition</key>
+	<false/>
+	<key>RAIDMaster</key>
+	<false/>
+	<key>RAIDSlice</key>
+	<false/>
+	<key>RecoveryDeviceIdentifier</key>
+	<string>disk3s3</string>
+	<key>Removable</key>
+	<false/>
+	<key>RemovableMedia</key>
+	<false/>
+	<key>RemovableMediaOrExternalDevice</key>
+	<false/>
+	<key>SMARTDeviceSpecificKeysMayVaryNotGuaranteed</key>
+	<dict/>
+	<key>SMARTStatus</key>
+	<string>Not Supported</string>
+	<key>Sealed</key>
+	<string>No</string>
+	<key>Size</key>
+	<integer>200265433088</integer>
+	<key>SolidState</key>
+	<true/>
+	<key>SupportsGlobalPermissionsDisable</key>
+	<true/>
+	<key>SystemImage</key>
+	<false/>
+	<key>TotalSize</key>
+	<integer>20000002048</integer>
+	<key>VolumeAllocationBlockSize</key>
+	<integer>4096</integer>
+	<key>VolumeName</key>
+	<string>Containers</string>
+	<key>VolumeSize</key>
+	<integer>0</integer>
+	<key>VolumeUUID</key>
+	<string>4EF85269-E4B1-4058-A1FA-E9240A971CC9</string>
+	<key>WholeDisk</key>
+	<false/>
+	<key>Writable</key>
+	<true/>
+	<key>WritableMedia</key>
+	<true/>
+	<key>WritableVolume</key>
+	<true/>
+</dict>
+</plist>
+"""#
+
+    /// `diskutil info -plist /`: the sealed system snapshot, in the boot container, disk3.
+    static let infoRoot = #"""
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>APFSContainerFree</key>
+	<integer>138077528064</integer>
+	<key>APFSContainerReference</key>
+	<string>disk3</string>
+	<key>APFSContainerSize</key>
+	<integer>200265433088</integer>
+	<key>APFSPhysicalStores</key>
+	<array>
+		<dict>
+			<key>APFSPhysicalStore</key>
+			<string>disk0s2</string>
+		</dict>
+	</array>
+	<key>APFSSnapshot</key>
+	<true/>
+	<key>APFSSnapshotName</key>
+	<string>com.apple.os.update-9A91EDBD140271063B786C536C3AC26E58AD0E7C7F07601D5628E11CD66CC339</string>
+	<key>APFSSnapshotUUID</key>
+	<string>D565D74B-8080-4247-A4BC-B1706F34D7E6</string>
+	<key>APFSVolumeGroupID</key>
+	<string>FC273B18-B69F-4463-9B9C-A57969691538</string>
+	<key>Bootable</key>
+	<true/>
+	<key>BooterDeviceIdentifier</key>
+	<string>disk3s2</string>
+	<key>BusProtocol</key>
+	<string></string>
+	<key>CanBeMadeBootable</key>
+	<false/>
+	<key>CanBeMadeBootableRequiresDestroy</key>
+	<false/>
+	<key>CapacityInUse</key>
+	<integer>13653508096</integer>
+	<key>Content</key>
+	<string>41504653-0000-11AA-AA11-00306543ECAC</string>
+	<key>DeviceBlockSize</key>
+	<integer>4096</integer>
+	<key>DeviceIdentifier</key>
+	<string>disk3s1s1</string>
+	<key>DeviceNode</key>
+	<string>/dev/disk3s1s1</string>
+	<key>DeviceTreePath</key>
+	<string>IODeviceTree:/arm-io/pcie@30000000/pci106b,1a00@7/AppleVirtIOStorageDevice</string>
+	<key>DiskUUID</key>
+	<string>D565D74B-8080-4247-A4BC-B1706F34D7E6</string>
+	<key>Ejectable</key>
+	<false/>
+	<key>EjectableMediaAutomaticUnderSoftwareControl</key>
+	<false/>
+	<key>EjectableOnly</key>
+	<false/>
+	<key>Encryption</key>
+	<false/>
+	<key>EncryptionThisVolumeProper</key>
+	<false/>
+	<key>FileVault</key>
+	<false/>
+	<key>FilesystemName</key>
+	<string>APFS</string>
+	<key>FilesystemType</key>
+	<string>apfs</string>
+	<key>FilesystemUserVisibleName</key>
+	<string>APFS</string>
+	<key>FreeSpace</key>
+	<integer>0</integer>
+	<key>GlobalPermissionsEnabled</key>
+	<true/>
+	<key>IOKitSize</key>
+	<integer>200265433088</integer>
+	<key>IORegistryEntryName</key>
+	<string>com.apple.os.update-9A91EDBD140271063B786C536C3AC26E58AD0E7C7F07601D5628E11CD66CC339</string>
+	<key>Internal</key>
+	<true/>
+	<key>Locked</key>
+	<false/>
+	<key>MediaName</key>
+	<string></string>
+	<key>MediaType</key>
+	<string></string>
+	<key>MountPoint</key>
+	<string>/</string>
+	<key>OSInternalMedia</key>
+	<false/>
+	<key>ParentWholeDisk</key>
+	<string>disk3</string>
+	<key>PartitionMapPartition</key>
+	<false/>
+	<key>RAIDMaster</key>
+	<false/>
+	<key>RAIDSlice</key>
+	<false/>
+	<key>RecoveryDeviceIdentifier</key>
+	<string>disk3s3</string>
+	<key>Removable</key>
+	<false/>
+	<key>RemovableMedia</key>
+	<false/>
+	<key>RemovableMediaOrExternalDevice</key>
+	<false/>
+	<key>SMARTDeviceSpecificKeysMayVaryNotGuaranteed</key>
+	<dict/>
+	<key>SMARTStatus</key>
+	<string>Not Supported</string>
+	<key>Sealed</key>
+	<string>Yes</string>
+	<key>Size</key>
+	<integer>200265433088</integer>
+	<key>SolidState</key>
+	<true/>
+	<key>SupportsGlobalPermissionsDisable</key>
+	<true/>
+	<key>SystemImage</key>
+	<false/>
+	<key>TotalSize</key>
+	<integer>200265433088</integer>
+	<key>VolumeAllocationBlockSize</key>
+	<integer>4096</integer>
+	<key>VolumeName</key>
+	<string>Macintosh HD</string>
+	<key>VolumeSize</key>
+	<integer>0</integer>
+	<key>VolumeUUID</key>
+	<string>D565D74B-8080-4247-A4BC-B1706F34D7E6</string>
+	<key>WholeDisk</key>
+	<false/>
+	<key>Writable</key>
+	<false/>
+	<key>WritableMedia</key>
+	<false/>
+	<key>WritableVolume</key>
+	<false/>
 </dict>
 </plist>
 """#

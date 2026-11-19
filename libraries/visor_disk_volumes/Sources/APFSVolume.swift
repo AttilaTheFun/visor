@@ -6,7 +6,7 @@ public struct APFSVolume: Codable, Equatable, Sendable {
     public var device: String
     public var name: String
     public var uuid: String
-    /// Bytes it holds now.
+    /// Bytes it holds now, as APFS counts them: at least its reserve.
     public var used: Int64
     /// The most it may hold, in bytes; 0 for no quota.
     public var quota: Int64

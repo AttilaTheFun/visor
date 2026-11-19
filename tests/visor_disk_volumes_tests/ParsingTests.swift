@@ -52,9 +52,13 @@ import Testing
         let volumes = try Disks.list(Fixtures.listWithBoth)[0].volumes
         let sessions = try #require(volumes.first { $0.name == "Sessions" })
         let containers = try #require(volumes.first { $0.name == "Containers" })
-        #expect(sessions.reserve == 5 * ByteSize.gigabyte)
+        // 5 GB and 20 GB asked for (`5000000000b`, `20000000000b`), rounded
+        // up to APFS's 4 KiB blocks. APFS lists an unused reserve as used.
+        #expect(sessions.reserve == 5_000_003_584)
+        #expect(sessions.used == sessions.reserve)
         #expect(sessions.quota == 0)
-        #expect(containers.quota == 20 * ByteSize.gigabyte)
+        #expect(containers.quota == 20_000_002_048)
+        #expect(containers.reserve == 0)
     }
 
     @Test func notAPlistThrows() {

@@ -12,12 +12,18 @@ public struct DiskSurvey: Equatable, Sendable {
     /// Mount points with a plain folder at them, not a volume: a new volume
     /// would be mounted beside it (`/Volumes/Sessions 1`).
     public var foldersInTheWay: Set<String>
+    /// What the filesystem says each mounted volume can still take, by
+    /// mount point (statfs's available bytes): exact, where the APFS
+    /// listing counts an unused reserve as used.
+    public var freeSpace: [String: Int64]
 
-    public init(bootContainer: String, containers: [APFSContainer], infos: [VolumeInfo] = [], foldersInTheWay: Set<String> = []) {
+    public init(bootContainer: String, containers: [APFSContainer], infos: [VolumeInfo] = [], foldersInTheWay: Set<String> = [],
+                freeSpace: [String: Int64] = [:]) {
         self.bootContainer = bootContainer
         self.containers = containers
         self.infos = infos
         self.foldersInTheWay = foldersInTheWay
+        self.freeSpace = freeSpace
     }
 
     /// The volumes to ask `diskutil info -plist` about: those named for a

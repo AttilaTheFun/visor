@@ -53,8 +53,8 @@ public struct DiskVolumes: Equatable, Sendable {
         var isFolder: ObjCBool = false
         guard files.fileExists(atPath: path, isDirectory: &isFolder), isFolder.boolValue else { return false }
         let parent = (path as NSString).deletingLastPathComponent
-        guard parent != path, let device = device(of: path), let parentDevice = device(of: parent) else { return path == "/" }
-        return device != parentDevice
+        guard parent != path, let own = device(of: path), let parents = device(of: parent) else { return path == "/" }
+        return own != parents
     }
 
     /// The device a path is on (stat's st_dev), however Foundation gives it.
