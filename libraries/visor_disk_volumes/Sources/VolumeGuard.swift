@@ -74,9 +74,9 @@ public enum VolumeGuard {
         let mountPoint = survey.info(device: volume.device)?.mountPoint
         let isRecorded = recorded?.ownUUID(for: role).map { $0.caseInsensitiveCompare(volume.uuid) == .orderedSame } ?? false
         guard mountPoint == role.mountPoint || isRecorded else {
-            let place = mountPoint.map { "is mounted at \($0)" } ?? "isn't mounted"
+            let place = mountPoint.map { "is mounted at \($0), not \(role.mountPoint)," } ?? "isn't mounted,"
             throw DiskVolumesError.wrongTarget(
-                "The volume named \(role.volumeName) (\(volume.device), \(volume.uuid)) \(place), not at \(role.mountPoint), "
+                "The volume named \(role.volumeName) (\(volume.device), \(volume.uuid)) \(place) "
                     + "and isn't the \(role.volumeName) recorded in volumes.json: it may not be Visor's, so nothing was deleted. "
                     + "If it is Visor's, mount it at \(role.mountPoint); if not, rename it, or delete it yourself in Disk Utility.")
         }
