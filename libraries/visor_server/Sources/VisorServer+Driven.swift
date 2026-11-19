@@ -208,6 +208,14 @@ extension VisorServer {
         // before its agent starts (Claude takes the mode at launch).
         record.setPermissions(skip: false)
         record.replaceProcess(makeProcess(record.info, resume: resume))
+        // Its file read again, where its agent here writes now. The one it
+        // followed before it moved is in the folder it began in; a
+        // conversation handed back is another file, under the key of the
+        // folder it moves back to, and keeps its id when its runner's agent
+        // resumed the one it had. Its agent saying that id again doesn't
+        // have the file followed again (SessionRecord's `.session`), so its
+        // replies here went unseen: no rows, the preview on the prompt.
+        record.followFile()
         var said = handedBack ? "Back on this computer, with its turns on the runner: \(why)" : "Back on this computer: \(why)"
         if let notReturned {
             said += ". Its turns on the runner weren't returned (\(notReturned)): it carries on from where it was before it moved"
