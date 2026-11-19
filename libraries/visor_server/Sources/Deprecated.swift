@@ -42,9 +42,10 @@ package enum Deprecated: String, CaseIterable, Sendable {
         }
     }
 
-    /// Said in the server's log, the first time in this run.
-    package func noted(_ detail: String = "") {
-        Self.notes.note(self, detail)
+    /// Said in the server's log (or `log`, a part's own), the first time
+    /// in this run.
+    package func noted(_ detail: String = "", log: (@Sendable (String) -> Void)? = nil) {
+        Self.notes.note(self, detail, log: log)
     }
 
     /// This run's.
@@ -61,11 +62,12 @@ package enum Deprecated: String, CaseIterable, Sendable {
         }
 
         /// Logs `what` (with `detail`, when there is one) unless it has
-        /// been already; whether it was this time.
+        /// been already, to `log` when one is given; whether it was this
+        /// time.
         @discardableResult
-        package func note(_ what: Deprecated, _ detail: String = "") -> Bool {
+        package func note(_ what: Deprecated, _ detail: String = "", log given: (@Sendable (String) -> Void)? = nil) -> Bool {
             guard said.withLock({ $0.insert(what).inserted }) else { return false }
-            log(what.line + (detail.isEmpty ? "" : " (\(detail))"))
+            (given ?? log)(what.line + (detail.isEmpty ? "" : " (\(detail))"))
             return true
         }
     }

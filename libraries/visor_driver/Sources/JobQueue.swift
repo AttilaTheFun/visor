@@ -239,7 +239,7 @@ final class JobQueue: AgentJobQueue {
     /// from a runner other than Visor's native one is deprecated (agent
     /// jobs move to CI): the first in a run is logged.
     func claim(_ request: AgentProtocol_V1_ClaimRequest, wait: Duration) async -> AgentProtocol_V1_Job? {
-        if !request.capabilities.contains(Self.native) { Deprecated.runnerClaim.noted("by \(request.runner)") }
+        if !request.capabilities.contains(Self.native) { Deprecated.runnerClaim.noted("by \(request.runner)", log: log) }
         let deadline = ContinuousClock.now + wait
         while true {
             releaseLapsed()
@@ -257,7 +257,7 @@ final class JobQueue: AgentJobQueue {
                 log("dispatcher: \(request.runner) claimed \(job.agent.uuid)")
                 let given = addressed(job, for: request.capabilities)
                 if Self.namesMultiPass(given.driverURL) || Self.namesMultiPass(given.agent.dispatcherURL) {
-                    Deprecated.multipassName.noted("job \(job.agent.uuid), \(given.driverURL)")
+                    Deprecated.multipassName.noted("job \(job.agent.uuid), \(given.driverURL)", log: log)
                 }
                 return given
             }
