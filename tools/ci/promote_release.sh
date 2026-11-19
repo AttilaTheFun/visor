@@ -20,9 +20,10 @@
 #   tools/ci/promote_release.sh merge <state> <assets>
 #
 # plan: the release's builds.json saved in <state>, and <state>/packages
-# written, a package a line: the Apple builds in <apple dir> (an .ipa and
-# Visor.app's .zip, its Linux programs in it), unless the release has them
-# as Production already, and the APK in <android dir> when release-android
+# written, a package a line: the Apple builds in <apple dir> (an .ipa,
+# Visor.app's .zip, its Linux programs in it, and Visor Disk Utility's
+# .zip when release-apple built one), unless the release has them as
+# Production already, and the APK in <android dir> when release-android
 # built one. merge, after the Sign step signed them into <assets>: with
 # nothing signed, the release's builds.json as it is; with Apple's left as
 # they were, the release's builds.json with the new lines in place of any
@@ -49,17 +50,20 @@ plan)
     mkdir -p "$state"
     rm -f "$state/packages" "$state/builds.json" "$state/promoted"
     gh release download "$tag" --repo "$repo" --pattern builds.json --dir "$state" || fail "$tag has no builds.json"
-    # Apple's signed already: the release's builds.json lists both a
-    # Production .ipa and a Production Mac .zip of this commit (a re-run,
-    # after Android's failed). Both, not either: a first run that died
-    # between the two is signed again whole.
-    promoted="$(python3 -I - "$state/builds.json" "$commit" << 'PY'
+    # Apple's signed already: the release's builds.json lists a Production
+    # .ipa and a Production .zip of each Mac app built (Visor.app's, and
+    # Visor Disk Utility's when there's one) of this commit (a re-run,
+    # after Android's failed). All, not some: a first run that died
+    # between them is signed again whole.
+    mac_apps=(com.LoganShire.Visor)
+    [ ! -f "$apple/visor_disk_utility.zip" ] || mac_apps+=(com.LoganShire.Visor.DiskUtility)
+    promoted="$(python3 -I - "$state/builds.json" "$commit" "${mac_apps[@]}" << 'PY'
 import json, sys
 builds = json.load(open(sys.argv[1]))
-def production(suffix):
+def production(suffix, bundle=None):
     return any(b.get("variant") == "Production" and b.get("commit") == sys.argv[2]
-               and b.get("file", "").endswith(suffix) for b in builds)
-print("yes" if all(production(suffix) for suffix in (".ipa", ".zip")) else "no")
+               and b.get("file", "").endswith(suffix) and bundle in (None, b.get("bundleID")) for b in builds)
+print("yes" if production(".ipa") and all(production(".zip", bundle) for bundle in sys.argv[3:]) else "no")
 PY
 )"
     echo "$promoted" > "$state/promoted"
@@ -73,6 +77,7 @@ PY
         done
         [ "$ipas" -gt 0 ] && [ -f "$apple/visor_mac.zip" ] || fail "$apple has no iPhone .ipa or no visor_mac.zip"
         echo "$apple/visor_mac.zip" >> "$state/packages"
+        [ ! -f "$apple/visor_disk_utility.zip" ] || echo "$apple/visor_disk_utility.zip" >> "$state/packages"
     else
         echo "promote_release: $tag's Apple builds are Production already, left as they are"
     fi

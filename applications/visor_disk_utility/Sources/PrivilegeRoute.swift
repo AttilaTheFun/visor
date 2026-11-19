@@ -13,7 +13,8 @@ enum PrivilegeRoute: Sendable {
     case sudo
 
     /// The AppleScript run by osascript with the commands as its arguments:
-    /// each quoted, and the `&&` between commands passed through.
+    /// each quoted, and the `&&` between commands passed through. So no
+    /// command's own argument may be exactly `&&`: VolumeGuard refuses one.
     static let script = """
         on run argv
             set commandLine to ""

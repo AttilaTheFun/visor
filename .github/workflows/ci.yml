@@ -618,7 +618,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist
+          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_disk_utility/Info.plist
           version="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           case "$version" in
             "" | *.0) echo "::error::no build version was stamped (the plist says \"$version\")"; exit 1 ;;
@@ -660,7 +660,7 @@ jobs:
           VISOR_CI_PACKAGE: .ci/packages
         run: >-
           tools/ci/container_build.sh --config=alpha --config=ci_device --compilation_mode=opt
-          --config=apple_cross_mac //applications/visor_ios //applications/visor_mac
+          --config=apple_cross_mac //applications/visor_ios //applications/visor_mac //applications/visor_disk_utility
       # The signing keeps the entitlements its signature carries: built
       # unsigned, it would lose the microphone.
       - name: Visor.app signed ad hoc with its entitlements
@@ -671,6 +671,7 @@ jobs:
           path: |
             .ci/packages/*.ipa
             .ci/packages/visor_mac.zip
+            .ci/packages/visor_disk_utility.zip
           if-no-files-found: error
           retention-days: 1
 
@@ -738,7 +739,7 @@ jobs:
         run: >-
           tools/ci/sign_builds.sh --variant Alpha --out "$RUNNER_TEMP/assets"
           --ipa-kind development --android-pin "$VISOR_ANDROID_PIN"
-          .ci/packages/*.ipa .ci/packages/visor_mac.zip .ci/android/*.apk
+          .ci/packages/*.ipa .ci/packages/visor_mac.zip .ci/packages/visor_disk_utility.zip .ci/android/*.apk
       - uses: actions/upload-artifact@v4
         with:
           name: alpha-assets
@@ -768,7 +769,9 @@ jobs:
         with:
           name: alpha-assets
           path: ${{ runner.temp }}/assets
-      - run: bazel run //tools/ci/launch_check -- "$RUNNER_TEMP"/assets/Visor-*-macos.zip
+      - run: bazel run //tools/ci/launch_check -- "$RUNNER_TEMP"/assets/Visor-[0-9]*-macos.zip
+      # Visor Disk Utility: signed, notarized, accepted by Gatekeeper, and opens.
+      - run: tools/ci/mac_app_opens.sh "$RUNNER_TEMP"/assets/Visor-Disk-Utility-*-macos.zip
 
   # The draft release (tools/ci/propose_release.sh) and its assets
   # (tools/ci/attach_release.sh), what Applications lists
@@ -903,7 +906,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist
+          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_disk_utility/Info.plist
           version="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           [ "v$version" = "$TAG" ] || { echo "::error::the version stamped, $version, isn't $TAG's"; exit 1; }
       - uses: ./.github/actions/bazel_cache
@@ -929,7 +932,7 @@ jobs:
           VISOR_CI_PACKAGE: .ci/packages
         run: >-
           tools/ci/container_build.sh --config=prod --config=ci_device --compilation_mode=opt
-          --config=apple_cross_mac //applications/visor_ios //applications/visor_mac
+          --config=apple_cross_mac //applications/visor_ios //applications/visor_mac //applications/visor_disk_utility
       - name: Visor.app signed ad hoc with its entitlements
         run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
       - uses: actions/upload-artifact@v4
@@ -938,6 +941,7 @@ jobs:
           path: |
             .ci/packages/*.ipa
             .ci/packages/visor_mac.zip
+            .ci/packages/visor_disk_utility.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -1093,9 +1097,14 @@ jobs:
           name: release-assets
           path: ${{ runner.temp }}/assets
       - run: |
-          for app in "$RUNNER_TEMP"/assets/Visor-*-macos.zip; do
+          for app in "$RUNNER_TEMP"/assets/Visor-[0-9]*-macos.zip; do
             [ -e "$app" ] || { echo "No Visor.app signed in this run: launched by the run that signed it"; exit 0; }
             bazel run //tools/ci/launch_check -- "$app"
+          done
+      - run: |
+          for app in "$RUNNER_TEMP"/assets/Visor-Disk-Utility-*-macos.zip; do
+            [ -e "$app" ] || { echo "No Visor Disk Utility signed in this run: checked by the run that signed it"; exit 0; }
+            tools/ci/mac_app_opens.sh "$app"
           done
 
   # Red when Visor for Android wasn't built and signed for this release,

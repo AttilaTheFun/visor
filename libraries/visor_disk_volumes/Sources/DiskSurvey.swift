@@ -41,6 +41,22 @@ public struct DiskSurvey: Equatable, Sendable {
         return nil
     }
 
+    /// A volume by its APFS volume UUID (of either case), and the container
+    /// it's in.
+    public func volume(uuid: String) -> (volume: APFSVolume, container: APFSContainer)? {
+        for container in containers {
+            if let volume = container.volumes.first(where: { !$0.uuid.isEmpty && $0.uuid.caseInsensitiveCompare(uuid) == .orderedSame }) {
+                return (volume, container)
+            }
+        }
+        return nil
+    }
+
+    /// A volume by a command's target: its disk or its APFS volume UUID.
+    public func volume(target: String) -> (volume: APFSVolume, container: APFSContainer)? {
+        volume(device: target) ?? volume(uuid: target)
+    }
+
     /// What `diskutil info` said of a disk.
     public func info(device: String) -> VolumeInfo? { infos.first { $0.device == device } }
 
