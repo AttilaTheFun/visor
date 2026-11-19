@@ -895,8 +895,9 @@ container agents.
     run the client in fixture mode, with no server. Don't move them back
     to Xcode without tools/ci/launch_check passing on macOS 27.0 against
     an Xcode build of the Mac app (`bazel run //tools/ci/launch_check --
-    <Visor.app or its .zip>`, on a Mac where no Visor runs: it opens the
-    app for real with a stand-in `claude`, waits for its server's
+    <Visor.app or its .zip>`, on a Mac where Visor was never set up: it
+    opens the app for real with a stand-in `claude` and a data folder of
+    its own whose server asks nothing, waits for its server's
     `/api/hello` on 7433, holds it a minute, and on a failure prints the
     crash report's exception, `asi` and faulting frames and the app's
     log). CI runs it on the signed Visor.app before a proposal
