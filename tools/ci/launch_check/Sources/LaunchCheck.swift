@@ -22,6 +22,7 @@ import Foundation
 /// already answering: it runs on a CI Mac or a leased VM, never a Mac
 /// someone is using).
 @main
+@MainActor
 enum LaunchCheck {
     static let port = 7433
     /// The subsystem the app's server logs under (ServerPlatform+Apple).
@@ -106,7 +107,7 @@ enum LaunchCheck {
             }
             Thread.sleep(forTimeInterval: 1)
         }
-        guard let pid else { return "\(app.executable) never started" }
+        guard let process = pid else { return "\(app.executable) never started" }
 
         // Held: the same process, answering, for the whole time. A few
         // missed answers in a row (a busy server) are not yet a failure.
@@ -115,7 +116,7 @@ enum LaunchCheck {
         while Date().timeIntervalSince(answered) < Double(options.hold) {
             Thread.sleep(forTimeInterval: 2)
             let held = Int(Date().timeIntervalSince(answered))
-            guard isRunning(pid) else { return "\(app.executable) (pid \(pid)) exited \(held) s after its server answered" }
+            guard isRunning(process) else { return "\(app.executable) (pid \(process)) exited \(held) s after its server answered" }
             if (try? hello()) != nil {
                 missed = 0
             } else {
