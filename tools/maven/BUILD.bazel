@@ -1,0 +1,4 @@
+# The lock files of the Maven repositories Visor pins for the modules it
+# builds with (MODULE.bazel, "Maven"), which rules_jvm_external writes:
+#   REPIN=1 bazel run @unpinned_<repository>//:pin
+exports_files(glob(["*_install.json"]))
