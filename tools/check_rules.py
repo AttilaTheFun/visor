@@ -20,7 +20,9 @@ Checked in every file git tracks (third_party/ aside):
 - no conditional compilation or platform check in the server library
   (libraries/visor_server) or the libraries below it (libraries/visor_agent,
   libraries/visor_system): what differs is their ServerPlatform's or
-  SystemPlatform's.
+  SystemPlatform's;
+- every app's Info.plist on the version line: its CFBundleShortVersionString
+  is MODULE.bazel's version (CI stamps each build's own, never committed).
 With --commits, the pull request's commits carry no attribution lines.
 
 Exits 1 when anything breaks a rule, saying what. Standard library only.
@@ -128,6 +130,23 @@ def check_swift(name, text):
                     f"no conditional compilation or platform check in {library.rstrip('/')}: a {platform} member")
 
 
+def check_version_line(names):
+    module = (ROOT / "MODULE.bazel").read_text()
+    found = re.search(r'^module\(\s*name\s*=\s*"visor",\s*version\s*=\s*"([^"]+)"', module, re.M)
+    if not found:
+        problem("MODULE.bazel", "no `module(name = \"visor\", version = …)` to read the version line from")
+        return
+    line = found.group(1)
+    for name in names:
+        if not (name.startswith("applications/") and name.endswith("Info.plist")):
+            continue
+        text = (ROOT / name).read_text()
+        version = re.search(r"<key>CFBundleShortVersionString</key>\s*<string>([^<]*)</string>", text)
+        if version and version.group(1) != line:
+            problem(f"{name}:{line_of(text, version.start())}",
+                    f"CFBundleShortVersionString is {version.group(1)}, not the version line's {line} (MODULE.bazel)")
+
+
 def check_commits(span):
     listed = subprocess.run(["git", "-C", str(ROOT), "log", "--format=%H%x00%B%x01", span],
                             capture_output=True, check=True).stdout.decode()
@@ -144,7 +163,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--commits", help="a pull request's commits, <base>..<head>, to check for attribution lines")
     args = parser.parse_args()
-    for name in tracked():
+    names = tracked()
+    check_version_line(names)
+    for name in names:
         path = ROOT / name
         if not path.is_file():
             continue
