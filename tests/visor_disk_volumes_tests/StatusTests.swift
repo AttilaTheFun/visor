@@ -69,7 +69,7 @@ import Testing
 
     @Test func visorsOwnVolumesAreRecordedAndKept() throws {
         let containers = "4EF85269-E4B1-4058-A1FA-E9240A971CC9"
-        let made = VolumesStatus(survey: try Disks.both(), updated: Date())
+        let made = VolumesStatus(survey: try Disks.both(), updated: Date(timeIntervalSince1970: 1_795_000_000))
         #expect(made.ownUUID(for: .containers) == containers)
         #expect(made.ownUUID(for: .sessions) == "86410F75-D43C-49E6-95C6-B20A5CBB16F2")
         #expect(made.record(for: .containers)?.uuid == containers)
