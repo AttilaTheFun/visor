@@ -70,7 +70,7 @@ enum DiskUtilityCLI {
         }
         var lines = ["\(state.role.volumeName): \(plan)",
                      "  path \(state.path), format \(state.format)"
-                         + (state.isCaseSensitive.map { $0 ? " (case-sensitive)" : " (case-insensitive)" } ?? "")]
+                         + (state.isCaseSensitive == false ? " (case-insensitive)" : "")]
         if let volume = state.volume {
             lines.append("  used \(state.usedDescription ?? ""), available \(state.available.map(ByteSize.describe) ?? "?"), "
                 + "reserve \(volume.reserve > 0 ? ByteSize.describe(volume.reserve) : "none"), "

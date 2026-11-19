@@ -53,7 +53,7 @@ import Testing
         #expect(sessions.available == 121_671_036_928)
         let containers = survey.state(for: .containers)
         #expect(containers.usedDescription == "0 MB")
-        #expect(containers.available == 20_000_002_048 - 868_352)
+        #expect(containers.available == Int64(20_000_002_048 - 868_352))
     }
 
     @Test func whatTheFilesystemSaysIsFreeComesFirst() throws {
@@ -61,7 +61,7 @@ import Testing
         survey.freeSpace = ["/Volumes/Sessions": 126_000_000_000]
         #expect(survey.state(for: .sessions).available == 126_000_000_000)
         #expect(survey.state(for: .sessions).record?.available == 126_000_000_000)
-        #expect(survey.state(for: .containers).available == 20_000_002_048 - 868_352)
+        #expect(survey.state(for: .containers).available == Int64(20_000_002_048 - 868_352))
     }
 
     @Test func aReserveOverTheQuotaIsRefused() throws {

@@ -81,11 +81,8 @@ struct VolumeCard: View {
     private var format: String {
         guard let state else { return "—" }
         guard state.exists else { return "\(state.format) (when created)" }
-        switch state.isCaseSensitive {
-        case true?: return "\(state.format) (case-sensitive)"
-        case false?: return "\(state.format) (case-insensitive)"
-        case nil: return state.format
-        }
+        // "Case-sensitive APFS" says so; plain "APFS" is case-insensitive.
+        return state.isCaseSensitive == false ? "\(state.format) (case-insensitive)" : state.format
     }
 
     private var notes: [String] {

@@ -9,7 +9,7 @@ struct DiskUtilityApp: App {
     var body: some Scene {
         Window("Visor Disk Utility", id: "main") {
             VolumesView(model: model)
-                .frame(minWidth: 560, minHeight: 520)
+                .frame(minWidth: 600, minHeight: 760)
                 .task { await model.refresh() }
         }
         .windowResizability(.contentSize)
