@@ -36,13 +36,9 @@
 #   a key reads alone (--noremote_upload_local_results). A writer downloads
 #   every output, so the disk cache GitHub's cache keeps (above) stays whole
 #   for the runs without a key. Without a key, nothing of BuildBuddy's.
-# Not the Apple targets on Linux (.bazelrc's apple_on_linux, which takes
+# Never the Apple targets on Linux (.bazelrc's apple_on_linux, which takes
 # Xcode's SDK archive): Apple's SDKs may not be redistributed, so CI builds
-# them on GitHub's `xcode-27` Macs with their own Xcode; but for a
-# proposal's and a release's Apple apps (alpha-apple, release-apple), which
-# ci.yml builds with rules_applecross from the SDKs its apple-sdks job packs
-# from that Mac's Xcode in the same run, turning apple_on_linux on itself
-# after this (docs/DEVELOPMENT.md, "Release builds").
+# them on GitHub's `xcode-27` Macs with their own Xcode.
 # It refuses to replace a .bazelrc.user it didn't write (a builder's own).
 #
 # trim: Bazel collects its disk cache's garbage only when its server is

@@ -762,8 +762,7 @@ container agents.
   http://<Shireworks host>:7490/files/sha256/$1`, for a Shireworks server that serves
   them (a container's `.netrc`, from `<data>/containers/home/`, has the
   token). Without it (CI's Linux
-  runners, but for a proposal's and a release's Apple apps: section 4, CI)
-  Linux builds what runs on Linux. The iPhone app, the Mac apps,
+  runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
   the Linux client (`//applications/visor_client_linux`), the Linux
   server (`//applications/visor_server_linux:visor-server`; the static
   release build is SwiftPM's, tools/linux_programs.sh), the web site and the Android APK
@@ -884,23 +883,30 @@ container agents.
   no paid larger runner. The header of ci.yml has it whole.
   - **Release builds: rules_applecross, not Xcode** (pinned). A
     proposal's and a release's iPhone app and Visor.app (`alpha-apple`,
-    `release-apple`) are built with rules_applecross (swift.org's Swift
-    6.4.2 and Xcode 27.2's SDKs, `apple_on_linux`) on GitHub's arm64
-    Ubuntu, not with Xcode, because of the 18–19 Nov 2026 crash: 0.62.1,
+    `release-apple`) are built with rules_applecross's toolchain, not
+    Xcode's own Swift, on GitHub's `xcode-27` Mac (`--config=apple_cross_mac`
+    in .bazelrc: swift.org's Swift 6.4.2 and LLVM's ld64.lld compile and
+    link; the Mac's Xcode 27.2 gives the SDKs, actool, ibtool and the macro
+    plugins; MODULE.bazel gives a Mac no ported tools, which it never runs),
+    because of the 18–19 Nov 2026 crash: 0.62.1,
     the first built by Xcode 27.2 (Apple's Swift 6.4.2, on GitHub's
     `xcode-27` Mac), aborted at launch on macOS 27.0 in
     `swift_task_dealloc`, from the short-lived deadline tasks of
     `Command.ask` and `JobQueue.claim` (code 0.61.1 had too, which
-    rules_applecross built and which runs). Every proof passed it: they
-    run the client in fixture mode, with no server. Don't move them back
-    to Xcode without tools/ci/launch_check passing on macOS 27.0 against
-    an Xcode build of the Mac app (`bazel run //tools/ci/launch_check --
+    rules_applecross built on Linux and which runs; built from one commit
+    on a macOS 27.0.1 VM, Xcode's Visor.app aborts the same way and
+    apple_cross_mac's runs). Every proof passed it: they run the client in
+    fixture mode, with no server. Don't move them back to Xcode's Swift
+    without tools/ci/launch_check passing on macOS 27.0 against such a
+    build of the Mac app (`bazel run //tools/ci/launch_check --
     <Visor.app or its .zip>`, on a Mac where Visor was never set up: it
     opens the app for real with a stand-in `claude` and a data folder of
     its own whose server asks nothing, waits for its server's
     `/api/hello` on 7433, holds it a minute, and on a failure prints the
-    crash report's exception, `asi` and faulting frames and the app's
-    log). CI runs it on the signed Visor.app before a proposal
+    crash report's exception, `asi` and faulting frames, a running but
+    silent app's main thread, and the app's log; an app signed otherwise
+    than the one before it on the same Mac waits on a keychain dialog for
+    the items that one left). CI runs it on the signed Visor.app before a proposal
     (`alpha-launch`) and before a release's assets are attached
     (`release-launch`).
   - **Where**: Linux and Android on GitHub's x86_64 `ubuntu-24.04`, in
@@ -908,17 +914,13 @@ container agents.
     tools/ci/job_tools.sh adds (Bazelisk, the Linux client's libraries,
     clang), Bazel's tree on the runner's second disk (Google's Android SDK
     and NDK tools are x86_64, and GitHub's arm runners have no Rosetta);
-    the Apple targets of pull requests, main and `verify` on GitHub's
-    `xcode-27` Macs with their own Xcode (27.2 where the image has it);
-    a proposal's and a release's Apple apps with rules_applecross on
-    GitHub's arm64 Ubuntu in Visor's agent image (by digest), from the SDKs
-    of the `xcode-27` Mac's own Xcode 27.2, packed in the run
-    (`apple-sdks`, rules_applecross's tools/package-sdks.sh) and handed
-    over as an artifact kept a day: Apple's SDKs may not be redistributed,
-    so they are never hosted. tools/ci/container_build.sh builds the
-    platform's apps where it runs. Visor's Linux programs
-    (`linux-programs`) build on GitHub's arm64 Ubuntu in Visor's agent
-    image (by digest).
+    the Apple targets on GitHub's `xcode-27` Macs with their own Xcode
+    (27.2 where the image has it; a proposal's and a release's apps with
+    rules_applecross's Swift, above): Apple's SDKs may not be
+    redistributed, so CI never builds them on Linux (`apple_on_linux` is a
+    builder's own). tools/ci/container_build.sh builds the platform's apps
+    where it runs. Visor's Linux programs (`linux-programs`) build on
+    GitHub's arm64 Ubuntu in Visor's agent image (by digest).
   - **Caches**: Bazel's settings are tools/ci/ci_bazel.sh's
     (.github/actions/bazel_cache): GitHub's cache (actions/cache) holds
     the disk and repository caches, outside the checkout (Bazel 9 refuses
@@ -956,9 +958,9 @@ container agents.
     does as `prerelease` and proposes a draft release naming its run. A
     proposal's version comes from the repository's releases and tags
     (tools/ci/version_from_tags.sh: one past the line's highest, the same
-    again for the same commit). The iPhone app and Visor.app are built
-    with rules_applecross on arm64 Ubuntu (`alpha-apple`; above),
-    optimized, with `--config=alpha`
+    again for the same commit). The iPhone app and Visor.app are built on
+    an `xcode-27` Mac (`alpha-apple`) with rules_applecross's Swift
+    (`--config=apple_cross_mac`, above), optimized, with `--config=alpha`
     and `--config=ci_device` (the iPhone's a device build signed ad hoc
     with a placeholder profile; Visor.app signed ad hoc asking for push,
     `app.ci.entitlements`), with the update settings from the
@@ -994,7 +996,7 @@ container agents.
     nothing publishes them.
   - **Released**: Logan's Release in Reviews publishes a proposed
     release's draft, which makes its tag. Production comes from the tag:
-    `release-apple` (rules_applecross on arm64 Ubuntu) and
+    `release-apple` (an `xcode-27` Mac, `--config=apple_cross_mac`) and
     `release-android` (Ubuntu)
     build the tag's commit with `--config=prod` and the tag's version
     (never the Alphas stamped again). `release` checks the commit is on

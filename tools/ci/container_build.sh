@@ -9,12 +9,12 @@
 #   repository, with its own Xcode): the iPhone and iPad app, Visor.app, the
 #   Mac client and Visor Server, the Mac's test bundles, then the libraries,
 #   the staging server and the command-line server for the Mac. Apple's SDKs
-#   may not be redistributed, so CI builds the Apple targets on Linux
-#   (.bazelrc's apple_on_linux, for a builder that has the SDK archive) only
-#   for a proposal's and a release's apps (alpha-apple, release-apple: in
-#   Visor's agent image, from the SDKs ci.yml's apple-sdks packs from the
-#   Mac's Xcode in the same run), which are never Xcode's own build since
-#   0.62.1 aborted at launch (docs/DEVELOPMENT.md, "Release builds").
+#   may not be redistributed, so CI never builds the Apple targets on Linux
+#   (.bazelrc's apple_on_linux, for a builder that has the SDK archive). A
+#   proposal's and a release's apps (alpha-apple, release-apple) are built
+#   here with --config=apple_cross_mac: rules_applecross's Swift, not
+#   Xcode's, since 0.62.1 aborted at launch (docs/DEVELOPMENT.md, "Release
+#   builds").
 # Bazel's settings (its caches, the downloads, BuildBuddy's remote cache
 # where the job has its key) are tools/ci/ci_bazel.sh's, written before
 # this runs (.github/actions/bazel_cache). Run with

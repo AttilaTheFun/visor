@@ -38,12 +38,9 @@ build --@isomer//foundation:internationalization
 # The Apple apps built on Linux with rules_applecross (MODULE.bazel), on a
 # builder that has Xcode 27.2's SDK archive: its .bazelrc.user says where
 # (`--distdir`, or a `--downloader_config` to a Shireworks server) and turns this
-# on with `build:linux --config=apple_on_linux`: ci.yml's alpha-apple and
-# release-apple, a proposal's and a release's Apple apps, from the SDKs
-# its apple-sdks job packs in the run (docs/DEVELOPMENT.md, "Release
-# builds"). Without it (CI's other Linux jobs: Apple's SDKs may not be
-# redistributed, so CI builds the Apple targets on GitHub's `xcode-27`
-# Macs) Linux builds what runs on Linux
+# on with `build:linux --config=apple_on_linux`. Without it (CI's Linux
+# jobs: Apple's SDKs may not be redistributed, so CI builds the Apple
+# targets on GitHub's `xcode-27` Macs) Linux builds what runs on Linux
 # alone, and nothing fetches the SDKs. Its toolchains (the clean-room Apple tools, LLD, the Swift that
 # built the SDKs) take the Apple targets; the host's own C and Swift
 # toolchains still build what runs on Linux (Isomer's Linux pieces link its
