@@ -990,7 +990,7 @@
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
         "bzlTransitiveDigest": "oyYy8cnTR2kIjRK9j7Fuwd3yG/85ziub42dq2MY6h48=",
-        "usagesDigest": "sFGRm/iPfuyueM26Z5LNGxx1AZTawd1u+Y9XZQeQsv4=",
+        "usagesDigest": "ykuPgzjMHSgRqf8c10NrnXfXuvDnkhKSnBA7DONzVU8=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
@@ -1034,9 +1034,7 @@
               "xcode_version": "27.2",
               "xcode_xip_urls": [],
               "local_xcode": true,
-              "ported_tools_archives": {
-                "x86_64": "third_party/applecross/no_ported_tools"
-              },
+              "ported_tools_archives": {},
               "ported_tools_manifest": "@@//third_party/applecross:ported_tools.sha256",
               "ported_tools_urls": [
                 "https://ported-tools.invalid/sha256/{sha256}"

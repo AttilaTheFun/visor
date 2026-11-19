@@ -14,7 +14,10 @@
 #   contents cache inside the main repository), which the workflow keeps in
 #   GitHub's cache (.github/actions/bazel_cache), when a cache is named;
 # - GitHub's downloads tried at GitHub, then at Bazel's mirror, each
-#   retried;
+#   retried; Maven Central's (the pinned Maven jars: MODULE.bazel)
+#   at Google's mirror of it first, then at Maven Central, whose rate limit
+#   (HTTP 429) a cold job's downloads met. Here, not in .bazelrc: Bazel
+#   reads one --downloader_config, and this file is CI's;
 # - no bazel-* convenience links in the checkout
 #   (--experimental_convenience_symlinks=ignore: rules_swift_package_manager
 #   copies local packages with `cp -RL`, which follows them into Bazel's
@@ -57,6 +60,8 @@ setup)
     {
         echo 'rewrite (github\.com/.*) $1'
         echo 'rewrite (github\.com/.*) mirror.bazel.build/$1'
+        echo 'rewrite repo1\.maven\.org/maven2/(.*) maven-central.storage-download.googleapis.com/maven2/$1'
+        echo 'rewrite repo1\.maven\.org/maven2/(.*) repo1.maven.org/maven2/$1'
     } > "$ROOT/.ci/downloader.cfg"
     lines=("$MARK" "common --downloader_config=$ROOT/.ci/downloader.cfg"
            "common --experimental_repository_downloader_retries=5"

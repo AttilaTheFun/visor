@@ -275,10 +275,71 @@ go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.24.12")
 
 # Maven: none of Visor's own. isomer_android_maven pins Isomer's AndroidX
-# (`@isomer_maven`) with its own lock file (isomer's docs/android_maven.md);
-# rules_android resolves its own tools (`@rules_android_maven`), which isomer
-# no longer pins for its consumers (0.54). Visor's Kotlin, if it ever uses
-# AndroidX, depends on `@isomer//android/maven:androidx`.
+# (`@isomer_maven`) with its own lock file (isomer's docs/android_maven.md).
+# Visor's Kotlin, if it ever uses AndroidX, depends on
+# `@isomer//android/maven:androidx`.
+#
+# Maven repositories of the modules Visor builds with, which they don't pin
+# and isomer no longer pins for its consumers (0.54): pinned here, as the
+# root module, to tools/maven's lock files. rules_android's tools
+# (`@rules_android_maven`: R8, bundletool, the desugaring libraries) and
+# Android's common libraries of its resource tools
+# (`@android_ide_common_30_1_3`), and the Bazel worker's (bazel_worker_java,
+# rules_android's: `@bazel_worker_maven`). rules_jvm_external merges each
+# tag with its module's (the module's artifacts; the lock file, the Android
+# rules and the repositories are the root's), so a cold build resolves
+# nothing with coursier against Maven Central (a cold CI job's had, and
+# Maven Central's rate limit failed it): Bazel's downloader fetches each
+# pinned jar by its sha256, into the repository cache, at Google's mirror of
+# Maven Central first (tools/ci/ci_bazel.sh's downloader config). A module
+# whose artifacts change fails the build until its repository is pinned
+# again, on Linux (a container), not a Mac, e.g.:
+#   REPIN=1 bazel run @unpinned_rules_android_maven//:pin
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+
+# rules_android's values for its two, which the root's would otherwise
+# replace.
+maven.install(
+    name = "rules_android_maven",
+    aar_import_bzl_label = "@rules_android//rules:rules.bzl",
+    known_contributing_modules = ["rules_android"],
+    lock_file = "//tools/maven:rules_android_maven_install.json",
+    repin_instructions = "rules_android's Maven artifacts changed: on Linux (a container), REPIN=1 bazel run @unpinned_rules_android_maven//:pin (MODULE.bazel).",
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+    use_starlark_android_rules = True,
+)
+maven.install(
+    name = "android_ide_common_30_1_3",
+    aar_import_bzl_label = "@rules_android//rules:rules.bzl",
+    known_contributing_modules = ["rules_android"],
+    lock_file = "//tools/maven:android_ide_common_30_1_3_install.json",
+    repin_instructions = "rules_android's Maven artifacts changed: on Linux (a container), REPIN=1 bazel run @unpinned_android_ide_common_30_1_3//:pin (MODULE.bazel).",
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+    use_starlark_android_rules = True,
+)
+maven.install(
+    name = "bazel_worker_maven",
+    known_contributing_modules = ["bazel_worker_java"],
+    lock_file = "//tools/maven:bazel_worker_maven_install.json",
+    repin_instructions = "bazel_worker_java's Maven artifacts changed: on Linux (a container), REPIN=1 bazel run @unpinned_bazel_worker_maven//:pin (MODULE.bazel).",
+)
+use_repo(
+    maven,
+    "android_ide_common_30_1_3",
+    "bazel_worker_maven",
+    "rules_android_maven",
+    "unpinned_android_ide_common_30_1_3",
+    "unpinned_bazel_worker_maven",
+    "unpinned_rules_android_maven",
+)
 
 android_tools = use_extension("@isomer//tools/android:extensions.bzl", "android_tools")
 use_repo(
