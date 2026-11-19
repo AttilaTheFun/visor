@@ -291,5 +291,63 @@ extension ServerTests {
         #expect(record.notice?.contains("Its turns on the runner weren't returned (its runner's agent can't return its conversation)") == true)
         wrapper.finish()
     }
+
+    /// One line of a Claude Code transcript.
+    private func line(_ type: String, _ uuid: String, _ parent: String?, _ text: String) -> String {
+        let content: Any = type == "assistant" ? [["type": "text", "text": text]] : text
+        var object: [String: Any] = ["type": type, "uuid": uuid, "message": ["role": type, "content": content]]
+        if let parent { object["parentUuid"] = parent }
+        return String(data: try! JSONSerialization.data(withJSONObject: object), encoding: .utf8)! + "\n"
+    }
+
+    /// The live pilot of 19 Nov: a session that followed its conversation
+    /// in the folder it began in, moved, and handed back the same
+    /// conversation (its runner's agent resumed it, keeping its id) under
+    /// the key of the folder it moves back to. Its agent here writes there:
+    /// the transcript and the preview follow that file, not the one it had.
+    @Test func aHandedBackConversationIsTheFileItsTranscriptFollows() async throws {
+        let began = root.appendingPathComponent("began-h5", isDirectory: true)
+        try FileManager.default.createDirectory(at: began, withIntermediateDirectories: true)
+        let first = ClaudeSessionFiles.expectedURL(sessionID: before, cwd: began.path)
+        try FileManager.default.createDirectory(at: first.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try (line("user", "p1", nil, "Remember APPLE") + line("assistant", "a1", "p1", "OK-APPLE")).write(to: first, atomically: true, encoding: .utf8)
+        let native = server.takeDriven(SessionInfo(id: "h5", agent: .claude, cwd: began.path, title: "Moved", created: 0),
+                                       process: ClaudeProcess(cwd: began.path, skipPermissions: true, resume: before))
+        native.followFile()
+        await native.waitForFile(past: 0)
+        #expect(native.entries.map(\.text) == ["Remember APPLE", "OK-APPLE"], "followed before it moved")
+
+        let (job, wrapper, record, here) = try await moved("h5")
+        #expect(record === native)
+        let loads = record.fileLoads
+        #expect(took(server.moveBack("h5", resume: before, cwd: here, why: "moved back by request")))
+        #expect(await eventually { wrapper.handedBack ? true : nil } == true)
+        let onThere = line("user", "p2", "a1", "Also BANANA") + line("assistant", "a2", "p2", "OK-BANANA")
+        let answer = await returnConversation(conversation(of: job.agent.uuid, folder: runnerFolder(job.agent.uuid), session: before, [
+            ("\(before).jsonl", line("user", "p1", nil, "Remember APPLE") + line("assistant", "a1", "p1", "OK-APPLE") + onThere),
+        ]), token: job.token)
+        #expect(answer.code == nil)
+        await server.handBackEnded("h5")
+        #expect(!record.driven && record.process.resumeID == before)
+
+        let returned = ClaudeSessionFiles.expectedURL(sessionID: before, cwd: here)
+        #expect(returned != first && FileManager.default.fileExists(atPath: returned.path))
+        await record.waitForFile(past: loads)
+        let following = await record.indexer?.url
+        #expect(following?.standardizedFileURL.path == returned.standardizedFileURL.path, "following the file handed back")
+        #expect(record.entries.map(\.text) == ["Remember APPLE", "OK-APPLE", "Also BANANA", "OK-BANANA"])
+
+        // Its agent here answers: the reply is in the transcript and the
+        // preview, not left on the prompt. (A prompt in the file that this
+        // server didn't send would have the file read again whole.)
+        let handle = try FileHandle(forWritingTo: returned)
+        handle.seekToEndOfFile()
+        handle.write(Data(line("assistant", "a3", "a2", "OK-CHERRY").utf8))
+        try handle.close()
+        #expect(await eventually { record.entries.last?.text == "OK-CHERRY" ? true : nil } == true,
+                "\(record.entries.map(\.text))")
+        #expect(record.info.preview?.contains("OK-CHERRY") == true, "\(record.info.preview ?? "")")
+        wrapper.finish()
+    }
 }
 }
