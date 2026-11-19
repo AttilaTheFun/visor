@@ -881,17 +881,46 @@ container agents.
   runners and cache alone, as every public app repository's (Logan, 15
   Nov 2026): no Shireworks runner, lease, cache, files or signing service;
   no paid larger runner. The header of ci.yml has it whole.
+  - **Release builds: rules_applecross, not Xcode** (pinned). A
+    proposal's and a release's iPhone app and Visor.app (`alpha-apple`,
+    `release-apple`) are built with rules_applecross's toolchain, not
+    Xcode's own Swift, on GitHub's `xcode-27` Mac (`--config=apple_cross_mac`
+    in .bazelrc: swift.org's Swift 6.4.2 and LLVM's ld64.lld compile and
+    link; the Mac's Xcode 27.2 gives the SDKs, actool, ibtool and the macro
+    plugins; MODULE.bazel gives a Mac no ported tools, which it never runs),
+    because of the 18–19 Nov 2026 crash: 0.62.1,
+    the first built by Xcode 27.2 (Apple's Swift 6.4.2, on GitHub's
+    `xcode-27` Mac), aborted at launch on macOS 27.0 in
+    `swift_task_dealloc`, from the short-lived deadline tasks of
+    `Command.ask` and `JobQueue.claim` (code 0.61.1 had too, which
+    rules_applecross built on Linux and which runs; built from one commit
+    on a macOS 27.0.1 VM, Xcode's Visor.app aborts the same way and
+    apple_cross_mac's runs). Every proof passed it: they run the client in
+    fixture mode, with no server. Don't move them back to Xcode's Swift
+    without tools/ci/launch_check passing on macOS 27.0 against such a
+    build of the Mac app (`bazel run //tools/ci/launch_check --
+    <Visor.app or its .zip>`, on a Mac where Visor was never set up: it
+    opens the app for real with a stand-in `claude` and a data folder of
+    its own whose server asks nothing, waits for its server's
+    `/api/hello` on 7433, holds it a minute, and on a failure prints the
+    crash report's exception, `asi` and faulting frames, a running but
+    silent app's main thread, and the app's log; an app signed otherwise
+    than the one before it on the same Mac waits on a keychain dialog for
+    the items that one left). CI runs it on the signed Visor.app before a proposal
+    (`alpha-launch`) and before a release's assets are attached
+    (`release-launch`).
   - **Where**: Linux and Android on GitHub's x86_64 `ubuntu-24.04`, in
     Swift's image (`swift:6.4.0-noble`, by digest) with what
     tools/ci/job_tools.sh adds (Bazelisk, the Linux client's libraries,
     clang), Bazel's tree on the runner's second disk (Google's Android SDK
     and NDK tools are x86_64, and GitHub's arm runners have no Rosetta);
     the Apple targets on GitHub's `xcode-27` Macs with their own Xcode
-    (27.2 where the image has it): Apple's SDKs may not be redistributed,
-    so CI never builds them on Linux (`apple_on_linux` is a builder's
-    own). tools/ci/container_build.sh builds the platform's apps where it
-    runs. Visor's Linux programs (`linux-programs`) build on GitHub's arm64
-    Ubuntu in Visor's agent image (by digest).
+    (27.2 where the image has it; a proposal's and a release's apps with
+    rules_applecross's Swift, above): Apple's SDKs may not be
+    redistributed, so CI never builds them on Linux (`apple_on_linux` is a
+    builder's own). tools/ci/container_build.sh builds the platform's apps
+    where it runs. Visor's Linux programs (`linux-programs`) build on
+    GitHub's arm64 Ubuntu in Visor's agent image (by digest).
   - **Caches**: Bazel's settings are tools/ci/ci_bazel.sh's
     (.github/actions/bazel_cache): GitHub's cache (actions/cache) holds
     the disk and repository caches, outside the checkout (Bazel 9 refuses
@@ -930,7 +959,8 @@ container agents.
     proposal's version comes from the repository's releases and tags
     (tools/ci/version_from_tags.sh: one past the line's highest, the same
     again for the same commit). The iPhone app and Visor.app are built on
-    an `xcode-27` Mac (`alpha-apple`), optimized, with `--config=alpha`
+    an `xcode-27` Mac (`alpha-apple`) with rules_applecross's Swift
+    (`--config=apple_cross_mac`, above), optimized, with `--config=alpha`
     and `--config=ci_device` (the iPhone's a device build signed ad hoc
     with a placeholder profile; Visor.app signed ad hoc asking for push,
     `app.ci.entitlements`), with the update settings from the
@@ -954,7 +984,9 @@ container agents.
     @android_build_tools' apksigner), its certificate checked against the
     workflow's `VISOR_ANDROID_PIN`. The draft is CI's
     (tools/ci/propose_release.sh, the run's token): no agent makes a draft
-    or a tag. The signed builds are attached to the draft
+    or a tag. Before it, `alpha-launch` opens the signed Visor.app on an
+    `xcode-27` Mac (tools/ci/launch_check), and `alpha-propose` proposes
+    only once it passed. The signed builds are attached to the draft
     (`Visor-<version>-ios.ipa`, `-macos.zip`, `-android.apk` and
     `builds.json`: tools/ci/attach_release.sh), which is what Applications
     lists (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent
@@ -964,7 +996,8 @@ container agents.
     nothing publishes them.
   - **Released**: Logan's Release in Reviews publishes a proposed
     release's draft, which makes its tag. Production comes from the tag:
-    `release-apple` (an `xcode-27` Mac) and `release-android` (Ubuntu)
+    `release-apple` (an `xcode-27` Mac, `--config=apple_cross_mac`) and
+    `release-android` (Ubuntu)
     build the tag's commit with `--config=prod` and the tag's version
     (never the Alphas stamped again). `release` checks the commit is on
     main and that a `verify` run of it passed and kept its proof
@@ -978,7 +1011,9 @@ container agents.
     run red afterwards if the APK wasn't made. Re-run failed jobs then
     signs the APK alone: Apple's, Production already, are left as they
     are, and only the APK and builds.json are attached again.
-    `release-assets` attaches the Production builds to the release in
+    `release-launch` opens the signed Visor.app on an `xcode-27` Mac
+    (tools/ci/launch_check) and `release-assets` waits for it, then
+    attaches the Production builds to the release in
     place of the Alphas, under the same names, with the disk image and
     builds.json, then that proof (tools/ci/release_proof.sh). A
     pre-release is never released: its commit is proposed as a release,

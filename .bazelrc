@@ -68,6 +68,24 @@ build:apple_on_linux --macos_cpus=arm64
 # make it byte for byte (Visor's Icon Composer icon, drawn flat).
 build:apple_on_linux --action_env=RULES_APPLECROSS_RESOURCE_OUTPUT_MODE=relaxed
 
+# A proposal's and a release's Apple apps, built on a Mac (CI's `xcode-27`:
+# alpha-apple, release-apple) with rules_applecross's toolchains as on
+# Linux: swift.org's Swift 6.4.2 (MODULE.bazel's applecross_swift, its
+# macOS package) and LLVM's ld64.lld compile and link, the Mac's own Xcode
+# 27.2 gives the SDKs (local_xcode), and Xcode's own actool, ibtool and
+# macro plugins bundle (apple_bundling_on_macos). Not Xcode's own Swift:
+# 0.62.1, which it built, aborted at launch on macOS 27.0
+# (docs/DEVELOPMENT.md, "Release builds"). The ported tools rules_applecross
+# stages are Linux's, which a Mac never runs: it reads them from an empty
+# folder (MODULE.bazel), so nothing of Shireworks' is fetched. Unlike
+# apple_on_linux, no DEVELOPER_DIR or PATH of the staged tree: the Mac's
+# own actions (plisttool's xcrun, actool) find its selected Xcode.
+build:apple_cross_mac --extra_toolchains=@apple_cross_toolchain//:all
+build:apple_cross_mac --xcode_version_config=@apple_cross_toolchain//:host_xcodes
+build:apple_cross_mac --@rules_apple//apple:sdk_tool_files=@apple_cross_toolchain//:sdk_tool_files
+build:apple_cross_mac --macos_cpus=arm64
+build:apple_cross_mac --repo_env=RULES_APPLECROSS_LOCAL_XCODE=1
+
 # Isomer's Linux WebView (WebKitGTK) includes glibconfig.h and
 # dbus-arch-deps.h from under /usr/lib, which Bazel accepts only as the cc
 # toolchain's own include directories: given to the compiler it detects, as
