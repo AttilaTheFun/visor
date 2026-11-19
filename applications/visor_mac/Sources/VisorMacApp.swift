@@ -15,7 +15,7 @@ import VisorServerApple
 import VisorServices
 import VisorUI
 
-@main
+/// Started by VisorMacMain, once it's no agent-proxy.
 struct VisorMacApp: App {
     private let server: VisorServer
     @State private var store: VisorStore
@@ -68,6 +68,8 @@ struct VisorMacApp: App {
         _store = State(initialValue: store)
         // This Mac's server among the computers, without pairing.
         if !VisorFixture.active { OwnServer.follow(server, in: store) }
+        // agent-proxy's launchd job, to settings.json's `agentProxy`.
+        if !VisorFixture.active { MacAgentProxy.settle() }
     }
 
     /// agent_protocol on this Mac (Logan, 12 Nov 2026): the server as driver

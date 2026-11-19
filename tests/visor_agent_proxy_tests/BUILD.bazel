@@ -1,0 +1,45 @@
+load("@rules_swift//swift:swift.bzl", "swift_test")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# agent-proxy's tests (from Shireworks' v0.15.1, XCTest, as they came):
+# egress, DNS, the gate, the GitHub interceptor and its authority, the relay
+# listener, the MCP pass-through, the log's rotation; and the host's own
+# (the settings it reads, its secrets, the import, the launchd job's
+# decisions). On Linux, in //tests:linux.
+swift_test(
+    name = "visor_agent_proxy_tests",
+    copts = STRICT_SWIFT,
+    srcs = glob(["proxy/*.swift"]),
+    module_name = "VisorAgentProxyTests",
+    package_name = "visor",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_agent_proxy",
+        "//libraries/visor_agent_proxy:agent_proxy_c",
+        "//libraries/visor_agent_proxy:visor_agent_proxy_host",
+        "//libraries/visor_server",
+        "@swiftpkg_swift_asn1//:SwiftASN1",
+        "@swiftpkg_swift_certificates//:X509",
+        "@swiftpkg_swift_crypto//:Crypto",
+        "@swiftpkg_swift_crypto//:_CryptoExtras",
+        "@swiftpkg_swift_nio//:NIOCore",
+        "@swiftpkg_swift_nio//:NIOHTTP1",
+        "@swiftpkg_swift_nio//:NIOPosix",
+        "@swiftpkg_swift_nio_ssl//:NIOSSL",
+    ],
+)
+
+# relay-client's, with a relay played (Linux alone: netlink, nftables).
+swift_test(
+    name = "relay_client_tests",
+    copts = STRICT_SWIFT,
+    srcs = glob(["relay_client/*.swift"]),
+    module_name = "RelayClientTests",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "//:foundation",
+        "//libraries/visor_agent_proxy",
+        "//libraries/visor_agent_proxy:relay_client_c",
+        "//libraries/visor_agent_proxy:visor_relay_client",
+    ],
+)

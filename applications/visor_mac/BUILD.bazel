@@ -47,6 +47,7 @@ swift_library(
         "//:foundation",
         "@swiftpkg_update_kit//:UpdateKit",
         "//libraries/message_cache",
+        "//libraries/visor_agent_proxy:visor_agent_proxy_host",
         "//libraries/visor_client",
         "//libraries/visor_driver",
         "//libraries/visor_native_runner",
