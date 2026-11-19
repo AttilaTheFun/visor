@@ -702,7 +702,7 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "dSr3GkO2vhyxmc87InZ9I0svVrbdp7988KIWluLAdAk=",
-        "usagesDigest": "NNcXXXZRyCkS6RF5wo/MH7SbrYjv78Yo6Fcdf7m+d3A=",
+        "usagesDigest": "eRxHv2cG9ogcBVBwXC01ZFOzwAuYHubgf2FdU/S4iws=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
@@ -728,7 +728,7 @@
     "@@isomer+//tools/android:extensions.bzl%android_tools": {
       "os:linux,arch:aarch64": {
         "bzlTransitiveDigest": "fQQ4tcvpXIll2SShkelhgy80kaCU2XOZbujRrEXigtI=",
-        "usagesDigest": "dEOXEkN17Mp2ccLaVedRepXeg3q+76pIL0W5aDrx8Ic=",
+        "usagesDigest": "PvRhE3hKbQlztBUywiJOjf7IbCXmYq6z3MaS2dFCT/o=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -977,7 +977,7 @@
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "qHbR00gVzVzkxX+PRtv4UGcUFMtBz7TK9CNYUWH8nIE=",
-        "usagesDigest": "D93unBuUCq5hCemkaajdL9xgsMWJOG2DG3X04r8+trQ=",
+        "usagesDigest": "AkYRdbvwL5Bz9GGKJxZCdI1PwS1hLpoQFHgS0RLiA0I=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "androidsdk": {
@@ -990,7 +990,7 @@
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
         "bzlTransitiveDigest": "oyYy8cnTR2kIjRK9j7Fuwd3yG/85ziub42dq2MY6h48=",
-        "usagesDigest": "mmLNAT+h+2AXm8tYOlbKKT2bNcaYI5DdzlBV9/oQl9I=",
+        "usagesDigest": "ykuPgzjMHSgRqf8c10NrnXfXuvDnkhKSnBA7DONzVU8=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
@@ -1091,7 +1091,7 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "B2aTY3dA0RubUZkTqFdg+fxS3ocQQeeog6AzCPaqDXY=",
-        "usagesDigest": "RVvjs/hm3xck3pVPpawXCMKOgVHoT+oihA4Lz3Jpp7g=",
+        "usagesDigest": "Tifstq/7Ir+FdIPeNL0vH1n2lX0/7nOVJz5fs85HQQw=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
