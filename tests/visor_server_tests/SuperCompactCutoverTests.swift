@@ -310,7 +310,8 @@ extension ServerTests {
         job.warnings = ["Missing: “Ship 0.64”"]
         job.chunk = 3
         job.chunks = 4
-        let status = try #require(SuperCompactStatus(json: try #require(parseJSON(job.json))))
+        let parsed = try #require(parseJSON(job.json))
+        let status = try #require(SuperCompactStatus(json: parsed))
         #expect(status.id == job.id)
         #expect(status.session == "s1")
         #expect(status.phase == .done)
@@ -319,7 +320,8 @@ extension ServerTests {
         #expect(status.handoff == job.handoff)
         #expect(status.awaitsReview)
         job.discarded = 5
-        #expect(SuperCompactStatus(json: try #require(parseJSON(job.json)))?.discarded == true)
+        let discarded = try #require(parseJSON(job.json))
+        #expect(SuperCompactStatus(json: discarded)?.discarded == true)
         #expect(SuperCompactStatus(json: status.json) == status)
     }
 }
