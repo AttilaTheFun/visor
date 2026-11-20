@@ -54,7 +54,7 @@ extension VisorServer {
     func isOwnApp(_ request: HTTPRequest) -> Bool { isOwnApp(socketFile: request.trusted, headers: request.headers) }
 
     /// The header the app key is shown in (lower-cased, as headers are read).
-    public static let appKeyHeader = "x-visor-app-key"
+    nonisolated public static let appKeyHeader = "x-visor-app-key"
 
     /// The answer to a request that is not let in: it wants the password.
     /// It says whose computer this is (its id, as `hello` does), so a

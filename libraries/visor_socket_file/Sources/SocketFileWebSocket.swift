@@ -39,8 +39,11 @@ final class SocketFileWebSocket {
     /// Connects to `socket` and asks for the channel at `path`, with
     /// `headers` on the opening request.
     func start(socket: String, path: String, headers: [String: String]) {
-        Task {
-            guard let stream = await connect(socket) else {
+        let connect = connect
+        Task { [weak self] in
+            let stream = await connect(socket)
+            guard let self else { return stream?.close() ?? () }
+            guard let stream else {
                 push("error no server answers at \(socket)")
                 return finish()
             }
