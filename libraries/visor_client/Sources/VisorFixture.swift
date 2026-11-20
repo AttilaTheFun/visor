@@ -23,8 +23,10 @@ public enum VisorFixture {
     /// ten seconds on that there are rows before it), arrivals (the
     /// chat, with rows coming in twelve and twenty-six seconds on, or
     /// from `goFile`'s coming) and
-    /// burst (eight long rows at once, eight seconds on), and
-    /// responding (the chat with a reply being written: `responding`).
+    /// burst (eight long rows at once, eight seconds on),
+    /// responding (the chat with a reply being written: `responding`),
+    /// and super-compact-running, -review and -done (Super Compact's
+    /// sheet over the chat: its job running, done for review, cut over).
     /// A session to open a few seconds after launch, for a recording of
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }

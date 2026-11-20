@@ -42,29 +42,29 @@ extension VisorServer {
 
     /// The session's job that is done, and its HANDOFF.md: or the refusal
     /// that says why there is none.
-    private func doneSuperCompact(_ record: SessionRecord) -> Result<(job: SuperCompactJob, handoff: URL), HTTPResponse> {
+    private func doneSuperCompact(_ record: SessionRecord) -> DoneSuperCompact {
         if let running = superCompaction, running.job.session == record.info.id, !running.job.phase.ended {
-            return .failure(HTTPResponse(409, Envelope.error("The super compact of “\(record.displayName)” is still running: wait for it to finish.").encoded()))
+            return .refused(HTTPResponse(409, Envelope.error("The super compact of “\(record.displayName)” is still running: wait for it to finish.").encoded()))
         }
         guard let job = latestSuperCompactJob(of: record.info.id) else {
-            return .failure(HTTPResponse(404, Envelope.error("“\(record.displayName)” has had no super compact.").encoded()))
+            return .refused(HTTPResponse(404, Envelope.error("“\(record.displayName)” has had no super compact.").encoded()))
         }
         guard job.phase == .done else {
-            return .failure(HTTPResponse(409, Envelope.error("The last super compact of “\(record.displayName)” is \(job.phase.rawValue), not done.").encoded()))
+            return .refused(HTTPResponse(409, Envelope.error("The last super compact of “\(record.displayName)” is \(job.phase.rawValue), not done.").encoded()))
         }
         let url = job.handoff.map { URL(fileURLWithPath: $0, isDirectory: false) }
             ?? job.folderURL.appendingPathComponent("HANDOFF.md", isDirectory: false)
         guard FileManager.default.fileExists(atPath: url.path) else {
-            return .failure(HTTPResponse(404, Envelope.error("HANDOFF.md of “\(record.displayName)” is not at \(url.path).").encoded()))
+            return .refused(HTTPResponse(404, Envelope.error("HANDOFF.md of “\(record.displayName)” is not at \(url.path).").encoded()))
         }
-        return .success((job, url))
+        return .found(job, url)
     }
 
     func superCompactHandoff(_ record: SessionRecord) -> HTTPResponse {
         let done: (job: SuperCompactJob, handoff: URL)
         switch doneSuperCompact(record) {
-        case .success(let found): done = found
-        case .failure(let refusal): return refusal
+        case .found(let job, let url): done = (job, url)
+        case .refused(let refusal): return refusal
         }
         guard let text = try? String(contentsOf: done.handoff, encoding: .utf8) else {
             return HTTPResponse(404, Envelope.error("HANDOFF.md of “\(record.displayName)” can't be read.").encoded())
@@ -84,8 +84,8 @@ extension VisorServer {
         }
         var done: (job: SuperCompactJob, handoff: URL)
         switch doneSuperCompact(record) {
-        case .success(let found): done = found
-        case .failure(let refusal): return refusal
+        case .found(let job, let url): done = (job, url)
+        case .refused(let refusal): return refusal
         }
         guard done.job.awaitsReview else {
             return HTTPResponse(409, Envelope.error("The handoff of “\(record.displayName)” has been \(done.job.continuedAs == nil ? "discarded" : "started from") already.").encoded())
@@ -110,8 +110,8 @@ extension VisorServer {
     func superCompactCutover(_ record: SessionRecord) -> HTTPResponse {
         var done: (job: SuperCompactJob, handoff: URL)
         switch doneSuperCompact(record) {
-        case .success(let found): done = found
-        case .failure(let refusal): return refusal
+        case .found(let job, let url): done = (job, url)
+        case .refused(let refusal): return refusal
         }
         if let already = record.info.continuedAs ?? done.job.continuedAs {
             return HTTPResponse(409, Envelope.error("“\(record.displayName)” is continued as \(already) already.").encoded())
@@ -242,4 +242,11 @@ extension VisorServer {
         }
         return current
     }
+}
+
+/// The session's job that is done and its HANDOFF.md, or the refusal that
+/// says why there is none.
+private enum DoneSuperCompact {
+    case found(SuperCompactJob, URL)
+    case refused(HTTPResponse)
 }
