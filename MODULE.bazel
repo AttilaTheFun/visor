@@ -171,22 +171,23 @@ use_repo(signing, "visor_signing")
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform
 # --- labels: Apple's own on Apple platforms, Isomer's elsewhere.
-bazel_dep(name = "isomer", version = "0.56.1")
+bazel_dep(name = "isomer", version = "0.58.1")
 
 # Isomer's AndroidX (the Android runtime's Compose and AndroidX), a module of
 # its own since isomer 0.54, at isomer's version (isomer's
 # docs/android_maven.md): Visor has no AndroidX of its own, so isomer's
 # `@isomer//android/maven:androidx` flags stay at their defaults, which find it.
-bazel_dep(name = "isomer_android_maven", version = "0.56.1")
+bazel_dep(name = "isomer_android_maven", version = "0.58.1")
 
 
 # isomer's Android cross-compile toolchains. The extension insists on a
 # root-level android.sdk tag even when only the NDK's cc toolchains are used.
-# The project registry's 0.5.0.isomer.1, which isomer asks for since 0.42: any
-# Linux takes Google's x86_64 SDK and NDK tools (an arm64 Linux, a container
-# on a Mac, runs them under Rosetta, with x86_64 glibc beside its own:
-# tools/containers/visor-agent), with no override of Visor's own.
-bazel_dep(name = "hermetic_android_toolchains", version = "0.5.0.isomer.1")
+# The project registry's 0.5.0.isomer.2, which isomer asks for since 0.58
+# (0.5.0.isomer.1 since 0.42; .2's SDK repository loads on any rules_android):
+# any Linux takes Google's x86_64 SDK and NDK tools (an arm64 Linux, a
+# container on a Mac, runs them under Rosetta, with x86_64 glibc beside its
+# own: tools/containers/visor-agent), with no override of Visor's own.
+bazel_dep(name = "hermetic_android_toolchains", version = "0.5.0.isomer.2")
 
 # A dev dependency (0.5.0 reads the root module's tags alone, and reports
 # its repositories so): each root declares its own.
@@ -214,14 +215,14 @@ swift.toolchain(
 # README, "Upgrading isomer"): the -i18n ones, as the client formats dates
 # and numbers (.bazelrc's --@isomer//foundation:internationalization).
 swift.wasm_sdk(
-    url = "https://github.com/AttilaTheFun/isomer_hermetic_toolchains/releases/download/isomer-6.4.2.1/swift-6.4.2-RELEASE_wasm-i18n.artifactbundle.tar.gz",
-    sha256 = "cc3423d1dfa969e1fb255ed324af6a9e3c7dedc06b75d90a3ff74adcce10877c",
+    url = "https://github.com/AttilaTheFun/isomer_hermetic_toolchains/releases/download/isomer-6.4.2.2/swift-6.4.2-RELEASE_wasm-i18n.artifactbundle.tar.gz",
+    sha256 = "86cb53c7af7808fd0b07e2f37b7a66a7a64f379b18348aedaaff7ddab24fb36b",
 )
 # No wasi-threads SDK beside it since isomer 0.41: it returns with Swift 6.5
 # (isomer's TODO.md), and nothing of Visor's builds for it.
 swift.android_sdk(
-    url = "https://github.com/AttilaTheFun/isomer_hermetic_toolchains/releases/download/isomer-6.4.2.1/swift-6.4.2-RELEASE_android-i18n.artifactbundle.tar.gz",
-    sha256 = "9ed7cd5051cc276acd14a5210d72311f2b4b7984c4bdaa77dd25bafad2170d93",
+    url = "https://github.com/AttilaTheFun/isomer_hermetic_toolchains/releases/download/isomer-6.4.2.2/swift-6.4.2-RELEASE_android-i18n.artifactbundle.tar.gz",
+    sha256 = "ab250666b10586a507abf4b80b55bf453ddeae1a7d499c788c4d347d5b55ce93",
 )
 use_repo(swift, "swift_toolchain")
 
