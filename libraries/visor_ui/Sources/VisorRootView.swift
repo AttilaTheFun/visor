@@ -436,7 +436,7 @@ public struct VisorRootView: View {
         still.disablesAnimations = true
         withTransaction(still) {
             switch screen {
-            case "chat", "inspector", "models", "learns-earlier", "arrivals", "burst", "torrent", "question", "commands", "sign-in-code":
+            case "chat", "inspector", "models", "learns-earlier", "arrivals", "burst", "torrent", "responding", "question", "commands", "sign-in-code":
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.chatSession))
             case "goal", "earlier":
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))

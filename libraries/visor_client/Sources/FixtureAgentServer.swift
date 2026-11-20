@@ -57,8 +57,13 @@ final class FixtureAgentServer: AgentServer {
         Task { onEvent(.session(reply)) }
     }
 
+    /// The responding screen's reply has begun coming, and has all come.
+    private var respondingStarted = false
+    private var respondingDone = false
+
     func subscribe(_ session: String) {
         guard let onEvent else { return }
+        if session == VisorFixture.chatSession, VisorFixture.screen == "responding" { return respond(onEvent) }
         // The chat waits on a tool call; on the question screen, on a
         // question; on the sign-in-code screen, on Claude's sign-in.
         let signingIn = session == VisorFixture.chatSession && VisorFixture.screen == "sign-in-code" && !signedIn
@@ -69,6 +74,29 @@ final class FixtureAgentServer: AgentServer {
                                          approval: approval, queued: [], notice: nil,
                                          signIn: signingIn ? VisorFixture.signInPage : nil))
         Task { onEvent(.session(reply)) }
+    }
+
+    /// The responding screen's chat: a reply being written, as a server
+    /// tells it. Its words so far on subscribing (`ephemeral.streams`), the
+    /// rest as `delta`s, then the turn's end; its row comes with the sync
+    /// a while after (`transcript(of:)`), and takes the stream's place.
+    private func respond(_ onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
+        let session = VisorFixture.chatSession
+        let reply = VisorFixture.responding
+        let snapshot = Self.wire(.ephemeral(session: session, streams: [StreamChunk(id: reply.id, text: reply.start)], status: [],
+                                            activity: "Thinking…", busy: true, approval: nil, queued: [], notice: nil, signIn: nil))
+        Task { onEvent(.session(snapshot)) }
+        guard !respondingStarted else { return }
+        respondingStarted = true
+        Task {
+            try? await Task.sleep(nanoseconds: VisorFixture.respondingDeltasAfter)
+            for words in reply.deltas {
+                onEvent(.session(Self.wire(.delta(session: session, message: reply.id, text: words))))
+                try? await Task.sleep(nanoseconds: 300_000_000)
+            }
+            onEvent(.session(Self.wire(.busy(session: session, false))))
+            respondingDone = true
+        }
     }
 
     func acknowledge(_ session: String) {}
@@ -157,6 +185,19 @@ final class FixtureAgentServer: AgentServer {
             var e = Envelope.transcript(session: session, entries: rows, streaming: "", activity: nil, busy: false, error: nil)
             e.after = revision == 1 ? [VisorFixture.transcript.last?.id ?? "", "arrival-1"] : ["arrival-2"]
             e.revision = revision + 1
+            e.generation = 1
+            return Self.wire(e)
+        }
+        if VisorFixture.screen == "responding", session == VisorFixture.chatSession, revision == 1 {
+            // The reply's row, once all of it has streamed and the turn has
+            // ended, and a while longer: the stream stays drawn until then.
+            while !respondingDone { try await Task.sleep(nanoseconds: 100_000_000) }
+            try await Task.sleep(nanoseconds: VisorFixture.respondingRowAfter)
+            let reply = VisorFixture.responding
+            var e = Envelope.transcript(session: session, entries: [TranscriptEntry(id: reply.id, role: .assistant, text: reply.final)],
+                                        streaming: "", activity: nil, busy: false, error: nil)
+            e.after = [VisorFixture.transcript.last?.id ?? ""]
+            e.revision = 2
             e.generation = 1
             return Self.wire(e)
         }

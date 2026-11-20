@@ -223,7 +223,8 @@ struct AgentScreen: View {
             // The path to the computer, when it is down, says more than
             // what the turn was last heard doing.
             status: connectionStatus == nil ? statusItems.map(ActivityItem.init) : [],
-            activity: connectionStatus ?? transcript.activity,
+            // Words coming in: the reply above is being written.
+            activity: connectionStatus ?? (transcript.writing ? "Writing…" : transcript.activity),
             error: transcript.error,
             emptyTitle: transcript.loaded ? (info?.archived == true ? "Archived" : "What should we do?") : "Loading…",
             emptyBody: transcript.loaded
@@ -458,14 +459,19 @@ struct AgentScreen: View {
     }
 
     /// The record's rows, each under the id it keeps through its copies.
-    /// The record's rows, then what was just sent to an idle agent: in the
-    /// thread at once, under the id its copy in the record takes over, so
-    /// the row stays where it is when the record catches up. Then what the
-    /// agent was handed from the queue and has not written down yet.
+    /// After them a reply of a turn that has ended whose row is not synced
+    /// yet; then what was just sent to an idle agent: in the thread at
+    /// once, under the id its copy in the record takes over, so the row
+    /// stays where it is when the record catches up; then what the agent
+    /// was handed from the queue and has not written down yet; then the
+    /// reply being written, under its message's id, which the record's row
+    /// takes when it lands (SessionTranscript+Responding).
     private var rows: [TranscriptMessage] {
         transcript.entries.map { TranscriptMessage($0, host: host.id, id: transcript.displayID(of: $0)) }
+            + transcript.responding(ofEndedTurn: true).map { TranscriptMessage($0, host: host.id) }
             + transcript.sending.filter(\.shown).map { TranscriptMessage($0.entry, host: host.id, id: $0.id) }
             + transcript.deliveredEntries.map { TranscriptMessage($0, host: host.id, id: $0.id) }
+            + transcript.responding(ofEndedTurn: false).map { TranscriptMessage($0, host: host.id) }
     }
 
     /// The session's name, as the sidebar lists it.

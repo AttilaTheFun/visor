@@ -23,7 +23,8 @@ public enum VisorFixture {
     /// ten seconds on that there are rows before it), arrivals (the
     /// chat, with rows coming in twelve and twenty-six seconds on, or
     /// from `goFile`'s coming) and
-    /// burst (eight long rows at once, eight seconds on).
+    /// burst (eight long rows at once, eight seconds on), and
+    /// responding (the chat with a reply being written: `responding`).
     /// A session to open a few seconds after launch, for a recording of
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }
@@ -179,6 +180,19 @@ public enum VisorFixture {
         TranscriptEntry(id: "f8", role: .assistant, text: "", activities: ["Edit: Sources/Sync/RowStore.swift", "Edit: Sources/Sync/SyncQueue.swift", "Bash: swift build"]),
         TranscriptEntry(id: "f9", role: .assistant, text: "Rows now sync in the background, and the banner matches your layout. I'd like to run the tests next."),
     ]
+
+    /// The responding screen's reply: its words so far when the chat
+    /// opens, the rest as they come (`respondingDeltasAfter` on, a few a
+    /// second), and its row on the record (`respondingRowAfter` after the
+    /// last), whose words end with what the stream never had.
+    static let responding = (
+        id: "msg_fixture_reply",
+        start: "Running the sync tests now.",
+        deltas: [" All 42", " sync tests", " pass,", " offline rows", " included,", " and the banner", " shows how many"],
+        final: "Running the sync tests now. All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting."
+    )
+    static let respondingDeltasAfter: UInt64 = 4_000_000_000
+    static let respondingRowAfter: UInt64 = 4_000_000_000
 
     /// The question the question screen's chat waits on (AskUserQuestion).
     static let question = ApprovalRequest(
