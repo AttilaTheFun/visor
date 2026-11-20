@@ -65,10 +65,13 @@ in the transcript and the agent can be notified."
 - **Quiet for the person** (Logan, 17 Nov 2026). A turn of mail — the
   notice, or a message handed over as a turn — is tagged `mail` by the
   server (`turnOrigin`, protocol.md's "Turns of mail"): its end pushes and
-  notifies nothing, and neither it nor the agent's reply in it becomes the
-  session's preview in the list. An approval asked during it still
-  notifies, and the person's own message sent meanwhile starts a turn of
-  their own that notifies as ever.
+  notifies nothing, and its prompt (the notice or the message) is not the
+  session's preview in the list. The agent's reply to the person in it is
+  (Logan, 20 Nov 2026: the preview is the thread's last regular message,
+  the person's or the agent's, as a messages app shows it, whatever began
+  the turn); an `@@to` message to another session is not. An
+  approval asked during it still notifies, and the person's own message
+  sent meanwhile starts a turn of their own that notifies as ever.
 - **No channel** (Logan, 8 Nov 2026). Claude Code's channel notification
   (`notifications/claude/channel`, a meta prompt rather than the user's
   turn) was the plan for Claude. It is dropped: Codex has no such thing, and

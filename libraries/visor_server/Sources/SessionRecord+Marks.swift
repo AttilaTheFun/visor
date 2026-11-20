@@ -110,41 +110,39 @@ extension SessionRecord {
         if info.preview == nil { info.preview = saved }
     }
 
-    /// The session's summary from its rows: the latest that says something
-    /// to or from the person — never mail. A turn's rows are the prompt
-    /// that began it and what follows until the next, so a turn of mail
-    /// (`TurnOrigin.isMail`: its prompt is in one of the forms the server
-    /// hands mail over in) is passed over whole, the agent's reply in it
-    /// too; so is a reply that is itself a message to another session
-    /// (`@@to`). The rows carry no origin of their own: the prompt's form
-    /// is the record of which turns were mail, kept wherever the rows are
-    /// (the store, the agent's own file), so it holds across a restart.
+    /// The session's summary from its rows: the last regular message in
+    /// the thread, the person's or the agent's, whichever is newer — as a
+    /// messages app shows a conversation's last message. What began a turn
+    /// plays no part. A regular message is a row the thread shows as a
+    /// bubble (TranscriptMessage+Wire): not a tool call or its result, nor
+    /// the server's own notes to the agent (`[Visor]`, a restart's nudge),
+    /// nor mail (`isMail`), which the thread shows as a mail row: mail
+    /// handed over as a prompt (the inbox's notice, a message headed with
+    /// its sender, `@@from`) and the agent's messages to other sessions
+    /// (`@@to`). Mail is known by its form, wherever the rows are kept
+    /// (the store, the agent's own file), so the rule holds across a
+    /// restart.
     static func latestPreview<Rows: BidirectionalCollection>(in rows: Rows) -> String? where Rows.Element == TranscriptEntry {
-        // The latest words of the turn being walked back through, said
-        // once its prompt is known not to be mail.
-        var reply: String?
-        for row in rows.reversed() {
-            if row.role == .user {
-                if TurnOrigin.isMail(row.text.trimmingCharacters(in: .whitespacesAndNewlines)) {
-                    reply = nil
-                    continue
-                }
-                if let reply { return reply }
-                if let said = preview(of: row) { return said }
-                continue
-            }
-            if reply == nil, !TurnOrigin.isMailReply(row.text) { reply = preview(of: row) }
+        rows.reversed().lazy.filter { !isMail($0) }.compactMap(preview(of:)).first
+    }
+
+    /// Whether a row is mail between sessions, which the thread shows as a
+    /// mail row and never as the person's or the agent's bubble.
+    static func isMail(_ entry: TranscriptEntry) -> Bool {
+        switch entry.role {
+        case .user: return TurnOrigin.isMail(entry.text.trimmingCharacters(in: .whitespacesAndNewlines))
+        case .assistant: return TurnOrigin.isMailReply(entry.text)
+        case .tool: return false
         }
-        // The rows begin inside a turn whose prompt is not among them.
-        return reply
     }
 
     /// What a row says, in a line or two: its words, else the pictures it
-    /// carries. Only what was said, by either side — a tool call or its
-    /// result is not a message, and a row of nothing but those is skipped
-    /// for the last row that spoke.
+    /// carries. Only a message, by either side — the person's answers to
+    /// the agent's questions are theirs, as the thread shows them, but a
+    /// tool call or its result is not a message, and a row of nothing but
+    /// those is skipped for the last row that spoke.
     static func preview(of entry: TranscriptEntry) -> String? {
-        guard entry.role == .user || entry.role == .assistant else { return nil }
+        guard entry.role == .user || entry.role == .assistant || entry.toolName == "answers" else { return nil }
         let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
         // The server's own notes to the agent (a restart's nudge) are not
         // the conversation's latest word.
