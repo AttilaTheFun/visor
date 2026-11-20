@@ -111,7 +111,9 @@ extension FeatureMapTests {
         /// A reply being written (the `responding` fixture, VisorFixture's
         /// `responding`): its words so far as the chat opens, more as they
         /// stream, then the record's row in its place, once: the stream
-        /// gone, no second copy.
+        /// gone, no second copy. (Not among FixtureScreens': while the turn
+        /// runs the composer offers Stop, not Send, so the chat is told by
+        /// its end.)
         @Test("Session chat: a reply drawn as it is written, then its row in its place")
         func responding() throws {
             let start = "Running the sync tests now."
