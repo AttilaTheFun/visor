@@ -37,11 +37,11 @@ import VisorSystem
 
 extension VisorServer {
     /// A session archive's extension.
-    static let sessionArchiveExtension = "visorsession"
+    nonisolated static let sessionArchiveExtension = "visorsession"
     /// The one folder a session archive holds.
-    static let sessionArchiveFolder = "session"
+    nonisolated static let sessionArchiveFolder = "session"
     /// An export's one file, as `/api/migration/read` names it.
-    static let sessionArchiveFileID = "archive"
+    nonisolated static let sessionArchiveFileID = "archive"
     /// The most a session archive may be, or unpack to: a move's files at
     /// most (migrationTotalCap), with its offer and tar's own headers.
     nonisolated static let sessionArchiveCap = migrationTotalCap + (16 << 20)
