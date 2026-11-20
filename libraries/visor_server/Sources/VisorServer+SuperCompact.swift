@@ -72,7 +72,7 @@ extension VisorServer {
                                   sourceBytes: Self.wholeLines(of: file.url), folder: folder.path,
                                   settings: settings.superCompact ?? SuperCompactSettings())
         }
-        run(job, tool: tool, cwd: record.info.cwd)
+        runSuperCompact(job, tool: tool, cwd: record.info.cwd)
         return HTTPResponse(202, superCompaction?.job.json ?? job.json)
     }
 
@@ -95,7 +95,7 @@ extension VisorServer {
 
     /// Runs a job, the one at a time; once it ends, the next one left
     /// unfinished (if any) carries on.
-    func run(_ job: SuperCompactJob, tool: String, cwd: String) {
+    func runSuperCompact(_ job: SuperCompactJob, tool: String, cwd: String) {
         let compaction = SuperCompaction(job: job, tool: tool, cwd: cwd)
         compaction.save()
         compaction.onEnd = { [weak self, weak compaction] _ in
@@ -121,7 +121,7 @@ extension VisorServer {
             return
         }
         Self.log("super compact \(job.id) of \(job.session): carrying on from \(job.phase.rawValue)")
-        run(job, tool: tool, cwd: session(job.session)?.info.cwd ?? "")
+        runSuperCompact(job, tool: tool, cwd: session(job.session)?.info.cwd ?? "")
     }
 
     /// Stops the job running where it stands, to carry on when the server

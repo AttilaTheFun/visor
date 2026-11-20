@@ -77,7 +77,7 @@ extension SuperCompactFilter {
         // description, a command's note) is not theirs.
         guard object["isMeta"] as? Bool != true, let message = object["message"] as? [String: Any] else { return [] }
         if object["isCompactSummary"] as? Bool == true {
-            let text = withoutReminders(text(of: message["content"]).text)
+            let text = withoutReminders(Self.text(of: message["content"]).text)
             return text.isEmpty ? [] : ["CLAUDE'S COMPACTION SUMMARY:\n" + text]
         }
         if let answers = ClaudeTranscriptParser.answers(object["toolUseResult"]) {
@@ -87,7 +87,7 @@ extension SuperCompactFilter {
             let results = parts.filter { $0["type"] as? String == "tool_result" }
             if !results.isEmpty { return results.compactMap(toolResult) }
         }
-        let (text, images) = text(of: message["content"])
+        let (text, images) = Self.text(of: message["content"])
         return words(text, images: images).map { [$0] } ?? []
     }
 
@@ -117,7 +117,7 @@ extension SuperCompactFilter {
         case "queued_command":
             // A message sent while the agent worked, taken into its turn.
             guard (attachment["commandMode"] as? String ?? "prompt") == "prompt" else { return [] }
-            let (text, images) = text(of: attachment["prompt"])
+            let (text, images) = Self.text(of: attachment["prompt"])
             return words(text, images: images).map { [$0] } ?? []
         case "goal_status":
             guard let condition = attachment["condition"] as? String else { return [] }
@@ -197,7 +197,7 @@ extension SuperCompactFilter {
 
     /// A tool's result as its first lines.
     static func toolResult(_ part: [String: Any]) -> String? {
-        let (raw, images) = text(of: part["content"])
+        let (raw, images) = Self.text(of: part["content"])
         let error = part["is_error"] as? Bool == true
         let text = withoutReminders(raw)
         let lines = text.split(separator: "\n", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
