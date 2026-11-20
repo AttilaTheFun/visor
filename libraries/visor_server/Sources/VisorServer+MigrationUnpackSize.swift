@@ -206,11 +206,11 @@ extension VisorServer {
 
     /// The archive unpacked by `tar` into `staging`, measured as it goes
     /// and stopped past `bound` (unpackBound) or `entries` (entryBound):
-    /// what went wrong, if anything.
+    /// what went wrong, if anything. `gzip` false: as tar finds it.
     static func extract(_ archive: URL, into staging: URL, tar: String, bound: (bytes: Int, why: String),
-                        entries: (entries: Int, why: String), every interval: Duration) async -> String? {
+                        entries: (entries: Int, why: String), every interval: Duration, gzip: Bool = true) async -> String? {
         let limit = bound.bytes, most = entries.entries
-        guard let result = await Command.output(tar, ["--no-same-owner", "--no-same-permissions", "-xzf", archive.path, "-C", staging.path],
+        guard let result = await Command.output(tar, ["--no-same-owner", "--no-same-permissions", gzip ? "-xzf" : "-xf", archive.path, "-C", staging.path],
                                                 errors: true, every: interval, stopping: {
                                                     let now = unpacked(staging)
                                                     return now.bytes > limit || now.entries > most

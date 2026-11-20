@@ -5,11 +5,18 @@
 // place of folders, and asks for the first message the session starts with.
 // A server with Shireworks offers a container in place of a folder: the agent
 // runs there, a repository cloned into it.
+// Or a session is restored: one imported from a session archive (Import…,
+// here or the Mac's File › Import…) or backed up on the computer, started
+// again there on its own conversation.
 // Sessions start in auto mode (no permission prompts — nobody is at the
 // computer to answer them); the chat's model sheet switches to manual.
 
+import Foundation
 import NavigationUI
 import SwiftUI
+#if canImport(UniformTypeIdentifiers)
+import UniformTypeIdentifiers
+#endif
 import VisorClient
 import VisorProtocol
 
@@ -18,13 +25,18 @@ struct ComposeSessionSheet: View {
     var store: VisorStore
     /// The computer and the new session's id.
     let started: (String, String) -> Void
+    /// Opened on Restore (the fixture's `restore`), or on Restore with the
+    /// file picker open (the Mac's File › Import…).
+    var startsOnRestore = false
+    var importsAtOnce = false
     @Environment(\.dismiss) private var dismiss
     @State private var serverID = ""
     @State private var cwd = ""
     @State private var agent: AgentKind = .claude
     @State private var title = ""
     @State private var browsing = false
-    @State private var resuming = false
+    /// A new conversation, the agent's own resumed, or a session restored.
+    @State private var conversation: Conversation = .new
     @State private var resumable: [ResumableSession] = []
     @State private var resumableLoad: Task<Void, Never>?
     @State private var loadingResumable = false
@@ -39,6 +51,26 @@ struct ComposeSessionSheet: View {
     @State private var message = ""
     /// A folder was picked here: the latest project no longer stands in.
     @State private var placePicked = false
+    /// The sessions to restore: each imported or backed-up session.
+    @State private var restorable: [Restorable] = []
+    @State private var loadingRestorable = false
+    /// The one chosen (Restorable's id).
+    @State private var restoreChoice: String?
+    /// The file picker for a session archive to import is open.
+    @State private var importing = false
+    @State private var importJob: SessionImport?
+
+    private enum Conversation: Hashable { case new, resume, restore }
+
+    /// One session of a backup the computer keeps, imported or backed up.
+    private struct Restorable: Identifiable {
+        let backup: SessionBackup
+        let item: SessionBackupItem
+        var id: String { backup.path + "|" + item.id }
+    }
+
+    private var resuming: Bool { conversation == .resume }
+    private var restoring: Bool { conversation == .restore }
 
     /// Only a computer that is answering can start a session.
     private var host: AgentServerConnection? {
@@ -50,10 +82,19 @@ struct ComposeSessionSheet: View {
     /// Picking up an agent's own session needs a folder to look in and a
     /// session that starts without a message.
     private var canResume: Bool { starting == .inFolders }
+    /// Restoring needs a computer that keeps imported and backed-up
+    /// sessions and restores one by itself.
+    private var canRestore: Bool { host?.archives == true }
+    /// The sessions on the computer now, archived too: one of them isn't
+    /// restored over (Logan's rule: remove it first).
+    private var sessionsHere: Set<String> {
+        Set((host?.projects ?? []).flatMap { $0.sessions + $0.archived }.map(\.id))
+    }
     private var available: Set<AgentKind> {
         Set((host?.catalogs ?? []).filter(\.available).map(\.agent))
     }
     private var ready: Bool {
+        if restoring { return host != nil && !waiting && restorable.contains { $0.id == restoreChoice && !sessionsHere.contains($0.item.id) } }
         return host != nil && !waiting && !place.isEmpty && !(resuming && canResume && resumeID.trimmed.isEmpty)
             && (!starting.withFirstMessage || !message.trimmed.isEmpty)
     }
@@ -81,7 +122,9 @@ struct ComposeSessionSheet: View {
                         .accessibilityIdentifier("computer")
                     }
                 }
-                if let host, starting.fromChoices {
+                if restoring {
+                    // Restoring: the session's own folder, agent and name.
+                } else if let host, starting.fromChoices {
                     Section("Start From") {
                         if host.startChoices.isEmpty {
                             Text("No choices from this server yet.").foregroundColor(.secondary)
@@ -120,20 +163,25 @@ struct ComposeSessionSheet: View {
                     }
                 }
                 Section {
-                    Picker("Agent", selection: $agent) {
-                        ForEach(AgentKind.allCases, id: \.self) { kind in
-                            Text(pickerTitle(for: kind)).tag(kind)
+                    if !restoring {
+                        Picker("Agent", selection: $agent) {
+                            ForEach(AgentKind.allCases, id: \.self) { kind in
+                                Text(pickerTitle(for: kind)).tag(kind)
+                            }
                         }
+                        .pickerStyle(.menu)
                     }
-                    .pickerStyle(.menu)
-                    if canResume {
-                        Picker("Conversation", selection: $resuming) {
-                            Text("New").tag(false)
-                            Text("Resume").tag(true)
+                    if canResume || canRestore {
+                        Picker("Conversation", selection: $conversation) {
+                            Text("New").tag(Conversation.new)
+                            if canResume { Text("Resume").tag(Conversation.resume) }
+                            if canRestore { Text("Restore").tag(Conversation.restore) }
                         }
                         .pickerStyle(.segmented)
+                        .accessibilityIdentifier("conversation")
                     }
                 }
+                if restoring, let host { restoreSection(host) }
                 if resuming && canResume {
                     Section {
                         TextField("Session id", text: $resumeID)
@@ -168,18 +216,20 @@ struct ComposeSessionSheet: View {
                         Text("The agent's own sessions started in this folder, newest first; or paste an id.")
                     }
                 }
-                Section {
-                    // The default as the field's prompt, its name hidden: a
-                    // Mac's form shows a field's title as a label beside it.
-                    TextField("Name", text: $title, prompt: Text(defaultTitle))
-                        .labelsHidden()
-                        .accessibilityIdentifier("title")
-                } header: {
-                    Text("Name")
-                } footer: {
-                    Text("Optional.")
+                if !restoring {
+                    Section {
+                        // The default as the field's prompt, its name hidden: a
+                        // Mac's form shows a field's title as a label beside it.
+                        TextField("Name", text: $title, prompt: Text(defaultTitle))
+                            .labelsHidden()
+                            .accessibilityIdentifier("title")
+                    } header: {
+                        Text("Name")
+                    } footer: {
+                        Text("Optional.")
+                    }
                 }
-                if starting.withFirstMessage {
+                if starting.withFirstMessage && !restoring {
                     Section {
                         TextField("What the agent should do", text: $message, axis: .vertical)
                             .lineLimit(3...8)
@@ -209,7 +259,7 @@ struct ComposeSessionSheet: View {
                     if waiting {
                         ProgressView().controlSize(.small)
                     } else {
-                        Button("Start", action: start)
+                        Button(restoring ? "Restore" : "Start", action: start)
                             .disabled(!ready)
                             .accessibilityIdentifier("start")
                     }
@@ -217,6 +267,9 @@ struct ComposeSessionSheet: View {
             }
         }
         .presentationDetentsLarge()
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.visorSession]) { result in
+            if case .success(let url) = result { importArchive(url) }
+        }
         .sheet(isPresented: $browsing) {
             if let host {
                 FolderPicker(host: host, start: cwd) { chosen in
@@ -231,18 +284,26 @@ struct ComposeSessionSheet: View {
             if cwd.isEmpty { useLatestProject() }
             useChoices()
             if !available.contains(agent), let first = AgentKind.allCases.first(where: available.contains) { agent = first }
+            if startsOnRestore || importsAtOnce, canRestore {
+                conversation = .restore
+                importing = importsAtOnce
+            }
         }
         .onChange(of: serverID) {
             useLatestProject()
             choiceID = ""
             useChoices()
             resumable = []
+            if restoring { loadRestorable() }
         }
         .onChange(of: host?.startChoices ?? []) { useChoices() }
         // The computer's projects arrive after the sheet opens: the latest
         // stands in until a folder is picked.
         .onChange(of: recentProjects.first?.cwd) { if !placePicked { useLatestProject() } }
-        .onChange(of: resuming) { if resuming { loadResumable() } }
+        .onChange(of: conversation) {
+            if resuming { loadResumable() }
+            if restoring { loadRestorable() }
+        }
         .onChange(of: agent) { if resuming { loadResumable() } }
         .onChange(of: cwd) { if resuming { loadResumable() } }
     }
@@ -308,8 +369,120 @@ struct ComposeSessionSheet: View {
         }
     }
 
+    /// The sessions the computer keeps to restore, each to choose, and the
+    /// way to import another.
+    @ViewBuilder private func restoreSection(_ host: AgentServerConnection) -> some View {
+        Section {
+            if loadingRestorable {
+                HStack { ProgressView().controlSize(.small); Text("Looking…").foregroundColor(.secondary) }
+            } else if restorable.isEmpty {
+                Text("No imported or backed-up sessions on \(host.record.name) yet.").foregroundColor(.secondary)
+            }
+            ForEach(restorable) { entry in
+                let here = sessionsHere.contains(entry.item.id)
+                Button { restoreChoice = entry.id } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.item.title.isEmpty ? entry.item.id : entry.item.title).lineLimit(2)
+                            Text(Self.detail(of: entry.backup, here: here, now: Date().timeIntervalSince1970))
+                                .font(.caption).foregroundColor(.secondary).lineLimit(2)
+                        }
+                        Spacer()
+                        if restoreChoice == entry.id { Image(systemName: "checkmark").foregroundColor(.accentColor) }
+                        else { Color.clear.frame(width: 1) }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(here)
+                .accessibilityIdentifier("restore-" + entry.item.id)
+            }
+            Button { importing = true } label: {
+                Label("Import…", systemImage: "square.and.arrow.down")
+            }
+            .disabled(importJob?.phase == .importing)
+            .accessibilityIdentifier("import-archive")
+            if let importJob {
+                switch importJob.phase {
+                case .importing:
+                    ProgressView(value: importJob.progress) { Text("Importing \(importJob.file.lastPathComponent)…") }
+                case .failed(let problem):
+                    Text(problem).foregroundColor(.red).accessibilityIdentifier("import-error")
+                case .done:
+                    EmptyView()
+                }
+            }
+        } header: {
+            Text("Restore")
+        } footer: {
+            Text("Sessions imported from a session archive (.visorsession) or backed up on this computer. Restoring starts one again "
+                 + "here on its own conversation, in its own folder; a session still here is removed first. The computer it came from is left as it is.")
+        }
+    }
+
+    /// "Imported from Mini, 30 min ago", "Backed up 1 day ago", or why it
+    /// can't be restored now.
+    private static func detail(of backup: SessionBackup, here: Bool, now: Double) -> String {
+        if here { return "On this computer now: remove it first to restore it." }
+        let ago = UsageWords.ago(now - backup.created)
+        return backup.imported ? "Imported from \(backup.from.isEmpty ? "a session archive" : backup.from), \(ago)" : "Backed up \(ago)"
+    }
+
+    /// The sessions of every backup the computer keeps, newest first.
+    private func loadRestorable() {
+        guard let host, host.archives else { return }
+        loadingRestorable = true
+        Task {
+            let kept = (try? await host.sessionBackups()) ?? []
+            restorable = kept.flatMap { backup in backup.sessions.filter(\.kept).map { Restorable(backup: backup, item: $0) } }
+            loadingRestorable = false
+            if restoreChoice == nil || !restorable.contains(where: { $0.id == restoreChoice }) {
+                restoreChoice = restorable.first { !sessionsHere.contains($0.item.id) }?.id
+            }
+        }
+    }
+
+    /// The file picked imported into the computer's backups store, then
+    /// listed and chosen.
+    private func importArchive(_ url: URL) {
+        guard let host else { return }
+        let job = SessionImport(file: url, host: host)
+        importJob = job
+        Task {
+            let began = Compat.beginFileAccess(url)
+            await job.run()
+            Compat.endFileAccess(url, began)
+            guard case .done(let backup) = job.phase else { return }
+            if let item = backup.sessions.first { restoreChoice = backup.path + "|" + item.id }
+            loadRestorable()
+        }
+    }
+
+    /// The session chosen restored on the computer, and opened.
+    private func restore(on host: AgentServerConnection) {
+        guard let entry = restorable.first(where: { $0.id == restoreChoice }) else { return }
+        waiting = true
+        failure = nil
+        Task {
+            do {
+                let item = try await host.restoreSession(entry.item.id, from: entry.backup.path)
+                guard let item, item.outcome.hasPrefix("Restored") else {
+                    failure = item?.outcome ?? "Nothing was restored."
+                    waiting = false
+                    return
+                }
+                dismiss()
+                started(host.id, entry.item.id)
+            } catch {
+                failure = "\(error)"
+                waiting = false
+            }
+        }
+    }
+
     private func start() {
         guard let host else { return }
+        if restoring { return restore(on: host) }
         waiting = true
         failure = nil
         let place = place

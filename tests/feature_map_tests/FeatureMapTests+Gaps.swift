@@ -40,5 +40,17 @@ extension FeatureMapTests {
         @Test("Session chat → Subagent: tap a subagent's row",
               .disabled("the fixture's transcript has no subagent"))
         func subagent() {}
+
+        @Test("Restore a session → Import: tap import-archive",
+              .disabled("Import… opens the system's file picker (an open panel, Files, a file input), which the driver can't answer: it has no command for a picker's file (the server's import is SessionArchiveTests')"))
+        func importArchive() {}
+
+        @Test("Export a session → saved: tap export-save",
+              .disabled("Save… opens the system's save panel (a file exporter), which the driver can't answer: it has no command for where to save (the export itself is SessionArchiveTests')"))
+        func saveExport() {}
+
+        @Test("File › Export… and File › Import… (the Mac's menu bar)",
+              .disabled("Isomer's hosts draw no menu bar, and the driver has no command for one: the items open the same Export a session sheet and Restore a session that the session's menu and New Session's Restore open, which are taken"))
+        func macFileMenu() {}
     }
 }

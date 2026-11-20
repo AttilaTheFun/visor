@@ -96,6 +96,15 @@ extension VisorServer {
     private func backUp(_ record: SessionRecord, into folder: URL) async -> SessionBackupItem {
         let item = { (outcome: String, kept: Bool) in SessionBackupItem(id: record.info.id, title: record.info.title, outcome: outcome, kept: kept) }
         guard let resume = record.process.resumeID, !resume.isEmpty else { return item("Not backed up: it has no conversation yet.", false) }
+        if let failure = await keep(record, resume: resume, in: folder) { return item("Not backed up: \(failure.message)", false) }
+        return item("Backed up.", true)
+    }
+
+    /// One session's offer and files written into `folder` (made when
+    /// missing), as a backup keeps them and a session archive holds them
+    /// (VisorServer+SessionArchive): why not, if they weren't, and then
+    /// the folder is gone.
+    func keep(_ record: SessionRecord, resume: String, in folder: URL) async -> MigrationFailure? {
         let files = FileManager.default
         try? files.createDirectory(at: folder, withIntermediateDirectories: true)
         let carried: (offer: MigrationOffer, urls: [String: URL])
@@ -103,7 +112,7 @@ extension VisorServer {
         case .success(let made): carried = made
         case .failure(let failure):
             try? files.removeItem(at: folder)
-            return item("Not backed up: \(failure.message)", false)
+            return failure
         }
         for file in carried.offer.files {
             guard let url = carried.urls[file.id] else { continue }
@@ -114,16 +123,16 @@ extension VisorServer {
                 if url != kept { try? files.moveItem(at: url, to: kept) }
             } else if let problem = Self.copy(url, bytes: file.size, to: kept) {
                 try? files.removeItem(at: folder)
-                return item("Not backed up: \(problem)", false)
+                return MigrationFailure(message: problem)
             }
         }
         do {
             try Self.write(carried.offer.json, to: folder.appendingPathComponent("offer.json", isDirectory: false))
         } catch {
             try? files.removeItem(at: folder)
-            return item("Not backed up: \(error.localizedDescription)", false)
+            return MigrationFailure(message: error.localizedDescription)
         }
-        return item("Backed up.", true)
+        return nil
     }
 
     /// The backups kept in backupsFolder, newest first.
@@ -156,7 +165,8 @@ extension VisorServer {
         backup.path = folder.path
         var items: [SessionBackupItem] = []
         for item in backup.sessions where item.kept && (ids?.contains(item.id) ?? true) {
-            items.append(await restore(item, from: folder.appendingPathComponent(SessionPathName.of(item.id), isDirectory: true), made: backup.created))
+            items.append(await restore(item, from: folder.appendingPathComponent(SessionPathName.of(item.id), isDirectory: true), made: backup.created,
+                                       imported: backup.imported))
         }
         backup.sessions = items
         Self.log("restored from \(folder.path): " + items.map { "\($0.title) (\($0.id)): \($0.outcome)" }.joined(separator: "; "))
@@ -168,9 +178,15 @@ extension VisorServer {
 
     /// One session put back: its conversation's files where missing or
     /// shorter, its memory where there is none, its folder where it is
-    /// gone, and the session itself when it is gone.
-    private func restore(_ item: SessionBackupItem, from folder: URL, made: Double) async -> SessionBackupItem {
+    /// gone, and the session itself when it is gone. One `imported` from a
+    /// session archive is refused while a session by its id is here
+    /// (Logan: remove it first), before anything is put back.
+    private func restore(_ item: SessionBackupItem, from folder: URL, made: Double, imported: Bool = false) async -> SessionBackupItem {
         var result = item
+        if imported, let here = session(item.id) {
+            result.outcome = "Not restored: “\(here.info.title)” (\(item.id)) is on this computer already. Remove it first, then restore it."
+            return result
+        }
         let files = FileManager.default
         guard let data = files.contents(atPath: folder.appendingPathComponent("offer.json").path),
               let stored = MigrationOffer(json: parseJSON(String(decoding: data, as: UTF8.self)) ?? .null) else {
@@ -253,7 +269,9 @@ extension VisorServer {
             return result
         }
         let when = Self.backupStamp(Date(timeIntervalSince1970: made))
-        var notice = "Restored from a backup made on \(offer.from.isEmpty ? "this computer" : offer.from) (\(when))."
+        let computer = offer.from.isEmpty ? "this computer" : offer.from
+        var notice = imported ? "Restored from a session archive from \(computer), imported \(when)."
+            : "Restored from a backup made on \(computer) (\(when))."
         if offer.session.container != nil { notice += " It ran in a container of its own, which Visor no longer makes: it runs on this computer now." }
         guard startCarried(offer, id: offer.session.id, cwd: cwd, notice: notice) != nil else {
             result.outcome = "Not restored: the session could not be started here."

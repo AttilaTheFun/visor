@@ -14,6 +14,7 @@ extension FeatureMapTests {
             ("search", .search),
             ("connect", .addComputer),
             ("new-session", .newSession),
+            ("restore", .restore),
             ("chat", .chat),
             ("goal", .chat),
             ("earlier", .chat),

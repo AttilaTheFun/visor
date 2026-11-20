@@ -6,8 +6,8 @@ import Testing
 
 enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
     case onboarding, signIn, sessions, search, archived, project, migrate, addComputer
-    case newSession, folder, chat, approval, question, signInCode, model, allModels, details, toolCalls
-    case preview, subPage, settings, computer
+    case newSession, restore, folder, chat, approval, question, signInCode, model, allModels, details, toolCalls
+    case preview, subPage, settings, computer, export
 
     var testDescription: String { rawValue }
 
@@ -32,6 +32,8 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
         case .migrate: return screen.shows("Migrate")
         case .addComputer: return sheet && screen.has(id: "host") && screen.has(id: "connect")
         case .newSession: return sheet && screen.texts.contains("New Session")
+        // New Session with Restore chosen: its Import… listed.
+        case .restore: return sheet && screen.texts.contains("New Session") && screen.has(id: "import-archive")
         case .folder: return screen.texts.contains("Choose a folder")
         // Send, or with nothing typed on the iPhone, Dictate in its place;
         // or its slash commands offered, over it on the iPhone (a popover,
@@ -57,6 +59,9 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
         // Or its "Network paths": on the iPhone the page is taller than the
         // screen, and the driver lists what is on it.
         case .computer: return screen.has(id: "relay-toggle") || screen.has(id: "share-log") || screen.texts.contains("Network paths")
+        // The export's sheet, reading, read or refused.
+        case .export:
+            return sheet && (screen.has(id: "export-progress") || screen.has(id: "export-save") || screen.has(id: "export-error"))
         }
     }
 

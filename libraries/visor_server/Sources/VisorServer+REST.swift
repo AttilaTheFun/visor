@@ -43,6 +43,19 @@ extension VisorServer {
             Task { respond(await restMoveBack(call)) }
             return
         }
+        // A session as a session archive, and one imported into the
+        // backups store (VisorServer+SessionArchive).
+        if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "export", authorized(request) {
+            let body = Envelope.decodeBody(request.body)
+            Task {
+                let reply = await exportSession(parts[1], to: body.path)
+                respond(reply.type == "error" ? HTTPResponse(reply.message == "No such session" ? 404 : 400, reply.encoded()) : .json(reply.encoded()))
+            }
+            return
+        }
+        if request.method == "POST", parts.first == "import", parts.count <= 2, authorized(request) {
+            return routeImport(request, parts: parts, respond: respond)
+        }
         // Sessions backed up to a folder here, and restored from one.
         if parts.first == "backups", authorized(request) {
             return routeBackups(request, parts: parts, respond: respond)

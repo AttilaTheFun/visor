@@ -103,7 +103,7 @@ final class FixtureAgentServer: AgentServer {
         }
     }
 
-    func sessions() async throws -> [SessionInfo] { kept(Self.welcome.sessions ?? []) }
+    func sessions() async throws -> [SessionInfo] { kept((Self.welcome.sessions ?? []) + restored) }
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] {
         guard case .notifications(let on) = action else { return [] }
@@ -211,4 +211,50 @@ final class FixtureAgentServer: AgentServer {
         [SearchHit(session: VisorFixture.chatSession, message: "f9", role: "assistant", snippet: "Rows now sync in the background…",
                    title: "Offline sync", cwd: "/Users/visor/Developer/weather")]
     }
+
+    // MARK: Session archives
+
+    /// The sessions restored here from VisorFixture.backups, listed from
+    /// then on as a server lists a session it started again.
+    private var restored: [SessionInfo] = []
+
+    var archives: Bool { true }
+
+    func backups() async throws -> [SessionBackup] { VisorFixture.backups.map { SessionBackup(json: $0.json) ?? $0 } }
+
+    /// A session of one of VisorFixture.backups put back as a server puts
+    /// it back: refused while it is here when imported, else restored.
+    func restore(_ path: String, sessions ids: [String]?) async throws -> (backup: SessionBackup, sessions: [SessionInfo]) {
+        guard var backup = VisorFixture.backups.first(where: { $0.path == path }) else { throw AgentServerError.message("No such backup") }
+        let here = Set(((Self.welcome.sessions ?? []) + restored).map(\.id))
+        backup.sessions = backup.sessions.filter { ids?.contains($0.id) ?? true }.map { item in
+            var item = item
+            if here.contains(item.id) {
+                item.outcome = backup.imported ? "Not restored: “\(item.title)” (\(item.id)) is on this computer already. Remove it first, then restore it."
+                    : "Here already: left as it is."
+            } else {
+                item.outcome = "Restored."
+                restored.append(SessionInfo(id: item.id, agent: .claude, cwd: VisorFixture.restoredFolder, title: item.title, created: VisorFixture.now))
+            }
+            return item
+        }
+        return (backup, kept((Self.welcome.sessions ?? []) + restored))
+    }
+
+    /// An export: the session's name and a small archive's bytes.
+    func exportSession(_ session: String) async throws -> (token: String, file: MigrationFile) {
+        let title = VisorFixture.sessions.first { $0.id == session }?.title ?? "Session"
+        return (session, MigrationFile(id: "archive", place: "\(title)-2026-11-20.visorsession", size: VisorFixture.archive.count, packed: true))
+    }
+
+    func migrationRead(_ offer: String, file: String, offset: Int, length: Int) async throws -> (data: String, next: Int) {
+        let bytes = VisorFixture.archive
+        let end = min(bytes.count, offset + length)
+        return (bytes[min(offset, end)..<end].base64EncodedString(), end)
+    }
+
+    /// An import: taken, and kept as VisorFixture's imported backup.
+    func importUpload(size: Int, name: String) async throws -> String { "fixture-import" }
+    func importWrite(_ token: String, offset: Int, data: String) async throws -> Int { offset + (Data(base64Encoded: data)?.count ?? 0) }
+    func importFinish(_ token: String) async throws -> SessionBackup { VisorFixture.backups[0] }
 }

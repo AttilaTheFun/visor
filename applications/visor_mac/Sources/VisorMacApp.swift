@@ -137,6 +137,15 @@ struct VisorMacApp: App {
                 Button("Close Visor") { AppDelegate.backToTheMenuBar() }
                     .keyboardShortcut("q")
             }
+            // A session as one file (Session archive v1), and one imported
+            // to restore: the view opens each (VisorRootView).
+            CommandGroup(after: .newItem) {
+                Divider()
+                Button("Export…") { store.exportRequested = true }
+                    .disabled(store.viewedSession == nil)
+                Button("Import…") { store.importRequested = true }
+                    .disabled(store.connectedServers.isEmpty)
+            }
             CommandMenu("Computers") {
                 ForEach(store.servers) { host in
                     Button("\(host.record.name.isEmpty ? host.record.address : host.record.name) — \(host.state.label)") {

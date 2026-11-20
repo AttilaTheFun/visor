@@ -55,6 +55,29 @@ extension VisorServer {
         return nil
     }
 
+    /// Why the session `title`'s own files (`files`, each here at
+    /// `sources`) are more than a move, a backup or a session archive
+    /// carries, said so that the person can act on it: which file, where it
+    /// is, how large, the cap, and what would help. Nil when they fit. (A
+    /// transcript has been seen at 2.4 GB, past the 2 GiB cap.)
+    static func tooLarge(_ files: [MigrationFile], at sources: [String: URL], title: String) -> String? {
+        let start = "“\(title)” is too large to move, back up or export: "
+        let help = " A new session's transcript starts small: carry on in one (ask this one for a summary to start it with), and move or export that one instead."
+        func named(_ file: MigrationFile) -> String {
+            let path = sources[file.id]?.path ?? file.id
+            let size = megabytes(file.size) + (file.packed ? " packed" : "")
+            if file.id == memoryFileID { return "Claude's memory for its project, \(path), is \(size)" }
+            return (file.packed ? "the folder beside its transcript, \(path)," : "its transcript, \(path),") + " is \(size)"
+        }
+        if let file = files.first(where: { $0.size < 0 || $0.size > migrationFileCap }) {
+            return start + named(file) + ", and Visor carries at most \(megabytes(migrationFileCap)) of one file." + help
+        }
+        let total = files.reduce(0) { $0 + $1.size }
+        guard total > migrationTotalCap else { return nil }
+        return start + "its files come to \(megabytes(total)) (" + files.map(named).joined(separator: "; ")
+            + "), and Visor carries at most \(megabytes(migrationTotalCap)) in all." + help
+    }
+
     /// Why `files` of `agent` would not fit here: where the move keeps them
     /// as they come (migrationsFolder) and under the agent's own folder,
     /// each must have their size and migrationFreeMargin free. Nil when

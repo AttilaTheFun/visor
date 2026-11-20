@@ -30,6 +30,15 @@ public final class VisorStore {
     /// A computer whose settings a `visor://sign-in` link asked for (its
     /// address), for the view to show; cleared once it has.
     public var openingSettings: String?
+    /// The session on screen, by its computer's id and its own: what the
+    /// Mac's File › Export… exports.
+    public private(set) var viewedServer: String?
+    public private(set) var viewedSession: String?
+    /// File › Export… (the session on screen) and File › Import… asked for
+    /// from the Mac's menu bar, a scene away from the view, for the view to
+    /// open; cleared once it has.
+    public var exportRequested = false
+    public var importRequested = false
     /// Bumped when a server's record changes, so views of the store refresh.
     private var revision = 0
     /// Under the key an earlier build saved its computers.
@@ -113,6 +122,8 @@ public final class VisorStore {
     /// The session on screen, if any: a notification about it, with the app
     /// in front, is not shown over it.
     public func noteViewing(serverID: String?, sessionID: String?) {
+        viewedServer = sessionID == nil ? nil : serverID
+        viewedSession = serverID == nil ? nil : sessionID
         guard let serverID, let sessionID, let server = server(for: serverID) else {
             VisorNotificationHandler.shared.viewing = nil
             return
