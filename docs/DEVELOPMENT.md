@@ -1428,7 +1428,12 @@ found) leaves its screens to launches of their own, and fails the test.
   fixture's screens in the light look and pictured cropped to its window.
   Not through the driver yet: Isomer's Mac launcher takes no launch
   arguments (the caret held lit, visor#244) and its screen is the
-  runner's 1024 by 768 unless the script makes it 1920 by 1080.
+  runner's 1024 by 768 unless the script makes it 1920 by 1080. So the
+  app, built with the driver, is opened with it off (`ISO_DRIVER=none`):
+  left on, it dials a hub that isn't there every second, reading the whole
+  window through accessibility each time, and the settings screen never
+  settled (50% CPU, 0.63's release run). A screen whose log shows the
+  driver dialling fails.
 - Android (`tools/ci/proof_android.sh <apps> <out> portrait|landscape`, on
   Ubuntu): blue Visor's APK, built for x86_64, on an emulator under the
   runner's KVM, made as Isomer's hermetic one is (API 34, 1080 by 1920 at
