@@ -10,7 +10,8 @@ final class ClientConnection {
     private let socket: WebSocketConnection
     var authenticated = false
     /// Whether it came on a connection only this user could open (the
-    /// socket file an SSH client reaches): its login needs no password.
+    /// socket file an SSH client, or Visor.app, reaches) and is let in
+    /// there (VisorServer.trusts): its login needs no password.
     var trusted = false
     /// The client id its login gave (a Visor client's own), for the log.
     var clientID: String?

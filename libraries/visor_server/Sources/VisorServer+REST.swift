@@ -179,6 +179,8 @@ extension VisorServer {
         case ("PUT", 1, "push-proxy"): restSetPushProxy(call)
         case ("GET", 1, "mcp"): restMCP(call)
         case ("PUT", 1, "mcp"): restSetMCP(call)
+        case (_, 1, "settings"): restSettings(call)
+        case ("GET", 1, "session-table"): restSessionTable(call)
         case ("POST", 1, "quit"): restQuit(call)
         case ("POST", 1, "sessions"): restStartSession(call)
         case ("POST", 1, "jobs"): restQueueJob(call)

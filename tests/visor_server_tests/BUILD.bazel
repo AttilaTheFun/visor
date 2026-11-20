@@ -61,6 +61,10 @@ swift_test(
         "//libraries/visor_server_linux",
         "//libraries/visor_server_posix",
         "//libraries/visor_system",
+        # Visor.app's way to its own server, at its socket file
+        # (SocketFileClientTests).
+        "//libraries/visor_services",
+        "//libraries/visor_socket_file",
         # A runner's agent driven over gRPC (DrivenAgentTests), and the
         # native runner claiming with a runner token (RunnerTokenTests).
         "//libraries/visor_driver",

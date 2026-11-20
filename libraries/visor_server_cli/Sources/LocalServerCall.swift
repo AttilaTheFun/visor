@@ -1,10 +1,10 @@
 // A REST call to the server running on this computer, over its trusted
 // socket (VisorServer.socketPath, this user's alone): what `visor-server
 // admin-token` and `visor-server keys` ask of it, the menu bar app's
-// server or the command-line one alike; and what Visor.app asks of the
-// server agent when it is its client (MacServerCalls). One request, its
-// answer read until the server closes the connection, as it does after
-// each.
+// server or the command-line one alike. (Visor.app reaches its own server
+// there through its client, as any computer: libraries/visor_socket_file.)
+// One request, its answer read until the server closes the connection, as
+// it does after each.
 
 import Foundation
 import VisorServer

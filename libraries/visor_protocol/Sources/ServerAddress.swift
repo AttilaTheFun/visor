@@ -22,7 +22,7 @@ public struct ServerAddress: Equatable, Hashable, Sendable {
         while let last = value.last, last.isWhitespace || last.isNewline || last == "/" { value = value.dropLast() }
         guard !value.isEmpty else { return nil }
         let lowered = value.lowercased()
-        if lowered.hasPrefix("http://") || lowered.hasPrefix("https://") {
+        if lowered.hasPrefix("http://") || lowered.hasPrefix("https://") || lowered.hasPrefix(SocketFileURL.httpScheme) {
             root = String(value)
         } else if lowered.hasPrefix("ws://") || lowered.hasPrefix("wss://") {
             // The socket's form, typed by someone who had it to hand.
@@ -32,10 +32,17 @@ public struct ServerAddress: Equatable, Hashable, Sendable {
         }
     }
 
-    /// The live channel: the socket at the root, `ws` for `http`.
+    /// The live channel: the socket at the root, `ws` for `http` (and
+    /// `ws+unix` for a socket file's, SocketFileURL).
     public var socket: String {
-        root.lowercased().hasPrefix("https://") ? "wss://" + root.dropFirst(8) + "/" : "ws://" + root.dropFirst(7) + "/"
+        let lowered = root.lowercased()
+        if lowered.hasPrefix(SocketFileURL.httpScheme) { return SocketFileURL.socketScheme + root.dropFirst(SocketFileURL.httpScheme.count) + "/" }
+        return lowered.hasPrefix("https://") ? "wss://" + root.dropFirst(8) + "/" : "ws://" + root.dropFirst(7) + "/"
     }
+
+    /// Whether this is a server's socket file on this computer
+    /// (SocketFileURL).
+    public var isSocketFile: Bool { SocketFileURL.isSocketFile(root) }
 
     /// The one-shot calls, under `/api`.
     public var api: String { root + "/api" }
@@ -43,7 +50,10 @@ public struct ServerAddress: Equatable, Hashable, Sendable {
     /// Whether this is a bare name: HTTPS at the root, nothing else said.
     public var isBareName: Bool { root.hasPrefix("https://") && !root.dropFirst(8).contains("/") && !root.dropFirst(8).contains(":") }
 
-    /// What to show for it: the bare name where that is all there is,
-    /// else the URL.
-    public var display: String { isBareName ? String(root.dropFirst(8)) : root }
+    /// What to show for it: the bare name where that is all there is, the
+    /// socket file's path for one, else the URL.
+    public var display: String {
+        if let file = SocketFileURL.split(root) { return file.socket }
+        return isBareName ? String(root.dropFirst(8)) : root
+    }
 }

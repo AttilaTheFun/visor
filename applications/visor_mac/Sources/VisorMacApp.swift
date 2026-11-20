@@ -1,14 +1,18 @@
 // Visor on the Mac: a menu bar app, the eye
 // in the bar with the server's menu, whose window is Visor's macOS client,
-// and the Mac's Visor server under both, each keeping what it has in places
-// of its own (MacPlaces).
+// and the Mac's Visor server under both (the server agent, or in the app's
+// process), each keeping what it has in places of its own (MacPlaces). The
+// menu, Settings and the window are the server's clients alike, at its
+// socket file (LocalServer).
 
 import AppKit
 import SwiftUI
 import VisorClient
 import VisorProtocol
 import VisorServer
+import VisorServerPOSIX
 import VisorServices
+import VisorSocketFile
 import VisorUI
 
 /// Started by VisorMacMain, once it's no agent-proxy and no server agent.
@@ -40,7 +44,12 @@ struct VisorMacApp: App {
         // The client's own: its cache and its keychain items. Then its
         // services, which the store connects through.
         AgentServerConnection.cache = .open(named: "messages", in: MacPlaces.folder("Client"))
-        installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(),
+        // This Mac's own server at its socket file (SocketFileURL), with the
+        // app's key; every other computer as before.
+        let socketFile = SocketFileHTTPService(connect: { await POSIXUnixSocket.connect($0) }, headers: { MacAppKey.headers })
+        let socketFileChannel = SocketFileSocketService(connect: { await POSIXUnixSocket.connect($0) }, headers: { MacAppKey.headers })
+        installVisorServices(socket: SocketFileRoutedSocketService(socketFile: socketFileChannel, other: NativeVisorSocketService()),
+                             http: SocketFileRoutedHTTPService(socketFile: socketFile, other: NativeVisorHTTPService()),
                              settings: NativeVisorSettingsService(keychainService: MacPlaces.clientService),
                              notifications: NativeVisorNotificationService(), ssh: NativeVisorSSHService(), network: NativeVisorNetworkService(),
                              dictation: NativeVisorDictationService(), deviceName: Host.current().localizedName ?? "",
@@ -57,7 +66,7 @@ struct VisorMacApp: App {
         if !VisorFixture.active { local.follow(in: store) }
         // agent-proxy's launchd job, to settings.json's `agentProxy`, for
         // the server in the app (the server agent folds it in).
-        if !VisorFixture.active, local.server != nil { MacAgentProxy.settle() }
+        if !VisorFixture.active, local.mode == .inApp { MacAgentProxy.settle() }
     }
 
     var body: some Scene {
@@ -88,7 +97,8 @@ struct VisorMacApp: App {
         .defaultSize(width: 1200, height: 820)
         .commands {
             // ⌘Q closes the window, back to the menu bar: quitting ends the
-            // server's agents, which only the menu's Quit Visor does.
+            // agents of the server in the app, which only the menu's Quit
+            // Visor does.
             CommandGroup(replacing: .appTermination) {
                 Button("Close Visor") { AppDelegate.backToTheMenuBar() }
                     .keyboardShortcut("q")
@@ -115,11 +125,7 @@ struct VisorMacApp: App {
             }
         }
         Settings {
-            if let server = local.server {
-                SettingsPane(server: server)
-            } else {
-                AgentServerSettings(local: local)
-            }
+            ServerSettingsPane(local: local)
         }
     }
 }

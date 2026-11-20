@@ -36,8 +36,11 @@ update_entitlements(
 # client (applications/visor_macos) in 0.46, and keeps what it has in places
 # of its own (Sources/MacPlaces.swift). The same executable is the server
 # agent with `--server` (Sources/MacServerAgent.swift: the server headless,
-# a launchd job, with the app its client, while the app's `ServerAsAgent`
-# default is on) and agent-proxy with `--agent-proxy`.
+# a launchd job, while the app's `ServerAsAgent` default is on) and
+# agent-proxy with `--agent-proxy`. The app is its server's client alone,
+# its window, menu and Settings alike, at the server's socket file
+# (Sources/LocalServer.swift, //libraries/visor_socket_file), whichever
+# process runs it.
 swift_library(
     name = "mac_lib",
     copts = STRICT_SWIFT,
@@ -61,6 +64,7 @@ swift_library(
         "//libraries/visor_server_cli",
         "//libraries/visor_server_posix",
         "//libraries/visor_services",
+        "//libraries/visor_socket_file",
         "//libraries/visor_system",
         "//libraries/visor_ui",
     ],

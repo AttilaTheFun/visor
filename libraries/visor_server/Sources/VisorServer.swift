@@ -169,6 +169,15 @@ public final class VisorServer {
     /// command-line server's, where there is no menu bar. Off in the menu
     /// bar app, whose menu is the only way (rotateSigningKeys).
     public var emergencyRotationOverREST = false
+    /// What Visor.app shows at the socket file to be taken for itself, its
+    /// menu and Settings (VisorServer+Access, `X-Visor-App-Key`): kept in
+    /// the Mac's keychain, which gives it to Visor's own processes alone,
+    /// and set by the Mac's binaries; nil elsewhere. While it is set, the
+    /// socket file is listened on from the start, password or none, and
+    /// whatever `sshEnabled` says (the app's way to its own server); and the
+    /// menu's own calls, a reset of the admin token without it and an
+    /// emergency rotation of the signing keys, are taken from it alone.
+    public var appKey: String?
     /// Re-mints the native sessions' token files hourly
     /// (VisorServer+SessionTokenFiles).
     var sessionTokenRefresh: Task<Void, Never>?

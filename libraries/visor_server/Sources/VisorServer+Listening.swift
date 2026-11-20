@@ -13,8 +13,14 @@ import VisorSystem
 
 extension VisorServer {
     /// Listens once there is a password (or nothing is asked); without
-    /// one the menu says so and Settings is where to go.
+    /// one the menu says so and Settings is where to go. Visor.app's own
+    /// server (`appKey` set) listens on its socket file from the start, so
+    /// the app can set one.
     public func start() {
+        if appKey != nil, socketListener == nil {
+            _ = serving()
+            listenForSSH()
+        }
         guard listener == nil, !password.isEmpty || settings.asksNothing else { return }
         // An agent that has gone leaves a pipe that cannot be written to:
         // that is an error to the write, not a signal that ends the app.
@@ -25,11 +31,7 @@ extension VisorServer {
             await ToolPath.locate(tools)
             broadcastCatalogs()
         }
-        let http = HTTPServer { [weak self] request, respond in
-            guard let self else { return respond(HTTPResponse(500, "{\"error\":\"gone\"}")) }
-            self.route(request, respond: respond)
-        }
-        self.http = http
+        let http = serving()
         let options = ListeningOptions(port: port, everywhere: settings.reachableFromNetwork, tls: tlsIdentity)
         do {
             try listen(options)
@@ -56,11 +58,24 @@ extension VisorServer {
     }
     public static var socketPathOverride: String?
 
+    /// The REST side's server, made the first time a listener needs it
+    /// after a start (the socket file's may be first).
+    private func serving() -> HTTPServer {
+        if let http { return http }
+        let http = HTTPServer { [weak self] request, respond in
+            guard let self else { return respond(HTTPResponse(500, "{\"error\":\"gone\"}")) }
+            self.route(request, respond: respond)
+        }
+        self.http = http
+        return http
+    }
+
     /// Listens on the socket file, when SSH clients are let in without a
-    /// password. A system without socket files, or a folder that cannot
-    /// be made, is logged and leaves the port as the only path.
+    /// password, or Visor.app is this server's client (`appKey`). A system
+    /// without socket files, or a folder that cannot be made, is logged and
+    /// leaves the port as the only path.
     private func listenForSSH() {
-        guard settings.sshEnabled, socketListener == nil else { return }
+        guard settings.sshEnabled || appKey != nil, socketListener == nil else { return }
         let path = Self.socketPath
         let folder = (path as NSString).deletingLastPathComponent
         // Another server answers there (the installed one, with this one a
@@ -175,10 +190,12 @@ extension VisorServer {
 
     private func acceptClient(_ stream: any ByteStream, received: Data, trusted: Bool) {
         let client = ClientConnection(stream: stream, received: received)
-        client.trusted = trusted
         if let end = HTTPServer.headerEnd(received) {
             client.headers = HTTPServer.headers(String(decoding: received[..<end], as: UTF8.self))
         }
+        // The socket file's: as this user, while SSH clients are, or for
+        // Visor.app itself.
+        client.trusted = trusts(socketFile: trusted, headers: client.headers)
         let key = ObjectIdentifier(client)
         connections[key] = client
         clientCount = connections.count

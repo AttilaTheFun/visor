@@ -74,6 +74,11 @@ public struct AgentServerRecord: Identifiable, Hashable, Sendable {
         self.lastPath = lastPath
     }
 
+    /// Whether it is reached at its socket file on this computer
+    /// (SocketFileURL: Visor on the Mac's own server): there alone, with
+    /// no password and no other path.
+    public var isSocketFile: Bool { SocketFileURL.isSocketFile(address) }
+
     /// Every address to try, the preferred first, without repeats.
     public var allPaths: [String] {
         var out: [String] = []

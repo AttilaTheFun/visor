@@ -163,9 +163,10 @@ The graph is the same everywhere; what a node is differs with the width:
   Android on its side (1080×2400 at 420 dpi, the proof's and the
   suite's emulator) is regular width too: the list sits beside the chat,
   and `back` from the chat has nothing to go back from.
-- **The Mac only:** the menu bar's Visor menu and Visor Server's own
-  Settings window (password, network paths, push) are outside this
-  graph: neither is part of `VisorRootView`. The window's File menu has
+- **The Mac only:** the menu bar's Visor menu and this Mac's server's
+  Settings window (password, network paths, push: the server's API at
+  its socket file, whichever process runs it) are outside this graph:
+  neither is part of `VisorRootView`. The window's File menu has
   **Export…** (the session on screen: Export a session) and **Import…**
   (Restore a session, its file picker open): the same nodes the session's
   menu and New Session's Restore reach, which the suite takes.
