@@ -1,10 +1,11 @@
 // What a session tells the person. Its notifications switched off, it
 // pushes nothing but the widget's silent state; the switch is the
 // session's, kept and sent with it. A turn of mail (another session's
-// message, the inbox's notice) tells nothing when it ends, and its prompt
-// is not the session's preview, though the agent's reply to the person in
-// it is; the person's own message sent during it starts a turn of theirs
-// that tells, and an approval asked during it is told as any is.
+// message, the inbox's notice) tells nothing when it ends; an approval
+// asked during it is told as any is, and the person's own message sent
+// during it starts a turn of theirs that tells. The session's preview is
+// the thread's last regular message, the person's or the agent's, whatever
+// began its turn: never mail (the notice, `@@from`, `@@to`) nor a tool row.
 
 import Foundation
 @testable import VisorAgent
@@ -331,11 +332,12 @@ extension ServerTests {
 
     // MARK: The preview
 
-    /// The preview is the latest message to or from the person, whatever
-    /// began its turn: it passes over mail's prompt, whatever form it came
-    /// in, and a reply that is itself a message to another session, but
-    /// not the agent's reply in a turn of mail, nor its reply to the
-    /// server's own nudge.
+    /// The preview is the thread's last regular message, the person's or
+    /// the agent's, as a messages app shows it: whatever began its turn.
+    /// It passes over mail's prompt, whatever form it came in, a reply
+    /// that is itself a message to another session, tool rows and the
+    /// server's own nudge, but not the agent's reply in a turn of mail,
+    /// nor its reply to the nudge.
     @Test func testThePreviewIsTheLatestAgentMessage() {
         let notice = "[Visor: you have 1 unread message in your inbox; read them with read_inbox]"
         let header = "[Message from the Visor session “Server work” (A) on mini (server s1), to this session “Client work” (B) on mini — "
@@ -361,6 +363,17 @@ extension ServerTests {
         // A reply to the person that is a message to another session.
         #expect(SessionRecord.latestPreview(in: [TranscriptEntry(id: "u1", role: .user, text: "Tell A"),
                                                  TranscriptEntry(id: "a1", role: .assistant, text: sent)]) == "Tell A")
+        // The person's message is the preview until the agent replies; a
+        // tool call after it changes nothing.
+        let asked = mine + [TranscriptEntry(id: "u2", role: .user, text: "And the tests?")]
+        #expect(SessionRecord.latestPreview(in: asked) == "And the tests?")
+        #expect(SessionRecord.latestPreview(in: asked + [TranscriptEntry(id: "t2", role: .tool, text: "ok", toolName: "tool_result"),
+                                                         TranscriptEntry(id: "a2", role: .assistant, text: "")]) == "And the tests?")
+        #expect(SessionRecord.latestPreview(in: asked + [TranscriptEntry(id: "a2", role: .assistant, text: "They pass.")]) == "They pass.")
+        // The person's answers to the agent's questions are theirs, as the
+        // thread shows them.
+        #expect(SessionRecord.latestPreview(in: mine + [TranscriptEntry(id: "q1", role: .tool, text: "Which?\n**Both**", toolName: "answers")])
+            == "Which?\n**Both**")
         // The server's nudge is no word, its reply is.
         #expect(SessionRecord.latestPreview(in: mine + [TranscriptEntry(id: "u2", role: .user, text: VisorServer.resumeNudge),
                                                         TranscriptEntry(id: "a2", role: .assistant, text: "Picked it up.")]) == "Picked it up.")

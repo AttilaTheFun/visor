@@ -14,8 +14,9 @@ extension SessionRecord {
         unwritten.append((text: text, seen: userRows(entries, saying: text), orphaned: nil))
         noteDelivered()
         // The session's summary is the latest thing said, already — but
-        // never mail, which is no word to the person.
-        if origin != .mail, let preview = Self.preview(of: TranscriptEntry(id: "", role: .user, text: text)), preview != info.preview {
+        // never mail, which is no word to the person (latestPreview).
+        let row = TranscriptEntry(id: "", role: .user, text: text)
+        if !Self.isMail(row), let preview = Self.preview(of: row), preview != info.preview {
             info.preview = preview
             info.updated = Date().timeIntervalSince1970
             onInfoChanged?()

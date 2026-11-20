@@ -67,8 +67,9 @@ in the transcript and the agent can be notified."
   server (`turnOrigin`, protocol.md's "Turns of mail"): its end pushes and
   notifies nothing, and its prompt (the notice or the message) is not the
   session's preview in the list. The agent's reply to the person in it is
-  (Logan, 20 Nov 2026: the preview is the latest agent message, whatever
-  began the turn); an `@@to` message to another session is not. An
+  (Logan, 20 Nov 2026: the preview is the thread's last regular message,
+  the person's or the agent's, as a messages app shows it, whatever began
+  the turn); an `@@to` message to another session is not. An
   approval asked during it still notifies, and the person's own message
   sent meanwhile starts a turn of their own that notifies as ever.
 - **No channel** (Logan, 8 Nov 2026). Claude Code's channel notification
