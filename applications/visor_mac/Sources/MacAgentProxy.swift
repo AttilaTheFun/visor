@@ -6,8 +6,12 @@
 //   keeps (AgentProxyJob), never the app's UI.
 // - `Visor agent-proxy secret-set <name>` (and `secret-remove`): one of its
 //   secrets kept, piped in on standard input.
-// - At the server's start: the job settled to settings.json's `agentProxy`
-//   (none: none, the job removed if there was one).
+// - At the start of the server in the app: the job settled to
+//   settings.json's `agentProxy` (none: none, the job removed if there was
+//   one).
+// - In the server agent (`Visor --server`): folded in, as on Linux. The job
+//   is stopped and removed first, then the proxy started inside the server
+//   when `agentProxy` is set.
 
 import Foundation
 import VisorAgentProxyHost
@@ -36,6 +40,21 @@ enum MacAgentProxy {
         if given.first == "agent-proxy" {
             exit(AgentProxyCommand.main(Array(given.dropFirst()), secrets: secrets))
         }
+    }
+
+    /// What runs inside the server agent, held for its life.
+    private static var folded: AgentProxyHost.Running?
+
+    /// In the server agent: the job gone (its ports are the proxy's here),
+    /// then the proxy started in this process, with the server's secrets,
+    /// when `agentProxy` is set. A change takes a restart, as on Linux.
+    static func foldIn(_ server: VisorServer) async {
+        let log: @Sendable (String) -> Void = { ServerPlatform.current.log("agent-proxy: \($0)") }
+        await AgentProxyJob.settle(bundleID: MacPlaces.own, version: VisorMacApp.bundleVersion, places: places, folded: true,
+                                   log: { ServerPlatform.current.log($0) })
+        guard let settings = server.settings.agentProxy else { return }
+        folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
+                                      log: log)
     }
 
     /// The launchd job made to match settings.json and this app, off the

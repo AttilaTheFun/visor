@@ -17,7 +17,9 @@ extension ServerPlatform {
         return VersionTitle.of(version: short, build: build)
     }
 
-    public static func apple(secrets: any SecretStore = KeychainSecrets()) -> ServerPlatform {
+    /// `lifecycle`: the app's relauncher, unless the server runs as the
+    /// server agent (`Visor --server`), which launchd restarts.
+    public static func apple(secrets: any SecretStore = KeychainSecrets(), lifecycle: any ServerLifecycle = AppRelauncher()) -> ServerPlatform {
         let logger = Logger(subsystem: "com.LoganShire.Visor", category: "server")
         let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
         return ServerPlatform(
@@ -33,7 +35,7 @@ extension ServerPlatform {
                               addresses: { NetworkAddresses.all().map(\.address) },
                               networkAddresses: { NetworkAddresses.all().map { NetworkAddress(address: $0.address, interface: $0.name) } },
                               localNetworkName: { LocalNetworkName.current() }, resolve: { POSIXResolver.ipv4($0) }),
-            lifecycle: AppRelauncher(),
+            lifecycle: lifecycle,
             // In the app's bundle, beside its own program.
             agentHosts: POSIXAgentHosting(program: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/visor-agent-host", isDirectory: false).path),
             // At notice, which the system keeps on disk (info is held in

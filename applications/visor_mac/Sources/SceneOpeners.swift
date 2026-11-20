@@ -8,7 +8,6 @@
 
 import SwiftUI
 import VisorClient
-import VisorServer
 
 struct SceneOpeners: View {
     @Environment(\.openWindow) private var openWindow
@@ -19,7 +18,7 @@ struct SceneOpeners: View {
             .frame(width: 0, height: 0)
             .onAppear {
                 AppDelegate.keep(openWindow: openWindow, openSettings: openSettings)
-                if !VisorFixture.active, VisorServer.shared.password.isEmpty { AppDelegate.openSettings() }
+                if !VisorFixture.active, LocalServer.shared.needsPassword { AppDelegate.openSettings() }
             }
     }
 }

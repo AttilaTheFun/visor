@@ -129,8 +129,12 @@ let system: [Target] = [
                            .product(name: "X509", package: "swift-certificates"), .product(name: "SwiftASN1", package: "swift-asn1"),
                            .product(name: "Crypto", package: "swift-crypto"), .product(name: "_CryptoExtras", package: "swift-crypto")],
             path: "libraries/visor_agent_proxy/Sources", swiftSettings: strict),
+    // Visor's LaunchAgents on a Mac (agent-proxy's job and the server
+    // agent's): what's decided builds everywhere, launchctl on a Mac alone.
+    .target(name: "VisorLaunchAgent", dependencies: ["VisorProtocol", "VisorServer", "VisorServerPOSIX"],
+            path: "libraries/visor_launch_agent/Sources", swiftSettings: strict),
     .target(name: "VisorAgentProxyHost",
-            dependencies: ["VisorAgentProxy", "VisorServer", .product(name: "Crypto", package: "swift-crypto")],
+            dependencies: ["VisorAgentProxy", "VisorLaunchAgent", "VisorServer", .product(name: "Crypto", package: "swift-crypto")],
             path: "libraries/visor_agent_proxy/Host", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain",
                       dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge", "VisorDriver", "VisorNativeRunner",

@@ -4,20 +4,17 @@
 // of its own (MacPlaces).
 
 import AppKit
-import MessageCache
 import SwiftUI
 import VisorClient
-import VisorDriver
-import VisorNativeRunner
 import VisorProtocol
 import VisorServer
-import VisorServerApple
 import VisorServices
 import VisorUI
 
-/// Started by VisorMacMain, once it's no agent-proxy.
+/// Started by VisorMacMain, once it's no agent-proxy and no server agent.
 struct VisorMacApp: App {
-    private let server: VisorServer
+    /// This Mac's server: in the app, or the server agent (LocalServer).
+    private let local: LocalServer
     @State private var store: VisorStore
     /// The server's life, the client's pushes and the Dock icon.
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
@@ -33,23 +30,13 @@ struct VisorMacApp: App {
     }
 
     init() {
-        // The server's own: its keychain items and its store. Then the
-        // server, before anything asks for it.
-        ServerCache.shared = .open(named: "messages", in: MacPlaces.folder("Server"))
-        ServerPlatform.current = .apple(secrets: KeychainSecrets(service: MacPlaces.serverService))
-        // agent_protocol's port open before the sessions are read: the
-        // wrappers and runners of sessions moved to runners redial it.
-        let agentProtocol = Self.agentProtocol()
-        agentProtocol.listen()
-        server = VisorServer.shared
-        // An unattended setup (a leased test VM, tools/e2e): the first
-        // password from the environment (launchctl setenv, so it's on no
-        // disk), kept as Settings' Save would keep it. Never replaces one
-        // already kept.
-        if server.password.isEmpty, let given = ProcessInfo.processInfo.environment["VISOR_SETUP_PASSWORD"], !given.isEmpty {
-            server.password = given
-        }
-        Self.startAgentProtocol(agentProtocol, serving: server)
+        // The server's own: its keychain items. Then the server, before
+        // anything asks for it: made here, as it always was, unless it runs
+        // as the server agent (LocalServer, MacServer).
+        MacServer.prepare()
+        let local = LocalServer.shared
+        self.local = local
+        local.begin()
         // The client's own: its cache and its keychain items. Then its
         // services, which the store connects through.
         AgentServerConnection.cache = .open(named: "messages", in: MacPlaces.folder("Client"))
@@ -63,52 +50,21 @@ struct VisorMacApp: App {
             VisorHost.notifications?.requestPermission()
         }
         // The welcome is this Mac's: its server a password away.
-        VisorOnboardings.current = MacOnboarding(server: server)
+        VisorOnboardings.current = MacOnboarding(local: local)
         let store = VisorStore()
         _store = State(initialValue: store)
         // This Mac's server among the computers, without pairing.
-        if !VisorFixture.active { OwnServer.follow(server, in: store) }
-        // agent-proxy's launchd job, to settings.json's `agentProxy`.
-        if !VisorFixture.active { MacAgentProxy.settle() }
-    }
-
-    /// agent_protocol on this Mac (Logan, 12 Nov 2026): the server as driver
-    /// and dispatcher on loopback, and the native runner, which runs each
-    /// job's agent under the agent-wrapper in this app's Helpers. Its jobs'
-    /// harness is the `AgentJobHarness` default (claude unless set; echo
-    /// for a test without a model). Containers reach them as
-    /// `AgentProtocolContainerURL` says, else through Shireworks'
-    /// agent-proxy (`http://visor.agent.internal:7434`).
-    private static func agentProtocol() -> VisorDriver.Listening {
-        let port = agentProtocolPort
-        let harness = UserDefaults.standard.string(forKey: "AgentJobHarness") ?? "claude"
-        let set = UserDefaults.standard.string(forKey: "AgentProtocolContainerURL") ?? ""
-        let containerURL = set.isEmpty ? VisorDriver.containerURL(port: port) : set
-        return VisorDriver.Listening(host: "127.0.0.1", port: port, url: agentProtocolURL, containerURL: containerURL, harness: harness)
-    }
-
-    private static let agentProtocolPort = 7434
-    private static var agentProtocolURL: String { "http://127.0.0.1:\(agentProtocolPort)" }
-
-    /// The server served, and the native runner pulling from it, with a
-    /// runner token of its own.
-    private static func startAgentProtocol(_ agentProtocol: VisorDriver.Listening, serving server: VisorServer) {
-        agentProtocol.serve(server)
-        let url = agentProtocolURL
-        let wrapper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/agent-wrapper").path
-        // Its own runner token, so it claims when runner tokens are required.
-        let name = Host.current().localizedName ?? "Mac"
-        guard FileManager.default.isExecutableFile(atPath: wrapper),
-              let runner = NativeRunner(dispatcher: url, wrapper: wrapper, name: name, token: agentProtocol.runnerToken(for: name),
-                                        log: { VisorDriver.log($0) }) else { return }
-        Task { await runner.run() }
+        if !VisorFixture.active { local.follow(in: store) }
+        // agent-proxy's launchd job, to settings.json's `agentProxy`, for
+        // the server in the app (the server agent folds it in).
+        if !VisorFixture.active, local.server != nil { MacAgentProxy.settle() }
     }
 
     var body: some Scene {
         MenuBarExtra {
-            VisorMenu(server: server)
+            VisorMenu(local: local)
         } label: {
-            Image(systemName: server.listening ? "eye" : "eye.slash")
+            Image(systemName: local.serving ? "eye" : "eye.slash")
         }
         Window("Visor", id: Self.mainWindow) {
             VisorRootView()
@@ -159,7 +115,11 @@ struct VisorMacApp: App {
             }
         }
         Settings {
-            SettingsPane(server: server)
+            if let server = local.server {
+                SettingsPane(server: server)
+            } else {
+                AgentServerSettings(local: local)
+            }
         }
     }
 }
