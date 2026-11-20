@@ -664,7 +664,7 @@ jobs:
       # The signing keeps the entitlements its signature carries: built
       # unsigned, it would lose the microphone.
       - name: Visor.app signed ad hoc with its entitlements
-        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
+        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment keychain-access-groups
       - uses: actions/upload-artifact@v4
         with:
           name: alpha-apple
@@ -934,7 +934,7 @@ jobs:
           tools/ci/container_build.sh --config=prod --config=ci_device --compilation_mode=opt
           --config=apple_cross_mac //applications/visor_ios //applications/visor_mac //applications/visor_disk_utility
       - name: Visor.app signed ad hoc with its entitlements
-        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment
+        run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment keychain-access-groups
       - uses: actions/upload-artifact@v4
         with:
           name: release-apple

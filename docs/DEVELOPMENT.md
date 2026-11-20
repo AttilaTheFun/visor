@@ -642,8 +642,13 @@ the separate `com.LoganShire.Visor.agent-proxy` job is stopped and removed
   in the app's process is made and started by LocalServer and asked like
   any other. The Mac's server serves its socket file from its start
   (password or none, `sshEnabled` or not: `VisorServer.appKey`), and
-  Visor.app shows its app key there (`X-Visor-App-Key`, kept with the
-  server's keychain items, which only Visor's own processes read): the app
+  Visor.app shows its app key there (`X-Visor-App-Key`, kept in the
+  data-protection keychain under Visor.app's own access group,
+  `<team>.com.LoganShire.Visor`, which its Developer ID profile grants:
+  another process of the user's is told there's none, with no prompt to
+  allow. A build without the group, signed ad hoc, keeps it with the
+  server's items in the login keychain, and the log says so; a signed
+  build moves it over the first time it's read, MacSecrets): the app
   is let in with `sshEnabled` off, and the menu's Reset Admin Token… and
   Emergency Key Rotation… are taken from it alone, as they were only the
   menu's in the app's process. Quit Visor: in the app's process,

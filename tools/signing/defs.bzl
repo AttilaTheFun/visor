@@ -10,11 +10,19 @@ A template is an entitlements plist with the line `<!-- UPDATE_APP_GROUP -->`
 where the group goes: `com.apple.security.application-groups` with it, or
 nothing when no group is set. With no group the plist fragment is empty, and
 UpdateKit does nothing (its README, "The app group").
+
+`team_prefix = True` also makes each `$(AppIdentifierPrefix)` the builder's
+team (TEAM_ID: VISOR_TEAM_ID, a placeholder in CI), for a build with no
+provisioning profile to take it from (a Mac app's CI build, signed ad hoc),
+where rules_apple refuses the variable. CI's signing (apple_profiles.py)
+makes that prefix the Developer ID profile's: put the app's
+`com.apple.application-identifier` beside it, with the same prefix, so the
+signer knows what to replace.
 """
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@visor_signing//:signing.bzl", "UPDATE_APPLICATIONS_BUNDLE_IDS", "UPDATE_APP_GROUP")
+load("@visor_signing//:signing.bzl", "TEAM_ID", "UPDATE_APPLICATIONS_BUNDLE_IDS", "UPDATE_APP_GROUP")
 
 PLACEHOLDER = "<!-- UPDATE_APP_GROUP -->"
 
@@ -59,12 +67,16 @@ def update_infoplist(name, **kwargs):
         **kwargs
     )
 
-def update_entitlements(name, template, **kwargs):
-    """`template` with its PLACEHOLDER line given the app group, or removed."""
+def update_entitlements(name, template, team_prefix = False, **kwargs):
+    """`template` with its PLACEHOLDER line given the app group, or removed;
+    with `team_prefix`, its `$(AppIdentifierPrefix)` the builder's team."""
+    substitutions = {PLACEHOLDER: update_group_entitlement()}
+    if team_prefix:
+        substitutions["$(AppIdentifierPrefix)"] = _xml(TEAM_ID) + "."
     expand_template(
         name = name,
         out = name + ".entitlements",
         template = template,
-        substitutions = {PLACEHOLDER: update_group_entitlement()},
+        substitutions = substitutions,
         **kwargs
     )

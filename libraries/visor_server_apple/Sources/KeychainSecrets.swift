@@ -3,17 +3,31 @@ import Security
 import VisorServer
 
 /// Secrets in the keychain, as generic passwords under the app's bundle id.
-/// The app that wrote one reads it without asking, as long as it is signed
-/// the same way each build (a stable signature, not ad hoc).
+/// With no access group, in the login keychain (a file): the app that wrote
+/// one reads it without asking, as long as it is signed the same way each
+/// build (a stable signature, not ad hoc), and any other process of the
+/// user's may ask for it, which the user is prompted to allow. With one, in
+/// the data-protection keychain under that group (KeychainSecrets+DataProtection):
+/// only a process signed with the group finds it; any other is told
+/// there's nothing, and nobody is asked.
 public final class KeychainSecrets: SecretStore {
     private let service: String
+    private let accessGroup: String?
 
-    public init(service: String = Bundle.main.bundleIdentifier ?? "Visor Server") { self.service = service }
+    public init(service: String = Bundle.main.bundleIdentifier ?? "Visor Server", accessGroup: String? = nil) {
+        self.service = service
+        self.accessGroup = accessGroup
+    }
 
-    private func query(_ key: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: service,
-         kSecAttrAccount as String: key]
+    func query(_ key: String) -> [String: Any] {
+        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: service,
+                                    kSecAttrAccount as String: key]
+        if let accessGroup {
+            query[kSecUseDataProtectionKeychain as String] = true
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        return query
     }
 
     public func get(_ key: String) -> String? {
@@ -44,7 +58,10 @@ public final class KeychainSecrets: SecretStore {
         if SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary) == errSecItemNotFound {
             var add = query
             add[kSecValueData as String] = data
-            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            // The data-protection keychain's never leave this Mac (a backup
+            // restored elsewhere has none): the next start makes them again.
+            add[kSecAttrAccessible as String] = accessGroup == nil ? kSecAttrAccessibleAfterFirstUnlock
+                : kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             SecItemAdd(add as CFDictionary, nil)
         }
     }

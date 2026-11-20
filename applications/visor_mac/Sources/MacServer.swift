@@ -19,7 +19,7 @@ enum MacServer {
     /// process of the app's, even one whose server is the agent: its
     /// keychain items are read through it.
     static func prepare(lifecycle: any ServerLifecycle = AppLifecycle(), log: (@Sendable (String) -> Void)? = nil) {
-        var platform = ServerPlatform.apple(secrets: KeychainSecrets(service: MacPlaces.serverService), lifecycle: lifecycle)
+        var platform = ServerPlatform.apple(secrets: MacSecrets.make(), lifecycle: lifecycle)
         if let log {
             let system = platform.log
             platform.log = { line in
