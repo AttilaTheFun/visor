@@ -92,7 +92,9 @@ identity keeps its dot: `@swiftpkg_agent_ui//:AgentUI`.
 7. Keeping the server up: a LaunchAgent with RunAtLoad that runs
    `open -a "/Applications/Visor Server.app"` starts it at login (no
    KeepAlive — the server's relauncher owns restarts; the agents are under
-   their own hosts and outlive it).
+   their own hosts and outlive it). Or, with Visor.app's `ServerAsAgent`
+   default on, the server agent (section 3, The server as a background
+   agent), which the app installs itself.
 
 ## 3. Architecture, as built
 
@@ -561,6 +563,77 @@ crashes or never answers on its port, the previous build is put back and
 opened, carrying the same sessions, and `relaunch-rollback.txt` says why,
 which the server shows in its menu (`updateNotice`) once. Once the new build
 has stayed up, the one it replaced is removed (no backups left behind).
+
+**The server as a background agent** (0a of the container engine's plan;
+off by default). Visor.app's own executable with `--server`
+(applications/visor_mac's MacServerAgent) runs the whole server headless,
+with no AppKit UI: the sessions and their agents' hosts, the native
+runner, the driver on 7434, REST and WebSocket on 7433,
+`~/.visor/server.sock`, pushes, MCP and relaunch, started by the same code
+as the server in the app (MacServer). It runs as a launchd LaunchAgent,
+`com.LoganShire.Visor.server` (`~/Library/LaunchAgents/…server.plist`:
+ProgramArguments the app's executable and `--server`, RunAtLoad,
+KeepAlive after a failure, AbandonProcessGroup, its log
+`~/Library/Logs/Visor-server.log`), settled as agent-proxy's job is: one
+LaunchAgentJob (libraries/visor_launch_agent) for both, written or left,
+restarted on a new version or program, and only for an app in
+/Applications. In it, agent-proxy runs inside the server, as on Linux, and
+the separate `com.LoganShire.Visor.agent-proxy` job is stopped and removed
+(still only when `agentProxy` is set).
+- **Turning it on:** `defaults write com.LoganShire.Visor ServerAsAgent
+  -bool true`, then restart Visor's server (a restart from a client, or
+  `POST /api/restart`): the server in the app goes as an in-place relaunch
+  does, the agents' hosts left running, and the app that reopens hands
+  over. Off (the default) with no agent there, the app makes its server as
+  it always has and looks at nothing else.
+- **The hand-over** (ServerHandOver, at the app's launch, before the app
+  makes a server): the app installs the agent and starts it (or leaves the
+  same one running), then waits up to the watch (two minutes) for
+  `/api/hello` on 7433 from the job's own process (lsof's listener, where
+  it says). Then the app is the agent's client. If it doesn't answer, the
+  app removes the agent (launchd's TERM: the agent steps aside, leaving the
+  hosts) and runs its own server as before, which picks the hosts up. With
+  the default turned off again, the app removes the agent the same way at
+  its next launch. A copy outside /Applications never writes or removes the
+  job; it uses an agent that serves.
+- **Quitting the app** (`killall Visor`, Quit Visor in the agent's menu)
+  leaves the server serving. `/api/quit` stops the agent (an exit of 0,
+  which KeepAlive leaves stopped until the app's next launch or the next
+  login).
+- **Updates and rollback** (ServerAgentRestart, ServerAgentWatch):
+  `POST /api/restart {path}` on the agent checks the bundle (the same
+  bundle id), rewrites the plist to the new executable and version (the old
+  plist kept beside it), and starts a detached watcher; the server lets its
+  hosts go and exits 0. The watcher, once it has gone, moves the running
+  bundle aside (`Previous/`), copies the new one in, and starts the job
+  again (`launchctl kickstart -k`, or a fresh bootstrap when the plist
+  changed). It watches it as AppRelauncher does: up to ten minutes for the
+  first answer on 7433 from the job's process, then two minutes up. If the
+  process goes or never answers, the job is stopped, the previous bundle and
+  plist are put back, `relaunch-rollback.txt` says why, and it is started
+  again; once it has stayed up, the replaced bundle is removed. A plain
+  restart that doesn't come up is started once more. The agents' hosts
+  outlive all of it, and every session that was running is carried on (the
+  job starts with no `--resume-sessions` list). Visor.app's own updates
+  (UpdateKit), with the agent serving, go through it the same way; the app
+  reopens once the agent has stayed up with the new build. AppRelauncher
+  stays for the server in the app, which is kept a release as the fallback.
+- **What phones and the other Mac see:** an ordinary server restart. The
+  data folder (`~/Library/Application Support/Visor`), the keychain items
+  (the app's own executable reads them, the same signature), the server id,
+  the ports (7433, 7434), the socket file, `tailscale serve`'s target
+  (127.0.0.1:7433) and the admin token are the same, so they reconnect to
+  the same address and identity, with no re-pairing.
+- **In 0a the app stays half a client.** Its window reaches the agent at
+  loopback with the password, as it reached its own server. Its menu shows
+  the agent, Restart Server (over the socket) and Quit Visor; Settings
+  points to the computer's settings in the window; updates go through the
+  socket. What the app still does to a server in its own process (the
+  menu's codes, password, sessions, admin token and keys; SettingsPane;
+  the rollback note) is the app-in-client work of 0b. Agents started by the
+  agent are launchd's grandchildren, not the app's: macOS's privacy grants
+  (Files and Folders) follow the app's signature, to be checked on a signed
+  build.
 
 **Agents apart from the server.** Unless turned off — Visor Server's
 "Run agents apart from the server" (`ServerSettings.detachAgents`, on by

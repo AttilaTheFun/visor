@@ -6,7 +6,8 @@
 // - agent-proxy's, `<bundle id>.agent-proxy`, `Visor --agent-proxy`
 //   (AgentProxyJob), while the server runs in the app;
 // - the server's, `<bundle id>.server`, `Visor --server` (ServerAgentJob),
-//   when the server runs as a background agent (docs/server-agent.md).
+//   when the server runs as a background agent (docs/DEVELOPMENT.md, The
+//   server as a background agent).
 //
 // - Its plist is `~/Library/LaunchAgents/<label>.plist` (so launchd starts
 //   it at login, before the app), started again after a failure (5 seconds

@@ -77,17 +77,25 @@ import Testing
             return kill(pid, 0) == 0
         }
 
+        /// The watcher run to its end, its output read from a file. Spawned
+        /// and waited for directly: Foundation's Process on Linux follows
+        /// its child by a socket the child's children inherit, and the
+        /// stand-in servers outlive the watcher.
         func run(_ watch: ServerAgentWatch) throws -> String {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", watch.script()]
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-            try process.run()
-            let output = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return String(decoding: output, as: UTF8.self)
+            let output = root + "/watch.out"
+            var actions = posix_spawn_file_actions_t()
+            posix_spawn_file_actions_init(&actions)
+            defer { posix_spawn_file_actions_destroy(&actions) }
+            posix_spawn_file_actions_addopen(&actions, 1, output, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+            posix_spawn_file_actions_adddup2(&actions, 1, 2)
+            let argv: [UnsafeMutablePointer<CChar>?] = ["/bin/sh", "-c", watch.script()].map { strdup($0) } + [nil]
+            defer { for pointer in argv { free(pointer) } }
+            var pid: pid_t = 0
+            let spawned = posix_spawn(&pid, "/bin/sh", &actions, nil, argv, environ)
+            guard spawned == 0 else { throw POSIXError(POSIXErrorCode(rawValue: spawned) ?? .EIO) }
+            var status: Int32 = 0
+            while waitpid(pid, &status, 0) < 0, errno == EINTR {}
+            return read(output) ?? ""
         }
 
         func cleanUp() {
