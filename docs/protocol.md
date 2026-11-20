@@ -208,7 +208,11 @@ under `/api`.
 | `POST /migration/unpack` | | Removed in 0.61: 410 with `error`. (Before: a project carried as an archive unpacked where its step said.) |
 | `POST /migration/finish` | `migration` | `migration` with `session` (the new one's id) and `sessions`: the conversation's files put where the agent here keeps that conversation for the plan's folder, Claude's memory under that folder's project (when it has none), the folder made, new and empty, and the session started there resuming the same conversation, its model and effort kept (a Codex goal comes too, paused), with a notice of where it came from. (A client before 0.61 also sent the projects' `steps` and a `cwd` of its choosing, which are passed over.) |
 | `POST /backups` | `sessionIDs` (else every session not archived), `path` (a folder of its own, else a new one under Visor's data folder's `backups`, by when it was made) | `backup`: its `path`, `created`, `from` (the computer's name), `size`, and its `sessions`, each with whether it was `kept` and its `outcome`. Each session's folder holds its offer (`offer.json`, as `POST /migration/offer` makes it) and the agent's own files for its conversation, to their last whole line: one half of a move, written to a folder. No project: since 0.61 a backup carries what a move carries, and a request's `projects` is passed over |
-| `GET /backups` | | `backups`: those under the data folder's `backups`, newest first |
+| `GET /backups` | | `backups`: those under the data folder's `backups`, newest first; one `imported` from a session archive says so |
+| `POST /sessions/{id}/export` | `path` (a file, or a folder for it by its own name, on the server's computer; optional, never over a file) | `export` with `file` (`id` `archive`, `place` its name, `<title>-<date>.visorsession`, and `size`) and either `path` (where it was written) or `migration` (a token: read it as a move's file, `POST /migration/read` with `file.id` `archive`, for as long as an offer is kept). The session as a session archive (below). Refused, naming the file, its size, the cap and what would help, when its conversation is more than a move carries |
+| `POST /import` | `path` (a session archive on the server's computer), or `file` (`size`, and its name in `place`) to upload one | with `path`: as `/import/finish`. With `file`: `import` with `migration`, the upload's token. Refused past 4 GiB (and 16 MiB for its offer and tar's own) or the room to keep it |
+| `POST /import/write` | `migration`, `offset`, `data` (base64, a piece of at most 4 MB) | `import` with the next `offset`; a piece follows on from the last and ends within the size the upload began with |
+| `POST /import/finish` | `migration` | `backup`: the archive, held to what a move takes and a restore applies, kept under the data folder's `backups` as a backup of its own (`imported`), its one session `Imported.`. Refused, nothing kept, when it holds anything but its one folder, an entry that leads out or a link that does, more than 16 entries, an offer a plan would refuse, a file the offer doesn't name (or one it names missing, not a plain file, or not the size it says), or an archive inside that a restore would refuse (its names, its 200,000 entries, its sizes). `POST /backups/restore` of it puts the session back on this computer, as a backup's, but is refused (`Not restored: … Remove it first, then restore it.`) while a session by its id is here; nothing is ever done to the computer it came from |
 | `POST /backups/restore` | `path` (a backup's folder), `sessionIDs` (else all it kept) | `backup`, each session's `outcome` saying what was done, and `sessions`. The other half of a move, read from the folder, and held to what a move takes: the offer as a plan checks it (and the session's own, by its id), its archives checked and walked as a move's are. The session's folder (the server's own for it, where it keeps one; else where it was, under this home folder) is made empty when it is gone; a conversation file missing or shorter here is put back (a shorter one set aside as `.before-restore-<time>`, never removed), one as long or longer left as it is; Claude's memory is put back where the folder's project has none; a session gone from here is started again under its own id on the same conversation, told it was restored, and one still here is left as it is. The project archives a backup from before 0.61 holds (`project-<n>`) are left out, said in the server's log |
 
 Moving a session (`SessionMigration` in the client): the user chooses only
@@ -279,6 +283,47 @@ absolute one always), a hard link to a file outside it or anything but
 files, folders and links (a device, a fifo), and only then moved into
 place; it must hold that folder alone, and never takes the place of one
 there.
+
+### Session archive v1
+
+One session in one file, `<title>-<date>.visorsession` (the date UTC,
+`YYYY-MM-DD`): what `POST /sessions/{id}/export` writes, `POST /import`
+takes, and a CI agent job writes for its session. It is a tar, gzipped
+(an importer takes it plain too, as tar finds it), holding one folder,
+`session`, which is a backup's folder for the session:
+
+```
+session/offer.json              the session as POST /migration/offer makes it
+session/conversation-0.jsonl    the transcript, to its last whole line
+session/conversation-1.tgz      the folder beside it (Claude's subagents and
+                                long tool results), a gzipped tar of that
+                                folder by its own name (the conversation's id)
+session/memory.tgz              Claude's memory for the project: a gzipped
+                                tar of the folder `memory`
+```
+
+- `offer.json`: `token` (any), `from` (the computer's or the job's name),
+  `session` (a `SessionInfo`: `id`, `agent`, `cwd` absolute, `title`,
+  `model`, …), `resumeID` (the agent's own id for the conversation, a
+  UUID), `home` (the home folder `cwd` was under) and `files`, each `id`,
+  `place`, `size` and `packed`, as a move's offer has them. Claude's
+  transcript's `place` is `projects/{project}/<resumeID>.jsonl`, its
+  folder's `projects/{project}/<resumeID>`, the memory's empty (id
+  `memory`); Codex's is its rollout under `~/.codex`, OpenRouter's
+  `sessions/<resumeID>.json(l)`.
+- Each file is named `<id>.<suffix>`: `tgz` when `packed`, else its
+  place's extension (`data` when it has none). Its `size` is its size in
+  the archive, exactly; nothing else is in the folder.
+- Caps, a move's: 2 GiB a file, 4 GiB all of them, 200,000 entries in an
+  archive inside, 16 entries in the archive itself. An export of a
+  conversation past them is refused with what would help (carry on in a
+  new session, whose transcript starts small).
+- Gzip rather than zstd: the tar on a stock Mac (bsdtar 3.5 without
+  libzstd) and Windows' read zstd only through a `zstd` program, which
+  neither has; every tar Visor runs on reads and writes gzip.
+
+A CI job writes one with `tar -czf <title>-<date>.visorsession -C <dir>
+session`, its `session` folder as above.
 
 A client asks `GET /sessions` once a minute as the backup for the socket:
 the list is taken as a `sessions` broadcast would be, and an answer while

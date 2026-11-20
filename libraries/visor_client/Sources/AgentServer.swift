@@ -190,6 +190,25 @@ public protocol AgentServer: AnyObject {
     /// all): what became of each, and the server's sessions.
     func restore(_ path: String, sessions: [String]?) async throws -> (backup: SessionBackup, sessions: [SessionInfo])
 
+    // MARK: Session archives (`/api/sessions/<id>/export`, `/api/import`)
+
+    /// Whether this server exports sessions as session archives, imports
+    /// them, and restores one session of a backup by itself.
+    var archives: Bool { get }
+
+    /// The session as a session archive, kept on the server for reading a
+    /// piece at a time (migrationRead, the file `archive`): the token to
+    /// read it with, and its name and size (`place`, `size`).
+    func exportSession(_ session: String) async throws -> (token: String, file: MigrationFile)
+    /// An upload begun of a session archive of `size` bytes called `name`:
+    /// the token its pieces are written with.
+    func importUpload(size: Int, name: String) async throws -> String
+    /// A piece of the upload at `offset`, base64: where the next starts.
+    func importWrite(_ token: String, offset: Int, data: String) async throws -> Int
+    /// The upload imported into the server's backups store: the backup it
+    /// is kept as.
+    func importFinish(_ token: String) async throws -> SessionBackup
+
     // MARK: Identity and SSH
 
     /// What the server said of itself at the last sign-in: its id and
@@ -246,6 +265,11 @@ public extension AgentServer {
     func restore(_ path: String, sessions: [String]?) async throws -> (backup: SessionBackup, sessions: [SessionInfo]) {
         throw AgentServerError.unsupported
     }
+    var archives: Bool { false }
+    func exportSession(_ session: String) async throws -> (token: String, file: MigrationFile) { throw AgentServerError.unsupported }
+    func importUpload(size: Int, name: String) async throws -> String { throw AgentServerError.unsupported }
+    func importWrite(_ token: String, offset: Int, data: String) async throws -> Int { throw AgentServerError.unsupported }
+    func importFinish(_ token: String) async throws -> SessionBackup { throw AgentServerError.unsupported }
     var identity: ServerIdentity? { nil }
     func authorizeSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
 }

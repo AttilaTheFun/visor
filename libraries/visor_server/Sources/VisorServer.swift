@@ -84,6 +84,9 @@ public final class VisorServer {
     /// moving here, by their plans' ids (VisorServer+Migration.swift).
     var migrationsOut: [String: OutgoingMigration] = [:]
     var migrationsIn: [String: IncomingMigration] = [:]
+    /// Session archives being uploaded to import, by their tokens
+    /// (VisorServer+SessionArchive.swift).
+    var importsIn: [String: IncomingImport] = [:]
     /// The bytes free on the disk a URL is on, which a move here must fit
     /// (VisorServer+MigrationSize.swift): the system's word, or a test's.
     var freeBytes: (URL) -> Int? = { VisorServer.systemFreeBytes($0) }

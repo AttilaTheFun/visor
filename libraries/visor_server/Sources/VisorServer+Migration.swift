@@ -73,17 +73,21 @@ extension VisorServer {
         return e
     }
 
-    /// A session as a move offers it (or a backup keeps it): its
+    /// A session as a move offers it (or a backup or an export keeps it): its
     /// conversation's files — each by an id, where it is here, a folder
     /// packed into `folder` first, a file to its last whole line — and
     /// Claude's memory with them; refused when a file, or all of them, is
-    /// more than a move carries (migrationFileCap, migrationTotalCap).
+    /// more than a move carries (migrationFileCap, migrationTotalCap), in
+    /// words that name it, its size and what would help (tooLarge).
     func offer(of record: SessionRecord, resume: String, token: String,
                packingInto folder: URL) async -> Result<(offer: MigrationOffer, urls: [String: URL]), MigrationFailure> {
         var files: [MigrationFile] = []
         var urls: [String: URL] = [:]
+        // Where each is here, for a refusal to name.
+        var sources: [String: URL] = [:]
         for (index, file) in SessionCatalog.conversationFiles(agent: record.info.agent, id: resume, cwd: record.info.cwd).enumerated() {
             let id = "conversation-\(index)"
+            sources[id] = file.url
             if file.folder {
                 let archive = folder.appendingPathComponent(id + ".tgz", isDirectory: false)
                 if let problem = await Self.pack(folder: file.url, into: archive) {
@@ -101,13 +105,14 @@ extension VisorServer {
         if record.info.agent == .claude, let conversation = urls["conversation-0"],
            let memory = await Self.packMemory(beside: conversation, into: folder) {
             urls[memory.file.id] = memory.url
+            sources[memory.file.id] = conversation.deletingLastPathComponent().appendingPathComponent("memory", isDirectory: true)
             files.append(memory.file)
         }
         guard files.contains(where: { !$0.packed }) else {
             return .failure(MigrationFailure(message: "The agent's own record of “\(record.info.title)” is not on this computer."))
         }
-        if let problem = Self.oversized(files) {
-            return .failure(MigrationFailure(message: "“\(record.info.title)” is too large to move: \(problem)."))
+        if let problem = Self.tooLarge(files, at: sources, title: record.info.title) {
+            return .failure(MigrationFailure(message: problem))
         }
         var info = record.info
         info.cwd = (info.cwd as NSString).expandingTildeInPath
@@ -138,8 +143,8 @@ extension VisorServer {
 
     // MARK: Keeping
 
-    /// Offers and plans past their time go, with what was packed or written
-    /// for them.
+    /// Offers (and exports), plans and imports' uploads past their time go,
+    /// with what was packed or written for them.
     func ageMigrations(now: Date = Date()) {
         for (token, offer) in migrationsOut where now.timeIntervalSince(offer.created) > Self.migrationLifetime {
             try? FileManager.default.removeItem(at: offer.folder)
@@ -148,6 +153,10 @@ extension VisorServer {
         for (id, move) in migrationsIn where now.timeIntervalSince(move.created) > Self.migrationLifetime {
             try? FileManager.default.removeItem(at: move.folder)
             migrationsIn[id] = nil
+        }
+        for (token, upload) in importsIn where now.timeIntervalSince(upload.created) > Self.migrationLifetime {
+            try? FileManager.default.removeItem(at: upload.folder)
+            importsIn[token] = nil
         }
     }
 

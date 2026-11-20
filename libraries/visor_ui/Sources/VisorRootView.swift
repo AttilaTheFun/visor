@@ -33,6 +33,13 @@ public struct VisorRootView: View {
     /// What a fork's or branch's page calls when it is ended there.
     @State private var popSubPage = ViewAction()
     @State private var composing = false
+    /// The compose opens on Restore (the fixture's `restore`), or on Restore
+    /// with its file picker open (File › Import…).
+    @State private var composeRestores = false
+    @State private var composeImports = false
+    /// A session being exported as a session archive (File › Export…, or
+    /// its menu's Export…).
+    @State private var exporting: SessionExport?
     @State private var renamingSession: SessionTarget?
     @State private var renamingProject: ProjectTarget?
     @State private var deletingSession: SessionTarget?
@@ -243,10 +250,28 @@ public struct VisorRootView: View {
         }
         .navigationSplitViewStyle(.balanced))
         .environment(\.trailingPane, $pane)
-        .sheet(isPresented: $composing) {
-            ComposeSessionSheet(store: store) { serverID, id in
+        .sheet(isPresented: $composing, onDismiss: {
+            composeRestores = false
+            composeImports = false
+        }) {
+            ComposeSessionSheet(store: store, started: { serverID, id in
                 selection = .session(SessionSelection(serverID: serverID, sessionID: id))
-            }
+            }, startsOnRestore: composeRestores, importsAtOnce: composeImports)
+        }
+        .itemSheet($exporting) { export in
+            SessionExportSheet(export: export)
+        }
+        // The Mac's File › Export… and File › Import…, from its menu bar.
+        .onChange(of: store.exportRequested) {
+            guard store.exportRequested else { return }
+            store.exportRequested = false
+            exportViewedSession()
+        }
+        .onChange(of: store.importRequested) {
+            guard store.importRequested else { return }
+            store.importRequested = false
+            composeImports = true
+            composing = true
         }
         .itemSheet($migrating) { migration in
             MigrationSheet(migration: migration) { id in
@@ -419,6 +444,10 @@ public struct VisorRootView: View {
                 search = VisorFixture.searchQuery
             case "new-session":
                 composing = true
+            case "restore":
+                composeRestores = true
+                composing = true
+
             case "settings":
                 // Beside a chat: the case a Mac's layout looped on with two
                 // inspectors (TrailingPane).
@@ -563,6 +592,13 @@ public struct VisorRootView: View {
         }
     }
 
+    /// The session on screen exported (File › Export…).
+    private func exportViewedSession() {
+        guard let serverID = store.viewedServer, let id = store.viewedSession, let host = store.server(for: serverID), host.archives,
+              let session = host.projects.flatMap({ $0.sessions + $0.archived }).first(where: { $0.id == id }) else { return }
+        exporting = SessionExport(session: session, host: host)
+    }
+
     @ViewBuilder private func sessionMenu(_ card: SessionCard) -> some View {
         let host = card.host, session = card.session
         Button { nameDraft = session.title; renamingSession = SessionTarget(host: host, session: session) } label: {
@@ -570,6 +606,13 @@ public struct VisorRootView: View {
         }
         Button { host.archive(session.id) } label: { Label("Archive", systemImage: "archivebox") }
         AgentStateButtons(host: host, session: session)
+        // As one file, to keep, carry or import elsewhere (Session
+        // archive v1); the session stays.
+        if host.archives {
+            Button { exporting = SessionExport(session: session, host: host) } label: {
+                Label("Export…", systemImage: "square.and.arrow.up")
+            }
+        }
         // To another computer connected now; this one keeps the session
         // until the user removes it.
         let others = store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }

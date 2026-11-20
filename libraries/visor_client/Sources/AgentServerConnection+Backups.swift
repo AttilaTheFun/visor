@@ -27,4 +27,16 @@ extension AgentServerConnection {
         take(list, replacing: false)
         return backup
     }
+
+    /// Whether this computer's server exports sessions as session archives
+    /// and imports them (SessionExport, SessionImport).
+    public var archives: Bool { server.archives }
+
+    /// Puts back the one session `id` of the backup at `path` on this
+    /// computer: what became of it. Started again, it is listed at once.
+    public func restoreSession(_ id: String, from path: String) async throws -> SessionBackupItem? {
+        let (backup, list) = try await server.restore(path, sessions: [id])
+        take(list, replacing: false)
+        return backup.sessions.first { $0.id == id }
+    }
 }

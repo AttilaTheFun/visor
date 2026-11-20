@@ -28,5 +28,25 @@
 		<string>com.LoganShire.VisorServer.macOS</string>
 		<string>com.LoganShire.Visor.MenuBar</string>
 	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.LoganShire.Visor.session</string>
+			<key>UTTypeDescription</key>
+			<string>Visor Session Archive</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>visorsession</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

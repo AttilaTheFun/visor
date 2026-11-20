@@ -13,12 +13,17 @@ public struct SessionBackup: Codable, Equatable, Sendable {
     public var sessions: [SessionBackupItem]
     /// The bytes it holds.
     public var size: Int
+    /// Whether it was imported from a session archive (`POST /api/import`)
+    /// rather than backed up here: restoring its session is refused while
+    /// that session is on the computer.
+    public var imported: Bool
 
-    public init(path: String, created: Double, from: String, sessions: [SessionBackupItem], size: Int) {
+    public init(path: String, created: Double, from: String, sessions: [SessionBackupItem], size: Int, imported: Bool = false) {
         self.path = path
         self.created = created
         self.from = from
         self.sessions = sessions
         self.size = size
+        self.imported = imported
     }
 }

@@ -69,6 +69,19 @@ public enum VisorFixture {
     static let picturePath = "/Users/visor/Pictures/layout.png"
     static let moviePath = "/Users/visor/Movies/banner.mov"
     static let now: Double = 1_790_000_000
+    /// The folder a session restored in the fixture runs in.
+    static let restoredFolder = "/Users/visor/Developer/notes"
+    /// The backups store: a session imported from a session archive, and a
+    /// backup holding a session that is here still.
+    static let backups: [SessionBackup] = [
+        SessionBackup(path: "/Users/visor/Library/Application Support/Visor/backups/20261120-091500-import", created: now - 1800, from: "Mini",
+                      sessions: [SessionBackupItem(id: "fixture-imported", title: "Field notes", outcome: "Imported.", kept: true)],
+                      size: 2_400_000, imported: true),
+        SessionBackup(path: "/Users/visor/Library/Application Support/Visor/backups/20261119-080000", created: now - 86_400, from: "Snapshot Mac",
+                      sessions: [SessionBackupItem(id: chatSession, title: "Offline sync", outcome: "Backed up.", kept: true)], size: 9_800_000),
+    ]
+    /// An exported session's bytes, as the fixture's computer gives them.
+    static let archive = Data("A session archive in the fixture.".utf8)
 
     @MainActor static var sessions: [SessionInfo] {
         func session(_ id: String, _ agent: AgentKind, _ cwd: String, _ title: String, model: String, preview: String,

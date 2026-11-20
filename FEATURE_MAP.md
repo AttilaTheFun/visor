@@ -40,6 +40,8 @@ flowchart TD
     Migrate["Migrate sheet"]
     AddComputer["Add Computer"]
     NewSession["New Session"]
+    Restore["Restore a session<br/>(New Session's Restore)"]
+    Export["Export a session"]
     Folder["Choose a folder"]
     Chat["Session chat"]
     Approval["Approval controls<br/>(in the chat)"]
@@ -70,6 +72,8 @@ flowchart TD
     Sessions -->|"tap settings"| Settings
     Sessions -->|"longpress session-‹id›, tap “Project Settings”"| Project
     Sessions -->|"longpress session-‹id›, tap “Migrate…”"| Migrate
+    Sessions -->|"longpress session-‹id›, tap “Export…”"| Export
+    Export -->|"tap export-done"| Sessions
     Search -->|"tap session-‹id› or message-hit"| Chat
     Archived -->|"swipe archived-session-‹id› left, “Unarchive”"| Sessions
 
@@ -78,6 +82,8 @@ flowchart TD
     NewSession -->|"tap project"| Folder
     Folder -->|"tap choose-folder"| NewSession
     NewSession -->|"type first-message, tap start"| Chat
+    NewSession -->|"select conversation “Restore”"| Restore
+    Restore -->|"tap restore-‹id›, tap start"| Chat
 
     Chat -->|"tap session-title"| Details
     Chat -->|"tap model (no approval waiting)"| Model
@@ -115,7 +121,9 @@ that opens it directly (see "Driving it" below).
 | Archived Sessions | text "Archived Sessions" | `archived-session-‹id›` | none (the fixture has no archived sessions) |
 | Project settings | the project's page, titled by its name: "Copy folder path" listed | "Rename in Visor…", "Copy folder path", "Archived Sessions (‹n›)", "Remove Project" | none: `longpress session-fixture-chat` on `sessions`, then tap "Project Settings" (not on the iPhone yet: see "Not wired yet") |
 | Add Computer | a sheet; `host` and `connect` listed | `host`, `paste-code`, `password`, `authentication`, `connect`, `provider-‹id›` (several providers), `copy-ssh-key`, `show-key-qr` (an SSH address) | `connect` |
-| New Session | a sheet; text "New Session" | `computer` (several computers), `choice`, `project`, `project-chosen`, `resume-id`, `title`, `first-message`, `start-error`, `start` | `new-session` |
+| New Session | a sheet; text "New Session" | `computer` (several computers), `choice`, `project`, `project-chosen`, `conversation` (New, Resume, Restore), `resume-id`, `title`, `first-message`, `start-error`, `start` | `new-session` |
+| Restore a session | New Session's sheet with `import-archive` listed (`conversation` on Restore) | `restore-‹id›` (each imported or backed-up session; one still on the computer is disabled, "remove it first"), `import-archive` ("Import…": a session archive, `.visorsession`, from the system's file picker), `import-error`, `start` ("Restore"), `start-error` | `restore` (the fixture's computer keeps `fixture-imported`, "Field notes", imported from "Mini", and a backup of `fixture-chat`, which is here) |
+| Export a session | a sheet; `export-progress`, `export-save` or `export-error` listed | `export-progress`, `export-save` ("Save…": the save panel, opened at once on the Mac), `export-share` ("Share…", the iPhone's share sheet), `export-said`, `export-error`, `export-done` | none: `longpress session-fixture-chat` on `sessions`, then tap "Export…" (the fixture's archive is "Offline sync-2026-11-20.visorsession") |
 | Choose a folder | text "Choose a folder" | `folder-path`, `choose-folder` | none |
 | Session chat | `session-title` and "Send" listed (on the iPhone, with the composer empty, "Dictate" stands where "Send" is); in `commands` the iPhone shows the slash commands in a popover over the chat, and the driver lists only the popover | `session-title` ("Session details"), `attach`, `model` and `goal` (not while an approval or question waits: Approval controls take their place), `loop`, `queued`, "Send", `busy-actions`, `dictate`, `copy-message`, `branch-message`, `share-message`, `attachment-‹file›`, `new-rows-pill`, `suggestion-/‹command›` | `chat`, `goal`, `earlier`, `commands` |
 | Approval controls | `allow` and `deny`, or `answer`, listed | `allow`, `deny`, `answer` | `chat` (a Bash approval is pending) |
@@ -157,7 +165,10 @@ The graph is the same everywhere; what a node is differs with the width:
   and `back` from the chat has nothing to go back from.
 - **The Mac only:** the menu bar's Visor menu and Visor Server's own
   Settings window (password, network paths, push) are outside this
-  graph: neither is part of `VisorRootView`.
+  graph: neither is part of `VisorRootView`. The window's File menu has
+  **Export…** (the session on screen: Export a session) and **Import…**
+  (Restore a session, its file picker open): the same nodes the session's
+  menu and New Session's Restore reach, which the suite takes.
 
 Outside the app: `visor://connect?code=…` adds a computer (the Add
 Computer sheet's end state), `visor://sign-in?computer=…` opens that
@@ -253,6 +264,11 @@ since isomer#228 and #231; the suite takes them all by identifier.)
   finds it.
 - **`back` in a sheet:** on Isomer, `back` on a page pushed inside a
   sheet (Settings → a computer's page) closes the whole sheet.
+- **The system's file pickers:** Restore's `import-archive` (an open
+  panel, Files, a file input) and Export's `export-save` (a save panel)
+  ask the system where, and the driver has no command to answer either;
+  the Mac's File menu likewise (no host draws a menu bar). Their tests are
+  disabled; the server's export and import are SessionArchiveTests'.
 - **Elements without an identifier:** the composer's text field, which
   lives in AgentUI (found by its "Message ‹Agent›…" placeholder).
 - **Not in the fixture:** Archived Sessions (and so Unarchive), Migrate (a

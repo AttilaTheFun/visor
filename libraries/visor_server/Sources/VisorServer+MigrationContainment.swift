@@ -81,8 +81,10 @@ extension VisorServer {
     /// walked (unsafeTree), and only then moved into place, where nothing
     /// is by that name but an empty folder (never over what is there). What
     /// went wrong, if anything; the folder it was unpacked into goes either
-    /// way.
-    static func unpack(_ archive: URL, into folder: URL, only name: String, limits: UnpackLimits = UnpackLimits()) async -> String? {
+    /// way. `gzip` false takes the archive as tar finds it, gzipped or not
+    /// (a session archive: VisorServer+SessionArchive).
+    static func unpack(_ archive: URL, into folder: URL, only name: String, limits: UnpackLimits = UnpackLimits(),
+                       gzip: Bool = true) async -> String? {
         guard isCarriedName(name) else { return "\(name) is not a name to unpack as" }
         let destination = folder.appendingPathComponent(name, isDirectory: false)
         if let there = try? FileManager.default.attributesOfItem(atPath: destination.path) {
@@ -90,25 +92,11 @@ extension VisorServer {
             guard there[.type] as? FileAttributeType == .typeDirectory, empty else { return "\(name) is in \(folder.path) already" }
         }
         let tar = ToolPath.resolve("tar") ?? "/usr/bin/tar"
-        // Listed as written (`-P`: no leading `/` taken off), so the names
-        // checked are the archive's own.
-        guard let listed = await Command.output(tar, ["-t", "-P", "-z", "-f", archive.path]) else { return "tar could not be started" }
-        guard listed.status == 0 else { return "it is not an archive tar can read" }
-        let names = listed.text.split(separator: "\n").filter { !$0.isEmpty }
-        // How many entries it makes, held to the cap before anything else
-        // is asked of its names.
-        let entries = listedEntries(names, most: limits.entries)
-        if let problem = entryRefusal(entries, limits) { return problem }
-        for entry in names {
-            if let problem = unsafeEntry(String(entry), only: name) { return problem }
+        let declared: (entries: Int, bytes: Int)
+        switch await vetted(archive, only: name, limits: limits, in: folder, tar: tar, gzip: gzip) {
+        case .success(let listed): declared = listed
+        case .failure(let refusal): return refusal.message
         }
-        // Each entry's size as it declares it (`-v`), and so all of them,
-        // held to the limits before anything is unpacked.
-        guard let verbose = await Command.output(tar, ["-t", "-v", "-P", "-z", "--numeric-owner", "-f", archive.path]), verbose.status == 0,
-              let declared = listedBytes(verbose.text), declared.entries == names.count else {
-            return "the sizes of what it holds could not be read"
-        }
-        if let problem = unpackRefusal(declared.bytes, limits, in: folder) { return problem }
         let files = FileManager.default
         try? files.createDirectory(at: folder, withIntermediateDirectories: true)
         let staging = folder.appendingPathComponent(".visor-unpacking-" + UUID().uuidString.lowercased(), isDirectory: true)
@@ -117,8 +105,10 @@ extension VisorServer {
         }
         defer { removeTree(staging) }
         let bound = unpackBound(declared.bytes, limits, in: folder)
-        let entryLimit = entryBound(entries, limits)
-        if let problem = await extract(archive, into: staging, tar: tar, bound: bound, entries: entryLimit, every: limits.every) { return problem }
+        let entryLimit = entryBound(declared.entries, limits)
+        if let problem = await extract(archive, into: staging, tar: tar, bound: bound, entries: entryLimit, every: limits.every, gzip: gzip) {
+            return problem
+        }
         let top = ((try? files.contentsOfDirectory(atPath: staging.path)) ?? []).sorted()
         guard top == [name] else { return "it holds \(top.joined(separator: ", ")), not \(name) alone" }
         // The folder itself is the root of the walk: a link in it that
@@ -143,6 +133,39 @@ extension VisorServer {
             return "could not put \(name) in \(folder.path): \(error.localizedDescription)"
         }
         return nil
+    }
+
+    /// What `unpack` holds an archive to before anything of it is unpacked
+    /// in `folder`: its listing, every entry's name (unsafeEntry), how many
+    /// entries it makes, and the sizes it declares, all within `limits`.
+    /// How many entries it makes and the bytes it declares; or why not. An
+    /// import asks it of each archive a session archive holds, so that one
+    /// is refused there, not later when it is restored.
+    static func vetted(_ archive: URL, only name: String, limits: UnpackLimits, in folder: URL, tar: String,
+                       gzip: Bool = true) async -> Result<(entries: Int, bytes: Int), MigrationFailure> {
+        let compression = gzip ? ["-z"] : []
+        // Listed as written (`-P`: no leading `/` taken off), so the names
+        // checked are the archive's own.
+        guard let listed = await Command.output(tar, ["-t", "-P"] + compression + ["-f", archive.path]) else {
+            return .failure(MigrationFailure(message: "tar could not be started"))
+        }
+        guard listed.status == 0 else { return .failure(MigrationFailure(message: "it is not an archive tar can read")) }
+        let names = listed.text.split(separator: "\n").filter { !$0.isEmpty }
+        // How many entries it makes, held to the cap before anything else
+        // is asked of its names.
+        let entries = listedEntries(names, most: limits.entries)
+        if let problem = entryRefusal(entries, limits) { return .failure(MigrationFailure(message: problem)) }
+        for entry in names {
+            if let problem = unsafeEntry(String(entry), only: name) { return .failure(MigrationFailure(message: problem)) }
+        }
+        // Each entry's size as it declares it (`-v`), and so all of them,
+        // held to the limits before anything is unpacked.
+        guard let verbose = await Command.output(tar, ["-t", "-v", "-P"] + compression + ["--numeric-owner", "-f", archive.path]),
+              verbose.status == 0, let declared = listedBytes(verbose.text), declared.entries == names.count else {
+            return .failure(MigrationFailure(message: "the sizes of what it holds could not be read"))
+        }
+        if let problem = unpackRefusal(declared.bytes, limits, in: folder) { return .failure(MigrationFailure(message: problem)) }
+        return .success((entries, declared.bytes))
     }
 
     /// Why an archive's entry (as `tar -t` lists it) can't be unpacked: an

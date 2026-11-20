@@ -65,32 +65,41 @@ extension VisorServer {
         guard let url = Self.carried(file, in: move.folder) else { return .error("“\(file)” is not a name a move's file has.") }
         // Only a file the offer named, and never past the size it said.
         guard let declared = move.offer.files.first(where: { $0.id == file }) else { return .error("“\(file)” is not a file of this move.") }
-        let offset = body.offset ?? 0
-        guard offset >= 0, offset <= declared.size, data.count <= declared.size - offset else {
-            return .error("That piece runs past the \(declared.size) bytes “\(file)” was offered as.")
-        }
-        // The last piece sent again (its answer lost on the way back): what
-        // is here already ends with the same bytes, so it is taken as written.
-        let size = Self.fileSize(url)
-        if offset < size, offset + data.count == size, Self.endsWith(url, data) {
+        switch Self.writePiece(data, at: body.offset ?? 0, to: url, declared: declared.size, name: "“\(file)”") {
+        case .success(let next):
             var e = Envelope(type: "migration")
-            e.offset = size
+            e.offset = next
             return e
+        case .failure(let refusal):
+            return .error(refusal.message)
         }
+    }
+
+    /// A piece (`data`) of a file being carried here a piece at a time (a
+    /// move's file, an archive to import), at `offset` of `url`, never past
+    /// the `declared` bytes it was said to be: where the next piece starts,
+    /// or why it can't be written. The first piece starts the file and each
+    /// next one follows on; the last one sent again (its answer lost on the
+    /// way back) is taken as written.
+    static func writePiece(_ data: Data, at offset: Int, to url: URL, declared: Int, name: String) -> Result<Int, MigrationFailure> {
+        guard offset >= 0, offset <= declared, data.count <= declared - offset else {
+            return .failure(MigrationFailure(message: "That piece runs past the \(declared) bytes \(name) was offered as."))
+        }
+        // What is here already ends with the same bytes: taken as written.
+        let size = fileSize(url)
+        if offset < size, offset + data.count == size, endsWith(url, data) { return .success(size) }
         if offset == 0 { _ = FileManager.default.createFile(atPath: url.path, contents: nil) }
-        guard Self.fileSize(url) == offset, let handle = try? FileHandle(forWritingTo: url) else {
-            return .error("That piece does not follow on from what was written (\(Self.fileSize(url)) bytes).")
+        guard fileSize(url) == offset, let handle = try? FileHandle(forWritingTo: url) else {
+            return .failure(MigrationFailure(message: "That piece does not follow on from what was written (\(fileSize(url)) bytes)."))
         }
         defer { try? handle.close() }
         do {
             _ = try handle.seekToEnd()
             try handle.write(contentsOf: data)
         } catch {
-            return .error("Could not write: \(error.localizedDescription)")
+            return .failure(MigrationFailure(message: "Could not write: \(error.localizedDescription)"))
         }
-        var e = Envelope(type: "migration")
-        e.offset = offset + data.count
-        return e
+        return .success(offset + data.count)
     }
 
     /// The end of a move: the conversation's files put where the agent here

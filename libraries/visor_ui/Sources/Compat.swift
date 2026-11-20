@@ -3,6 +3,7 @@
 // inset-grouped form style on the Mac.
 
 import AgentUI
+import Foundation
 import SwiftUI
 #if canImport(QuickLook)
 import QuickLook
@@ -17,6 +18,33 @@ enum Compat {
         true
         #else
         false
+        #endif
+    }
+
+    /// Whether an exported session is saved at once (the Mac's save
+    /// panel), rather than waiting for Save… or Share… (a phone's).
+    static var savesExportAtOnce: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// Leave to read a file the person picked where it lies: Apple's
+    /// sandbox's security scope, which Apple's Foundation alone has.
+    /// Whether it was given, for endFileAccess.
+    static func beginFileAccess(_ url: URL) -> Bool {
+        #if canImport(Darwin)
+        url.startAccessingSecurityScopedResource()
+        #else
+        false
+        #endif
+    }
+
+    static func endFileAccess(_ url: URL, _ began: Bool) {
+        #if canImport(Darwin)
+        if began { url.stopAccessingSecurityScopedResource() }
         #endif
     }
 }
@@ -124,6 +152,18 @@ extension View {
     ShareLink(item: text, preview: SharePreview("Visor connection log")) {
         Text("Share Connection Log")
     }
+}
+
+/// The file at `url` handed to the iPhone's share sheet (AirDrop, Mail,
+/// Files); elsewhere nothing, Save… being the way. (A portable SwiftUI's
+/// ShareLink shares a link's text, not its file.)
+@MainActor @ViewBuilder func shareFileLink(_ url: URL) -> some View {
+    #if os(iOS)
+    ShareLink(item: url) { Label("Share…", systemImage: "square.and.arrow.up") }
+        .accessibilityIdentifier("export-share")
+    #else
+    EmptyView()
+    #endif
 }
 
 extension View {
