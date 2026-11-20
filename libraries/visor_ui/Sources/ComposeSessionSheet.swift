@@ -59,6 +59,8 @@ struct ComposeSessionSheet: View {
     /// The file picker for a session archive to import is open.
     @State private var importing = false
     @State private var importJob: SessionImport?
+    /// The sheet has opened on Restore as it was asked to (startsOnRestore).
+    @State private var openedOnRestore = false
 
     private enum Conversation: Hashable { case new, resume, restore }
 
@@ -124,6 +126,7 @@ struct ComposeSessionSheet: View {
                 }
                 if restoring {
                     // Restoring: the session's own folder, agent and name.
+                    EmptyView()
                 } else if let host, starting.fromChoices {
                     Section("Start From") {
                         if host.startChoices.isEmpty {
@@ -284,11 +287,11 @@ struct ComposeSessionSheet: View {
             if cwd.isEmpty { useLatestProject() }
             useChoices()
             if !available.contains(agent), let first = AgentKind.allCases.first(where: available.contains) { agent = first }
-            if startsOnRestore || importsAtOnce, canRestore {
-                conversation = .restore
-                importing = importsAtOnce
-            }
+            openOnRestore()
         }
+        // The computer answers after the sheet opens (a launch's): Restore
+        // is offered, and opened, once it does.
+        .onChange(of: canRestore) { openOnRestore() }
         .onChange(of: serverID) {
             useLatestProject()
             choiceID = ""
@@ -426,6 +429,15 @@ struct ComposeSessionSheet: View {
         if here { return "On this computer now: remove it first to restore it." }
         let ago = UsageWords.ago(now - backup.created)
         return backup.imported ? "Imported from \(backup.from.isEmpty ? "a session archive" : backup.from), \(ago)" : "Backed up \(ago)"
+    }
+
+    /// Restore chosen, and the file picker opened, where the sheet was
+    /// asked to open so: once, as soon as the computer offers it.
+    private func openOnRestore() {
+        guard startsOnRestore || importsAtOnce, canRestore, !openedOnRestore else { return }
+        openedOnRestore = true
+        conversation = .restore
+        importing = importsAtOnce
     }
 
     /// The sessions of every backup the computer keeps, newest first.
