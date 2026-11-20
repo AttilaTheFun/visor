@@ -48,6 +48,11 @@ public struct SuperCompactJob: Codable, Equatable, Sendable {
     public var warnings: [String] = []
     /// HANDOFF.md, once written.
     public var handoff: String?
+    /// The session started from HANDOFF.md (the cut-over), once there is
+    /// one; and when the person discarded the handoff instead, which ends
+    /// its review: nothing is cut over from it then.
+    public var continuedAs: String?
+    public var discarded: Double?
     /// When it began, last changed and ended (seconds since 1970).
     public var started: Double
     public var updated: Double
@@ -78,13 +83,27 @@ public struct SuperCompactJob: Codable, Equatable, Sendable {
         return try? JSONDecoder().decode(SuperCompactJob.self, from: data)
     }
 
+    /// Done and waiting for the person's review: neither cut over nor
+    /// discarded.
+    public var awaitsReview: Bool { phase == .done && continuedAs == nil && discarded == nil }
+
     /// Written to its folder, whole or not at all.
     public func keep() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(self) else { return }
-        try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        Self.makePrivate(folderURL)
         try? data.write(to: folderURL.appendingPathComponent(Self.fileName, isDirectory: false), options: .atomic)
+    }
+
+    /// A folder made, or made again, its owner's alone (0700): a job's
+    /// folders hold the conversation's text, prefiltered, and the first
+    /// lines of its tools' results can carry tokens. Set after it is made
+    /// too, for one that was there already.
+    public static func makePrivate(_ folder: URL) {
+        let files = FileManager.default
+        try? files.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try? files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path)
     }
 
     /// As the status answers.

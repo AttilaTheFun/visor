@@ -125,8 +125,72 @@ public enum VisorFixture {
                 return session
             }
         }
+        // On the `super-compact-done` screen, the chat carried on already.
+        if screen == "super-compact-done" { sessions = continued(sessions) }
         return sessions
     }
+
+    /// The session the chat is carried on as by a Super Compact's cut-over.
+    public static let continuedSession = "fixture-continued"
+
+    /// The sessions once the chat has been carried on: it archived and
+    /// naming the session that carries it on, which names it in turn.
+    static func continued(_ sessions: [SessionInfo]) -> [SessionInfo] {
+        guard !sessions.contains(where: { $0.id == continuedSession }) else { return sessions }
+        var next = SessionInfo(id: continuedSession, agent: .claude, cwd: "/Users/visor/Library/Application Support/Visor/Sessions/Claude/" + continuedSession,
+                               title: "Offline sync (continued)", busy: false, model: "opus", created: now - 30)
+        next.preview = "I've read HANDOFF.md in full and will carry on from it."
+        next.updated = now - 20
+        next.continuedFrom = chatSession
+        return sessions.map { info in
+            guard info.id == chatSession else { return info }
+            var info = info
+            info.archived = true
+            info.continuedAs = continuedSession
+            return info
+        } + [next]
+    }
+
+    /// Super Compact's job in the fixture: running (the map at chunk 12 of
+    /// 40), done and waiting for its review (one warning), or cut over.
+    static func superCompact(_ phase: SuperCompactStatus.Phase, chunk: Int = 12, continued: Bool = false) -> SuperCompactStatus {
+        SuperCompactStatus(id: "fixture-job", session: chatSession, title: "Offline sync", phase: phase, chunk: phase == .map ? chunk : 40,
+                           chunks: 40, mergeStep: phase == .map ? 0 : 6, mergeSteps: 6,
+                           warnings: phase == .done ? ["1 of the ledger's 9 rules and decisions isn't in HANDOFF.md: “Keep the order rows were written in”"] : [],
+                           handoff: phase == .done ? "/Users/visor/Library/Application Support/Visor/super-compact/fixture-chat/fixture-job/HANDOFF.md" : nil,
+                           continuedAs: continued ? continuedSession : nil, started: now - 3600, updated: now - 60,
+                           finished: phase == .done ? now - 60 : nil)
+    }
+
+    /// The thread of the session the chat is carried on as.
+    static let continuedTranscript: [TranscriptEntry] = [
+        TranscriptEntry(id: "c1", role: .user, text: "You're continuing session \"Offline sync\" (fixture-chat). Read HANDOFF.md in this folder in full, "
+                            + "in parts if it's long, before anything else, and treat its rules and decisions as the person's own."),
+        TranscriptEntry(id: "c2", role: .assistant, text: "I've read HANDOFF.md in full and will carry on from it."),
+    ]
+
+    /// The fixture's HANDOFF.md.
+    static let handoff = """
+    # Handoff: Offline sync
+
+    ## Who's who
+    - **Offline sync** (fixture-chat): the weather app's sync, on Snapshot Mac.
+
+    ## Rules and decisions
+    - 2026-11-18: rows are written to the local store first, and marked *pending* until the server confirms them.
+    - 2026-11-19: "Run the sync tests before every push."
+
+    ## Current state
+    - The retry queue is in; the offline banner matches the person's layout.
+
+    ## Open work
+    1. Run `swift test --filter SyncTests` (waiting on the person's approval).
+    2. Release notes for 2.4.
+
+    ## Timeline
+    - **2026-11-18:** found rows dropped while offline; wrote them locally first.
+    - **2026-11-19:** the retry queue and the banner.
+    """
 
     static var catalogs: [AgentCatalog] {
         [AgentCatalog(agent: .claude, models: [

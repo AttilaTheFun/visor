@@ -4,7 +4,10 @@
 //
 //   POST   /api/sessions/<id>/super-compact   start one (or carry a failed one on)
 //   GET    /api/sessions/<id>/super-compact   how it stands
-//   DELETE /api/sessions/<id>/super-compact   cancel it
+//   DELETE /api/sessions/<id>/super-compact   cancel it (or discard its handoff)
+//   GET|PUT /api/sessions/<id>/super-compact/handoff   HANDOFF.md, to review and edit
+//   POST   /api/sessions/<id>/super-compact/cutover   the new session started from it
+//                                                     (VisorServer+SuperCompactCutover)
 //
 // Admin-only, as every REST route is (VisorServer+Access). One job runs
 // at a time per server, for its disk and CPU: a second is refused while
@@ -67,7 +70,10 @@ extension VisorServer {
             guard let file = SessionCatalog.conversationFiles(agent: .claude, id: conversation, cwd: record.info.cwd).first(where: { !$0.folder })
             else { return HTTPResponse(404, Envelope.error("The conversation \(conversation) of “\(record.info.title)” is not on this computer.").encoded()) }
             let id = UUID().uuidString.lowercased()
-            let folder = Self.superCompactRoot.appendingPathComponent(record.info.id, isDirectory: true).appendingPathComponent(id, isDirectory: true)
+            // Each folder down to the job's its owner's alone (0700).
+            let sessionFolder = Self.superCompactRoot.appendingPathComponent(record.info.id, isDirectory: true)
+            let folder = sessionFolder.appendingPathComponent(id, isDirectory: true)
+            for each in [Self.superCompactRoot, sessionFolder, folder] { SuperCompactJob.makePrivate(each) }
             job = SuperCompactJob(id: id, session: record.info.id, conversation: conversation, title: record.displayName, source: file.url.path,
                                   sourceBytes: Self.wholeLines(of: file.url), folder: folder.path,
                                   settings: settings.superCompact ?? SuperCompactSettings())
@@ -86,6 +92,14 @@ extension VisorServer {
 
     func cancelSuperCompact(_ record: SessionRecord) -> HTTPResponse {
         guard let running = superCompaction, running.job.session == record.info.id, !running.job.phase.ended else {
+            // A job done and waiting for its review: its handoff discarded.
+            if var waiting = latestSuperCompactJob(of: record.info.id), waiting.awaitsReview {
+                waiting.discarded = Date().timeIntervalSince1970
+                waiting.updated = waiting.discarded ?? waiting.updated
+                waiting.keep()
+                Self.log("super compact \(waiting.id) of \(record.info.id): its handoff discarded")
+                return .json(waiting.json)
+            }
             return HTTPResponse(404, Envelope.error("No super compact is running for “\(record.info.title)”.").encoded())
         }
         running.cancel()

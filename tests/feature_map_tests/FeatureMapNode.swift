@@ -8,6 +8,7 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
     case onboarding, signIn, sessions, search, archived, project, migrate, addComputer
     case newSession, restore, folder, chat, approval, question, signInCode, model, allModels, details, toolCalls
     case preview, subPage, settings, computer, export
+    case superCompact, superCompactRunning, superCompactReview, superCompactEdit, superCompactDone
 
     var testDescription: String { rawValue }
 
@@ -62,6 +63,14 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
         // The export's sheet, reading, read or refused.
         case .export:
             return sheet && (screen.has(id: "export-progress") || screen.has(id: "export-save") || screen.has(id: "export-error"))
+        // Super Compact's sheet: ready to start, running, HANDOFF.md for
+        // review (and edited), and carried on.
+        case .superCompact: return sheet && screen.has(id: "super-compact-start")
+        case .superCompactRunning: return sheet && screen.has(id: "super-compact-progress") && screen.has(id: "super-compact-cancel")
+        case .superCompactReview:
+            return sheet && screen.has(id: "super-compact-cutover") && screen.has(id: "super-compact-edit") && screen.has(id: "super-compact-discard")
+        case .superCompactEdit: return sheet && screen.has(id: "super-compact-editor") && screen.has(id: "super-compact-save")
+        case .superCompactDone: return sheet && screen.has(id: "super-compact-continued")
         }
     }
 
