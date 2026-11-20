@@ -203,6 +203,9 @@ public final class VisorServer {
     /// they were mid-turn when the app went away, and were named on the
     /// command line (or in VISOR_RESUME). Nudged once the listener is up.
     var pendingResumes: [String] = []
+    /// The Super Compact job running, if one is: one at a time per server
+    /// (VisorServer+SuperCompact).
+    var superCompaction: SuperCompaction?
 
     public init(port: UInt16 = Envelope.defaultPort) {
         self.port = port

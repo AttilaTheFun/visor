@@ -40,6 +40,8 @@ extension VisorServer {
     /// the next server to pick up; the rest ended.
     public func stepAside() async {
         Self.log("stepping aside: the agents under hosts are left running")
+        // A super compact stops where it stands, and carries on next time.
+        haltSuperCompaction()
         await leaveAgents()
     }
 
@@ -50,6 +52,7 @@ extension VisorServer {
     /// runner, and its wrapper dials back when the server is here again
     /// (Stop Agent, or ending the session, is how it is stopped).
     public func endAll() async {
+        haltSuperCompaction()
         for record in sessions where record.info.busy { record.interrupted = true }
         saveArchiveNow()
         // What the agents say as they go is not heard: the record of the

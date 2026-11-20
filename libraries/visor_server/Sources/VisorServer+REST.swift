@@ -188,6 +188,7 @@ extension VisorServer {
         case (_, 1...2, "admin-token"): restAdminToken(call)
         case (_, 1...2, "keys"): restSigningKeys(call)
         case ("DELETE", 2, "sessions"): restEndSession(call)
+        case (_, 3, "sessions") where parts[2] == "super-compact": restSuperCompact(call)
         case ("POST", 3, "sessions"): restSessionAction(call)
         default: HTTPResponse(404, "{\"error\":\"not found\"}")
         }

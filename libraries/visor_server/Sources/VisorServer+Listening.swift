@@ -45,6 +45,8 @@ extension VisorServer {
         keepModelsFresh()
         keepSessionTokensFresh()
         resumePending()
+        // A super compact the last server went away under carries on.
+        resumeSuperCompaction()
     }
 
     /// The socket file: `~/.visor/server.sock`, short enough for a socket

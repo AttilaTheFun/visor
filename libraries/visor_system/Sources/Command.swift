@@ -9,7 +9,8 @@ package enum Command {
     @concurrent
     package static func output(_ executable: String, _ arguments: [String], environment: [String: String]? = nil,
                        errors: Bool = false, input: Data? = nil) async -> (status: Int32, text: String)? {
-        guard let ran = await run(executable, arguments, environment: environment, errors: errors, input: input, watch: nil) else { return nil }
+        guard let ran = await run(executable, arguments, environment: environment, directory: nil, errors: errors, input: input, watch: nil)
+        else { return nil }
         return (ran.status, ran.text)
     }
 
@@ -21,17 +22,29 @@ package enum Command {
     @concurrent
     package static func output(_ executable: String, _ arguments: [String], errors: Bool = false, every interval: Duration,
                                stopping stop: @escaping @Sendable () -> Bool) async -> (status: Int32, text: String, stopped: Bool)? {
-        await run(executable, arguments, environment: nil, errors: errors, input: nil, watch: (interval, stop))
+        await run(executable, arguments, environment: nil, directory: nil, errors: errors, input: nil, watch: (interval, stop))
+    }
+
+    /// As output, in `directory` with `environment`, `input` written to
+    /// it, and `stop` asked every `interval` while it runs: a long call
+    /// that can be cancelled (Super Compact's headless `claude -p`, its
+    /// prompt on standard input).
+    @concurrent
+    package static func output(_ executable: String, _ arguments: [String], environment: [String: String], directory: URL, errors: Bool,
+                               input: Data, every interval: Duration,
+                               stopping stop: @escaping @Sendable () -> Bool) async -> (status: Int32, text: String, stopped: Bool)? {
+        await run(executable, arguments, environment: environment, directory: directory, errors: errors, input: input, watch: (interval, stop))
     }
 
     @concurrent
-    private static func run(_ executable: String, _ arguments: [String], environment: [String: String]?, errors: Bool, input: Data?,
+    private static func run(_ executable: String, _ arguments: [String], environment: [String: String]?, directory: URL?, errors: Bool, input: Data?,
                             watch: (interval: Duration, stop: @Sendable () -> Bool)?) async -> (status: Int32, text: String, stopped: Bool)? {
         let process = Process()
         let command = SystemPlatform.current.tools.command(executable, arguments)
         process.executableURL = URL(fileURLWithPath: command.executable)
         process.arguments = command.arguments
         if let environment { process.environment = environment }
+        if let directory { process.currentDirectoryURL = directory }
         let out = Pipe()
         process.standardOutput = out
         process.standardError = errors ? out : FileHandle.nullDevice
