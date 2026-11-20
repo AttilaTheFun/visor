@@ -103,8 +103,13 @@ for screen in $SCREENS; do
     # the fixture, with no windows restored from the run before, and a text
     # field's caret held lit rather than blinking (AppKit's blink periods,
     # in milliseconds): a picture caught it lit or not from run to run
-    # (visor#244).
-    open -n --stdout "$out/logs/$screen.log" --stderr "$out/logs/$screen.log" "$app" --args \
+    # (visor#244). Its driver off (ISO_DRIVER=none): the app is built with
+    # Isomer's (--config=drive, as the iPhone's is in the same build), but
+    # nothing here drives it. Left on, it dials a hub that isn't there once
+    # a second, and before each dial it reads the whole window through
+    # accessibility, every menu opened: 50% of the runner's CPU on the
+    # settings screen, 33% on commands (0.63's release run).
+    open -n --env ISO_DRIVER=none --stdout "$out/logs/$screen.log" --stderr "$out/logs/$screen.log" "$app" --args \
         -visor.fixture snapshot -visor.fixture.screen "$fixture" -visor.fixture.appearance light \
         -ApplePersistenceIgnoreState YES \
         -NSTextInsertionPointBlinkPeriodOn 100000000 -NSTextInsertionPointBlinkPeriodOff 0.001
@@ -132,6 +137,11 @@ for screen in $SCREENS; do
         status=1
     fi
     echo "$screen: ${cpu:-?}% CPU once settled"
+    # The driver said nothing: it was off, so the CPU above is the app's own.
+    if grep -q '^\[iso\] driver' "$out/logs/$screen.log" 2> /dev/null; then
+        echo "::error::$screen: Isomer's driver dialled out (ISO_DRIVER=none didn't reach the app)"
+        status=1
+    fi
     # In front again, should another window have come over it.
     open -a "$app"
     sleep 1
