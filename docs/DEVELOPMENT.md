@@ -989,7 +989,13 @@ container agents.
     only once it passed. The signed builds are attached to the draft
     (`Visor-<version>-ios.ipa`, `-macos.zip`, `-android.apk` and
     `builds.json`: tools/ci/attach_release.sh), which is what Applications
-    lists (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). The agent
+    lists (AttilaTheFun/applications' docs/RELEASE_ASSETS.md). Visor Disk
+    Utility (applications/visor_disk_utility) is built, signed, notarized
+    and released beside Visor.app as its own asset,
+    `Visor-Disk-Utility-<version>-macos.zip` (no disk image), with its own
+    builds.json line (tools/ci/sign_builds.sh); `alpha-launch` and
+    `release-launch` check it's signed and opens
+    (tools/ci/mac_app_opens.sh). The agent
     image of that version follows when tools/containers/ changed
     (`agent-image`, built with buildah on GitHub's arm64 Ubuntu, arm64
     alone). A branch's builds are experiments only (Logan, 12 Nov 2026):

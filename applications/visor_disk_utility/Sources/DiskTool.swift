@@ -38,9 +38,10 @@ enum DiskTool {
     }
 
     /// Runs the commands as an administrator once VolumeGuard has passed
-    /// them against a fresh survey; then the disks as they are after.
+    /// them against a fresh survey and volumes.json's record of Visor's own
+    /// volumes; then the disks as they are after.
     static func change(_ commands: [DiskCommand], route: PrivilegeRoute) throws -> DiskSurvey {
-        try VolumeGuard.check(commands, against: survey())
+        try VolumeGuard.check(commands, against: survey(), recorded: DiskVolumes.readStatus(at: statusURL))
         for invocation in route.invocations(of: commands.map(\.argv)) {
             do {
                 _ = try run(invocation)
@@ -57,11 +58,12 @@ enum DiskTool {
         return VolumesStatus.url(inDataDirectory: support.appendingPathComponent("Visor", isDirectory: true))
     }
 
-    /// Writes volumes.json for the survey; the file's path.
+    /// Writes volumes.json for the survey, keeping the UUIDs of Visor's own
+    /// volumes the last one recorded; the file's path.
     @discardableResult
     static func writeStatus(_ survey: DiskSurvey) throws -> URL {
         let url = statusURL
-        try VolumesStatus(survey: survey, updated: Date()).write(to: url)
+        try VolumesStatus(survey: survey, updated: Date(), previous: DiskVolumes.readStatus(at: url)).write(to: url)
         return url
     }
 

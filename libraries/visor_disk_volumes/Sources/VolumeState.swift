@@ -74,21 +74,34 @@ public struct VolumeState: Equatable, Sendable {
         return [try DiskCommand.addVolume(role, container: container, reserve: reserve, quota: quota)]
     }
 
-    /// The commands that erase it: Containers alone, deleted and made again
+    /// The commands that erase it: Containers alone, deleted (by its APFS
+    /// volume UUID) and made again
     /// in its container, case-sensitive, with the reserve and quota given
     /// (an erase in place would keep its case and lose both). Sessions
     /// throws: it's never erased.
     public func eraseCommands(reserve: Int64, quota: Int64) throws -> [DiskCommand] {
         guard role.isErasable else { throw DiskVolumesError.sessionsNeverErased("Erase \(role.volumeName)") }
         guard let volume, let container else { throw DiskVolumesError.blocked("There's no \(role.volumeName) volume to erase.") }
-        return [try DiskCommand.deleteVolume(role, device: volume.device),
+        return [try DiskCommand.deleteVolume(role, uuid: volume.uuid),
                 try DiskCommand.addVolume(role, container: container.reference, reserve: reserve, quota: quota)]
+    }
+
+    /// Its APFS volume UUID when it's Visor's own as found now: named for
+    /// its role, with no system role, mounted at its mount point (as Visor
+    /// Disk Utility makes it). volumes.json keeps it (VolumesStatus.ownVolumes):
+    /// a volume of the name mounted elsewhere is Visor's only if its UUID is
+    /// the one kept.
+    public var inPlaceUUID: String? {
+        guard let volume, isMountedInPlace, volume.name == role.volumeName, volume.roles.isEmpty,
+              DiskCommand.isVolumeUUID(volume.uuid) else { return nil }
+        return volume.uuid
     }
 
     /// Its line in volumes.json; nil when there's no volume.
     public var record: VolumeRecord? {
         guard let volume else { return nil }
-        return VolumeRecord(role: role, name: volume.name, path: info?.mountPoint, device: volume.device,
+        return VolumeRecord(role: role, name: volume.name, uuid: volume.uuid.isEmpty ? nil : volume.uuid,
+                            path: info?.mountPoint, device: volume.device,
                             format: info?.filesystemName ?? "", caseSensitive: info?.isCaseSensitive,
                             used: volume.used, quota: volume.quota, reserve: volume.reserve, available: available)
     }

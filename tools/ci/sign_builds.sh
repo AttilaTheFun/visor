@@ -20,11 +20,15 @@
 #   production for a release: ad hoc, else enterprise, else development
 #   profiles), with APPLE_DEVELOPMENT_P12, APPLE_DEVELOPMENT_PASSWORD (empty
 #   or unset: a .p12 with no password) and APPLE_PROFILES;
-# - .zip (Visor.app, its Linux programs sealed in): apple_sign.sh, Developer
-#   ID, notarized and stapled, with --dmg its disk image too, with
+# - .zip (Visor.app, its Linux programs sealed in; Visor Disk Utility.app):
+#   apple_sign.sh, Developer ID, notarized and stapled, with --dmg Visor's
+#   disk image too (Visor.app's alone), with
 #   APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_PASSWORD, APPLE_NOTARY_KEY,
 #   APPLE_NOTARY_KEY_ID, APPLE_NOTARY_ISSUER and APPLE_PROFILES (its
-#   Developer ID profile: Visor.app asks for push and the app group);
+#   Developer ID profile: Visor.app asks for push and the app group;
+#   Visor Disk Utility needs none). Each Mac app's assets go by its own
+#   name (mac_app_name): Visor-<version>-macos.zip, and
+#   Visor-Disk-Utility-<version>-macos.zip with its own builds.json line;
 # - .apk: android_sign.sh with Visor's release key (`visor`), its
 #   certificate pinned (--android-pin, the workflow's VISOR_ANDROID_PIN),
 #   with ANDROID_SIGNING_KEYSTORE and ANDROID_SIGNING_PASSWORD; the JDK
@@ -37,7 +41,8 @@
 # --variant is what the builds are: an Alpha (`--config=alpha`) or a
 # release's Production build (`--config=prod`, built from its tag: nothing
 # is stamped Production here). Each Apple package's BuildVariant must be
-# it, or nothing is signed. APPLE_PROFILES may be a gzipped .tar (GitHub
+# it, and its version the first's (every Info.plist stamped alike), or
+# nothing is signed. APPLE_PROFILES may be a gzipped .tar (GitHub
 # caps a secret at 48 KB), with APPLE_PROFILES_2 … _9 beside it.
 #
 # A platform's package whose keys aren't all set fails the job: Visor's
@@ -50,6 +55,19 @@ fail() { echo "sign_builds: $*" >&2; exit 1; }
 usage="usage: tools/ci/sign_builds.sh --variant Alpha|Production --out <dir> [--ipa-kind development|production] [--dmg] [--android-pin <sha256>] <package>…"
 APP=Visor
 ANDROID_KEY=visor
+
+# The name a Mac app's assets go by, by its bundle id: Visor's for
+# Visor.app (Visor-<version>-macos.zip, beside Visor's iPhone and Android
+# apps), and Visor Disk Utility's own for it, a separate app that
+# Applications offers on its own line (Visor-Disk-Utility-<version>-macos.zip).
+# Any other Mac app isn't one this repository releases.
+mac_app_name() {
+    case "$1" in
+        com.LoganShire.Visor) echo "$APP" ;;
+        com.LoganShire.Visor.DiskUtility) echo "Visor Disk Utility" ;;
+        *) return 1 ;;
+    esac
+}
 
 variant="" out="" ipa_kind="development" dmg="" android_pin=""
 packages=()
@@ -129,10 +147,24 @@ with_secrets() {
     )
 }
 # Each Apple package is the variant asked for (its Info.plist's
-# BuildVariant), before anything is signed.
+# BuildVariant), of one version, and each Mac app one released here,
+# before anything is signed. Visor.app's .zip (its disk image's, with
+# --dmg) apart from any other Mac app's.
+version="" visor_zips=() other_zips=()
 for package in ${ipas[@]+"${ipas[@]}"} ${zips[@]+"${zips[@]}"}; do
-    built="$(release_asset_describe "$package" | sed -n 5p)" || fail "$(basename "$package") was not read"
+    description="$(release_asset_describe "$package")" || fail "$(basename "$package") was not read"
+    built="$(sed -n 5p <<< "$description")"
     [ "$built" = "$variant" ] || fail "$(basename "$package") is a build of variant \"$built\", not $variant"
+    stamped="$(sed -n 3p <<< "$description")"
+    [ -n "$version" ] || version="$stamped"
+    [ "$stamped" = "$version" ] || fail "$(basename "$package") is version \"$stamped\", not $version: stamp every Info.plist alike"
+    case "$package" in
+        *.zip)
+            bundle="$(sed -n 1p <<< "$description")"
+            name="$(mac_app_name "$bundle")" || fail "$(basename "$package") is $bundle, not a Mac app released here"
+            if [ "$name" = "$APP" ]; then visor_zips+=("$package"); else other_zips+=("$package"); fi
+            ;;
+    esac
 done
 PROFILES=(APPLE_PROFILES APPLE_PROFILES_2 APPLE_PROFILES_3 APPLE_PROFILES_4 APPLE_PROFILES_5 APPLE_PROFILES_6
           APPLE_PROFILES_7 APPLE_PROFILES_8 APPLE_PROFILES_9)
@@ -154,14 +186,26 @@ if [ ${#zips[@]} -gt 0 ]; then
     if name="$(missing APPLE_DEVELOPER_ID_P12 APPLE_NOTARY_KEY APPLE_NOTARY_KEY_ID APPLE_NOTARY_ISSUER APPLE_PROFILES)"; then
         fail "the Mac app can't be signed: $name isn't set in the job's environment"
     fi
-    with_secrets APPLE_DEVELOPER_ID_P12 APPLE_DEVELOPER_ID_PASSWORD APPLE_NOTARY_KEY \
-        APPLE_NOTARY_KEY_ID APPLE_NOTARY_ISSUER "${PROFILES[@]}" -- \
-        "$CI/apple_sign.sh" --key-from-env ${dmg:+--dmg} --out "$work/signed-mac" "${zips[@]}"
-    for package in "${zips[@]}"; do
+    # Visor.app with its disk image (--dmg), any other Mac app without one.
+    if [ ${#visor_zips[@]} -gt 0 ]; then
+        with_secrets APPLE_DEVELOPER_ID_P12 APPLE_DEVELOPER_ID_PASSWORD APPLE_NOTARY_KEY \
+            APPLE_NOTARY_KEY_ID APPLE_NOTARY_ISSUER "${PROFILES[@]}" -- \
+            "$CI/apple_sign.sh" --key-from-env ${dmg:+--dmg} --out "$work/signed-mac" "${visor_zips[@]}"
+    fi
+    if [ ${#other_zips[@]} -gt 0 ]; then
+        with_secrets APPLE_DEVELOPER_ID_P12 APPLE_DEVELOPER_ID_PASSWORD APPLE_NOTARY_KEY \
+            APPLE_NOTARY_KEY_ID APPLE_NOTARY_ISSUER "${PROFILES[@]}" -- \
+            "$CI/apple_sign.sh" --key-from-env --out "$work/signed-mac" "${other_zips[@]}"
+    fi
+    for package in ${visor_zips[@]+"${visor_zips[@]}"}; do
         signed="$work/signed-mac/$(basename "$package")"
         release_asset_file "$signed" "$out" "$APP"
         # The disk image, described by its app's .zip.
         [ -z "$dmg" ] || release_asset_file "${signed%.zip}.dmg" "$out" "$APP" "$signed"
+    done
+    for package in ${other_zips[@]+"${other_zips[@]}"}; do
+        signed="$work/signed-mac/$(basename "$package")"
+        release_asset_file "$signed" "$out" "$(mac_app_name "$(release_asset_describe "$signed" | sed -n 1p)")"
     done
 fi
 
