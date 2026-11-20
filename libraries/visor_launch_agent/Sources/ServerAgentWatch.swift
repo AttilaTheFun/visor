@@ -139,7 +139,7 @@ public struct ServerAgentWatch: Sendable {
 
     /// The previous plist put back, if there is one.
     private var putPlistBack: String {
-        previousPlist.map { "[ -f \(Self.quoted($0)) ] && cp \(Self.quoted($0)) \(Self.quoted(plist))" } ?? ":"
+        previousPlist.map { "[ -f \(Self.quoted($0)) ] && mv -f \(Self.quoted($0)) \(Self.quoted(plist))" } ?? ":"
     }
 
     /// The new bundle in the running one's place, that one kept aside; if
@@ -172,6 +172,7 @@ public struct ServerAgentWatch: Sendable {
         \(stop)
         if [ -d \(Self.quoted(backup)) ]; then
           rm -rf \(Self.quoted(destination)) && mv \(Self.quoted(backup)) \(Self.quoted(destination))
+          rmdir \(Self.quoted((backup as NSString).deletingLastPathComponent)) 2>/dev/null
           printf '%s\\n' "\(words)" > \(Self.quoted(note))
           echo "$(date): rolled back to \(oldVersion): $why"
         fi

@@ -121,6 +121,8 @@ import Testing
         #expect(scene.read(scene.destination + "/name") == "old", "the previous build is back")
         #expect(scene.read(scene.plist) == "old plist", "and its plist")
         #expect(!FileManager.default.fileExists(atPath: scene.backup))
+        #expect(!FileManager.default.fileExists(atPath: scene.root + "/Previous"), "nothing left behind")
+        #expect(!FileManager.default.fileExists(atPath: scene.previousPlist))
         #expect(scene.read(scene.note) == "Visor Server 0.62.5 did not stay up after the update (it quit or crashed), so 0.62.4 was put back.\n")
         #expect(scene.running, "and the job was started again")
     }
