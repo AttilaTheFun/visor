@@ -25,8 +25,15 @@ variant_infoplist(
 # nothing.
 update_infoplist(name = "update_plist")
 
+# And the app's own keychain access group (`<team>.com.LoganShire.Visor`,
+# the data-protection keychain's: Sources/MacSecrets.swift), which the
+# Developer ID profile grants too (its `<team>.*`). Its prefix is the
+# builder's team here (a placeholder in CI: the ad hoc build has no profile
+# to take it from), which CI's signing makes the profile's, with the
+# application identifier beside it.
 update_entitlements(
     name = "app_ci_entitlements",
+    team_prefix = True,
     template = "app.ci.entitlements",
 )
 
@@ -93,8 +100,10 @@ macos_application(
     # The hardened runtime's own (the microphone); and push in a build CI
     # publishes, which Shireworks' signing signs again with the Developer
     # ID profile, taking push's value from it, but only for an app that
-    # asks for push; and the app group, which the profile grants. A build to run here asks for none: a restricted
-    # entitlement with no profile to allow it stops the app at launch.
+    # asks for push; and the app group and the app's keychain access group,
+    # which the profile grants. A build to run here asks for none: a restricted
+    # entitlement with no profile to allow it stops the app at launch (its
+    # app key stays in the login keychain: Sources/MacSecrets.swift).
     entitlements = select({
         ":ci_signed": ":app_ci_entitlements",
         "//conditions:default": "app.entitlements",

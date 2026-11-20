@@ -1,7 +1,8 @@
 // The key Visor.app shows at its own server's socket file
 // (VisorServer.appKey, `X-Visor-App-Key`): kept with the server's keychain
-// items (MacPlaces' server service), which are Visor's processes' alone, so
-// another process of this user's, an agent's, can't show it. The server
+// items (MacPlaces' server service), in the data-protection keychain under
+// Visor.app's own access group (MacSecrets), so another process of this
+// user's, an agent's, is told there's none and can't show it. The server
 // makes it the first time it is made, in the app's process or the server
 // agent's; the app reads it for each call it makes there (VisorSocketFile's
 // services), once there is one.
@@ -12,7 +13,7 @@ import VisorServer
 
 enum MacAppKey {
     static let header = "X-Visor-App-Key"
-    private static let name = "app-key"
+    static let name = "app-key"
     /// The key once read, so the keychain is asked once.
     private static let held = Mutex<String?>(nil)
 
