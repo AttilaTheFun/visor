@@ -596,10 +596,12 @@ the separate `com.LoganShire.Visor.agent-proxy` job is stopped and removed
   the default turned off again, the app removes the agent the same way at
   its next launch. A copy outside /Applications never writes or removes the
   job; it uses an agent that serves.
-- **Quitting the app** (`killall Visor`, Quit Visor in the agent's menu)
-  leaves the server serving. `/api/quit` stops the agent (an exit of 0,
-  which KeepAlive leaves stopped until the app's next launch or the next
-  login).
+- **Quitting the app** (Quit Visor in the agent's menu, or killing it)
+  leaves the server serving. `killall Visor` reaches the agent too (its
+  process is Visor's): sent TERM by anyone, it steps aside (the hosts left
+  running) and exits 1, and KeepAlive starts it again at once. `/api/quit`
+  stops it (an exit of 0, which KeepAlive leaves stopped until the app's
+  next launch or the next login).
 - **Updates and rollback** (ServerAgentRestart, ServerAgentWatch):
   `POST /api/restart {path}` on the agent checks the bundle (the same
   bundle id), rewrites the plist to the new executable and version (the old

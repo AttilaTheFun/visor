@@ -11,7 +11,8 @@
 //   ~/Library/LaunchAgents, its log `~/Library/Logs/Visor-server.log`.
 // - KeepAlive after a failure only: an exit of 0 is the server asked to
 //   stop (`/api/quit`), or making way for its update, which its watcher
-//   starts (ServerAgentRestart).
+//   starts (ServerAgentRestart). TERM from anyone but launchd's own ending
+//   of it is an exit of 1: started again.
 // - AbandonProcessGroup: the agents' hosts and the update's watcher are
 //   its children, and outlive it.
 

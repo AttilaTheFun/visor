@@ -6,9 +6,12 @@
 // (ServerAgentRestart). Its lines go to the system log, as the app's do, and
 // to standard error, which launchd points at ~/Library/Logs/Visor-server.log.
 //
-// Stopped by launchd (TERM: the app handing the server back, a restart of
-// the job, logging out), it steps aside as an in-place relaunch does: the
-// agents under hosts are left running, for the next server to pick up.
+// Sent TERM (launchd: the app handing the server back, a restart of the
+// job, logging out; or anyone: `killall Visor` reaches it too, its process
+// being Visor's), it steps aside as an in-place relaunch does: the agents
+// under hosts are left running, for the next server to pick up. It then
+// exits 1, so launchd's KeepAlive starts it again unless launchd itself
+// was ending it: only `/api/quit` (an exit of 0) leaves it stopped.
 
 import Darwin
 import Foundation
@@ -44,9 +47,9 @@ enum MacServerAgent {
         let server = MacServer.make()
         POSIXStopSignals.onStop {
             Task { @MainActor in
-                log("the server agent was asked to stop")
+                log("the server agent was sent TERM: it steps aside, for launchd to start it again unless launchd is ending it")
                 await server.stepAside()
-                exit(0)
+                exit(1)
             }
         }
         server.start()
