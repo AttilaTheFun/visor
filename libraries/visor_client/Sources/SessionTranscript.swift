@@ -19,7 +19,10 @@ import VisorServices
 ///
 /// Observed (Observation) through one counter, `tick`, advanced when views
 /// are told: every property a view reads touches it, and the state itself
-/// is kept untracked, so a frame's changes reach a view once.
+/// is kept untracked, so a frame's changes reach a view once. The reply
+/// being written (`responding`, SessionTranscript+Responding) has a
+/// counter and a faster frame of its own, `respondingTick` and
+/// `respondingFrame`: a second is too slow for words as they come.
 @MainActor
 @Observable
 public final class SessionTranscript {
@@ -99,12 +102,36 @@ public final class SessionTranscript {
     /// its copies — the one sent from here, the computer's copy, the
     /// agent's own record of it — so the view sees one row that changes,
     /// not one removed and another inserted.
-    @ObservationIgnored private var displayIDs: [String: String] = [:]
+    @ObservationIgnored var displayIDs: [String: String] = [:]
     public func displayID(of entry: TranscriptEntry) -> String { displayIDs[entry.id] ?? entry.id }
 
     /// The ids of the rows the thread shows, in order: the record's under
-    /// their display ids, then what was just sent and is shown.
-    var shownIDs: [String] { _entries.map(displayID(of:)) + _sending.filter(\.shown).map(\.id) }
+    /// their display ids, a reply of a turn that has ended and is not on
+    /// the record yet, what was just sent and is shown, then the reply
+    /// being written.
+    var shownIDs: [String] {
+        _entries.map(displayID(of:)) + respondingRows(ofEndedTurn: true).map(\.id) + _sending.filter(\.shown).map(\.id)
+            + respondingRows(ofEndedTurn: false).map(\.id)
+    }
+
+    /// Advanced when views are told of the replies being written: at most
+    /// once a `respondingFrame` (SessionTranscript+Responding).
+    var respondingTick = 0
+    /// How often, at most, views are told of the words of a reply being
+    /// written (nanoseconds): four times a second, a pace a reader follows
+    /// and a long reply's markdown is drawn again at without cost.
+    public static var respondingFrame: UInt64 = 250_000_000
+    /// The replies being written, by message id, in the order they began.
+    @ObservationIgnored var _responding: [Responding] = []
+    /// A responding frame is running, something changed in it, and what
+    /// ends it.
+    @ObservationIgnored var respondingFraming = false
+    @ObservationIgnored var respondingDirty = false
+    @ObservationIgnored var respondingFrameEnds: Task<Void, Never>?
+    /// How many times views have been told of the replies, for tests.
+    @ObservationIgnored var respondingAnnounced = 0
+    /// Words were the last thing the turn did: no tool or thinking since.
+    @ObservationIgnored var writingNow = false
 
     /// A rebuilt set of rows: a row that is new here and has the same role
     /// and words as one that went takes that one's display id.
@@ -126,8 +153,6 @@ public final class SessionTranscript {
         entry.role.rawValue + "|" + AgentServerConnection.trimmed(entry.text)
     }
 
-    /// The record's rows, as synced: all the thread shows. What streams
-    /// is not kept or drawn — the sync answers as soon as the record moves.
     /// The session as the computer's list has it, told with the rest of
     /// the transcript a frame at a time: the chat reads it here, not in
     /// the list, which changes whenever any session on the computer does
@@ -154,7 +179,7 @@ public final class SessionTranscript {
         }
     }
 
-    @ObservationIgnored private var _entries: [TranscriptEntry] = []
+    @ObservationIgnored var _entries: [TranscriptEntry] = []
     public var entries: [TranscriptEntry] {
         get { _ = tick; return _entries }
         set { _entries = newValue; changed() }
@@ -164,7 +189,7 @@ public final class SessionTranscript {
         get { _ = tick; return _activity }
         set { _activity = newValue; changed() }
     }
-    @ObservationIgnored private var _busy: Bool = false
+    @ObservationIgnored var _busy: Bool = false
     public var busy: Bool {
         get { _ = tick; return _busy }
         set { _busy = newValue; changed() }
@@ -434,6 +459,7 @@ public final class SessionTranscript {
         loaded = true
         keep?(write, SyncState(revision: revision, generation: generation))
         settleSending()
+        settleResponding()
         if first { flush() } else if wasCatchingUp && !catchingUp { endCatchUp() }
     }
 
@@ -443,6 +469,8 @@ public final class SessionTranscript {
     func release() {
         entries = []
         displayIDs = [:]
+        // Told again on subscribing (`ephemeral`), as the server has them.
+        clearResponding()
         loaded = false
         // Asked for whole again, unless the cache says where it stood.
         revision = 0
@@ -589,7 +617,7 @@ public final class SessionTranscript {
             // are taken here only before the first sync has answered.
             if !loaded { sync(envelope) }
             activity = envelope.activity
-            busy = envelope.busy ?? false
+            takeBusy(envelope.busy ?? false)
             error = envelope.error
             take(notice: envelope.notice)
         case "ephemeral":
@@ -597,23 +625,30 @@ public final class SessionTranscript {
             turnStatus = envelope.status ?? []
             activity = envelope.activity
             latestActivity = envelope.activity
-            busy = envelope.busy ?? false
+            takeBusy(envelope.busy ?? false)
+            // The replies being written, as the server has them now.
+            takeStreams(envelope.streams ?? [])
             pendingApproval = envelope.approval
             signIn = envelope.signIn
             take(notice: envelope.notice)
         case "status":
             turnStatus = envelope.status ?? []
-        case "delta", "streamEnd":
-            // A reply being written: not drawn. Its row comes with the sync.
-            break
+            // Thinking or a tool: the words have stopped for now.
+            writingNow = false
+        case "delta":
+            // More of a reply being written, drawn until its row is synced.
+            takeDelta(id: envelope.id ?? "stream", text: envelope.text ?? "")
+        case "streamEnd":
+            endStream(id: envelope.id)
         case "entry":
             // Rows come from the record, over HTTP; the socket's copy is
             // not taken, so there is one source of them.
             break
         case "activity":
             setActivity(envelope.activity)
+            writingNow = false
         case "busy":
-            busy = envelope.busy ?? false
+            takeBusy(envelope.busy ?? false)
             if !busy { pendingApproval = nil }
         case "failure":
             error = envelope.message

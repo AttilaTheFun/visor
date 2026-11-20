@@ -397,7 +397,8 @@ in its store.
 | `pong` | | The answer to `ping`, to that client only. |
 | `sessions` | `sessions` | The session list changed (a start, an end, busy flipped). |
 | `transcript` | `session`, `entries`, `streaming`, `activity`, `busy`, `error` | The whole state, on subscribe. |
-| `delta` | `session`, `id`, `text` | More of the reply being written; `id` is the message's, which its first row on the record also has. |
+| `delta` | `session`, `id`, `text` | More of the reply being written; `id` is the message's, which its first row on the record also has. Appended to what the client holds for `id` (The reply being written, below). |
+| `ephemeral` | `session`, `streams`, `status`, `activity`, `busy`, `approval`, `queued`, `notice`, `signIn` | Everything about the session that is not the record, whole: on subscribing, after a notice, and as `GET /sessions/<id>/state` answers. `streams`: the replies being written that the record doesn't carry yet, each `id` (the message's) and `text` (its words so far). |
 | `entry` | `session`, `entry` | A finished entry, or a replacement for the entry with the same id (an assistant message grows as its tool calls arrive). An assistant entry clears `streaming`. |
 | `activity` | `session`, `activity` | What the agent is doing ("Bash: ls"), or null. |
 | `busy` | `session`, `busy` | The turn started / ended. |
@@ -413,6 +414,44 @@ tool's output; the transcript view hides them, the assistant's
 `activities` row is what the user sees.
 
 `AgentAccount` (an agent's, per computer): `plan` in words ("Subscription", "ChatGPT Pro", "API key"), `subscription` (paid for by a plan, so a session's `cost` is what it would have cost), `limits`, `updated` (when an agent last said, seconds since 1970). Each limit: `name` ("5-hour", "Weekly", "Key limit", "Credits"), `used` (the share, 0–1), `resets` (seconds since 1970), and for an amount `left`, `total`, `unit` (`dollars` or `credits`). The server keeps the last of each agent's in `accounts.json` beside the sessions.
+
+### The reply being written
+
+A session's thread is its record (the rows, synced) joined with its
+ephemeral state, and the reply being written ("responding") is part of
+that state. The server streams it as it comes (`delta`), and gives what
+it holds unrecorded whole in `ephemeral.streams`. Visor's client
+(libraries/visor_client, SessionTranscript+Responding) draws it so:
+
+- **What it holds:** per message id, the words: a snapshot
+  (`ephemeral.streams`, on subscribing or polled from `GET /state`)
+  replaces the words of each it names; a `delta` appends to its id's, or
+  begins one. A message held and missing from a snapshot was recorded
+  there, or lost with a restart: it is kept, finished, as below.
+- **The join, with the client's own synced rows:** a reply `M` is drawn
+  while those rows have no assistant row `M` or `M#k` (a segment), and a
+  `delta` for a message they have is dropped. It is drawn as the agent's
+  row under the id `M`, which the record's row (whose id is `M`) is shown
+  under too: the row landing is one row changing in place, never a second
+  copy and never a gap.
+- **When it goes:** only once the rows have it. Not when the turn ends
+  (`busy` false) or the message does (`streamEnd`): the row comes with the
+  sync a moment later, and until then the words stay. One whose row never
+  comes (a turn cut short, a server restarted) goes once the next turn
+  has begun (`busy` true) and a sync has answered without it.
+- **Order:** the record's rows; a reply of a turn that has ended (it
+  answers what came before); the user's rows not on the record yet (sent
+  to an idle agent, or `delivered`); the reply of the turn running. The
+  queue is the composer's.
+- **Pace:** the server sends a `delta` per chunk (30–60 a second from
+  Claude Code); the client redraws the reply at most four times a second,
+  apart from the thread's own frame (once a second). Its markdown is drawn
+  as the record's is, each paragraph's styles cached by its words, so only
+  the paragraph being written is parsed again. While words are the last
+  thing the agent did, the status line says "Writing…".
+
+Driven sessions (a runner's agent, over agent_protocol) have no streamed
+words yet: their thread moves with the record alone.
 
 ## Agents
 

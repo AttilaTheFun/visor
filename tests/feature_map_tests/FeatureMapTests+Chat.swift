@@ -108,6 +108,29 @@ extension FeatureMapTests {
             FeatureMapNode.chat.expectShown(on: try app.screen { FeatureMapNode.chat.isShown(on: $0) })
         }
 
+        /// A reply being written (the `responding` fixture, VisorFixture's
+        /// `responding`): its words so far as the chat opens, more as they
+        /// stream, then the record's row in its place, once: the stream
+        /// gone, no second copy.
+        @Test("Session chat: a reply drawn as it is written, then its row in its place")
+        func responding() throws {
+            let start = "Running the sync tests now."
+            let final = "Running the sync tests now. All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting."
+            let app = try chat("responding")
+            defer { app.quit() }
+            // The words so far, from the snapshot.
+            let opened = try app.screen(within: 10) { $0.texts.contains { $0.hasPrefix(start) } }
+            #expect(opened.texts.contains { $0.hasPrefix(start) && $0 != final }, "the partial reply: \(opened.summary)")
+            // More of it, as it streams, before its row.
+            let growing = try app.screen(within: 15) { $0.texts.contains { $0.hasPrefix(start) && $0.contains("pass,") && $0 != final } }
+            #expect(growing.texts.contains { $0.hasPrefix(start) && $0.contains("pass,") && $0 != final }, "the reply growing: \(growing.summary)")
+            // The record's row, in its place: the reply once, whole.
+            let landed = try app.screen(within: 30) { $0.texts.contains(final) }
+            #expect(landed.texts.contains(final), "the reply's row: \(landed.summary)")
+            #expect(landed.texts.filter { $0.hasPrefix(start) } == [final], "one row, the record's: \(landed.summary)")
+            FeatureMapNode.chat.expectShown(on: landed)
+        }
+
         @Test("Session chat → Side Questions: type /btw, tap “Send”; back")
         func sideQuestions() throws {
             let app = try chat()
