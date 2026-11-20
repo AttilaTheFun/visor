@@ -9,12 +9,17 @@
 //                                 request's bearer presents (403 without
 //                                 it), shown this once; the old one stops
 //                                 working now
+//   POST /api/admin-token/reset   {token}: a new one without the current
+//                                 one, shown this once: Visor.app's menu
+//                                 alone (its app key on the socket file,
+//                                 VisorServer.isOwnApp; 403 otherwise)
 //
 // Each is an admin route, as every REST route is (authorized): never an
 // agent's token. Rotating takes the current token whatever else lets the
 // request in (the password, the trusted socket): nothing over REST resets
-// it without it. The menu bar app's Reset Admin Token… does
-// (resetAdminToken), in its own process. Rotating or resetting it also
+// it without it but the Mac's menu, Reset Admin Token…, which shows the
+// app key the keychain keeps for Visor's processes alone, whether the
+// server runs in the app or as its agent (resetAdminToken). Rotating or resetting it also
 // ends the `hello` tokens handed out to a request it let in (they never
 // expire otherwise): the old token's holder keeps no way in through them.
 
@@ -31,6 +36,12 @@ extension VisorServer {
             return answer(adminToken.create(), status: 201, what: "made")
         case ("POST", 2) where call.parts[1] == "rotate":
             return answer(adminToken.rotate(presenting: call.request.authorization), status: 200, what: "rotated")
+        case ("POST", 2) where call.parts[1] == "reset":
+            guard isOwnApp(call.request) else {
+                return HTTPResponse(403, Envelope.error("The admin token is reset from Visor's menu on this Mac, or rotated with the current one.").encoded())
+            }
+            guard let token = resetAdminToken() else { return HTTPResponse(409, Envelope.error("The admin token is given at launch here").encoded()) }
+            return HTTPResponse(200, JSONValue.object(["token": .string(token)]).encoded())
         default:
             return HTTPResponse(404, "{\"error\":\"not found\"}")
         }

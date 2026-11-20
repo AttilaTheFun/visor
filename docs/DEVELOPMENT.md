@@ -626,16 +626,37 @@ the separate `com.LoganShire.Visor.agent-proxy` job is stopped and removed
   the ports (7433, 7434), the socket file, `tailscale serve`'s target
   (127.0.0.1:7433) and the admin token are the same, so they reconnect to
   the same address and identity, with no re-pairing.
-- **In 0a the app stays half a client.** Its window reaches the agent at
-  loopback with the password, as it reached its own server. Its menu shows
-  the agent, Restart Server (over the socket) and Quit Visor; Settings
-  points to the computer's settings in the window; updates go through the
-  socket. What the app still does to a server in its own process (the
-  menu's codes, password, sessions, admin token and keys; SettingsPane;
-  the rollback note) is the app-in-client work of 0b. Agents started by the
-  agent are launchd's grandchildren, not the app's: macOS's privacy grants
-  (Files and Folders) follow the app's signature, to be checked on a signed
-  build.
+- **The app is the server's client alone** (0b). Whichever process
+  runs the server, the app reaches it the one way, at its socket file,
+  as an SSH client does: no password, through the client stack that
+  reaches every other computer (VisorAgentServer, with the host's HTTP
+  and socket services wrapped by libraries/visor_socket_file to send
+  `http+unix://` and `ws+unix://` there). The window holds this Mac at
+  `http+unix://<~/.visor/server.sock>` (a computer held from before at
+  loopback with the password is moved there); the menu, Settings, the
+  welcome, the token alerts, updates (`/api/restart {path}`) and the
+  rollback note (`updateNotice`, reported to Applications once) use
+  `/api/settings`, `/api/sessions`, `/api/session-table`,
+  `/api/admin-token…`, `/api/keys/rotate`, `/api/push/…`, `/api/restart`
+  and `/api/quit`. Nothing in the app touches a server object: the server
+  in the app's process is made and started by LocalServer and asked like
+  any other. The Mac's server serves its socket file from its start
+  (password or none, `sshEnabled` or not: `VisorServer.appKey`), and
+  Visor.app shows its app key there (`X-Visor-App-Key`, kept with the
+  server's keychain items, which only Visor's own processes read): the app
+  is let in with `sshEnabled` off, and the menu's Reset Admin Token… and
+  Emergency Key Rotation… are taken from it alone, as they were only the
+  menu's in the app's process. Quit Visor: in the app's process,
+  `/api/quit` (the agents ended, then the app, AppLifecycle; a quit from
+  outside waits for it the same way); with the agent, the app alone. The
+  agent's menu also has Restart Server, Stop Server (`/api/quit`, which
+  launchd leaves stopped) and, while it doesn't answer, Start Server
+  (`launchctl kickstart`). Notifications are the client's, as for any
+  other computer: the app's connection to its own server registers its
+  push token there and notifies itself when the server sends none. Agents
+  started by the agent are launchd's grandchildren, not the app's: macOS's
+  privacy grants (Files and Folders) follow the app's signature, to be
+  checked on a signed build.
 
 **Agents apart from the server.** Unless turned off — Visor Server's
 "Run agents apart from the server" (`ServerSettings.detachAgents`, on by

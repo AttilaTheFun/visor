@@ -486,8 +486,9 @@ public final class AgentServerConnection: Identifiable {
     /// tailnet's) before any other, the rest only when SSH does not
     /// answer. A device without SSH (a browser) skips SSH paths.
     func pathsToTry() -> [String] {
-        // Standing alone: the address it was added at, and no other.
-        if isolated { return [record.address] }
+        // Standing alone: the address it was added at, and no other. At its
+        // socket file (this Mac's own server): there alone.
+        if isolated || record.isSocketFile { return [record.address] }
         var candidates: [String] = []
         let canSSH = VisorHost.ssh != nil
         let own = record.allPaths.filter { canSSH || SSHAddress($0) == nil }
@@ -613,9 +614,9 @@ public final class AgentServerConnection: Identifiable {
             changed = true
             if !identity.keepMessages { forgetKeptMessages() }
         }
-        // Standing alone: the paths learned before go too, and the
-        // server's own are never taken.
-        if isolated {
+        // Standing alone, or at its socket file: the paths learned before
+        // go too, and the server's own are never taken.
+        if isolated || record.isSocketFile {
             if !record.paths.isEmpty { record.paths = []; changed = true }
             if changed { onRecordChange?() }
             return
@@ -661,7 +662,7 @@ public final class AgentServerConnection: Identifiable {
     /// being the way in where the device has it): this device's key is
     /// handed to the server, and SSH tried again — once.
     private func enrollSSHIfWanted() {
-        guard !isolated, !sshPaths.isEmpty, let path, SSHAddress(path) == nil, !sshEnrolled,
+        guard !isolated, !record.isSocketFile, !sshPaths.isEmpty, let path, SSHAddress(path) == nil, !sshEnrolled,
               let ssh = VisorHost.ssh else { return }
         sshEnrolled = true
         let server = server

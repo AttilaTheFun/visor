@@ -28,10 +28,21 @@ serves the same on a socket file only its user can open,
 `~/.visor/server.sock`: a client that comes through the computer's own
 SSH as that user reaches it there (running `nc -U ~/.visor/server.sock`
 per connection) and is already signed in.
+Visor.app's own server (the Mac's, in the app's process or as its server
+agent) serves the socket file always, from its start, whether or not it
+has a password yet and whatever `sshEnabled` says: Visor.app is its
+client there, its window, menu and Settings alike (a client's address
+`http+unix://<the socket file's path, percent-encoded>`, its channel
+`ws+unix://…/`). The app shows its app key, `X-Visor-App-Key`, on every
+request and the channel's upgrade: a key kept with the server's keychain
+items, which macOS gives Visor's own processes alone. With `sshEnabled`
+off, a connection there without the key is taken as one on the port
+(the password, or a token, wanted).
 
 A request is answered when `Authorization: Bearer` is the password from
 the menu bar app, a token from `hello`, or the admin token (below) — or
-when it came on the socket file, where no bearer is needed — or when the
+when it came on the socket file, where no bearer is needed (while
+`sshEnabled`, or with the app key) — or when the
 server is set to
 ask nothing (`authentication: none` in its settings; `visor-server auth
 none`), the path being the proof: a LAN or VPN of one's own, SSH alone,
@@ -109,7 +120,9 @@ it only where its owner's own shell sets it.
   session's token file (mode 600 is the same user's); the server's
   environment through /proc on Linux; and they can reach the trusted
   socket file, which is the full admin REST side: `POST /api/admin-token`
-  while there is none, key rotation, everything. The admin token protects
+  while there is none, key rotation, everything (but the reset of the
+  admin token and an emergency rotation, which want Visor.app's app key
+  from the keychain on a Mac). The admin token protects
   against containers, the network and other devices, not against a native
   agent of the same user; running the server as a user of its own is
   optional hardening.
@@ -171,8 +184,12 @@ under `/api`.
 | `GET /admin-token` | | `exists`: whether there is an admin token; `holding`: `kept` (with the secrets: the menu bar app's) or `givenAtLaunch` (the command-line server's, in memory). Never the token. |
 | `POST /admin-token` | | 201 `token`: the first admin token, shown this once; only where it is `kept` and there is none (409 otherwise, saying why). |
 | `POST /admin-token/rotate` | (the current admin token as the bearer) | `token`: its replacement, shown this once; the old one stops working at once. 403 when the bearer isn't the current one (the password and the socket file don't rotate it); 409 where it is given at launch. |
+| `POST /admin-token/reset` | | `token`: a new admin token without the current one, shown this once; the old one stops working at once. Visor.app's menu's alone (Reset Admin Token…): only on the socket file with the app key (Who gets in), 403 otherwise; 409 where it is given at launch. |
 | `GET /keys` | | `current`: the signing key's id (`kid`) agents' tokens are signed with now; `kids`: the keys that verify every token they signed (the current one, and those rotated out less than a day ago); `grace`: those rotated out a day to two days ago, which verify only a runner's Renew and Release (Agents' tokens, below); `problem`: why the kept keys can't be used, while they can't. Never the keys. |
-| `POST /keys/rotate` | `dropPrevious`? | as `GET /keys`, with a new current key; the one before is kept a day, as long as the tokens it signed last, then a day more for a runner's Renew and Release alone. 503 while the kept keys can't be read, but for an emergency rotation, which replaces them. `dropPrevious: true` (an emergency) drops every other key at once, and every token signed with one: only on the command-line server (`visor-server keys rotate --drop-previous`); the menu bar app answers 403, its menu's Emergency Key Rotation… being the only way. Native sessions' token files are re-minted at once; after an emergency, each runner's agent is restarted on a new job. Never the admin token. |
+| `POST /keys/rotate` | `dropPrevious`? | as `GET /keys`, with a new current key; the one before is kept a day, as long as the tokens it signed last, then a day more for a runner's Renew and Release alone. 503 while the kept keys can't be read, but for an emergency rotation, which replaces them. `dropPrevious: true` (an emergency) drops every other key at once, and every token signed with one: only on the command-line server (`visor-server keys rotate --drop-previous`); the Mac's server answers 403 but to Visor.app's own Emergency Key Rotation… (on the socket file with the app key). Native sessions' token files are re-minted at once; after an emergency, each runner's agent is restarted on a new job. Never the admin token. |
+| `GET /settings` | | `settings`: the server as its owner's menu and Settings show it — `host`, `id`, `version`, `port`, `password`, `listening`, `lastError`?, `updateNotice`? (an update rolled back), `reachableAddress`?, `codes`? (as `GET /codes`), `clientCount`, `servesTLS`, `sshPaths`, `detachingSet`? (VISOR_DETACH_AGENT_HOST in its environment), `apnsKeyID`, `apnsTeamID`, `apnsConfigured`, `pushDevices`, `hasAdminToken`, and `settings`: `authentication` (`password` or `none`), `lan`, `vpn`, `sshEnabled`, `proxyEnabled`, `publicAddress`, `tlsIdentityPath`, `detachAgents`, `clientsKeepMessages`. Never the admin token, the APNs key or the TLS identity's password. From 0.62 (Visor.app's own server and visor-server alike). |
+| `PUT /settings` | any of `password` (never empty), `authentication`, `lan`, `vpn`, `sshEnabled`, `proxyEnabled`, `publicAddress`, `tlsIdentityPath`, `tlsPassword` (the identity's, kept with the secrets), `detachAgents`, `clientsKeepMessages` | as `GET /settings`, once the fields given are set (one save; the server listens again where how it listens changed). 400 with `error`, and nothing changed, for an empty password or an `authentication` that is neither. |
+| `GET /session-table` | | `text`: every session as a markdown table (the computer, each project and its folder, the session, its agent, the agent's own id that resumes it): the menu's Copy Session Table. |
 | `GET /runners/tokens` | | **Deprecated (19 Nov 2026), as are the three below:** runner tokens go with the dispatcher once agent jobs run on Nimbus CI; each answer says so (`deprecated`), and the first mint or list in a server's run is logged. `required`: whether agent_protocol's `Claim` must show its runner's token (the `runnerTokensRequired` setting; off unless turned on), and `runners`: each `runner` name with a token, when it was `created`, and `own: true` for this server's own native runner's (held in memory, new each start). Never the tokens. |
 | `POST /runners/tokens` | `runner`: the name its claims say (`container@mini`; no slash) | `runner`, `token` (shown this once: kept with the server's secrets), `created`, `replaced` (it had one, which no longer works). The runner shows it on `Claim` as `authorization: Bearer <token>`, with its `runner` field the same name (docs/runners.md). Deprecated (above). |
 | `PUT /runners/tokens` | `required` (true or false) | as `GET /runners/tokens`: on, a `Claim` with no runner token is refused (UNAUTHENTICATED); off, it is let in and logged once per runner. A token that isn't a runner's, or is another runner's, is refused either way. Deprecated (above): `runnerTokensRequired` goes with them. |

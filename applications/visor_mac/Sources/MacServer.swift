@@ -18,7 +18,7 @@ enum MacServer {
     /// relauncher in the app, launchd's restart in the agent. Given in every
     /// process of the app's, even one whose server is the agent: its
     /// keychain items are read through it.
-    static func prepare(lifecycle: any ServerLifecycle = AppRelauncher(), log: (@Sendable (String) -> Void)? = nil) {
+    static func prepare(lifecycle: any ServerLifecycle = AppLifecycle(), log: (@Sendable (String) -> Void)? = nil) {
         var platform = ServerPlatform.apple(secrets: KeychainSecrets(service: MacPlaces.serverService), lifecycle: lifecycle)
         if let log {
             let system = platform.log
@@ -39,6 +39,10 @@ enum MacServer {
         let agentProtocol = agentProtocol()
         agentProtocol.listen()
         let server = VisorServer.shared
+        // Visor.app is this server's client at its socket file, from the
+        // start (password or none, sshEnabled or not), and its menu's own
+        // calls are taken from it alone: by the key the keychain keeps.
+        server.appKey = MacAppKey.made()
         // An unattended setup (a leased test VM, tools/e2e): the first
         // password from the environment (launchctl setenv, so it's on no
         // disk), kept as Settings' Save would keep it. Never replaces one

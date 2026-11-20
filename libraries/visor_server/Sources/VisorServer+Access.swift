@@ -27,13 +27,34 @@ extension VisorServer {
     /// the admin token from $VISOR_ADMIN_TOKEN, which Visor never gives an
     /// agent.
     func authorized(_ request: HTTPRequest) -> Bool {
-        if request.trusted { return true }
+        if trusts(socketFile: request.trusted, headers: request.headers) { return true }
         // An agent's token is refused even where nothing is asked.
         if isAgentToken(request.authorization) { return false }
         if settings.asksNothing { return front?.admits(request.headers) ?? true }
         guard let bearer = request.authorization, !bearer.isEmpty else { return false }
         return bearer == password || tokens.contains(bearer) || adminToken.admits(bearer)
     }
+
+    /// Whether a connection on the socket file is let in as this user,
+    /// without a password: while SSH clients are (`sshEnabled`), and always
+    /// for Visor.app on this computer (`isOwnApp`). One on the port never is.
+    func trusts(socketFile: Bool, headers: [String: String]) -> Bool {
+        socketFile && (settings.sshEnabled || isOwnApp(socketFile: socketFile, headers: headers))
+    }
+
+    /// Whether a connection is Visor.app's own, on this computer: on the
+    /// socket file, showing the app key (`appKey`), which the keychain
+    /// gives Visor's processes alone. Its menu's calls are taken from it
+    /// alone: the admin token reset without it, an emergency rotation of
+    /// the signing keys.
+    func isOwnApp(socketFile: Bool, headers: [String: String]) -> Bool {
+        socketFile && SecretToken.same(headers[Self.appKeyHeader], appKey)
+    }
+
+    func isOwnApp(_ request: HTTPRequest) -> Bool { isOwnApp(socketFile: request.trusted, headers: request.headers) }
+
+    /// The header the app key is shown in (lower-cased, as headers are read).
+    public static let appKeyHeader = "x-visor-app-key"
 
     /// The answer to a request that is not let in: it wants the password.
     /// It says whose computer this is (its id, as `hello` does), so a

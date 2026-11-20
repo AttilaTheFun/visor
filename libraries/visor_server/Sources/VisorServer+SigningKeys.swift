@@ -12,7 +12,9 @@
 // runner's Renew and Release alone (AgentTokens.expiredTokenGrace). An emergency one (`dropPrevious`)
 // drops every other key, and every session's and runner's agent's token
 // with it: over REST only where the server says so (the command-line
-// server, emergencyRotationOverREST), from the menu bar alone on a Mac.
+// server, emergencyRotationOverREST), from the menu bar alone on a Mac (in
+// the app's process, or over the socket file with the app key the keychain
+// keeps for Visor's processes: VisorServer.isOwnApp).
 // Neither touches the admin token. Either way the native sessions' token
 // files are re-minted at once, so their agents carry on; after an
 // emergency one, each runner's agent is told to stop and its session carried
@@ -31,7 +33,7 @@ extension VisorServer {
             return .json(keysJSON())
         case ("POST", 2) where call.parts[1] == "rotate":
             let dropPrevious = parseJSON(call.request.body)?["dropPrevious"].bool ?? false
-            if dropPrevious, !emergencyRotationOverREST {
+            if dropPrevious, !emergencyRotationOverREST, !isOwnApp(call.request) {
                 return HTTPResponse(403, Envelope.error("An emergency rotation (every other key dropped) is made from Visor Server's "
                     + "menu on this computer, not over REST.").encoded())
             }

@@ -2,11 +2,12 @@
 // own server is a password away (OwnServer adds it once it has one), and
 // other computers are added as anywhere else. The default welcome tells
 // someone to download Visor Server, which this app is. This Mac's server is
-// the one in the app, or the server agent (LocalServer).
+// the server agent, or the one in the app (LocalServer), as it says over
+// its API.
 
 import SwiftUI
 import VisorClient
-import VisorServer
+import VisorProtocol
 import VisorUI
 
 @MainActor
@@ -33,19 +34,19 @@ private struct MacOnboardingView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section {
-                    if let server = local.server {
-                        if server.password.isEmpty {
+                    if local.mode == .handingOver {
+                        Text("This Mac's server is starting in the background.")
+                    } else if let controls = local.controls {
+                        if !controls.hasPassword {
                             Text("Choose a password in Settings: this Mac serves its agents once it has one, and shows here. The agents' command-line tools (Claude Code, Codex) are yours to install.")
                             Button("Open Settings…") { AppDelegate.openSettings() }
                         } else {
-                            Text("This Mac's server is running. Add it here to start sessions on it.")
-                            Button("Add This Mac") { OwnServer.add(OwnServer.code(of: server), to: store) }
+                            Text(local.mode == .agent ? "This Mac's server is running in the background. Add it here to start sessions on it."
+                                                      : "This Mac's server is running. Add it here to start sessions on it.")
+                            Button("Add This Mac") { OwnServer.add(controls, to: store) }
                         }
-                    } else if local.mode == .agent {
-                        Text("This Mac's server is running in the background. Add it here to start sessions on it.")
-                        Button("Add This Mac") { OwnServer.add(OwnServer.agentCode(), to: store) }
                     } else {
-                        Text("This Mac's server is starting in the background.")
+                        Text("This Mac's server isn't answering\(local.unreachable.map { ": \($0)" } ?? ".")")
                     }
                 } header: {
                     Text("This Mac").textCase(nil)

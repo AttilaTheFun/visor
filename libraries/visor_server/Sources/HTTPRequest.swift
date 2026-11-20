@@ -4,8 +4,9 @@ public struct HTTPRequest {
     public var headers: [String: String]
     public var body: String
     /// Whether the connection it came on is one only this user could
-    /// open (the socket file an SSH client reaches): then it is let in
-    /// without a bearer.
+    /// open (the socket file an SSH client, or Visor.app, reaches): then
+    /// it is let in without a bearer, while SSH clients are or for the app
+    /// (VisorServer.trusts).
     public var trusted = false
 
     /// The bearer token; "" for a bare `Bearer` (no password).

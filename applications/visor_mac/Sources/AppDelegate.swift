@@ -1,5 +1,6 @@
 // Visor's application delegate on the Mac: the server's life (started at
-// launch, its agents ended before a quit, as Visor Server did), the
+// launch, its agents ended before a quit, as Visor Server did, asked over
+// the server's API), the
 // client's pushes (the token and the notifications, as the Mac client did),
 // and the Dock icon, which the app shows only while one of its windows is
 // open: it is a menu bar app first.
@@ -8,7 +9,6 @@ import AppKit
 import SwiftUI
 import UserNotifications
 import VisorClient
-import VisorServer
 import VisorServices
 
 @MainActor
@@ -32,15 +32,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         Self.followWindows()
     }
 
-    /// The agents go before the app does: quitting waits for them. The
-    /// menu's Quit Visor ends them first (`VisorServer.quit`); this is for
-    /// a quit that comes from outside (logging out, another app asking).
-    /// The server agent's are its own: the app quits alone.
+    /// The agents go before the app does, while the server runs in the
+    /// app: quitting waits for them. The server is asked to stop as any
+    /// client asks it (`/api/quit`, at its socket file): it ends its agents,
+    /// then ends the app (AppLifecycle, AppTermination), or, relaunching,
+    /// has already left them. The server agent's are its own: the app quits
+    /// alone.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let server = LocalServer.shared.server, !server.agentsEnded else { return .terminateNow }
+        guard LocalServer.shared.mode == .inApp, !AppTermination.serverEnded else { return .terminateNow }
+        AppTermination.pending = true
         Task {
-            await server.endAll()
-            sender.reply(toApplicationShouldTerminate: true)
+            do {
+                try await LocalServer.shared.client.quitServer()
+            } catch {
+                // Nobody to ask: the app goes as it is.
+                NSLog("Visor: the server didn't take /api/quit: %@", VisorAgentServer.problem(error))
+                guard AppTermination.pending else { return }
+                AppTermination.pending = false
+                sender.reply(toApplicationShouldTerminate: true)
+            }
         }
         return .terminateLater
     }
@@ -63,6 +73,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         Self.openWindow = openWindow
         openSettingsAction = openSettings
     }
+
+    /// Whether a view has handed over SwiftUI's way to Settings yet.
+    static var canOpenSettings: Bool { openSettingsAction != nil }
 
     /// The Dock icon while a window of the app's own is open, and the menu
     /// bar alone when the last one closes. An app with no Dock icon is not
@@ -108,8 +121,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     /// ⌘Q in Visor's window: the windows closed and the app back in the
-    /// menu bar. Quitting ends the server's agents, so only the menu's Quit
-    /// Visor does that.
+    /// menu bar. Quitting ends the server's agents while it runs in the
+    /// app, so only the menu's Quit Visor does that.
     static func backToTheMenuBar() {
         for window in windows() { window.close() }
         NSApp.setActivationPolicy(.accessory)
