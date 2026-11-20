@@ -2,7 +2,8 @@
 /// server, which hands the agent every input itself, tagged it
 /// (`SessionInfo.turnOrigin`). A turn of mail (another session's message,
 /// or the notice that messages wait in the inbox) tells the person
-/// nothing when it ends, and its words are never the session's preview.
+/// nothing when it ends, and its prompt is never the session's preview
+/// (the agent's reply to the person in it is).
 public enum TurnOrigin: String, Codable, Hashable, Sendable {
     /// What a client sent: the person's own words.
     case user

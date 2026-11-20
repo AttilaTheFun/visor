@@ -1,10 +1,10 @@
 // What a session tells the person. Its notifications switched off, it
 // pushes nothing but the widget's silent state; the switch is the
 // session's, kept and sent with it. A turn of mail (another session's
-// message, the inbox's notice) tells nothing when it ends, and neither it
-// nor the agent's reply in it is the session's preview; the person's own
-// message sent during it starts a turn of theirs that does, and an
-// approval asked during it is told as any is.
+// message, the inbox's notice) tells nothing when it ends, and its prompt
+// is not the session's preview, though the agent's reply to the person in
+// it is; the person's own message sent during it starts a turn of theirs
+// that tells, and an approval asked during it is told as any is.
 
 import Foundation
 @testable import VisorAgent
@@ -149,10 +149,10 @@ extension ServerTests {
 
     // MARK: Turns of mail
 
-    /// The inbox's notice starts a turn of mail: neither it nor the agent's
-    /// reply in it pushes or becomes the preview; the unread count still
-    /// moves.
-    @Test func testAMailTurnAndItsReplyAreQuiet() {
+    /// The inbox's notice starts a turn of mail: it pushes nothing and is
+    /// not the preview; the unread count still moves. The agent's reply in
+    /// it is its latest word, and is the preview (still no push).
+    @Test func testAMailTurnIsQuietButItsReplyIsThePreview() {
         let agent = QuietAgent()
         let a = record("A", "Server work")
         let b = record("B", "Client work", agent: agent)
@@ -171,8 +171,9 @@ extension ServerTests {
 
         // Its rows, as the agent's log writes them.
         _ = b.take(fileRow: TranscriptEntry(id: "B-u2", role: .user, text: notice))
+        #expect(b.info.preview == "Built.", "nor is the notice's row")
         _ = b.take(fileRow: TranscriptEntry(id: "B-a2", role: .assistant, text: "Told A the API is done."))
-        #expect(b.info.preview == "Built.", "nor is the agent's reply to the mail")
+        #expect(b.info.preview == "Told A the API is done.", "the agent's reply is its latest message, whatever began the turn")
 
         server.handle(.busy(false), from: b)
         #expect(said.isEmpty, "a turn of mail ending tells nothing")
@@ -196,6 +197,35 @@ extension ServerTests {
         #expect(b.info.preview == "Built.")
         server.handle(.busy(false), from: b)
         #expect(said.isEmpty)
+    }
+
+    /// Logan's Manager session (20 Nov 2026): mail came, the agent read its
+    /// inbox and then wrote to the person. The preview is that reply, not
+    /// an older one; the notice isn't the preview, nor is a message the
+    /// agent sends another session (`@@to`). The turn still tells nothing.
+    @Test func testTheReplyAfterMailIsThePreview() {
+        let agent = QuietAgent()
+        let a = record("A", "Server work")
+        let b = record("B", "Client work", agent: agent)
+        server.sessions = [a, b]
+        server.notifyPushes()
+        send("Nimbus lends every machine now", from: "A", to: "B")
+        server.handle(.busy(true), from: b)
+        let notice = "[Visor: you have 1 unread message in your inbox; read them with read_inbox]"
+        _ = b.take(fileRow: TranscriptEntry(id: "B-u2", role: .user, text: notice))
+        #expect(b.info.preview == "Built.", "the notice is not the preview")
+        _ = b.take(fileRow: TranscriptEntry(id: "B-t2", role: .tool, text: "1 message", toolName: "tool_result"))
+        #expect(b.info.preview == "Built.", "nor a tool call")
+        let reply = "Nimbus can now lend every kind of machine: Ubuntu, Windows, Mac and iPhone simulators, and Android containers."
+        _ = b.take(fileRow: TranscriptEntry(id: "B-a2", role: .assistant, text: reply))
+        #expect(b.info.preview == reply, "the agent's latest message, though its turn began from mail")
+        let sent = AgentMessageMarkers.outboundText(to: "Server work", on: "mini", body: "Thanks, noted.")
+        _ = b.take(fileRow: TranscriptEntry(id: "B-a3", role: .assistant, text: sent))
+        #expect(b.info.preview == reply, "a message to another session is not the preview")
+        server.handle(.busy(false), from: b)
+        #expect(said.isEmpty, "the turn of mail still tells nothing")
+        // Read back after a restart: the same.
+        #expect(SessionRecord.latestPreview(in: b.entries) == reply)
     }
 
     /// The person's message sent during a turn of mail waits, keeps its
@@ -240,7 +270,7 @@ extension ServerTests {
         #expect(b.info.turnOrigin == .mail)
         server.handle(.busy(false), from: b)
         #expect(said == ["turn"])
-        #expect(b.info.preview == "Shipped.")
+        #expect(b.info.preview == "Shipped.", "the mail's prompt is not the preview")
     }
 
     /// An approval asked during a turn of mail is told as any is — unless
@@ -301,28 +331,34 @@ extension ServerTests {
 
     // MARK: The preview
 
-    /// The preview passes over every turn of mail, whatever form it came
-    /// in, and a reply that is itself a message to another session; it
-    /// keeps the reply to the server's own nudge.
-    @Test func testThePreviewIsNeverMail() {
+    /// The preview is the latest message to or from the person, whatever
+    /// began its turn: it passes over mail's prompt, whatever form it came
+    /// in, and a reply that is itself a message to another session, but
+    /// not the agent's reply in a turn of mail, nor its reply to the
+    /// server's own nudge.
+    @Test func testThePreviewIsTheLatestAgentMessage() {
         let notice = "[Visor: you have 1 unread message in your inbox; read them with read_inbox]"
         let header = "[Message from the Visor session “Server work” (A) on mini (server s1), to this session “Client work” (B) on mini — "
             + "not from the user. To answer, use send_message with session A and server s1.]\n\nIs the API done?"
         let marked = AgentMessageMarkers.inboundText(from: "Server work", on: "mini", body: "Is the API done?")
+        let sent = AgentMessageMarkers.outboundText(to: "Server work", on: "mini", body: "Done.")
         let mine = [TranscriptEntry(id: "u1", role: .user, text: "Build it"),
                     TranscriptEntry(id: "a1", role: .assistant, text: "Built.")]
         for mail in [notice, header, marked] {
             let rows = mine + [TranscriptEntry(id: "u2", role: .user, text: mail),
                                TranscriptEntry(id: "t2", role: .tool, text: "ok", toolName: "tool_result"),
                                TranscriptEntry(id: "a2", role: .assistant, text: "Answered A.")]
-            #expect(SessionRecord.latestPreview(in: rows) == "Built.", "\(mail)")
+            #expect(SessionRecord.latestPreview(in: rows) == "Answered A.", "\(mail)")
+            // A reply to another session in it (`@@to`) is not the preview.
+            #expect(SessionRecord.latestPreview(in: rows + [TranscriptEntry(id: "a3", role: .assistant, text: sent)]) == "Answered A.")
+            // A turn of mail with no words yet but tools: what came before.
+            #expect(SessionRecord.latestPreview(in: Array(rows.prefix(4))) == "Built.")
             // Just begun: the mail's prompt alone.
             #expect(SessionRecord.latestPreview(in: mine + [rows[2]]) == "Built.")
             // The person's message after it is theirs.
             #expect(SessionRecord.latestPreview(in: rows + [TranscriptEntry(id: "u3", role: .user, text: "Ship it")]) == "Ship it")
         }
         // A reply to the person that is a message to another session.
-        let sent = AgentMessageMarkers.outboundText(to: "Server work", on: "mini", body: "Done.")
         #expect(SessionRecord.latestPreview(in: [TranscriptEntry(id: "u1", role: .user, text: "Tell A"),
                                                  TranscriptEntry(id: "a1", role: .assistant, text: sent)]) == "Tell A")
         // The server's nudge is no word, its reply is.
