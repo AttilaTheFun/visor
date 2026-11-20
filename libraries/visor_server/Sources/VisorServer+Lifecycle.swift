@@ -34,6 +34,15 @@ extension VisorServer {
         return nil
     }
 
+    /// Makes way, as a relaunch does, for whoever ends this process next
+    /// (the server agent's launchd, stopping or restarting its job): what
+    /// is running written down, and the agents under hosts left working for
+    /// the next server to pick up; the rest ended.
+    public func stepAside() async {
+        Self.log("stepping aside: the agents under hosts are left running")
+        await leaveAgents()
+    }
+
     /// Ends every session (the app is quitting). What was running is
     /// written down as running, so the next launch can carry it on: this is
     /// the record of the shutdown, however the app was quit. A driven

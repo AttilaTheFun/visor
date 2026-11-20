@@ -1,8 +1,11 @@
 // This Mac's server in Visor's window, without pairing: the server in the
-// app's own process, added to the client's computers as its connection code
-// would add it, but at this Mac's loopback address, which needs no network
-// path to be open. Once added it is a computer like any other here: a new
-// password is taken in, and one forgotten by hand stays forgotten.
+// app's own process, or the server agent (LocalServer), added to the
+// client's computers as its connection code would add it, but at this Mac's
+// loopback address, which needs no network path to be open. Once added it
+// is a computer like any other here: a new password is taken in, and one
+// forgotten by hand stays forgotten. The server agent is the same server
+// (its id, password and port), so a Mac that had it in the app keeps the
+// same computer when the agent takes over.
 
 import Foundation
 import Observation
@@ -25,35 +28,52 @@ enum OwnServer {
                               paths: server.ownAddresses.filter { $0 != loopback }, auth: server.settings.authentication)
     }
 
+    /// The server agent's, from what it keeps (its settings and the
+    /// keychain's password), read without making a server here: loopback
+    /// alone.
+    static func agentCode() -> ConnectionCode? {
+        let password = ServerPlatform.current.secrets.get("password") ?? ""
+        let settings = ServerSettings.kept(at: VisorServer.settingsURL)
+        guard !password.isEmpty, !settings.serverID.isEmpty else { return nil }
+        let loopback = "\(settings.tlsIdentityPath.isEmpty ? "http" : "https")://127.0.0.1:\(Envelope.defaultPort)"
+        return ConnectionCode(name: ServerPlatform.current.host.name, host: loopback, password: password, id: settings.serverID,
+                              auth: settings.authentication)
+    }
+
     /// The computer held here that is this Mac's server, by its id.
-    static func held(_ server: VisorServer, in store: VisorStore) -> AgentServerConnection? {
-        guard !server.id.isEmpty else { return nil }
-        return store.servers.first { $0.record.serverID == server.id }
+    static func held(id: String, in store: VisorStore) -> AgentServerConnection? {
+        guard !id.isEmpty else { return nil }
+        return store.servers.first { $0.record.serverID == id }
     }
 
     /// Adds the server to the store the first time it has a password, and
     /// keeps the one held signing in with the password it has now.
     static func follow(_ server: VisorServer, in store: VisorStore) {
-        join(server, store)
+        join(code(of: server), store)
         withObservationTracking { _ = server.password } onChange: {
             Task { @MainActor in follow(server, in: store) }
         }
     }
 
+    /// The same for the server agent, once it serves.
+    static func followAgent(in store: VisorStore) {
+        join(agentCode(), store)
+    }
+
     /// Adds it, whether or not it was before: the welcome page's button.
-    static func add(_ server: VisorServer, to store: VisorStore) {
-        guard let code = code(of: server) else { return }
+    static func add(_ code: ConnectionCode?, to store: VisorStore) {
+        guard let code else { return }
         UserDefaults.standard.set(true, forKey: addedKey)
         store.open(code.encoded)
     }
 
-    private static func join(_ server: VisorServer, _ store: VisorStore) {
-        guard let code = code(of: server) else { return }
-        if let held = held(server, in: store) {
+    private static func join(_ code: ConnectionCode?, _ store: VisorStore) {
+        guard let code else { return }
+        if let held = held(id: code.id, in: store) {
             // Signing in as it is: left alone, not connected again.
             if held.record.secret != code.password { store.open(code.encoded) }
         } else if !UserDefaults.standard.bool(forKey: addedKey) {
-            add(server, to: store)
+            add(code, to: store)
         }
     }
 }

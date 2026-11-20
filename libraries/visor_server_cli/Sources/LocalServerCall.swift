@@ -1,25 +1,41 @@
 // A REST call to the server running on this computer, over its trusted
 // socket (VisorServer.socketPath, this user's alone): what `visor-server
 // admin-token` and `visor-server keys` ask of it, the menu bar app's
-// server or the command-line one alike. One request, its answer read until
-// the server closes the connection, as it does after each.
+// server or the command-line one alike; and what Visor.app asks of the
+// server agent when it is its client (MacServerCalls). One request, its
+// answer read until the server closes the connection, as it does after
+// each.
 
 import Foundation
 import VisorServer
 import VisorSystem
 
-struct LocalServerCall {
+public struct LocalServerCall {
     let method: String
     let path: String
     /// Shown as `Authorization: Bearer`, if any.
     var bearer: String? = nil
     var body: String = ""
 
+    public init(method: String, path: String, bearer: String? = nil, body: String = "") {
+        self.method = method
+        self.path = path
+        self.bearer = bearer
+        self.body = body
+    }
+
     /// The status and body of the answer.
     @MainActor
     func send(through system: any CommandLineSystem, socket: String? = nil) async throws(CommandLineError) -> (status: Int, body: String) {
+        try await send(connect: { await system.connect(unixPath: $0) }, socket: socket)
+    }
+
+    /// The same, connecting with `connect` (POSIXUnixSocket.connect).
+    @MainActor
+    public func send(connect: @MainActor (String) async -> (any ByteStream)?, socket: String? = nil) async throws(CommandLineError)
+        -> (status: Int, body: String) {
         let socket = socket ?? VisorServer.socketPath
-        guard let stream = await system.connect(unixPath: socket) else {
+        guard let stream = await connect(socket) else {
             throw .failed("no server answers at \(socket): is it running, with `ssh on` (its trusted socket)?")
         }
         var head = "\(method) \(path) HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n"

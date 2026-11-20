@@ -13,7 +13,7 @@ package(default_visibility = ["//visibility:public"])
 # its host (Host/, VisorAgentProxyHost): ServerSettings' `agentProxy` and
 # the server's secrets, run on a Mac as Visor's own executable with
 # `--agent-proxy` (a launchd job, AgentProxyJob) and on Linux inside
-# visor-server. SwiftNIO and NIOSSL for its resolver and the interceptor,
+# visor-server (and inside `Visor --server`, the server agent). SwiftNIO and NIOSSL for its resolver and the interceptor,
 # swift-certificates, swift-asn1 and swift-crypto for its authority.
 swift_interop_hint(
     name = "agent_proxy_c_swift",
@@ -57,6 +57,7 @@ swift_library(
     deps = [
         "//:foundation",
         ":visor_agent_proxy",
+        "//libraries/visor_launch_agent",
         "//libraries/visor_server",
         "@swiftpkg_swift_crypto//:Crypto",
     ],

@@ -148,6 +148,11 @@ port is free. With nothing configured it ends with 0 and stays ended. Once
 you've changed `agentProxy`, restart Visor; the job is restarted with the new
 settings.
 
+**In the server agent** (`Visor --server`, docs/DEVELOPMENT.md, The server
+as a background agent), agent-proxy runs inside the server, as on Linux:
+at the agent's start the job is stopped and its plist removed, then the
+proxy is started in the agent when `agentProxy` is set.
+
 **On Linux**, visor-server runs the same proxy **inside its own process**,
 started once the server is made, when `agentProxy` is set. A change takes a
 restart of visor-server. This is the simpler choice: no second process, the

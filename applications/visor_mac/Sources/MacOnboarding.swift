@@ -1,7 +1,8 @@
 // Visor on the Mac's welcome, while its window has no computers: this Mac's
 // own server is a password away (OwnServer adds it once it has one), and
 // other computers are added as anywhere else. The default welcome tells
-// someone to download Visor Server, which this app is.
+// someone to download Visor Server, which this app is. This Mac's server is
+// the one in the app, or the server agent (LocalServer).
 
 import SwiftUI
 import VisorClient
@@ -10,16 +11,16 @@ import VisorUI
 
 @MainActor
 struct MacOnboarding: VisorOnboarding {
-    let server: VisorServer
+    let local: LocalServer
 
     func isNeeded(_ store: VisorStore) -> Bool { store.servers.isEmpty }
 
-    func view(_ store: VisorStore) -> AnyView { AnyView(MacOnboardingView(server: server)) }
+    func view(_ store: VisorStore) -> AnyView { AnyView(MacOnboardingView(local: local)) }
 }
 
 @MainActor
 private struct MacOnboardingView: View {
-    let server: VisorServer
+    let local: LocalServer
     @Environment(VisorStore.self) private var store
 
     static let readme = URL(string: "https://github.com/AttilaTheFun/visor#readme")!
@@ -32,12 +33,19 @@ private struct MacOnboardingView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section {
-                    if server.password.isEmpty {
-                        Text("Choose a password in Settings: this Mac serves its agents once it has one, and shows here. The agents' command-line tools (Claude Code, Codex) are yours to install.")
-                        Button("Open Settings…") { AppDelegate.openSettings() }
+                    if let server = local.server {
+                        if server.password.isEmpty {
+                            Text("Choose a password in Settings: this Mac serves its agents once it has one, and shows here. The agents' command-line tools (Claude Code, Codex) are yours to install.")
+                            Button("Open Settings…") { AppDelegate.openSettings() }
+                        } else {
+                            Text("This Mac's server is running. Add it here to start sessions on it.")
+                            Button("Add This Mac") { OwnServer.add(OwnServer.code(of: server), to: store) }
+                        }
+                    } else if local.mode == .agent {
+                        Text("This Mac's server is running in the background. Add it here to start sessions on it.")
+                        Button("Add This Mac") { OwnServer.add(OwnServer.agentCode(), to: store) }
                     } else {
-                        Text("This Mac's server is running. Add it here to start sessions on it.")
-                        Button("Add This Mac") { OwnServer.add(server, to: store) }
+                        Text("This Mac's server is starting in the background.")
                     }
                 } header: {
                     Text("This Mac").textCase(nil)

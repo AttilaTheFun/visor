@@ -9,6 +9,7 @@ import Foundation
 import Testing
 @testable import VisorAgentProxy
 @testable import VisorAgentProxyHost
+import VisorLaunchAgent
 import VisorServer
 
 @Suite struct AgentProxyHostTests {

@@ -16,8 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The server runs from launch, whether or not a window or the menu
         // is ever opened, once it has a password. Without one, Settings
-        // opens over the window when it shows (SceneOpeners).
-        VisorServer.shared.start()
+        // opens over the window when it shows (SceneOpeners). (The server
+        // agent runs apart: LocalServer.)
+        LocalServer.shared.launched()
         UNUserNotificationCenter.current().delegate = self
         // Once launched, when AppKit delivers the token to this delegate:
         // asked any earlier, the answer can go nowhere.
@@ -34,10 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// The agents go before the app does: quitting waits for them. The
     /// menu's Quit Visor ends them first (`VisorServer.quit`); this is for
     /// a quit that comes from outside (logging out, another app asking).
+    /// The server agent's are its own: the app quits alone.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard !VisorServer.shared.agentsEnded else { return .terminateNow }
+        guard let server = LocalServer.shared.server, !server.agentsEnded else { return .terminateNow }
         Task {
-            await VisorServer.shared.endAll()
+            await server.endAll()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

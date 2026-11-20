@@ -34,7 +34,10 @@ update_entitlements(
 # window is Visor's macOS client, with the Mac's Visor server under it. It
 # took over from Visor Server (applications/visor_menubar) and the Mac
 # client (applications/visor_macos) in 0.46, and keeps what it has in places
-# of its own (Sources/MacPlaces.swift).
+# of its own (Sources/MacPlaces.swift). The same executable is the server
+# agent with `--server` (Sources/MacServerAgent.swift: the server headless,
+# a launchd job, with the app its client, while the app's `ServerAsAgent`
+# default is on) and agent-proxy with `--agent-proxy`.
 swift_library(
     name = "mac_lib",
     copts = STRICT_SWIFT,
@@ -50,10 +53,13 @@ swift_library(
         "//libraries/visor_agent_proxy:visor_agent_proxy_host",
         "//libraries/visor_client",
         "//libraries/visor_driver",
+        "//libraries/visor_launch_agent",
         "//libraries/visor_native_runner",
         "//libraries/visor_protocol",
         "//libraries/visor_server",
         "//libraries/visor_server_apple",
+        "//libraries/visor_server_cli",
+        "//libraries/visor_server_posix",
         "//libraries/visor_services",
         "//libraries/visor_system",
         "//libraries/visor_ui",
