@@ -66,15 +66,28 @@ public struct VolumeState: Equatable, Sendable {
     }
 
     /// The commands that make it: `diskutil apfs addVolume` in the boot
-    /// container, case-sensitive, with its reserve and quota (0: none); for
-    /// Visor, Spotlight turned off on it after, in the same administrator
-    /// prompt (VolumeExclusions).
-    public func createCommands(reserve: Int64, quota: Int64) throws -> [DiskCommand] {
+    /// container, case-sensitive, with its reserve and quota (0: none); its
+    /// mount point given to `user` (`chown <user>:staff`, `chmod 775`: as an
+    /// administrator made it, it's root's); and, for Visor, Spotlight turned
+    /// off on it (VolumeExclusions). All in the same administrator prompt.
+    public func createCommands(reserve: Int64, quota: Int64, user: String) throws -> [DiskCommand] {
         guard case let .create(container) = plan else {
             throw DiskVolumesError.blocked("\(role.volumeName) already exists or can't be made here; it's never made twice.")
         }
-        let add = try DiskCommand.addVolume(role, container: container, reserve: reserve, quota: quota)
-        return role == .visor ? [add, try DiskCommand.spotlightOff(role)] : [add]
+        let made = [try DiskCommand.addVolume(role, container: container, reserve: reserve, quota: quota)]
+            + (try DiskCommand.ownership(role, user: user))
+        return role == .visor ? made + [try DiskCommand.spotlightOff(role)] : made
+    }
+
+    /// The commands that give an adopted volume's mount point to `user`
+    /// (its Fix, on the card, when it isn't theirs): Visor's own alone
+    /// (named for its role, mounted in place). VolumeGuard lets them run
+    /// only with the role named in its `fixing`.
+    public func ownershipCommands(user: String) throws -> [DiskCommand] {
+        guard inPlaceUUID != nil else {
+            throw DiskVolumesError.blocked("\(role.mountPoint) isn't \(role.volumeName) as Visor Disk Utility makes it: its owner is left as it is.")
+        }
+        return try DiskCommand.ownership(role, user: user)
     }
 
     /// The commands that put back what an adopted volume should have: for

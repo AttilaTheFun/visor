@@ -50,6 +50,17 @@ by Visor Disk Utility, which records them in `volumes.json`:
 | **Sources** | `/Volumes/Sources` | The sessions' checkouts: the container's checkouts' folder unless `container.checkouts` names another. |
 | **Visor** | `/Volumes/Visor` (not shared, but for `Containers/`'s parts below) | Everything else of Visor's: `Data/` (the server's data folder: sessions.json, settings, push, relay, jobs, images, backups, migrations, super-compact, agent-proxy, `run/`, `hosts/`, and `volumes.json`), `Caches/Server` and `Caches/Client` (the two `messages.sqlite`), `Logs/` (Visor-server, agent-proxy and egress, and the relaunch log), `tmp/` (an export before it's saved; emptied at the app's start), `run/server.sock` (the server's socket file) and `Containers/` (below). It replaced 0.64's Containers volume: a `volumes.json` that says `containers` reads as `visor`. |
 
+Each volume Visor Disk Utility makes is given to the person who made it,
+as Nimbus gives its own: a volume made in the administrator prompt is
+root's at its root, where Visor can't write its data, socket or sessions'
+folders, so `chown <user>:staff` and `chmod 775` of its mount point follow
+the `addVolume` in the same prompt. VolumeGuard lets them run exactly so,
+on a role's mount point, and only for a volume made earlier in the same run
+(never `-R`, never `/`, never another owner). An adopted volume that isn't
+the person's says so on its card ("Owned by root: Visor can't write
+here"), and its Fix (`fix-owner <role>` on the command line) runs the same
+two, the guard told that volume is being fixed.
+
 The Visor volume is left out of Time Machine and Spotlight, as Nimbus
 leaves its own (Logan, 21 Nov 2026): Visor's data, caches, logs and
 container aren't the person's work, and a container's root filesystem

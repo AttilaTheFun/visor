@@ -659,6 +659,13 @@ removed (still only when `agentProxy` is set).
   the ports (7433, 7434), the socket file, `tailscale serve`'s target
   (127.0.0.1:7433) and the admin token are the same, so they reconnect to
   the same address and identity, with no re-pairing.
+- **The volumes given to the person (0.65):** Visor Disk Utility follows
+  each `diskutil apfs addVolume` with `chown <user>:staff` and `chmod 775`
+  of the new mount point, in the same administrator prompt (as Nimbus
+  does: a volume made as root is root's at its root). VolumeGuard passes
+  them only as exactly that, at a role's mount point, for a volume made
+  earlier in the same run, or for an adopted one of Visor's own when its
+  card's Fix (or `fix-owner <role>`) names it in `fixing`.
 - **The Visor volume out of backups and search (0.65):** Visor Disk
   Utility makes Visor with Spotlight off (`mdutil -i off /Volumes/Visor`
   after `diskutil apfs addVolume`, one administrator prompt; VolumeGuard

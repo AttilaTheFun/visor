@@ -16,7 +16,7 @@ import Testing
         #expect(state.notes[0].contains("case-insensitive"))
         #expect(state.notes[0].contains("never reformatted"))
         // Nothing would make it again.
-        #expect(throws: DiskVolumesError.self) { try state.createCommands(reserve: 0, quota: 0) }
+        #expect(throws: DiskVolumesError.self) { try state.createCommands(reserve: 0, quota: 0, user: "someone") }
     }
 
     @Test func aMissingVolumeIsMadeCaseSensitiveInTheBootContainer() throws {
@@ -26,17 +26,20 @@ import Testing
         #expect(state.path == "/Volumes/Visor")
         #expect(state.format == "Case-sensitive APFS")
         #expect(state.available == 126_925_406_208)
-        let commands = try state.createCommands(reserve: 0, quota: 200 * ByteSize.gigabyte)
+        let commands = try state.createCommands(reserve: 0, quota: 200 * ByteSize.gigabyte, user: "someone")
         #expect(commands.map(\.argv) == [["/usr/sbin/diskutil", "apfs", "addVolume", "disk3", "Case-sensitive APFS", "Visor",
                                           "-quota", "200000000000b"],
+                                         ["/usr/sbin/chown", "someone:staff", "/Volumes/Visor"],
+                                         ["/bin/chmod", "775", "/Volumes/Visor"],
                                          ["/usr/bin/mdutil", "-i", "off", "/Volumes/Visor"]])
     }
 
     @Test func aFreshMacMakesBoth() throws {
         let survey = try Disks.fresh()
         for role in VolumeRole.allCases { #expect(survey.state(for: role).plan == .create(container: "disk3")) }
-        let sessions = try survey.state(for: .sessions).createCommands(reserve: 20 * ByteSize.gigabyte, quota: 0)
-        #expect(sessions.map(\.description) == ["diskutil apfs addVolume disk3 Case-sensitive APFS Sessions -reserve 20000000000b"])
+        let sessions = try survey.state(for: .sessions).createCommands(reserve: 20 * ByteSize.gigabyte, quota: 0, user: "someone")
+        #expect(sessions.map(\.description) == ["diskutil apfs addVolume disk3 Case-sensitive APFS Sessions -reserve 20000000000b",
+                                                 "chown someone:staff /Volumes/Sessions", "chmod 775 /Volumes/Sessions"])
     }
 
     @Test func theTwoAsMadeAreAdoptedWithNoNotes() throws {
@@ -66,7 +69,7 @@ import Testing
 
     @Test func aReserveOverTheQuotaIsRefused() throws {
         let state = try Disks.fresh().state(for: .visor)
-        #expect(throws: DiskVolumesError.self) { try state.createCommands(reserve: 10 * ByteSize.gigabyte, quota: 5 * ByteSize.gigabyte) }
+        #expect(throws: DiskVolumesError.self) { try state.createCommands(reserve: 10 * ByteSize.gigabyte, quota: 5 * ByteSize.gigabyte, user: "someone") }
     }
 
     @Test func aVolumeOfTheNameNotMountedIsAdoptedWithANote() throws {
