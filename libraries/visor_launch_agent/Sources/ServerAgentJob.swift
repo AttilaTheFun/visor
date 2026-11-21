@@ -101,12 +101,14 @@ public enum ServerAgentJob {
     /// | no     | registered, a 0.64 plist, or running          | elsewhere        | refuse  |
     /// | yes    | any                                           | elsewhere        | refuse  |
     /// | yes    | a 0.64 plist                                  | in /Applications | restart |
+    /// | yes    | running (whatever SMAppService says)          | in /Applications | leave   |
     /// | yes    | waiting for the person's approval             | in /Applications | hold    |
-    /// | yes    | registered and running                        | in /Applications | leave   |
     /// | yes    | registered and not running, or not registered | in /Applications | start   |
     ///
     /// launchd that doesn't answer holds: nothing is stopped or started on
-    /// what isn't known.
+    /// what isn't known. Wanted, a running agent is never stopped (NCH's
+    /// check of #491: a reopen that read its status wrong ended it, and the
+    /// app served in its place); only 0.64's job is, once, to give way.
     public static func decide(wanted: Bool, executable: String?, status: ServiceStatus, legacyPlist: Bool,
                               running: Bool?) -> LaunchAgentJob.Action {
         let there = status == .enabled || status == .requiresApproval || legacyPlist || running == true
@@ -115,9 +117,25 @@ public enum ServerAgentJob {
         if let why = LaunchAgentJob.installProblem(executable) { return .refuse(why) }
         guard wanted else { return .stop }
         if legacyPlist { return .restart("0.64's plist in ~/Library/LaunchAgents gives way to the app's own") }
+        if running { return .leave }
         if status == .requiresApproval {
             return .hold("it waits to be allowed in System Settings › General › Login Items")
         }
-        return status == .enabled && running ? .leave : .start
+        return .start
+    }
+
+    /// The agent registered afresh: out of launchd first (`stop`: launchctl
+    /// bootout, waited for), then registered (`register`: SMAppService,
+    /// which starts it); what went wrong, or nil. The one way it's started
+    /// once its bundle may have changed (ServerAgentService.reregister): an
+    /// update to another build, a rollback to the one before, a start of a
+    /// registered job that isn't running. SMAppService's launch constraint
+    /// is the bundle registered: launchd won't spawn the job from a bundle
+    /// put in its place (`spawn failed`, 78, "needs LWCR update") until it's
+    /// booted out and registered again (NCH's check of #491); registering
+    /// alone isn't enough.
+    public static func reregister(stop: () async -> Void, register: () async -> String?) async -> String? {
+        await stop()
+        return await register()
     }
 }

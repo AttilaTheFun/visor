@@ -12,9 +12,11 @@
 // Visor volume at its start (MacPlaces.settle); with the volume expected
 // and not mounted, it ends, for launchd to start it again.
 //
-// `Visor server-agent register`: the agent registered with SMAppService
-// from this bundle (ServerAgentService), for the update's watcher when
-// launchd no longer has the job.
+// `Visor server-agent register`: the agent registered afresh with
+// SMAppService from this bundle (booted out, then registered:
+// ServerAgentService.reregister), for the update's watcher after an update
+// or a rollback, when SMAppService's launch constraint still names the
+// bundle that was replaced.
 //
 // Sent TERM (launchd: the app handing the server back, a restart of the
 // job, logging out; or anyone: `killall Visor` reaches it too, its process
@@ -26,6 +28,7 @@
 import Darwin
 import DiskVolumes
 import Foundation
+import Synchronization
 import VisorLaunchAgent
 import VisorProtocol
 import VisorServer
@@ -38,14 +41,29 @@ enum MacServerAgent {
     static func handle(_ arguments: [String]) {
         let given = Array(arguments.dropFirst())
         if given == [ServerAgentJob.command, "register"] {
-            if let problem = ServerAgentService.register(bundleID: MacPlaces.own) {
-                FileHandle.standardError.write(Data("Visor: the server agent couldn't be registered: \(problem)\n".utf8))
-                exit(1)
-            }
-            exit(0)
+            register()
         }
         guard given.first == ServerAgentJob.argument else { return }
         run()
+    }
+
+    /// Registered afresh from this bundle (booted out, then registered:
+    /// ServerAgentService.reregister), which starts it; ends.
+    private static func register() -> Never {
+        let bundleID = MacPlaces.own
+        let problem = Mutex<String?>(nil)
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            let said = await ServerAgentService.reregister(bundleID: bundleID)
+            problem.withLock { $0 = said }
+            done.signal()
+        }
+        done.wait()
+        if let problem = problem.withLock({ $0 }) {
+            FileHandle.standardError.write(Data("Visor: the server agent couldn't be registered: \(problem)\n".utf8))
+            exit(1)
+        }
+        exit(0)
     }
 
     private static func run() -> Never {

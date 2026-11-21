@@ -81,25 +81,34 @@ public struct ServerAgentWatch: Sendable {
         self.settle = settle
     }
 
-    /// The watcher for `job` on this user's launchd: started with
-    /// `kickstart -k` (ended first if launchd started it again meanwhile),
-    /// or, if launchd no longer has it, registered again from the bundle in
-    /// place (`<executable> server-agent register`, SMAppService), which
-    /// starts it; stopped with a KILL, which its KeepAlive would answer
-    /// only after the bundle is back.
+    /// The watcher for `job` on this user's launchd. A plain restart (no
+    /// `source`) is started with `kickstart -k`, or registered again if
+    /// launchd no longer has it. After an update to another build, and
+    /// after a rollback to the one before, it's registered afresh from the
+    /// bundle in place (`<executable> server-agent register`: booted out,
+    /// then registered, ServerAgentService.reregister), as SMAppService's
+    /// launch constraint is the bundle it was registered from, and launchd
+    /// won't spawn the job from another put in its place. Stopped with a
+    /// KILL, which its KeepAlive would answer only after the bundle is back.
     public static func launchd(job: LaunchAgentJob, serverPID: Int32, destination: String, executable: String, source: String?,
                                backup: String?, note: String, newVersion: String, oldVersion: String,
                                port: UInt16 = Envelope.defaultPort) -> ServerAgentWatch {
         let target = "gui/$(id -u)/\(job.label)"
-        let program = quoted((destination as NSString).appendingPathComponent("Contents/MacOS/" + executable))
-        let start = "launchctl kickstart -k \(target) 2>/dev/null || \(program) \(ServerAgentJob.command) register"
+        let register = registerCommand(destination: destination, executable: executable)
+        let start = source == nil ? "launchctl kickstart -k \(target) 2>/dev/null || \(register)" : register
         return ServerAgentWatch(serverPID: serverPID, destination: destination, source: source, backup: backup, plist: job.plistPath,
-                                previousPlist: nil, start: start, reload: start,
+                                previousPlist: nil, start: start, reload: register,
                                 stop: "launchctl kill SIGKILL \(target) 2>/dev/null; sleep 0.5",
                                 pid: "launchctl print \(target) 2>/dev/null | awk '$1==\"pid\" && $2==\"=\" {print $3; exit}'",
                                 answers: answers(port: port),
                                 accept: "spctl --assess --type execute \(quoted(destination)) >/dev/null 2>&1 && xattr -rd com.apple.quarantine \(quoted(destination)) 2>/dev/null",
                                 note: note, newVersion: newVersion, oldVersion: oldVersion, port: port)
+    }
+
+    /// Shell: the agent registered afresh from the bundle at `destination`
+    /// (`<its executable> server-agent register`).
+    public static func registerCommand(destination: String, executable: String) -> String {
+        quoted((destination as NSString).appendingPathComponent("Contents/MacOS/" + executable)) + " \(ServerAgentJob.command) register"
     }
 
     /// Shell: succeeds when the server's port answers `/api/hello` (any
