@@ -25,6 +25,7 @@ extension Envelope {
         e.skipPermissions = value["skipPermissions"].bool
         e.session = value["session"].string
         e.text = value["text"].string
+        e.from = value["from"].int
         e.sessions = value["sessions"].array?.compactMap(SessionInfo.init(json:))
         e.catalogs = value["catalogs"].array?.compactMap(AgentCatalog.init(json:))
         e.account = AgentAccount(json: value["account"])
@@ -114,6 +115,7 @@ extension Envelope {
         put("agent", agent?.rawValue); put("cwd", cwd); put("title", title); put("runsOn", runsOn)
         putBool("skipPermissions", skipPermissions)
         put("session", session); put("text", text)
+        if let from { o["from"] = .number(Double(from)) }
         if let sessions { o["sessions"] = .array(sessions.map(\.json)) }
         if let catalogs { o["catalogs"] = .array(catalogs.map(\.json)) }
         if let account { o["account"] = account.json }

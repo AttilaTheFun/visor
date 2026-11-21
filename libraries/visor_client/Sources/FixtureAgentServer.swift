@@ -60,6 +60,8 @@ final class FixtureAgentServer: AgentServer {
     /// The responding screen's reply has begun coming, and has all come.
     private var respondingStarted = false
     private var respondingDone = false
+    /// Its words told so far: what a snapshot gives, as a server's does.
+    private var respondingWords: String?
 
     func subscribe(_ session: String) {
         guard let onEvent else { return }
@@ -83,15 +85,19 @@ final class FixtureAgentServer: AgentServer {
     private func respond(_ onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
         let session = VisorFixture.chatSession
         let reply = VisorFixture.responding
-        let snapshot = Self.wire(.ephemeral(session: session, streams: [StreamChunk(id: reply.id, text: reply.start)], status: [],
+        let snapshot = Self.wire(.ephemeral(session: session, streams: [StreamChunk(id: reply.id, text: respondingWords ?? reply.start)], status: [],
                                             activity: "Thinking…", busy: true, approval: nil, queued: [], notice: nil, signIn: nil))
         Task { onEvent(.session(snapshot)) }
         guard !respondingStarted else { return }
         respondingStarted = true
         Task {
             try? await Task.sleep(nanoseconds: VisorFixture.respondingDeltasAfter)
+            // Each where it goes, as a server of 0.64 says it.
+            var told = reply.start
             for words in reply.deltas {
-                onEvent(.session(Self.wire(.delta(session: session, message: reply.id, text: words))))
+                onEvent(.session(Self.wire(.delta(session: session, message: reply.id, text: words, from: told.utf8.count))))
+                told += words
+                respondingWords = told
                 try? await Task.sleep(nanoseconds: 300_000_000)
             }
             onEvent(.session(Self.wire(.busy(session: session, false))))

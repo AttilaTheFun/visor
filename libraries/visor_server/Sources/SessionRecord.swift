@@ -79,6 +79,12 @@ public final class SessionRecord {
     /// is never lost between the stream's end and the file's catching up.
     public internal(set) var streams: [(id: String, text: String)] = []
 
+    /// The words streamed since subscribers were last told of them, and
+    /// the flush that tells them (VisorServer+Streams): five times a
+    /// second, not a piece at a time.
+    var unsent = StreamAppends()
+    var streamFlush: Task<Void, Never>?
+
     /// The words of every stream, for anything that still wants one string.
     public var streaming: String { streams.map(\.text).joined(separator: "\n\n") }
 
@@ -314,6 +320,7 @@ public final class SessionRecord {
         info.busy = false
         activity = nil
         streams = []
+        unsent.clear()
     }
 
     func markEnded() {
