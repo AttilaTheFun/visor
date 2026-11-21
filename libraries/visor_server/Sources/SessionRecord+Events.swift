@@ -1,5 +1,5 @@
-// An agent's events applied to the record: what is streaming, and the
-// turn's status.
+// An agent's events applied to the record: the turn's state, and its
+// status.
 
 import ClaudeTranscript
 import Foundation
@@ -8,60 +8,54 @@ import VisorAgent
 import VisorProtocol
 
 extension SessionRecord {
-    /// A row from the record carries the stream with the same message id
-    /// (the row's id is the message id, or the message id with a segment
-    /// suffix): the stream has served and goes.
-    func dropStream(carriedBy rowID: String) {
-        let base = rowID.split(separator: "#").first.map(String.init) ?? rowID
-        streams.removeAll { $0.id == base }
-    }
-
-    /// Whether the record carries a message: a row with its id, or that
-    /// id with a segment suffix.
-    func carries(messageID id: String) -> Bool {
-        entries.contains { $0.role == .assistant && ($0.id == id || $0.id.hasPrefix(id + "#")) }
+    /// Where the turn stands now, from what the record holds
+    /// (TurnState+Precedence): what the server tells when it changes
+    /// (VisorServer+Turn).
+    var currentTurn: TurnState {
+        TurnState.of(approval: info.pendingApproval, signIn: signIn?.url != nil, busy: info.busy, sending: sending,
+                     responding: responding, status: turn.items, background: backgroundKnown ? info.background : [])
     }
 
     /// Applies an agent event to the transcript and returns the envelope
     /// that tells a subscriber the same thing — or nothing, for an event
-    /// the record has overtaken. Streamed words return nothing: they wait
-    /// in `unsent` for the server's next flush (VisorServer+Streams).
+    /// the record has overtaken. Streamed words return nothing: they say
+    /// only that the agent is responding, which the turn's state tells.
     func apply(_ event: AgentEvent) -> Envelope? {
         switch event {
-        case .delta(let id, let text):
-            // A message already on the record is finished: its row can
-            // reach the record before the last of its streamed words are
-            // applied here, and words taken after it would only stand as
-            // a stream nothing ever settles.
-            guard !carries(messageID: id) else { return nil }
-            if let index = streams.lastIndex(where: { $0.id == id }) {
-                unsent.add(id: id, from: streams[index].text.utf8.count, text: text)
-                streams[index].text += text
-            } else {
-                unsent.add(id: id, from: 0, text: text)
-                streams.append((id: id, text: text))
-            }
+        case .delta:
+            // Words coming: the agent is responding. Its words are not
+            // kept or told (the message's row brings them), so a piece of
+            // them costs nothing past the first.
+            sending = false
+            responding = true
+            return nil
+        case .turnBegan:
+            sending = false
             return nil
         case .activity(let label):
             activity = label
             return .activity(session: info.id, label)
         case .thinking(let on):
+            // A block of the message began (thinking, a tool's call, more
+            // words): the words before it have stopped.
+            sending = false
+            responding = false
             turn.thinking(on)
             return .status(session: info.id, items: turn.items)
         case .toolStarted(let id, let name, let label, let tasks):
+            sending = false
+            responding = false
             turn.started(id: id, name: name, label: label, tasks: tasks)
             return .status(session: info.id, items: turn.items)
         case .toolFinished(let id):
+            // Its result came, whether it worked or failed: the agent
+            // takes it up next.
+            responding = false
             turn.finished(id: id)
             return .status(session: info.id, items: turn.items)
         case .busy(let value):
-            // A turn beginning: what an earlier one streamed and the record
-            // never carried (a turn cut short, its row lost) is let go of.
-            // A client keeps its own copy until a sync answers without it.
-            if value, !info.busy {
-                streams = []
-                unsent.clear()
-            }
+            // A turn beginning or ending: nothing of the last one's words.
+            if value != info.busy { responding = false }
             info.busy = value
             noteDelivered()
             // A wake-up that has come and gone with no next one set: the
@@ -74,15 +68,11 @@ extension SessionRecord {
                 info.pendingApproval = nil
                 turn.clear()
                 turnPickedUp = false
-                // A stream is not cleared by the turn ending: it stays
-                // until the record carries its row. Only an agent whose
-                // rows never come from a file lets the turn's end clear it.
-                if indexer == nil { streams = []; unsent.clear() }
-                // What the record carries by now has served.
-                streams.removeAll { carries(messageID: $0.id) }
+                sending = false
             }
             return .busy(session: info.id, value)
         case .failure(let message):
+            sending = false
             error = message
             return .failure(session: info.id, message)
         case .context(let used, let limit):
@@ -131,6 +121,7 @@ extension SessionRecord {
             if bytes == nil { backgroundEnded() }
             return nil
         case .question(let request):
+            sending = false
             info.pendingApproval = request
             return .approval(session: info.id, request)
         case .withdrawn(let id):

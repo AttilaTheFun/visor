@@ -352,6 +352,8 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
                 emit.yield(.busy(true))
                 emit.yield(.activity("Thinking…"))
             }
+            // Claude has the message: what it does next is thinking.
+            emit.yield(.turnBegan)
             if let session {
                 // A copy that has begun is a conversation of its own: it
                 // resumes by its own id from here on, from its own end.

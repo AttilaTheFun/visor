@@ -40,12 +40,17 @@ import VisorClientProto
         approval.summary = "Which color?"
         approval.questions = [question]
 
-        var responding = Visor_Client_V1_Responding()
-        responding.id = "M"
-        responding.text = "Café au lait 🙂"
+        var wait = Visor_Client_V1_TurnWait()
+        wait.kind = .tool
+        wait.id = "toolu_1"
+        wait.label = "Bash: bazel test …"
+        wait.work = .shell
+        var turn = Visor_Client_V1_TurnState()
+        turn.phase = .waiting
+        turn.waits = [wait]
 
         var state = Visor_Client_V1_SessionState()
-        state.responding = [responding]
+        state.turn = turn
         state.status = [item]
         state.activity = "Bash: ls"
         state.busy = true
@@ -58,13 +63,8 @@ import VisorClientProto
         #expect(state.hasApproval)
 
         // Each change the stream carries.
-        var append = Visor_Client_V1_Append()
-        append.id = "M"
-        append.from = Int64("Café au lait 🙂".utf8.count)
-        append.text = ", then"
-        var settled = Visor_Client_V1_Settled()
-        settled.id = "M"
-        settled.recordRevision = 43
+        var responding = Visor_Client_V1_TurnState()
+        responding.phase = .responding
         var status = Visor_Client_V1_StatusList()
         status.items = [item]
         var waiting = Visor_Client_V1_ApprovalChange()
@@ -72,7 +72,7 @@ import VisorClientProto
         var queued = Visor_Client_V1_QueuedList()
         queued.messages = ["Again"]
         let changes: [Visor_Client_V1_SessionChange.OneOf_Change] = [
-            .state(state), .append(append), .settled(settled), .status(status), .activity("Read: a.swift"),
+            .state(state), .turn(responding), .status(status), .activity("Read: a.swift"),
             .busy(false), .approval(waiting), .approval(Visor_Client_V1_ApprovalChange()), .notice(""),
             .failure("The agent ended"), .queued(queued),
         ]

@@ -99,7 +99,7 @@ extension SessionRecord {
         // Behind a row let go of: the rows held can't bring it up.
         let since = since.flatMap { $0 < letGoThrough ? nil : $0 }
         let delta = since.map { rows(since: $0, after: after, limit: Self.pageRows) }
-        var e = Envelope.transcript(session: info.id, entries: delta?.rows ?? Array(entries.suffix(Self.servedRows)), streaming: streaming,
+        var e = Envelope.transcript(session: info.id, entries: delta?.rows ?? Array(entries.suffix(Self.servedRows)), streaming: "",
                                     activity: activity, busy: info.busy, error: error)
         if let delta {
             e.after = delta.after

@@ -1,5 +1,5 @@
 // What a client gets without the live channel: the list of sessions and a
-// session's ephemeral state (what streams, the turn's status, busy, an
+// session's ephemeral state (the turn's state and status lines, busy, an
 // approval waiting, the queue, a notice), each held until it changes, as
 // the transcript's sync is. The socket is the quick way to hear these;
 // over a path that carries no WebSocket (a proxy that does not pass them,

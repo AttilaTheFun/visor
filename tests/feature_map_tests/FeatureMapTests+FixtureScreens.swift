@@ -19,6 +19,7 @@ extension FeatureMapTests {
             ("goal", .chat),
             ("earlier", .chat),
             ("commands", .chat),
+            ("turn-background", .chat),
             ("chat", .approval),
             ("question", .question),
             ("models", .model),

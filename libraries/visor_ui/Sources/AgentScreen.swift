@@ -220,11 +220,11 @@ struct AgentScreen: View {
     private var chat: some View {
         AgentView(
             messages: rows,
-            // The path to the computer, when it is down, says more than
-            // what the turn was last heard doing.
-            status: connectionStatus == nil ? statusItems.map(ActivityItem.init) : [],
-            // Words coming in: the reply above is being written.
-            activity: connectionStatus ?? (transcript.writing ? "Writing…" : transcript.activity),
+            // One line under the thread: where the turn stands (sending,
+            // thinking, responding, waiting on what), or the path to the
+            // computer when it is down, which says more.
+            status: connectionStatus == nil ? Self.turnLine(transcript.turnState) : [],
+            activity: connectionStatus ?? transcript.turnState.words,
             error: transcript.error,
             emptyTitle: transcript.loaded ? (info?.archived == true ? "Archived" : "What should we do?") : "Loading…",
             emptyBody: transcript.loaded
@@ -487,29 +487,25 @@ struct AgentScreen: View {
     }
 
     /// The record's rows, each under the id it keeps through its copies.
-    /// After them a reply of a turn that has ended whose row is not synced
-    /// yet; then what was just sent to an idle agent: in the thread at
-    /// once, under the id its copy in the record takes over, so the row
-    /// stays where it is when the record catches up; then what the agent
-    /// was handed from the queue and has not written down yet; then the
-    /// reply being written, under its message's id, which the record's row
-    /// takes when it lands (SessionTranscript+Responding).
+    /// Then what was just sent to an idle agent: in the thread at once,
+    /// under the id its copy in the record takes over, so the row stays
+    /// where it is when the record catches up; then what the agent was
+    /// handed from the queue and has not written down yet. The reply being
+    /// written is not drawn: it is the line under the thread
+    /// ("Responding…") until its row syncs.
     private var rows: [TranscriptMessage] {
         transcript.entries.map { TranscriptMessage($0, host: host.id, id: transcript.displayID(of: $0)) }
-            + transcript.responding(ofEndedTurn: true).map { TranscriptMessage($0, host: host.id) }
             + transcript.sending.filter(\.shown).map { TranscriptMessage($0.entry, host: host.id, id: $0.id) }
             + transcript.deliveredEntries.map { TranscriptMessage($0, host: host.id, id: $0.id) }
-            + transcript.responding(ofEndedTurn: false).map { TranscriptMessage($0, host: host.id) }
     }
 
-    /// The session's name, as the sidebar lists it.
-    /// The turn's status lines while the agent works; what it has in the
-    /// background between turns (the status row shows the last running
-    /// item, so the two are never mixed: a monitor must not hide the
-    /// thinking).
-    private var statusItems: [StatusItem] {
-        if transcript.busy { return transcript.turnStatus }
-        return info?.background ?? []
+    /// The turn's line, with its work's symbol (a shell, a monitor, a
+    /// subagent, a tool) when it waits on one: the status row shows a
+    /// running item's words and symbol, and the plain words (`activity`)
+    /// otherwise.
+    static func turnLine(_ turn: TurnState) -> [ActivityItem] {
+        guard let work = turn.work, let words = turn.words else { return [] }
+        return [ActivityItem(StatusItem(id: "turn", kind: work, label: words, running: true))]
     }
 
     private var sessionTitle: String {

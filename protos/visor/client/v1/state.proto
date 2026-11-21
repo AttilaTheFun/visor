@@ -1,9 +1,9 @@
 // A session's ephemeral state: everything about it that is not the record.
 // Sessions.Watch sends it whole, then its changes, for as long as the
-// client follows the session. The client joins it with the rows it has
-// synced (rows.proto): the reply being written ("responding") is drawn
-// until its row is synced, then the row in its place (docs/protocol.md,
-// The reply being written).
+// client follows the session. Where the turn stands (sending, thinking,
+// responding, waiting on something, idle) is part of it; the reply's words
+// are not: they come with its row, synced (rows.proto; docs/protocol.md,
+// The turn's state).
 syntax = "proto3";
 
 package visor.client.v1;
@@ -13,11 +13,11 @@ message WatchSessionRequest {
   string session = 1;
 }
 
-// The state whole: on watching, and again when the client's words of a
-// reply don't meet an append.
+// The state whole: on watching.
 message SessionState {
-  // The replies being written that the record doesn't carry yet.
-  repeated Responding responding = 1;
+  // Was the replies being written (0.64's design), never sent.
+  reserved 1;
+  reserved "responding";
   // The turn's status lines so far: tool calls, subagents, shells, thinking.
   repeated StatusItem status = 2;
   // What the agent is doing ("Bash: ls"); empty for nothing.
@@ -32,35 +32,50 @@ message SessionState {
   string notice = 7;
   // A sign-in waiting for its code (`/login`): the page to sign in at.
   string sign_in = 8;
-  // The record's revision when the state was read: a reply the client's
-  // rows carry by then is settled.
+  // The record's revision when the state was read.
   int64 record_revision = 9;
+  // Where the turn stands.
+  TurnState turn = 10;
 }
 
-// A reply being written: its message's id (which its first row on the
-// record has too) and its words so far.
-message Responding {
-  string id = 1;
-  string text = 2;
+// Where a session's turn stands, one state at a time. When several things
+// are true, the most pressing: an approval, a question or a sign-in; a
+// tool call or a subagent running; the reply being written; thinking; the
+// person's message on its way; between turns, work left in the background.
+message TurnState {
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_SENDING = 1;
+    PHASE_THINKING = 2;
+    PHASE_RESPONDING = 3;
+    PHASE_WAITING = 4;
+    PHASE_IDLE = 5;
+  }
+  Phase phase = 1;
+  // For waiting: what it waits on, in the order the agent began them.
+  repeated TurnWait waits = 2;
 }
 
-// More words of a reply being written: where they go (`from`, the length
-// in UTF-8 bytes of the words before them) and what they are. The server
-// sends one per message at most every 200 ms. Words that don't meet what
-// the client holds mean some were missed: it watches again, for the state
-// whole.
-message Append {
-  string id = 1;
-  int64 from = 2;
-  string text = 3;
-}
-
-// The record carries a reply: its row is on the record from
-// `record_revision` on. The client lets its words go once its own rows
-// have it.
-message Settled {
-  string id = 1;
-  int64 record_revision = 2;
+// One thing a waiting turn waits on.
+message TurnWait {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_APPROVAL = 1;
+    KIND_QUESTION = 2;
+    KIND_SIGN_IN = 3;
+    KIND_TOOL = 4;
+    KIND_SUBAGENT = 5;
+    KIND_BACKGROUND = 6;
+  }
+  Kind kind = 1;
+  // The tool call's, the approval's or the background task's id.
+  string id = 2;
+  // What it is, in a line ("Bash: bazel test //tests:linux", a subagent's
+  // description, an approval's summary).
+  string label = 3;
+  // What sort of work, for its symbol; unspecified for an approval, a
+  // question or a sign-in.
+  StatusItem.Kind work = 4;
 }
 
 // One thing the turn is doing or has done.
@@ -121,8 +136,6 @@ message SessionChange {
   oneof change {
     // The state whole, in place of what the client holds.
     SessionState state = 1;
-    Append append = 2;
-    Settled settled = 3;
     // The turn's status lines, whole, whenever they change.
     StatusList status = 4;
     // What the agent is doing; empty for nothing.
@@ -137,7 +150,12 @@ message SessionChange {
     string failure = 9;
     // What waits for the turn's end.
     QueuedList queued = 10;
+    // Where the turn stands, whenever that changes.
+    TurnState turn = 11;
   }
+  // Were a reply's words and their settling (0.64's design), never sent.
+  reserved 2, 3;
+  reserved "append", "settled";
 }
 
 message StatusList {

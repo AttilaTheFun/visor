@@ -52,9 +52,6 @@ public protocol AgentServer: AnyObject {
     func subscribe(_ session: String)
     /// Stops following a session that was left.
     func unsubscribe(_ session: String)
-    /// Asks again for the state of a session followed, whole: the words
-    /// held of a reply being written don't meet what the server sent next.
-    func askState(_ session: String)
     /// The code a sign-in page showed, for the session's sign-in (`/login`).
     func signIn(_ session: String, code: String)
     /// The user has read what the session had to tell them.
@@ -251,8 +248,6 @@ public protocol AgentServer: AnyObject {
 
 public extension AgentServer {
     var racesPaths: Bool { false }
-    /// Subscribing again brings the state whole, as the first time.
-    func askState(_ session: String) { subscribe(session) }
     func authenticate(_ record: AgentServerRecord, byFirstOf paths: [String], headStarts: [Int32],
                       timeouts: [Int32]) async throws -> (name: String?, path: String) {
         var record = record
