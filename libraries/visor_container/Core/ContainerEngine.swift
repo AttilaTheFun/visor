@@ -8,6 +8,13 @@
 // - Started on first use (an exec, or Start), stopped once nothing has run
 //   in it and no session has been placed in it for the idle minutes, and
 //   started again at a server's start when a session is placed in it.
+// - Visor's driver (agent_protocol's AgentDriver, 127.0.0.1:7434 on the Mac)
+//   carried in too, on a socket of its own (the driver link, a UnixBridge
+//   with no header: the agents' JWTs authenticate them) at
+//   /run/visor/driver.sock, which relay-client forwards from the guest's
+//   loopback (`--forward 7434=…`): the agents' wrappers dial
+//   AGENT_DRIVER_URL=http://127.0.0.1:7434, as on the Mac, whether or not
+//   agent-proxy's relay is up (startWrapper, for step 4's sessions).
 // - Before it boots, the relay-client link check (ToolsFolder's rule on the
 //   programs' copy); once booted, `relay-client check` run in it, asking
 //   agent-proxy's health through the relay. If either fails it shows "no
@@ -31,6 +38,15 @@ public actor ContainerEngine {
     public static let toolsInGuest = "/opt/visor/bin"
     /// relay-client in the guest.
     public static let relayClient = toolsInGuest + "/relay-client"
+    /// agent_protocol's agent-wrapper in the guest: each session's agent.
+    public static let agentWrapper = toolsInGuest + "/agent-wrapper"
+    /// The driver link's socket in the guest.
+    public static let driverInGuest = "/run/visor/driver.sock"
+    /// The guest's loopback port relay-client forwards to it: the driver's
+    /// port on the Mac, so the URL is the same in and out.
+    public static let driverPortInGuest: UInt16 = 7434
+    /// What the agents in it dial (AGENT_DRIVER_URL).
+    public static let driverURL = "http://127.0.0.1:\(driverPortInGuest)"
     /// What the main process runs under relay-client: a process that waits,
     /// so everything else is exec'd.
     public static let waits = ["/bin/sh", "-c", "trap 'exit 0' TERM INT; while :; do sleep 86400 & wait $!; done"]
@@ -41,6 +57,8 @@ public actor ContainerEngine {
     var since: Date
     var machine: (any ContainerMachine)?
     var relay: HostRelay?
+    /// The driver link: the guest's /run/visor/driver.sock to Visor's driver.
+    var driverLink: UnixBridge?
     var layout: ContainerLayout?
     /// What the running container was started with.
     var booted: (cpus: Int, memoryGiB: Int, image: ImageDigest)?
@@ -127,8 +145,7 @@ public actor ContainerEngine {
     func stop(reason: String) async {
         if let starting { _ = try? await starting.value }
         guard let machine else {
-            relay?.stop()
-            relay = nil
+            stopLinks()
             if state != .starting { set(context.configuration().enabled && context.host.canRunContainer ? .stopped : .off) }
             return
         }
@@ -136,14 +153,21 @@ public actor ContainerEngine {
         self.machine = nil
         generation += 1
         await machine.stop()
-        relay?.stop()
-        relay = nil
+        stopLinks()
         booted = nil
         executions.removeAll()
         idleSince = nil
         let configuration = context.configuration()
         set(configuration.enabled && context.host.canRunContainer ? .stopped : .off)
         context.log("container: stopped (\(reason))")
+    }
+
+    /// The relay and the driver link stopped, their sockets gone.
+    func stopLinks() {
+        relay?.stop()
+        relay = nil
+        driverLink?.stop()
+        driverLink = nil
     }
 
     func set(_ next: ContainerState) {

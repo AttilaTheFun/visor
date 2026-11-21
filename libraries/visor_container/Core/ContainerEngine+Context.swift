@@ -1,6 +1,6 @@
 // What the container engine is given by the server that runs it: this Mac,
 // where the Containers volume is, Visor's Linux programs, the relay's
-// socket and token, the backends, the settings as they are now, how many
+// socket and token, the driver link's socket and the driver's port, the backends, the settings as they are now, how many
 // sessions are placed in the container, the clock and the log.
 
 import Foundation
@@ -22,6 +22,12 @@ extension ContainerEngine {
         public var relaySocket: URL
         /// The relay's token as it is now (agent-proxy/relay-token).
         public var relayToken: @Sendable () -> String?
+        /// The driver link's socket on the host (beside the relay's unless
+        /// given: the same folder, this user's alone).
+        public var driverSocket: URL
+        /// Visor's driver (agent_protocol's AgentDriver) on this Mac's
+        /// loopback: 7434, unless a test runs its own.
+        public var driverPort: Int
         public var assets: any ContainerAssetBackend
         /// The kernel and init filesystem pinned (the build's; a test's own).
         public var pins: ContainerPins
@@ -40,7 +46,7 @@ extension ContainerEngine {
 
         public init(host: ContainerHost, locate: @escaping @Sendable () throws -> ContainerLayout, linuxPrograms: URL?, version: String,
                     sessions: String = "/Volumes/Sessions", relaySocket: URL, relayToken: @escaping @Sendable () -> String?,
-                    assets: any ContainerAssetBackend, pins: ContainerPins = .current, backend: any ContainerBackend,
+                    driverSocket: URL? = nil, driverPort: Int = 7434, assets: any ContainerAssetBackend, pins: ContainerPins = .current, backend: any ContainerBackend,
                     configuration: @escaping @Sendable () -> ContainerEngineConfiguration,
                     placedSessions: @escaping @Sendable () async -> Int = { 0 }, now: @escaping @Sendable () -> Date = { Date() },
                     log: @escaping @Sendable (String) -> Void = { _ in }, checkTimeout: Duration = .seconds(20),
@@ -52,6 +58,8 @@ extension ContainerEngine {
             self.sessions = sessions
             self.relaySocket = relaySocket
             self.relayToken = relayToken
+            self.driverSocket = driverSocket ?? relaySocket.deletingLastPathComponent().appendingPathComponent("driver.sock")
+            self.driverPort = driverPort
             self.assets = assets
             self.pins = pins
             self.backend = backend

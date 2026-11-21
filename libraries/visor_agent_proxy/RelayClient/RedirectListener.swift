@@ -72,8 +72,9 @@ public final class RedirectListener: Sendable {
             close(connection)
             return
         }
-        // To this listener itself, or loopback's: never relayed.
-        if address.hasPrefix("127.") {
+        // To this listener itself, or loopback's (the forwards'): never
+        // relayed, as the chain never redirects them.
+        if !ContainerNetwork.isRedirected(address) {
             close(connection)
             return
         }

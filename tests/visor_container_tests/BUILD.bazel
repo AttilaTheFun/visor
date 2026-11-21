@@ -9,14 +9,16 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # egress check, no egress refusing processes, first use, the idle stop, the
 # start with a server, the root filesystem, a crash), and HostRelay against
 # a fake agent-proxy relay (the header's bytes, the splice) and agent-proxy's
-# own relay listener (relay-client check's health answer). No VM: on Linux,
-# in //tests:linux, and on a Mac.
+# own relay listener (relay-client check's health answer); the driver link
+# (carried in, no header, no agent-proxy needed) and startWrapper's argv and
+# environment. No VM: on Linux, in //tests:linux, and on a Mac.
 swift_test(
     name = "visor_container_tests",
     copts = STRICT_SWIFT,
     srcs = [
         "AssetsTests.swift",
         "EngineTests.swift",
+        "EngineTests+Wrapper.swift",
         "FakeBackend.swift",
         "FakeMachines.swift",
         "HostRelayTests.swift",
