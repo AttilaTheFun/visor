@@ -2,18 +2,20 @@
 
 /// Checks commands against the disks as they are, just before they run:
 /// only `apfs addVolume` of a missing role's volume, and `apfs
-/// deleteVolume` of Visor's own Containers volume by its APFS volume UUID,
-/// ever pass. Anything that would erase or delete Sessions (by name, by
-/// mount point, by disk or by UUID) throws, whoever built the command, and
-/// so does any argument that's exactly `&&`.
+/// deleteVolume` of one of Visor's own volumes by its APFS volume UUID
+/// when that role is one the caller asked to delete (`deleting`: none,
+/// unless Uninstall… was asked to delete the volumes), ever pass. Anything
+/// that would erase or delete Sessions (by name, by mount point, by disk or
+/// by UUID) throws, whoever built the command, unless Sessions itself is
+/// asked for; and so does any argument that's exactly `&&`.
 public enum VolumeGuard {
     /// What joins commands in the administrator prompt's one shell
     /// (PrivilegeRoute's AppleScript passes it through unquoted): never an
     /// argument of a command, or the command after it would be a new one.
     public static let commandJoiner = "&&"
 
-    /// The verbs that erase, delete or reformat: never aimed at Sessions,
-    /// and of these only deleteVolume is run at all.
+    /// The verbs that erase, delete or reformat: never aimed at Sessions
+    /// unless it's asked for, and of these only deleteVolume is run at all.
     static let destructive: Set<String> = [
         "deleteVolume", "eraseVolume", "deleteContainer", "deleteVolumeGroup", "deleteSnapshot",
         "eraseDisk", "reformat", "partitionDisk", "zeroDisk", "randomDisk", "secureErase",
@@ -21,10 +23,13 @@ public enum VolumeGuard {
     ]
 
     /// Throws unless every command may run now. `recorded` is volumes.json
-    /// as Visor Disk Utility last wrote it: its ownVolumes say which
-    /// Containers is Visor's when it isn't mounted at /Volumes/Containers
-    /// (nil: only the one mounted there is).
-    public static func check(_ commands: [DiskCommand], against survey: DiskSurvey, recorded: VolumesStatus? = nil) throws {
+    /// as Visor Disk Utility last wrote it: its ownVolumes say which volume
+    /// of a role's name is Visor's when it isn't mounted at the role's
+    /// mount point (nil: only the one mounted there is). `deleting`: the
+    /// roles whose volumes may be deleted (none, unless Uninstall… was
+    /// asked to, with the volumes' names typed).
+    public static func check(_ commands: [DiskCommand], against survey: DiskSurvey, recorded: VolumesStatus? = nil,
+                             deleting: Set<VolumeRole> = []) throws {
         let sessions = survey.state(for: .sessions)
         var deleted: Set<String> = []
         for command in commands {
@@ -34,7 +39,8 @@ public enum VolumeGuard {
                     + "which would start another command in the administrator prompt's shell)")
             }
             guard command.argv.first == DiskCommand.diskutil else { throw DiskVolumesError.notAllowed(command.description) }
-            if let verb = arguments.firstIndex(where: destructive.contains) {
+            let isDelete = Array(arguments.prefix(2)) == ["apfs", "deleteVolume"]
+            if let verb = arguments.firstIndex(where: destructive.contains), !(isDelete && deleting.contains(.sessions)) {
                 for target in arguments[(verb + 1)...] where !target.hasPrefix("-") {
                     try refuseSessions(target, sessions: sessions, survey: survey, command: command)
                 }
@@ -44,32 +50,36 @@ public enum VolumeGuard {
                 try checkAdd(arguments, survey: survey, deleted: deleted, command: command)
             case ["apfs", "deleteVolume"]:
                 guard arguments.count == 3 else { throw DiskVolumesError.notAllowed(command.description) }
-                try checkDelete(arguments[2], survey: survey, recorded: recorded)
-                deleted.insert(VolumeRole.containers.volumeName)
+                let role = try checkDelete(arguments[2], survey: survey, recorded: recorded, deleting: deleting)
+                deleted.insert(role.volumeName)
             default:
                 throw DiskVolumesError.notAllowed(command.description)
             }
         }
     }
 
-    /// Throws unless the target is Visor's own Containers, by its APFS
-    /// volume UUID, in the survey made just now: named Containers, with no
-    /// system role, and either mounted at /Volumes/Containers or the one
-    /// volumes.json recorded as Visor's (so a volume of Visor's that came
-    /// to be mounted elsewhere is still erased, and someone else's
-    /// Containers mounted elsewhere never is). A disk (`disk3s8`) is
-    /// refused: its number can change between this look and the command.
-    private static func checkDelete(_ target: String, survey: DiskSurvey, recorded: VolumesStatus?) throws {
-        let role = VolumeRole.containers
+    /// Throws unless the target is one of Visor's own volumes, of a role
+    /// asked for, by its APFS volume UUID, in the survey made just now:
+    /// named for its role, with no system role, and either mounted at the
+    /// role's mount point or the one volumes.json recorded as Visor's (so a
+    /// volume of Visor's that came to be mounted elsewhere is still
+    /// deleted, and someone else's of the name mounted elsewhere never is).
+    /// A disk (`disk3s8`) is refused: its number can change between this
+    /// look and the command. The role deleted.
+    private static func checkDelete(_ target: String, survey: DiskSurvey, recorded: VolumesStatus?,
+                                    deleting: Set<VolumeRole>) throws -> VolumeRole {
         guard DiskCommand.isVolumeUUID(target) else {
-            throw DiskVolumesError.wrongTarget("\(target) isn't an APFS volume UUID: \(role.volumeName) is deleted by its UUID alone, "
+            throw DiskVolumesError.wrongTarget("\(target) isn't an APFS volume UUID: Visor's volumes are deleted by their UUIDs alone, "
                 + "never by a disk number, which can change. Nothing was deleted.")
         }
         guard let (volume, _) = survey.volume(uuid: target) else {
             throw DiskVolumesError.wrongTarget("No APFS volume here has the UUID \(target) now. Nothing was deleted.")
         }
-        guard volume.name == role.volumeName, volume.roles.isEmpty else {
-            throw DiskVolumesError.wrongTarget("\(volume.device) (\(target)) is \(volume.name), not \(role.volumeName). Nothing was deleted.")
+        guard let role = VolumeRole.allCases.first(where: { $0.volumeName == volume.name }), volume.roles.isEmpty else {
+            throw DiskVolumesError.wrongTarget("\(volume.device) (\(target)) is \(volume.name), not one of Visor's volumes. Nothing was deleted.")
+        }
+        guard deleting.contains(role) else {
+            throw DiskVolumesError.wrongTarget("\(role.volumeName) is deleted only when its deletion is asked for, by name. Nothing was deleted.")
         }
         let mountPoint = survey.info(device: volume.device)?.mountPoint
         let isRecorded = recorded?.ownUUID(for: role).map { $0.caseInsensitiveCompare(volume.uuid) == .orderedSame } ?? false
@@ -80,6 +90,7 @@ public enum VolumeGuard {
                     + "and isn't the \(role.volumeName) recorded in volumes.json: it may not be Visor's, so nothing was deleted. "
                     + "If it is Visor's, mount it at \(role.mountPoint); if not, rename it, or delete it yourself in Disk Utility.")
         }
+        return role
     }
 
     /// Throws if the target is Sessions: its disk or UUID, a volume named

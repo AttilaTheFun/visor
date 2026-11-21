@@ -3,8 +3,8 @@
 import Foundation
 
 /// One `diskutil` command line. Only two kinds are ever made: adding a
-/// volume, and deleting Containers (VolumeGuard checks both again before
-/// anything runs).
+/// volume, and deleting one of Visor's (VolumeGuard checks both again
+/// before anything runs, and passes a delete only of a role asked for).
 public struct DiskCommand: Equatable, Sendable, CustomStringConvertible {
     /// diskutil, by its full path: never one found on a PATH.
     public static let diskutil = "/usr/sbin/diskutil"
@@ -34,12 +34,12 @@ public struct DiskCommand: Equatable, Sendable, CustomStringConvertible {
         return DiskCommand(arguments: arguments)
     }
 
-    /// `diskutil apfs deleteVolume <volume UUID>`, for Containers alone:
-    /// Sessions throws. By its APFS volume UUID, never its disk (`disk3s8`):
-    /// disk numbers can change between VolumeGuard's look and the command
-    /// running as root, a UUID can't.
+    /// `diskutil apfs deleteVolume <volume UUID>`: by its APFS volume UUID,
+    /// never its disk (`disk3s8`): disk numbers can change between
+    /// VolumeGuard's look and the command running as root, a UUID can't.
+    /// Made only for Uninstall…, when the volumes' deletion is asked for;
+    /// VolumeGuard refuses it otherwise.
     public static func deleteVolume(_ role: VolumeRole, uuid: String) throws -> DiskCommand {
-        guard role.isErasable else { throw DiskVolumesError.sessionsNeverErased("diskutil apfs deleteVolume \(uuid)") }
         guard isVolumeUUID(uuid) else {
             throw DiskVolumesError.blocked("\(role.volumeName) has no APFS volume UUID (\"\(uuid)\"): it's deleted by its UUID alone.")
         }

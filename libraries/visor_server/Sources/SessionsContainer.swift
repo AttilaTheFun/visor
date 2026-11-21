@@ -32,4 +32,16 @@ public protocol SessionsContainer: AnyObject, Sendable {
     /// Whether nothing listens on loopback's `port` now: what a relay port
     /// is chosen by.
     func loopbackPortIsFree(_ port: Int) -> Bool
+    /// A command run to its end in it (started first if it isn't running),
+    /// in place of one on this Mac: Super Compact's `claude -p` and the
+    /// models' `initialize`, while the container is on. Refused while it's
+    /// off or has no egress.
+    func run(_ command: ContainerCommand) async throws -> ContainerCommandOutput
+}
+
+extension SessionsContainer {
+    /// A container that runs no command (a test's): refused.
+    public func run(_ command: ContainerCommand) async throws -> ContainerCommandOutput {
+        throw AgentJobRefusal("This Sessions container runs no command.")
+    }
 }

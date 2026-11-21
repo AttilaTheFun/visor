@@ -173,14 +173,15 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: scene.note), "nothing was put back")
     }
 
-    @Test func theLaunchdWatchStartsWithKickstartUnlessThePlistChanged() {
+    @Test func theLaunchdWatchStartsWithKickstartElseRegistersFromTheBundle() {
         let job = ServerAgentJob.job(bundleID: "com.LoganShire.Visor", home: "/Users/me")
-        let same = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", source: nil, backup: nil,
-                                            previousPlist: nil, reloads: false, note: "/n", newVersion: "1", oldVersion: "1")
-        #expect(same.start == "launchctl kickstart -k gui/$(id -u)/com.LoganShire.Visor.server")
-        let changed = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", source: nil, backup: nil,
-                                               previousPlist: nil, reloads: true, note: "/n", newVersion: "2", oldVersion: "1")
-        #expect(changed.start.hasSuffix("launchctl bootstrap gui/$(id -u) '/Users/me/Library/LaunchAgents/com.LoganShire.Visor.server.plist'"))
-        #expect(changed.script().contains("while kill -0 1 2>/dev/null"), "it waits for the server to go first")
+        let watch = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", executable: "Visor",
+                                             source: nil, backup: nil, note: "/n", newVersion: "1", oldVersion: "1")
+        #expect(watch.start == "launchctl kickstart -k gui/$(id -u)/com.LoganShire.Visor.server 2>/dev/null "
+            + "|| '/Applications/Visor.app/Contents/MacOS/Visor' server-agent register")
+        #expect(watch.reload == watch.start)
+        #expect(watch.previousPlist == nil, "the plist is the bundle's: it comes back with it")
+        #expect(!watch.script().contains("bootstrap"))
+        #expect(watch.script().contains("while kill -0 1 2>/dev/null"), "it waits for the server to go first")
     }
 }

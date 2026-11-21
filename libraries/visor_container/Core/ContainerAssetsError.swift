@@ -3,8 +3,8 @@
 import Foundation
 
 public enum ContainerAssetsError: Error, Equatable, Sendable, LocalizedError, CustomStringConvertible {
-    /// The Containers volume isn't mounted where Visor looks.
-    case noContainersVolume(String)
+    /// The Visor volume isn't mounted where Visor looks.
+    case noVisorVolume(String)
     /// A download's SHA-256 wasn't the one pinned.
     case checksumMismatch(what: String, expected: String, found: String)
     /// The kernel isn't in its archive at the path pinned.
@@ -22,8 +22,8 @@ public enum ContainerAssetsError: Error, Equatable, Sendable, LocalizedError, Cu
 
     public var description: String {
         switch self {
-        case let .noContainersVolume(path):
-            "There's no Containers volume at \(path). Make it with Visor Disk Utility, then try again."
+        case let .noVisorVolume(path):
+            "There's no Visor volume at \(path). Make it with Visor Disk Utility, then try again."
         case let .checksumMismatch(what, expected, found):
             "\(what) isn't the one pinned: its SHA-256 is \(found), not \(expected)."
         case let .memberMissing(member):

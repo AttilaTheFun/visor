@@ -214,7 +214,7 @@ extension SuperCompaction {
         var last = ""
         for attempt in 1...max(attempts, 1) {
             if stop.isSet { throw Failure.stopped }
-            let outcome = await Self.call(tool: tool, model: model, prompt: prompt, in: folder, limit: callLimit, stop: stop)
+            let outcome = await Self.call(tool: tool, model: model, prompt: prompt, in: folder, limit: callLimit, stop: stop, caller: caller)
             if stop.isSet { throw Failure.stopped }
             switch outcome {
             case .success(let answer) where usable(answer):
@@ -246,16 +246,23 @@ extension SuperCompaction {
          "--safe-mode", "--disable-slash-commands", "--no-session-persistence", "--system-prompt", SuperCompactPrompts.system]
     }
 
-    /// One call of `claude -p`, in `folder`, ended when `stop` is set or
-    /// it has taken `limit`.
+    /// One call of `claude -p`, in `folder` (or by `caller`: in the
+    /// Sessions container), ended when `stop` is set or it has taken
+    /// `limit`.
     @concurrent
     static func call(tool: String, model: String, prompt: String, in folder: URL, limit: Duration,
-                     stop: Stop) async -> Result<String, CallFailure> {
+                     stop: Stop, caller: Caller? = nil) async -> Result<String, CallFailure> {
         let deadline = ContinuousClock.now + limit
-        guard let ran = await Command.output(tool, arguments(model: model), environment: ToolPath.environment(), directory: folder, errors: true,
-                                             input: Data(prompt.utf8), every: .milliseconds(200),
-                                             stopping: { stop.isSet || ContinuousClock.now >= deadline }) else {
-            return .failure(CallFailure(reason: "could not start \(tool)"))
+        let stopping: @Sendable () -> Bool = { stop.isSet || ContinuousClock.now >= deadline }
+        let ran: (status: Int32, text: String, stopped: Bool)?
+        if let caller {
+            ran = await caller(arguments(model: model), Data(prompt.utf8), limit, stopping)
+        } else {
+            ran = await Command.output(tool, arguments(model: model), environment: ToolPath.environment(), directory: folder, errors: true,
+                                       input: Data(prompt.utf8), every: .milliseconds(200), stopping: stopping)
+        }
+        guard let ran else {
+            return .failure(CallFailure(reason: caller == nil ? "could not start \(tool)" : "could not run \(tool) in the Sessions container"))
         }
         if ran.stopped {
             return .failure(CallFailure(reason: stop.isSet ? "stopped" : "took longer than \(limit), and was ended"))

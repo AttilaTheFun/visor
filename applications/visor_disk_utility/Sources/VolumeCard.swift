@@ -1,5 +1,6 @@
 // One volume: whether it's there, what it is, its space, and what can be
-// done. Sessions has no erase, ever.
+// done. No volume is ever erased here: Visor's has its data on it, so its
+// Erase Containers… empties only the container's folder.
 
 import DiskVolumes
 import SwiftUI
@@ -27,9 +28,7 @@ struct VolumeCard: View {
                     sizeRow("Quota", text: binding(\.quota), help: "The most it may hold. Empty for no limit.")
                 }
                 if state?.exists == true {
-                    Text(role.isErasable
-                         ? "diskutil can't change a volume's reserve or quota once it's made: Erase Containers… remakes it with these."
-                         : "diskutil can't change a volume's reserve or quota once it's made, and Sessions is never erased.")
+                    Text("diskutil can't change a volume's reserve or quota once it's made, and Visor Disk Utility never erases one.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -40,9 +39,9 @@ struct VolumeCard: View {
                 }
                 HStack {
                     Spacer()
-                    if role.isErasable {
+                    if role == .visor {
                         Button("Erase Containers…", role: .destructive) { confirmingErase = true }
-                            .disabled(model.isBusy || state?.exists != true)
+                            .disabled(model.isBusy || state?.isMountedInPlace != true)
                     }
                     Button("Create") { Task { await model.create(role) } }
                         .disabled(model.isBusy || !canCreate)
@@ -55,8 +54,9 @@ struct VolumeCard: View {
         .confirmationDialog("Erase Containers?", isPresented: $confirmingErase) {
             Button("Erase Containers", role: .destructive) { Task { await model.eraseContainers() } }
         } message: {
-            Text("Everything on Containers is deleted: the container's image, root filesystem, caches and logs. "
-                 + "The volume is made again, case-sensitive, with the reserve and quota above. Sessions isn't touched.")
+            Text("The Containers folder on Visor is emptied: the container's image, root filesystem, caches and logs, "
+                 + "all fetched and made again when it next starts. Stop the Sessions container first (Visor's Settings). "
+                 + "Visor's data on the volume, Sessions and Sources aren't touched.")
         }
     }
 
@@ -65,9 +65,9 @@ struct VolumeCard: View {
         return false
     }
 
-    /// Reserve and quota are typed for a volume to be made, and for
-    /// Containers' erase; an existing Sessions' are shown as they are.
-    private var sizesEditable: Bool { canCreate || (role.isErasable && state?.exists == true) }
+    /// Reserve and quota are typed for a volume to be made; an existing
+    /// one's are shown as they are.
+    private var sizesEditable: Bool { canCreate }
 
     private var status: String {
         switch state?.plan {

@@ -50,15 +50,29 @@ extension VisorServer {
     }
 
     /// The socket file: `~/.visor/server.sock`, short enough for a socket
-    /// path anywhere, in a folder of this user's alone; in VISOR_RUNTIME_DIR
-    /// when that is set (a home that can't hold a socket) — or where a test
-    /// or a staging server puts its own, away from the installed server's.
+    /// path anywhere, in a folder of this user's alone; where the binary
+    /// places it (`placedSocketPath`: Visor.app's on the Visor volume,
+    /// `/Volumes/Visor/run/server.sock`); in VISOR_RUNTIME_DIR when that is
+    /// set (a home that can't hold a socket) — or where a test or a staging
+    /// server puts its own, away from the installed server's.
     public static var socketPath: String {
         if let socketPathOverride { return socketPathOverride }
         if let runtime = runtimeDirectory() { return runtime.appendingPathComponent("server.sock", isDirectory: false).path }
-        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".visor/server.sock", isDirectory: false).path
+        if let placedSocketPath { return placedSocketPath }
+        return legacySocketPath
     }
     public static var socketPathOverride: String?
+    /// Where the binary keeps the socket file instead of `~/.visor`: set
+    /// before the server starts, and in the clients of the same process.
+    public static var placedSocketPath: String?
+
+    /// `~/.visor/server.sock`: the socket file before the Visor volume, and
+    /// what an SSH client of 0.64 still reaches (`nc -U
+    /// ~/.visor/server.sock`). With the socket file placed elsewhere, it's a
+    /// link to it for one release (0.65), then goes (docs/DEVELOPMENT.md).
+    public static var legacySocketPath: String {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".visor/server.sock", isDirectory: false).path
+    }
 
     /// The REST side's server, made the first time a listener needs it
     /// after a start (the socket file's may be first).
@@ -92,8 +106,31 @@ extension VisorServer {
                 self?.accept(stream, trusted: true)
             }
             Self.log("listening for SSH clients at \(path)")
+            linkLegacySocket(to: path)
         } catch {
             Self.log("not listening for SSH clients: \(error)")
+        }
+    }
+
+    /// `~/.visor/server.sock` a link to the socket file placed elsewhere
+    /// (0.65 alone: an SSH client of 0.64 asks for that path), unless a
+    /// server still answers there; the folder made this user's alone.
+    private func linkLegacySocket(to path: String) {
+        let legacy = Self.legacySocketPath
+        guard Self.socketPathOverride == nil, path != legacy else { return }
+        let files = FileManager.default
+        if (try? files.destinationOfSymbolicLink(atPath: legacy)) == path { return }
+        if ServerPlatform.current.listening.answers(unixPath: legacy) {
+            Self.log("\(legacy) is another server's socket: it isn't linked to \(path)")
+            return
+        }
+        do {
+            try files.createDirectory(atPath: (legacy as NSString).deletingLastPathComponent, withIntermediateDirectories: true,
+                                      attributes: [.posixPermissions: 0o700])
+            try? files.removeItem(atPath: legacy)
+            try files.createSymbolicLink(atPath: legacy, withDestinationPath: path)
+        } catch {
+            Self.log("\(legacy) couldn't be linked to \(path): \(error)")
         }
     }
 
@@ -107,7 +144,8 @@ extension VisorServer {
         modelsRefresh = Task {
             var soon = true
             while !Task.isCancelled {
-                async let claude = ClaudeHarness.refreshModels()
+                // In the Sessions container while it's on (VisorServer+ContainerClaude).
+                async let claude = refreshClaudeModels()
                 async let codex = CodexHarness.refreshModels()
                 // OpenRouter's list, from its CLI, when it is a day old.
                 async let openrouter = OpenRouterHarness.refreshIfStale()

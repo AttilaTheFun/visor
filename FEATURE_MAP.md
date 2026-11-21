@@ -9,7 +9,7 @@ that takes it. The client is one SwiftUI tree, `VisorRootView`
 iPad and Mac, Isomer's on Android and the web.
 
 Visor Disk Utility (applications/visor_disk_utility), the Mac app that
-makes the Sessions and Containers volumes, is a separate app with a window
+makes the Sessions, Sources and Visor volumes, is a separate app with a window
 of its own, outside that tree: it isn't mapped here.
 
 How to read it:
@@ -158,7 +158,7 @@ that opens it directly (see "Driving it" below).
 | Attachment preview | a sheet with "Done"; on the iPhone it is Quick Look, whose button is "close" | "Done" ("close" on the iPhone), "Share" | none (the `chat` fixture's two attachments are both labelled "Open the attachment": tap them by `attachment-‹file›`) |
 | Fork, Branch, Side Questions, Subagent | its title: "Fork of …", "Branch of …", "Side Questions", or the subagent's description | the chat's | none |
 | Settings | `settings-appearance` listed | `settings-computer-‹name›`, `settings-add-computer`, `settings-notify-waiting`, `-failed`, `-goal`, `-turn`, `settings-appearance`, `account-sign-out`, `settings-done` (a sheet) or `settings-back` (a pane) | `settings` (Mac's proof) |
-| Computer settings | `share-log` or "Network paths" listed | `use-ssh`, `relay-toggle`, `back-up-sessions`, `show-qr`, `qr-code`, `copy-http-code`, `copy-https-code`, `copy-ssh-code`, `share-log` | none |
+| Computer settings | `share-log` or "Network paths" listed | `use-ssh`, `relay-toggle`, `back-up-sessions`, `show-qr`, `qr-code`, `copy-http-code`, `copy-https-code`, `copy-ssh-code`, `share-log`, `copy-ssh-key`, `show-key-qr`, `forget-device` (reached over SSH) | none |
 
 The fixture's canned data: one computer, "Snapshot Mac", with the sessions
 `fixture-chat` ("Offline sync", Claude, a goal and a pending Bash

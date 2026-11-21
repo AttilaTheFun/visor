@@ -1,20 +1,27 @@
-// The two volumes, and what each must be.
+// The three volumes, and what each must be.
 
-/// Which of Visor's two volumes a volume is.
-public enum VolumeRole: String, Codable, CaseIterable, Sendable {
+/// Which of Visor's three volumes a volume is. Everything Visor keeps on a
+/// Mac is on one of them once they're made (docs/containers.md, Visor's
+/// volumes), so deleting them, after Uninstall…, leaves the Mac as it was.
+public enum VolumeRole: String, CaseIterable, Sendable {
     /// The sessions' working folders (`/Volumes/Sessions/<Agent>/<id>`), the
     /// container's harness folder (`/Volumes/Sessions/.claude`) and staged
     /// exports: what must survive. Never erased.
     case sessions
-    /// The container's image, root filesystem, caches and logs: what can be
-    /// thrown away and made again.
-    case containers
+    /// The sessions' checkouts, shared into the container at the same path
+    /// (`/Volumes/Sources`): case-sensitive, as a Linux checkout wants.
+    case sources
+    /// Visor's own: its data folder (`Data/`), its caches, logs and socket,
+    /// and the container's image, root filesystem and caches
+    /// (`Containers/`). It replaced 0.64's Containers volume.
+    case visor
 
     /// The volume's name, and so its mount point's.
     public var volumeName: String {
         switch self {
         case .sessions: "Sessions"
-        case .containers: "Containers"
+        case .sources: "Sources"
+        case .visor: "Visor"
         }
     }
 
@@ -23,24 +30,22 @@ public enum VolumeRole: String, Codable, CaseIterable, Sendable {
     public var mountPoint: String { "/Volumes/\(volumeName)" }
 
     /// The APFS personality it's made with (`diskutil apfs addVolume`'s
-    /// <fs>). Both are case-sensitive: Sessions holds folders a Linux
-    /// container works in, and Containers' caches and logs are shared into
-    /// the same Linux container, where `Foo.h` and `foo.h` are two files.
-    /// (The container's own image and root filesystem are ext4 block files,
-    /// which don't mind either way.)
+    /// <fs>). All three are case-sensitive: Sessions and Sources hold
+    /// folders a Linux container works in, and the container's caches and
+    /// logs on Visor are shared into the same Linux container, where `Foo.h`
+    /// and `foo.h` are two files. (The container's own image and root
+    /// filesystem are ext4 block files, which don't mind either way.)
     public var personality: String { "Case-sensitive APFS" }
 
     /// Whether it should be case-sensitive.
     public var wantsCaseSensitive: Bool { true }
 
-    /// Whether Visor Disk Utility may ever erase it: Containers alone.
-    public var isErasable: Bool { self == .containers }
-
     /// What it's for, in a line.
     public var purpose: String {
         switch self {
         case .sessions: "The sessions' working folders, the container's .claude folder and staged exports. Never erased."
-        case .containers: "The container's image, root filesystem, caches and logs. Can be erased and made again."
+        case .sources: "The sessions' checkouts, shared into the container at the same path."
+        case .visor: "Visor's data, caches, logs and socket, and the container's image, root filesystem and caches."
         }
     }
 
@@ -49,7 +54,7 @@ public enum VolumeRole: String, Codable, CaseIterable, Sendable {
     public var defaultReserve: Int64 {
         switch self {
         case .sessions: 20 * ByteSize.gigabyte
-        case .containers: 0
+        case .sources, .visor: 0
         }
     }
 
@@ -57,8 +62,34 @@ public enum VolumeRole: String, Codable, CaseIterable, Sendable {
     /// disk's).
     public var defaultQuota: Int64 {
         switch self {
-        case .sessions: 0
-        case .containers: 200 * ByteSize.gigabyte
+        case .sessions, .sources: 0
+        case .visor: 200 * ByteSize.gigabyte
         }
+    }
+
+    /// The Containers volume's role, as a volumes.json of 0.64's names it.
+    public static let retiredContainers = "containers"
+
+    /// The role a volumes.json line (or a command line) names: its own, or
+    /// `containers`, which the Visor volume replaced, read as `visor`.
+    public static func named(_ text: String) -> VolumeRole? {
+        text == retiredContainers ? .visor : VolumeRole(rawValue: text)
+    }
+}
+
+extension VolumeRole: Codable {
+    /// `containers` (a volumes.json of 0.64's) reads as `visor`.
+    public init(from decoder: any Decoder) throws {
+        let text = try decoder.singleValueContainer().decode(String.self)
+        guard let role = VolumeRole.named(text) else {
+            throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath,
+                                                                    debugDescription: "\(text) isn't one of Visor's volumes"))
+        }
+        self = role
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 }

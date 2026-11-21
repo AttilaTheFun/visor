@@ -1,6 +1,7 @@
-// Where the Sessions container's files go: on the Containers volume, in
-// `Visor/` (docs/containers.md). All of it can be thrown away and made
-// again; what must survive is on Sessions.
+// Where the Sessions container's files go: on the Visor volume, in
+// `Containers/` (docs/containers.md). All of it can be thrown away and made
+// again; what must survive is on Sessions, and the sessions' checkouts on
+// Sources.
 //
 //   kernel/vmlinux, vmlinux.json        the kernel, and what it was checked against
 //   store/                              Containerization's image store (content/, state.json)
@@ -11,20 +12,13 @@
 //                                       of the template) and the image it was cloned from
 //   sessions/boot.log                   the guest's console, each boot
 //   sessions/logs/<process>.log         each process exec'd in it
-//
-// TODO(case sensitivity, still open with Logan): where the sessions'
-// checkouts live in the container. Sessions is case-insensitive on both
-// Macs today and virtiofs passes that on; the proposal is a third,
-// case-sensitive APFS volume (`/Volumes/Work`) made by Visor Disk Utility.
-// Nothing here decides it: the engine mounts Sessions, and the checkouts'
-// folder only where the settings name one (ContainerSettings.checkouts).
 
 import DiskVolumes
 import Foundation
 
 public struct ContainerLayout: Equatable, Sendable {
-    /// Visor's folder on the Containers volume.
-    public static let folderName = "Visor"
+    /// The container's folder on the Visor volume.
+    public static let folderName = VisorFolders.containersName
 
     public var root: URL
 
@@ -32,12 +26,12 @@ public struct ContainerLayout: Equatable, Sendable {
         self.root = root
     }
 
-    /// Visor's folder on the Containers volume as Visor finds it, or an
+    /// The container's folder on the Visor volume as Visor finds it, or an
     /// error naming Visor Disk Utility when it isn't mounted.
     public static func locate(_ volumes: DiskVolumes) throws -> ContainerLayout {
-        let containers = volumes.containers
-        guard containers.isReady else { throw ContainerAssetsError.noContainersVolume(containers.path) }
-        return ContainerLayout(root: URL(fileURLWithPath: containers.path, isDirectory: true).appendingPathComponent(folderName, isDirectory: true))
+        let visor = volumes.visor
+        guard visor.isReady else { throw ContainerAssetsError.noVisorVolume(visor.path) }
+        return ContainerLayout(root: URL(fileURLWithPath: visor.path, isDirectory: true).appendingPathComponent(folderName, isDirectory: true))
     }
 
     public var kernelFolder: URL { root.appendingPathComponent("kernel", isDirectory: true) }

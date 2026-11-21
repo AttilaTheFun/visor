@@ -3,7 +3,7 @@
 // `agentProxy` at its start (the last good it kept when settings.json can't
 // be read), starts what's configured, and runs until it's ended (TERM,
 // INT). Its own lines go to standard error, which launchd points at
-// `~/Library/Logs/Visor-agent-proxy.log`; past about 8 MB it's moved aside
+// `Visor-agent-proxy.log` in Visor's logs; past about 8 MB it's moved aside
 // (`.1`) and a new one begun (LogRotation).
 //
 // How it ends says what launchd does next (the job's KeepAlive starts it

@@ -34,16 +34,20 @@ struct VisorMacApp: App {
     }
 
     init() {
-        // The server's own: its keychain items. Then the server, before
-        // anything asks for it: made here, as it always was, unless it runs
-        // as the server agent (LocalServer, MacServer).
-        MacServer.prepare()
+        // Where Visor's things are, the home folder's moved onto the Visor
+        // volume first if the server will run here (MacPlaces); the
+        // server's own: its keychain items. Then the server, before anything
+        // asks for it: made here, as it always was, unless it runs as the
+        // server agent (LocalServer, MacServer).
+        MacServer.prepare(runsServer: LocalServer.runsInApp, client: true)
         let local = LocalServer.shared
         self.local = local
         local.begin()
         // The client's own: its cache and its keychain items. Then its
         // services, which the store connects through.
         AgentServerConnection.cache = .open(named: "messages", in: MacPlaces.folder("Client"))
+        // An export's staging on the Visor volume (emptied at each start).
+        SessionExport.staging = MacPlaces.folders.temporary
         // This Mac's own server at its socket file (SocketFileURL), with the
         // app's key; every other computer as before.
         let socketFile = SocketFileHTTPService(connect: { await POSIXUnixSocket.connect($0) }, headers: { MacAppKey.headers })

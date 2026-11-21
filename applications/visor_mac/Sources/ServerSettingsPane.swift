@@ -203,7 +203,7 @@ struct ServerSettingsPane: View {
                     Text("Remote Login is off on this Mac, so nothing reaches these yet: turn it on in System Settings → General → Sharing.")
                         .font(.caption).foregroundColor(.red)
                 } else {
-                    Text("Through this Mac's Remote Login, as you: no password asked (the socket file ~/.visor/server.sock).")
+                    Text("Through this Mac's Remote Login, as you: no password asked (the socket file \(VisorServer.socketPath)).")
                         .font(.caption).foregroundColor(.secondary)
                 }
             }

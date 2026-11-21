@@ -28,6 +28,15 @@ extension VisorServer {
     /// (tests give a fake one).
     static var superCompactTool: String?
 
+    /// The `claude` a job runs: a test's, else the image's in the Sessions
+    /// container while it's on (VisorServer+ContainerClaude), else the one
+    /// on the tools' path; nil when there's none.
+    func superCompactProgram() -> String? {
+        if let tool = Self.superCompactTool { return tool }
+        if claudeRunsInContainer, containerClaudeEnvironment() != nil { return "claude" }
+        return ToolPath.resolve("claude")
+    }
+
     /// What a second job is told while one runs.
     static func superCompactBusy(_ running: SuperCompactJob) -> String {
         "A super compact is running already, of “\(running.title)” (session \(running.session)): one at a time per server. "
@@ -53,7 +62,7 @@ extension VisorServer {
         guard record.info.agent == .claude else {
             return HTTPResponse(400, Envelope.error("Super Compact reads Claude Code's conversations: “\(record.info.title)” is \(record.info.agent.title)'s.").encoded())
         }
-        guard let tool = Self.superCompactTool ?? ToolPath.resolve("claude") else {
+        guard let tool = superCompactProgram() else {
             return HTTPResponse(400, Envelope.error("Claude Code (claude) is not on this computer, so nothing can run the compaction.").encoded())
         }
         let job: SuperCompactJob
@@ -110,7 +119,7 @@ extension VisorServer {
     /// Runs a job, the one at a time; once it ends, the next one left
     /// unfinished (if any) carries on.
     func runSuperCompact(_ job: SuperCompactJob, tool: String, cwd: String) {
-        let compaction = SuperCompaction(job: job, tool: tool, cwd: cwd)
+        let compaction = SuperCompaction(job: job, tool: tool, cwd: cwd, caller: Self.superCompactTool == nil ? superCompactCaller() : nil)
         compaction.save()
         compaction.onEnd = { [weak self, weak compaction] _ in
             guard let self, let compaction, self.superCompaction === compaction else { return }
@@ -127,7 +136,7 @@ extension VisorServer {
     func resumeSuperCompaction() {
         guard superCompaction == nil else { return }
         guard var job = superCompactJobs().filter({ !$0.phase.ended }).min(by: { $0.started < $1.started }) else { return }
-        guard let tool = Self.superCompactTool ?? ToolPath.resolve("claude") else {
+        guard let tool = superCompactProgram() else {
             job.failedIn = job.phase
             job.phase = .failed
             job.error = "Claude Code (claude) is not on this computer"

@@ -1,13 +1,12 @@
 // One of Visor's LaunchAgents on a Mac: a job of this user's launchd that
 // runs Visor.app's own executable with an argument of its own, so it carries
 // the app's signature (its keychain items, its entitlements) and is never
-// the app's child. Two are settled this way, the same code:
-//
-// - agent-proxy's, `<bundle id>.agent-proxy`, `Visor --agent-proxy`
-//   (AgentProxyJob), while the server runs in the app;
-// - the server's, `<bundle id>.server`, `Visor --server` (ServerAgentJob),
-//   when the server runs as a background agent (docs/DEVELOPMENT.md, The
-//   server as a background agent).
+// the app's child. agent-proxy's, `<bundle id>.agent-proxy`, `Visor
+// --agent-proxy` (AgentProxyJob), while the server runs in the app, is
+// settled this way. (The server's, `<bundle id>.server`, `Visor --server`,
+// was too until 0.65: its plist is the app bundle's now, registered with
+// SMAppService (ServerAgentJob, ServerAgentService), and this type is only
+// its label and log, and 0.64's plist's path, to remove it.)
 //
 // - Its plist is `~/Library/LaunchAgents/<label>.plist` (so launchd starts
 //   it at login, before the app), started again after a failure (5 seconds

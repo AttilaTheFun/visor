@@ -23,6 +23,6 @@ enum Disks {
     /// The VM with both volumes as Visor Disk Utility made them.
     static func both() throws -> DiskSurvey {
         DiskSurvey(bootContainer: "disk3", containers: try list(Fixtures.listWithBoth),
-                   infos: [try info(Fixtures.infoSessions), try info(Fixtures.infoContainers)])
+                   infos: [try info(Fixtures.infoSessions), try info(Fixtures.infoVisor)])
     }
 }

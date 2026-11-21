@@ -16,8 +16,12 @@ extension VisorAgentServer {
     /// The server's port on the computer's loopback.
     static let serverPort = Int(Envelope.defaultPort)
     /// What reaches the server's socket file on the computer, run there
-    /// for each connection (`VisorServer.socketPath`).
-    static let attachCommand = "nc -U ~/.visor/server.sock"
+    /// for each connection (`VisorServer.socketPath`): on the Visor volume
+    /// where a Mac has one (0.65), else `~/.visor/server.sock`, as before
+    /// (and as a 0.64 client still asks: the server links it to the
+    /// volume's for 0.65). In `sh`, whatever the user's own shell is.
+    static let attachCommand = "sh -c 'if [ -S /Volumes/Visor/run/server.sock ]; then exec nc -U /Volumes/Visor/run/server.sock; "
+        + "else exec nc -U \"$HOME/.visor/server.sock\"; fi'"
 
     /// Opens the SSH connection along the address's route — each hop's
     /// host key kept the first time and compared after — and a port here

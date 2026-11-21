@@ -4,7 +4,7 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # The Sessions container's assets fetched, checked and unpacked for real,
 # then again to show they're kept (docs/containers.md): on a Mac, a macOS VM
 # lease included (no Virtualization is needed for this), into the
-# Containers volume or a scratch folder:
+# Visor volume's Containers folder or a scratch folder:
 #
 #   bazel run //tools/e2e/container_assets -- --image ghcr.io/attilathefun/visor-agent@sha256:… --root /tmp/containers-visor
 swift_binary(

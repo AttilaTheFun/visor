@@ -276,27 +276,48 @@ extension ServerTests {
         VisorServer.authorizedKeysPathOverride = folder.appendingPathComponent("ssh/authorized_keys").path
         defer { VisorServer.authorizedKeysPathOverride = nil }
         server.password = "pearl-grove"
-        func post(_ line: String, bearer: String? = "pearl-grove") -> Int {
+        func post(_ line: String, device: String? = nil, bearer: String? = "pearl-grove", path: String = "/api/ssh/keys") -> Int {
             var body = Envelope(type: "ssh")
             body.text = line
+            body.title = device
             var headers: [String: String] = [:]
             if let bearer { headers["authorization"] = "Bearer " + bearer }
-            return server.route(HTTPRequest(method: "POST", path: "/api/ssh/keys", headers: headers, body: body.encoded())).status
+            return server.route(HTTPRequest(method: "POST", path: path, headers: headers, body: body.encoded())).status
         }
-        let key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGqz1sYyl1Y1kK5lN0w0C5oZ6QwYyq3lQ1kDnq1Z2y7A visor"
-        #expect(post(key, bearer: nil) == 401)
-        #expect(post(key) == 200)
-        #expect(post(key) == 200, "the same key again is no change")
+        let blob = "AAAAC3NzaC1lZDI1NTE5AAAAIGqz1sYyl1Y1kK5lN0w0C5oZ6QwYyq3lQ1kDnq1Z2y7A"
+        let key = "ssh-ed25519 \(blob) visor"
+        #expect(post(key, device: "Logan's iPhone", bearer: nil) == 401)
+        #expect(post(key, device: "Logan's iPhone") == 200)
+        #expect(post(key, device: "Logan's iPhone") == 200, "the same key again is no change")
         #expect(post("ssh-ed25519 AAAAother visor") == 200)
         #expect(post("rm -rf /") == 400)
         #expect(post("ssh-ed25519 AAAA$not$base64") == 400)
         #expect(post("ssh-ed25519") == 400)
-        let kept = try String(contentsOfFile: VisorServer.authorizedKeysPath, encoding: .utf8)
-        #expect(kept == (key + "\nssh-ed25519 AAAAother visor\n"))
+        var kept = try String(contentsOfFile: VisorServer.authorizedKeysPath, encoding: .utf8)
+        // Each line tagged with its device, else its own comment.
+        #expect(kept == "ssh-ed25519 \(blob) visor:Logan-s-iPhone\nssh-ed25519 AAAAother visor:visor\n")
         let fileMode = try FileManager.default.attributesOfItem(atPath: VisorServer.authorizedKeysPath)[.posixPermissions] as? Int
         let folderMode = try FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent("ssh").path)[.posixPermissions] as? Int
         #expect((fileMode.map { $0 & 0o777 }) == 0o600)
         #expect((folderMode.map { $0 & 0o777 }) == 0o700)
+
+        // Forget this device: Visor's line goes, one added by hand stays,
+        // and 0.64's untagged `visor` line is tagged when it comes again.
+        let byHand = "ssh-ed25519 AAAAbyhand me@laptop"
+        let older = "ssh-ed25519 AAAAolder visor"
+        try (kept + byHand + "\n" + older + "\n").write(toFile: VisorServer.authorizedKeysPath, atomically: true, encoding: .utf8)
+        #expect(post(key, path: "/api/ssh/keys/forget") == 200)
+        #expect(post("ssh-ed25519 AAAAbyhand", path: "/api/ssh/keys/forget") == 200, "nothing of Visor's to forget")
+        #expect(post("ssh-ed25519 AAAAolder", device: "Mini") == 200)
+        kept = try String(contentsOfFile: VisorServer.authorizedKeysPath, encoding: .utf8)
+        #expect(kept == "ssh-ed25519 AAAAother visor:visor\n\(byHand)\nssh-ed25519 AAAAolder visor:Mini\n")
+        #expect(post("ssh-ed25519 AAAAolder", path: "/api/ssh/keys/forget") == 200)
+        #expect(post("not a key", path: "/api/ssh/keys/forget") == 400)
+        #expect(try String(contentsOfFile: VisorServer.authorizedKeysPath, encoding: .utf8) == "ssh-ed25519 AAAAother visor:visor\n\(byHand)\n")
+        #expect(VisorServer.isVisorsKeyLine("ssh-ed25519 AAAA visor:Mini"))
+        #expect(VisorServer.isVisorsKeyLine("ssh-ed25519 AAAA visor"))
+        #expect(!VisorServer.isVisorsKeyLine("ssh-ed25519 AAAA visor@box"))
+        #expect(!VisorServer.isVisorsKeyLine("ssh-ed25519 AAAA my visor"))
 
         server.settings.proxyEnabled = true
         server.settings.publicAddress = "https://proxy.example.com/visor"

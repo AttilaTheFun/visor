@@ -1,4 +1,4 @@
-// Which of the container's assets are on the Containers volume now, as
+// Which of the container's assets are on the Visor volume (Containers/) now, as
 // files: nothing fetched or hashed to say so (preparing them checks each).
 
 public struct ContainerAssetStatus: Equatable, Sendable {

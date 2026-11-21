@@ -2,7 +2,8 @@ load("@rules_swift//swift:swift.bzl", "swift_test")
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 # Visor's LaunchAgents (libraries/visor_launch_agent): the server agent's
-# job as settled (its plist, read back, and what's decided), the hand-over
+# job as settled (its plist, the bundle's, checked against the code, and
+# what's decided), the hand-over
 # from the server in the app with launchd and the server played by fakes,
 # and the restart's watcher run for real with stand-ins for launchd and the
 # server (its rollback, and a build that stays up). On Linux, in
@@ -12,6 +13,7 @@ swift_test(
     copts = STRICT_SWIFT,
     srcs = glob(["*.swift"]),
     module_name = "VisorLaunchAgentTests",
+    data = ["//applications/visor_mac:LaunchAgents/com.LoganShire.Visor.server.plist"],
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         "//:foundation",

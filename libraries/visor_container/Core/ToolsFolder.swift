@@ -1,7 +1,7 @@
 // Visor's Linux programs for the container: Contents/Resources/Linux
 // (visor-server, with visor-agent-host and relay-client links to it, and
 // agent_protocol's agent-wrapper, a static program of its own),
-// copied to the Containers volume's tools/<visor version>/ and mounted
+// copied to the Visor volume's Containers/tools/<visor version>/ and mounted
 // read-only at /opt/visor/bin. A share of the app bundle itself would go
 // stale when the app is updated in place.
 //
@@ -56,7 +56,7 @@ public enum ToolsFolder {
         }
     }
 
-    /// The folder for `version` on the Containers volume, made from
+    /// The folder for `version` on the Visor volume (Containers/), made from
     /// `source` (the app's Contents/Resources/Linux) if it isn't there or
     /// isn't the same; checked either way. The copy is made beside it and
     /// moved into place once whole and checked.

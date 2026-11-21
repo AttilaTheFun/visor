@@ -77,10 +77,14 @@ public struct SuperCompactJob: Codable, Equatable, Sendable {
 
     public var folderURL: URL { URL(fileURLWithPath: folder, isDirectory: true) }
 
-    /// As kept, or nil when it can't be read.
+    /// As kept, or nil when it can't be read; its folder the one it's read
+    /// from, wherever it was when it was written (the data folder moved onto
+    /// the Visor volume since, say).
     public static func kept(in folder: URL) -> SuperCompactJob? {
-        guard let data = try? Data(contentsOf: folder.appendingPathComponent(fileName, isDirectory: false)) else { return nil }
-        return try? JSONDecoder().decode(SuperCompactJob.self, from: data)
+        guard let data = try? Data(contentsOf: folder.appendingPathComponent(fileName, isDirectory: false)),
+              var job = try? JSONDecoder().decode(SuperCompactJob.self, from: data) else { return nil }
+        job.folder = folder.path
+        return job
     }
 
     /// Done and waiting for the person's review: neither cut over nor

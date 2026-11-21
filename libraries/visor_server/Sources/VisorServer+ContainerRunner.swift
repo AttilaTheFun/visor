@@ -75,7 +75,7 @@ extension VisorServer {
             return AgentJobSource(repository: remote, ref: project.branch ?? "", name: (project.path as NSString).lastPathComponent)
         }
         let agent = UUID().uuidString.lowercased()
-        let sessions = shared.first ?? "/Volumes/Sessions"
+        guard let sessions = shared.first else { return .failure(AgentJobRefusal(Self.noSessionsShared)) }
         let folder = shared.contains { Self.isInside(cwd, $0) } ? cwd : "\(sessions)/Claude/\(agent)"
         let move = AgentJobMove(agent: agent, session: record.info.id, title: record.info.title, model: record.info.model ?? "",
                                 effort: record.info.effort ?? "", resume: resume, cwd: cwd, sources: sources,
@@ -109,8 +109,9 @@ extension VisorServer {
         guard let container = sessionsContainer, let drivenProcess else { return .failure(AgentJobRefusal(Self.noContainerEngine)) }
         let status = await container.status()
         guard status.takesSessions else { return .failure(AgentJobRefusal(Self.containerRefusal(status))) }
+        guard let volume = container.sharedFolders.first else { return .failure(AgentJobRefusal(Self.noSessionsShared)) }
         let id = UUID().uuidString.lowercased()
-        let folder = "\(container.sharedFolders.first ?? "/Volumes/Sessions")/Claude/\(id)"
+        let folder = "\(volume)/Claude/\(id)"
         let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
         var info = SessionInfo(id: id, agent: .claude, cwd: folder, title: named.isEmpty ? "Claude Code (container)" : String(named.prefix(60)),
                                skipPermissions: true, model: model, effort: effort, created: Date().timeIntervalSince1970)
@@ -158,6 +159,10 @@ extension VisorServer {
         return nil
     }
 
+    /// What a session is told when the container shares no Sessions volume
+    /// (its engine names it, from volumes.json: never a path assumed here).
+    static let noSessionsShared = "The Sessions container shares no Sessions volume: make it with Visor Disk Utility."
+
     /// What a session is told when the container can't take it.
     static func containerRefusal(_ status: ContainerStatus) -> String {
         if !status.canRun { return "This Mac can't run the Sessions container: " + (status.errors.last ?? "it needs macOS 26 or later on Apple silicon.") }
@@ -182,7 +187,7 @@ extension VisorServer {
             containerRunner.waiting.insert(id)
             return .failure(AgentJobRefusal(Self.noContainerEngine))
         }
-        let sessions = container.sharedFolders.first ?? "/Volumes/Sessions"
+        guard let sessions = container.sharedFolders.first else { return .failure(AgentJobRefusal(Self.noSessionsShared)) }
         containerRunner.place(agent, session: id, resume: move.resume, cwd: move.cwd)
         let harness = containerRunner.harness
         let request = ContainerAgent(
@@ -252,7 +257,7 @@ extension VisorServer {
         if count >= ContainerRunner.quickEndsAllowed {
             containerRunner.quickEnds[id] = nil
             return holdInContainer(record, "Its agent in the Sessions container ended \(count) times as it started (the last with \(status)); "
-                + "its log is sessions/logs/\(agent).log on the Containers volume. Start Agent tries again; Move Back brings it to this computer.")
+                + "its log is Containers/sessions/logs/\(agent).log on the Visor volume. Start Agent tries again; Move Back brings it to this computer.")
         }
         let why = restartedUnder ? "carrying on, as the Sessions container restarted under it, the agent of"
                                  : "carrying on, as its agent there ended (\(status)), the agent in the Sessions container of"

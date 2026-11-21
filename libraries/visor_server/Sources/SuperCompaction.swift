@@ -16,6 +16,14 @@ final class SuperCompaction {
     private(set) var job: SuperCompactJob
     /// The `claude` it runs.
     let tool: String
+    /// How a call of `claude -p` is made, when not here: in the Sessions
+    /// container while it's on (VisorServer+ContainerClaude), given its
+    /// arguments, its standard input, its limit and when to stop; the
+    /// status, what it wrote and whether it was stopped, or nil when it
+    /// couldn't be run.
+    typealias Caller = @Sendable (_ arguments: [String], _ input: Data, _ limit: Duration,
+                                  _ stopping: @escaping @Sendable () -> Bool) async -> (status: Int32, text: String, stopped: Bool)?
+    let caller: Caller?
     /// The session's folder, for HANDOFF.md to name.
     let cwd: String
     let stop = Stop()
@@ -27,10 +35,11 @@ final class SuperCompaction {
     var onEnd: ((SuperCompactJob) -> Void)?
     private var task: Task<Void, Never>?
 
-    init(job: SuperCompactJob, tool: String, cwd: String) {
+    init(job: SuperCompactJob, tool: String, cwd: String, caller: Caller? = nil) {
         self.job = job
         self.tool = tool
         self.cwd = cwd
+        self.caller = caller
     }
 
     /// Why it was asked to stop: cancelled (it ends so, for good), or
