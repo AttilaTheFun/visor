@@ -9,6 +9,14 @@ import VisorProtocol
 /// person), `ping`. Every call goes
 /// to the server through its link; what the agent is told goes out a line
 /// at a time.
+///
+/// The tools' list is answered at once, from the passed-on tools as last
+/// looked at: Visor's own are always in it, and a look that fails or is
+/// slow (the server restarting, an endpoint down) keeps the last good
+/// list. The agent is told the list changed only when a look finds tools
+/// that differ, as values, from what it was last given (visor 0.65: 0.64
+/// compared their JSON as text, whose objects' keys come in no set order,
+/// and told it on every look).
 package actor MCPBridge {
     private let link: any MCPServerLink
     private let output: any MCPOutput
@@ -21,9 +29,13 @@ package actor MCPBridge {
     /// none of them listed, watched or called.
     private let passesOn: Bool
     private let timing: MCPTiming
-    /// The passed-on tools as last listed to the agent: what a later look
-    /// is held against.
-    private var listedProxied: String?
+    /// The passed-on tools as the server last listed them: what the tools'
+    /// list answers with at once, kept through a look that fails. Nil until
+    /// a look has come back.
+    private var proxied: [JSONValue]?
+    /// What the agent was last given of the passed-on tools (`signature`):
+    /// what a later look is held against.
+    private var announced: JSONValue?
     private var watching = false
     /// The look every 30 s at the passed-on tools, until `close`.
     private var watch: Task<Void, Never>?
@@ -60,11 +72,13 @@ package actor MCPBridge {
         case "notifications/cancelled":
             asking[params["requestId"].encoded()]?.cancel("cancelled")
         case "tools/list":
+            guard passesOn else { return listTools(id, []) }
+            if let proxied { return listTools(id, proxied) }
+            // The first list: looked at once, within `look`; Visor's own
+            // alone if that fails, the rest said when a look finds them.
             Task {
-                var proxied: [JSONValue] = []
-                if passesOn { proxied = await proxiedTools() }
-                listedProxied = Self.signature(proxied)
-                respond(id, .object(["tools": .array((approvals ? [MCPTools.approve] : []) + MCPTools.sessions + proxied)]))
+                if proxied == nil, let looked = await lookAtProxied() { proxied = looked }
+                listTools(id, proxied ?? [])
             }
         case "tools/call":
             let name = params["name"].string ?? ""
@@ -94,6 +108,12 @@ package actor MCPBridge {
         watch = nil
     }
 
+    /// The tools' list: Visor's own, and the passed-on ones given.
+    private func listTools(_ id: JSONValue, _ passedOn: [JSONValue]) {
+        if passesOn { announced = Self.signature(passedOn) }
+        respond(id, .object(["tools": .array((approvals ? [MCPTools.approve] : []) + MCPTools.sessions + passedOn)]))
+    }
+
     private func respond(_ id: JSONValue, _ result: JSONValue) {
         output.send(.object(["jsonrpc": .string("2.0"), "id": id, "result": result]))
     }
@@ -104,37 +124,53 @@ package actor MCPBridge {
 
     // MARK: The passed-on tools
 
-    /// The session's passed-on tools, from the server; none when it can't say.
-    private func proxiedTools() async -> [JSONValue] {
-        let reply = await link.call(["mode": .string("mcp_tools")])
-        guard reply.ok else { return [] }
-        return parseJSON(reply.text)?.array ?? []
+    /// The session's passed-on tools, from the server, within `look`; nil
+    /// when it doesn't say (unreachable, refused, or too slow), so the last
+    /// good list is kept rather than taken as none.
+    private func lookAtProxied() async -> [JSONValue]? {
+        let link = self.link
+        let reply = await MCPDeadline.first(within: timing.look) { await link.call(["mode": .string("mcp_tools")]) }
+        guard let reply, reply.ok, let tools = parseJSON(reply.text)?.array else { return nil }
+        return tools
     }
 
     /// What a list of tools is held against: each one's name, description
-    /// and schema.
-    static func signature(_ tools: [JSONValue]) -> String {
-        JSONValue.array(tools.map { tool in
+    /// and schema, compared as values (an object's keys in any order).
+    static func signature(_ tools: [JSONValue]) -> JSONValue {
+        .array(tools.map { tool in
             .array([tool["name"], .string(tool["description"].string ?? ""), tool["inputSchema"]])
-        }).encoded()
+        })
     }
 
-    /// Every 30 s: the passed-on tools as they are now, and a word to the
-    /// agent when they differ from what it was last given.
+    /// A look that came back: kept, and a word to the agent when its tools
+    /// differ from what it was last given (and never before its first list).
+    private func took(_ tools: [JSONValue]) {
+        proxied = tools
+        let now = Self.signature(tools)
+        guard let announced, now != announced else { return }
+        self.announced = now
+        output.send(.object(["jsonrpc": .string("2.0"), "method": .string("notifications/tools/list_changed")]))
+    }
+
+    /// Every 30 s: the passed-on tools as they are now. A look that fails
+    /// keeps the last good list and is tried again sooner, after `retry`,
+    /// doubled each time it fails again, up to the 30 s.
     private func watchProxied() {
         guard !watching else { return }
         watching = true
-        let every = timing.watch
+        let timing = self.timing
         watch = Task {
+            var failures = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: every)
+                let wait = failures == 0 ? timing.watch : min(timing.retry * (1 << min(failures - 1, 16)), timing.watch)
+                try? await Task.sleep(for: wait)
                 if Task.isCancelled { return }
-                let tools = await proxiedTools()
-                let now = Self.signature(tools)
-                if let listed = listedProxied, now != listed {
-                    listedProxied = now
-                    output.send(.object(["jsonrpc": .string("2.0"), "method": .string("notifications/tools/list_changed")]))
+                guard let tools = await lookAtProxied() else {
+                    failures += 1
+                    continue
                 }
+                failures = 0
+                took(tools)
             }
         }
     }
