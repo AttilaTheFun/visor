@@ -20,8 +20,8 @@ relay-client's loopback forward to it, agent-wrapper in Visor's Linux
 programs, and `ContainerEngine.startWrapper`), and **step 4's server half,
 the container runner** (sessions placed in it, Move to Container and Move
 Back, a new session there, their agents started again across restarts:
-"Placing sessions", below). The clients' half (the Migrate… menu cut down to
-these places, the placement shown on each session) is next.
+"Placing sessions", below), and **its clients' half** (Migrate… as one list
+of these places, and the placement shown on each session).
 
 ## Requirements
 
@@ -353,6 +353,21 @@ intake's containment and caps).
   placed there keep it from its idle stop, and start it with the server
   (`placedInContainer`).
 
+**In the clients** (visor_ui's MigratePlaces, from a session's context
+menu): **Migrate…** asks where the session goes, saying where it is, and
+offers each place but that one: its computer ("‹computer›": Move Back),
+that computer's Sessions container ("‹computer›'s Container": Move to
+Container, offered while `GET /api/container` says it takes sessions,
+asked on connecting and after each move), then any other computer
+connected now that migrates (the Migrate sheet, as before; for a session
+in the container, shown disabled, the alert saying to move it back first,
+as the server refuses it). It's a button
+and an alert, not a menu within the context menu, which only Apple's
+SwiftUI draws. Move to a Runner (the dispatcher's) is no longer
+offered. A session's row marks where it runs: a box, "In the Sessions
+container", for one placed there (SessionPlaceMark, from
+`SessionInfo.placement`).
+
 **Its token in the agent's environment** (agent_protocol#17): the wrapper
 reads `AGENT_TOKEN` and unsets it, and keeps it from its harness's
 environment, but `/proc/<wrapper>/environ` still shows the environment the
@@ -377,9 +392,8 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
 
 ## What's next
 
-- **Step 4's clients' half:** Migrate… as one menu cut down to these places
-  (this Mac, its container, the other Macs), the placement shown on each
-  session, New Session in the container, and their feature-map screens.
+- **New Session in the container** in the clients (the server's `POST
+  /api/container/sessions` is there).
 - **agent_protocol#17:** the token handed over on a descriptor, above.
 
 ## Testing
