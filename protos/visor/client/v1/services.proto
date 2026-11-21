@@ -1,0 +1,37 @@
+// The client's link to a Visor server over gRPC (from 0.64): one
+// server-streaming call for the server, one per session followed, and
+// unary calls for the rest. No bidirectional streams, so gRPC-Web stays
+// possible. Services alone: their messages are the other files', so the
+// server's and the client's generated modules share one set of them.
+//
+// A client uses it only when the server's hello says `rpc:
+// ["visor.client.v1"]`, and otherwise the WebSocket, per path. Calls carry
+// `authorization: Bearer <token>`, as the REST side's do.
+syntax = "proto3";
+
+package visor.client.v1;
+
+import "visor/client/v1/commands.proto";
+import "visor/client/v1/rows.proto";
+import "visor/client/v1/server.proto";
+import "visor/client/v1/state.proto";
+
+service Server {
+  // The sessions list, the catalogs and the accounts: each whole, then
+  // again when it changes.
+  rpc Watch(WatchServerRequest) returns (stream ServerUpdate);
+}
+
+service Sessions {
+  // A session's ephemeral state: whole, then its changes, until the
+  // client lets go. Watching again brings it whole again.
+  rpc Watch(WatchSessionRequest) returns (stream SessionChange);
+  // The session's rows past the revision the client holds.
+  rpc Sync(SyncRequest) returns (SyncResponse);
+  // The rows before one.
+  rpc Earlier(EarlierRequest) returns (EarlierResponse);
+  rpc Send(SendRequest) returns (CommandResponse);
+  rpc Approve(ApproveRequest) returns (CommandResponse);
+  rpc Interrupt(InterruptRequest) returns (CommandResponse);
+  rpc Stop(StopRequest) returns (CommandResponse);
+}

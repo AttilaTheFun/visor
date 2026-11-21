@@ -1,0 +1,54 @@
+// The server as a client keeps it: its sessions, the agents on offer and
+// their accounts. Server.Watch sends each whole, then each again whenever
+// it changes.
+//
+// A session, a catalog and an account are carried in the wire protocol's
+// JSON (docs/protocol.md: SessionInfo, AgentCatalog, AgentAccount), as
+// the REST side and the WebSocket carry them, so the two links read one
+// shape while both run; each is decoded by VisorProtocol's own
+// `init(json:)`.
+syntax = "proto3";
+
+package visor.client.v1;
+
+message WatchServerRequest {
+  // The sessions list's revision the client holds (0 for none): the first
+  // update brings the list unless the client has that revision already.
+  int64 revision = 1;
+}
+
+message ServerUpdate {
+  // The sessions list's revision, as `GET /sessions` gives it: counts up
+  // with every change to the list.
+  int64 revision = 1;
+  oneof change {
+    // The sessions, whole.
+    SessionList sessions = 2;
+    // The agents on offer and their models, whole (a key was entered).
+    CatalogList catalogs = 3;
+    // One agent's account changed: its plan, or how near its limits it is.
+    AccountChange account = 4;
+  }
+}
+
+message SessionList {
+  repeated Session sessions = 1;
+}
+
+// A session as the list carries it: its id, and its SessionInfo as JSON.
+message Session {
+  string id = 1;
+  bytes json = 2;
+}
+
+message CatalogList {
+  // Each an AgentCatalog as JSON.
+  repeated bytes catalogs = 1;
+}
+
+message AccountChange {
+  // The agent ("claude", "codex", "openrouter").
+  string agent = 1;
+  // An AgentAccount as JSON.
+  bytes json = 2;
+}

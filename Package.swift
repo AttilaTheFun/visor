@@ -89,6 +89,10 @@ let relayClientDependency: [Target.Dependency] = ["VisorRelayClient"]
 let relayClient: [Target] = []
 let relayClientDependency: [Target.Dependency] = []
 #endif
+/// What the client link's servers and clients are built on.
+let grpcProto: [Target.Dependency] = ["VisorClientProto", .product(name: "GRPCCore", package: "grpc-swift-2"),
+                                      .product(name: "GRPCProtobuf", package: "grpc-swift-protobuf"),
+                                      .product(name: "SwiftProtobuf", package: "swift-protobuf")]
 /// Linux: POSIX signals and sockets (shared with the Mac), and the agents'
 /// host, built beside the server.
 let system: [Target] = [
@@ -118,6 +122,17 @@ let system: [Target] = [
                            .product(name: "GRPCCore", package: "grpc-swift-2"),
                            .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport")],
             path: "libraries/visor_native_runner/Sources", swiftSettings: strict),
+    // The client's gRPC link to the server (protos/visor/client/v1): its
+    // messages, and the services' servers and clients, as
+    // tools/proto/generate keeps their Swift for SwiftPM (Bazel generates
+    // its own, libraries/visor_client_proto). Generated: Swift 6, its
+    // warnings the generators'.
+    .target(name: "VisorClientProto", dependencies: [.product(name: "SwiftProtobuf", package: "swift-protobuf")],
+            path: "libraries/visor_client_proto/Sources/VisorClientProto", swiftSettings: [.swiftLanguageMode(.v6)]),
+    .target(name: "VisorClientGRPCServer", dependencies: grpcProto,
+            path: "libraries/visor_client_proto/Sources/VisorClientGRPCServer", swiftSettings: [.swiftLanguageMode(.v6)]),
+    .target(name: "VisorClientGRPCClient", dependencies: grpcProto,
+            path: "libraries/visor_client_proto/Sources/VisorClientGRPCClient", swiftSettings: [.swiftLanguageMode(.v6)]),
     // Visor's agent-proxy (docs/agent-proxy.md): its sockets, the proxy, and
     // its host, which visor-server runs inside itself when `agentProxy` is
     // set. SwiftNIO, NIOSSL, swift-certificates, swift-asn1 and swift-crypto.
@@ -147,12 +162,16 @@ let tests: [Target] = []
 /// both in the same folder, where the server looks for it.
 let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["VisorAgentHostMain"])]
 /// agent_protocol (its driver, dispatcher and wrapper), by release, and its
-/// gRPC.
+/// gRPC; and the protobuf runtimes of the client link's protos.
 let runnerPackages: [Package.Dependency] = [
     // As third_party/swift_packages pins it.
     .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", exact: "0.5.0"),
     .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
     .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
+    // The client link's protos: the runtimes of the plugins that make
+    // their Swift (tools/proto).
+    .package(url: "https://github.com/grpc/grpc-swift-protobuf.git", from: "2.5.0"),
+    .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.39.0"),
 ]
 /// agent-proxy's: the versions third_party/swift_packages resolves for Bazel.
 let proxyPackages: [Package.Dependency] = [

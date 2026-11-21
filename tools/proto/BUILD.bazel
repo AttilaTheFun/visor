@@ -1,0 +1,87 @@
+load("@rules_swift//proto:proto.bzl", "swift_proto_compiler")
+load("@rules_swift//swift:swift.bzl", "swift_binary")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+load(":protoc.bzl", "resolved_protoc")
+
+package(default_visibility = ["//visibility:public"])
+
+# The protos' Swift compilers, as Isomer's examples/proto_greeter has
+# them: the messages by protoc-gen-swift, the gRPC services by
+# protoc-gen-grpc-swift-2 (grpc-swift-protobuf), one compiler for servers
+# and one for clients. The plugins and their runtimes come from the SwiftPM
+# graph (third_party/swift_packages: swift-protobuf 1.39.0 and
+# grpc-swift-protobuf 2.5.0, as agent_protocol's tools/plugins pins them),
+# and protoc is the proto toolchain's, prebuilt (.bazelrc's
+# --incompatible_enable_proto_toolchain_resolution).
+
+swift_proto_compiler(
+    name = "swift_proto",
+    plugin = "@swiftpkg_swift_protobuf//:protoc-gen-swift",
+    plugin_name = "swift",
+    plugin_option_allowlist = ["Visibility"],
+    plugin_options = {"Visibility": "Public"},
+    suffixes = [".pb.swift"],
+    deps = ["@swiftpkg_swift_protobuf//:SwiftProtobuf"],
+)
+
+_GRPC_PLUGIN_OPTIONS = [
+    "Client",
+    "ExtraModuleImports",
+    "FileNaming",
+    "GRPCModuleName",
+    "KeepMethodCasing",
+    "Server",
+    "SwiftProtobufModuleName",
+    "Visibility",
+]
+
+[
+    swift_proto_compiler(
+        name = "grpc_swift_" + variant.lower() + "_proto",
+        plugin = "@swiftpkg_grpc_swift_protobuf//:protoc-gen-grpc-swift-2",
+        plugin_name = "grpc_swift_" + variant.lower(),
+        plugin_option_allowlist = _GRPC_PLUGIN_OPTIONS,
+        plugin_options = {
+            "Client": str(variant == "Client").lower(),
+            "Server": str(variant == "Server").lower(),
+            "Visibility": "Public",
+        },
+        suffixes = [".grpc.swift"],
+        deps = [
+            "@swiftpkg_grpc_swift_2//:GRPCCore",
+            "@swiftpkg_grpc_swift_protobuf//:GRPCProtobuf",
+            "@swiftpkg_swift_protobuf//:SwiftProtobuf",
+        ],
+    )
+    for variant in [
+        "Server",
+        "Client",
+    ]
+]
+
+resolved_protoc(name = "protoc")
+
+# SwiftPM's copy of the protos' Swift (libraries/visor_client_proto/Sources),
+# made by the same protoc and plugins, with the same options:
+#
+#   bazel run //tools/proto:generate             # write it again
+#   bazel run //tools/proto:generate -- --check  # fail if it differs
+swift_binary(
+    name = "generate",
+    srcs = glob(["generate/*.swift"]),
+    args = [
+        "--protoc",
+        "$(rootpath :protoc)",
+        "--swift-plugin",
+        "$(rootpath @swiftpkg_swift_protobuf//:protoc-gen-swift)",
+        "--grpc-plugin",
+        "$(rootpath @swiftpkg_grpc_swift_protobuf//:protoc-gen-grpc-swift-2)",
+    ],
+    copts = STRICT_SWIFT,
+    data = [
+        ":protoc",
+        "@swiftpkg_grpc_swift_protobuf//:protoc-gen-grpc-swift-2",
+        "@swiftpkg_swift_protobuf//:protoc-gen-swift",
+    ],
+    module_name = "ProtoGenerate",
+)

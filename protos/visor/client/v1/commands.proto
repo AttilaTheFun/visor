@@ -1,0 +1,43 @@
+// What a client does to a session over the gRPC link: one call each,
+// answered with the sessions the answer names, as the REST side's are.
+// Everything else (settings, forks, mail, backups, the admin's, the
+// relay's, migration and push) stays REST in 0.64.
+syntax = "proto3";
+
+package visor.client.v1;
+
+import "visor/client/v1/server.proto";
+
+// A message from the user. Sent to a working agent, it waits in the
+// session's queue.
+message SendRequest {
+  string session = 1;
+  string text = 2;
+  // Pictures already uploaded, as paths on the server's computer.
+  repeated string images = 3;
+}
+
+// The user's Allow or Deny of a tool call waiting, or their answers to the
+// agent's questions (by question; several to one joined with ", "; none is
+// a refusal).
+message ApproveRequest {
+  string session = 1;
+  string id = 2;
+  bool allow = 3;
+  map<string, string> answers = 4;
+}
+
+// The turn ends; the agent's process stays (the wire protocol's `stop`).
+message InterruptRequest {
+  string session = 1;
+}
+
+// The agent is stopped (the wire protocol's `stopAgent`); the next message
+// starts it again.
+message StopRequest {
+  string session = 1;
+}
+
+message CommandResponse {
+  SessionList sessions = 1;
+}
