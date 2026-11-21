@@ -29,6 +29,11 @@
 // - `mcp/token`, the sessions' token (`X-Visor-Proxy`); none: every call
 //   refused;
 // - `mcp/<upstream>/<header>`, an upstream's secret header.
+//
+// From 0.66, `agentProxy.gh` adds gh_mcp, answered in this process at the
+// pass-through's `/mcp/gh` (GitHubMCP) where `mcp` has no upstream named
+// gh; with `gh` and no `mcp`, the pass-through listens on its own port
+// (7439) for it alone.
 
 import Crypto
 import Foundation
@@ -49,10 +54,19 @@ public enum AgentProxyHost {
         public var dataDirectory: URL
         /// The egress log's path where the settings name none.
         public var egressLog: String
+        /// gh_mcp's audit log's where `agentProxy.gh` names none: in the
+        /// server's logs folder, beside the egress log given (a Mac's:
+        /// `Visor-gh.log` in Visor's logs, ~/Library/Logs or, on 0.65's
+        /// layout, /Volumes/Visor/Logs), else `agent-proxy/gh.log` in the
+        /// data folder.
+        public var ghAuditLog: String
 
-        public init(dataDirectory: URL, egressLog: String? = nil) {
+        public init(dataDirectory: URL, egressLog: String? = nil, ghAuditLog: String? = nil) {
             self.dataDirectory = dataDirectory
             self.egressLog = egressLog ?? dataDirectory.appendingPathComponent("agent-proxy/egress.log").path
+            self.ghAuditLog = ghAuditLog
+                ?? egressLog.map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("Visor-gh.log").path }
+                ?? dataDirectory.appendingPathComponent("agent-proxy/gh.log").path
         }
 
         /// `<data folder>/agent-proxy`.
@@ -94,8 +108,8 @@ public enum AgentProxyHost {
     /// added needs no restart.
     public static func start(_ settings: AgentProxySettings, places: Places, secrets: any SecretStore, version: String,
                              log: @escaping @Sendable (String) -> Void) -> Running? {
-        guard settings.relayPort != nil || settings.mcp != nil else {
-            log("agentProxy has neither `mcp` nor `relayPort`: nothing to serve")
+        guard settings.relayPort != nil || settings.mcp != nil || settings.gh != nil else {
+            log("agentProxy has neither `mcp`, `gh` nor `relayPort`: nothing to serve")
             return nil
         }
         try? FileManager.default.createDirectory(at: places.folder, withIntermediateDirectories: true)
@@ -108,8 +122,8 @@ public enum AgentProxyHost {
             failed = relay == nil
         }
         var nativeMCP: NativeMCPProxy?
-        if let mcp = settings.mcp {
-            nativeMCP = startMCP(mcp, secrets: secrets, log: log)
+        if settings.mcp != nil || settings.gh != nil {
+            nativeMCP = startMCP(settings.mcp ?? AgentProxySettings.MCP(), gh: settings.gh, places: places, secrets: secrets, log: log)
             failed = failed || nativeMCP == nil
         }
         let serving = [relay == nil ? nil : "the relay listener", nativeMCP == nil ? nil : "the MCP pass-through"].compactMap { $0 }
@@ -177,9 +191,10 @@ public enum AgentProxyHost {
         return (relay, interceptor)
     }
 
-    /// The native sessions' MCP pass-through.
-    private static func startMCP(_ mcp: AgentProxySettings.MCP, secrets: any SecretStore, log: @escaping @Sendable (String) -> Void)
-        -> NativeMCPProxy? {
+    /// The native sessions' MCP pass-through, with gh_mcp answered in it
+    /// when `gh` is set and no upstream is named gh.
+    private static func startMCP(_ mcp: AgentProxySettings.MCP, gh: AgentProxySettings.GH?, places: Places, secrets: any SecretStore,
+                                 log: @escaping @Sendable (String) -> Void) -> NativeMCPProxy? {
         guard (1...65535).contains(mcp.port) else {
             log("agentProxy.mcp's port \(mcp.port) isn't a port: no MCP pass-through")
             return nil
@@ -188,18 +203,27 @@ public enum AgentProxyHost {
             NativeMCPProxy.Endpoint(name: given.name, url: given.url, headers: given.headers, secretHeaders: given.secretHeaders,
                                     withheldTools: given.withheldTools)
         }
+        var inProcess: [String: any InProcessMCP] = [:]
+        if let gh {
+            if upstreams.contains(where: { $0.name == GitHubMCP.name }) {
+                log("agentProxy.gh is set, but mcp's upstream gh is passed through still: remove it for gh_mcp in-process")
+            } else if let served = gitHubMCP(gh, places: places, log: log) {
+                inProcess[GitHubMCP.name] = served
+            }
+        }
         let token = KeptSecret(AgentProxySettings.mcpTokenName, in: secrets)
         guard let proxy = NativeMCPProxy(port: UInt16(mcp.port), endpoints: { upstreams }, admits: { token.admits($0) },
                                          secret: { upstream, header in
                                              secrets.get(AgentProxySettings.secretKey(AgentProxySettings.mcpSecretName(upstream: upstream,
                                                                                                                        header: header)))
-                                         }) else {
+                                         }, inProcess: inProcess) else {
             log("loopback port \(mcp.port) can't be had for the MCP pass-through (another listener on it?)")
             return nil
         }
         proxy.start()
+        let served = upstreams.map { "/mcp/\($0.name)" } + inProcess.keys.sorted().map { "/mcp/\($0) (in-process)" }
         log("the MCP pass-through is on loopback port \(mcp.port): "
-            + (upstreams.isEmpty ? "no upstreams" : upstreams.map { "/mcp/\($0.name)" }.joined(separator: ", "))
+            + (served.isEmpty ? "no upstreams" : served.joined(separator: ", "))
             + (token.isSet ? "" : "; no sessions' token yet (agent-proxy secret-set mcp/token): every call refused"))
         return proxy
     }

@@ -72,5 +72,8 @@ swift_test(
         "@swiftpkg_agent_protocol//:AgentProtocol",
         "@swiftpkg_grpc_swift_2//:GRPCCore",
         "@swiftpkg_grpc_swift_nio_transport//:GRPCNIOTransportHTTP2",
+        # gh_mcp in agent-proxy, listed by MCPProxy over loopback
+        # (InProcessGitHubMCPTests).
+        "//libraries/visor_agent_proxy:visor_agent_proxy_host",
     ],
 )

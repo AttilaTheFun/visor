@@ -148,8 +148,12 @@ let system: [Target] = [
     // agent's): what's decided builds everywhere, launchctl on a Mac alone.
     .target(name: "VisorLaunchAgent", dependencies: ["VisorProtocol", "VisorServer", "VisorServerPOSIX"],
             path: "libraries/visor_launch_agent/Sources", swiftSettings: strict),
+    // gh_mcp, folded in (0.66): its tools, guards and audit log, which
+    // agent-proxy's host answers in-process at the pass-through's /mcp/gh.
+    // Foundation's alone.
+    .target(name: "VisorGHMCP", path: "libraries/visor_gh_mcp/Sources", swiftSettings: strict),
     .target(name: "VisorAgentProxyHost",
-            dependencies: ["VisorAgentProxy", "VisorLaunchAgent", "VisorServer", .product(name: "Crypto", package: "swift-crypto")],
+            dependencies: ["VisorAgentProxy", "VisorGHMCP", "VisorLaunchAgent", "VisorServer", .product(name: "Crypto", package: "swift-crypto")],
             path: "libraries/visor_agent_proxy/Host", swiftSettings: strict),
     .executableTarget(name: "VisorServerMain",
                       dependencies: ["VisorServerCLI", "VisorServerLinux", "VisorAgentHost", "VisorMCPBridge", "VisorDriver", "VisorNativeRunner",

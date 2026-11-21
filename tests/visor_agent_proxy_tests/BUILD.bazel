@@ -5,7 +5,8 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # egress, DNS, the gate, the GitHub interceptor and its authority, the relay
 # listener, the MCP pass-through, the log's rotation; and the host's own
 # (the settings it reads, its secrets, the import, the launchd job's
-# decisions). On Linux, in //tests:linux.
+# decisions, and gh_mcp answered in-process at /mcp/gh). On Linux, in
+# //tests:linux.
 swift_test(
     name = "visor_agent_proxy_tests",
     copts = STRICT_SWIFT,
@@ -21,6 +22,7 @@ swift_test(
         "//libraries/visor_agent_proxy",
         "//libraries/visor_agent_proxy:agent_proxy_c",
         "//libraries/visor_agent_proxy:visor_agent_proxy_host",
+        "//libraries/visor_gh_mcp",
         "//libraries/visor_launch_agent",
         "//libraries/visor_server",
         "@swiftpkg_swift_asn1//:SwiftASN1",

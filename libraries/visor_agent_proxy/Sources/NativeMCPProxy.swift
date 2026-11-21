@@ -5,6 +5,8 @@
 // (JSON, or SSE). Containers don't come this way: theirs is the relay listener's `/mcp/<name>` (MCPAnswering).
 // In Visor (moved from Shireworks' v0.15.1, 19 Nov 2026) its upstreams are ServerSettings' `agentProxy.mcp`, its
 // token and their secret headers Visor's secrets.
+// From 0.66 a name may also be answered in-process (InProcessMCP: gh_mcp, folded in at `/mcp/gh`), where no upstream
+// of that name is configured: an upstream wins, so moving gh_mcp from its own listener (7470) in is a settings change.
 
 import CAgentProxyPOSIX
 import Foundation
@@ -52,13 +54,15 @@ public final class NativeMCPProxy: Sendable {
     public let maxConnections: Int
     /// The calls being answered.
     private let open = Locked(0)
+    /// The MCP servers answered here, in this process, by name (`/mcp/<name>`), where no upstream has that name.
+    private let inProcess: [String: any InProcessMCP]
 
     public static let defaultMaxConnections = 64
 
     /// Listening on loopback `port` alone: a call without the sessions' token is refused. Nil when the port can't be had.
     public init?(port: UInt16, endpoints: @escaping @Sendable () -> [Endpoint], admits: @escaping @Sendable (String) -> Bool,
                  secret: @escaping @Sendable (_ endpoint: String, _ header: String) -> String?,
-                 maxConnections: Int = NativeMCPProxy.defaultMaxConnections) {
+                 inProcess: [String: any InProcessMCP] = [:], maxConnections: Int = NativeMCPProxy.defaultMaxConnections) {
         agent_proxy_ignore_broken_pipes()
         let listener = agent_proxy_listen(port, 0)
         guard listener >= 0 else { return nil }
@@ -67,6 +71,7 @@ public final class NativeMCPProxy: Sendable {
         self.endpoints = endpoints
         self.admits = admits
         self.secret = secret
+        self.inProcess = inProcess
         self.maxConnections = maxConnections
     }
 
@@ -199,11 +204,15 @@ public final class NativeMCPProxy: Sendable {
         answerMCP(client, request)
     }
 
-    /// A call to `/mcp/<name>`: passed on to that MCP server with its secret headers, a withheld tool refused.
+    /// A call to `/mcp/<name>`: passed on to that MCP server with its secret headers, a withheld tool refused; or, with
+    /// no upstream of that name, answered by the one served here of that name.
     func answerMCP(_ client: Int32, _ request: Request) {
         var request = request
         let name = request.path.hasPrefix("/mcp/") ? String(request.path.dropFirst(5).prefix { $0 != "?" && $0 != "/" }) : ""
-        guard let endpoint = endpoints().first(where: { $0.name == name }) else { return Self.reply(client, "404 Not Found", "No MCP server \(name).") }
+        guard let endpoint = endpoints().first(where: { $0.name == name }) else {
+            guard let server = inProcess[name] else { return Self.reply(client, "404 Not Found", "No MCP server \(name).") }
+            return Self.send(client, Self.answered(request, by: server))
+        }
         guard let url = URLComponents(string: endpoint.url), url.scheme == "http", let host = url.host else {
             return Self.reply(client, "502 Bad Gateway", "\(endpoint.url) is not a plain HTTP address.")
         }
@@ -239,6 +248,25 @@ public final class NativeMCPProxy: Sendable {
             if listing { held.append(contentsOf: buffer[0..<count]) } else { Self.send(client, Data(buffer[0..<count])) }
         }
         if listing { Self.send(client, Self.withoutTools(withheld, in: held)) }
+    }
+
+    /// A call answered by a server of this process's, waited for on this call's own thread (never a thread of Swift's
+    /// pool): its whole HTTP answer. The sessions' token stops here, as it does before an upstream.
+    static func answered(_ request: Request, by server: any InProcessMCP) -> Data {
+        var headers: [String: String] = [:]
+        for header in request.headers where header.name.lowercased() != tokenHeader.lowercased() {
+            headers[header.name] = headers[header.name].map { $0 + ", " + header.value } ?? header.value
+        }
+        let method = request.method, body = request.body
+        let answer = Locked<InProcessMCPAnswer?>(nil)
+        let done = DispatchSemaphore(value: 0)
+        Task {
+            let answered = await server.answer(method: method, headers: headers, body: body)
+            answer.withLock { $0 = answered }
+            done.signal()
+        }
+        done.wait()
+        return (answer.withLock { $0 } ?? InProcessMCPAnswer(status: 500)).serialized
     }
 
     /// A request to an endpoint that withholds tools, checked.
