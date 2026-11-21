@@ -9,8 +9,8 @@ import Testing
 extension FeatureMapTests {
     @Suite("Not driven yet")
     struct Gaps {
-        @Test("Sessions → Migrate sheet: longpress session-‹id›, “Migrate…”",
-              .disabled("the context menu opens (Sessions' projectSettings takes it), but it offers Migrate… only with a second connected computer that migrates: the fixture has one, whose computer doesn't migrate"))
+        @Test("Sessions → Migrate sheet: longpress session-‹id›, “Migrate…”, ‹another computer›",
+              .disabled("Migrate… opens (Sessions' movesIntoTheContainerAndBack takes it, for the fixture's Sessions container), but another computer is offered only when a second connected computer migrates: the fixture has one, whose computer doesn't migrate"))
         func migrate() {}
 
         @Test("Sessions → Archived Sessions: tap archived-‹name›",

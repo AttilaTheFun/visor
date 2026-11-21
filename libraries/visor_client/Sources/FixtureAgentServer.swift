@@ -121,14 +121,24 @@ final class FixtureAgentServer: AgentServer {
     /// setting the fixture keeps, as a server keeps it, so its switch in
     /// Session details stays where it was put.
     private var muted: Set<String> = []
+    /// Where the sessions moved here are placed (Migrate…'s container and
+    /// back).
+    private var placed: [String: SessionPlacement] = [:]
 
-    /// The fixture's sessions, with what was switched here.
+    /// The fixture's sessions, with what was switched and moved here.
     private func kept(_ sessions: [SessionInfo]) -> [SessionInfo] {
         sessions.map { info in
             var info = info
             info.notifications = !muted.contains(info.id)
+            if let place = placed[info.id] { info.placement = place }
             return info
         }
+    }
+
+    /// The fixture's computer has a Sessions container, on, that takes
+    /// sessions (so Migrate… offers it).
+    func sessionsContainer() async -> ContainerStatus? {
+        ContainerStatus(state: .stopped, enabled: true, canRun: true, cpus: 8, memoryGiB: 16, idleMinutes: 30)
     }
 
     func sessions() async throws -> [SessionInfo] { kept(listed) }
@@ -152,6 +162,12 @@ final class FixtureAgentServer: AgentServer {
     var cutOver = false
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] {
+        // Moved into the container or back, as a server answers: the
+        // session, placed there (kept, as the screens move on).
+        if action == .moveToContainer || action == .moveBack {
+            placed[session] = action == .moveToContainer ? .container : .host
+            return kept(listed).filter { $0.id == session }.map { Self.wire(.sessions([$0])).sessions?.first ?? $0 }
+        }
         guard case .notifications(let on) = action else { return [] }
         if on { muted.remove(session) } else { muted.insert(session) }
         return kept(Self.welcome.sessions ?? []).filter { $0.id == session }.map { Self.wire(.sessions([$0])).sessions?.first ?? $0 }
