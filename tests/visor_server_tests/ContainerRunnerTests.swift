@@ -503,6 +503,20 @@ extension ServerTests {
         wrapper.finish()
     }
 
+    @Test func aSessionInTheContainerIsNotOfferedToAnotherComputer() async throws {
+        let (_, wrapper, record) = try await placed("stays")
+        var asked = Envelope(type: "migration")
+        asked.session = "stays"
+        let answer = await withCheckedContinuation { (done: CheckedContinuation<HTTPResponse, Never>) in
+            server.routeMigration("offer", body: asked) { done.resume(returning: $0) }
+        }
+        #expect(answer.status == 409)
+        #expect(answer.body.contains("move it back to this computer first"), Comment(rawValue: answer.body))
+        let direct = await server.migrationOffer(asked)
+        #expect(direct.type == "error" && direct.message == VisorServer.containerMigrationRefusal(record))
+        wrapper.finish()
+    }
+
     @Test func anAgentThatEndsIsStartedAgainAndThreeQuickEndsStopIt() async throws {
         let (first, wrapper, record) = try await placed("ends")
         wrapper.finish()

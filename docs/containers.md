@@ -337,6 +337,10 @@ intake's containment and caps).
   stop it instead, and so does a container held stopped or unable to take
   it, each saying why; Start Agent tries again. An agent let go that hasn't
   ended within 10 seconds (30 after a hand-back) is sent TERM, then KILL.
+- **Migrating it to another computer** is refused while it's in the
+  container (`POST /api/migration/offer` answers 409: move it back first),
+  as the offer reads this Mac's Claude folder and would leave its turns
+  there behind.
 - **Move Back** hands its conversation back into this Mac's Claude folder,
   under the folder it comes back to, and it carries on from it here. A
   session whose agent isn't running there (stopped) has one started to hand

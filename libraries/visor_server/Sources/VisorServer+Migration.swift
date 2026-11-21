@@ -36,7 +36,13 @@ extension VisorServer {
         Task {
             let reply: Envelope
             switch step {
-            case "offer": reply = await migrationOffer(body)
+            case "offer":
+                // In the Sessions container: its turns there are in the
+                // container's Claude folder, which an offer doesn't read.
+                if let record = session(body.session), isInContainer(record) {
+                    return respond(HTTPResponse(409, Envelope.error(Self.containerMigrationRefusal(record)).encoded()))
+                }
+                reply = await migrationOffer(body)
             case "read": reply = migrationRead(body)
             case "plan": reply = await migrationPlan(body)
             case "write": reply = migrationWrite(body)
@@ -51,11 +57,19 @@ extension VisorServer {
 
     // MARK: Where the session is
 
+    /// Why a session in the Sessions container isn't offered to another
+    /// computer: its conversation there would be left behind.
+    static func containerMigrationRefusal(_ record: SessionRecord) -> String {
+        "“\(record.info.title)” is in the Sessions container: move it back to this computer first, so its conversation there comes with it."
+    }
+
     /// The session (`session`) offered for moving: its conversation's files
-    /// (a folder packed).
+    /// (a folder packed). Refused for one in the Sessions container
+    /// (routeMigration answers that 409).
     func migrationOffer(_ body: Envelope) async -> Envelope {
         ageMigrations()
         guard let record = session(body.session) else { return .error("No such session") }
+        guard !isInContainer(record) else { return .error(Self.containerMigrationRefusal(record)) }
         guard let resume = record.process.resumeID, !resume.isEmpty else {
             return .error("“\(record.info.title)” has no conversation to move yet: send it a message first.")
         }
