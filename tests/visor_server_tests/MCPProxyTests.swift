@@ -3,7 +3,9 @@
 // with the server's secrets; a session's tools listed under each endpoint's
 // name and its calls passed on with its own headers; an endpoint switched
 // off for a session; an SSE answer read; a forgotten MCP session begun again;
-// none for a driven session (its agent on a runner).
+// none for a driven session (its agent on a runner); an endpoint that goes
+// down or is slow keeping its last good tools, asked at once beside the
+// others and less often while it fails, and left out only after long.
 
 import Foundation
 import Synchronization
@@ -16,17 +18,36 @@ import Testing
 /// the test sets them.
 private final class FakeMCPServer: HTTPFetching {
     struct Heard: Sendable {
+        let url: String
         let headers: [String: String]
         let message: JSONValue
     }
     let heard = Mutex<[Heard]>([])
     /// Answer `tools/call` with a 404 this many times (a restarted server).
     let forgetting = Mutex(0)
+    /// The addresses that answer everything with a 502 (an endpoint down
+    /// behind agent-proxy).
+    let down = Mutex<Set<String>>([])
+    /// The addresses that answer nothing: each request waits out its
+    /// timeout, and fails.
+    let slow = Mutex<Set<String>>([])
+
+    /// The `tools/list` requests sent to `url`.
+    func lists(of url: String) -> Int {
+        heard.withLock { $0.filter { $0.url == url && $0.message["method"].string == "tools/list" }.count }
+    }
 
     func fetch(_ request: OutgoingRequest) async throws -> OutgoingRequest.Answer {
         let message = parseJSON(String(decoding: request.body, as: UTF8.self)) ?? .null
-        heard.withLock { $0.append(Heard(headers: request.headers, message: message)) }
+        heard.withLock { $0.append(Heard(url: request.url, headers: request.headers, message: message)) }
         let method = message["method"].string ?? ""
+        if slow.withLock({ $0.contains(request.url) }) {
+            try? await Task.sleep(for: .seconds(request.timeout))
+            throw CancellationError()
+        }
+        if down.withLock({ $0.contains(request.url) }) {
+            return .init(status: 502, body: Data("\(request.url) doesn't answer.".utf8))
+        }
         guard let id = message["id"].int else { return .init(status: 202, body: Data()) }
         if method == "tools/call", forgetting.withLock({ left in
             guard left > 0 else { return false }
@@ -220,6 +241,67 @@ extension ServerTests {
         #expect((parseJSON(called.text ?? "")?["content"][0]["text"].string) == "made Again")
         let methods = endpoint.heard.withLock { $0.compactMap { $0.message["method"].string } }
         #expect(methods.suffix(4) == ["tools/call", "initialize", "notifications/initialized", "tools/call"])
+    }
+
+    /// An endpoint that goes down: its last good tools listed still, and a
+    /// call to it failing with why; asked again after 2 s, then 4 s and so
+    /// on; left out only once it has been down 15 minutes; and listed again
+    /// when it answers.
+    @Test func testAnEndpointDownKeepsItsLastGoodToolsUntilLongGone() async throws {
+        #expect(setEndpoints(gh).status == 200)
+        let url = "http://127.0.0.1:7470/mcp"
+        var clock = Date(timeIntervalSince1970: 2_000_000_000)
+        server.mcpProxy.now = { clock }
+        func names() async throws -> [String?] { parseJSON(try await ask("mcp_tools").text ?? "")?.array?.map { $0["name"].string } ?? [] }
+        #expect(try await names() == ["gh__pr_create"])
+
+        endpoint.down.withLock { _ = $0.insert(url) }
+        #expect(try await names() == ["gh__pr_create"], "its last good tools")
+        let called = try await ask("mcp_call", text: #"{"tool":"gh__pr_create","arguments":{"title":"Down"}}"#)
+        #expect(called.error?.contains("502") ?? false, Comment(rawValue: called.error ?? "no error"))
+        let asked = endpoint.lists(of: url)
+        clock += 1
+        #expect(try await names() == ["gh__pr_create"])
+        #expect(endpoint.lists(of: url) == asked, "not asked again within its 2 s")
+        clock += 1.5
+        #expect(try await names() == ["gh__pr_create"])
+        #expect(endpoint.lists(of: url) == asked + 1, "asked again after 2 s")
+        clock += 3
+        _ = try await names()
+        #expect(endpoint.lists(of: url) == asked + 1, "then not for 4 s")
+        clock += 1.5
+        _ = try await names()
+        #expect(endpoint.lists(of: url) == asked + 2)
+
+        clock += 14 * 60
+        #expect(try await names() == ["gh__pr_create"], "down 14 minutes: still listed")
+        clock += 2 * 60
+        #expect(try await names() == [], "down 16 minutes: left out")
+
+        endpoint.down.withLock { $0.removeAll() }
+        clock += 61
+        #expect(try await names() == ["gh__pr_create"], "back once it answers")
+        clock += 1
+        _ = try await names()
+        #expect(endpoint.lists(of: url) == asked + 6, "and asked every time again")
+    }
+
+    /// Two endpoints asked at once: one that answers nothing costs the
+    /// list only its short limit, the other's tools listed beside its
+    /// never-answered none; once it answers, both.
+    @Test func testASlowEndpointDoesntHoldUpTheList() async throws {
+        let two = #"{"endpoints":[{"name":"gh","url":"http://127.0.0.1:7470/mcp"},{"name":"oss","url":"http://mac.local:7481/oss"}]}"#
+        #expect(setEndpoints(two).status == 200)
+        server.mcpProxy.listTimeout = 0.3
+        endpoint.slow.withLock { _ = $0.insert("http://mac.local:7481/oss") }
+        let began = Date()
+        let listed = try await ask("mcp_tools")
+        #expect(Date().timeIntervalSince(began) < 2, "within its limit, not each endpoint's in turn")
+        #expect((parseJSON(listed.text ?? "")?.array?.map { $0["name"].string }) == ["gh__pr_create"])
+        endpoint.slow.withLock { $0.removeAll() }
+        try await Task.sleep(for: .seconds(2.1))
+        let both = try await ask("mcp_tools")
+        #expect((parseJSON(both.text ?? "")?.array?.map { $0["name"].string }) == ["gh__pr_create", "oss__pr_create"])
     }
 
     @Test func testAProxiedCallIsShownByItsServerAndName() {
