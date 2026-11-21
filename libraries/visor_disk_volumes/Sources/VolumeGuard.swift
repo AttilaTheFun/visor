@@ -1,10 +1,12 @@
 // The last check before diskutil runs as an administrator.
 
 /// Checks commands against the disks as they are, just before they run:
-/// only `apfs addVolume` of a missing role's volume, and `apfs
-/// deleteVolume` of one of Visor's own volumes by its APFS volume UUID
-/// when that role is one the caller asked to delete (`deleting`: none,
-/// unless Uninstall… was asked to delete the volumes), ever pass. Anything
+/// only `apfs addVolume` of a missing role's volume, `apfs deleteVolume` of
+/// one of Visor's own volumes by its APFS volume UUID when that role is one
+/// the caller asked to delete (`deleting`: none, unless Uninstall… was
+/// asked to delete the volumes), and `mdutil -i off /Volumes/Visor` on
+/// Visor's own volume (mounted there, or made by an addVolume before it in
+/// the same run), ever pass. Anything
 /// that would erase or delete Sessions (by name, by mount point, by disk or
 /// by UUID) throws, whoever built the command, unless Sessions itself is
 /// asked for; and so does any argument that's exactly `&&`.
@@ -32,13 +34,19 @@ public enum VolumeGuard {
                              deleting: Set<VolumeRole> = []) throws {
         let sessions = survey.state(for: .sessions)
         var deleted: Set<String> = []
+        // The roles an addVolume before it in this run makes.
+        var made: Set<VolumeRole> = []
         for command in commands {
             let arguments = command.arguments
             if arguments.contains(commandJoiner) {
                 throw DiskVolumesError.notAllowed("\(command.description) (an argument is exactly \(commandJoiner), "
                     + "which would start another command in the administrator prompt's shell)")
             }
-            guard command.argv.first == DiskCommand.diskutil else { throw DiskVolumesError.notAllowed(command.description) }
+            if command.program == DiskCommand.mdutil {
+                try checkSpotlightOff(arguments, survey: survey, made: made, command: command)
+                continue
+            }
+            guard command.program == DiskCommand.diskutil else { throw DiskVolumesError.notAllowed(command.description) }
             let isDelete = Array(arguments.prefix(2)) == ["apfs", "deleteVolume"]
             if let verb = arguments.firstIndex(where: destructive.contains), !(isDelete && deleting.contains(.sessions)) {
                 for target in arguments[(verb + 1)...] where !target.hasPrefix("-") {
@@ -48,6 +56,7 @@ public enum VolumeGuard {
             switch Array(arguments.prefix(2)) {
             case ["apfs", "addVolume"]:
                 try checkAdd(arguments, survey: survey, deleted: deleted, command: command)
+                if let role = VolumeRole.allCases.first(where: { $0.volumeName == arguments[4] }) { made.insert(role) }
             case ["apfs", "deleteVolume"]:
                 guard arguments.count == 3 else { throw DiskVolumesError.notAllowed(command.description) }
                 let role = try checkDelete(arguments[2], survey: survey, recorded: recorded, deleting: deleting)
@@ -91,6 +100,21 @@ public enum VolumeGuard {
                     + "If it is Visor's, mount it at \(role.mountPoint); if not, rename it, or delete it yourself in Disk Utility.")
         }
         return role
+    }
+
+    /// Throws unless it's exactly `mdutil -i off /Volumes/Visor`, and the
+    /// volume there is Visor's own: in the survey, named Visor with no
+    /// system role and mounted in place; or made by an addVolume before it
+    /// in the same run. Never Sessions or Sources, which stay indexed, and
+    /// never a folder that isn't a volume of Visor's.
+    private static func checkSpotlightOff(_ arguments: [String], survey: DiskSurvey, made: Set<VolumeRole>,
+                                          command: DiskCommand) throws {
+        let role = VolumeRole.visor
+        guard arguments == ["-i", "off", role.mountPoint] else { throw DiskVolumesError.notAllowed(command.description) }
+        guard made.contains(role) || survey.state(for: role).inPlaceUUID != nil else {
+            throw DiskVolumesError.wrongTarget("\(role.mountPoint) isn't Visor's own volume (named \(role.volumeName), mounted there): "
+                + "Spotlight is left as it is.")
+        }
     }
 
     /// Throws if the target is Sessions: its disk or UUID, a volume named

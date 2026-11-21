@@ -2,24 +2,41 @@
 
 import Foundation
 
-/// One `diskutil` command line. Only two kinds are ever made: adding a
-/// volume, and deleting one of Visor's (VolumeGuard checks both again
-/// before anything runs, and passes a delete only of a role asked for).
+/// One command line run as an administrator. Only three kinds are ever
+/// made: adding a volume, deleting one of Visor's, and turning Spotlight off
+/// on the Visor volume (VolumeGuard checks each again before anything runs,
+/// and passes a delete only of a role asked for, and Spotlight's only on
+/// Visor's own).
 public struct DiskCommand: Equatable, Sendable, CustomStringConvertible {
     /// diskutil, by its full path: never one found on a PATH.
     public static let diskutil = "/usr/sbin/diskutil"
+    /// Spotlight's tool, by its full path.
+    public static let mdutil = "/usr/bin/mdutil"
 
-    /// Its arguments, after diskutil's own path.
+    /// The program, by its full path: diskutil unless said.
+    public var program: String
+    /// Its arguments, after the program's own path.
     public var arguments: [String]
 
     /// A command as given. Nothing runs it but DiskTool, after VolumeGuard
     /// has passed it.
-    public init(arguments: [String]) { self.arguments = arguments }
+    public init(program: String = DiskCommand.diskutil, arguments: [String]) {
+        self.program = program
+        self.arguments = arguments
+    }
 
-    /// The whole command line, diskutil first.
-    public var argv: [String] { [Self.diskutil] + arguments }
+    /// The whole command line, the program first.
+    public var argv: [String] { [program] + arguments }
 
-    public var description: String { (["diskutil"] + arguments).joined(separator: " ") }
+    public var description: String { ([(program as NSString).lastPathComponent] + arguments).joined(separator: " ") }
+
+    /// `mdutil -i off <mount point>`: Spotlight's index of the Visor volume
+    /// off, as Nimbus turns it off on its own (its data, caches, logs and
+    /// container are nothing to search). Sessions and Sources stay indexed.
+    public static func spotlightOff(_ role: VolumeRole) throws -> DiskCommand {
+        guard role == .visor else { throw DiskVolumesError.blocked("Spotlight is turned off on the Visor volume alone.") }
+        return DiskCommand(program: mdutil, arguments: ["-i", "off", role.mountPoint])
+    }
 
     /// `diskutil apfs addVolume <container> "Case-sensitive APFS" <name>
     /// [-reserve <bytes>b] [-quota <bytes>b]`: mounted at /Volumes/<name>.
