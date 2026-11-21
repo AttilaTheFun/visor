@@ -124,21 +124,25 @@ public enum ServerAgentJob {
         return .start
     }
 
-    /// The agent registered afresh: unregistered first (`unregister`:
-    /// SMAppService's, which drops its Background Items record), out of
-    /// launchd (`stop`: launchctl bootout, waited for), then registered
-    /// (`register`: SMAppService, which starts it); what went wrong, or nil.
-    /// The one way it's started once its bundle may have changed
-    /// (ServerAgentService.reregister): an update to another build, a
-    /// rollback to the one before, a start of a registered job that isn't
-    /// running. Registering records the bundle's code as the job's launch
-    /// constraint, and launchd won't spawn the job from another build put in
-    /// its place (`spawn failed`, "Launch Constraint Violation", exit 78,
-    /// "needs LWCR update": NCH's check of #491, and an update between two
-    /// ad hoc builds on macOS 27.0.1); a bootout and a register keep the
-    /// record, and its constraint, so it's unregistered first.
-    public static func reregister(unregister: () async -> Void, stop: () async -> Void,
+    /// The agent registered afresh: the bundle in place told to
+    /// LaunchServices again (`refresh`: `lsregister -f`), unregistered
+    /// (`unregister`: SMAppService's), out of launchd (`stop`: launchctl
+    /// bootout, waited for), then registered (`register`: SMAppService,
+    /// which starts it); what went wrong, or nil. The one way it's started
+    /// once its bundle may have changed (ServerAgentService.reregister): an
+    /// update to another build, a rollback to the one before, a start of a
+    /// registered job that isn't running. Background Items keeps a record
+    /// of the job with its executable's checksum, the job's launch
+    /// constraint, and launchd won't spawn it from another build put in its
+    /// place (`spawn failed`, "Launch Constraint Violation", exit 78, "needs
+    /// LWCR update": NCH's check of #491, and an update between two ad hoc
+    /// builds on macOS 27.0.1). A bootout and a register, or an unregister
+    /// and a register, keep that record; only once LaunchServices has the
+    /// bundle again does the unregister and register make a new one, of the
+    /// build in place (checked there).
+    public static func reregister(refresh: () async -> Void, unregister: () async -> Void, stop: () async -> Void,
                                   register: () async -> String?) async -> String? {
+        await refresh()
         await unregister()
         await stop()
         return await register()

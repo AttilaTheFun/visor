@@ -150,18 +150,20 @@ private actor FakeSteps: ServerHandOverSteps {
         #expect(await run(wanted: true, serving) == .agent(4242))
     }
 
-    /// Registering afresh is an unregister and a bootout first, then the
-    /// registration: the record SMAppService keeps holds the launch
-    /// constraint of the bundle it was registered from, so after an update
-    /// or a rollback a bootout and a register alone leave launchd unable to
-    /// spawn it.
-    @Test func reregisteringUnregistersAndBootsOutFirstThenRegisters() async {
+    /// Registering afresh is LaunchServices told of the bundle again, an
+    /// unregister and a bootout first, then the registration: Background
+    /// Items' record holds the launch constraint of the build registered,
+    /// and only so is it made again for the build in place (after an update
+    /// or a rollback, a bootout and a register, or an unregister and a
+    /// register, left launchd unable to spawn it).
+    @Test func reregisteringRefreshesUnregistersAndBootsOutFirstThenRegisters() async {
         let calls = Calls()
-        let problem = await ServerAgentJob.reregister(unregister: { await calls.add("unregister") }, stop: { await calls.add("bootout") },
+        let problem = await ServerAgentJob.reregister(refresh: { await calls.add("lsregister") }, unregister: { await calls.add("unregister") },
+                                                      stop: { await calls.add("bootout") },
                                                       register: { await calls.add("register"); return nil })
         #expect(problem == nil)
-        #expect(await calls.all == ["unregister", "bootout", "register"])
-        let refused = await ServerAgentJob.reregister(unregister: {}, stop: {}, register: { "Operation not permitted" })
+        #expect(await calls.all == ["lsregister", "unregister", "bootout", "register"])
+        let refused = await ServerAgentJob.reregister(refresh: {}, unregister: {}, stop: {}, register: { "Operation not permitted" })
         #expect(refused == "Operation not permitted")
     }
 }

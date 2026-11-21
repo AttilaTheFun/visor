@@ -50,15 +50,36 @@ public enum ServerAgentService {
         }
     }
 
-    /// Registered afresh (ServerAgentJob.reregister): unregistered, out of
-    /// launchd, then registered, which starts it from the bundle in place
-    /// now, its launch constraint that bundle's. What `Visor server-agent
-    /// register` runs (the update's watcher, after an update or a
-    /// rollback), and how the hand-over starts one that isn't running.
-    public static func reregister(bundleID: String) async -> String? {
-        await ServerAgentJob.reregister(unregister: { try? await service(bundleID: bundleID).unregister() },
+    /// Registered afresh (ServerAgentJob.reregister): the bundle told to
+    /// LaunchServices again, unregistered, out of launchd, then registered,
+    /// which starts it from the bundle in place now, its launch constraint
+    /// that bundle's. What `Visor server-agent register` runs (the update's
+    /// watcher, after an update or a rollback), and how the hand-over starts
+    /// one that isn't running.
+    public static func reregister(bundleID: String, bundle: String = Bundle.main.bundlePath) async -> String? {
+        await ServerAgentJob.reregister(refresh: { await launchServices(bundle) },
+                                        unregister: { try? await service(bundleID: bundleID).unregister() },
                                         stop: { await Launchctl.stop(label: ServerAgentJob.label(bundleID: bundleID)) },
                                         register: { register(bundleID: bundleID) })
+    }
+
+    /// LaunchServices' own tool, which Background Items reads the app's
+    /// record from.
+    static let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+    /// The bundle registered with LaunchServices again (`lsregister -f`), as
+    /// it is now.
+    static func launchServices(_ bundle: String) async {
+        await Task.detached {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: lsregister)
+            process.arguments = ["-f", bundle]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            process.standardInput = FileHandle.nullDevice
+            guard (try? process.run()) != nil else { return }
+            process.waitUntilExit()
+        }.value
     }
 
     /// 0.64's plist: its job stopped and the file removed, if it's there.

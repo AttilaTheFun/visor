@@ -13,7 +13,8 @@
 // and not mounted, it ends, for launchd to start it again.
 //
 // `Visor server-agent register`: the agent registered afresh with
-// SMAppService from this bundle (unregistered, booted out, then registered:
+// SMAppService from this bundle (LaunchServices told of it again, unregistered,
+// booted out, then registered:
 // ServerAgentService.reregister), for the update's watcher after an update
 // or a rollback, when SMAppService's launch constraint still names the
 // bundle that was replaced.
