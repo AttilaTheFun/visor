@@ -20,6 +20,13 @@
 # the release Mac has no Shireworks of its own; without it, they're built here
 # in a container leased from this Mac's.
 #
+# The same app carries container.json in Contents/Resources (docs/containers.md):
+# the Sessions container's agent image by digest, with the kernel and init
+# filesystem this commit pins, written by //tools/container_manifest. The
+# image is the one CI builds the Linux programs in (ci.yml's linux-programs
+# job), unless VISOR_AGENT_IMAGE names another
+# (ghcr.io/attilathefun/visor-agent@sha256:…).
+#
 #   tools/release_mac.sh <version>               # the .dmgs in dist/
 #   tools/release_mac.sh <version> --publish     # and a GitHub release v<version>
 set -euo pipefail
@@ -62,6 +69,14 @@ linux_programs() {
     || { echo "Visor's Linux programs are not in $archive" >&2; exit 1; }
 }
 
+# container.json at the path given: VISOR_AGENT_IMAGE's image, else the one
+# ci.yml's linux-programs job runs in.
+container_manifest() {
+  local image=(--workflow "$PWD/.github/workflows/ci.yml")
+  [ -n "${VISOR_AGENT_IMAGE:-}" ] && image=(--image "$VISOR_AGENT_IMAGE")
+  bazel run //tools/container_manifest -- "${image[@]}" --out "$1"
+}
+
 # Sends a file for notarization and waits; fails unless Apple accepts it.
 notarize() {
   local file="$1" log="$WORK/notary-$(basename "$1").json"
@@ -78,10 +93,12 @@ release_app() {
   local app="$WORK/$target/$name.app"
   [ "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "$VERSION" ] \
     || { echo "$name's CFBundleShortVersionString is not $VERSION" >&2; exit 1; }
-  # Visor's Linux programs, sealed with the app (the link kept a link).
+  # Visor's Linux programs, sealed with the app (the link kept a link), and
+  # the Sessions container's pins.
   if [ -n "$linux" ]; then
     rm -rf "$app/Contents/Resources/Linux"
     ditto "$WORK/linux" "$app/Contents/Resources/Linux"
+    container_manifest "$app/Contents/Resources/container.json"
   fi
   tools/sign_mac_app.sh "$app" >/dev/null
   local signature; signature="$(codesign -dvv "$app" 2>&1)"

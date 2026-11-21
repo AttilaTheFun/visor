@@ -62,6 +62,11 @@ swift_library(
         "//libraries/message_cache",
         "//libraries/visor_agent_proxy:visor_agent_proxy_host",
         "//libraries/visor_client",
+        # The Sessions container's readiness in Settings, on Apple's
+        # Containerization (the Mac's alone).
+        "//libraries/visor_container",
+        "//libraries/visor_container:visor_container_core",
+        "//libraries/visor_disk_volumes",
         "//libraries/visor_driver",
         "//libraries/visor_launch_agent",
         "//libraries/visor_native_runner",
@@ -104,6 +109,9 @@ macos_application(
     # which the profile grants. A build to run here asks for none: a restricted
     # entitlement with no profile to allow it stops the app at launch (its
     # app key stays in the login keychain: Sources/MacSecrets.swift).
+    # Virtualization (the Sessions container's VM, docs/containers.md) in
+    # both: it's unrestricted, so no profile need grant it, and an ad hoc
+    # build opens with it.
     entitlements = select({
         ":ci_signed": ":app_ci_entitlements",
         "//conditions:default": "app.entitlements",

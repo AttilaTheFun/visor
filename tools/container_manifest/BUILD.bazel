@@ -1,0 +1,23 @@
+load("@rules_swift//swift:swift.bzl", "swift_binary")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# container.json for a release's Visor.app (docs/containers.md): the agent
+# image's digest, with the kernel and init filesystem this commit pins.
+# tools/release_mac.sh runs it, and tools/ci/mac_app_linux_programs.sh
+# seals what it wrote:
+#
+#   bazel run //tools/container_manifest -- --workflow .github/workflows/ci.yml --out container.json
+#   bazel run //tools/container_manifest -- --image ghcr.io/attilathefun/visor-agent@sha256:… --out container.json
+#
+# Foundation and VisorContainerCore alone: it builds on Linux too, where
+# CI's signing jobs run.
+swift_binary(
+    name = "container_manifest",
+    srcs = glob(["Sources/*.swift"]),
+    copts = STRICT_SWIFT,
+    module_name = "ContainerManifestTool",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_container:visor_container_core",
+    ],
+)

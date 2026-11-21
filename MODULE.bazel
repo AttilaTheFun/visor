@@ -143,10 +143,25 @@ swift_deps.configure_package(
     name = "swift-crypto",
     patch_cmds = ["sed -i.orig 's/^#if canImport(Darwin)$/#if true/' Package.swift"],
 )
+# zstd (Containerization's archives) says its whole lib/ is public headers
+# (`publicHeadersPath: "."`): rules_swift_package_manager's module map then
+# holds every internal header, which can't build on its own
+# (FSE_STATIC_LINKING_ONLY and the rest are defined by the .c files that
+# include them). Its public headers alone, as zstd installs them: a folder
+# of its own whose module map names the three.
+swift_deps.configure_package(
+    name = "zstd",
+    patch_cmds = [
+        "mkdir -p lib/include && printf 'module libzstd [extern_c] {\\n    header \"../zstd.h\"\\n    header \"../zdict.h\"\\n    header \"../zstd_errors.h\"\\n    export *\\n}\\n' > lib/include/module.modulemap",
+        "sed -i.orig 's|publicHeadersPath: \"\\.\"|publicHeadersPath: \"include\"|' Package.swift",
+    ],
+)
 use_repo(
     swift_deps,
     "swift_package",
     "swiftpkg_agent_protocol",
+    # Apple's Containerization, for libraries/visor_container (the Mac's).
+    "swiftpkg_containerization",
     "swiftpkg_agent_ui",
     "swiftpkg_grpc_swift_2",
     "swiftpkg_grpc_swift_nio_transport",

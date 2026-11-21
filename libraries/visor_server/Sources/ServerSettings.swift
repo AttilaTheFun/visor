@@ -90,12 +90,16 @@ public struct ServerSettings: Codable, Equatable, Sendable {
     /// docs/super-compact.md). None, the default: Haiku, Sonnet and Opus,
     /// in chunks of about 120,000 tokens.
     public var superCompact: SuperCompactSettings?
+    /// The Sessions container's (ContainerSettings, docs/containers.md):
+    /// whether it's on, its CPUs, memory and idle stop, and an image digest
+    /// in place of the release's. None, the default: off.
+    public var container: ContainerSettings?
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case lan, vpn, reachableFromNetwork, sshEnabled, tlsIdentityPath, proxyEnabled, publicAddress, serverID, authentication, standalone,
-             frontPaths, clientsKeepMessages, detachAgents, mcpEndpoints, pushProxy, runnerTokensRequired, agentProxy, superCompact
+             frontPaths, clientsKeepMessages, detachAgents, mcpEndpoints, pushProxy, runnerTokensRequired, agentProxy, superCompact, container
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -117,6 +121,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         if runnerTokensRequired { try c.encode(runnerTokensRequired, forKey: .runnerTokensRequired) }
         try c.encodeIfPresent(agentProxy, forKey: .agentProxy)
         try c.encodeIfPresent(superCompact, forKey: .superCompact)
+        try c.encodeIfPresent(container, forKey: .container)
     }
 
     public static func kept(at url: URL) -> ServerSettings {
@@ -153,6 +158,7 @@ public struct ServerSettings: Codable, Equatable, Sendable {
         // (agent-proxy itself keeps the last it started with: its host).
         agentProxy = (try? c.decodeIfPresent(AgentProxySettings.self, forKey: .agentProxy)) ?? nil
         superCompact = (try? c.decodeIfPresent(SuperCompactSettings.self, forKey: .superCompact)) ?? nil
+        container = (try? c.decodeIfPresent(ContainerSettings.self, forKey: .container)) ?? nil
     }
 
     public func keep(at url: URL) {

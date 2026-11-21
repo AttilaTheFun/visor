@@ -2,7 +2,8 @@ extension ServerControls.Settings {
     public var json: JSONValue {
         .object(["authentication": .string(authentication), "lan": .bool(lan), "vpn": .bool(vpn), "sshEnabled": .bool(sshEnabled),
                  "proxyEnabled": .bool(proxyEnabled), "publicAddress": .string(publicAddress), "tlsIdentityPath": .string(tlsIdentityPath),
-                 "detachAgents": .bool(detachAgents), "clientsKeepMessages": .bool(clientsKeepMessages)])
+                 "detachAgents": .bool(detachAgents), "clientsKeepMessages": .bool(clientsKeepMessages),
+                 "containerEnabled": .bool(containerEnabled), "containerImageDigest": .string(containerImageDigest)])
     }
 
     public init(json: JSONValue) {
@@ -11,7 +12,8 @@ extension ServerControls.Settings {
                   vpn: json["vpn"].bool ?? defaults.vpn, sshEnabled: json["sshEnabled"].bool ?? defaults.sshEnabled,
                   proxyEnabled: json["proxyEnabled"].bool ?? defaults.proxyEnabled, publicAddress: json["publicAddress"].string ?? "",
                   tlsIdentityPath: json["tlsIdentityPath"].string ?? "", detachAgents: json["detachAgents"].bool ?? defaults.detachAgents,
-                  clientsKeepMessages: json["clientsKeepMessages"].bool ?? defaults.clientsKeepMessages)
+                  clientsKeepMessages: json["clientsKeepMessages"].bool ?? defaults.clientsKeepMessages,
+                  containerEnabled: json["containerEnabled"].bool ?? false, containerImageDigest: json["containerImageDigest"].string ?? "")
     }
 }
 

@@ -1,0 +1,42 @@
+load("@rules_swift//swift:swift.bzl", "swift_test")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# The Sessions container's assets (libraries/visor_container's core): the
+# pins and container.json, the layout on the Containers volume, fetching
+# and checking against a fake backend, Visor's Linux programs under the link
+# rule (dangling, absolute and escaping links refused), and Settings'
+# readiness row. Foundation alone: on Linux, in //tests:linux, and on a Mac.
+swift_test(
+    name = "visor_container_tests",
+    copts = STRICT_SWIFT,
+    srcs = [
+        "AssetsTests.swift",
+        "FakeBackend.swift",
+        "PinsTests.swift",
+        "ReadinessTests.swift",
+        "ToolsFolderTests.swift",
+    ],
+    module_name = "VisorContainerTests",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_container:visor_container_core",
+        "//libraries/visor_disk_volumes",
+        "@swiftpkg_swift_crypto//:Crypto",
+    ],
+)
+
+# The Mac's half: this Mac's readiness and memory, and the Containerization
+# backend taking a member out of an archive. macOS alone; pulling a real
+# image is //tools/e2e/container_assets's (it needs the network).
+swift_test(
+    name = "visor_container_mac_tests",
+    copts = STRICT_SWIFT,
+    srcs = ["HostTests.swift"],
+    module_name = "VisorContainerMacTests",
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        "//:foundation",
+        "//libraries/visor_container",
+        "//libraries/visor_container:visor_container_core",
+    ],
+)
