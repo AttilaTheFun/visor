@@ -32,7 +32,7 @@ extension VisorServer {
     /// server is made): where the secrets are the app's own alone.
     public static var keepsAdminToken = false
     /// The token itself among the secrets, when it's kept.
-    public static let adminTokenSecret = AdminToken.tokenKey
+    public nonisolated static let adminTokenSecret = AdminToken.tokenKey
 
     /// `/api/admin-token…`, by method.
     func restAdminToken(_ call: RESTCall) -> HTTPResponse {

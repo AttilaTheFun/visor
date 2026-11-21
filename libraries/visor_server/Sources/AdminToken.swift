@@ -54,7 +54,7 @@ package final class AdminToken {
     /// Where its hash is kept among the server's secrets.
     package static let secretKey = "adminTokenHash"
     /// Where the token itself is kept, when it is (`keepingToken`).
-    package static let tokenKey = "adminToken"
+    package nonisolated static let tokenKey = "adminToken"
 
     package let holding: Holding
     private let secrets: (any SecretStore)?
