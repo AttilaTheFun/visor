@@ -370,7 +370,7 @@ public final class VisorServer {
     /// The agents Visor starts itself in its Sessions container, for the
     /// sessions placed there (VisorServer+ContainerRunner): the driver
     /// asks it of their tokens.
-    package lazy var containerRunner = ContainerRunner(tokens: agentTokens) { [weak self] id in
+    @ObservationIgnored package lazy var containerRunner = ContainerRunner(tokens: agentTokens) { [weak self] id in
         self?.session(id).map { !$0.info.archived }
     }
 

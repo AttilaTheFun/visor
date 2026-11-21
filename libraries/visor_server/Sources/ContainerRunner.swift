@@ -112,11 +112,11 @@ package final class ContainerRunner: DrivenAgentDirectory {
 
     // MARK: - DrivenAgentDirectory
 
-    func holds(_ agent: String) -> Bool {
+    package func holds(_ agent: String) -> Bool {
         agents[Self.key(agent)] != nil
     }
 
-    func access(_ agent: String, bearers: [String], withinGrace: Bool, now: Date) -> DrivenAgentAccess {
+    package func access(_ agent: String, bearers: [String], withinGrace: Bool, now: Date) -> DrivenAgentAccess {
         let id = Self.key(agent)
         guard let placed = agents[id] else { return .unknown }
         let shown = bearers.filter { !$0.isEmpty }
@@ -145,29 +145,29 @@ package final class ContainerRunner: DrivenAgentDirectory {
         return expired ? .expired : .refused(why)
     }
 
-    func session(of agent: String) -> String {
+    package func session(of agent: String) -> String {
         agents[Self.key(agent)]?.session ?? Self.key(agent)
     }
 
-    func conversation(of agent: String) -> (resume: String, cwd: String)? {
+    package func conversation(of agent: String) -> (resume: String, cwd: String)? {
         agents[Self.key(agent)].map { ($0.resume, $0.cwd) }
     }
 
     /// A new token for `agent`: an hour's, as its session.
-    func token(for agent: String) -> String {
+    package func token(for agent: String) -> String {
         let id = Self.key(agent)
         return tokens.mint(.runnerAgent, session: session(of: id), agent: id)
     }
 
-    func expiry(of token: String) -> Date? {
+    package func expiry(of token: String) -> Date? {
         tokens.expiry(of: token)
     }
 
-    var tokenRefreshLead: TimeInterval { tokens.runnerAgentLifetime / 6 }
+    package var tokenRefreshLead: TimeInterval { tokens.runnerAgentLifetime / 6 }
 
     /// Always: the container is the agent's sandbox, and its session gets
     /// Visor's own MCP tools alone.
-    func runsInContainer(_ agent: String) -> Bool { true }
+    package func runsInContainer(_ agent: String) -> Bool { true }
 
     /// An agent's id as it's kept: in lower case, however its wrapper
     /// spells it back.
