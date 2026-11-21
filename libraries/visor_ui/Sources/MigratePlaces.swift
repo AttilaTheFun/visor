@@ -7,7 +7,10 @@ import VisorProtocol
 /// conversation carried both ways); or another computer connected now
 /// that migrates (the Migrate sheet: this one keeps the session until the
 /// user removes it). Each but the place it's in, while there is somewhere
-/// to go. A plain button and an alert, which every client's SwiftUI draws
+/// to go. Another computer is shown but not offered for a session in the
+/// container, which moves back first: a migration reads this computer's
+/// Claude folder, and its turns there would be left behind (the server
+/// refuses it too). A plain button and an alert, which every client's SwiftUI draws
 /// (a menu within a context menu is Apple's alone).
 @MainActor
 struct MigratePlaces {
@@ -27,8 +30,10 @@ struct MigratePlaces {
     var intoContainer: Bool { placement == .host && session.agent == .claude && !session.archived && host.takesContainerSessions }
     /// Back onto the computer, from the container or a runner.
     var back: Bool { placement != .host }
-    /// Other computers, where it can migrate.
+    /// Other computers, where it can migrate (or could, once it's back).
     var elsewhere: [AgentServerConnection] { host.migrates ? others : [] }
+    /// Whether the other computers wait for it to move back first.
+    var elsewhereWaits: Bool { placement == .container }
     /// Whether there is anywhere to go.
     var offers: Bool { intoContainer || back || !elsewhere.isEmpty }
 
@@ -39,5 +44,12 @@ struct MigratePlaces {
         case .runner: "It's on a runner of \(name)'s."
         case .host: "It's on \(name)."
         }
+    }
+
+    /// What Migrate… says: where it is, and, for one in the container with
+    /// other computers to go to, that it moves back first.
+    var said: String {
+        guard elsewhereWaits, !elsewhere.isEmpty else { return here }
+        return here + " Move it back to \(name) first to migrate it to another computer, so its conversation there comes with it."
     }
 }

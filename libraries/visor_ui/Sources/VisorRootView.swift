@@ -334,14 +334,15 @@ public struct VisorRootView: View {
                 }
                 ForEach(places.elsewhere, id: \.id) { other in
                     Button(other.record.name) {
-                        migrating = SessionMigration(session: target.session, from: target.host, to: other)
+                        if !places.elsewhereWaits { migrating = SessionMigration(session: target.session, from: target.host, to: other) }
                         placing = nil
                     }
+                    .disabled(places.elsewhereWaits)
                 }
             }
             Button("Cancel", role: .cancel) { placing = nil }
         } message: {
-            Text(placing.map { places(of: $0.session, on: $0.host).here } ?? "")
+            Text(placing.map { places(of: $0.session, on: $0.host).said } ?? "")
         }
         .alert("Remove this session?", isPresented: presenting($deletingSession)) {
             Button("Cancel", role: .cancel) { deletingSession = nil }

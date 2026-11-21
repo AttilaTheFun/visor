@@ -359,7 +359,9 @@ offers each place but that one: its computer ("‹computer›": Move Back),
 that computer's Sessions container ("‹computer›'s Container": Move to
 Container, offered while `GET /api/container` says it takes sessions,
 asked on connecting and after each move), then any other computer
-connected now that migrates (the Migrate sheet, as before). It's a button
+connected now that migrates (the Migrate sheet, as before; for a session
+in the container, shown disabled, the alert saying to move it back first,
+as the server refuses it). It's a button
 and an alert, not a menu within the context menu, which only Apple's
 SwiftUI draws. Move to a Runner (the dispatcher's) is no longer
 offered. A session's row marks where it runs: a box, "In the Sessions
