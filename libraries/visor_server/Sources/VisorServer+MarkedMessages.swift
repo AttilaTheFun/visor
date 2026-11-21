@@ -42,10 +42,11 @@ extension VisorServer {
         let now = Date().timeIntervalSince1970
         let from = RelayEndpoint(server: id, serverName: hostName, session: record.info.id, sessionName: record.displayName)
         if isThisServer(addressed.computer) {
-            guard let target = markedTarget(named: addressed.session, except: record) else {
+            let routed = markedRoute(named: addressed.session, except: record)
+            guard let target = routed.target else {
                 let to = RelayEndpoint(server: id, serverName: hostName, session: "", sessionName: addressed.session)
                 record.mailbox.send(MailMessage(id: messageID, from: from, to: to, text: addressed.body, sent: now, state: .failed,
-                                                changed: now, problem: "No session named “\(addressed.session)” on \(hostName)."))
+                                                changed: now, problem: routed.refusal ?? "No session named “\(addressed.session)” on \(hostName)."))
                 saveArchive()
                 broadcastSessionsSoon()
                 return
@@ -63,15 +64,24 @@ extension VisorServer {
 
     /// A session of this server's that a message names: by its name or its
     /// id, ignoring case; not the sender, and not ended or archived.
-    /// One archived by a Super Compact's cut-over is the session that
-    /// carries it on (forwardedSession).
+    /// One archived by a Super Compact's cut-over is the last session of its
+    /// chain of continuations (forwarding).
     func markedTarget(named name: String, except sender: SessionRecord?) -> SessionRecord? {
+        markedRoute(named: name, except: sender).target
+    }
+
+    /// The same, or why a session carried on has nowhere to forward it.
+    func markedRoute(named name: String, except sender: SessionRecord?) -> (target: SessionRecord?, refusal: String?) {
         let named: (SessionRecord) -> Bool = { Self.sameName($0.displayName, name) || $0.info.id == name }
-        if let found = sessions.first(where: { $0 !== sender && !$0.info.ended && !$0.info.archived && named($0) }) { return found }
-        guard let carried = sessions.first(where: { $0.info.continuedAs != nil && named($0) }),
-              let next = session(forwardedSession(carried.info.id)), next !== carried, next !== sender,
-              !next.info.ended, !next.info.archived else { return nil }
-        return next
+        if let found = sessions.first(where: { $0 !== sender && !$0.info.ended && !$0.info.archived && named($0) }) { return (found, nil) }
+        guard let carried = sessions.first(where: { $0.info.continuedAs != nil && named($0) }) else { return (nil, nil) }
+        let forwarded = forwarding(carried.info.id)
+        if let refusal = forwarded.refusal { return (nil, refusal) }
+        guard let next = session(forwarded.session), next !== carried, next !== sender else { return (nil, nil) }
+        guard !next.info.ended, !next.info.archived else {
+            return (nil, "Not sent: \(carried.info.id) was carried on as \(forwarded.session ?? ""), which is archived or ended on \(hostName).")
+        }
+        return (next, nil)
     }
 
     /// The written messages waiting for a computer and session by name,
@@ -93,8 +103,10 @@ extension VisorServer {
     /// A written message carried here: handed to its session as a turn
     /// beginning `@@from`.
     func takeMarked(_ message: RelayMessage) -> RelayReceipt {
-        guard let target = markedTarget(named: message.to.session, except: nil) else {
-            return RelayReceipt(message: message.id, outcome: .failed, text: "No session “\(message.to.sessionName)” on \(hostName).")
+        let routed = markedRoute(named: message.to.session, except: nil)
+        guard let target = routed.target else {
+            return RelayReceipt(message: message.id, outcome: .failed,
+                                text: routed.refusal ?? "No session “\(message.to.sessionName)” on \(hostName).")
         }
         let busy = mail(message.text, from: message.from, to: target, messageID: message.id, here: false, marked: true)
         return RelayReceipt(message: message.id, outcome: busy ? .queued : .sent, text: "")
