@@ -32,6 +32,15 @@ Swift package, by version in third_party/swift_packages like agent_ui),
 rules_swift_package_manager (rspm) brings SwiftPM packages into Bazel as `@swiftpkg_<identity>` — the
 identity keeps its dot: `@swiftpkg_agent_ui//:AgentUI`.
 
+The client's gRPC link (from 0.64) is protos/visor/client/v1. Bazel
+generates its Swift as it builds: `swift_proto_library`
+(libraries/visor_client_proto) with tools/proto's compilers, the plugins
+from the SwiftPM graph and protobuf's prebuilt protoc
+(`--incompatible_enable_proto_toolchain_resolution`). SwiftPM builds a
+copy that is kept in libraries/visor_client_proto/Sources. After a proto
+changes, write it again with `bazel run //tools/proto:generate`; `--check`
+fails when the copy differs from what the protos make.
+
 ## 2. Setting up a Mac
 
 1. Xcode 27 with the iOS 27 runtime; `xcode-select` to it. Bazelisk
@@ -1157,7 +1166,10 @@ container agents.
     `Visor-Disk-Utility-<version>-macos.zip` (no disk image), with its own
     builds.json line (tools/ci/sign_builds.sh); `alpha-launch` and
     `release-launch` check it's signed and opens
-    (tools/ci/mac_app_opens.sh). The agent
+    (tools/ci/mac_app_opens.sh). So is Visor Client
+    (applications/visor_macos, sandboxed: docs/visor-client.md),
+    `Visor-Client-<version>-macos.zip`, checked sandboxed too
+    (`mac_app_opens.sh --sandboxed`). The agent
     image of that version follows when tools/containers/ changed
     (`agent-image`, built with buildah on GitHub's arm64 Ubuntu, arm64
     alone). A branch's builds are experiments only (Logan, 12 Nov 2026):

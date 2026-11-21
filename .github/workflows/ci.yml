@@ -143,6 +143,12 @@ jobs:
       - name: The client's screens, headless
         if: steps.changes.outputs.code == 'true'
         run: bazel test --config=headless --test_output=errors //tests/feature_map_tests/...
+      # SwiftPM's copy of the client link's Swift (libraries/visor_client_proto/
+      # Sources) is what the protos make (tools/proto/generate, with Bazel's
+      # protoc and plugins).
+      - name: The protos' Swift
+        if: steps.changes.outputs.code == 'true'
+        run: bazel run //tools/proto:generate -- --check
       # Bazel's server let go before SwiftPM builds beside it.
       - name: Bazel stopped
         if: steps.changes.outputs.code == 'true'
@@ -155,6 +161,8 @@ jobs:
         run: |
           swift build --product visor-server
           swift build --target VisorServices
+          swift build --target VisorClientGRPCServer
+          swift build --target VisorClientGRPCClient
 
   # The Apple targets, on an xcode-27 Mac with its own Xcode.
   container-apple:

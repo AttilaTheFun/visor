@@ -11,6 +11,12 @@ common --repo_env=ACCEPTED_ANDROID_NDK_LICENSE_VERSION=r30
 common --repo_env=ACCEPTED_ANDROID_SDK_LICENSE_VERSION=35
 common --android_platforms=@rules_android//:arm64-v8a
 
+# Protocol buffers' protoc through toolchain resolution: protobuf's
+# prebuilt one for the machine that runs it, never compiled from source
+# (swift_proto_library's compilers in tools/proto name no protoc of their
+# own).
+common --incompatible_enable_proto_toolchain_resolution
+
 # rules_java's hermetic JDK 17, for rules_android's Java actions.
 common --java_language_version=17
 common --java_runtime_version=remotejdk_17

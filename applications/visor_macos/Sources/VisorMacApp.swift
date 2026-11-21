@@ -1,4 +1,4 @@
-// The Mac client's @main, on the shared host sources.
+// Visor Client's @main, the Mac client's, on the shared host sources.
 
 import SwiftUI
 import VisorClient
@@ -22,44 +22,30 @@ struct VisorMacApp: App {
     }
 
     init() {
-        Self.adoptFormerApp()
         // The host's services first: the store connects through them.
-        installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: NativeVisorSettingsService(),
-                             notifications: NativeVisorNotificationService(), ssh: NativeVisorSSHService(), network: NativeVisorNetworkService(),
+        // Visor Client is sandboxed (applications/visor_macos/BUILD.bazel):
+        // its secrets in its own keychain group where the build has one
+        // (ClientKeychain), and no SSH, whose tunnel listens on 127.0.0.1,
+        // which the sandbox refuses a client (no network.server): its
+        // computers are reached over HTTP and HTTPS alone. Nothing of a
+        // server's either: no socket file, launchd job, ~/.visor or ~/.ssh.
+        // (Nor what the client kept before 0.46, as com.LoganShire.Visor.macOS:
+        // outside its container, the sandbox doesn't read it.)
+        let settings = NativeVisorSettingsService(keychainGroup: ClientKeychain.ownGroup())
+        installVisorServices(socket: NativeVisorSocketService(), http: NativeVisorHTTPService(), settings: settings,
+                             notifications: NativeVisorNotificationService(), ssh: nil, network: NativeVisorNetworkService(),
                              dictation: NativeVisorDictationService(), deviceName: Host.current().localizedName ?? "",
                              appVersion: Self.bundleVersion, platformName: "macOS")
+        // The sandbox reads the files the person picks and writes none: an
+        // exported session is shared, not saved.
+        VisorHost.savesFiles = false
         if !VisorFixture.active {
             // (The push token is asked for once launched: MacPushDelegate.)
             VisorHost.notifications?.requestPermission()
         }
-        _store = State(initialValue: VisorStore())
-    }
-
-    /// The bundle id this app had before: its saved computers and its
-    /// cache are taken over the first time this build runs.
-    static let formerBundleID = "com.LoganShire.Visor.macOS"
-
-    static func adoptFormerApp() {
-        // Once: the computers have moved to the keychain since, so their
-        // absence from the settings says nothing about whether this ran.
-        let settings = UserDefaults.standard
-        guard Bundle.main.bundleIdentifier != formerBundleID, !settings.bool(forKey: "visor.adoptedFormerApp") else { return }
-        settings.set(true, forKey: "visor.adoptedFormerApp")
-        // What the former app kept, and only what this one lacks: not a
-        // suite's whole view, which holds this launch's arguments too (a
-        // `-visor.fixture` launch would be kept as the app's own setting).
-        let own = Bundle.main.bundleIdentifier.flatMap(settings.persistentDomain(forName:)) ?? [:]
-        for (key, value) in settings.persistentDomain(forName: formerBundleID) ?? [:] where key.hasPrefix("visor.") && own[key] == nil {
-            settings.set(value, forKey: key)
-        }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        if let current = Bundle.main.bundleIdentifier {
-            let target = base.appendingPathComponent(current)
-            let source = base.appendingPathComponent(formerBundleID)
-            if !FileManager.default.fileExists(atPath: target.path), FileManager.default.fileExists(atPath: source.path) {
-                try? FileManager.default.moveItem(at: source, to: target)
-            }
-        }
+        let store = VisorStore()
+        VisorHost.forgetEverything = { ForgetEverything.run(store: store, settings: settings) }
+        _store = State(initialValue: store)
     }
 
     var body: some Scene {

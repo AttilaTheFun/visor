@@ -101,6 +101,13 @@ register_toolchains(
     "@rules_applecross//toolchain:apple_bundling_on_macos",
 )
 bazel_dep(name = "rules_xcodeproj", version = "4.1.0")
+# Protocol buffers, for the client's gRPC link (protos/visor/client/v1):
+# proto_library, and protoc, prebuilt (the proto toolchain's, which
+# .bazelrc's --incompatible_enable_proto_toolchain_resolution turns on).
+# The versions the graph resolves already: rules_swift asks for protobuf
+# 34.0.bcr.1.
+bazel_dep(name = "protobuf", version = "34.0.bcr.1")
+bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "rules_swift_package_manager", version = "1.25.0.isomer.1")
 
 # The chat, composer and navigation views: the agent_ui package, pinned by

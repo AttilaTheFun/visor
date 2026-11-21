@@ -64,6 +64,34 @@ import VisorServicesNative
         }
     }
 
+    @Test func forgetEverythingClearsSettingsAndSecrets() throws {
+        try withDefaults { defaults in
+            let settings = NativeVisorSettingsService(environment: ["visor.account": "fixture"], defaults: defaults)
+            settings.set(key: "servers", value: "[]")
+            settings.setSecret(key: "ssh.key", value: "secret")
+            defaults.set("theirs", forKey: "NSWindow Frame main")
+            settings.forgetEverything()
+            // Every `visor.` setting and secret (a host with no keychain
+            // keeps them together), and the launch's: none come back.
+            #expect(settings.get(key: "servers") == "")
+            #expect(settings.secret(key: "ssh.key") == "")
+            #expect(settings.get(key: "account") == "")
+            #expect(defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("visor.") }.isEmpty)
+            // The rest of the domain stays, unless it is named.
+            #expect(defaults.string(forKey: "NSWindow Frame main") == "theirs")
+        }
+    }
+
+    @Test func ownKeychainGroupIsTheBundlesOwn() {
+        let bundle = "com.LoganShire.VisorClient.macOS"
+        #expect(VisorKeychainGroup.own(bundleID: bundle, groups: ["T.other", "T." + bundle], applicationIdentifier: nil) == "T." + bundle)
+        // None of the groups: the application identifier, if it is the bundle's.
+        #expect(VisorKeychainGroup.own(bundleID: bundle, groups: [], applicationIdentifier: "T." + bundle) == "T." + bundle)
+        #expect(VisorKeychainGroup.own(bundleID: bundle, groups: ["T.com.LoganShire.Visor"], applicationIdentifier: "T.other") == nil)
+        // The bundle id alone is no group, nor another bundle's that ends the same.
+        #expect(VisorKeychainGroup.own(bundleID: bundle, groups: [bundle, "T.x" + bundle], applicationIdentifier: nil) == nil)
+    }
+
     @Test func headlessNamesAreTheBareOnes() {
         let environment = ["fixture": "snapshot", "visor.account": "fixture"]
         #expect(VisorLaunchSettings.values(in: environment, prefix: "") == ["fixture": "snapshot"])

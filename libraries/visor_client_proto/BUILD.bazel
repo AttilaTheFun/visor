@@ -1,0 +1,44 @@
+load("@rules_swift//proto:proto.bzl", "swift_proto_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The client's gRPC link to the server (protos/visor/client/v1) in Swift:
+# its messages, the services' servers (the server's, from 0.64's PR 4) and
+# their clients (libraries/visor_client_grpc's, PR 5). Generated as they
+# build, by the compilers in tools/proto; Sources/ is SwiftPM's copy of the
+# same (tools/proto/generate), which Bazel doesn't build.
+#
+# For Linux, the Mac, iOS and Android, against //:foundation: the system's
+# Foundation on Apple's platforms and Linux, Isomer's on Android.
+
+swift_proto_library(
+    name = "visor_client_proto",
+    additional_compiler_deps = ["//:foundation"],
+    compilers = ["//tools/proto:swift_proto"],
+    module_name = "VisorClientProto",
+    protos = ["//protos/visor/client/v1:messages_proto"],
+)
+
+swift_proto_library(
+    name = "visor_client_grpc_server",
+    additional_compiler_deps = ["//:foundation"],
+    compilers = [
+        "//tools/proto:swift_proto",
+        "//tools/proto:grpc_swift_server_proto",
+    ],
+    module_name = "VisorClientGRPCServer",
+    protos = ["//protos/visor/client/v1:services_proto"],
+    deps = [":visor_client_proto"],
+)
+
+swift_proto_library(
+    name = "visor_client_grpc_client",
+    additional_compiler_deps = ["//:foundation"],
+    compilers = [
+        "//tools/proto:swift_proto",
+        "//tools/proto:grpc_swift_client_proto",
+    ],
+    module_name = "VisorClientGRPCClient",
+    protos = ["//protos/visor/client/v1:services_proto"],
+    deps = [":visor_client_proto"],
+)

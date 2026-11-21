@@ -7,6 +7,7 @@
 import Foundation
 import SwiftUI
 import VisorClient
+import VisorServices
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif
@@ -37,7 +38,7 @@ struct SessionExportSheet: View {
         .task {
             guard export.phase == .exporting, export.progress == 0 else { return }
             await export.run()
-            if case .ready = export.phase, Compat.savesExportAtOnce { saving = true }
+            if case .ready = export.phase, Compat.savesExportAtOnce, VisorHost.savesFiles { saving = true }
         }
         .fileExporter(isPresented: $saving, document: document, contentType: .visorSession, defaultFilename: export.name) { result in
             switch result {
@@ -66,8 +67,12 @@ struct SessionExportSheet: View {
             Section {
                 LabeledContent("File", value: export.name)
                 LabeledContent("Size", value: MigrationSheet.size(export.size))
-                Button("Save…") { saving = true }
-                    .accessibilityIdentifier("export-save")
+                // Shared alone where the host saves no file (Visor Client's
+                // sandbox reads the files picked and writes none).
+                if VisorHost.savesFiles {
+                    Button("Save…") { saving = true }
+                        .accessibilityIdentifier("export-save")
+                }
                 shareFileLink(url)
                 if let said {
                     Text(said).font(.footnote).accessibilityIdentifier("export-said")

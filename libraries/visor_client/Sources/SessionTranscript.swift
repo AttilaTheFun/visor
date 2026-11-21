@@ -132,6 +132,12 @@ public final class SessionTranscript {
     @ObservationIgnored var respondingAnnounced = 0
     /// Words were the last thing the turn did: no tool or thinking since.
     @ObservationIgnored var writingNow = false
+    /// Asks the server for the session's state again, whole: the words
+    /// held of a reply don't meet a `delta`'s `from`. Set by the
+    /// connection that owns this.
+    @ObservationIgnored var askState: (() -> Void)?
+    /// The state has been asked for and has not come yet.
+    @ObservationIgnored var stateAsked = false
 
     /// A rebuilt set of rows: a row that is new here and has the same role
     /// and words as one that went takes that one's display id.
@@ -637,7 +643,7 @@ public final class SessionTranscript {
             writingNow = false
         case "delta":
             // More of a reply being written, drawn until its row is synced.
-            takeDelta(id: envelope.id ?? "stream", text: envelope.text ?? "")
+            takeDelta(id: envelope.id ?? "stream", text: envelope.text ?? "", from: envelope.from)
         case "streamEnd":
             endStream(id: envelope.id)
         case "entry":

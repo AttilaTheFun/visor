@@ -1,0 +1,42 @@
+load("@rules_apple//apple:macos.bzl", "macos_unit_test")
+load("@rules_swift//swift:swift.bzl", "swift_library", "swift_test")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# The client link's protos (libraries/visor_client_proto): each message
+# through its encoding and back, and the services' servers and clients
+# built and named as the protos name them. On Linux (//tests:linux), and as
+# an .xctest bundle on a Mac.
+
+_DEPS = [
+    "//:foundation",
+    "//libraries/visor_client_proto",
+    "//libraries/visor_client_proto:visor_client_grpc_client",
+    "//libraries/visor_client_proto:visor_client_grpc_server",
+    "@swiftpkg_grpc_swift_2//:GRPCCore",
+    "@swiftpkg_swift_protobuf//:SwiftProtobuf",
+]
+
+swift_test(
+    name = "visor_client_proto_tests",
+    copts = STRICT_SWIFT,
+    srcs = glob(["*.swift"]),
+    module_name = "VisorClientProtoTests",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = _DEPS,
+)
+
+swift_library(
+    name = "visor_client_proto_tests_lib",
+    testonly = True,
+    copts = STRICT_SWIFT,
+    srcs = glob(["*.swift"]),
+    module_name = "VisorClientProtoTests",
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = _DEPS,
+)
+
+macos_unit_test(
+    name = "visor_client_proto_mac_tests",
+    minimum_os_version = "15.0",
+    deps = [":visor_client_proto_tests_lib"],
+)

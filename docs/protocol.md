@@ -374,6 +374,7 @@ and `subscribe` and stream the rest.
 | `send` | `session`, `text` | A user turn. While the agent works it waits in the session's queue (`queued`); handed to the agent, and until its log has the message (Codex can compact its context for minutes first), it is in the session's `delivered` while the agent works, which a client shows as the user's row until the transcript carries it (handed to an agent that went before its log had it, it never was taken: it leaves `delivered` at once, and a few seconds later the session's `notice` names it, to be sent again); when the turn ends (or `stop` ends it) the queue goes over a message at a time, never joined, each turn but the last stopped as soon as it starts (once the agent says it began: Claude's `system/init`, Codex's turn id — a stop sent before that is taken and ignored), so the agent answers the last. `/goal clear` sent during a turn goes ahead of the queue and stops the turn. |
 | `stop` | `session` | Kill the agent's process; the transcript stays and the next `send` resumes the agent's own session. |
 | `subscribe` | `session` | Replay the transcript, then stream. |
+| `state` | `session` | The session's ephemeral state again, whole: answered with `ephemeral`, after whatever streamed has been told. A client sends it when the words it holds of a reply don't meet a `delta`'s `from` (The reply being written, below). From 0.64; a server before it answers `error` "Unknown message state", and sends no `from`, so a client never asks it. |
 | `signIn` | `session`, `text` | The code the sign-in page showed (`<code>#<state>`), for the session's sign-in (`/login`). `send` of `/login` (with `claude auth login`'s options, `--console`, `--sso`; `/login cancel` to give up) to a Claude session starts one beside the agent, which takes no turn: the session's state (`ephemeral`) carries `signIn`, the page to sign in at, until it ends; signed in, the agent is made again on the new sign-in, and a notice says how it ended. Also `POST /sessions/{id}/signIn`. Visor lists `login` among a Claude session's commands. |
 | `unsubscribe` | `session` | The client left the session: nothing more of it is sent until it subscribes again. A server before 0.33 answers `error` "Unknown message unsubscribe", which a client lets pass. |
 | `permissions` | `session`, `skipPermissions` | Switch the session between auto-approving and manual. On the computer itself auto-approving is Claude Code's own auto mode and Codex in its workspace sandbox, never a bypass; in a container (the server's own, `inContainer`) a session always skips its prompts (Claude's bypassPermissions, Codex's full access), and an ask for manual is refused (from 0.50; before, auto was a bypass everywhere). Codex applies it next turn; Claude's process restarts (resumed by id) once the current turn ends. `sessions` follows. |
@@ -401,7 +402,7 @@ in its store.
 | `pong` | | The answer to `ping`, to that client only. |
 | `sessions` | `sessions` | The session list changed (a start, an end, busy flipped). |
 | `transcript` | `session`, `entries`, `streaming`, `activity`, `busy`, `error` | The whole state, on subscribe. |
-| `delta` | `session`, `id`, `text` | More of the reply being written; `id` is the message's, which its first row on the record also has. Appended to what the client holds for `id` (The reply being written, below). |
+| `delta` | `session`, `id`, `text`, `from` | More of the reply being written; `id` is the message's, which its first row on the record also has. Appended to what the client holds for `id` (The reply being written, below). `from` (from 0.64): where the words go, the length in UTF-8 bytes of the message's words before them. |
 | `ephemeral` | `session`, `streams`, `status`, `activity`, `busy`, `approval`, `queued`, `notice`, `signIn` | Everything about the session that is not the record, whole: on subscribing, after a notice, and as `GET /sessions/<id>/state` answers. `streams`: the replies being written that the record doesn't carry yet, each `id` (the message's) and `text` (its words so far). |
 | `entry` | `session`, `entry` | A finished entry, or a replacement for the entry with the same id (an assistant message grows as its tool calls arrive). An assistant entry clears `streaming`. |
 | `activity` | `session`, `activity` | What the agent is doing ("Bash: ls"), or null. |
@@ -432,6 +433,13 @@ it holds unrecorded whole in `ephemeral.streams`. Visor's client
   replaces the words of each it names; a `delta` appends to its id's, or
   begins one. A message held and missing from a snapshot was recorded
   there, or lost with a restart: it is kept, finished, as below.
+- **Offsets:** a `delta` from 0.64 says where its words go (`from`, the
+  UTF-8 length of the words before them). Those that meet what the client
+  holds are appended; those it holds already (a snapshot brought them
+  first) are passed over; any other (words missed) is not taken, and the
+  client asks for the state again (`state`), once until it comes, whose
+  `ephemeral.streams` puts the words right. Without `from` (an older
+  server), words are appended.
 - **The join, with the client's own synced rows:** a reply `M` is drawn
   while those rows have no assistant row `M` or `M#k` (a segment), and a
   `delta` for a message they have is dropped. It is drawn as the agent's
@@ -447,8 +455,14 @@ it holds unrecorded whole in `ephemeral.streams`. Visor's client
   answers what came before); the user's rows not on the record yet (sent
   to an idle agent, or `delivered`); the reply of the turn running. The
   queue is the composer's.
-- **Pace:** the server sends a `delta` per chunk (30–60 a second from
-  Claude Code); the client redraws the reply at most four times a second,
+- **Pace:** Claude Code streams 30–60 pieces a second; the server
+  gathers them per session and sends each message's as one `delta` every
+  200 ms at most (VisorServer+Streams), and anything else it tells of the
+  session first tells what streamed before it, so the order is the
+  agent's. A snapshot (on subscribing, or asked for with `state`) comes
+  after what streamed has been told, so the next `delta` starts where it
+  ends. A turn beginning lets go of what an earlier turn streamed that the
+  record never carried. The client redraws the reply at most four times a second,
   apart from the thread's own frame (once a second). Its markdown is drawn
   as the record's is, each paragraph's styles cached by its words, so only
   the paragraph being written is parsed again. While words are the last

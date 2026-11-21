@@ -394,6 +394,14 @@ extension VisorServer {
         // (a goal's next step, a loop waking): the server's, not the
         // person's — and not the mail's it may follow.
         if case .busy(true) = event, !record.info.busy { record.info.turnOrigin = .system }
+        // Streamed words wait for the session's next flush; anything else
+        // tells what streamed before it first (VisorServer+Streams).
+        if case .delta = event {
+            _ = record.apply(event)
+            flushStreamsSoon(record)
+            return
+        }
+        flushStreams(record)
         // Nothing to say is nothing sent.
         broadcast(record.apply(event), session: record)
         noteSubagents(after: event, of: record)

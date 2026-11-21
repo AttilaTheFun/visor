@@ -37,6 +37,10 @@ public struct Envelope: Codable, Sendable {
     // send / stop / subscribe / end / transcript / delta / entry / activity / busy / failure
     public var session: String?
     public var text: String?
+    /// `delta`: where its words go in the message, the length in UTF-8
+    /// bytes of the words told before them (from 0.64; absent from an
+    /// older server, whose words are appended).
+    public var from: Int?
     // sessions / welcome
     public var sessions: [SessionInfo]?
     // welcome: each provider's models
@@ -310,6 +314,11 @@ extension Envelope {
     public static func subscribe(session: String) -> Envelope {
         var e = Envelope(type: "subscribe"); e.session = session; return e
     }
+    /// Asks for the session's ephemeral state again, whole (`ephemeral`):
+    /// the words a client holds of a reply don't meet a `delta`'s `from`.
+    public static func state(session: String) -> Envelope {
+        var e = Envelope(type: "state"); e.session = session; return e
+    }
     /// Stops following a session the client has left: its state and
     /// streamed words are sent no more (a server before 0.33 says it does
     /// not know the message, which the client lets pass).
@@ -377,8 +386,9 @@ extension Envelope {
     /// Words streamed for one assistant message, named by the message's
     /// own id, so a client keeps each message as its own row — and keeps
     /// it, complete, until the transcript carries a row with that id.
-    public static func delta(session: String, message id: String, text: String) -> Envelope {
-        var e = Envelope(type: "delta"); e.session = session; e.id = id; e.text = text; return e
+    /// `from` is where they go: the UTF-8 length of the words before them.
+    public static func delta(session: String, message id: String, text: String, from: Int? = nil) -> Envelope {
+        var e = Envelope(type: "delta"); e.session = session; e.id = id; e.text = text; e.from = from; return e
     }
     /// A new entry, or a replacement for the entry with the same id.
     public static func entry(session: String, _ entry: TranscriptEntry) -> Envelope {
