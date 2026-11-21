@@ -191,10 +191,18 @@ session is mid-turn. Then:
    session's inbox, addressed to it, and its agent is told it has mail
    once its first turn ends; what was read stays. From then on, mail to
    the old id (`send_message`, a relayed message, or one written as
-   `@@to`, by its id or name) goes to the new session, along a chain of
-   them should that one be carried on too; the sender is told it was
-   forwarded and which id to write to. The forwarding entry is the old
-   session's `continuedAs`, kept with it.
+   `@@to`, by its id or name) goes to the new session. The forwarding
+   entry is the old session's `continuedAs`, kept with it, and delivery
+   follows a chain of them to its last session (A→B→C, after two
+   cut-overs, goes to C); the sender is told it was forwarded, through how
+   many continuations, and the final id to write to from then on. So that
+   a mistaken `continuedAs` can never bounce a message for ever, the chain
+   is followed at most 8 hops (`VisorServer.forwardingHops`) and never
+   round a cycle (A→B→A, or a session carried on as itself): either, or a
+   continuation to a session no longer on the server, refuses the message
+   with a clear error to its sender, and nothing is delivered. A chain
+   that ends at a session archived or ended by hand is refused the same
+   way. Each forward and each refusal is logged.
 7. **Each names the other:** `continuedAs` on the old session and
    `continuedFrom` on the new (SessionInfo), and the job's `continuedAs`.
 

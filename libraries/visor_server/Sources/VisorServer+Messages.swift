@@ -422,11 +422,17 @@ extension VisorServer {
                 return "\(info.id) — \(record.displayName) (\(info.agent.title), \(info.busy ? "working" : "idle")) in \(info.cwd)"
             }.joined(separator: "\n")
         case "send":
-            // Mail for a session a Super Compact carried on goes to the one
-            // that carries it on (VisorServer+SuperCompactCutover).
-            let addressed = forwardedSession(envelope.session)
-            guard let target = others.first(where: { $0.info.id == addressed }) else {
-                reply.error = "No other session with that id; list_sessions names them."
+            // Mail for a session a Super Compact carried on goes to the last
+            // of its chain of continuations (VisorServer+SuperCompactCutover).
+            let forwarded = forwarding(envelope.session)
+            if let refusal = forwarded.refusal {
+                reply.error = refusal
+                return reply
+            }
+            guard let target = others.first(where: { $0.info.id == forwarded.session }) else {
+                reply.error = forwarded.hops == 0 ? "No other session with that id; list_sessions names them."
+                    : "Not sent: \(envelope.session ?? "") was carried on as \(forwarded.session ?? ""), which is archived or ended; "
+                    + "list_sessions names the sessions there are."
                 return reply
             }
             guard let text = envelope.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
@@ -442,8 +448,9 @@ extension VisorServer {
             let inbox = target.takesMail
             let busy = mail(text, from: from, to: target, messageID: messageID, here: computer == nil)
             var to = "“\(target.displayName)” (\(target.info.id)) on \(hostName)"
-            if let asked = envelope.session, asked != target.info.id {
-                to += " (forwarded: \(asked) was carried on as \(target.info.id), which is the session to write to from now on)"
+            if let asked = envelope.session, forwarded.hops > 0 {
+                let through = forwarded.hops == 1 ? "" : " through \(forwarded.hops) continuations"
+                to += " (forwarded: \(asked) was carried on as \(target.info.id)\(through), which is the session to write to from now on)"
             }
             if inbox {
                 reply.text = "Delivered to the inbox of \(to), message id \(messageID): its agent is told it has mail"
