@@ -20,8 +20,8 @@ relay-client's loopback forward to it, agent-wrapper in Visor's Linux
 programs, and `ContainerEngine.startWrapper`), and **step 4's server half,
 the container runner** (sessions placed in it, Move to Container and Move
 Back, a new session there, their agents started again across restarts:
-"Placing sessions", below), and **its clients' half** (Migrate… as one menu of
-these places, and the placement shown on each session).
+"Placing sessions", below), and **its clients' half** (Migrate… as one list
+of these places, and the placement shown on each session).
 
 ## Requirements
 
