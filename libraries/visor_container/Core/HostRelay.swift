@@ -13,9 +13,12 @@
 //
 // The socket itself is a UnixBridge's (the driver link is the other); at
 // most `maxConnections` at once. No token, or no agent-proxy answering: the
-// connection is closed, and the guest's egress check fails.
+// connection is closed, and the guest's egress check fails. Its first
+// stream says in the log whether it had a token to frame it with (never
+// the token).
 
 import Foundation
+import Synchronization
 import VisorAgentProxy
 
 public final class HostRelay: Sendable {
@@ -36,10 +39,16 @@ public final class HostRelay: Sendable {
     /// every connection is closed).
     public init(socketPath: String, host: String = "127.0.0.1", port: Int, maxConnections: Int = HostRelay.defaultMaxConnections,
                 token: @escaping @Sendable () -> String?, log: @escaping @Sendable (String) -> Void = { _ in }) {
+        let first = Mutex(true)
         bridge = UnixBridge(name: "relay", target: "agent-proxy", socketPath: socketPath, host: host, port: port, maxConnections: maxConnections,
                             opening: {
-                                guard let token = token(), !token.isEmpty else { return .refused("no relay token (agent-proxy/relay-token)") }
-                                return .header(HostRelay.header(token: token))
+                                let given = token() ?? ""
+                                if first.withLock({ held in defer { held = false }; return held }) {
+                                    log("relay: its first stream framed " + (given.isEmpty ? "with no relay token (none set): refused"
+                                                                                            : "with the relay's token (\(given.count) characters)"))
+                                }
+                                guard !given.isEmpty else { return .refused("no relay token (agent-proxy/relay-token)") }
+                                return .header(HostRelay.header(token: given))
                             }, log: log)
     }
 

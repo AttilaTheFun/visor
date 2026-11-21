@@ -123,6 +123,10 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// session, the one it carries on. Nil from a server before 0.64.
     public var continuedAs: String?
     public var continuedFrom: String?
+    /// Where its agent runs on its server: this computer, its Sessions
+    /// container, or a runner's. Nil from a server before 0.64, which a
+    /// client takes as the computer's own (or `inContainer`'s).
+    public var placement: SessionPlacement?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -193,5 +197,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         turnOrigin = (try? c.decodeIfPresent(TurnOrigin.self, forKey: .turnOrigin)) ?? nil
         continuedAs = try c.decodeIfPresent(String.self, forKey: .continuedAs)
         continuedFrom = try c.decodeIfPresent(String.self, forKey: .continuedFrom)
+        // A placement a later build wrote, which this one has not heard of, is none.
+        placement = (try? c.decodeIfPresent(SessionPlacement.self, forKey: .placement)) ?? nil
     }
 }

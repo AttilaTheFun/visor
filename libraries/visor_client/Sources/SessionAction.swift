@@ -51,4 +51,11 @@ public enum SessionAction: Equatable, Sendable {
     /// (`container`, Shireworks' primary container), which picks its
     /// conversation up and clones its repositories.
     case moveToRunner(runsOn: String)
+    /// Into its computer's Sessions container (docs/containers.md, "Placing
+    /// sessions"): its agent here ended, and one started there on the same
+    /// conversation.
+    case moveToContainer
+    /// Back on its computer from the container (or a runner), with its
+    /// conversation handed back.
+    case moveBack
 }

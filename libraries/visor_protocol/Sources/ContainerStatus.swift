@@ -30,10 +30,15 @@ public struct ContainerStatus: Equatable, Sendable {
     public var egress: String?
     /// What went wrong lately, the latest last (at most a few).
     public var errors: [String]
+    /// Why it's held stopped, when it was stopped on purpose (Stop, or
+    /// turned off): its sessions' agents wait for Start Agent then, rather
+    /// than starting it again. Nil while it runs, and after a stop it
+    /// takes up again by itself (a crash, an idle stop, a restart).
+    public var held: String?
 
     public init(state: ContainerState, enabled: Bool = false, canRun: Bool = false, cpus: Int? = nil, memoryGiB: Int? = nil,
                 idleMinutes: Int? = nil, image: String? = nil, since: Double? = nil, processes: Int = 0, relayPort: Int? = nil,
-                egress: String? = nil, errors: [String] = []) {
+                egress: String? = nil, errors: [String] = [], held: String? = nil) {
         self.state = state
         self.enabled = enabled
         self.canRun = canRun
@@ -46,6 +51,7 @@ public struct ContainerStatus: Equatable, Sendable {
         self.relayPort = relayPort
         self.egress = egress
         self.errors = errors
+        self.held = held
     }
 
     /// Whether a session may be started in it now, or would start it: on

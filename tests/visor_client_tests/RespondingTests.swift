@@ -24,7 +24,9 @@ final class RespondingTests: XCTestCase {
         return e
     }
 
-    private func delta(_ id: String, _ text: String) -> Envelope { session("delta") { $0.id = id; $0.text = text } }
+    private func delta(_ id: String, _ text: String, from: Int? = nil) -> Envelope {
+        session("delta") { $0.id = id; $0.text = text; $0.from = from }
+    }
     private func busy(_ on: Bool) -> Envelope { session("busy") { $0.busy = on } }
     private func snapshot(_ streams: [StreamChunk], busy: Bool = true) -> Envelope {
         session("ephemeral") { $0.streams = streams; $0.busy = busy; $0.status = [] }
@@ -140,6 +142,44 @@ final class RespondingTests: XCTestCase {
         // One on subscribing that the rows already carry is not drawn.
         t.apply(snapshot([StreamChunk(id: "M", text: "Partial")]))
         XCTAssertEqual(drawn(t), [])
+    }
+
+    /// A server of 0.64 says where each delta's words go (`from`, their
+    /// UTF-8 offset): those that meet the words held are appended, those
+    /// held already are passed over, and a gap asks for the state again,
+    /// once, until its snapshot puts the words right.
+    func testOffsetsAppendSkipWhatIsHeldAndAskForTheStateOnAGap() {
+        let t = started()
+        var asked = 0
+        t.askState = { asked += 1 }
+        t.apply(delta("M", "Café ", from: 0))
+        t.apply(delta("M", "au lait", from: "Café ".utf8.count))
+        XCTAssertEqual(drawn(t), ["Café au lait"])
+        // Words a snapshot brought first, told again: passed over.
+        t.apply(snapshot([StreamChunk(id: "M", text: "Café au lait, then")]))
+        t.apply(delta("M", ", then", from: "Café au lait".utf8.count))
+        XCTAssertEqual(drawn(t), ["Café au lait, then"])
+        XCTAssertEqual(asked, 0)
+        // A gap (words missed): not taken, and the state asked for once.
+        let held = "Café au lait, then".utf8.count
+        t.apply(delta("M", " toast", from: held + 4))
+        t.apply(delta("M", " too", from: held + 10))
+        XCTAssertEqual(drawn(t), ["Café au lait, then"])
+        XCTAssertEqual(asked, 1, "asked once until the state comes")
+        // The state comes: the words as the server has them, and the next
+        // delta meets them.
+        t.apply(snapshot([StreamChunk(id: "M", text: "Café au lait, then eggs toast too")]))
+        t.apply(delta("M", ".", from: "Café au lait, then eggs toast too".utf8.count))
+        XCTAssertEqual(drawn(t), ["Café au lait, then eggs toast too."])
+        XCTAssertEqual(asked, 1)
+        // A new message must start at 0; one that starts later asks again.
+        t.apply(delta("N", "late", from: 3))
+        XCTAssertEqual(asked, 2)
+        XCTAssertEqual(drawn(t), ["Café au lait, then eggs toast too."])
+        // Words with no offset (a server before 0.64) are appended.
+        t.apply(snapshot([StreamChunk(id: "M", text: "Café au lait, then eggs toast too.")]))
+        t.apply(delta("M", " Done"))
+        XCTAssertEqual(drawn(t), ["Café au lait, then eggs toast too. Done"])
     }
 
     func testWordsAreToldOnTheirOwnFasterFrame() async throws {

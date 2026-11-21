@@ -133,24 +133,31 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(relay.heard.withLock { $0 }, ["CONNECT api.github.com:443 HTTP/1.1", "CONNECT 140.82.112.3:22 HTTP/1.1"])
     }
 
-    /// A listener on loopback whose connections are closed at once, or held.
+    /// A listener on loopback, at a port the system picked (not one picked
+    /// at random, which a test run beside it could pick too), whose
+    /// connections are closed at once, or held.
     private func listener(closing: Bool) throws -> (port: UInt16, stop: () -> Void) {
-        for _ in 0..<20 {
-            let port = UInt16.random(in: 20000...45000)
-            let socket = relay_client_listen(port, 0)
-            guard socket >= 0 else { continue }
-            Thread.detachNewThread {
-                var held: [Int32] = []
-                while true {
-                    let connection = relay_client_accept(socket)
-                    if connection < 0 { break }
-                    if closing { close(connection) } else { held.append(connection) }
-                }
-                held.forEach { close($0) }
-            }
-            return (port, { relay_client_shutdown(socket); close(socket) })
+        let socket = relay_client_listen(0, 0)
+        guard socket >= 0 else { throw XCTSkip("no port") }
+        var bound = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let named = withUnsafeMutablePointer(to: &bound) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(socket, $0, &length) }
         }
-        throw XCTSkip("no port")
+        guard named == 0 else {
+            close(socket)
+            throw XCTSkip("no port")
+        }
+        Thread.detachNewThread {
+            var held: [Int32] = []
+            while true {
+                let connection = relay_client_accept(socket)
+                if connection < 0 { break }
+                if closing { close(connection) } else { held.append(connection) }
+            }
+            held.forEach { close($0) }
+        }
+        return (UInt16(bigEndian: bound.sin_port), { relay_client_shutdown(socket); close(socket) })
     }
 
     func testCheckSaysConnectedOnlyWhenTheConnectionHolds() throws {

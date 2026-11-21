@@ -76,7 +76,8 @@ flowchart TD
     Sessions -->|"tap archived-‹name›"| Archived
     Sessions -->|"tap settings"| Settings
     Sessions -->|"longpress session-‹id›, tap “Project Settings”"| Project
-    Sessions -->|"longpress session-‹id›, tap “Migrate…”"| Migrate
+    Sessions -->|"longpress session-‹id›, tap “Migrate…”, tap ‹another computer›"| Migrate
+    Sessions -->|"longpress session-‹id›, tap “Migrate…”, tap “‹computer›'s Container” (or, in it, “‹computer›”)"| Sessions
     Sessions -->|"longpress session-‹id›, tap “Export…”"| Export
     Export -->|"tap export-done"| Sessions
     Sessions -->|"longpress session-‹id›, tap “Super Compact…”"| SuperCompact
@@ -132,7 +133,7 @@ that opens it directly (see "Driving it" below).
 |---|---|---|---|
 | Onboarding | text "Welcome to Visor" | `add-computer`, `settings` | `onboarding` |
 | Sign in to Visor | text "Sign in to Visor" | `account-sign-in` | none: launch with the setting `account=fixture` and no `fixture` (the fixture skips the account) |
-| Sessions | the navigation title "Sessions", and the rows "Snapshot Mac", "Offline sync" (`computer-‹name›` and `session-‹id›`); `add-computer` too, but on the iPhone on its side, or after an account's sign-in, it can be below the fold | `session-‹id›` (its `place-`, `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field | `sessions`, `machines` |
+| Sessions | the navigation title "Sessions", and the rows "Snapshot Mac", "Offline sync" (`computer-‹name›` and `session-‹id›`); `add-computer` too, but on the iPhone on its side, or after an account's sign-in, it can be below the fold | `session-‹id›` (its `place-` — labelled "In the Sessions container" for one placed in its computer's container, "On macOS" on the Mac itself — `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field; a row's context menu's "Migrate…", an alert of the places it can go: "‹computer›" (back from its Sessions container), "‹computer›'s Container" (while the container takes sessions), then any other computer that migrates | `sessions`, `machines` (the release notes in the container) |
 | Search results | text "Messages" or `message-hit` | `message-hit`, `session-‹id›` | `search` (types "sync") |
 | Archived Sessions | text "Archived Sessions" | `archived-session-‹id›` | none (the fixture has no archived sessions) |
 | Project settings | the project's page, titled by its name: "Copy folder path" listed | "Rename in Visor…", "Copy folder path", "Archived Sessions (‹n›)", "Remove Project" | none: `longpress session-fixture-chat` on `sessions`, then tap "Project Settings" (not on the iPhone yet: see "Not wired yet") |
@@ -215,7 +216,7 @@ The suite that walks this map is `//tests/feature_map_tests`
 (`bazel test --config=headless //tests/feature_map_tests/...`, in a
 Linux container, nothing drawn): every node is reached and checked as in
 the table, and every solid arrow is taken, except where the fixture
-hasn't what it needs (Archived Sessions, Migrate, All Models, a fork):
+hasn't what it needs (Archived Sessions, the Migrate sheet, All Models, a fork):
 those, and the dotted ones, are disabled tests that say why. It drives the headless client,
 `//applications/visor_headless` (`VisorRootView` on Isomer's headless
 host, offline, its settings from the environment). docs/DEVELOPMENT.md,
@@ -293,8 +294,9 @@ since isomer#228 and #231; the suite takes them all by identifier.)
   disabled; the server's export and import are SessionArchiveTests'.
 - **Elements without an identifier:** the composer's text field, which
   lives in AgentUI (found by its "Message ‹Agent›…" placeholder).
-- **Not in the fixture:** Archived Sessions (and so Unarchive), Migrate (a
-  second computer that migrates), All Models, a fork, a branch and a
+- **Not in the fixture:** Archived Sessions (and so Unarchive), the Migrate
+  sheet (a second computer that migrates; Migrate…'s own places, the
+  computer and its Sessions container, are), All Models, a fork, a branch and a
   subagent can't be reached in fixture mode; their tests are disabled
   until it has them.
 - **The rest of the tests don't use the driver yet:** the iPhone's and

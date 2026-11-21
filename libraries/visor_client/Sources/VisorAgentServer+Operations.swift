@@ -18,6 +18,11 @@ extension VisorAgentServer {
             send(.signIn(session: session, code: code))
         }
     }
+    /// By polling, every answer is the state whole, and words are never
+    /// streamed: nothing to ask.
+    public func askState(_ session: String) {
+        if polling == nil { send(.state(session: session)) }
+    }
     public func unsubscribe(_ session: String) {
         if let polling { polling.states.removeValue(forKey: session)?.cancel() } else { send(.unsubscribe(session: session)) }
     }
@@ -71,6 +76,8 @@ extension VisorAgentServer {
         case .moveToRunner(let runsOn):
             var e = Envelope(type: "moveToRunner"); e.session = session; e.runsOn = runsOn
             reply = try await call("POST", base + "/moveToRunner", e)
+        case .moveToContainer: reply = try await call("POST", base + "/moveToContainer")
+        case .moveBack: reply = try await call("POST", base + "/moveBack")
         }
         return reply.sessions ?? []
     }

@@ -35,6 +35,10 @@ public struct ContainerSession: Equatable, Sendable {
     /// runner passes it unless the job says false).
     public var skipPermissions: Bool?
     public var labels: [String]
+    /// A moved session's repositories, cloned by the wrapper under
+    /// `sourcesDirectory` before it resumes (AGENT_JOB's `sources`): each
+    /// its clone URL, its branch, and its folder's name.
+    public var sources: [Source]
     /// The agent's token (Job.token, a JWT): its bearer to the driver and
     /// dispatcher, in AGENT_TOKEN alone (never in AGENT_JOB or argv).
     public var token: String?
@@ -52,7 +56,8 @@ public struct ContainerSession: Equatable, Sendable {
 
     public init(id: String, dispatcherURL: String, reportsTo: String? = nil, title: String = "", prompt: String = "", harness: String? = nil,
                 model: String? = nil, effort: String? = nil, workingDirectory: String? = nil, resumeSessionID: String? = nil,
-                skipPermissions: Bool? = nil, labels: [String] = [], token: String? = nil, runner: String = ContainerEngine.name,
+                skipPermissions: Bool? = nil, labels: [String] = [], sources: [Source] = [], token: String? = nil,
+                runner: String = ContainerEngine.name,
                 sourcesDirectory: String? = nil, claudeProgram: String? = nil, environment: [String: String] = [:]) {
         self.id = id
         self.dispatcherURL = dispatcherURL
@@ -66,6 +71,7 @@ public struct ContainerSession: Equatable, Sendable {
         self.resumeSessionID = resumeSessionID
         self.skipPermissions = skipPermissions
         self.labels = labels
+        self.sources = sources
         self.token = token
         self.runner = runner
         self.sourcesDirectory = sourcesDirectory
@@ -85,7 +91,25 @@ public struct ContainerSession: Equatable, Sendable {
             if let value, !value.isEmpty { object[key] = value }
         }
         if let skipPermissions { object["skipPermissions"] = skipPermissions }
+        if !sources.isEmpty {
+            object["sources"] = sources.map { ["repository": $0.repository, "ref": $0.ref, "name": $0.name] }
+        }
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data("{}".utf8)
         return String(decoding: data, as: UTF8.self)
+    }
+}
+
+extension ContainerSession {
+    /// A repository a resumed session works in (agent_protocol's Source).
+    public struct Source: Equatable, Sendable {
+        public var repository: String
+        public var ref: String
+        public var name: String
+
+        public init(repository: String, ref: String = "", name: String = "") {
+            self.repository = repository
+            self.ref = ref
+            self.name = name
+        }
     }
 }

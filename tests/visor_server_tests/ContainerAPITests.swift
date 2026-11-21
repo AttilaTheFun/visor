@@ -1,5 +1,5 @@
 // The Sessions container over REST (VisorServer+Container): `GET
-// /api/container` and `POST /api/container/start|stop`, each an admin's,
+// /api/container` and `POST /api/container/start|stop|restart`, each an admin's,
 // answered by the engine the binary gave (a fake here), or "off" where
 // there's none; and turning the container on giving agent-proxy a free
 // relay port where it has none, never Shireworks' 7499.
@@ -34,6 +34,17 @@ extension ServerTests {
         func stop() async -> ContainerStatus {
             calls.withLock { $0.append("stop") }
             return ContainerStatus(state: .stopped, enabled: true, canRun: true)
+        }
+
+        func restart() async -> ContainerStatus {
+            calls.withLock { $0.append("restart") }
+            return ContainerStatus(state: .running, enabled: true, canRun: true)
+        }
+
+        var sharedFolders: [String] { ["/Volumes/Sessions"] }
+
+        func startAgent(_ agent: ContainerAgent) async throws -> any ContainerAgentRun {
+            throw CancellationError()
         }
 
         func settingsChanged(_ settings: ServerSettings) { told.withLock { $0.append(settings) } }
@@ -85,7 +96,7 @@ extension ServerTests {
         #expect(await call("POST", "/api/container/start", bearer: "wrong").status == 401)
     }
 
-    @Test func theEngineAnswersStatusStartAndStop() async throws {
+    @Test func theEngineAnswersStatusStartStopAndRestart() async throws {
         let engine = FakeEngine()
         server.sessionsContainer = engine
         let read = try #require(status(await call("GET", "/api/container")))
@@ -93,7 +104,8 @@ extension ServerTests {
         let started = try #require(status(await call("POST", "/api/container/start")))
         #expect(started.state == .noEgress && started.egress == "relay-client check ended 1" && started.errors == ["no egress"])
         #expect(status(await call("POST", "/api/container/stop"))?.state == .stopped)
-        #expect(engine.calls.withLock { $0 } == ["status", "start", "stop"])
+        #expect(status(await call("POST", "/api/container/restart"))?.state == .running)
+        #expect(engine.calls.withLock { $0 } == ["status", "start", "stop", "restart"])
         #expect(await call("GET", "/api/container/start").status == 404)
         #expect(await call("POST", "/api/container/reboot").status == 404)
     }

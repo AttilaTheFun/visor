@@ -128,11 +128,15 @@ public enum AgentProxyHost {
             log("agentProxy: \(problem): no relay listener")
             return (nil, nil)
         }
-        let relayToken = KeptSecret(AgentProxySettings.relayTokenName, in: secrets)
-        if !relayToken.isSet, case .absent = secrets.lookup(AgentProxySettings.secretKey(AgentProxySettings.relayTokenName)) {
+        // Made first, then read: a KeptSecret keeps what it read for a
+        // minute, so one asked before the token was made would refuse every
+        // relayed stream for that minute (a container booted within it had
+        // no egress).
+        if case .absent = secrets.lookup(AgentProxySettings.secretKey(AgentProxySettings.relayTokenName)) {
             secrets.set(AgentProxySettings.secretKey(AgentProxySettings.relayTokenName), SecretToken.mint())
             log("the relay's token made (agent-proxy/relay-token)")
         }
+        let relayToken = KeptSecret(AgentProxySettings.relayTokenName, in: secrets)
         let egressPath = settings.egressLog ?? places.egressLog
         try? FileManager.default.createDirectory(atPath: (egressPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         let egress = EgressLog(file: URL(fileURLWithPath: egressPath))

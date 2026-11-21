@@ -60,6 +60,16 @@ extension VisorServer {
         var expected: Set<String> = []
         for record in sessions where record.driven {
             record.replaceProcess(drivenProcess(record.info))
+            // In the Sessions container, which went with the server: its
+            // agent is started again once the engine is given (Visor starts
+            // it; no runner claims it).
+            if isInContainer(record) {
+                if !record.info.archived, record.info.agentState != .stopped {
+                    containerRunner.waiting.insert(record.info.id)
+                    record.info.agentState = .starting
+                }
+                continue
+            }
             if record.move == nil, let kept = jobs?.kept(session: record.info.id) {
                 record.move = kept
                 Self.log("driven session \(record.info.title) (\(record.info.id)): its move taken from the dispatcher's jobs (agent \(kept.agent))")
@@ -76,6 +86,8 @@ extension VisorServer {
         }
         jobs?.adopt(moves, expected: expected)
         if !moves.isEmpty || sessions.contains(where: \.driven) { saveArchiveNow() }
+        // The engine given already (a test's, or a server that had it first).
+        if sessionsContainer != nil { resumeContainerSessions() }
     }
 
     /// A job for a runner, from a client (an envelope as for a session: its
@@ -179,7 +191,15 @@ extension VisorServer {
             Self.log("\(record.info.title) (\(id)) is moving back already (\(why))")
             return .success(())
         }
-        if handBack, let process = record.process as? HandingBackProcess, process.takesHandBack, !(record.move?.agent ?? "").isEmpty {
+        // In the Sessions container, its wrapper is always Visor's own
+        // (protocol 2): one not running is started to hand the session
+        // back, as its turns there are in the container's Claude folder.
+        let inContainer = isInContainer(record)
+        if handBack, inContainer, !containerRunner.runningSessions.contains(record.info.id), sessionsContainer != nil {
+            resumeInContainer(record, why: "starting, to hand it back, the agent in the Sessions container of")
+        }
+        if handBack, let process = record.process as? HandingBackProcess, process.takesHandBack || inContainer,
+           !(record.move?.agent ?? "").isEmpty {
             startHandBack(record, process, resume: resume, cwd: cwd, why: why, loud: loud)
             return .success(())
         }
@@ -201,6 +221,9 @@ extension VisorServer {
         let id = record.info.id
         jobs?.forget(session: id)
         if !handedBack { record.process.stop() }
+        // In the Sessions container: its agent ended there if it doesn't by
+        // itself (one that handed back is finishing: three times as long).
+        containerRunner.release(session: id, after: handedBack ? containerRunner.releaseGrace * 3 : nil)
         record.driven = false
         record.move = nil
         if !cwd.isEmpty { record.info.cwd = cwd }

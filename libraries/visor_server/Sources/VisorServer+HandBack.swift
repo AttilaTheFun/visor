@@ -140,6 +140,9 @@ extension VisorServer {
     /// before it moved (move.resume). "" when its move isn't known.
     func knownConversation(of record: SessionRecord) -> String {
         guard let move = record.move ?? jobs?.kept(session: record.info.id) else { return "" }
+        // A session begun in the Sessions container moved with nothing: its
+        // conversation there is the one it has.
+        if move.resume.isEmpty { return move.conversation }
         if !move.conversation.isEmpty, move.conversation != move.resume,
            !SessionCatalog.conversationFiles(agent: .claude, id: move.conversation, cwd: move.cwd).isEmpty {
             return move.conversation

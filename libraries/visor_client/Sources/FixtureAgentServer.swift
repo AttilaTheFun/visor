@@ -60,6 +60,8 @@ final class FixtureAgentServer: AgentServer {
     /// The responding screen's reply has begun coming, and has all come.
     private var respondingStarted = false
     private var respondingDone = false
+    /// Its words told so far: what a snapshot gives, as a server's does.
+    private var respondingWords: String?
 
     func subscribe(_ session: String) {
         guard let onEvent else { return }
@@ -83,15 +85,19 @@ final class FixtureAgentServer: AgentServer {
     private func respond(_ onEvent: @escaping @MainActor (AgentServerEvent) -> Void) {
         let session = VisorFixture.chatSession
         let reply = VisorFixture.responding
-        let snapshot = Self.wire(.ephemeral(session: session, streams: [StreamChunk(id: reply.id, text: reply.start)], status: [],
+        let snapshot = Self.wire(.ephemeral(session: session, streams: [StreamChunk(id: reply.id, text: respondingWords ?? reply.start)], status: [],
                                             activity: "Thinking…", busy: true, approval: nil, queued: [], notice: nil, signIn: nil))
         Task { onEvent(.session(snapshot)) }
         guard !respondingStarted else { return }
         respondingStarted = true
         Task {
             try? await Task.sleep(nanoseconds: VisorFixture.respondingDeltasAfter)
+            // Each where it goes, as a server of 0.64 says it.
+            var told = reply.start
             for words in reply.deltas {
-                onEvent(.session(Self.wire(.delta(session: session, message: reply.id, text: words))))
+                onEvent(.session(Self.wire(.delta(session: session, message: reply.id, text: words, from: told.utf8.count))))
+                told += words
+                respondingWords = told
                 try? await Task.sleep(nanoseconds: 300_000_000)
             }
             onEvent(.session(Self.wire(.busy(session: session, false))))
@@ -121,14 +127,24 @@ final class FixtureAgentServer: AgentServer {
     /// setting the fixture keeps, as a server keeps it, so its switch in
     /// Session details stays where it was put.
     private var muted: Set<String> = []
+    /// Where the sessions moved here are placed (Migrate…'s container and
+    /// back).
+    private var placed: [String: SessionPlacement] = [:]
 
-    /// The fixture's sessions, with what was switched here.
+    /// The fixture's sessions, with what was switched and moved here.
     private func kept(_ sessions: [SessionInfo]) -> [SessionInfo] {
         sessions.map { info in
             var info = info
             info.notifications = !muted.contains(info.id)
+            if let place = placed[info.id] { info.placement = place }
             return info
         }
+    }
+
+    /// The fixture's computer has a Sessions container, on, that takes
+    /// sessions (so Migrate… offers it).
+    func sessionsContainer() async -> ContainerStatus? {
+        ContainerStatus(state: .stopped, enabled: true, canRun: true, cpus: 8, memoryGiB: 16, idleMinutes: 30)
     }
 
     func sessions() async throws -> [SessionInfo] { kept(listed) }
@@ -152,6 +168,12 @@ final class FixtureAgentServer: AgentServer {
     var cutOver = false
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] {
+        // Moved into the container or back, as a server answers: the
+        // session, placed there (kept, as the screens move on).
+        if action == .moveToContainer || action == .moveBack {
+            placed[session] = action == .moveToContainer ? .container : .host
+            return kept(listed).filter { $0.id == session }.map { Self.wire(.sessions([$0])).sessions?.first ?? $0 }
+        }
         guard case .notifications(let on) = action else { return [] }
         if on { muted.remove(session) } else { muted.insert(session) }
         return kept(Self.welcome.sessions ?? []).filter { $0.id == session }.map { Self.wire(.sessions([$0])).sessions?.first ?? $0 }

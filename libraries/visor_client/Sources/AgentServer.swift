@@ -52,6 +52,9 @@ public protocol AgentServer: AnyObject {
     func subscribe(_ session: String)
     /// Stops following a session that was left.
     func unsubscribe(_ session: String)
+    /// Asks again for the state of a session followed, whole: the words
+    /// held of a reply being written don't meet what the server sent next.
+    func askState(_ session: String)
     /// The code a sign-in page showed, for the session's sign-in (`/login`).
     func signIn(_ session: String, code: String)
     /// The user has read what the session had to tell them.
@@ -209,6 +212,12 @@ public protocol AgentServer: AnyObject {
     /// is kept as.
     func importFinish(_ token: String) async throws -> SessionBackup
 
+    // MARK: The Sessions container (`/api/container`)
+
+    /// How its Sessions container stands: nil from a server that has none,
+    /// or doesn't say (before 0.64). What Migrate… offers it by.
+    func sessionsContainer() async -> ContainerStatus?
+
     // MARK: Super Compact (`/api/sessions/<id>/super-compact`)
 
     /// Whether this server condenses a session's conversation into
@@ -242,6 +251,8 @@ public protocol AgentServer: AnyObject {
 
 public extension AgentServer {
     var racesPaths: Bool { false }
+    /// Subscribing again brings the state whole, as the first time.
+    func askState(_ session: String) { subscribe(session) }
     func authenticate(_ record: AgentServerRecord, byFirstOf paths: [String], headStarts: [Int32],
                       timeouts: [Int32]) async throws -> (name: String?, path: String) {
         var record = record
@@ -290,6 +301,7 @@ public extension AgentServer {
     func importUpload(size: Int, name: String) async throws -> String { throw AgentServerError.unsupported }
     func importWrite(_ token: String, offset: Int, data: String) async throws -> Int { throw AgentServerError.unsupported }
     func importFinish(_ token: String) async throws -> SessionBackup { throw AgentServerError.unsupported }
+    func sessionsContainer() async -> ContainerStatus? { nil }
     var superCompacts: Bool { false }
     func superCompact(of session: String) async throws -> SuperCompactStatus? { throw AgentServerError.unsupported }
     func startSuperCompact(_ session: String) async throws -> SuperCompactStatus { throw AgentServerError.unsupported }

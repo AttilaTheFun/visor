@@ -98,6 +98,9 @@ extension VisorDriver {
                 server?.drivenAgentRequeued(session, why: why)
             }
             server.drivenProcess = { _ in DrivenProcess() }
+            // The agents Visor starts in its Sessions container run what
+            // its jobs do.
+            server.containerRunner.harness = harness
             server.takeUpDrivenSessions()
             self.server = server
             let waiting = waiters

@@ -9,7 +9,11 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # `uname`, a file written to /Volumes/Sessions/<scratch> and read back
 # both ways, no LAN from the guest; the driver link with agent-proxy
 # stopped (relay-client's loopback forward to a stub AgentDriver here, and
-# agent-wrapper with a stand-in claude completing Connect through it); then
+# agent-wrapper with a stand-in claude completing Connect through it); a
+# real session (a Visor server of the run's own, its driver on a free port,
+# and its container runner placing a session in the container: answered,
+# its conversation on Sessions, carried on across a restart of the
+# container, and moved back with its conversation handed back); then
 # stopped and everything deleted.
 #
 # Bare metal only: a Mac with Apple silicon and macOS 26 or later where
@@ -25,6 +29,9 @@ swift_binary(
     srcs = glob(["Sources/*.swift"]),
     copts = STRICT_SWIFT,
     module_name = "ContainerEndToEnd",
+    # The server's and the driver's `package` members (its own server on a
+    # throwaway data folder: HostFolders.dataRoot, the container runner).
+    package_name = "visor",
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
         "//:foundation",
@@ -32,8 +39,14 @@ swift_binary(
         "//libraries/visor_agent_proxy:visor_agent_proxy_host",
         "//libraries/visor_container",
         "//libraries/visor_container:visor_container_core",
+        "//libraries/visor_container:visor_container_runner",
+        "//libraries/claude_transcript",
+        "//libraries/visor_agent",
+        "//libraries/visor_driver",
         "//libraries/visor_protocol",
         "//libraries/visor_server",
+        "//libraries/visor_server_apple",
+        "//libraries/visor_system",
         "@swiftpkg_agent_protocol//:AgentProtocol",
         "@swiftpkg_grpc_swift_2//:GRPCCore",
         "@swiftpkg_grpc_swift_nio_transport//:GRPCNIOTransportHTTP2",
