@@ -63,8 +63,15 @@ public enum ServerAgentService {
                                                stop: { await Launchctl.stop(label: label) },
                                                register: { register(bundleID: bundleID) },
                                                running: { await Launchctl.pid(label: label) != nil },
-                                               pause: { try? await Task.sleep(for: .seconds(3)) })
+                                               pause: { try? await Task.sleep(for: registerPause) })
     }
+
+    /// How long a registration is given before launchd is asked whether it
+    /// runs: long enough, when it was refused for its launch constraint,
+    /// for Background Items to have dropped its record of the job (about
+    /// five seconds after the refusal, on macOS 27.0.1), so the next
+    /// registration makes a new one of the build in place.
+    static let registerPause: Duration = .seconds(8)
 
     /// LaunchServices' own tool, which Background Items reads the app's
     /// record from.

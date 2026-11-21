@@ -141,10 +141,11 @@ public enum ServerAgentJob {
     /// Constraint Violation", exit 78, "needs LWCR update": NCH's check of
     /// #491). On macOS 27.0.1, between two ad hoc builds, the first
     /// registration after the bundle changed was refused so, whatever came
-    /// before it (a bootout, an unregister, `lsregister -f`); launchd then
-    /// asks for the constraint to be updated on the next spawn, and the
-    /// next registration ran the new build. So it's tried again rather
-    /// than left down.
+    /// before it (a bootout, an unregister, `lsregister -f`); about five
+    /// seconds on, Background Items dropped its record of the job, and the
+    /// next registration made a new one and ran the new build. So it's
+    /// tried again, once the record has had time to go, rather than left
+    /// down.
     public static func reregister(attempts: Int = 3, refresh: () async -> Void, unregister: () async -> Void, stop: () async -> Void,
                                   register: () async -> String?, running: () async -> Bool,
                                   pause: () async -> Void) async -> String? {

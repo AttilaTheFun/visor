@@ -634,9 +634,10 @@ removed (still only when `agentProxy` is set).
   bootout and register, and through an unregister and register, until
   LaunchServices is told of the bundle again (`lsregister -f`); and on
   macOS 27.0.1 the first registration after the bundle changed was
-  refused even then, the next one running the new build, so all four go
-  together, and again (three times at most) while launchd has no process
-  of it: an update to another build and a rollback both go
+  refused even then (Background Items drops its record of the job about
+  five seconds on), the next one running the new build, so all four go
+  together, and again, eight seconds on and three times at most, while
+  launchd has no process of it: an update to another build and a rollback both go
   through that one function (ServerAgentService.reregister). An update to a build that isn't byte-identical wants a
   check on a real Mac before each release that changes this path (NCH
   checked a byte-identical one and a rollback on macOS 27.0.1). It watches it as
