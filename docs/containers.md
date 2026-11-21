@@ -14,8 +14,11 @@ entitlement, the assets fetched, checked and kept, Visor's Linux programs
 staged for it, its settings and Settings' readiness row), and **PR 2, the
 engine** (the container booted in the server agent, its relay to
 agent-proxy, the egress check, processes exec'd in it, the idle stop, and
-its status in the API and Settings). No session is placed in it yet: that's
-step 4's.
+its status in the API and Settings), and **PR 3, the driver link and the
+Linux agent-wrapper** (Visor's driver carried in on a socket of its own,
+relay-client's loopback forward to it, agent-wrapper in Visor's Linux
+programs, and `ContainerEngine.startWrapper`). No session is placed in it
+yet: that's step 4's.
 
 ## Requirements
 
@@ -95,7 +98,7 @@ to run here) has no image pinned unless Settings names one.
 ### Visor's Linux programs
 
 `Contents/Resources/Linux` (visor-server, with relay-client and
-visor-agent-host as links to it) is copied to `tools/<visor version>/` on
+visor-agent-host as links to it, and agent-wrapper) is copied to `tools/<visor version>/` on
 the Containers volume, to be mounted read-only at `/opt/visor/bin`. A share
 of the app bundle itself would go stale when the app is updated in place.
 `ToolsFolder` copies it under **the link rule**, checked on the app's folder
@@ -105,7 +108,21 @@ and again on the copy:
   no `/` and is a regular executable in the same folder;
 - a dangling, absolute or escaping link, a link to a link, a file that
   isn't executable, or anything else, is refused, and so is a folder
-  missing visor-server, relay-client or visor-agent-host.
+  missing visor-server, relay-client, visor-agent-host or agent-wrapper.
+
+**agent-wrapper** is agent_protocol's (the version Package.resolved pins,
+0.5.0), a static program of its own (about 70 MB stripped) beside
+visor-server, not a name of it: agent_protocol 0.5.0 makes it only an
+executable (its `AgentWrapper` module is no library product, and its main is
+top-level code), so visor-server can't run it by a name as it runs
+relay-client. tools/linux_programs.sh builds it as a product of Visor's
+package (`swift build --product agent-wrapper`, the same static SDK and
+flags, the dependencies' build shared), strips it, checks it's static and
+that it runs (`--help`: 0.5.0 has no `--help` or `--version`, so it answers
+its usage and status 2); tools/ci/linux_programs.sh puts it in the tar,
+and tools/ci/mac_app_linux_programs.sh and tools/release_mac.sh seal it
+into the app. When agent_protocol exports its wrapper's main, it can become
+a link to visor-server too (the link rule takes either).
 
 A relay-client that doesn't resolve inside the mount would leave the
 container with no egress: refused, the container will show "no egress"
@@ -158,7 +175,8 @@ progress interrupted). There's no helper process of its own.
   folder (`container.checkouts`) at its own path where the settings name
   one. Nothing else.
 - **Its main process** is `/opt/visor/bin/relay-client run --relay
-  /run/agent-proxy/relay.sock -- <a shell that waits>`, as root, with
+  /run/agent-proxy/relay.sock --forward 7434=/run/visor/driver.sock --
+  <a shell that waits>`, as root, with
   Containerization's init (signals forwarded, zombies reaped). Its lines go
   to `sessions/logs/relay-client.log`, the guest's console to
   `sessions/boot.log`.
@@ -170,7 +188,8 @@ progress interrupted). There's no helper process of its own.
 - **Processes:** `ContainerEngine.exec(ContainerExec)` runs one (its
   arguments, environment over the image's, working folder, and output
   appended to `sessions/logs/<id>.log`), and gives a `ContainerExecution`
-  to signal and wait on. Step 4 runs each session's agent-wrapper so.
+  to signal and wait on. `startWrapper(session:)` runs a session's
+  agent-wrapper so (below).
 
 ### Egress: the relay
 
@@ -199,6 +218,63 @@ progress interrupted). There's no helper process of its own.
   egress**: processes (session starts) are refused, and Start (Check Again)
   runs the check again.
 
+### The driver link
+
+Visor's driver (agent_protocol's `AgentDriver`, gRPC on 127.0.0.1:7434 in
+the server agent) is carried in on **a socket of its own**, not through
+agent-proxy:
+
+- On the Mac, a `UnixBridge` (HostRelay's other half: the same accept
+  loop, splice and connection cap) listens on `run/driver.sock` beside the
+  relay's socket, and joins each connection to the driver's port with
+  **no PROXY header**: the agents' JWTs (`AGENT_TOKEN`, shown as
+  `authorization: Bearer` on every call) say who they are, as on the Mac.
+- It's carried into the guest at `/run/visor/driver.sock`, and started and
+  stopped with the relay.
+- In the guest, relay-client's `--forward 7434=/run/visor/driver.sock`
+  (`LoopbackForward`) listens on **127.0.0.1:7434** and joins each
+  connection to that socket. Loopback is what relay-client's nat chain never
+  redirects (`ContainerNetwork.excluded`, 127.0.0.0/8, which the chain's
+  `ip daddr 127.0.0.0/8 return` and the redirect listener's own refusal are
+  both made from, and `ContainerNetwork.isRedirected` tests), so these
+  connections never reach agent-proxy.
+- So **`AGENT_DRIVER_URL=http://127.0.0.1:7434`** inside, the same as on the
+  Mac, with no `*.agent.internal` name, and it **works with agent-proxy's
+  relay down** (`//tools/e2e/container` checks it with agent-proxy
+  stopped). A driver that doesn't answer closes the guest's connection,
+  and the wrapper dials again (1 s, doubling to 30 s).
+
+### A session's agent-wrapper
+
+`ContainerEngine.startWrapper(session: ContainerSession)` execs
+`/opt/visor/bin/agent-wrapper` in the session's working folder, its output
+to `sessions/logs/<session>.log`, with the environment a runner gives it
+(agent_protocol's README; Shireworks' `AgentRunner.environment` and
+`ExecAgentHost`), over the image's:
+
+| Variable | Value |
+| --- | --- |
+| `AGENT_ID` | `<agent uuid>@<dispatcher URL>` |
+| `AGENT_JOB` | The job's JSON (WrapperOptions' keys: `agent`, `dispatcherURL`, `title`, `prompt`, `labels`, `driverURL`, and `harness`, `model`, `effort`, `workingDirectory`, `resumeSessionID`, `skipPermissions` only when set). Never the token. |
+| `AGENT_DRIVER_URL` | `http://127.0.0.1:7434` |
+| `AGENT_DISPATCHER_URL` | Whom it reports Started, Completed and Failed to, when it has one |
+| `AGENT_RUNNER` | `visor-sessions` unless the session says |
+| `AGENT_TOKEN` | The agent's JWT, there alone (the wrapper unsets it once read and keeps it from the harness) |
+| `AGENT_SESSIONS_DIR` | `/Volumes/Sessions` (a job with no folder works in `<it>/Claude/<agent>`) |
+| `AGENT_SOURCES_DIR` | Where a resumed session's sources are cloned, when given |
+| `AGENT_WRAPPER_CLAUDE` | Only for a stand-in (a test's): the harness is the image's `claude`, on its PATH (`/usr/local/bin/claude`, npm's Claude Code) |
+| `TMPDIR` | `/tmp`: the wrapper's MCP socket (`agent-mcp-*/mcp.sock`, which it hands its harness as `AGENT_MCP_SOCKET` for `agent-wrapper mcp`) on the guest's own disk, not on Sessions' share |
+| `HOME` | `/root` (the image sets none; processes run as root, and the image's `IS_SANDBOX=1` lets Claude Code bypass its prompts as root) |
+
+The session's own variables (a sign-in, `CLAUDE_CONFIG_DIR`) go in too, but
+never over the `AGENT_*` contract. The wrapper is passed
+`--skip-permissions` unless the job says it asks (`skipPermissions` false:
+its prompts then go to the driver as `mcp__visor__approve`), as Shireworks'
+container runner does. Its working folder, when it's under Sessions or the
+checkouts' folder, is made on the Mac first (the guest sees it at the same
+path); otherwise the exec starts in the image's folder and the wrapper makes
+its own. Placing sessions, and the UI, are step 4's.
+
 ### Its status
 
 `GET /api/container` (an admin's, as every REST route is) answers its state
@@ -222,11 +298,9 @@ Start, Stop and Check Again.
 
 ## What's next
 
-- **PR 3, the driver link and the Linux agent-wrapper:** a dedicated
-  `driver.sock` to `127.0.0.1:7434`, carried in at `/run/visor/driver.sock`.
 - **Step 4, the container runner:** sessions placed in the container, each
-  its agent-wrapper exec'd (`ContainerEngine.exec`), counted as placed for
-  the idle stop and the start with the server.
+  its agent-wrapper started (`ContainerEngine.startWrapper`), counted as
+  placed for the idle stop and the start with the server, and the UI.
 
 ## Testing
 
@@ -239,7 +313,15 @@ Start, Stop and Check Again.
   `HostRelay` against a fake agent-proxy relay (the header's bytes, the
   splice, the token re-read, no agent-proxy) and agent-proxy's own relay
   listener (`relay-client check`'s health answer through it, and not with
-  another token). `//tests/visor_server_tests`: `/api/container` (an
+  another token); the driver link (carried in beside the relay, the
+  guest's bytes reaching a fake driver with nothing before them, with no
+  agent-proxy there, and closed when no driver answers) and
+  `startWrapper`'s argv, environment, folder and log.
+  `//tests/visor_agent_proxy_tests:relay_client_tests`: `--forward`'s
+  loopback listener joined to a Unix socket, what `--forward` takes, and
+  loopback never redirected (`isRedirected`, the mask, the rule's order);
+  and, where namespaces can be made, a forward inside relay-client's
+  network that the relay never hears of. `//tests/visor_server_tests`: `/api/container` (an
   admin's; off without an engine) and the relay port given when it's turned
   on (never 7499).
   `//tests/visor_container_tests:visor_container_mac_tests` (macOS): this
@@ -255,8 +337,15 @@ Start, Stop and Check Again.
   folder in /tmp, with agent-proxy's relay listener in its own process on a
   free port, it checks the boot and `relay-client check`, `uname`, a file
   each way through `/Volumes/Sessions/.visor-e2e-container-<id>`, and no
-  LAN (only `lo`, and this Mac's addresses and a private one refused), then
-  stops and deletes everything. It signs a copy of itself ad hoc with the
+  LAN (only `lo`, and this Mac's addresses and a private one refused); then,
+  with agent-proxy stopped, that `relay-client check` fails while
+  127.0.0.1:7434 in the guest reaches a stub AgentDriver of its own (on a
+  free port, never the real 7434), and that `startWrapper`'s agent-wrapper,
+  with a stand-in claude, completes Connect through it (its hello naming
+  the agent, protocol 2, its token the bearer), answers the driver's
+  message, is stopped by it, and ends 0. Then it stops and deletes
+  everything. It signs a copy of itself ad hoc with the
   virtualization entitlement and runs that. `--linux` is a build's
-  `Contents/Resources/Linux` with `relay-client check`'s health answer
-  (0.64 or later).
+  `Contents/Resources/Linux` with `relay-client run --forward` and
+  agent-wrapper (0.64 or later), or `tools/linux_programs.sh <folder>`'s
+  output.

@@ -314,8 +314,12 @@ static const char *table = "relay_client";
 static const char *chain = "output";
 
 /// The table made anew: created if missing, deleted, created, with its
-/// base chain (nat, output, priority -100) and its two rules.
-static int set_up_redirect(unsigned short port, char *problem, size_t size) {
+/// base chain (nat, output, priority -100) and its two rules: what is to
+/// `excluded` under `mask` (relay-client's ContainerNetwork: 127.0.0.0/8,
+/// where its forwards and DNS listen) returns, and every other TCP
+/// connection is redirected to `port`.
+static int set_up_redirect(unsigned short port, const unsigned char excluded[4], const unsigned char mask[4], char *problem,
+                           size_t size) {
     int s = open_netlink(MP_NETLINK_NETFILTER);
     if (s < 0) return say(problem, size, "nf_tables netlink", errno);
     unsigned char batch[8192];
@@ -360,7 +364,7 @@ static int set_up_redirect(unsigned short port, char *problem, size_t size) {
     string(&m, MP_NFTA_CHAIN_TYPE, "nat");
     APPEND();
 
-    // ip daddr 127.0.0.0/8 return
+    // ip daddr <excluded>/<mask> return (127.0.0.0/8)
     nft_start(&m, MP_NFT_MSG_NEWRULE, MP_NLM_F_CREATE | MP_NLM_F_APPEND | MP_NLM_F_ACK, sequence++);
     string(&m, MP_NFTA_RULE_TABLE, table);
     string(&m, MP_NFTA_RULE_CHAIN, chain);
@@ -375,14 +379,15 @@ static int set_up_redirect(unsigned short port, char *problem, size_t size) {
     be32(&m, MP_NFTA_BITWISE_SREG, MP_NFT_REG_1);
     be32(&m, MP_NFTA_BITWISE_DREG, MP_NFT_REG_1);
     be32(&m, MP_NFTA_BITWISE_LEN, 4);
-    unsigned char mask[4] = {0xFF, 0, 0, 0}, nothing[4] = {0, 0, 0, 0}, loopback[4] = {127, 0, 0, 0};
+    unsigned char nothing[4] = {0, 0, 0, 0}, network[4];
+    for (int i = 0; i < 4; i++) network[i] = excluded[i] & mask[i];
     data(&m, MP_NFTA_BITWISE_MASK, mask, 4);
     data(&m, MP_NFTA_BITWISE_XOR, nothing, 4);
     end_expression(&m);
     expression(&m, "cmp");
     be32(&m, MP_NFTA_CMP_SREG, MP_NFT_REG_1);
     be32(&m, MP_NFTA_CMP_OP, MP_NFT_CMP_EQ);
-    data(&m, MP_NFTA_CMP_DATA, loopback, 4);
+    data(&m, MP_NFTA_CMP_DATA, network, 4);
     end_expression(&m);
     expression(&m, "immediate");
     be32(&m, MP_NFTA_IMMEDIATE_DREG, MP_NFT_REG_VERDICT);
@@ -447,18 +452,22 @@ static int set_up_redirect(unsigned short port, char *problem, size_t size) {
     return 0;
 }
 
-int relay_client_container_network(unsigned short port, const char *source, char *problem, size_t size) {
+int relay_client_container_network(unsigned short port, const char *source, const unsigned char excluded[4], const unsigned char mask[4],
+                                   char *problem, size_t size) {
     struct in_addr address;
     if (inet_pton(AF_INET, source, &address) != 1) return say(problem, size, "the source address", EINVAL);
     if (set_up_routes(address, problem, size) != 0) return -1;
-    return set_up_redirect(port, problem, size);
+    return set_up_redirect(port, excluded, mask, problem, size);
 }
 
 #else
 
-int relay_client_container_network(unsigned short port, const char *source, char *problem, size_t size) {
+int relay_client_container_network(unsigned short port, const char *source, const unsigned char excluded[4], const unsigned char mask[4],
+                                   char *problem, size_t size) {
     (void)port;
     (void)source;
+    (void)excluded;
+    (void)mask;
     snprintf(problem, size, "only on Linux");
     errno = ENOTSUP;
     return -1;

@@ -5,7 +5,9 @@
 // starts); its assets and root filesystem on the Containers volume; its
 // relay's socket in the data folder's run/ (this user's alone), carried to
 // agent-proxy's relay port in this same process with the relay's token from
-// the server's secrets. No session is placed in it yet (step 4).
+// the server's secrets; and the driver link's socket beside it, carried to
+// this server's driver (agent_protocol's AgentDriver, 127.0.0.1:7434). No
+// session is placed in it yet (step 4).
 
 import DiskVolumes
 import Foundation
@@ -26,6 +28,7 @@ final class MacSessionsContainer: SessionsContainer {
         let kept = KeptSettings(settings)
         self.settings = kept
         let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
+        let run = data.appendingPathComponent("run", isDirectory: true)
         let images = ContainerizationBackend()
         let token = KeptSecret(AgentProxySettings.relayTokenName, in: ServerPlatform.current.secrets)
         let resources = Bundle.main.resourceURL
@@ -36,8 +39,10 @@ final class MacSessionsContainer: SessionsContainer {
             locate: { try ContainerLayout.locate(DiskVolumes.locate(dataDirectory: data)) },
             linuxPrograms: linux.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil },
             version: VisorMacApp.bundleVersion,
-            relaySocket: data.appendingPathComponent("run", isDirectory: true).appendingPathComponent("relay.sock"),
+            relaySocket: run.appendingPathComponent("relay.sock"),
             relayToken: { token.value },
+            driverSocket: run.appendingPathComponent("driver.sock"),
+            driverPort: MacServer.agentProtocolPort,
             assets: images,
             backend: ContainerizationMachines(images: images),
             configuration: { Self.configuration(kept.current, manifest: manifest) },

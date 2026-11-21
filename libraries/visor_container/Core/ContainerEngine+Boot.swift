@@ -1,8 +1,9 @@
 // Starting the Sessions container: the assets had (fetched once, checked
 // each time), Visor's Linux programs staged under the link rule (the
 // relay-client link check, before the boot), the root filesystem cloned
-// from the template when there's none of this image, the relay listening,
-// the boot, and then `relay-client check` run in it (the egress check).
+// from the template when there's none of this image, the relay and the
+// driver link listening, the boot, and then `relay-client check` run in it
+// (the egress check).
 
 import Foundation
 import VisorProtocol
@@ -58,25 +59,34 @@ extension ContainerEngine {
         try FileManager.default.createDirectory(at: layout.logs, withIntermediateDirectories: true)
         let relay = HostRelay(socketPath: context.relaySocket.path, port: port, token: context.relayToken, log: context.log)
         try relay.start()
+        let driverLink = Self.driverLink(context)
+        do {
+            try driverLink.start()
+        } catch {
+            relay.stop()
+            throw error
+        }
         let spec = ContainerBootSpec(
             name: Self.name, kernel: assets.kernel, initfs: assets.initfs, rootfs: rootfs, image: image.reference(), store: layout.store,
             cpus: configuration.cpus, memoryBytes: UInt64(configuration.memoryGiB) << 30, shares: shares(tools, configuration),
-            sockets: [ContainerBootSpec.Socket(host: context.relaySocket.path, guest: HostRelay.guestPath)],
-            arguments: [Self.relayClient, "run", "--relay", HostRelay.guestPath, "--"] + Self.waits,
-            mainLog: layout.log(process: "relay-client"), bootLog: layout.bootLog)
+            sockets: [ContainerBootSpec.Socket(host: context.relaySocket.path, guest: HostRelay.guestPath),
+                      ContainerBootSpec.Socket(host: context.driverSocket.path, guest: Self.driverInGuest)],
+            arguments: Self.mainArguments, mainLog: layout.log(process: "relay-client"), bootLog: layout.bootLog)
         context.log("container: booting \(image.reference()) (\(configuration.cpus) CPUs, \(configuration.memoryGiB) GiB, no network), "
-                    + "relayed to agent-proxy on port \(port)")
+                    + "relayed to agent-proxy on port \(port), Visor's driver at \(Self.driverURL) in it")
         let machine: any ContainerMachine
         do {
             machine = try await context.backend.boot(spec)
         } catch {
             relay.stop()
+            driverLink.stop()
             throw error
         }
         generation += 1
         let booting = generation
         self.machine = machine
         self.relay = relay
+        self.driverLink = driverLink
         booted = (configuration.cpus, configuration.memoryGiB, image)
         idleSince = context.now()
         Task { [weak self] in
@@ -84,6 +94,20 @@ extension ContainerEngine {
             await self?.mainEnded(status, generation: booting)
         }
         try await checkEgressAgain()
+    }
+
+    /// The main process: relay-client, the relay its way out and the
+    /// driver's port forwarded on its loopback, running a process that waits.
+    static var mainArguments: [String] {
+        [relayClient, "run", "--relay", HostRelay.guestPath, "--forward", "\(driverPortInGuest)=\(driverInGuest)", "--"] + waits
+    }
+
+    /// The driver link: the guest's connections on /run/visor/driver.sock
+    /// to Visor's driver on loopback, with no header (the agents' JWTs
+    /// authenticate them; nothing of agent-proxy's is in the way).
+    static func driverLink(_ context: Context) -> UnixBridge {
+        UnixBridge(name: "driver link", target: "Visor's driver", socketPath: context.driverSocket.path, port: context.driverPort,
+                   opening: { .plain }, log: context.log)
     }
 
     /// The folders shared in: Sessions read-write at the same path, the

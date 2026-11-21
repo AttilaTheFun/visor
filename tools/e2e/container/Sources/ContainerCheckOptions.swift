@@ -8,9 +8,9 @@ struct ContainerCheckOptions {
         usage: container --linux <folder> [--image <ghcr.io/attilathefun/visor-agent@sha256:…>] [--sessions <folder>]
                          [--cpus <n>] [--memory <GiB>] [--keep]
 
-          --linux     Visor's Linux programs (visor-server, relay-client and visor-agent-host links), as
-                      Visor.app/Contents/Resources/Linux has them, of a build with `relay-client check`'s health
-                      answer (this branch's or later).
+          --linux     Visor's Linux programs (visor-server, relay-client and visor-agent-host links, agent-wrapper),
+                      as Visor.app/Contents/Resources/Linux has them, of a build with `relay-client run --forward`
+                      and agent-wrapper (container-driver-link's, or later).
           --image     The agent image, by digest (default: /Applications/Visor.app's container.json).
           --sessions  The Sessions volume, shared at the same path (/Volumes/Sessions); a scratch folder is made
                       in it and deleted.

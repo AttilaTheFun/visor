@@ -7,7 +7,10 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # loopback port, the container engine's boot (no network, Sessions shared,
 # relay-client its main process), `relay-client check` through the relay,
 # `uname`, a file written to /Volumes/Sessions/<scratch> and read back
-# both ways, no LAN from the guest; then stopped and everything deleted.
+# both ways, no LAN from the guest; the driver link with agent-proxy
+# stopped (relay-client's loopback forward to a stub AgentDriver here, and
+# agent-wrapper with a stand-in claude completing Connect through it); then
+# stopped and everything deleted.
 #
 # Bare metal only: a Mac with Apple silicon and macOS 26 or later where
 # Virtualization can make a VM (never a macOS VM lease, which can't nest).
@@ -30,5 +33,8 @@ swift_binary(
         "//libraries/visor_container:visor_container_core",
         "//libraries/visor_protocol",
         "//libraries/visor_server",
+        "@swiftpkg_agent_protocol//:AgentProtocol",
+        "@swiftpkg_grpc_swift_2//:GRPCCore",
+        "@swiftpkg_grpc_swift_nio_transport//:GRPCNIOTransportHTTP2",
     ],
 )

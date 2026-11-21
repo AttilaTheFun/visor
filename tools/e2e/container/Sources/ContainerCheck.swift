@@ -13,11 +13,22 @@
 //    other (and owned by this user on the host), and no LAN: only `lo` in
 //    /sys/class/net, and a connection to this Mac's own address and to a
 //    private address refused by agent-proxy.
-// 5. Stopped, agent-proxy stopped, and everything made deleted.
+// 5. The driver link: agent-proxy stopped first, so nothing goes its way.
+//    `relay-client check` (its health) now fails, while
+//    `relay-client check 127.0.0.1:7434`, relay-client's loopback forward to
+//    the driver link, reaches the stub driver (StubDriver, on a free port
+//    here, never the real 7434). Then ContainerEngine.startWrapper runs
+//    /opt/visor/bin/agent-wrapper with a stand-in claude (FakeClaude, put
+//    on Sessions, AGENT_WRAPPER_CLAUDE) and AGENT_DRIVER_URL
+//    http://127.0.0.1:7434: it completes Connect (its hello naming the
+//    agent, protocol 2, its token as the bearer), answers the driver's
+//    message, is stopped by it, and ends 0.
+// 6. Stopped, and everything made deleted.
 //
 // Exits 0 when every check passed, 1 when one failed (each is said).
 
 import Foundation
+import Synchronization
 import VisorAgentProxyHost
 import VisorContainer
 import VisorContainerCore
@@ -68,11 +79,16 @@ struct ContainerCheck {
         guard let port = RelayPortChoice.choose(isFree: { LoopbackPort.isFree($0) }) else { throw CheckError("no loopback port is free for the relay") }
         let secrets = MemorySecrets()
         let places = AgentProxyHost.Places(dataDirectory: scratch.data)
-        guard let proxy = AgentProxyHost.start(AgentProxySettings(relayPort: port), places: places, secrets: secrets, version: "e2e",
-                                               log: { Self.say("agent-proxy: \($0)") }), proxy.relay != nil else {
+        guard let running = AgentProxyHost.start(AgentProxySettings(relayPort: port), places: places, secrets: secrets, version: "e2e",
+                                                 log: { Self.say("agent-proxy: \($0)") }), running.relay != nil else {
             throw CheckError("agent-proxy's relay listener didn't start on port \(port)")
         }
+        let proxy = StopOnce { running.stop() }
         defer { proxy.stop() }
+        let driver = StubDriver()
+        let served = try await driver.start()
+        defer { served.stop() }
+        Self.say("the stub driver on 127.0.0.1:\(served.port)")
         let token = secrets.get(AgentProxySettings.secretKey(AgentProxySettings.relayTokenName))
         checks.record("agent-proxy's relay listener on loopback port \(port), its token made", token != nil && port != 7499)
 
@@ -82,7 +98,8 @@ struct ContainerCheck {
                                                          image: options.image, relayPort: port)
         let engine = ContainerEngine(context: ContainerEngine.Context(
             host: .current, locate: { layout }, linuxPrograms: options.linux, version: "e2e-\(scratch.id)", sessions: options.sessions,
-            relaySocket: scratch.relaySocket, relayToken: { token }, assets: images, backend: ContainerizationMachines(images: images),
+            relaySocket: scratch.relaySocket, relayToken: { token }, driverPort: served.port, assets: images,
+            backend: ContainerizationMachines(images: images),
             configuration: { configuration }, log: { Self.say($0) }))
 
         let started = Date()
@@ -97,8 +114,10 @@ struct ContainerCheck {
             return
         }
         await guestChecks(engine, layout: layout, &checks)
+        await driverChecks(engine, driver, stopProxy: proxy.stop, &checks)
         let stopped = await engine.stop()
-        checks.record("it stops", stopped.state == .stopped && !FileManager.default.fileExists(atPath: scratch.relaySocket.path))
+        checks.record("it stops", stopped.state == .stopped && !FileManager.default.fileExists(atPath: scratch.relaySocket.path)
+                      && !FileManager.default.fileExists(atPath: engine.context.driverSocket.path))
         let egressLog = places.egressLog
         if let text = try? String(contentsOfFile: egressLog, encoding: .utf8) {
             Self.say("agent-proxy's egress log:\n" + text.split(separator: "\n").suffix(10).joined(separator: "\n"))
@@ -131,6 +150,65 @@ struct ContainerCheck {
         for target in Self.lanTargets() {
             let lan = await exec(engine, "lan-\(target.replacingOccurrences(of: ":", with: "-"))", [ContainerEngine.relayClient, "check", target])
             checks.record("no LAN: \(target) refused (\(lan.output))", lan.status != 0)
+        }
+    }
+
+    /// The driver link, with agent-proxy stopped: the forward reaches the
+    /// stub driver, and agent-wrapper with a stand-in claude completes
+    /// Connect through it, answers, and ends when it's stopped.
+    private func driverChecks(_ engine: ContainerEngine, _ driver: StubDriver, stopProxy: () -> Void, _ checks: inout Checks) async {
+        stopProxy()
+        let health = await exec(engine, "relay-check-no-proxy", [ContainerEngine.relayClient, "check"])
+        checks.record("agent-proxy stopped: relay-client check fails (\(health.output))", health.status != 0)
+        let forward = await exec(engine, "driver-forward", [ContainerEngine.relayClient, "check", "127.0.0.1:\(ContainerEngine.driverPortInGuest)"])
+        checks.record("127.0.0.1:\(ContainerEngine.driverPortInGuest) in the guest reaches the stub driver (\(forward.output))", forward.status == 0)
+
+        let id = UUID().uuidString.lowercased()
+        let claude = scratch.sessions.appendingPathComponent("fake-claude.py")
+        do {
+            try Data(FakeClaude.script.utf8).write(to: claude)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        } catch {
+            checks.fail("the stand-in claude", "\(error)")
+            return
+        }
+        let token = "e2e-token-\(scratch.id)"
+        let session = ContainerSession(id: id, dispatcherURL: "http://127.0.0.1:\(ContainerEngine.driverPortInGuest)", title: "e2e \(scratch.id)",
+                                       workingDirectory: scratch.sessions.appendingPathComponent("Claude/\(id)").path, skipPermissions: true,
+                                       token: token, claudeProgram: claude.path)
+        let status: Int32?
+        let log: URL?
+        do {
+            let execution = try await engine.startWrapper(session: session)
+            log = execution.log
+            status = await Self.wait(execution, seconds: 120)
+        } catch {
+            checks.fail("agent-wrapper started", "\(error)")
+            return
+        }
+        let heard = driver.heard.withLock { $0 }
+        let hello = heard.hello
+        checks.record("agent-wrapper completes Connect through the driver link (hello: agent \(hello?.agent.uuid ?? "-"), "
+                      + "protocol \(hello.map { "\($0.protocol)" } ?? "-"), the bearer \(heard.bearer == token ? "its token" : "\(heard.bearer ?? "none")"))",
+                      hello?.agent.uuid == id && (hello?.protocol ?? 0) >= 2 && heard.bearer == token)
+        checks.record("the agent answers the driver's message (\(StubDriver.message))", heard.answered)
+        checks.record("stopped by the driver, agent-wrapper ends 0 (\(status.map { "\($0)" } ?? "still running after 120 s"); "
+                      + "ended: \(heard.ended ?? "-"))", status == 0)
+        if status != 0, let log { Self.say("agent-wrapper's log:\n" + Self.tail(log)) }
+    }
+
+    /// A process's status, or nil if it ran past `seconds` (then killed).
+    private static func wait(_ execution: ContainerExecution, seconds: Int) async -> Int32? {
+        await withTaskGroup(of: Int32?.self) { group in
+            group.addTask { await execution.wait() }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(seconds))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            if first == nil { try? await execution.signal(9) }
+            group.cancelAll()
+            return first
         }
     }
 
@@ -168,5 +246,21 @@ struct ContainerCheck {
     static func tail(_ url: URL) -> String {
         let text = (try? String(contentsOf: url, encoding: .utf8)) ?? "(none)"
         return text.split(separator: "\n").suffix(30).joined(separator: "\n")
+    }
+}
+
+/// agent-proxy's listeners stopped once, whichever asks first (the driver
+/// checks, or the end).
+private final class StopOnce: Sendable {
+    private let action: Mutex<(@Sendable () -> Void)?>
+
+    init(_ action: @escaping @Sendable () -> Void) { self.action = Mutex(action) }
+
+    func stop() {
+        let action = self.action.withLock { held in
+            defer { held = nil }
+            return held
+        }
+        action?()
     }
 }

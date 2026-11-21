@@ -39,6 +39,9 @@ import VisorProtocol
             let server = programs.appendingPathComponent("visor-server")
             try Data("#!/bin/sh\n".utf8).write(to: server)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: server.path)
+            let wrapper = programs.appendingPathComponent("agent-wrapper")
+            try Data("#!/bin/sh\n# agent-wrapper\n".utf8).write(to: wrapper)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper.path)
             for name in ["relay-client", "visor-agent-host"] {
                 try FileManager.default.createSymbolicLink(atPath: programs.appendingPathComponent(name).path, withDestinationPath: "visor-server")
             }
@@ -46,11 +49,11 @@ import VisorProtocol
 
         var layout: ContainerLayout { ContainerLayout(root: root.appendingPathComponent("Containers/Visor", isDirectory: true)) }
 
-        func engine() -> ContainerEngine {
+        func engine(sessions: String = "/Volumes/Sessions", driverPort: Int = 7434) -> ContainerEngine {
             let layout = layout
             return ContainerEngine(context: ContainerEngine.Context(
-                host: host.withLock { $0 }, locate: { layout }, linuxPrograms: programs, version: "0.64.7", sessions: "/Volumes/Sessions",
-                relaySocket: socketFolder.appendingPathComponent("relay.sock"), relayToken: { "relay-secret" }, assets: assets,
+                host: host.withLock { $0 }, locate: { layout }, linuxPrograms: programs, version: "0.64.7", sessions: sessions,
+                relaySocket: socketFolder.appendingPathComponent("relay.sock"), relayToken: { "relay-secret" }, driverPort: driverPort, assets: assets,
                 pins: AssetsTests.pins(), backend: machines, configuration: { self.configuration.withLock { $0 } },
                 placedSessions: { self.placed.withLock { $0 } }, now: { self.clock.withLock { $0 } },
                 checkTimeout: .seconds(2), checkRetryPause: .milliseconds(10)))
@@ -65,7 +68,7 @@ import VisorProtocol
         }
     }
 
-    private func rig() async throws -> Rig {
+    func rig() async throws -> Rig {
         let assets = FakeBackend(archive: AssetsTests.archive)
         await assets.setDigests(ContainerPins.current.initfs.reference, [ContainerPins.current.initfs.digest])
         await assets.setDigests(AssetsTests.image.reference(), [AssetsTests.image.value])
@@ -91,16 +94,21 @@ import VisorProtocol
             ContainerBootSpec.Share(source: "/Volumes/Sessions", destination: "/Volumes/Sessions", readOnly: false),
             ContainerBootSpec.Share(source: layout.tools(version: "0.64.7")!.path, destination: "/opt/visor/bin", readOnly: true),
         ])
+        // The relay, and the driver link beside it (the same folder).
         #expect(spec.sockets == [ContainerBootSpec.Socket(host: rig.socketFolder.appendingPathComponent("relay.sock").path,
-                                                          guest: "/run/agent-proxy/relay.sock")])
-        #expect(spec.arguments.prefix(5) == ["/opt/visor/bin/relay-client", "run", "--relay", "/run/agent-proxy/relay.sock", "--"])
+                                                          guest: "/run/agent-proxy/relay.sock"),
+                                 ContainerBootSpec.Socket(host: rig.socketFolder.appendingPathComponent("driver.sock").path,
+                                                          guest: "/run/visor/driver.sock")])
+        #expect(spec.arguments.prefix(7) == ["/opt/visor/bin/relay-client", "run", "--relay", "/run/agent-proxy/relay.sock",
+                                             "--forward", "7434=/run/visor/driver.sock", "--"])
         // The root filesystem is the template's clone, and says of which image.
         #expect(try Data(contentsOf: layout.rootfs) == Data(contentsOf: layout.template(image: AssetsTests.image)))
         #expect(try String(contentsOf: layout.rootfsRecord, encoding: .utf8).contains(AssetsTests.image.value))
         // Its egress check, then nothing else.
         #expect(await machine.execs.map(\.arguments) == [["/opt/visor/bin/relay-client", "check"]])
-        // The relay listens on the host's side.
+        // The relay and the driver link listen on the host's side.
         #expect(FileManager.default.fileExists(atPath: rig.socketFolder.appendingPathComponent("relay.sock").path))
+        #expect(FileManager.default.fileExists(atPath: rig.socketFolder.appendingPathComponent("driver.sock").path))
         // The status, as the API says it.
         #expect(ContainerStatus(json: status.json) == status)
         #expect(status.cpus == 4 && status.memoryGiB == 8 && status.image == AssetsTests.image.value && status.relayPort == 7438)

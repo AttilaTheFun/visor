@@ -10,14 +10,23 @@
 # Visor.app carries the folder in Contents/Resources/Linux, and every
 # container has it read-only at /opt/visor/bin.
 #
+# And agent-wrapper (agent_protocol's, at the version Package.resolved pins,
+# 0.5.0), each Sessions container session's agent (docs/containers.md), a
+# static program of its own (about 70 MB stripped): agent_protocol 0.5.0
+# makes it only an executable (its AgentWrapper module is no library
+# product, and its main is top-level code), so visor-server can't run it
+# by a name. It's built as a product of Visor's package, sharing the
+# dependencies' build. Once agent_protocol exports its wrapper's main, it
+# can be a link too.
+#
 #   tools/linux_programs.sh <folder>
 #
 # On Linux with Swift 6.4.0 (Visor's agent image, a CI container): the SDK
 # is installed the first time, by its checksum (285 MB), and its link needs
 # lld, libc++abi and libunwind spelled out. The folder gets the program
 # (visor-server, stripped: about 3x smaller, and nothing reads its symbols),
-# the visor-agent-host and relay-client links, checked that each name runs,
-# and nothing else.
+# the visor-agent-host and relay-client links, agent-wrapper (stripped too),
+# checked that each runs, and nothing else.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:?the folder for the programs}"
@@ -64,17 +73,23 @@ swift build -c release --swift-sdk aarch64-swift-linux-musl \
     -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
     -Xswiftc -use-ld=lld -Xlinker -lc++abi -Xlinker -lunwind \
     --scratch-path "$scratch" --product visor-server
+swift build -c release --swift-sdk aarch64-swift-linux-musl \
+    -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
+    -Xswiftc -use-ld=lld -Xlinker -lc++abi -Xlinker -lunwind \
+    --scratch-path "$scratch" --product agent-wrapper
 bin="$(swift build -c release --swift-sdk aarch64-swift-linux-musl \
     -Xcxx -stdlib=libc++ -Xlinker -L"$shim" \
     --scratch-path "$scratch" --show-bin-path)"
 
 mkdir -p "$OUT"
-rm -f "$OUT/visor-server" "$OUT/visor-agent-host" "$OUT/relay-client"
-cp "$bin/visor-server" "$OUT/visor-server"
-if command -v llvm-strip > /dev/null; then llvm-strip "$OUT/visor-server"; else strip "$OUT/visor-server"; fi
-chmod 755 "$OUT/visor-server"
-# Static.
-! ldd "$OUT/visor-server" > /dev/null 2>&1 || { echo "$me: $OUT/visor-server is linked dynamically" >&2; exit 1; }
+rm -f "$OUT/visor-server" "$OUT/visor-agent-host" "$OUT/relay-client" "$OUT/agent-wrapper"
+for program in visor-server agent-wrapper; do
+    cp "$bin/$program" "$OUT/$program"
+    if command -v llvm-strip > /dev/null; then llvm-strip "$OUT/$program"; else strip "$OUT/$program"; fi
+    chmod 755 "$OUT/$program"
+    # Static.
+    ! ldd "$OUT/$program" > /dev/null 2>&1 || { echo "$me: $OUT/$program is linked dynamically" >&2; exit 1; }
+done
 ln -s visor-server "$OUT/visor-agent-host"
 ln -s visor-server "$OUT/relay-client"
 
@@ -90,4 +105,11 @@ case "$answer" in *'"result":{}'*) ;; *) echo "$me: visor-agent-host mcp answere
 # can leave the program writing to a closed pipe (status 141, 2 runs in 100).
 usage="$("$OUT/relay-client" help)" || { echo "$me: relay-client does not run" >&2; exit 1; }
 grep -q "^Usage: relay-client run" <<< "$usage" || { echo "$me: relay-client answered: $usage" >&2; exit 1; }
+grep -q -- "--forward <port>=<socket>" <<< "$usage" || { echo "$me: relay-client has no --forward: $usage" >&2; exit 1; }
+# agent-wrapper's usage: 0.5.0 has no --help or --version, so --help is an
+# unknown flag, answered with the usage and status 2, and nothing started.
+status=0
+wrapper="$("$OUT/agent-wrapper" --help 2>&1)" || status=$?
+[ "$status" -eq 2 ] && grep -q "^Usage: agent-wrapper" <<< "$wrapper" \
+    || { echo "$me: agent-wrapper does not run (status $status): $wrapper" >&2; exit 1; }
 ls -l "$OUT"
