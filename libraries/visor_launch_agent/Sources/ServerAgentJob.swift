@@ -124,18 +124,39 @@ public enum ServerAgentJob {
         return .start
     }
 
-    /// The agent registered afresh: out of launchd first (`stop`: launchctl
+    /// The agent registered afresh: the bundle in place told to
+    /// LaunchServices again (`refresh`: `lsregister -f`), unregistered
+    /// (`unregister`: SMAppService's), out of launchd (`stop`: launchctl
     /// bootout, waited for), then registered (`register`: SMAppService,
-    /// which starts it); what went wrong, or nil. The one way it's started
-    /// once its bundle may have changed (ServerAgentService.reregister): an
-    /// update to another build, a rollback to the one before, a start of a
-    /// registered job that isn't running. SMAppService's launch constraint
-    /// is the bundle registered: launchd won't spawn the job from a bundle
-    /// put in its place (`spawn failed`, 78, "needs LWCR update") until it's
-    /// booted out and registered again (NCH's check of #491); registering
-    /// alone isn't enough.
-    public static func reregister(stop: () async -> Void, register: () async -> String?) async -> String? {
-        await stop()
-        return await register()
+    /// which starts it), and, if launchd hasn't it running a moment later
+    /// (`running`, after `pause`), all of it again, up to `attempts` times;
+    /// what went wrong, or nil. The one way it's started once its bundle
+    /// may have changed (ServerAgentService.reregister): an update to
+    /// another build, a rollback to the one before, a start of a registered
+    /// job that isn't running.
+    ///
+    /// Background Items keeps a record of the job with its executable's
+    /// checksum as the job's launch constraint, and launchd won't spawn it
+    /// from another build put in its place (`spawn failed`, "Launch
+    /// Constraint Violation", exit 78, "needs LWCR update": NCH's check of
+    /// #491). On macOS 27.0.1, between two ad hoc builds, the first
+    /// registration after the bundle changed was refused so, whatever came
+    /// before it (a bootout, an unregister, `lsregister -f`); about five
+    /// seconds on, Background Items dropped its record of the job, and the
+    /// next registration made a new one and ran the new build. So it's
+    /// tried again, once the record has had time to go, rather than left
+    /// down.
+    public static func reregister(attempts: Int = 3, refresh: () async -> Void, unregister: () async -> Void, stop: () async -> Void,
+                                  register: () async -> String?, running: () async -> Bool,
+                                  pause: () async -> Void) async -> String? {
+        for _ in 0..<max(attempts, 1) {
+            await refresh()
+            await unregister()
+            await stop()
+            if let problem = await register() { return problem }
+            await pause()
+            if await running() { return nil }
+        }
+        return "launchd didn't start it after \(max(attempts, 1)) registrations (its launch constraint: the build registered isn't the one in place)"
     }
 }

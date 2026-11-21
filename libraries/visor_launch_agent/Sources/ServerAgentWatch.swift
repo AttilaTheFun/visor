@@ -85,8 +85,8 @@ public struct ServerAgentWatch: Sendable {
     /// `source`) is started with `kickstart -k`, or registered again if
     /// launchd no longer has it. After an update to another build, and
     /// after a rollback to the one before, it's registered afresh from the
-    /// bundle in place (`<executable> server-agent register`: booted out,
-    /// then registered, ServerAgentService.reregister), as SMAppService's
+    /// bundle in place (`<executable> server-agent register`: unregistered,
+    /// booted out, then registered, ServerAgentService.reregister), as SMAppService's
     /// launch constraint is the bundle it was registered from, and launchd
     /// won't spawn the job from another put in its place. Stopped with a
     /// KILL, which its KeepAlive would answer only after the bundle is back.

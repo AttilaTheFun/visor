@@ -596,8 +596,9 @@ removed (still only when `agentProxy` is set).
   over. Off (the default) with no agent there, the app makes its server as
   it always has and looks at nothing else.
 - **The hand-over** (ServerHandOver, at the app's launch, before the app
-  makes a server): the app registers the agent afresh (booted out, then
-  registered: ServerAgentService.reregister) unless it's running, which is
+  makes a server): the app registers the agent afresh (LaunchServices
+  told of the bundle again, unregistered, booted out, then registered:
+  ServerAgentService.reregister) unless it's running, which is
   left as it is, then waits up to the watch (two minutes) for `/api/hello`
   on 7433 from the job's own process (lsof's listener, where it says).
   Then the app is the agent's client. While `ServerAsAgent` is on, the app
@@ -623,13 +624,21 @@ removed (still only when `agentProxy` is set).
   bundle id) and starts a detached watcher; the server lets its hosts go
   and exits 0. The watcher, once it has gone, moves the running bundle aside
   (`Previous/`), copies the new one in (its plist with it), and registers
-  the job afresh from it (`Visor server-agent register`: launchctl bootout,
-  then SMAppService's register; a plain restart is `launchctl kickstart
+  the job afresh from it (`Visor server-agent register`: `lsregister -f`
+  of the bundle, SMAppService's unregister, launchctl bootout, then
+  register; a plain restart is `launchctl kickstart
   -k`). SMAppService's launch constraint is the bundle registered: launchd
   won't spawn the job from another bundle put in its place (`spawn failed`,
-  last exit 78, "needs LWCR update") until it's booted out and registered
-  again, so an update to another build and a rollback both go through that
-  one function. An update to a build that isn't byte-identical wants a
+  last exit 78, "Launch Constraint Violation", "needs LWCR update"): its
+  Background Items record keeps the registered build's checksum through a
+  bootout and register, and through an unregister and register, until
+  LaunchServices is told of the bundle again (`lsregister -f`); and on
+  macOS 27.0.1 the first registration after the bundle changed was
+  refused even then (Background Items drops its record of the job about
+  five seconds on), the next one running the new build, so all four go
+  together, and again, eight seconds on and three times at most, while
+  launchd has no process of it: an update to another build and a rollback both go
+  through that one function (ServerAgentService.reregister). An update to a build that isn't byte-identical wants a
   check on a real Mac before each release that changes this path (NCH
   checked a byte-identical one and a rollback on macOS 27.0.1). It watches it as
   AppRelauncher does: up to ten minutes for the first answer on 7433 from
