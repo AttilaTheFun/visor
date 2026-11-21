@@ -66,6 +66,24 @@ final class NativeMCPProxyTests: XCTestCase {
         XCTAssertEqual(endpoint.requests.withLock { $0.count }, 1)
     }
 
+    /// An endpoint kept as MultiPass's runner.json kept it (CLIENT_ID: $SESSION_ID) leaves CLIENT_ID to the session, so
+    /// each session reaches the MCP server as itself, never as the literal `$SESSION_ID`; its other plain headers win.
+    func testAnEndpointsSessionHeaderIsTheSessions() throws {
+        let endpoint = try XCTUnwrap(FakeEndpoint())
+        defer { endpoint.stop() }
+        let proxy = try proxy([NativeMCPProxy.Endpoint(name: "shireworks", url: "http://127.0.0.1:\(endpoint.port)/mcp",
+                                                       headers: ["CLIENT_ID": "$SESSION_ID", "X-Fleet": "mini"], secretHeaders: ["API_KEY"])])
+        defer { proxy.stop() }
+        let answered = try ask(proxy.port, "/mcp/shireworks", token: "one-token", body: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+                               extra: ["CLIENT_ID: s1", "X-Fleet: the-callers-own"])
+        XCTAssertEqual(answered.status, "200")
+        let seen = try XCTUnwrap(endpoint.requests.withLock { $0.first })
+        XCTAssertTrue(seen.contains("CLIENT_ID: s1\r\n"), "the session's own CLIENT_ID goes on")
+        XCTAssertFalse(seen.contains("$SESSION_ID"), "never the variable as written")
+        XCTAssertTrue(seen.contains("X-Fleet: mini\r\n"))
+        XCTAssertFalse(seen.contains("the-callers-own"), "the endpoint's other plain headers stand in for the caller's")
+    }
+
     func testAWithheldToolIsNeitherListedNorCalled() throws {
         let tools = #"{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"whoami"},{"name":"github_token"}]}}"#
         let endpoint = try XCTUnwrap(FakeEndpoint(answer: tools))
