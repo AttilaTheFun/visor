@@ -33,6 +33,14 @@ import Testing
         #expect(try JSONDecoder().decode(ServerSettings.self, from: JSONEncoder().encode(settings)).container == container)
     }
 
+    @Test func theCheckoutsFolderIsAnAbsolutePathOrNone() throws {
+        #expect(try decoded(#"{"container":{}}"#).container?.checkouts == nil)
+        #expect(try decoded(#"{"container":{"checkouts":"/Volumes/Work"}}"#).container?.checkouts == "/Volumes/Work")
+        #expect(try decoded(#"{"container":{"checkouts":"Work"}}"#).container?.checkouts == nil, "not a path of its own")
+        #expect(try decoded(#"{"container":{"checkouts":"/"}}"#).container?.checkouts == nil)
+        #expect(try decoded(#"{"container":{"checkouts":7}}"#).container?.enabled == false, "the rest still read")
+    }
+
     @Test func whatIsntAFieldsValueReadsAsItsDefault() throws {
         let json = #"{"lan":true,"container":{"enabled":"yes","cpus":0,"memoryGiB":-2,"idleMinutes":0,"imageDigest":"ghcr.io/attilathefun/visor-agent:latest"}}"#
         let settings = try decoded(json)

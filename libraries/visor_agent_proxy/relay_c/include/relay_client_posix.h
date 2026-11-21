@@ -36,9 +36,12 @@ int relay_client_resolve_connect(const char *host, unsigned short port, int seco
 /// network namespace (Linux, root there): loopback up, holding `source`
 /// (an IPv4 address), the default route through loopback from it, and the
 /// nftables table `ip relay_client`, made anew, whose output chain (nat,
-/// priority -100) returns for 127.0.0.0/8 and redirects every other TCP
-/// connection to `port`. 0, or -1 with what failed written to `problem`.
-int relay_client_container_network(unsigned short port, const char *source, char *problem, size_t size);
+/// priority -100) returns for `excluded` under `mask` (4 bytes each:
+/// ContainerNetwork's 127.0.0.0/8, loopback, where relay-client's forwards
+/// and DNS listen) and redirects every other TCP connection to `port`. 0,
+/// or -1 with what failed written to `problem`.
+int relay_client_container_network(unsigned short port, const char *source, const unsigned char excluded[4], const unsigned char mask[4],
+                                   char *problem, size_t size);
 
 /// Starts `path` with `argv` and `envp` as a child that keeps this
 /// process's standard input, output and errors and its process group

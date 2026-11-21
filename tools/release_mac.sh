@@ -66,6 +66,7 @@ linux_programs() {
   [ -f "$WORK/linux/visor-server" ] && [ -x "$WORK/linux/visor-server" ] \
     && [ "$(readlink "$WORK/linux/visor-agent-host")" = visor-server ] \
     && [ "$(readlink "$WORK/linux/relay-client")" = visor-server ] \
+    && [ -f "$WORK/linux/agent-wrapper" ] && [ -x "$WORK/linux/agent-wrapper" ] \
     || { echo "Visor's Linux programs are not in $archive" >&2; exit 1; }
 }
 

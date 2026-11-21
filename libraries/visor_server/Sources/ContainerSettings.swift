@@ -25,6 +25,13 @@ public struct ContainerSettings: Codable, Equatable, Sendable {
     /// (ghcr.io/attilathefun/visor-agent): never a tag. Nil for the
     /// release's.
     public var imageDigest: String?
+    /// A folder of this Mac's for the sessions' checkouts, mounted
+    /// read-write at the same path in the container (an absolute path);
+    /// nil: none, the checkouts are on Sessions. Where they belong is still
+    /// open (docs/containers.md: Sessions is case-insensitive on both Macs,
+    /// and the proposal is a case-sensitive `/Volumes/Work`), so it's a
+    /// setting rather than a decision.
+    public var checkouts: String?
 
     public init() {}
 
@@ -71,7 +78,7 @@ public struct ContainerSettings: Codable, Equatable, Sendable {
         return hex.count == 64 && hex.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
     }
 
-    enum CodingKeys: String, CodingKey { case enabled, cpus, memoryGiB, idleMinutes, imageDigest }
+    enum CodingKeys: String, CodingKey { case enabled, cpus, memoryGiB, idleMinutes, imageDigest, checkouts }
 
     // Field by field: one missing, or not what it should be, reads as its
     // default (an image digest that isn't one is dropped: the release's
@@ -84,5 +91,7 @@ public struct ContainerSettings: Codable, Equatable, Sendable {
         idleMinutes = ((try? c.decodeIfPresent(Int.self, forKey: .idleMinutes)) ?? nil).flatMap { $0 > 0 ? $0 : nil } ?? 30
         let digest = ((try? c.decodeIfPresent(String.self, forKey: .imageDigest)) ?? nil)?.trimmingCharacters(in: .whitespaces)
         imageDigest = digest.flatMap { Self.isImageDigest($0) ? $0 : nil }
+        let folder = ((try? c.decodeIfPresent(String.self, forKey: .checkouts)) ?? nil)?.trimmingCharacters(in: .whitespaces)
+        checkouts = folder.flatMap { $0.hasPrefix("/") && $0.count > 1 ? $0 : nil }
     }
 }

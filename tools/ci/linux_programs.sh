@@ -1,7 +1,8 @@
 #!/bin/bash
 # Visor's own Linux programs (tools/linux_programs.sh: visor-server, also
-# the agents' host as visor-agent-host and relay-client, links to it, linked
-# fully static for arm64 with Swift's Static Linux SDK), built in CI's own job
+# the agents' host as visor-agent-host and relay-client, links to it, and
+# agent_protocol's agent-wrapper, linked fully static for arm64 with Swift's
+# Static Linux SDK), built in CI's own job
 # (linux-programs: GitHub's arm64 Ubuntu runner, in a container of Visor's
 # agent image, which has the Swift the SDK is for, and checks that each
 # program runs), and written to
@@ -23,4 +24,4 @@ trap 'rm -rf "$work"' EXIT
 git -c safe.directory="$ROOT" -C "$ROOT" archive --format=tar HEAD | tar -x -C "$work"
 mkdir -p "$work/out"
 (cd "$work" && tools/linux_programs.sh "$work/out")
-tar -c -f "$OUT" -C "$work/out" visor-server visor-agent-host relay-client
+tar -c -f "$OUT" -C "$work/out" visor-server visor-agent-host relay-client agent-wrapper

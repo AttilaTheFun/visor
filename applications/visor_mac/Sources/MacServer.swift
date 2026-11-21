@@ -77,7 +77,8 @@ enum MacServer {
         return VisorDriver.Listening(host: "127.0.0.1", port: port, url: agentProtocolURL, containerURL: containerURL, harness: harness)
     }
 
-    private static let agentProtocolPort = 7434
+    /// The driver's port on loopback (the Sessions container's driver link goes to it).
+    static let agentProtocolPort = 7434
     private static var agentProtocolURL: String { "http://127.0.0.1:\(agentProtocolPort)" }
 
     /// The server served, and the native runner pulling from it, with a

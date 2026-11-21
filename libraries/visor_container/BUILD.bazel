@@ -8,10 +8,14 @@ package(default_visibility = ["//visibility:public"])
 # agent image by digest), container.json, where each goes on the Containers
 # volume, fetching and checking them against a backend (ContainerAssets),
 # Visor's Linux programs copied out of the app under the link rule
-# (ToolsFolder), and Settings' readiness row. Foundation, swift-crypto and
-# DiskVolumes alone, with nothing fetched here: it builds everywhere, so its
-# tests run on Linux (//tests:linux) and //tools/container_manifest writes
-# container.json wherever a release is signed.
+# (ToolsFolder), Settings' readiness row, and the container engine itself
+# (ContainerEngine: the lifecycle, the idle stop, the egress check and the
+# exec'd processes, over a ContainerBackend) with its relay to agent-proxy
+# (HostRelay). Foundation, swift-crypto, DiskVolumes, VisorProtocol (the
+# status) and agent-proxy's header, splice and sockets, with nothing
+# fetched and no VM made here: it builds everywhere, so its tests run on
+# Linux (//tests:linux) with a fake backend, and //tools/container_manifest
+# writes container.json wherever a release is signed.
 swift_library(
     name = "visor_container_core",
     copts = STRICT_SWIFT,
@@ -19,7 +23,10 @@ swift_library(
     module_name = "VisorContainerCore",
     deps = [
         "//:foundation",
+        "//libraries/visor_agent_proxy",
+        "//libraries/visor_agent_proxy:agent_proxy_c",
         "//libraries/visor_disk_volumes",
+        "//libraries/visor_protocol",
         "@swiftpkg_swift_crypto//:Crypto",
     ],
 )
@@ -30,7 +37,10 @@ swift_library(
 # filesystem (none of which needs Virtualization), and this Mac's readiness
 # (macOS 26, Apple silicon, VZVirtualMachine.isSupported) and free memory.
 # macOS alone: nothing Linux builds (visor-server, //tests:linux) depends on
-# Containerization. The VM itself comes with the container engine (PR 2).
+# Containerization. And the engine's VM (ContainerizationMachines): a
+# LinuxContainer booted with VZVirtualMachineManager from the assets, its
+# processes exec'd, which needs the virtualization entitlement and a Mac
+# that can make VMs (never a macOS VM).
 swift_library(
     name = "visor_container",
     copts = STRICT_SWIFT,
@@ -43,5 +53,6 @@ swift_library(
         "@swiftpkg_containerization//:Containerization",
         "@swiftpkg_containerization//:ContainerizationArchive",
         "@swiftpkg_containerization//:ContainerizationOCI",
+        "@swiftpkg_containerization//:ContainerizationOS",
     ],
 )

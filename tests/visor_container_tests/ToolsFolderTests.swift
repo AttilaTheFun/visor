@@ -10,11 +10,13 @@ import VisorContainerCore
     private let files = FileManager.default
 
     /// A folder as the app's Contents/Resources/Linux has it: visor-server,
-    /// and relay-client and visor-agent-host links to it.
+    /// relay-client and visor-agent-host links to it, and agent-wrapper
+    /// (agent_protocol's, a program of its own).
     private func linuxFolder() throws -> URL {
         let folder = files.temporaryDirectory.appendingPathComponent("tools-\(UUID().uuidString)", isDirectory: true)
         try files.createDirectory(at: folder, withIntermediateDirectories: true)
         try executable("visor-server", in: folder)
+        try executable("agent-wrapper", in: folder)
         try files.createSymbolicLink(atPath: folder.appendingPathComponent("relay-client").path, withDestinationPath: "visor-server")
         try files.createSymbolicLink(atPath: folder.appendingPathComponent("visor-agent-host").path, withDestinationPath: "visor-server")
         return folder
@@ -88,6 +90,21 @@ import VisorContainerCore
         defer { try? files.removeItem(at: folder) }
         try files.removeItem(at: folder.appendingPathComponent("relay-client"))
         #expect(refusal(folder) == .toolMissing("relay-client"))
+    }
+
+    @Test func agentWrapperIsNeededAndMayBeAProgramOrALink() throws {
+        #expect(ToolsFolder.required.contains("agent-wrapper"), "each session's agent runs under it")
+        let folder = try linuxFolder()
+        defer { try? files.removeItem(at: folder) }
+        try files.removeItem(at: folder.appendingPathComponent("agent-wrapper"))
+        #expect(refusal(folder) == .toolMissing("agent-wrapper"))
+        // A multi-call name of visor-server, should agent_protocol export
+        // its main: the same rule as relay-client's.
+        try relink("agent-wrapper", to: "visor-server", in: folder)
+        try ToolsFolder.check(folder)
+        try relink("agent-wrapper", to: "/usr/local/bin/agent-wrapper", in: folder)
+        guard case let .toolRefused(name, reason)? = refusal(folder) else { Issue.record("not refused"); return }
+        #expect(name == "agent-wrapper" && reason.contains("absolute"))
     }
 
     @Test func stagingCopiesTheFolderKeepingItsLinks() throws {

@@ -1,5 +1,6 @@
 // Visor's Linux programs for the container: Contents/Resources/Linux
-// (visor-server, with visor-agent-host and relay-client links to it),
+// (visor-server, with visor-agent-host and relay-client links to it, and
+// agent_protocol's agent-wrapper, a static program of its own),
 // copied to the Containers volume's tools/<visor version>/ and mounted
 // read-only at /opt/visor/bin. A share of the app bundle itself would go
 // stale when the app is updated in place.
@@ -15,8 +16,9 @@ import Foundation
 
 public enum ToolsFolder {
     /// What the container runs from the folder: its relay to agent-proxy,
-    /// the agents' host, and the server they're names of.
-    public static let required = ["visor-server", "relay-client", "visor-agent-host"]
+    /// the agents' host, the server they're names of, and each session's
+    /// agent-wrapper.
+    public static let required = ["visor-server", "relay-client", "visor-agent-host", "agent-wrapper"]
 
     /// Throws unless every entry keeps the link rule and every required
     /// name is there.
