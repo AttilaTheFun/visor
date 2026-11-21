@@ -35,6 +35,16 @@ struct VolumeCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                if let owner = model.foreignOwner(role) {
+                    HStack {
+                        Label("Owned by \(owner): Visor can't write here.", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Spacer()
+                        Button("Fix") { Task { await model.fixOwner(role) } }
+                            .disabled(model.isBusy)
+                            .help("Gives \(role.mountPoint) to you (chown, chmod 775), with the administrator's prompt.")
+                    }
+                }
                 ForEach(notes, id: \.self) { note in
                     Label(note, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)

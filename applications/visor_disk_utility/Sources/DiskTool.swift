@@ -39,8 +39,10 @@ enum DiskTool {
     /// Runs the commands as an administrator once VolumeGuard has passed
     /// them against a fresh survey and volumes.json's record of Visor's own
     /// volumes; then the disks as they are after.
-    static func change(_ commands: [DiskCommand], route: PrivilegeRoute, deleting: Set<VolumeRole> = []) throws -> DiskSurvey {
-        try VolumeGuard.check(commands, against: survey(), recorded: DiskVolumes.readStatus(at: statusURL), deleting: deleting)
+    static func change(_ commands: [DiskCommand], route: PrivilegeRoute, deleting: Set<VolumeRole> = [],
+                       fixing: Set<VolumeRole> = []) throws -> DiskSurvey {
+        try VolumeGuard.check(commands, against: survey(), recorded: DiskVolumes.readStatus(at: statusURL), deleting: deleting,
+                              user: user, fixing: fixing)
         for invocation in route.invocations(of: commands.map(\.argv)) {
             do {
                 _ = try run(invocation)
@@ -49,6 +51,16 @@ enum DiskTool {
             }
         }
         return try survey()
+    }
+
+    /// The person running Visor Disk Utility: the owner a volume it makes is
+    /// given (chown, in the same prompt).
+    static var user: String { NSUserName() }
+
+    /// Who owns the mount point now (its root folder); nil if it can't be
+    /// read.
+    static func owner(of path: String) -> String? {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.ownerAccountName] as? String
     }
 
     /// Whether the Visor volume at `path` is left out of Time Machine and

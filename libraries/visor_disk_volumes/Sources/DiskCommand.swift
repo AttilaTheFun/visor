@@ -2,16 +2,20 @@
 
 import Foundation
 
-/// One command line run as an administrator. Only three kinds are ever
-/// made: adding a volume, deleting one of Visor's, and turning Spotlight off
-/// on the Visor volume (VolumeGuard checks each again before anything runs,
-/// and passes a delete only of a role asked for, and Spotlight's only on
-/// Visor's own).
+/// One command line run as an administrator. Only these are ever made:
+/// adding a volume, giving a volume just made to the person (chown, chmod),
+/// deleting one of Visor's, and turning Spotlight off on the Visor volume
+/// (VolumeGuard checks each again before anything runs, and passes a delete
+/// only of a role asked for, Spotlight's only on Visor's own, and an owner
+/// only of a volume made in the same run, or one the card's Fix names).
 public struct DiskCommand: Equatable, Sendable, CustomStringConvertible {
     /// diskutil, by its full path: never one found on a PATH.
     public static let diskutil = "/usr/sbin/diskutil"
     /// Spotlight's tool, by its full path.
     public static let mdutil = "/usr/bin/mdutil"
+    /// chown and chmod, by their full paths.
+    public static let chown = "/usr/sbin/chown"
+    public static let chmod = "/bin/chmod"
 
     /// The program, by its full path: diskutil unless said.
     public var program: String
@@ -29,6 +33,24 @@ public struct DiskCommand: Equatable, Sendable, CustomStringConvertible {
     public var argv: [String] { [program] + arguments }
 
     public var description: String { ([(program as NSString).lastPathComponent] + arguments).joined(separator: " ") }
+
+    /// `chown <user>:staff <mount point>` and `chmod 775 <mount point>`: a
+    /// volume made as an administrator is root's at its root, where Visor
+    /// can't write (its data folder, its socket, the sessions' folders), so
+    /// it's given to the person who made it, as Nimbus gives its own, in the
+    /// same prompt.
+    public static func ownership(_ role: VolumeRole, user: String) throws -> [DiskCommand] {
+        guard isUserName(user) else { throw DiskVolumesError.blocked("\(user) isn't a user's name.") }
+        return [DiskCommand(program: chown, arguments: [user + ":staff", role.mountPoint]),
+                DiskCommand(program: chmod, arguments: ["775", role.mountPoint])]
+    }
+
+    /// Whether `name` is a short user name: letters, digits, `.`, `_` and
+    /// `-`, not starting with `-`.
+    public static func isUserName(_ name: String) -> Bool {
+        !name.isEmpty && name.count <= 64 && !name.hasPrefix("-")
+            && name.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }
+    }
 
     /// `mdutil -i off <mount point>`: Spotlight's index of the Visor volume
     /// off, as Nimbus turns it off on its own (its data, caches, logs and

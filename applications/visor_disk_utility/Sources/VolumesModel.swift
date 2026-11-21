@@ -18,6 +18,8 @@ final class VolumesModel {
     var failure: String?
     /// Where volumes.json was last written, or why it wasn't.
     private(set) var statusLine = ""
+    /// Each role's mount point's owner, as last looked (Visor's own, in place).
+    private(set) var owners: [VolumeRole: String] = [:]
     /// Whether the Visor volume is left out of Time Machine and Spotlight,
     /// as last looked; nil without it.
     private(set) var visorExclusions: VolumeExclusions?
@@ -36,8 +38,25 @@ final class VolumesModel {
     func create(_ role: VolumeRole) async {
         guard let state = states[role], let sizes = sizes(for: role) else { return }
         await perform {
-            try DiskTool.change(state.createCommands(reserve: sizes.reserve, quota: sizes.quota), route: .administratorPrompt)
+            try DiskTool.change(state.createCommands(reserve: sizes.reserve, quota: sizes.quota, user: DiskTool.user), route: .administratorPrompt)
         }
+    }
+
+    /// An adopted volume's mount point given to the person (Fix: chown
+    /// <user>:staff, chmod 775, the administrator prompt).
+    func fixOwner(_ role: VolumeRole) async {
+        guard let state = states[role] else { return }
+        await perform {
+            try DiskTool.change(state.ownershipCommands(user: DiskTool.user), route: .administratorPrompt, fixing: [role])
+        }
+    }
+
+    /// Who owns a volume's mount point, when it isn't the person running
+    /// Visor Disk Utility (Visor can't write there); nil when it is, or the
+    /// volume isn't Visor's own in place.
+    func foreignOwner(_ role: VolumeRole) -> String? {
+        guard let owner = owners[role], owner != DiskTool.user else { return nil }
+        return owner
     }
 
     /// The Visor volume left out again where it isn't: Spotlight turned off
@@ -80,6 +99,9 @@ final class VolumesModel {
         do {
             let survey = try await Task.detached(operation: work).value
             apply(survey)
+            owners = Dictionary(uniqueKeysWithValues: VolumeRole.allCases.compactMap { role in
+                survey.state(for: role).inPlaceUUID == nil ? nil : DiskTool.owner(of: role.mountPoint).map { (role, $0) }
+            })
             let inPlace = survey.state(for: .visor).isMountedInPlace
             visorExclusions = inPlace ? await Task.detached { DiskTool.exclusions() }.value : nil
         } catch DiskVolumesError.cancelled {

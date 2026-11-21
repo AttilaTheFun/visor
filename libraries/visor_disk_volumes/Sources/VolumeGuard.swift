@@ -4,9 +4,11 @@
 /// only `apfs addVolume` of a missing role's volume, `apfs deleteVolume` of
 /// one of Visor's own volumes by its APFS volume UUID when that role is one
 /// the caller asked to delete (`deleting`: none, unless Uninstall… was
-/// asked to delete the volumes), and `mdutil -i off /Volumes/Visor` on
+/// asked to delete the volumes), `mdutil -i off /Volumes/Visor` on
 /// Visor's own volume (mounted there, or made by an addVolume before it in
-/// the same run), ever pass. Anything
+/// the same run), and `chown <the user>:staff` and `chmod 775` of a role's
+/// mount point, the volume made before them in the same run (or, for Fix,
+/// an adopted one of Visor's own the caller names in `fixing`), ever pass. Anything
 /// that would erase or delete Sessions (by name, by mount point, by disk or
 /// by UUID) throws, whoever built the command, unless Sessions itself is
 /// asked for; and so does any argument that's exactly `&&`.
@@ -29,9 +31,12 @@ public enum VolumeGuard {
     /// of a role's name is Visor's when it isn't mounted at the role's
     /// mount point (nil: only the one mounted there is). `deleting`: the
     /// roles whose volumes may be deleted (none, unless Uninstall… was
-    /// asked to, with the volumes' names typed).
+    /// asked to, with the volumes' names typed). `user`: the person running
+    /// Visor Disk Utility, the only owner a mount point is given (nil: no
+    /// chown at all). `fixing`: the adopted volumes whose mount points'
+    /// owner and mode may be put right (Fix, on the card).
     public static func check(_ commands: [DiskCommand], against survey: DiskSurvey, recorded: VolumesStatus? = nil,
-                             deleting: Set<VolumeRole> = []) throws {
+                             deleting: Set<VolumeRole> = [], user: String? = nil, fixing: Set<VolumeRole> = []) throws {
         let sessions = survey.state(for: .sessions)
         var deleted: Set<String> = []
         // The roles an addVolume before it in this run makes.
@@ -44,6 +49,10 @@ public enum VolumeGuard {
             }
             if command.program == DiskCommand.mdutil {
                 try checkSpotlightOff(arguments, survey: survey, made: made, command: command)
+                continue
+            }
+            if command.program == DiskCommand.chown || command.program == DiskCommand.chmod {
+                try checkOwnership(command, survey: survey, made: made, user: user, fixing: fixing)
                 continue
             }
             guard command.program == DiskCommand.diskutil else { throw DiskVolumesError.notAllowed(command.description) }
@@ -114,6 +123,32 @@ public enum VolumeGuard {
         guard made.contains(role) || survey.state(for: role).inPlaceUUID != nil else {
             throw DiskVolumesError.wrongTarget("\(role.mountPoint) isn't Visor's own volume (named \(role.volumeName), mounted there): "
                 + "Spotlight is left as it is.")
+        }
+    }
+
+    /// Throws unless it's exactly `chown <user>:staff <mount point>` (the
+    /// person running Visor Disk Utility) or `chmod 775 <mount point>`, of a
+    /// role's mount point, its volume made by an addVolume before it in the
+    /// same run, or (Fix) an adopted one the caller names in `fixing` that's
+    /// Visor's own (named for its role, mounted in place). Never `-R`,
+    /// never `/` or any other path, never another owner.
+    private static func checkOwnership(_ command: DiskCommand, survey: DiskSurvey, made: Set<VolumeRole>, user: String?,
+                                       fixing: Set<VolumeRole>) throws {
+        let arguments = command.arguments
+        guard arguments.count == 2, let role = VolumeRole.allCases.first(where: { $0.mountPoint == arguments[1] }) else {
+            throw DiskVolumesError.notAllowed(command.description)
+        }
+        if command.program == DiskCommand.chown {
+            guard let user, DiskCommand.isUserName(user), arguments[0] == user + ":staff" else {
+                throw DiskVolumesError.notAllowed(command.description)
+            }
+        } else {
+            guard arguments[0] == "775" else { throw DiskVolumesError.notAllowed(command.description) }
+        }
+        let adoptedOwn = fixing.contains(role) && survey.state(for: role).inPlaceUUID != nil
+        guard made.contains(role) || adoptedOwn else {
+            throw DiskVolumesError.wrongTarget("\(role.mountPoint) is \(role.volumeName)'s, made before Visor Disk Utility looked: "
+                + "its owner is changed only by its Fix, never as it's adopted.")
         }
     }
 

@@ -10,21 +10,23 @@ import Testing
 @Suite struct ExclusionTests {
     @Test func makingVisorTurnsSpotlightOffInTheSamePrompt() throws {
         let fresh = try Disks.fresh()
-        let visor = try fresh.state(for: .visor).createCommands(reserve: 0, quota: 200 * ByteSize.gigabyte)
+        let visor = try fresh.state(for: .visor).createCommands(reserve: 0, quota: 200 * ByteSize.gigabyte, user: "someone")
         #expect(visor.map(\.argv) == [
             ["/usr/sbin/diskutil", "apfs", "addVolume", "disk3", "Case-sensitive APFS", "Visor", "-quota", "200000000000b"],
+            ["/usr/sbin/chown", "someone:staff", "/Volumes/Visor"],
+            ["/bin/chmod", "775", "/Volumes/Visor"],
             ["/usr/bin/mdutil", "-i", "off", "/Volumes/Visor"],
         ])
         #expect(visor.map(\.description).last == "mdutil -i off /Volumes/Visor")
-        try VolumeGuard.check(visor, against: fresh)
-        // Sessions and Sources: made alone, backed up and indexed.
+        try VolumeGuard.check(visor, against: fresh, user: "someone")
+        // Sessions and Sources: made and given to the person, backed up and indexed.
         for role in [VolumeRole.sessions, .sources] {
-            let made = try fresh.state(for: role).createCommands(reserve: 0, quota: 0)
-            #expect(made.map(\.program) == ["/usr/sbin/diskutil"], "\(role)")
+            let made = try fresh.state(for: role).createCommands(reserve: 0, quota: 0, user: "someone")
+            #expect(made.map(\.program) == ["/usr/sbin/diskutil", "/usr/sbin/chown", "/bin/chmod"], "\(role)")
         }
         // All three in one prompt.
-        let all = try VolumeRole.allCases.flatMap { try fresh.state(for: $0).createCommands(reserve: 0, quota: 0) }
-        try VolumeGuard.check(all, against: fresh)
+        let all = try VolumeRole.allCases.flatMap { try fresh.state(for: $0).createCommands(reserve: 0, quota: 0, user: "someone") }
+        try VolumeGuard.check(all, against: fresh, user: "someone")
     }
 
     @Test func anAdoptedVisorHasSpotlightTurnedOffWhenItsFoundIndexing() throws {
