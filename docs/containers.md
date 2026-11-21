@@ -74,7 +74,10 @@ was. So, beside the volumes: the server agent's plist is the app bundle's
 Device, in a computer's settings over SSH, takes its own out), and, with the
 container on, the server's own `claude -p` runs in it (Containers only,
 below). `~/.visor/server.sock` is a link to the volume's socket file for
-0.65 alone, for SSH clients of 0.64, then goes.
+0.65 alone, for SSH clients of 0.64, then goes. Visor Disk Utility's
+Uninstall… removes the rest, a dry run first, and deletes the three
+volumes only when asked, their names typed (docs/DEVELOPMENT.md,
+Uninstall…).
 
 ### Containers only
 

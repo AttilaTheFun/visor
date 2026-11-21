@@ -669,6 +669,38 @@ removed (still only when `agentProxy` is set).
   socket in MacServerAgent.otherServerGone); `~/.visor/server.sock` stays
   only as the socket file of a Mac without the Visor volume. Uninstall…
   removes `~/.visor`.
+- **Uninstall…** (0.65; Visor Disk Utility's toolbar, or `Visor Disk
+  Utility uninstall`, a dry run unless `--yes`): libraries/visor_uninstall
+  plans, from what's there, everything Visor left on the Mac outside its
+  volumes, and Visor Disk Utility runs it (UninstallRunner): Visor quit;
+  the server agent stopped and unregistered (`Visor server-agent
+  unregister`: an app can't unregister another's), 0.64's server plist
+  and agent-proxy's job and plist removed, the agents' hosts still running
+  ended; both keychain services' items (`com.LoganShire.Visor.server` and
+  `com.LoganShire.Visor`), in the login keychain and, under Visor's access
+  group (which a Developer ID build of Visor Disk Utility is signed with
+  too: its own profile must grant it), the data-protection keychain, the
+  app key and the admin token there; the defaults domains of both apps and
+  their Saved State; `tccutil reset All com.LoganShire.Visor`; the
+  `authorized_keys` lines Visor added (`visor:<device>`, and 0.64's
+  `visor`); `~/.visor`, and what's left in Application Support (`Visor`,
+  `com.LoganShire.Visor`), `~/Library/Logs/Visor-*`, the system's Caches
+  and HTTPStorages of both apps, and `/tmp/visor-relaunch.log`. Listed and
+  never removed: `~/.claude/projects/-Volumes-Sessions-…`, Claude Code's
+  own, which Move Back left. Only when asked (`--delete-volumes`), with
+  "delete Sessions, Sources and Visor" typed: the three volumes, by their
+  APFS volume UUIDs through the administrator prompt (VolumeGuard lets
+  those roles alone through). Last, Visor.app and Visor Disk Utility to the
+  Trash. Printed, never run: how to undo a hand-run `tailscale serve` of
+  7433, and the line of `~/.zshrc` that exports `VISOR_ADMIN_TOKEN` (its
+  number, never the token). What no app can remove goes by itself: the
+  unified log expires, and LaunchServices' and notifications' entries drop
+  when the app is deleted.
+- **`Visor admin-token`** prints the admin token to standard output, from
+  the keychain (MacAdminTokenCommand), for a script, so `.zshrc` needn't
+  export it: from 0.65 Visor.app keeps the token itself beside its hash, in
+  the data-protection keychain under the app's group (AdminToken's
+  `keepingToken`). A token made before 0.65 isn't kept: rotate it once.
 - **The app is the server's client alone** (0b). Whichever process
   runs the server, the app reaches it the one way, at its socket file,
   as an SSH client does: no password, through the client stack that

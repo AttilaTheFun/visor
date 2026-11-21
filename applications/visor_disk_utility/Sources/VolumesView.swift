@@ -3,9 +3,11 @@
 import DiskVolumes
 import SwiftUI
 
-/// The three volumes, a refresh, and where Visor reads them from.
+/// The three volumes, a refresh, where Visor reads them from, and
+/// Uninstall….
 struct VolumesView: View {
     @Bindable var model: VolumesModel
+    @State private var uninstall: UninstallModel?
 
     var body: some View {
         ScrollView {
@@ -30,7 +32,12 @@ struct VolumesView: View {
             if model.isBusy {
                 ToolbarItem { ProgressView().controlSize(.small) }
             }
+            ToolbarItem {
+                Button("Uninstall…") { uninstall = UninstallModel() }
+                    .disabled(model.isBusy)
+            }
         }
+        .sheet(item: $uninstall) { UninstallSheet(model: $0) }
         .alert("Visor Disk Utility", isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
