@@ -4,7 +4,8 @@
 // and a second time; the new session in a fresh folder with the old one's
 // agent, model, effort and title "(continued)", HANDOFF.md and Claude's
 // memory in it, and its first prompt; the old one archived, its unread
-// mail moved and its later mail forwarded; and each naming the other.
+// mail moved and its later mail forwarded, along a chain of continuations
+// within a limit and never round a cycle; and each naming the other.
 
 import ClaudeTranscript
 import Foundation
@@ -277,8 +278,121 @@ extension ServerTests {
         // A message written to it by name or id finds the new one too.
         #expect(server.markedTarget(named: "App", except: sender) === next)
         #expect(server.markedTarget(named: "s1", except: sender) === next)
-        #expect(server.forwardedSession("s1") == id)
-        #expect(server.forwardedSession("s9") == "s9")
+        #expect(server.forwarding("s1") == MailForwarding(session: id, hops: 1))
+        #expect(server.forwarding("s9") == MailForwarding(session: "s9"))
+    }
+
+    // MARK: Forwarding along a chain of continuations
+
+    /// Sessions `ids`, each but the last archived and carried on as the next
+    /// (A→B→C, after two cut-overs); `back`, the last carried on as it too.
+    @discardableResult
+    private func chain(_ ids: [String], back: String? = nil) throws -> [SessionRecord] {
+        let records = try ids.map { try session($0, title: "Chain " + $0) }
+        for (record, next) in zip(records, ids.dropFirst()) {
+            record.info.continuedAs = next
+            record.info.archived = true
+        }
+        if let back, let last = records.last {
+            last.info.continuedAs = back
+            last.info.archived = true
+        }
+        return records
+    }
+
+    private func send(to session: String, from sender: SessionRecord, _ text: String = "Hello") -> Envelope {
+        var ask = Envelope(type: "agent")
+        ask.mode = "send"
+        ask.session = session
+        ask.text = text
+        return server.agentReply(ask, caller: sender)
+    }
+
+    @Test func mailFollowsOneContinuation() throws {
+        let sender = try session("s9", title: "Reviews")
+        let records = try chain(["a", "b"])
+        #expect(server.forwarding("a") == MailForwarding(session: "b", hops: 1))
+        let reply = send(to: "a", from: sender)
+        #expect(reply.error == nil, "\(reply.error ?? "")")
+        #expect(reply.text?.contains("forwarded: a was carried on as b, which") == true, "\(reply.text ?? "")")
+        #expect(records[1].mailbox.inbox.map(\.text) == ["Hello"])
+        #expect(records[0].mailbox.inbox.isEmpty)
+    }
+
+    @Test func mailFollowsAChainToItsLastSession() throws {
+        let sender = try session("s9", title: "Reviews")
+        let records = try chain(["a", "b", "c"])
+        #expect(server.forwarding("a") == MailForwarding(session: "c", hops: 2))
+        #expect(server.forwarding("b") == MailForwarding(session: "c", hops: 1))
+        let reply = send(to: "a", from: sender)
+        #expect(reply.error == nil, "\(reply.error ?? "")")
+        // The sender is told the id it went to: the last of the chain.
+        #expect(reply.text?.contains("(c) on") == true, "\(reply.text ?? "")")
+        #expect(reply.text?.contains("forwarded: a was carried on as c through 2 continuations") == true, "\(reply.text ?? "")")
+        #expect(records.map { $0.mailbox.inbox.count } == [0, 0, 1])
+        #expect(server.markedTarget(named: "a", except: sender) === records[2])
+        #expect(server.markedTarget(named: "Chain b", except: sender) === records[2])
+    }
+
+    @Test func aCycleOfContinuationsIsRefused() throws {
+        let sender = try session("s9", title: "Reviews")
+        let records = try chain(["a", "b"], back: "a")
+        let forwarded = server.forwarding("a")
+        #expect(forwarded.session == nil)
+        #expect(forwarded.refusal?.contains("go round in a circle") == true, "\(forwarded.refusal ?? "")")
+        let reply = send(to: "a", from: sender)
+        #expect(reply.error?.contains("circle") == true, "\(reply.error ?? "")")
+        #expect(records.allSatisfy { $0.mailbox.inbox.isEmpty })
+        #expect(server.markedRoute(named: "b", except: sender).refusal?.contains("circle") == true)
+        // A session carried on as itself is a cycle too.
+        let alone = try session("z", title: "Alone")
+        alone.info.continuedAs = "z"
+        #expect(server.forwarding("z").refusal?.contains("circle") == true)
+    }
+
+    @Test func aChainPastTheLimitIsRefused() throws {
+        let sender = try session("s9", title: "Reviews")
+        let limit = VisorServer.forwardingHops
+        // As long as the limit: delivered to its end.
+        let ids = (0...limit).map { "k\($0)" }
+        let records = try chain(ids)
+        #expect(server.forwarding("k0") == MailForwarding(session: "k\(limit)", hops: limit))
+        #expect(send(to: "k0", from: sender).error == nil)
+        #expect(records.last?.mailbox.inbox.count == 1)
+        // One past it: refused, nothing sent.
+        let longer = try session("k\(limit + 1)", title: "Past")
+        records.last?.info.continuedAs = longer.info.id
+        records.last?.info.archived = true
+        let forwarded = server.forwarding("k0")
+        #expect(forwarded.session == nil)
+        #expect(forwarded.refusal?.contains("past \(limit)") == true, "\(forwarded.refusal ?? "")")
+        #expect(send(to: "k0", from: sender).error?.contains("past \(limit)") == true)
+        #expect(longer.mailbox.inbox.isEmpty)
+        // From further along, it is within the limit again.
+        #expect(server.forwarding("k1") == MailForwarding(session: longer.info.id, hops: limit))
+    }
+
+    @Test func aMissingOrArchivedSessionInTheChainIsRefused() throws {
+        let sender = try session("s9", title: "Reviews")
+        let records = try chain(["a", "b", "c"])
+        // The last archived by hand (not carried on): nothing to deliver to.
+        records[2].info.archived = true
+        #expect(server.forwarding("a") == MailForwarding(session: "c", hops: 2))
+        let archived = send(to: "a", from: sender)
+        #expect(archived.error?.contains("carried on as c, which is archived or ended") == true, "\(archived.error ?? "")")
+        #expect(server.markedTarget(named: "a", except: sender) == nil)
+        #expect(server.markedRoute(named: "a", except: sender).refusal?.contains("archived or ended") == true)
+        // The middle one deleted: the chain is broken there.
+        server.sessions.removeAll { $0.info.id == "b" }
+        let forwarded = server.forwarding("a")
+        #expect(forwarded.session == nil)
+        #expect(forwarded.refusal?.contains("a was carried on as b, which is no longer on") == true, "\(forwarded.refusal ?? "")")
+        #expect(send(to: "a", from: sender).error?.contains("no longer on") == true)
+        // One that was never here is not forwarded, and not found.
+        #expect(server.forwarding("nope") == MailForwarding(session: "nope"))
+        #expect(send(to: "nope", from: sender).error?.contains("No other session with that id") == true)
+        #expect(server.forwarding(nil) == MailForwarding(session: nil))
+        #expect(records.allSatisfy { $0.mailbox.inbox.isEmpty })
     }
 
     @Test func aDiscardedHandoffIsNotCutOver() throws {

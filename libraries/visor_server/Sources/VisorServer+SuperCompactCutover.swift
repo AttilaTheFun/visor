@@ -164,7 +164,7 @@ extension VisorServer {
         // (d) Its first prompt.
         deliver(Self.continuingPrompt(title: record.displayName, id: old.id), to: next)
         // (f) Its mail: what waits unread moves over, and what comes for the
-        // old id from now on goes to the new one (forwardedSession).
+        // old id from now on goes to the new one (forwarding).
         let moved = forwardInbox(from: record, to: next)
         // (e) The old one put away, never deleted.
         archive(record)
@@ -231,17 +231,54 @@ extension VisorServer {
         return unread.count
     }
 
-    /// The session mail for `id` goes to: itself, or, for one a Super
-    /// Compact carried on, the session that carries it on now (along a
-    /// chain of them, should that one have been carried on too).
-    func forwardedSession(_ id: String?) -> String? {
-        var current = id
-        var seen: Set<String> = []
-        while let at = current, seen.insert(at).inserted, let next = session(at)?.info.continuedAs, session(next) != nil {
-            current = next
+    /// The most continuations mail follows (A→B→C is two): past them it is
+    /// refused, so a mistaken `continuedAs` never bounces a message for ever.
+    static let forwardingHops = 8
+
+    /// Where mail for `id` goes: itself, or, for one a Super Compact carried
+    /// on, along its `continuedAs` to the last session of the chain (A→B→C,
+    /// after two cut-overs, is C). Refused, saying why, on a cycle (A→B→A),
+    /// past `forwardingHops`, or at a continuation to a session no longer
+    /// here; logged either way.
+    func forwarding(_ id: String?) -> MailForwarding {
+        guard let id else { return MailForwarding(session: nil) }
+        var at = id
+        var seen: Set<String> = [id]
+        var hops = 0
+        while let next = session(at)?.info.continuedAs {
+            let refusal: String? = if session(next) == nil {
+                "\(at) was carried on as \(next), which is no longer on \(hostName)"
+            } else if seen.contains(next) {
+                "the continuations from \(id) go round in a circle (back to \(next) after \(hops + 1))"
+            } else if hops == Self.forwardingHops {
+                "the continuations from \(id) go on past \(Self.forwardingHops)"
+            } else {
+                nil
+            }
+            if let refusal {
+                Self.log("mail for \(id) not forwarded: \(refusal)")
+                return MailForwarding(session: nil, hops: hops, refusal: "Not sent: \(refusal), so there is no session to forward it to.")
+            }
+            seen.insert(next)
+            at = next
+            hops += 1
         }
-        return current
+        if hops > 0 { Self.log("mail for \(id) forwarded to \(at) (\(hops) continuation\(hops == 1 ? "" : "s"))") }
+        return MailForwarding(session: at, hops: hops)
     }
+}
+
+/// Where mail for a session goes (VisorServer.forwarding): the session, the
+/// continuations followed to it, or why it goes nowhere.
+struct MailForwarding: Equatable {
+    /// The one asked for, or the last of its chain of continuations; nil
+    /// when refused.
+    var session: String?
+    /// How many continuations were followed: none for a session not
+    /// carried on.
+    var hops = 0
+    /// Why there is no session to send it to, for its sender.
+    var refusal: String?
 }
 
 /// The session's job that is done and its HANDOFF.md, or the refusal that
