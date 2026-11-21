@@ -34,6 +34,7 @@ swift_test(
         "//:foundation",
         "//libraries/visor_agent_proxy",
         "//libraries/visor_agent_proxy:agent_proxy_c",
+        "//libraries/visor_agent_proxy:visor_agent_proxy_host",
         "//libraries/visor_container:visor_container_core",
         "//libraries/visor_container:visor_container_runner",
         "//libraries/visor_disk_volumes",
