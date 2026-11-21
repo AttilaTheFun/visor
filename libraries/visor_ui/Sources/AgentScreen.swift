@@ -423,14 +423,42 @@ struct AgentScreen: View {
         .onAppear { offerQuestions() }
         .onChange(of: transcript.pendingApproval?.id) { _, _ in offerQuestions() }
         .overlay(alignment: .top) {
-            if info?.archived == true {
-                Text("Archived — a message resumes it")
-                    .font(.caption)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Capsule().fill(Color.secondary.opacity(0.15)))
-                    .padding(.top, 6)
+            VStack(spacing: 6) {
+                // Super Compact's cut-over: the session that carries this
+                // one on, and the one this carries on, each a tap away.
+                if let next = info?.continuedAs {
+                    continuation("Continued as", next, id: "continued-as")
+                } else if info?.archived == true {
+                    Text("Archived — a message resumes it")
+                        .font(.caption)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                }
+                if let previous = info?.continuedFrom {
+                    continuation("Continued from", previous, id: "continued-from")
+                }
             }
+            .padding(.top, 6)
         }
+    }
+
+    /// A row linking to the session `other`, "Continued as “…”" or
+    /// "Continued from “…”": opened in the window when tapped.
+    private func continuation(_ words: String, _ other: String, id: String) -> some View {
+        let title = host.sessions.first { $0.id == other }?.title ?? other
+        return Button { open(.session(SessionSelection(serverID: host.id, sessionID: other))) } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.turn.up.right.circle")
+                Text("\(words) “\(title)”")
+                Image(systemName: "chevron.right").font(.caption2)
+            }
+            .font(.caption)
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(words) “\(title)”")
+        .accessibilityIdentifier(id)
     }
 
     /// Opens the agent's questions when a new request asks some (once

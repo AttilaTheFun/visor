@@ -45,6 +45,8 @@ public struct VisorRootView: View {
     @State private var deletingSession: SessionTarget?
     /// A session being moved to another computer.
     @State private var migrating: SessionMigration?
+    /// A session being super-compacted (its menu's Super Compact…).
+    @State private var superCompacting: SuperCompact?
     @State private var removingProject: ProjectTarget?
     /// A project whose folder the computer can no longer find.
     @State private var troubled: ProjectTarget?
@@ -278,6 +280,11 @@ public struct VisorRootView: View {
                 selection = .session(SessionSelection(serverID: migration.to.id, sessionID: id))
             }
         }
+        .itemSheet($superCompacting) { compact in
+            SuperCompactSheet(compact: compact) { id in
+                selection = .session(SessionSelection(serverID: compact.host.id, sessionID: id))
+            }
+        }
         .itemSheet($locating) { target in
             FolderPicker(host: target.host) { cwd in
                 target.host.relocateProject(target.cwd, to: cwd)
@@ -448,6 +455,12 @@ public struct VisorRootView: View {
                 composeRestores = true
                 composing = true
 
+            case "super-compact-running", "super-compact-review", "super-compact-done":
+                // The sheet over the chat (once carried on, the new session's).
+                let shown = screen == "super-compact-done" ? VisorFixture.continuedSession : VisorFixture.chatSession
+                selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: shown))
+                openFixtureSuperCompact()
+
             case "settings":
                 // Beside a chat: the case a Mac's layout looped on with two
                 // inspectors (TrailingPane).
@@ -455,6 +468,21 @@ public struct VisorRootView: View {
                 settingsPresented.wrappedValue = true
             default:
                 break
+            }
+        }
+    }
+
+    /// The fixture's Super Compact sheet, of the chat, once its computer
+    /// has listed it.
+    private func openFixtureSuperCompact() {
+        Task { @MainActor in
+            for _ in 0..<100 {
+                if let host = store.server(for: VisorFixture.serverID),
+                   let chat = host.sessions.first(where: { $0.id == VisorFixture.chatSession }) {
+                    superCompacting = SuperCompact(session: chat, host: host)
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 100_000_000)
             }
         }
     }
@@ -623,6 +651,13 @@ public struct VisorRootView: View {
                 }
             } label: {
                 Label("Migrate…", systemImage: "arrow.right.circle")
+            }
+        }
+        // Its conversation condensed into HANDOFF.md, reviewed, and a new
+        // session carrying the work on from it (docs/super-compact.md).
+        if session.agent == .claude, host.superCompacts {
+            Button { superCompacting = SuperCompact(session: session, host: host) } label: {
+                Label("Super Compact…", systemImage: "arrow.down.right.and.arrow.up.left")
             }
         }
         // Into a runner's container, the same session carried on there

@@ -24,6 +24,9 @@ extension FeatureMapTests {
             ("models", .model),
             ("inspector", .details),
             ("settings", .settings),
+            ("super-compact-running", .superCompactRunning),
+            ("super-compact-review", .superCompactReview),
+            ("super-compact-done", .superCompactDone),
         ]
 
         @Test("A fixture screen opens its node", arguments: screens)

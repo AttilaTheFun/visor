@@ -63,11 +63,15 @@ extension VisorServer {
 
     /// A session of this server's that a message names: by its name or its
     /// id, ignoring case; not the sender, and not ended or archived.
+    /// One archived by a Super Compact's cut-over is the session that
+    /// carries it on (forwardedSession).
     func markedTarget(named name: String, except sender: SessionRecord?) -> SessionRecord? {
-        sessions.first { record in
-            record !== sender && !record.info.ended && !record.info.archived
-                && (Self.sameName(record.displayName, name) || record.info.id == name)
-        }
+        let named: (SessionRecord) -> Bool = { Self.sameName($0.displayName, name) || $0.info.id == name }
+        if let found = sessions.first(where: { $0 !== sender && !$0.info.ended && !$0.info.archived && named($0) }) { return found }
+        guard let carried = sessions.first(where: { $0.info.continuedAs != nil && named($0) }),
+              let next = session(forwardedSession(carried.info.id)), next !== carried, next !== sender,
+              !next.info.ended, !next.info.archived else { return nil }
+        return next
     }
 
     /// The written messages waiting for a computer and session by name,

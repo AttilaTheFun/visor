@@ -42,6 +42,11 @@ flowchart TD
     NewSession["New Session"]
     Restore["Restore a session<br/>(New Session's Restore)"]
     Export["Export a session"]
+    SuperCompact["Super Compact<br/>(ready to start)"]
+    SCRunning["Super Compact running"]
+    SCReview["Super Compact review<br/>(HANDOFF.md)"]
+    SCEdit["Edit HANDOFF.md"]
+    SCDone["Super Compact done<br/>(continued)"]
     Folder["Choose a folder"]
     Chat["Session chat"]
     Approval["Approval controls<br/>(in the chat)"]
@@ -74,6 +79,16 @@ flowchart TD
     Sessions -->|"longpress session-‹id›, tap “Migrate…”"| Migrate
     Sessions -->|"longpress session-‹id›, tap “Export…”"| Export
     Export -->|"tap export-done"| Sessions
+    Sessions -->|"longpress session-‹id›, tap “Super Compact…”"| SuperCompact
+    SuperCompact -->|"tap super-compact-start"| SCRunning
+    SCRunning -->|"tap super-compact-cancel"| SuperCompact
+    SCRunning -.->|"the job runs to its end"| SCReview
+    SCReview -->|"tap super-compact-edit"| SCEdit
+    SCEdit -->|"type super-compact-editor ‹text›, tap super-compact-save"| SCReview
+    SCReview -->|"tap super-compact-discard, “Discard”"| SuperCompact
+    SCReview -->|"tap super-compact-cutover"| SCDone
+    SCDone -->|"tap super-compact-open or super-compact-done"| Chat
+    Chat -->|"tap continued-from or continued-as"| Chat
     Search -->|"tap session-‹id› or message-hit"| Chat
     Archived -->|"swipe archived-session-‹id› left, “Unarchive”"| Sessions
 
@@ -125,6 +140,11 @@ that opens it directly (see "Driving it" below).
 | New Session | a sheet; text "New Session" | `computer` (several computers), `choice`, `project`, `project-chosen`, `conversation` (New, Resume, Restore), `resume-id`, `title`, `first-message`, `start-error`, `start` | `new-session` |
 | Restore a session | New Session's sheet with `import-archive` listed (`conversation` on Restore) | `restore-‹id›` (each imported or backed-up session; one still on the computer is disabled, "remove it first"), `import-archive` ("Import…": a session archive, `.visorsession`, from the system's file picker), `import-error`, `start` ("Restore"), `start-error` | `restore` (the fixture's computer keeps `fixture-imported`, "Field notes", imported from "Mini", and a backup of `fixture-chat`, which is here) |
 | Export a session | a sheet; `export-progress`, `export-save` or `export-error` listed | `export-progress`, `export-save` ("Save…": the save panel, opened at once on the Mac), `export-share` ("Share…", the iPhone's share sheet), `export-said`, `export-error`, `export-done` | none: `longpress session-fixture-chat` on `sessions`, then tap "Export…" (the fixture's archive is "Offline sync-2026-11-20.visorsession") |
+| Super Compact | a sheet; `super-compact-start` listed ("Start", or "Carry On" after a failed job; "The last one was cancelled." or "The last handoff was discarded." under it) | `super-compact-start`, `super-compact-error`, `super-compact-done` ("Done") | none: `longpress session-fixture-chat` on `sessions`, then tap "Super Compact…" (Claude's sessions only) |
+| Super Compact running | a sheet; `super-compact-progress` and `super-compact-cancel` listed | `super-compact-progress` (the phase: "Summarizing chunk n of N", the merge, "Writing HANDOFF.md"), `super-compact-cancel`, `super-compact-warnings`, `super-compact-done` | `super-compact-running` (the map at chunk 12 of 40, where it stays); a job started in the fixture runs to its end in about ten seconds |
+| Super Compact review | a sheet; `super-compact-cutover`, `super-compact-edit` and `super-compact-discard` listed | `super-compact-secrets-note` ("This summary was written from the session's transcript. It may include secrets…"), `super-compact-warnings` (the check's), `super-compact-cutover` ("Start New Session"), `super-compact-edit`, `super-compact-discard` (then the alert's "Discard"), HANDOFF.md drawn as markdown ("Handoff: Offline sync" in the fixture) | `super-compact-review` |
+| Edit HANDOFF.md | a sheet; `super-compact-editor` and `super-compact-save` listed | `super-compact-editor` (a text editor), `super-compact-save` ("Save"), `super-compact-edit-cancel` ("Cancel") | none: `super-compact-review`, then tap `super-compact-edit` |
+| Super Compact done | a sheet; `super-compact-continued` listed ("Continued as “Offline sync (continued)”.") | `super-compact-continued`, `super-compact-open`, `super-compact-done` | `super-compact-done` (the chat carried on already: `fixture-chat` archived, `fixture-continued` "Offline sync (continued)" open behind the sheet). The chats show `continued-as` ("Continued as “…”", on the old session) and `continued-from` ("Continued from “…”", on the new), each opening the other |
 | Choose a folder | text "Choose a folder" | `folder-path`, `choose-folder` | none |
 | Session chat | `session-title` and "Send" listed (on the iPhone, with the composer empty, "Dictate" stands where "Send" is); in `commands` the iPhone shows the slash commands in a popover over the chat, and the driver lists only the popover | `session-title` ("Session details"), `attach`, `model` and `goal` (not while an approval or question waits: Approval controls take their place), `loop`, `queued`, "Send", `busy-actions`, `dictate`, `copy-message`, `branch-message`, `share-message`, `attachment-‹file›`, `new-rows-pill`, `suggestion-/‹command›` | `chat`, `goal`, `earlier`, `commands`, `responding` (a reply being written: its words so far as the chat opens, more four seconds on, "Writing…" in the status line, then its row on the record in its place, once, about ten seconds on) |
 | Approval controls | `allow` and `deny`, or `answer`, listed | `allow`, `deny`, `answer` | `chat` (a Bash approval is pending) |

@@ -422,7 +422,10 @@ extension VisorServer {
                 return "\(info.id) — \(record.displayName) (\(info.agent.title), \(info.busy ? "working" : "idle")) in \(info.cwd)"
             }.joined(separator: "\n")
         case "send":
-            guard let target = others.first(where: { $0.info.id == envelope.session }) else {
+            // Mail for a session a Super Compact carried on goes to the one
+            // that carries it on (VisorServer+SuperCompactCutover).
+            let addressed = forwardedSession(envelope.session)
+            guard let target = others.first(where: { $0.info.id == addressed }) else {
                 reply.error = "No other session with that id; list_sessions names them."
                 return reply
             }
@@ -438,7 +441,10 @@ extension VisorServer {
             let messageID = envelope.messageID ?? UUID().uuidString.lowercased()
             let inbox = target.takesMail
             let busy = mail(text, from: from, to: target, messageID: messageID, here: computer == nil)
-            let to = "“\(target.displayName)” (\(target.info.id)) on \(hostName)"
+            var to = "“\(target.displayName)” (\(target.info.id)) on \(hostName)"
+            if let asked = envelope.session, asked != target.info.id {
+                to += " (forwarded: \(asked) was carried on as \(target.info.id), which is the session to write to from now on)"
+            }
             if inbox {
                 reply.text = "Delivered to the inbox of \(to), message id \(messageID): its agent is told it has mail"
                     + (busy ? " when its turn ends." : ".")

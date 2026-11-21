@@ -117,6 +117,12 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// nil before its first, and from a server before 0.61, which a client
     /// takes as the person's own.
     public var turnOrigin: TurnOrigin?
+    /// Super Compact's cut-over (docs/super-compact.md): the session that
+    /// carries this one's work on, from its HANDOFF.md, once this one is
+    /// archived for it (its mail goes there from then on); and, on that
+    /// session, the one it carries on. Nil from a server before 0.64.
+    public var continuedAs: String?
+    public var continuedFrom: String?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -185,5 +191,7 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         mailChanged = try c.decodeIfPresent(Double.self, forKey: .mailChanged)
         notifications = try c.decodeIfPresent(Bool.self, forKey: .notifications) ?? true
         turnOrigin = (try? c.decodeIfPresent(TurnOrigin.self, forKey: .turnOrigin)) ?? nil
+        continuedAs = try c.decodeIfPresent(String.self, forKey: .continuedAs)
+        continuedFrom = try c.decodeIfPresent(String.self, forKey: .continuedFrom)
     }
 }
