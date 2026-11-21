@@ -9,21 +9,21 @@ import Synchronization
 import VisorServer
 
 /// A secret, read again each minute.
-final class KeptSecret: Sendable {
+public final class KeptSecret: Sendable {
     private let key: String
     private let secrets: any SecretStore
     private let every: TimeInterval
     private let state = Mutex<(read: Date, value: String?)>((.distantPast, nil))
 
     /// `name` is agent-proxy's own (`github-token`, `mcp/token`, …).
-    init(_ name: String, in secrets: any SecretStore, every: TimeInterval = 60) {
+    public init(_ name: String, in secrets: any SecretStore, every: TimeInterval = 60) {
         key = AgentProxySettings.secretKey(name)
         self.secrets = secrets
         self.every = every
     }
 
     /// As kept now, trimmed; nil for none.
-    var value: String? {
+    public var value: String? {
         state.withLock { state in
             if Date().timeIntervalSince(state.read) >= every {
                 state.read = Date()

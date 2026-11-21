@@ -54,6 +54,13 @@ public actor ContainerizationBackend: ContainerAssetBackend {
         _ = try await EXT4Unpacker(capacityInBytes: capacityBytes).unpack(image, for: Self.platform, at: destination)
     }
 
+    /// The image's own process settings (its environment, working folder,
+    /// user), linux/arm64's; nil when it has none.
+    func imageConfig(_ reference: String, store: URL) async throws -> ImageConfig? {
+        let image = try await self.store(store).get(reference: reference)
+        return try await image.config(for: Self.platform).config
+    }
+
     private func store(_ folder: URL) throws -> ImageStore {
         let key = folder.standardizedFileURL
         if let kept = stores[key] { return kept }

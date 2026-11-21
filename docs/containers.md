@@ -8,11 +8,14 @@ of its own). It lives in Visor's background server (`Visor --server`), so
 quitting or reopening Visor.app leaves it running; an update of the server
 restarts it, and its sessions resume from Sessions.
 
-This is being built in steps. What's here now (**PR 1, the assets and
-settings**): the Containerization dependency, the virtualization
-entitlement, the assets (fetched, checked, kept), Visor's Linux programs
-staged for it, its settings and Settings' readiness row. The container
-doesn't boot yet: that's the engine's (PR 2).
+This is being built in steps. What's here now: **PR 1, the assets and
+settings** (the Containerization dependency, the virtualization
+entitlement, the assets fetched, checked and kept, Visor's Linux programs
+staged for it, its settings and Settings' readiness row), and **PR 2, the
+engine** (the container booted in the server agent, its relay to
+agent-proxy, the egress check, processes exec'd in it, the idle stop, and
+its status in the API and Settings). No session is placed in it yet: that's
+step 4's.
 
 ## Requirements
 
@@ -120,6 +123,7 @@ none is the defaults, off:
 | `memoryGiB` | Half of what's free when it starts, at least 4, at most 24 | At most all of this Mac's less 4 GiB. The cap minds that Nimbus will run VMs and containers on the Mini (32 GB) too; set it lower there if need be. Memory the guest frees isn't given back while it runs: the idle stop gives it back. |
 | `idleMinutes` | 30 | Minutes with no session in it before it's stopped. |
 | `imageDigest` | none | An agent image digest in place of the release's. |
+| `checkouts` | none | A folder of this Mac's (an absolute path) shared read-write at the same path, for the checkouts. Still open: see below. |
 
 A value that isn't one (a tag for `imageDigest`, a CPU count of 0) reads as
 its default.
@@ -130,32 +134,114 @@ readiness row: macOS 26 or later, Apple silicon, Virtualization, the
 Containers volume, and the assets on it (present, or what's missing: the
 engine fetches them when it first starts), with the image it would run.
 
+## The engine
+
+`ContainerEngine` (`VisorContainerCore`, over a `ContainerBackend`:
+VisorContainer's `ContainerizationMachines` on a Mac, a fake in the tests)
+runs in the server agent (`Visor --server`, MacSessionsContainer), not in
+the app's own server: the VM lives in that one process, so an update of the
+server restarts it, and its sessions resume from Sessions (a turn in
+progress interrupted). There's no helper process of its own.
+
+- **One container per Mac,** `visor-sessions`: Containerization's
+  `LinuxContainer` with `VZVirtualMachineManager`, the kernel, the init
+  filesystem read-only as the VM's `/`, and `sessions/rootfs.ext4` (an APFS
+  clone of the image's template) as its root filesystem. The clone is kept
+  across starts while the image is the same (what agents installed stays)
+  and made again from a new image's template at the next start, which is
+  only ever when it's idle. CPUs and memory are the settings' (the VM gets
+  Containerization's guest overhead on top).
+- **No network interface** (`interfaces = []`). Its only way out is the
+  relay, below.
+- **Shares** (virtiofs): `/Volumes/Sessions` at the same path, read-write;
+  `tools/<version>/` read-only at `/opt/visor/bin`; and the checkouts'
+  folder (`container.checkouts`) at its own path where the settings name
+  one. Nothing else.
+- **Its main process** is `/opt/visor/bin/relay-client run --relay
+  /run/agent-proxy/relay.sock -- <a shell that waits>`, as root, with
+  Containerization's init (signals forwarded, zombies reaped). Its lines go
+  to `sessions/logs/relay-client.log`, the guest's console to
+  `sessions/boot.log`.
+- **The lifecycle:** it starts on first use (an exec, or Start), and stops
+  once nothing has run in it and no session has been placed in it for
+  `idleMinutes`. A server's start starts it again if a session is placed in
+  it. If its main process ends, it's stopped (with the error said), and its
+  next use starts it again. Turned off in Settings, it's stopped.
+- **Processes:** `ContainerEngine.exec(ContainerExec)` runs one (its
+  arguments, environment over the image's, working folder, and output
+  appended to `sessions/logs/<id>.log`), and gives a `ContainerExecution`
+  to signal and wait on. Step 4 runs each session's agent-wrapper so.
+
+### Egress: the relay
+
+- `HostRelay` listens on `run/relay.sock` in Visor's data folder (a folder
+  of this user's alone; a socket's path must be under 104 bytes), carried
+  into the guest at `/run/agent-proxy/relay.sock`
+  (`UnixSocketConfiguration(direction: .into)`).
+- Each connection on it is a TCP stream to **agent-proxy's relay port** on
+  loopback (in the same process: agent-proxy is folded into the server
+  agent), begun with the PROXY v2 header naming the container (TLV 0xE1,
+  `visor-sessions`) and proving the relay (TLV 0xE2, the relay's token,
+  `agent-proxy/relay-token` in the server's secrets, read again each
+  minute), then spliced both ways. agent-proxy applies the egress policy,
+  the GitHub gate and the egress log.
+- **The relay port:** turning the container on gives agent-proxy one when
+  it has none (`agentProxy.relayPort`, kept in the settings): 7438 if it's
+  free, else the first free of 7440–7498 and 7500–7599. Never Visor's own
+  7433, 7434 or 7439 (nor the MCP pass-through's, if it's moved), and never
+  7499, Shireworks' relay on the Mini, which may be free only while
+  Shireworks is stopped. agent-proxy is started again with it at once.
+- **The egress check:** before the boot, the relay-client link check
+  (ToolsFolder's rule on the staged copy); after it, `relay-client check`
+  run in the guest, which asks agent-proxy's health (`GET /` through the
+  relay's socket: nothing resolved, nothing on the internet). Three tries.
+  If either fails, or there's no relay port, the container is **no
+  egress**: processes (session starts) are refused, and Start (Check Again)
+  runs the check again.
+
+### Its status
+
+`GET /api/container` (an admin's, as every REST route is) answers its state
+(`off`, `starting`, `running`, `no-egress`, `stopped`), whether it's on and
+whether this server can run it, its CPUs, memory and idle minutes, the
+image's digest, the processes in it, the relay port, what the egress check
+said, and the latest errors. `POST /api/container/start` and `/stop` answer
+the same after. A server without the engine (Linux, the app's own server)
+answers `off`, saying why. Settings › Sessions Container shows it, with
+Start, Stop and Check Again.
+
 ## Still open
 
 - **Where the sessions' checkouts live** (case sensitivity). Both Macs'
   Sessions volumes are case-insensitive today, and virtiofs passes that to
   Linux, where `Foo.h` and `foo.h` are two files. Proposed: a third,
   case-sensitive APFS volume for checkouts (`/Volumes/Work`, never erased),
-  made by Visor Disk Utility and mounted at the same path. Nothing in PR 1
-  decides it (a TODO in `ContainerLayout`).
+  made by Visor Disk Utility and mounted at the same path. The engine
+  doesn't decide it: `container.checkouts` names a folder to share at its
+  own path, and none is shared unless it's set.
 
 ## What's next
 
-- **PR 2, the container engine in the server:** a no-network boot from these
-  assets (`Kernel`, the init filesystem as `/`, a clone of the template as
-  the root filesystem), Sessions over virtiofs at `/Volumes/Sessions`,
-  `tools/<version>/` read-only at `/opt/visor/bin`, `HostRelay` carrying
-  agent-proxy's relay socket in, the relay-client check after boot, the idle
-  stop, and recovery after a crash. Booting is tested on the bare-metal
-  MacBook (`//tools/e2e/container`), never in a VM lease.
 - **PR 3, the driver link and the Linux agent-wrapper:** a dedicated
   `driver.sock` to `127.0.0.1:7434`, carried in at `/run/visor/driver.sock`.
+- **Step 4, the container runner:** sessions placed in the container, each
+  its agent-wrapper exec'd (`ContainerEngine.exec`), counted as placed for
+  the idle stop and the start with the server.
 
 ## Testing
 
 - `//tests/visor_container_tests` (in `//tests:linux`, and on a Mac): the
   pins and container.json, the layout, fetching and checking against a
-  fake backend, the link rule, and the readiness row.
+  fake backend, the link rule, and the readiness row; the engine against a
+  fake VM backend (the boot spec, the link check and the egress check, no
+  egress refusing processes, first use, the idle stop, the start with a
+  server, the root filesystem kept or cloned, a crash, turning it off), and
+  `HostRelay` against a fake agent-proxy relay (the header's bytes, the
+  splice, the token re-read, no agent-proxy) and agent-proxy's own relay
+  listener (`relay-client check`'s health answer through it, and not with
+  another token). `//tests/visor_server_tests`: `/api/container` (an
+  admin's; off without an engine) and the relay port given when it's turned
+  on (never 7499).
   `//tests/visor_container_tests:visor_container_mac_tests` (macOS): this
   Mac's readiness and memory, and the Containerization backend's archive
   reading. The settings' decoding is in `//tests/visor_server_tests`.
@@ -163,3 +249,13 @@ engine fetches them when it first starts), with the image it would run.
   --root <folder>` fetches, checks and unpacks everything for real, then
   again to show it's kept. It needs no Virtualization, so it runs in a macOS
   VM lease.
+- `bazel run //tools/e2e/container --config=apple_cross_mac -- --linux
+  <Linux programs> [--image <reference by digest>]` boots it for real, **on
+  bare metal only** (never a macOS VM: it can't nest): on a throwaway data
+  folder in /tmp, with agent-proxy's relay listener in its own process on a
+  free port, it checks the boot and `relay-client check`, `uname`, a file
+  each way through `/Volumes/Sessions/.visor-e2e-container-<id>`, and no
+  LAN (only `lo`, and this Mac's addresses and a private one refused), then
+  stops and deletes everything. `--linux` is a build's
+  `Contents/Resources/Linux` with `relay-client check`'s health answer
+  (0.64 or later).

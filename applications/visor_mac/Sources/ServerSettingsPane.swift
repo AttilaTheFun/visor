@@ -70,7 +70,7 @@ struct ServerSettingsPane: View {
             adminTokenSection(controls)
             pathsSection(controls)
             agentsSection(controls)
-            ContainerSettingsSection(settings: controls.settings, send: send)
+            ContainerSettingsSection(settings: controls.settings, client: local.client, send: send)
             devicesSection(controls)
             pushSection(controls)
             if local.mode == .agent || local.note != nil { backgroundSection }
