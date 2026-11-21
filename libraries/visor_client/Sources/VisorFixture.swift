@@ -96,6 +96,8 @@ public enum VisorFixture {
             info.reportedModel = nil
             info.contextUsed = 48_000
             info.contextLimit = 200_000
+            // On its computer, as a 0.64 server says.
+            info.placement = .host
             return info
         }
         var chat = session(chatSession, .claude, "/Users/visor/Developer/weather", "Offline sync",
@@ -118,9 +120,12 @@ public enum VisorFixture {
                     model: "gpt-5.5", preview: "The limiter now allows bursts of 20 per minute.", age: 86_400),
         ]
         // On the `machines` screen, where each runs: the widget's agent in a
-        // container (the server's own); the rest on the Mac.
+        // container (the server's own), the release notes' in the Mac's
+        // Sessions container; the rest on the Mac.
         if screen == "machines" {
             widget.inContainer = true
+            docs.placement = .container
+            sessions = sessions.map { $0.id == docs.id ? docs : $0 }
             sessions = sessions.map { $0.id == widget.id ? widget : $0 }.map { session in
                 var session = session
                 session.system = session.inContainer == true ? "linux" : "macos"

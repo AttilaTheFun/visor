@@ -6,8 +6,9 @@
 // relay's socket in the data folder's run/ (this user's alone), carried to
 // agent-proxy's relay port in this same process with the relay's token from
 // the server's secrets; and the driver link's socket beside it, carried to
-// this server's driver (agent_protocol's AgentDriver, 127.0.0.1:7434). No
-// session is placed in it yet (step 4).
+// this server's driver (agent_protocol's AgentDriver, 127.0.0.1:7434). The
+// sessions placed in it (the server's container runner) have their
+// agent-wrappers started in it, and keep it from its idle stop.
 
 import DiskVolumes
 import Foundation
@@ -15,6 +16,7 @@ import Synchronization
 import VisorAgentProxyHost
 import VisorContainer
 import VisorContainerCore
+import VisorContainerRunner
 import VisorProtocol
 import VisorServer
 
@@ -23,8 +25,10 @@ final class MacSessionsContainer: SessionsContainer {
     /// The server's settings as last told.
     private let settings: KeptSettings
 
+    /// `placed`: how many sessions are placed in it now, whose agents
+    /// should run (the server's).
     @MainActor
-    init(settings: ServerSettings) {
+    init(settings: ServerSettings, placed: @escaping @Sendable () async -> Int) {
         let kept = KeptSettings(settings)
         self.settings = kept
         let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
@@ -46,6 +50,7 @@ final class MacSessionsContainer: SessionsContainer {
             assets: images,
             backend: ContainerizationMachines(images: images),
             configuration: { Self.configuration(kept.current, manifest: manifest) },
+            placedSessions: placed,
             log: { ServerPlatform.current.log($0) }))
     }
 
@@ -68,6 +73,12 @@ final class MacSessionsContainer: SessionsContainer {
     func start() async -> ContainerStatus { await engine.start() }
 
     func stop() async -> ContainerStatus { await engine.stop() }
+
+    func restart() async -> ContainerStatus { await engine.restart() }
+
+    var sharedFolders: [String] { engine.sharedFolders(engine.context.configuration()) }
+
+    func startAgent(_ agent: ContainerAgent) async throws -> any ContainerAgentRun { try await engine.startAgent(agent) }
 
     @MainActor
     func settingsChanged(_ settings: ServerSettings) {

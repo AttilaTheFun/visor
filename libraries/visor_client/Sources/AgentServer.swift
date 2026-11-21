@@ -212,6 +212,12 @@ public protocol AgentServer: AnyObject {
     /// is kept as.
     func importFinish(_ token: String) async throws -> SessionBackup
 
+    // MARK: The Sessions container (`/api/container`)
+
+    /// How its Sessions container stands: nil from a server that has none,
+    /// or doesn't say (before 0.64). What Migrate… offers it by.
+    func sessionsContainer() async -> ContainerStatus?
+
     // MARK: Super Compact (`/api/sessions/<id>/super-compact`)
 
     /// Whether this server condenses a session's conversation into
@@ -295,6 +301,7 @@ public extension AgentServer {
     func importUpload(size: Int, name: String) async throws -> String { throw AgentServerError.unsupported }
     func importWrite(_ token: String, offset: Int, data: String) async throws -> Int { throw AgentServerError.unsupported }
     func importFinish(_ token: String) async throws -> SessionBackup { throw AgentServerError.unsupported }
+    func sessionsContainer() async -> ContainerStatus? { nil }
     var superCompacts: Bool { false }
     func superCompact(of session: String) async throws -> SuperCompactStatus? { throw AgentServerError.unsupported }
     func startSuperCompact(_ session: String) async throws -> SuperCompactStatus { throw AgentServerError.unsupported }

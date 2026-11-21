@@ -378,6 +378,7 @@ extension VisorServer {
         mcpProxy.forget(session: record.info.id)
         dropWaiters(for: record.info.id)
         jobs?.forget(session: record.info.id)
+        containerRunner.release(session: record.info.id)
         Self.log("session ended: \(record.info.title)")
         saveArchiveNow()
         broadcastSessions()

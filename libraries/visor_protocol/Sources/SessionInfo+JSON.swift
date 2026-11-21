@@ -37,6 +37,7 @@ extension SessionInfo {
         if let turnOrigin { o["turnOrigin"] = .string(turnOrigin.rawValue) }
         if let continuedAs { o["continuedAs"] = .string(continuedAs) }
         if let continuedFrom { o["continuedFrom"] = .string(continuedFrom) }
+        if let placement { o["placement"] = .string(placement.rawValue) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -77,6 +78,7 @@ extension SessionInfo {
         turnOrigin = json["turnOrigin"].string.flatMap(TurnOrigin.init(rawValue:))
         continuedAs = json["continuedAs"].string
         continuedFrom = json["continuedFrom"].string
+        placement = json["placement"].string.flatMap(SessionPlacement.init(rawValue:))
         preview = json["preview"].string
         updated = json["updated"].double
     }

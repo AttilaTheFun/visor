@@ -12,7 +12,9 @@ import Foundation
 import Synchronization
 import Testing
 import VisorAgentProxy
+import VisorAgentProxyHost
 import VisorContainerCore
+import VisorServer
 
 @Suite struct HostRelayTests {
     /// A short folder for a socket (a socket's path must be under 104 bytes).
@@ -22,8 +24,9 @@ import VisorContainerCore
         return url
     }
 
-    /// A fake relay listener: it reads the PROXY header, keeps it, answers
-    /// "header ok\n", then echoes what comes. Its port, and what it heard.
+    /// A fake relay listener, at a port the system picked: it reads the
+    /// PROXY header, keeps it, answers "header ok\n", then echoes what
+    /// comes. Its port, and what it heard.
     final class FakeRelay: Sendable {
         let port: Int
         private let listener: Int32
@@ -31,15 +34,9 @@ import VisorContainerCore
         let raw = Mutex<[[UInt8]]>([])
 
         init?() {
-            for _ in 0..<20 {
-                let port = Int.random(in: 20000...45000)
-                let listener = agent_proxy_listen(UInt16(port), 0)
-                guard listener >= 0 else { continue }
-                self.port = port
-                self.listener = listener
-                return
-            }
-            return nil
+            guard let (listener, port) = LoopbackPorts.listener() else { return nil }
+            self.port = port
+            self.listener = listener
         }
 
         func start() {
@@ -145,9 +142,9 @@ import VisorContainerCore
         let relay = HostRelay(socketPath: socket, port: fake.port, token: { token.withLock { $0 } })
         try relay.start()
         defer { relay.stop() }
-        _ = exchange(socket, "x")
+        #expect(exchange(socket, "x") == "header ok\nx")
         token.withLock { $0 = "second" }
-        _ = exchange(socket, "y")
+        #expect(exchange(socket, "y") == "header ok\ny")
         #expect(fake.raw.withLock { $0 } == [HostRelay.header(token: "first"), HostRelay.header(token: "second")])
         // None: the stream is closed, and nothing reaches agent-proxy.
         token.withLock { $0 = nil }
@@ -158,12 +155,13 @@ import VisorContainerCore
     @Test func noAgentProxyClosesTheStream() throws {
         let folder = try folder()
         defer { try? FileManager.default.removeItem(at: folder) }
-        let fake = try #require(FakeRelay())
-        let port = fake.port
-        fake.stop()
+        // A port held closed, not a fake relay stopped: another test could
+        // listen at a port let go.
+        let closed = try #require(LoopbackPorts.closed())
+        defer { closed.release() }
         let socket = folder.appendingPathComponent("relay.sock").path
         let lines = Mutex<[String]>([])
-        let relay = HostRelay(socketPath: socket, port: port, token: { "relay-secret" }, log: { line in lines.withLock { $0.append(line) } })
+        let relay = HostRelay(socketPath: socket, port: closed.port, token: { "relay-secret" }, log: { line in lines.withLock { $0.append(line) } })
         try relay.start()
         defer { relay.stop() }
         #expect(exchange(socket, "CONNECT x:1 HTTP/1.1\r\n\r\n") == "")
@@ -213,6 +211,43 @@ import VisorContainerCore
         let (ok, line) = RelayHealthCheck.run(path: socket, timeout: 5)
         #expect(ok, "\(line)")
         #expect(line.contains("agent-proxy answers"))
+    }
+
+    /// The relay's token as the engine reads it (from the server's secrets,
+    /// once agent-proxy has started on them) is agent-proxy's own, and it
+    /// takes the first stream at once: agent-proxy made its token before it
+    /// read it, so it never held "none" for its first minute (21 Nov: a
+    /// container booted within that minute had no egress).
+    @Test func aFreshAgentProxysTokenIsTheEnginesAndTakesTheFirstStreamAtOnce() throws {
+        let folder = try folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let secrets = MemorySecrets()
+        let key = AgentProxySettings.secretKey(AgentProxySettings.relayTokenName)
+        #expect(secrets.get(key) == nil, "no token before agent-proxy starts")
+        var running: AgentProxyHost.Running?
+        var port = 0
+        for _ in 0..<20 where running?.relay == nil {
+            port = Int.random(in: 20000...45000)
+            running = AgentProxyHost.start(AgentProxySettings(relayPort: port), places: AgentProxyHost.Places(dataDirectory: folder),
+                                           secrets: secrets, version: "test", log: { _ in })
+        }
+        let proxy = try #require(running)
+        defer { proxy.stop() }
+        let token = try #require(secrets.get(key), "agent-proxy made its token")
+        #expect(!token.isEmpty)
+        // The engine's side, as MacSessionsContainer reads it: the same store.
+        let engines = KeptSecret(AgentProxySettings.relayTokenName, in: secrets)
+        #expect(engines.value == token, "the engine's relay token is agent-proxy's")
+        let lines = Mutex<[String]>([])
+        let socket = folder.appendingPathComponent("relay.sock").path
+        let relay = HostRelay(socketPath: socket, port: port, token: { engines.value }, log: { line in lines.withLock { $0.append(line) } })
+        try relay.start()
+        defer { relay.stop() }
+        let (ok, line) = RelayHealthCheck.run(path: socket, timeout: 5)
+        #expect(ok, "the first stream taken, within agent-proxy's first minute: \(line)")
+        let said = lines.withLock { $0 }
+        #expect(said.contains { $0.hasPrefix("relay: its first stream framed with the relay's token (") }, "\(said)")
+        #expect(!said.contains { $0.contains(token) }, "never the token itself")
     }
 
     @Test func relayClientsHealthCheckFailsWithAnotherToken() throws {

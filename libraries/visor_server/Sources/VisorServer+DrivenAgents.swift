@@ -21,6 +21,8 @@ extension VisorServer {
     @discardableResult
     func resumeDriven(_ record: SessionRecord, why: String) -> Bool {
         guard record.driven else { return false }
+        // In the Sessions container: Visor starts its next agent itself.
+        if isInContainer(record) { return resumeInContainer(record, why: why) }
         guard let jobs else {
             return refuseDriven(record, "Its agent runs on a runner, and this server takes no jobs for runners: nothing was started.")
         }
@@ -66,6 +68,8 @@ extension VisorServer {
         // Told to stop if its wrapper is connected; a stop held for one that
         // isn't goes with this process, not to the next agent's wrapper.
         record.process.stop()
+        // In the Sessions container: ended there if it doesn't by itself.
+        containerRunner.release(session: record.info.id)
         if let drivenProcess { record.replaceProcess(drivenProcess(record.info)) }
         if record.info.busy {
             broadcast(record.apply(.activity(nil)), session: record)

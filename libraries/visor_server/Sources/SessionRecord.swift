@@ -131,12 +131,16 @@ public final class SessionRecord {
     /// changed go out with the session's info, for clients to read it again.
     /// Run under agent_protocol's wrapper, with this server as its driver
     /// (VisorDriver): its rows come over the wrapper's stream.
-    package var driven = false
+    package var driven = false {
+        didSet { info.placement = Self.placement(driven: driven, move: move) }
+    }
     /// A driven session's move to a runner: the agent that carries it on
     /// there, its conversation and folder here, where it works there. Kept
     /// with the session (sessions.json) while it is driven; only moveBack
     /// clears it.
-    package var move: AgentJobMove?
+    package var move: AgentJobMove? {
+        didSet { info.placement = Self.placement(driven: driven, move: move) }
+    }
     /// Whether a driven session's agent runs in a container (its job asks
     /// for one, or a container runner took it: VisorDriver's
     /// JobQueue.runsInContainer), as its driver says when its wrapper
@@ -269,6 +273,7 @@ public final class SessionRecord {
         self.info.delivered = []
         self.info.system = Self.system(of: info)
         self.info.inContainer = Self.inContainer(info)
+        self.info.placement = .host
         self.process = process
         self.entries = entries
         self.shownPrompts = shownPrompts
@@ -360,6 +365,13 @@ public final class SessionRecord {
     /// In a container this server didn't make for it: the server's own.
     static func inContainer(_ info: SessionInfo) -> Bool? {
         ServerPlatform.current.host.inContainer ? true : nil
+    }
+
+    /// Where a session's agent runs: this computer, unless driven; then the
+    /// Sessions container (Visor's own), or a dispatcher's runner.
+    static func placement(driven: Bool, move: AgentJobMove?) -> SessionPlacement {
+        guard driven else { return .host }
+        return move?.runsOn == ContainerRunner.runsOn ? .container : .runner
     }
 
     static func system(of info: SessionInfo) -> String? {

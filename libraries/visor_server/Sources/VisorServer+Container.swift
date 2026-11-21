@@ -1,6 +1,6 @@
 // The Sessions container, as the server serves it (docs/containers.md):
 // `GET /api/container`, its state, resources, image and errors, and
-// `POST /api/container/start` and `/stop`, each an admin's (as every REST
+// `POST /api/container/start`, `/stop` and `/restart`, each an admin's (as every REST
 // route is); and turning it on giving agent-proxy a relay port, its way out,
 // where none is set. Without an engine (Linux, the app's own server, a
 // test), it's off, and says why.
@@ -17,7 +17,7 @@ extension VisorServer {
     func routeContainer(_ request: HTTPRequest, parts: [String], respond: @escaping (HTTPResponse) -> Void) {
         let action = parts.count == 2 ? parts[1] : nil
         switch (request.method, parts.count, action) {
-        case ("GET", 1, nil), ("POST", 2, "start"), ("POST", 2, "stop"): break
+        case ("GET", 1, nil), ("POST", 2, "start"), ("POST", 2, "stop"), ("POST", 2, "restart"): break
         default: return respond(HTTPResponse(404, "{\"error\":\"not found\"}"))
         }
         guard let engine = sessionsContainer else {
@@ -29,6 +29,7 @@ extension VisorServer {
             let status = switch action {
             case "start": await engine.start()
             case "stop": await engine.stop()
+            case "restart": await engine.restart()
             default: await engine.status()
             }
             respond(.json(status.json.encoded()))

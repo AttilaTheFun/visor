@@ -12,30 +12,72 @@ final class Lines: Sendable {
     var all: [String] { lines.withLock { $0 } }
 }
 
-/// A listener on a free loopback port, its connections each handled on a
-/// thread of its own by `handle`.
+/// A socket listening on 127.0.0.1 at a port the system picked (port 0,
+/// read back), and that port: not one picked at random, which another
+/// test, in this process or a target run beside it, could pick too. Nil
+/// when it can't listen.
+func loopbackListener() -> (socket: Int32, port: UInt16)? {
+    let listener = agent_proxy_listen(0, 0)
+    guard listener >= 0 else { return nil }
+    guard let port = boundPort(listener) else {
+        close(listener)
+        return nil
+    }
+    return (listener, port)
+}
+
+/// A port on 127.0.0.1 where a connection is refused until `release`: a
+/// socket bound there without SO_REUSEADDR and never listened on, so no
+/// other listener can take it while it's held (as one just let go can be).
+/// At the file's level, where `bind` is the system's (in a test case,
+/// NSObject's own `bind` comes first on the Mac).
+func closedLoopbackPort() -> (port: UInt16, release: @Sendable () -> Void)? {
+    #if canImport(Glibc)
+    let holder = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+    #else
+    let holder = socket(AF_INET, SOCK_STREAM, 0)
+    #endif
+    guard holder >= 0 else { return nil }
+    var address = sockaddr_in()
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let bound = withUnsafePointer(to: &address) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(holder, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+    }
+    guard bound == 0, let port = boundPort(holder) else {
+        close(holder)
+        return nil
+    }
+    return (port, { close(holder) })
+}
+
+/// The port `socket` is bound to.
+private func boundPort(_ socket: Int32) -> UInt16? {
+    var bound = sockaddr_in()
+    var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+    let named = withUnsafeMutablePointer(to: &bound) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(socket, $0, &length) }
+    }
+    return named == 0 ? UInt16(bigEndian: bound.sin_port) : nil
+}
+
+/// A listener on a loopback port the system picked, its connections each
+/// handled on a thread of its own by `handle`.
 final class LoopbackServer: Sendable {
     let port: UInt16
     private let listener: Int32
 
     init?(_ handle: @escaping @Sendable (Int32) -> Void) {
-        for _ in 0..<20 {
-            let port = UInt16.random(in: 20000...45000)
-            let socket = agent_proxy_listen(port, 0)
-            if socket >= 0 {
-                self.port = port
-                listener = socket
-                Thread.detachNewThread { [listener] in
-                    while true {
-                        let connection = agent_proxy_accept(listener)
-                        if connection < 0 { return }
-                        Thread.detachNewThread { handle(connection) }
-                    }
-                }
-                return
+        guard let (socket, port) = loopbackListener() else { return nil }
+        self.port = port
+        listener = socket
+        Thread.detachNewThread { [listener] in
+            while true {
+                let connection = agent_proxy_accept(listener)
+                if connection < 0 { return }
+                Thread.detachNewThread { handle(connection) }
             }
         }
-        return nil
     }
 
     func stop() {

@@ -148,6 +148,11 @@ public final class AgentServerConnection: Identifiable {
     /// The last command that failed, for the UI.
     public var commandError: String?
 
+    /// How the computer's Sessions container stood when last asked (on
+    /// connecting, and after a move): nil when it has none, or doesn't
+    /// say. Migrate… offers it while it takes sessions.
+    public internal(set) var container: ContainerStatus?
+
     /// The server's subfolders of `path` (the picker); the resolved path comes back too.
     public func folders(at path: String) async throws -> (path: String, folders: [String]) {
         let listing = try await server.folders(at: path)
@@ -882,6 +887,7 @@ public final class AgentServerConnection: Identifiable {
             // A folder may have been renamed or moved while we were away.
             Task { await refreshMissing() }
             if server.starting.fromChoices { Task { await loadStartChoices() } }
+            Task { await refreshContainer() }
             registerForPush()
         case .catalogs(let catalogs):
             self.catalogs = catalogs
@@ -1477,6 +1483,36 @@ public final class AgentServerConnection: Identifiable {
     /// runner unless another label is given; the server refuses one that
     /// has work not pushed, is mid-turn, or isn't Claude Code's.
     public func moveToRunner(_ sessionID: String, runsOn: String = "container") { act(.moveToRunner(runsOn: runsOn), on: sessionID) }
+
+    /// The session into the computer's Sessions container, carried on there
+    /// on the same conversation; the server refuses one that is mid-turn,
+    /// archived, has work not pushed, or while the container can't take it.
+    public func moveToContainer(_ sessionID: String) {
+        perform { [weak self] in
+            let list = try await self?.server.act(.moveToContainer, on: sessionID) ?? []
+            self?.take(list, replacing: false)
+            await self?.refreshContainer()
+        }
+    }
+
+    /// The session back on the computer itself from its container (or a
+    /// runner), its conversation handed back.
+    public func moveBack(_ sessionID: String) {
+        perform { [weak self] in
+            let list = try await self?.server.act(.moveBack, on: sessionID) ?? []
+            self?.take(list, replacing: false)
+            await self?.refreshContainer()
+        }
+    }
+
+    /// Whether Migrate… offers the computer's Sessions container: it has
+    /// one, on, that takes sessions now.
+    public var takesContainerSessions: Bool { container?.takesSessions == true }
+
+    /// How its Sessions container stands, asked again.
+    func refreshContainer() async {
+        container = await server.sessionsContainer()
+    }
 
     /// The conversation went on elsewhere: keep to the branch shown (the
     /// next message carries it on and makes it the newest again), or

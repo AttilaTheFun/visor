@@ -62,7 +62,7 @@ enum MacServerAgent {
         // so turning it on has given agent-proxy its relay port before
         // agent-proxy is folded in; started again once it is, if a session
         // is placed in it.
-        let container = MacSessionsContainer(settings: server.settings)
+        let container = MacSessionsContainer(settings: server.settings, placed: { await server.placedInContainer })
         server.sessionsContainer = container
         Task {
             await MacAgentProxy.foldIn(server)
