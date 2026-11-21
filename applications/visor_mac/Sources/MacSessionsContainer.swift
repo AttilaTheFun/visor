@@ -19,11 +19,11 @@ import VisorServer
 final class MacSessionsContainer: SessionsContainer {
     let engine: ContainerEngine
     /// The server's settings as last told.
-    private let settings: Mutex<ServerSettings>
+    private let settings: KeptSettings
 
     @MainActor
     init(settings: ServerSettings) {
-        let kept = Mutex(settings)
+        let kept = KeptSettings(settings)
         self.settings = kept
         let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
         let images = ContainerizationBackend()
@@ -40,7 +40,7 @@ final class MacSessionsContainer: SessionsContainer {
             relayToken: { token.value },
             assets: images,
             backend: ContainerizationMachines(images: images),
-            configuration: { Self.configuration(kept.withLock { $0 }, manifest: manifest) },
+            configuration: { Self.configuration(kept.current, manifest: manifest) },
             log: { ServerPlatform.current.log($0) }))
     }
 
@@ -66,10 +66,7 @@ final class MacSessionsContainer: SessionsContainer {
 
     @MainActor
     func settingsChanged(_ settings: ServerSettings) {
-        let before = self.settings.withLock { held -> ServerSettings in
-            defer { held = settings }
-            return held
-        }
+        let before = self.settings.replace(with: settings)
         // A relay port given (the container turned on): agent-proxy, in
         // this process, listens on it.
         if before.agentProxy != settings.agentProxy { MacAgentProxy.refold(settings.agentProxy) }
@@ -78,4 +75,21 @@ final class MacSessionsContainer: SessionsContainer {
     }
 
     func loopbackPortIsFree(_ port: Int) -> Bool { LoopbackPort.isFree(port) }
+}
+
+/// The server's settings, as the engine reads them from any thread.
+private final class KeptSettings: Sendable {
+    private let value: Mutex<ServerSettings>
+
+    init(_ settings: ServerSettings) { value = Mutex(settings) }
+
+    var current: ServerSettings { value.withLock { $0 } }
+
+    /// `settings` kept; what was kept before.
+    func replace(with settings: ServerSettings) -> ServerSettings {
+        value.withLock { held in
+            defer { held = settings }
+            return held
+        }
+    }
 }
