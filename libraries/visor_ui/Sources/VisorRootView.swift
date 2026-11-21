@@ -641,17 +641,8 @@ public struct VisorRootView: View {
                 Label("Export…", systemImage: "square.and.arrow.up")
             }
         }
-        // To another computer connected now; this one keeps the session
-        // until the user removes it.
-        let others = store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }
-        if host.migrates, !others.isEmpty {
-            Menu {
-                ForEach(others, id: \.id) { other in
-                    Button(other.record.name) { migrating = SessionMigration(session: session, from: host, to: other) }
-                }
-            } label: {
-                Label("Migrate…", systemImage: "arrow.right.circle")
-            }
+        MigrateMenu(session: session, host: host, others: store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }) {
+            other in migrating = SessionMigration(session: session, from: host, to: other)
         }
         // Its conversation condensed into HANDOFF.md, reviewed, and a new
         // session carrying the work on from it (docs/super-compact.md).
@@ -659,11 +650,6 @@ public struct VisorRootView: View {
             Button { superCompacting = SuperCompact(session: session, host: host) } label: {
                 Label("Super Compact…", systemImage: "arrow.down.right.and.arrow.up.left")
             }
-        }
-        // Into a runner's container, the same session carried on there
-        // (docs/runners.md); the server says why when it can't.
-        if session.agent == .claude {
-            Button { host.moveToRunner(session.id) } label: { Label("Move to a Runner", systemImage: "shippingbox") }
         }
         // The command that picks the same conversation up in a terminal
         // on the computer itself.

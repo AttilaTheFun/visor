@@ -71,6 +71,8 @@ extension VisorAgentServer {
         case .moveToRunner(let runsOn):
             var e = Envelope(type: "moveToRunner"); e.session = session; e.runsOn = runsOn
             reply = try await call("POST", base + "/moveToRunner", e)
+        case .moveToContainer: reply = try await call("POST", base + "/moveToContainer")
+        case .moveBack: reply = try await call("POST", base + "/moveBack")
         }
         return reply.sessions ?? []
     }
