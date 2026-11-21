@@ -35,6 +35,8 @@ extension SessionInfo {
         // Absent is on, as from a server that has no switch.
         if !notifications { o["notifications"] = .bool(false) }
         if let turnOrigin { o["turnOrigin"] = .string(turnOrigin.rawValue) }
+        if let continuedAs { o["continuedAs"] = .string(continuedAs) }
+        if let continuedFrom { o["continuedFrom"] = .string(continuedFrom) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -73,6 +75,8 @@ extension SessionInfo {
         mailChanged = json["mailChanged"].double
         notifications = json["notifications"].bool ?? true
         turnOrigin = json["turnOrigin"].string.flatMap(TurnOrigin.init(rawValue:))
+        continuedAs = json["continuedAs"].string
+        continuedFrom = json["continuedFrom"].string
         preview = json["preview"].string
         updated = json["updated"].double
     }

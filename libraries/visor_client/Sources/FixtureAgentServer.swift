@@ -131,7 +131,25 @@ final class FixtureAgentServer: AgentServer {
         }
     }
 
-    func sessions() async throws -> [SessionInfo] { kept((Self.welcome.sessions ?? []) + restored) }
+    func sessions() async throws -> [SessionInfo] { kept(listed) }
+
+    /// The fixture's sessions, those restored, and the chat carried on
+    /// once it has been (Super Compact's cut-over).
+    var listed: [SessionInfo] {
+        let all = (Self.welcome.sessions ?? []) + restored
+        return cutOver ? VisorFixture.continued(all) : all
+    }
+
+    // Super Compact (FixtureAgentServer+SuperCompact): the chat's job, its
+    // HANDOFF.md as edited, and whether it has been cut over.
+    // The job is the screen's until the first call asks for it (`seeded`).
+    var superCompactJob: SuperCompactStatus?
+    var superCompactSeeded = false
+    /// A job started here runs on to its end (the one the running screen
+    /// opens on stays where it is, for its pictures).
+    var superCompactFinishes = false
+    var superCompactHandoff = VisorFixture.handoff
+    var cutOver = false
     func startSession(id: String, agent: AgentKind, cwd: String, title: String, skipPermissions: Bool, resume: String?) async throws -> [SessionInfo] { [] }
     func act(_ action: SessionAction, on session: String) async throws -> [SessionInfo] {
         guard case .notifications(let on) = action else { return [] }
@@ -225,6 +243,7 @@ final class FixtureAgentServer: AgentServer {
             throw CancellationError()
         }
         let rows = session == VisorFixture.chatSession ? VisorFixture.transcript
+            : session == VisorFixture.continuedSession ? VisorFixture.continuedTranscript
             : [TranscriptEntry(id: session + "-1", role: .user, text: "Start on this."),
                TranscriptEntry(id: session + "-2", role: .assistant, text: VisorFixture.sessions.first { $0.id == session }?.preview ?? "")]
         var e = Envelope.transcript(session: session, entries: rows, streaming: "", activity: nil, busy: false, error: nil)

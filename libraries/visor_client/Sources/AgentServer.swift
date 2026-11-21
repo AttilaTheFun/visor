@@ -209,6 +209,26 @@ public protocol AgentServer: AnyObject {
     /// is kept as.
     func importFinish(_ token: String) async throws -> SessionBackup
 
+    // MARK: Super Compact (`/api/sessions/<id>/super-compact`)
+
+    /// Whether this server condenses a session's conversation into
+    /// HANDOFF.md and carries the session on from it (docs/super-compact.md).
+    var superCompacts: Bool { get }
+    /// The session's job running, else its latest; nil when it has had none.
+    func superCompact(of session: String) async throws -> SuperCompactStatus?
+    /// Starts a job on the session (or carries its failed one on).
+    func startSuperCompact(_ session: String) async throws -> SuperCompactStatus
+    /// Cancels the session's running job, or discards a handoff that is
+    /// done and waiting for its review.
+    func cancelSuperCompact(_ session: String) async throws -> SuperCompactStatus
+    /// HANDOFF.md of the session's job that is done.
+    func superCompactHandoff(of session: String) async throws -> String
+    /// The person's edits saved as HANDOFF.md: the job, its check run on them.
+    func saveSuperCompactHandoff(of session: String, text: String) async throws -> SuperCompactStatus
+    /// The cut-over: the new session started from HANDOFF.md, the old one
+    /// archived. The new session's id, and the server's sessions.
+    func superCompactCutover(_ session: String) async throws -> (session: String, sessions: [SessionInfo])
+
     // MARK: Identity and SSH
 
     /// What the server said of itself at the last sign-in: its id and
@@ -270,6 +290,15 @@ public extension AgentServer {
     func importUpload(size: Int, name: String) async throws -> String { throw AgentServerError.unsupported }
     func importWrite(_ token: String, offset: Int, data: String) async throws -> Int { throw AgentServerError.unsupported }
     func importFinish(_ token: String) async throws -> SessionBackup { throw AgentServerError.unsupported }
+    var superCompacts: Bool { false }
+    func superCompact(of session: String) async throws -> SuperCompactStatus? { throw AgentServerError.unsupported }
+    func startSuperCompact(_ session: String) async throws -> SuperCompactStatus { throw AgentServerError.unsupported }
+    func cancelSuperCompact(_ session: String) async throws -> SuperCompactStatus { throw AgentServerError.unsupported }
+    func superCompactHandoff(of session: String) async throws -> String { throw AgentServerError.unsupported }
+    func saveSuperCompactHandoff(of session: String, text: String) async throws -> SuperCompactStatus { throw AgentServerError.unsupported }
+    func superCompactCutover(_ session: String) async throws -> (session: String, sessions: [SessionInfo]) {
+        throw AgentServerError.unsupported
+    }
     var identity: ServerIdentity? { nil }
     func authorizeSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
 }

@@ -13,13 +13,10 @@ each a setting; the person reviews (and may edit) the handoff before
 anything is cut over, which is always required; usage is no concern, but
 the server runs **one compaction at a time**, for its disk and CPU.
 
-This is the server's half (0.64, PR A): the job, its endpoints, its
-settings. The client's (PR B) adds the session menu's Super Compact…, the
-progress and review sheet, and the cut-over: a new session (the same
-title with "(continued)", the same agent, model and effort, HANDOFF.md in
-its folder, Claude's project memory copied, its first prompt to read
-HANDOFF.md in full), the original archived and never deleted, and its
-inbox forwarded to the new id.
+The server's job, its endpoints and settings came first (0.64, PR A);
+then the client's half and the cut-over (PR B): the session menu's Super
+Compact…, the sheet that follows the job and shows HANDOFF.md for review,
+and the cut-over, the server's, below.
 
 ## The endpoints
 
@@ -29,7 +26,10 @@ Admin-only, as every REST route (docs/protocol.md, "Who gets in").
 |---|---|
 | `POST /api/sessions/<id>/super-compact` | `202` with the job (below): started on a snapshot of the session's conversation, the session running on meanwhile. When the session's last job failed, that one carries on from where it failed instead. `409` while any job runs on this server ("one at a time per server"); `400` for a session that isn't Claude's or has no conversation yet, or when `claude` isn't on this computer; `404` when its conversation file isn't here. |
 | `GET /api/sessions/<id>/super-compact` | The session's job running, else its latest; `404` when it has had none. |
-| `DELETE /api/sessions/<id>/super-compact` | Cancels the session's running job (its call under way is ended at once): the job, `phase` `cancelled`. `404` when none runs. A cancelled job is over for good. |
+| `DELETE /api/sessions/<id>/super-compact` | Cancels the session's running job (its call under way is ended at once): the job, `phase` `cancelled`. A job done and waiting for its review has its handoff discarded instead (`discarded`, a time): nothing is cut over from it. `404` when there is neither. A cancelled job is over for good. |
+| `GET /api/sessions/<id>/super-compact/handoff` | HANDOFF.md of the session's job that is done: `{"type":"handoff","text":…,"path":…}`. `409` while the job runs or when it ended otherwise, `404` without one. |
+| `PUT /api/sessions/<id>/super-compact/handoff` | The person's edits, `{"text":…}`, saved in place of HANDOFF.md, and the check run again on them: the job, with its new `warnings`. At most 8 MiB (`413` past it); `409` once the handoff has been started from or discarded. |
+| `POST /api/sessions/<id>/super-compact/cutover` | The cut-over (below): `{"type":"cutover","session":‹new id›,"cwd":…,"message":…,"sessions":[…]}`. `409` unless the job is done and waiting for its review, and while the session is mid-turn. |
 
 The job (`type` `superCompact`, SuperCompactJob, kept as `job.json` in its
 folder): `id`, `session`, `conversation` (Claude's id), `title`; `source`
@@ -40,12 +40,17 @@ and `sourceBytes`, the conversation's file and the snapshot; `folder`;
 `filteredCharacters`; `settings`, as it began with them; `error` (why it
 failed, or the attempt that last had to be tried again); `warnings` (the
 check's); `handoff` (HANDOFF.md's path, once written); `started`,
-`updated`, `finished` (seconds since 1970).
+`updated`, `finished` (seconds since 1970); `continuedAs`, the session
+started from it once it is cut over, and `discarded`, when its handoff was
+thrown away instead.
 
 ## How it runs
 
 Each job has a folder in the server's data folder,
-`super-compact/<session>/<job>/`, and every step's output is a file there,
+`super-compact/<session>/<job>/`, each folder down to it its owner's alone
+(0700, set again on one that was there already): they hold the
+conversation's text, and the first lines of its tools' results can carry
+tokens. Every step's output is a file there,
 written once it is whole. A step whose file is there is done, so a job
 the server went away under (it halts the job when it steps aside or
 quits) carries on when the server starts again, from its last finished
@@ -129,6 +134,72 @@ hooks, plugins, skills: `--safe-mode`), and nothing kept of the call, so it
 never shows among the sessions to resume. A call that fails, answers in
 another form than asked, or runs past an hour is tried again, three times
 in all; then the job fails, saying why, and `POST` carries it on.
+
+## The review
+
+The session menu's **Super Compact…** (Claude's sessions, on a server
+that has it) opens a sheet over the session (SuperCompactSheet, its
+model SuperCompact in visor_client):
+
+- **Start** begins the job (**Carry On** after a failed one). The sheet
+  then follows it, asking every two seconds while it is open: the phase,
+  the map's chunk n of N, the merge's step, the final step, a call that had
+  to be tried again, and **Cancel Super Compact**. The job runs on the
+  server whether the sheet is open or not; opened again, the sheet picks
+  it up where it is.
+- **Done**, it shows HANDOFF.md for review, as markdown, cut at its
+  headings. Above it, a note: "This summary was written from the
+  session's transcript. It may include secrets that appeared in tool
+  output, so check before using it." Then the check's warnings, and:
+  - **Edit**: HANDOFF.md in a text editor, saved with `PUT …/handoff`
+    (the check runs again on the edit);
+  - **Start New Session**: the cut-over;
+  - **Discard**: the handoff thrown away (`DELETE`), and nothing changes.
+- **Review is required.** Nothing is cut over on its own: only Start New
+  Session, on a job that is done, does it.
+- Once cut over, the sheet says so and the new session opens. The old
+  session's chat shows a **Continued as “…”** row linking to the new one
+  (`continued-as`), and the new one's a **Continued from “…”** row back
+  (`continued-from`).
+
+## The cut-over
+
+`POST …/super-compact/cutover`, the server's alone, since only it can do
+every step together. It is refused unless the session's latest job is
+done, waiting for its review (not cut over, not discarded), and while the
+session is mid-turn. Then:
+
+1. **The new session**, started as a client's start makes one, in a fresh
+   folder: the server's folder for each session (VISOR_SESSIONS_DIR's
+   `<dir>/Claude/<id>`), else `Sessions/Claude/<id>` in its data folder, as
+   a session moved here gets. Its agent, model, effort and permissions
+   are the old one's, and its title the old one's with " (continued)".
+2. **HANDOFF.md** (as reviewed and edited) is copied into that folder.
+3. **Claude's project memory**, keyed by the folder (`memory` beside the
+   old conversation, `~/.claude/projects/<old key>/memory/`, or under
+   the project of the old session's folder), is copied under the new
+   folder's project (`~/.claude/projects/<new key>/memory/`), as a move
+   carries it (VisorServer+MigrationMemory), never over one that is there.
+4. **Its first prompt:** "You're continuing session "‹old title›"
+   (‹old id›). Read HANDOFF.md in this folder in full, in parts if it's
+   long, before anything else, and treat its rules and decisions as the
+   person's own."
+5. **The old session is archived**, never deleted: its conversation stays
+   where it is, exportable by copying its files by hand, as it is over the
+   archive caps.
+6. **Its inbox is forwarded.** The unread messages move to the new
+   session's inbox, addressed to it, and its agent is told it has mail
+   once its first turn ends; what was read stays. From then on, mail to
+   the old id (`send_message`, a relayed message, or one written as
+   `@@to`, by its id or name) goes to the new session, along a chain of
+   them should that one be carried on too; the sender is told it was
+   forwarded and which id to write to. The forwarding entry is the old
+   session's `continuedAs`, kept with it.
+7. **Each names the other:** `continuedAs` on the old session and
+   `continuedFrom` on the new (SessionInfo), and the job's `continuedAs`.
+
+The answer's `message` says what was copied (the memory's files) and how
+many messages moved.
 
 ## Settings
 

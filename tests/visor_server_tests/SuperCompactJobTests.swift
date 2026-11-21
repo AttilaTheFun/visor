@@ -191,6 +191,23 @@ extension ServerTests {
         #expect(server.superCompaction == nil)
     }
 
+    /// The jobs' folders are their owner's alone (0700), down to each
+    /// job's: they hold the conversation's text, and the first lines of
+    /// its tools' results can carry tokens. One there already is made so.
+    @Test func theFoldersAreTheOwnersAlone() async throws {
+        try session("s1")
+        try FileManager.default.createDirectory(at: VisorServer.superCompactRoot, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o755])
+        let begun = try job(rest("POST", "s1"))
+        let ended = try await finish()
+        #expect(ended.phase == .done, "\(ended.error ?? "")")
+        let folders = [VisorServer.superCompactRoot, VisorServer.superCompactRoot.appendingPathComponent("s1"), begun.folderURL]
+        for folder in folders {
+            let mode = try FileManager.default.attributesOfItem(atPath: folder.path)[.posixPermissions] as? NSNumber
+            #expect(mode?.intValue == 0o700, "\(folder.path): \(String(mode?.intValue ?? 0, radix: 8))")
+        }
+    }
+
     /// The server went away mid-map (halted, as it is when it steps aside
     /// or quits): the next server carries the job on from the last chunk
     /// finished, not from the start.
