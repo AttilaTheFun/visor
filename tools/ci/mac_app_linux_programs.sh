@@ -10,16 +10,22 @@
 # is unpacked or packed again. CI's signing job then signs the app around
 # them (tools/ci/sign_builds.sh).
 #
-#   tools/ci/mac_app_linux_programs.sh <Mac app .zip> <linux-programs .tar>
+# Given a third file, the container.json //tools/container_manifest wrote
+# (docs/containers.md: the Sessions container's image digest and pins), it
+# goes in as Contents/Resources/container.json beside them.
+#
+#   tools/ci/mac_app_linux_programs.sh <Mac app .zip> <linux-programs .tar> [<container.json>]
 #
 # Fails if the tar lacks any of the three (or the links aren't links to
 # visor-server), or the app has them already.
 set -euo pipefail
-[ $# -eq 2 ] || { echo "usage: tools/ci/mac_app_linux_programs.sh <Mac app .zip> <linux-programs .tar>" >&2; exit 2; }
-python3 -I - "$1" "$2" <<'PY'
-import stat, sys, tarfile, zipfile
+[ $# -eq 2 ] || [ $# -eq 3 ] \
+  || { echo "usage: tools/ci/mac_app_linux_programs.sh <Mac app .zip> <linux-programs .tar> [<container.json>]" >&2; exit 2; }
+python3 -I - "$@" <<'PY'
+import json, stat, sys, tarfile, zipfile
 
 app_zip, programs = sys.argv[1:3]
+manifest = sys.argv[3] if len(sys.argv) > 3 else None
 
 def fail(message):
     sys.exit(f"mac_app_linux_programs: {message}")
@@ -40,9 +46,19 @@ with zipfile.ZipFile(app_zip) as archive:
 apps = {name.split("/", 1)[0] for name in names if name.split("/", 1)[0].endswith(".app")}
 if len(apps) != 1:
     fail(f"{app_zip} holds {len(apps)} apps, not one")
-folder = f"{apps.pop()}/Contents/Resources/Linux/"
+app = apps.pop()
+folder = f"{app}/Contents/Resources/Linux/"
 if any(name.startswith(folder) for name in names):
     fail(f"{app_zip} has {folder} already")
+manifest_name = f"{app}/Contents/Resources/container.json"
+manifest_bytes = None
+if manifest is not None:
+    if manifest_name in names:
+        fail(f"{app_zip} has {manifest_name} already")
+    with open(manifest, "rb") as handle:
+        manifest_bytes = handle.read()
+    if "image" not in json.loads(manifest_bytes):
+        fail(f"{manifest} is not a container.json")
 
 def entry(name, mode):
     info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
@@ -60,5 +76,9 @@ with zipfile.ZipFile(app_zip, "a") as archive:
     for link in ("visor-agent-host", "relay-client"):
         archive.writestr(entry(folder + link, stat.S_IFLNK | 0o777), b"visor-server",
                          compress_type=zipfile.ZIP_STORED)
+    if manifest_bytes is not None:
+        archive.writestr(entry(manifest_name, stat.S_IFREG | 0o644), manifest_bytes, compress_type=zipfile.ZIP_DEFLATED)
 print(f"{folder}visor-server, and visor-agent-host and relay-client -> visor-server, into {app_zip}")
+if manifest_bytes is not None:
+    print(f"{manifest_name}, into {app_zip}")
 PY

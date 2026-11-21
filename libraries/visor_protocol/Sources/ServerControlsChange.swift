@@ -16,10 +16,12 @@ public struct ServerControlsChange: Equatable, Sendable {
     public var tlsPassword: String?
     public var detachAgents: Bool?
     public var clientsKeepMessages: Bool?
+    /// The Sessions container on or off (ContainerSettings.enabled).
+    public var containerEnabled: Bool?
 
     public init(password: String? = nil, authentication: String? = nil, lan: Bool? = nil, vpn: Bool? = nil, sshEnabled: Bool? = nil,
                 proxyEnabled: Bool? = nil, publicAddress: String? = nil, tlsIdentityPath: String? = nil, tlsPassword: String? = nil,
-                detachAgents: Bool? = nil, clientsKeepMessages: Bool? = nil) {
+                detachAgents: Bool? = nil, clientsKeepMessages: Bool? = nil, containerEnabled: Bool? = nil) {
         self.password = password
         self.authentication = authentication
         self.lan = lan
@@ -31,5 +33,6 @@ public struct ServerControlsChange: Equatable, Sendable {
         self.tlsPassword = tlsPassword
         self.detachAgents = detachAgents
         self.clientsKeepMessages = clientsKeepMessages
+        self.containerEnabled = containerEnabled
     }
 }

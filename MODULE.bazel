@@ -147,6 +147,8 @@ use_repo(
     swift_deps,
     "swift_package",
     "swiftpkg_agent_protocol",
+    # Apple's Containerization, for libraries/visor_container (the Mac's).
+    "swiftpkg_containerization",
     "swiftpkg_agent_ui",
     "swiftpkg_grpc_swift_2",
     "swiftpkg_grpc_swift_nio_transport",

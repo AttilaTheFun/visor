@@ -12,6 +12,7 @@ extension ServerControlsChange {
         if let tlsPassword { o["tlsPassword"] = .string(tlsPassword) }
         if let detachAgents { o["detachAgents"] = .bool(detachAgents) }
         if let clientsKeepMessages { o["clientsKeepMessages"] = .bool(clientsKeepMessages) }
+        if let containerEnabled { o["containerEnabled"] = .bool(containerEnabled) }
         return .object(o)
     }
 
@@ -20,6 +21,6 @@ extension ServerControlsChange {
                   vpn: json["vpn"].bool, sshEnabled: json["sshEnabled"].bool, proxyEnabled: json["proxyEnabled"].bool,
                   publicAddress: json["publicAddress"].string, tlsIdentityPath: json["tlsIdentityPath"].string,
                   tlsPassword: json["tlsPassword"].string, detachAgents: json["detachAgents"].bool,
-                  clientsKeepMessages: json["clientsKeepMessages"].bool)
+                  clientsKeepMessages: json["clientsKeepMessages"].bool, containerEnabled: json["containerEnabled"].bool)
     }
 }

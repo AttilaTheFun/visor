@@ -57,5 +57,13 @@ let package = Package(
             url: "https://github.com/AttilaTheFun/update_kit.git",
             exact: "0.17.0"
         ),
+        // Apple's Containerization (docs/containers.md): the Sessions
+        // container's image store, ext4 unpacking and init filesystem, and,
+        // from the container engine on, its VM. The Mac's alone
+        // (libraries/visor_container, macOS only): nothing Linux builds
+        // depends on it. Its vminit initfs is the same version's
+        // (ContainerPins). It asks for swift-collections 1.2 or later, and
+        // brings async-http-client and zstd.
+        .package(url: "https://github.com/apple/containerization.git", exact: "0.57.0"),
     ]
 )

@@ -53,7 +53,9 @@ extension VisorServer {
         controls.settings = ServerControls.Settings(authentication: settings.authentication, lan: settings.lan, vpn: settings.vpn,
                                                     sshEnabled: settings.sshEnabled, proxyEnabled: settings.proxyEnabled,
                                                     publicAddress: settings.publicAddress, tlsIdentityPath: settings.tlsIdentityPath,
-                                                    detachAgents: settings.detachAgents, clientsKeepMessages: settings.clientsKeepMessages)
+                                                    detachAgents: settings.detachAgents, clientsKeepMessages: settings.clientsKeepMessages,
+                                                    containerEnabled: settings.container?.enabled ?? false,
+                                                    containerImageDigest: settings.container?.imageDigest ?? "")
         controls.detachingSet = Self.detachingSet()
         let key = apnsKey
         controls.apnsKeyID = key.keyID
@@ -84,6 +86,11 @@ extension VisorServer {
         if let tlsIdentityPath = change.tlsIdentityPath { next.tlsIdentityPath = tlsIdentityPath }
         if let detachAgents = change.detachAgents { next.detachAgents = detachAgents }
         if let clientsKeepMessages = change.clientsKeepMessages { next.clientsKeepMessages = clientsKeepMessages }
+        if let containerEnabled = change.containerEnabled {
+            var container = next.container ?? ContainerSettings()
+            container.enabled = containerEnabled
+            next.container = container
+        }
         if next != settings { settings = next }
         if let tlsPassword = change.tlsPassword, !tlsPassword.isEmpty { setTLSPassword(tlsPassword) }
         if let password, password != self.password {
