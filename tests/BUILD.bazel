@@ -2,8 +2,10 @@
 # the server's (its Apple system's apart, by hand on a Mac), the driver's,
 # the message cache's, the transcript parser's, the Runner agent's, the
 # native settings' launch values (visor_services_tests), agent-proxy's and
-# relay-client's, the Disk Utility's volume model's, and the server agent's
-# launchd job, hand-over and restart watch (visor_launch_agent_tests).
+# relay-client's, the Disk Utility's volume model's, the server agent's
+# launchd job, hand-over and restart watch (visor_launch_agent_tests), and
+# the Sessions container's assets' core (visor_container_tests: no
+# Containerization, which is the Mac's alone).
 test_suite(
     name = "linux",
     tests = [
@@ -11,6 +13,7 @@ test_suite(
         "//tests/message_cache_tests",
         "//tests/visor_agent_proxy_tests",
         "//tests/visor_agent_proxy_tests:relay_client_tests",
+        "//tests/visor_container_tests",
         "//tests/visor_disk_volumes_tests",
         "//tests/visor_driver_tests",
         "//tests/visor_launch_agent_tests",

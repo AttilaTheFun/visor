@@ -17,10 +17,16 @@ public struct ServerControls: Equatable, Sendable {
         public var tlsIdentityPath: String
         public var detachAgents: Bool
         public var clientsKeepMessages: Bool
+        /// The Sessions container's setting (ContainerSettings.enabled): on
+        /// only where the Mac can run it, which Settings decides.
+        public var containerEnabled: Bool
+        /// Its image digest in place of the release's (`sha256:…`); empty
+        /// for the release's. Set in the server's settings file.
+        public var containerImageDigest: String
 
         public init(authentication: String = "password", lan: Bool = false, vpn: Bool = false, sshEnabled: Bool = true,
                     proxyEnabled: Bool = false, publicAddress: String = "", tlsIdentityPath: String = "", detachAgents: Bool = true,
-                    clientsKeepMessages: Bool = true) {
+                    clientsKeepMessages: Bool = true, containerEnabled: Bool = false, containerImageDigest: String = "") {
             self.authentication = authentication
             self.lan = lan
             self.vpn = vpn
@@ -30,6 +36,8 @@ public struct ServerControls: Equatable, Sendable {
             self.tlsIdentityPath = tlsIdentityPath
             self.detachAgents = detachAgents
             self.clientsKeepMessages = clientsKeepMessages
+            self.containerEnabled = containerEnabled
+            self.containerImageDigest = containerImageDigest
         }
 
         /// Anyone who reaches the server is let in.

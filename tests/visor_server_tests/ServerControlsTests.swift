@@ -73,6 +73,12 @@ extension ServerTests {
         let kept = ServerSettings.kept(at: VisorServer.settingsURL)
         #expect(kept.lan && kept.proxyEnabled && !kept.clientsKeepMessages)
 
+        // The Sessions container's switch: kept in ServerSettings.container, the rest of it left.
+        let container = try #require(controls(rest("PUT", "/api/settings", body: ServerControlsChange(containerEnabled: true).json.encoded())))
+        #expect(container.settings.containerEnabled && container.settings.containerImageDigest.isEmpty)
+        #expect(ServerSettings.kept(at: VisorServer.settingsURL).container?.enabled == true)
+        #expect(ServerSettings.kept(at: VisorServer.settingsURL).container?.idleMinutes == 30)
+
         let password = rest("PUT", "/api/settings", body: ServerControlsChange(password: "  new-pw ").json.encoded())
         #expect(controls(password)?.password == "new-pw")
         #expect(server.password == "new-pw" && VisorServer.secrets.get("password") == "new-pw")

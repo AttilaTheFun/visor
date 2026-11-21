@@ -1,0 +1,47 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# The Sessions container's assets and what decides them (docs/containers.md):
+# the pins (Kata's kernel by SHA-256, Containerization's vminit and Visor's
+# agent image by digest), container.json, where each goes on the Containers
+# volume, fetching and checking them against a backend (ContainerAssets),
+# Visor's Linux programs copied out of the app under the link rule
+# (ToolsFolder), and Settings' readiness row. Foundation, swift-crypto and
+# DiskVolumes alone, with nothing fetched here: it builds everywhere, so its
+# tests run on Linux (//tests:linux) and //tools/container_manifest writes
+# container.json wherever a release is signed.
+swift_library(
+    name = "visor_container_core",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Core/*.swift"]),
+    module_name = "VisorContainerCore",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_disk_volumes",
+        "@swiftpkg_swift_crypto//:Crypto",
+    ],
+)
+
+# The Mac's half, on Apple's Containerization: the backend that downloads
+# the kernel's archive and takes it apart, pulls images into the image
+# store, and unpacks the init filesystem and the agent image's root
+# filesystem (none of which needs Virtualization), and this Mac's readiness
+# (macOS 26, Apple silicon, VZVirtualMachine.isSupported) and free memory.
+# macOS alone: nothing Linux builds (visor-server, //tests:linux) depends on
+# Containerization. The VM itself comes with the container engine (PR 2).
+swift_library(
+    name = "visor_container",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorContainer",
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        ":visor_container_core",
+        "//:foundation",
+        "@swiftpkg_containerization//:Containerization",
+        "@swiftpkg_containerization//:ContainerizationArchive",
+        "@swiftpkg_containerization//:ContainerizationOCI",
+    ],
+)

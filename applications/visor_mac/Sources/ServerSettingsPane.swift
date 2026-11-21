@@ -1,9 +1,9 @@
 // Settings: this Mac's server's own, as Visor Server had them (the
 // connection code and its QR code, the password, the admin token, the
-// network paths and TLS, agents, devices, push), read and changed over the
-// server's API at its socket file (`/api/settings`, LocalServer),
-// whichever process runs it. A change is sent as it is made; what the
-// server answers is what shows.
+// network paths and TLS, agents, the Sessions container, devices, push),
+// read and changed over the server's API at its socket file
+// (`/api/settings`, LocalServer), whichever process runs it. A change is
+// sent as it is made; what the server answers is what shows.
 
 import AppKit
 import Network
@@ -70,6 +70,7 @@ struct ServerSettingsPane: View {
             adminTokenSection(controls)
             pathsSection(controls)
             agentsSection(controls)
+            ContainerSettingsSection(settings: controls.settings, send: send)
             devicesSection(controls)
             pushSection(controls)
             if local.mode == .agent || local.note != nil { backgroundSection }
