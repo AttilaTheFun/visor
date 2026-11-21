@@ -20,7 +20,9 @@
 // 6. Its agent in the container ended.
 //
 // The server can't start an agent on this Mac (its harness's tool is one
-// that isn't there), so the session back here starts nothing.
+// that isn't there), so the session back here starts nothing, and its
+// Claude folder is the run's (CLAUDE_CONFIG_DIR unset, checked), never
+// this Mac's.
 
 import ClaudeTranscript
 import Foundation
@@ -44,6 +46,9 @@ struct SessionCheck {
         try? FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
         HostFolders.dataRoot = data
         ClaudeSessionFiles.home = scratch.root.appendingPathComponent("home", isDirectory: true)
+        // Claude's folder is $CLAUDE_CONFIG_DIR's when it's set (a session's
+        // shell may set it): never this Mac's own, so it goes.
+        unsetenv("CLAUDE_CONFIG_DIR")
         var platform = ServerPlatform.apple(secrets: MemorySecrets())
         platform.host.dataDirectory = data
         platform.log = { ContainerCheck.say("server: \($0)") }
@@ -62,6 +67,11 @@ struct SessionCheck {
     func run(_ container: E2EContainer) async -> [(String, Bool)] {
         var results: [(String, Bool)] = []
         func record(_ name: String, _ ok: Bool) { results.append((name, ok)) }
+        let claudeFolder = ClaudeSessionFiles.configDirectory().path
+        guard claudeFolder.hasPrefix(scratch.root.path + "/") else {
+            record("the session check's Claude folder is the run's own (it's \(claudeFolder)): not run", false)
+            return results
+        }
         server.sessionsContainer = container
         let prompt = "hello from the e2e \(scratch.id)"
         let started = await server.startSessionInContainer(title: "e2e \(scratch.id)", prompt: prompt)
