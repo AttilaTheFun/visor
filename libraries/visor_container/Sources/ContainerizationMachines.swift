@@ -5,11 +5,13 @@
 // guest's overhead on top), no network interface, the folders shared in over
 // virtiofs, the relay's socket carried in, and the main process (with
 // Containerization's init, so signals are forwarded and zombies reaped) in
-// the image's environment, as root. Needs the virtualization entitlement and
+// the image's environment, as root (with CAP_NET_ADMIN, for the guest's
+// network). Needs the virtualization entitlement and
 // a Mac that can make VMs.
 
 import Containerization
 import ContainerizationOCI
+import ContainerizationOS
 import Foundation
 import VisorContainerCore
 
@@ -34,6 +36,16 @@ public struct ContainerizationMachines: ContainerBackend {
         let main = try LogWriter(spec.mainLog)
         config.process.stdout = main
         config.process.stderr = main
+        // Each process exec'd later (an agent, say) starts from these
+        // settings, with Containerization's default capabilities.
+        let base = config.process
+        // relay-client brings the guest's loopback up and sets its nftables:
+        // CAP_NET_ADMIN, which the default set leaves out ("loopback up:
+        // Operation not permitted", the bare-metal e2e of #481). The main
+        // process alone has it.
+        config.process.capabilities.bounding.append(.netAdmin)
+        config.process.capabilities.effective.append(.netAdmin)
+        config.process.capabilities.permitted.append(.netAdmin)
         // No network: no interface, no address. Its one way out is the relay.
         config.interfaces = []
         config.sockets = spec.sockets.map {
@@ -57,6 +69,6 @@ public struct ContainerizationMachines: ContainerBackend {
             try? await container.stop()
             throw error
         }
-        return ContainerizationMachine(container: container, base: config.process)
+        return ContainerizationMachine(container: container, base: base)
     }
 }
