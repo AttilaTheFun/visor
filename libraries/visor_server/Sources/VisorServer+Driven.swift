@@ -222,8 +222,8 @@ extension VisorServer {
         jobs?.forget(session: id)
         if !handedBack { record.process.stop() }
         // In the Sessions container: its agent ended there if it doesn't by
-        // itself (one that handed back is finishing).
-        containerRunner.release(session: id, after: handedBack ? .seconds(30) : nil)
+        // itself (one that handed back is finishing: three times as long).
+        containerRunner.release(session: id, after: handedBack ? containerRunner.releaseGrace * 3 : nil)
         record.driven = false
         record.move = nil
         if !cwd.isEmpty { record.info.cwd = cwd }
