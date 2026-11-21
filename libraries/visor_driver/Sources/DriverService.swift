@@ -316,7 +316,9 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
     /// its Sessions container; else the dispatcher's queue.
     private func directory(for agent: String, _ server: VisorServer) async -> any DrivenAgentDirectory {
         let jobs = self.jobs
-        return await MainActor.run { server.containerRunner.holds(agent) ? server.containerRunner : jobs }
+        return await MainActor.run { () -> any DrivenAgentDirectory in
+            server.containerRunner.holds(agent) ? server.containerRunner : jobs
+        }
     }
 
     /// What a returned conversation that isn't taken is refused with.
