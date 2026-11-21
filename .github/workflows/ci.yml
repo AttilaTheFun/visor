@@ -1029,8 +1029,14 @@ jobs:
         with:
           name: linux-programs
           path: ${{ runner.temp }}/linux-programs
+      - uses: ./.github/actions/bazel_cache
+        with:
+          group: ubuntu
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       - name: Visor's Linux programs into Visor.app
-        run: tools/ci/mac_app_linux_programs.sh "$RUNNER_TEMP/apple/visor_mac.zip" "$RUNNER_TEMP/linux-programs/linux-programs.tar"
+        run: |
+          bazel run //tools/container_manifest -- --workflow .github/workflows/ci.yml --out "$RUNNER_TEMP/container.json"
+          tools/ci/mac_app_linux_programs.sh "$RUNNER_TEMP/apple/visor_mac.zip" "$RUNNER_TEMP/linux-programs/linux-programs.tar" "$RUNNER_TEMP/container.json"
       # Visor for Android, when release-android built it.
       - if: needs.release-android.result == 'success'
         uses: actions/download-artifact@v4
