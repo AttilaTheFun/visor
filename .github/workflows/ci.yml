@@ -720,7 +720,9 @@ jobs:
           name: linux-programs
           path: ${{ runner.temp }}/linux-programs
       - name: Visor's Linux programs into Visor.app
-        run: tools/ci/mac_app_linux_programs.sh .ci/packages/visor_mac.zip "$RUNNER_TEMP/linux-programs/linux-programs.tar"
+        run: |
+          bazel run //tools/container_manifest -- --workflow .github/workflows/ci.yml --out "$RUNNER_TEMP/container.json"
+          tools/ci/mac_app_linux_programs.sh .ci/packages/visor_mac.zip "$RUNNER_TEMP/linux-programs/linux-programs.tar" "$RUNNER_TEMP/container.json"
       # The keys reach this step alone. Each build signed, and saved for the
       # draft with builds.json: Visor-<version>-ios.ipa, -macos.zip and
       # -android.apk.
