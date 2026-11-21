@@ -53,5 +53,6 @@ swift_library(
         "@swiftpkg_containerization//:Containerization",
         "@swiftpkg_containerization//:ContainerizationArchive",
         "@swiftpkg_containerization//:ContainerizationOCI",
+        "@swiftpkg_containerization//:ContainerizationOS",
     ],
 )
