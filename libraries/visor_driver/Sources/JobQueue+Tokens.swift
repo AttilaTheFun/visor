@@ -21,7 +21,7 @@
 import Foundation
 import VisorServer
 
-extension JobQueue: DrivenAgentDirectory {
+extension JobQueue {
     /// What a call shown a bearer for `agent` may do: `unknown` when this
     /// dispatcher holds no job of the agent (its job is gone, or was never
     /// here).

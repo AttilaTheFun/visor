@@ -14,7 +14,7 @@ import VisorProtocol
 import VisorServer
 
 @MainActor
-final class JobQueue: AgentJobQueue {
+final class JobQueue: AgentJobQueue, DrivenAgentDirectory {
     /// How long a claim holds without a renewal.
     static let claimLength: TimeInterval = 60
 
