@@ -17,17 +17,10 @@ private final class FakeServer: Sendable {
     private let listener: Int32
 
     init?() {
-        for _ in 0..<20 {
-            let port = UInt16.random(in: 20000...45000)
-            let socket = agent_proxy_listen(port, 0)
-            if socket >= 0 {
-                self.port = port
-                listener = socket
-                Thread.detachNewThread { [self] in serve() }
-                return
-            }
-        }
-        return nil
+        guard let (socket, port) = loopbackListener() else { return nil }
+        self.port = port
+        listener = socket
+        Thread.detachNewThread { [self] in serve() }
     }
 
     private func serve() {
@@ -109,19 +102,13 @@ final class ClientProxyTests: XCTestCase {
     }
 
     func testAServerThatCantBeReachedEndsTheClientsConnection() throws {
-        // A port nothing listens on: one just let go. (Not a FakeServer
-        // stopped at once: its accept thread could start after the stop, on
-        // the descriptor number the front's listener is given next.)
-        var port = 0
-        for _ in 0..<20 where port == 0 {
-            let candidate = UInt16.random(in: 20000...45000)
-            let socket = agent_proxy_listen(candidate, 0)
-            if socket >= 0 {
-                close(socket)
-                port = Int(candidate)
-            }
-        }
-        let proxy = try front(to: "127.0.0.1", port)
+        // A port nothing listens on: one held closed while the test runs.
+        // (Not a FakeServer stopped at once: its accept thread could start
+        // after the stop, on the descriptor number the front's listener is
+        // given next. Nor one just let go: another test could listen there.)
+        let closed = try XCTUnwrap(closedLoopbackPort())
+        defer { closed.release() }
+        let proxy = try front(to: "127.0.0.1", Int(closed.port))
         defer { proxy.stop() }
         let started = Date()
         XCTAssertEqual(try Self.say("anyone?", to: "127.0.0.1", port: proxy.front.port), "")

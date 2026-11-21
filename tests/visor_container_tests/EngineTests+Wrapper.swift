@@ -12,31 +12,29 @@ import Testing
 import VisorContainerCore
 
 extension EngineTests {
-    /// A TCP listener on loopback that answers "DRIVER <what it read>" and
-    /// closes: a stand-in for Visor's driver. Its port, and how to stop it.
+    /// A TCP listener on loopback, at a port the system picked, that
+    /// answers "DRIVER <what it read>" and closes: a stand-in for Visor's
+    /// driver. Its port, and how to stop it (once it has been used: stopped
+    /// at once, its accept thread could begin after the stop, on the
+    /// descriptor number another test's socket is given next).
     private func fakeDriver() throws -> (port: Int, stop: @Sendable () -> Void) {
-        for _ in 0..<20 {
-            let port = Int.random(in: 20000...45000)
-            let listener = agent_proxy_listen(UInt16(port), 0)
-            guard listener >= 0 else { continue }
-            Thread.detachNewThread {
-                while true {
-                    let stream = agent_proxy_accept(listener)
-                    if stream < 0 { return }
-                    Thread.detachNewThread {
-                        var buffer = [UInt8](repeating: 0, count: 256)
-                        let count = buffer.withUnsafeMutableBytes { read(stream, $0.baseAddress, $0.count) }
-                        if count > 0 {
-                            let answer = Array("DRIVER ".utf8) + buffer[0..<count]
-                            _ = answer.withUnsafeBytes { write(stream, $0.baseAddress, $0.count) }
-                        }
-                        close(stream)
+        guard let (listener, port) = LoopbackPorts.listener() else { throw FakeDriverError() }
+        Thread.detachNewThread {
+            while true {
+                let stream = agent_proxy_accept(listener)
+                if stream < 0 { return }
+                Thread.detachNewThread {
+                    var buffer = [UInt8](repeating: 0, count: 256)
+                    let count = buffer.withUnsafeMutableBytes { read(stream, $0.baseAddress, $0.count) }
+                    if count > 0 {
+                        let answer = Array("DRIVER ".utf8) + buffer[0..<count]
+                        _ = answer.withUnsafeBytes { write(stream, $0.baseAddress, $0.count) }
                     }
+                    close(stream)
                 }
             }
-            return (port, { agent_proxy_shutdown(listener); close(listener) })
         }
-        throw FakeDriverError()
+        return (port, { agent_proxy_shutdown(listener); close(listener) })
     }
 
     private struct FakeDriverError: Error {}
@@ -83,15 +81,19 @@ extension EngineTests {
     @Test func noDriverAnsweringClosesTheGuestsConnection() async throws {
         let rig = try await rig()
         defer { rig.remove() }
-        let driver = try fakeDriver()
-        driver.stop()
+        // A port held closed while the test runs, not a fake driver
+        // stopped: another test could listen at a port let go, and a
+        // stopped driver's accept thread could take this link's
+        // connections.
+        let closed = try #require(LoopbackPorts.closed())
+        defer { closed.release() }
         let lines = Mutex<[String]>([])
         let link = UnixBridge(name: "driver link", target: "Visor's driver", socketPath: rig.socketFolder.appendingPathComponent("d.sock").path,
-                              port: driver.port, opening: { .plain }, log: { line in lines.withLock { $0.append(line) } })
+                              port: closed.port, opening: { .plain }, log: { line in lines.withLock { $0.append(line) } })
         try link.start()
         defer { link.stop() }
         #expect(ask(link.socketPath, "hello") == "")
-        #expect(lines.withLock { $0.contains { $0.contains("driver link: Visor's driver at 127.0.0.1:\(driver.port) didn't answer") } })
+        #expect(lines.withLock { $0.contains { $0.contains("driver link: Visor's driver at 127.0.0.1:\(closed.port) didn't answer") } })
     }
 
     @Test func startWrapperExecsAgentWrapperWithTheRunnersEnvironment() async throws {
