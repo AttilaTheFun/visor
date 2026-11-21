@@ -596,16 +596,22 @@ removed (still only when `agentProxy` is set).
   over. Off (the default) with no agent there, the app makes its server as
   it always has and looks at nothing else.
 - **The hand-over** (ServerHandOver, at the app's launch, before the app
-  makes a server): the app registers the agent and starts it (or leaves it
-  running; one waiting for approval in System Settings › General › Login
-  Items holds, and the server runs in the app), then waits up to the watch (two minutes) for
-  `/api/hello` on 7433 from the job's own process (lsof's listener, where
-  it says). Then the app is the agent's client. If it doesn't answer, the
-  app removes the agent (launchd's TERM: the agent steps aside, leaving the
-  hosts) and runs its own server as before, which picks the hosts up. With
-  the default turned off again, the app removes the agent the same way at
-  its next launch. A copy outside /Applications never registers or removes
-  the agent; it uses an agent that serves.
+  makes a server): the app registers the agent afresh (booted out, then
+  registered: ServerAgentService.reregister) unless it's running, which is
+  left as it is, then waits up to the watch (two minutes) for `/api/hello`
+  on 7433 from the job's own process (lsof's listener, where it says).
+  Then the app is the agent's client. While `ServerAsAgent` is on, the app
+  never serves itself and never stops the agent (NCH's check of #491: an
+  app that fell back to its own server took the socket and port from the
+  agent it had just registered, which gave way to it every 35 seconds): an
+  agent that doesn't answer yet (waiting for approval in Login Items, or
+  slow) is waited for, the app its client, saying why in the menu. With
+  the default turned off, the app removes the agent (launchd's TERM: the
+  agent steps aside, leaving the hosts) and runs its own server, which
+  picks the hosts up. A copy outside /Applications never registers or
+  removes the agent; it uses or waits for one that's registered, and only
+  with none runs its own server. `Visor --help` (or a word it has no
+  command for) prints the usage and ends, never opening the app.
 - **Quitting the app** (Quit Visor in the agent's menu, or killing it)
   leaves the server serving. `killall Visor` reaches the agent too (its
   process is Visor's): sent TERM by anyone, it steps aside (the hosts left
@@ -616,9 +622,16 @@ removed (still only when `agentProxy` is set).
   `POST /api/restart {path}` on the agent checks the bundle (the same
   bundle id) and starts a detached watcher; the server lets its hosts go
   and exits 0. The watcher, once it has gone, moves the running bundle aside
-  (`Previous/`), copies the new one in (its plist with it), and starts the
-  job again (`launchctl kickstart -k`, or `Visor server-agent register`
-  from the bundle in place when launchd no longer has it). It watches it as
+  (`Previous/`), copies the new one in (its plist with it), and registers
+  the job afresh from it (`Visor server-agent register`: launchctl bootout,
+  then SMAppService's register; a plain restart is `launchctl kickstart
+  -k`). SMAppService's launch constraint is the bundle registered: launchd
+  won't spawn the job from another bundle put in its place (`spawn failed`,
+  last exit 78, "needs LWCR update") until it's booted out and registered
+  again, so an update to another build and a rollback both go through that
+  one function. An update to a build that isn't byte-identical wants a
+  check on a real Mac before each release that changes this path (NCH
+  checked a byte-identical one and a rollback on macOS 27.0.1). It watches it as
   AppRelauncher does: up to ten minutes for the first answer on 7433 from
   the job's process, then two minutes up. If the process goes or never
   answers, the job is stopped, the previous bundle is put back,

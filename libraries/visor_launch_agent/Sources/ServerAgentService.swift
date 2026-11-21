@@ -50,6 +50,16 @@ public enum ServerAgentService {
         }
     }
 
+    /// Registered afresh (ServerAgentJob.reregister): booted out of launchd,
+    /// then registered, which starts it from the bundle in place now. What
+    /// `Visor server-agent register` runs (the update's watcher, after an
+    /// update or a rollback), and how the hand-over starts one that isn't
+    /// running.
+    public static func reregister(bundleID: String) async -> String? {
+        await ServerAgentJob.reregister(stop: { await Launchctl.stop(label: ServerAgentJob.label(bundleID: bundleID)) },
+                                        register: { register(bundleID: bundleID) })
+    }
+
     /// 0.64's plist: its job stopped and the file removed, if it's there.
     /// Whether there was one.
     @discardableResult
@@ -87,12 +97,9 @@ public enum ServerAgentService {
             log("\(job.name): \(unwanted): stopped and unregistered")
         case .start, .restart:
             await removeLegacy(job: job, bundleID: bundleID, log: log)
-            if status(bundleID: bundleID) == .enabled {
-                guard await Launchctl.kickstart(label: job.label) else {
-                    log("\(job.name): registered, but launchd couldn't start it")
-                    return .hold("launchd couldn't start it")
-                }
-            } else if let problem = register(bundleID: bundleID) {
+            // Not running: booted out and registered again, whatever bundle
+            // it was registered from.
+            if let problem = await reregister(bundleID: bundleID) {
                 log("\(job.name): couldn't be registered: \(problem)")
                 return .hold(problem)
             }

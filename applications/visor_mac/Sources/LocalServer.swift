@@ -178,10 +178,15 @@ final class LocalServer {
     private func handOver() async {
         let log: @Sendable (String) -> Void = { ServerPlatform.current.log($0) }
         let steps = LaunchdHandOverSteps(job: Self.job, bundleID: MacPlaces.own, log: log)
-        let outcome = await ServerHandOver.run(wanted: Self.wanted, hasPassword: MacServer.hasPassword, steps: steps, log: log)
+        let outcome = await ServerHandOver.run(wanted: Self.wanted, steps: steps, log: log)
         switch outcome {
         case .agent(let pid):
             log("Visor is the client of the server agent (process \(pid)); no server is made in the app")
+            mode = .agent
+        case .waiting(let why):
+            // Wanted: never a server here, never the agent stopped. Its
+            // socket file is asked every few seconds, as any computer's is.
+            note = why
             mode = .agent
         case .inApp(let why):
             if let why { log(why) }
