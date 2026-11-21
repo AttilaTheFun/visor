@@ -115,7 +115,8 @@ extension EngineTests {
         #expect(exec.arguments == ["/opt/visor/bin/agent-wrapper", "--skip-permissions"])
         #expect(exec.workingDirectory == folder)
         var environment = exec.environment
-        let job = try #require(environment.removeValue(forKey: "AGENT_JOB"))
+        let removed = environment.removeValue(forKey: "AGENT_JOB")
+        let job = try #require(removed)
         #expect(environment == [
             "AGENT_ID": "\(id)@http://127.0.0.1:7434",
             "AGENT_DRIVER_URL": "http://127.0.0.1:7434",
