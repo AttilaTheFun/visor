@@ -25,6 +25,7 @@ swift_test(
         "FakeBackend.swift",
         "FakeMachines.swift",
         "HostRelayTests.swift",
+        "LoopbackPorts.swift",
         "PinsTests.swift",
         "ReadinessTests.swift",
         "ToolsFolderTests.swift",

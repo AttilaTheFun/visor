@@ -84,9 +84,19 @@ public final class UnixBridge: Sendable {
         }
         log("\(name): \(socketPath) to \(target) at \(host):\(port)")
         Thread.detachNewThread { [self] in
+            // The listener is this thread's to close, not stop()'s: closed
+            // there, its descriptor's number could be another socket's (a
+            // listener's elsewhere in the process) by the time this thread
+            // calls accept on it again, or for the first time, and that
+            // socket's connections would be taken here.
+            defer { close(listener) }
             while true {
                 let client = agent_proxy_accept(listener)
                 if client < 0 { return }
+                if state.withLock({ $0.stopped }) {
+                    close(client)
+                    return
+                }
                 guard admit() else {
                     close(client)
                     continue
@@ -100,7 +110,9 @@ public final class UnixBridge: Sendable {
     }
 
     /// No more connections taken (those open go on until they end), the
-    /// socket file gone.
+    /// socket file gone. The accept thread is woken to close the listener:
+    /// on Linux by its shutdown; on macOS, where a listener isn't shut down,
+    /// by a connection of its own.
     public func stop() {
         let listener = state.withLock { state -> Int32 in
             state.stopped = true
@@ -109,7 +121,8 @@ public final class UnixBridge: Sendable {
         }
         guard listener >= 0 else { return }
         agent_proxy_shutdown(listener)
-        close(listener)
+        let wake = agent_proxy_connect_unix(socketPath)
+        if wake >= 0 { close(wake) }
         unlink(socketPath)
     }
 

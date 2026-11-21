@@ -24,8 +24,9 @@ import VisorServer
         return url
     }
 
-    /// A fake relay listener: it reads the PROXY header, keeps it, answers
-    /// "header ok\n", then echoes what comes. Its port, and what it heard.
+    /// A fake relay listener, at a port the system picked: it reads the
+    /// PROXY header, keeps it, answers "header ok\n", then echoes what
+    /// comes. Its port, and what it heard.
     final class FakeRelay: Sendable {
         let port: Int
         private let listener: Int32
@@ -33,15 +34,9 @@ import VisorServer
         let raw = Mutex<[[UInt8]]>([])
 
         init?() {
-            for _ in 0..<20 {
-                let port = Int.random(in: 20000...45000)
-                let listener = agent_proxy_listen(UInt16(port), 0)
-                guard listener >= 0 else { continue }
-                self.port = port
-                self.listener = listener
-                return
-            }
-            return nil
+            guard let (listener, port) = LoopbackPorts.listener() else { return nil }
+            self.port = port
+            self.listener = listener
         }
 
         func start() {
@@ -147,9 +142,9 @@ import VisorServer
         let relay = HostRelay(socketPath: socket, port: fake.port, token: { token.withLock { $0 } })
         try relay.start()
         defer { relay.stop() }
-        _ = exchange(socket, "x")
+        #expect(exchange(socket, "x") == "header ok\nx")
         token.withLock { $0 = "second" }
-        _ = exchange(socket, "y")
+        #expect(exchange(socket, "y") == "header ok\ny")
         #expect(fake.raw.withLock { $0 } == [HostRelay.header(token: "first"), HostRelay.header(token: "second")])
         // None: the stream is closed, and nothing reaches agent-proxy.
         token.withLock { $0 = nil }
@@ -160,12 +155,13 @@ import VisorServer
     @Test func noAgentProxyClosesTheStream() throws {
         let folder = try folder()
         defer { try? FileManager.default.removeItem(at: folder) }
-        let fake = try #require(FakeRelay())
-        let port = fake.port
-        fake.stop()
+        // A port held closed, not a fake relay stopped: another test could
+        // listen at a port let go.
+        let closed = try #require(LoopbackPorts.closed())
+        defer { closed.release() }
         let socket = folder.appendingPathComponent("relay.sock").path
         let lines = Mutex<[String]>([])
-        let relay = HostRelay(socketPath: socket, port: port, token: { "relay-secret" }, log: { line in lines.withLock { $0.append(line) } })
+        let relay = HostRelay(socketPath: socket, port: closed.port, token: { "relay-secret" }, log: { line in lines.withLock { $0.append(line) } })
         try relay.start()
         defer { relay.stop() }
         #expect(exchange(socket, "CONNECT x:1 HTTP/1.1\r\n\r\n") == "")
