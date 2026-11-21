@@ -171,7 +171,7 @@ extension ServerTests {
         server.handle(.delta(message: "N", text: "Again"), from: session)
         server.handle(.busy(true), from: session)
         #expect(session.streams.map(\.id) == ["N"])
-        #expect(!session.unsent.isEmpty, "still to be told")
+        #expect((session.ephemeralEnvelope.streams?.map(\.text)) == ["Again"])
     }
 
     @Test func testAppendsStartOverWhenTheirStreamDid() {
