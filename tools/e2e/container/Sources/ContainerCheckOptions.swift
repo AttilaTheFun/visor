@@ -6,7 +6,7 @@ import VisorContainerCore
 struct ContainerCheckOptions {
     static let usage = """
         usage: container --linux <folder> [--image <ghcr.io/attilathefun/visor-agent@sha256:…>] [--sessions <folder>]
-                         [--cpus <n>] [--memory <GiB>] [--keep]
+                         [--cpus <n>] [--memory <GiB>] [--cache <folder>] [--keep]
 
           --linux     Visor's Linux programs (visor-server, relay-client and visor-agent-host links, agent-wrapper),
                       as Visor.app/Contents/Resources/Linux has them, of a build with `relay-client run --forward`
@@ -15,6 +15,10 @@ struct ContainerCheckOptions {
           --sessions  The Sessions volume, shared at the same path (/Volumes/Sessions); a scratch folder is made
                       in it and deleted.
           --cpus      2.  --memory  4 (GiB).
+          --cache     A folder kept between runs for the Containers layout's assets (the kernel, the image
+                      store, the unpacked template), so a rerun skips the fetch and the ~4-minute unpack. Each run's
+                      root filesystem clone, logs and staged programs in it are deleted before and after the run.
+                      Without it, everything is in the run's /tmp folder and deleted. One run at a time per cache.
           --keep      Keep the scratch data folder (its logs, the root filesystem) instead of deleting it.
         """
 
@@ -23,6 +27,7 @@ struct ContainerCheckOptions {
     var sessions = "/Volumes/Sessions"
     var cpus = 2
     var memoryGiB = 4
+    var cache: URL?
     var keep = false
 
     /// The options, or a problem (and the usage) on standard error and exit 2.
@@ -43,6 +48,9 @@ struct ContainerCheckOptions {
                 guard let digest = ImageDigest(value) else { fail("\(value) isn't the agent image by digest") }
                 image = digest
             case "--sessions": options.sessions = value
+            case "--cache":
+                guard value.hasPrefix("/") else { fail("--cache takes an absolute folder") }
+                options.cache = URL(fileURLWithPath: value, isDirectory: true)
             case "--cpus":
                 guard let n = Int(value), n > 0 else { fail("--cpus takes a count") }
                 options.cpus = n

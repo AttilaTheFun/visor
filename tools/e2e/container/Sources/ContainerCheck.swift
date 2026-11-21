@@ -41,7 +41,7 @@ struct ContainerCheck {
 
     init(options: ContainerCheckOptions) {
         self.options = options
-        scratch = Scratch(sessions: options.sessions)
+        scratch = Scratch(sessions: options.sessions, cache: options.cache)
     }
 
     static func say(_ line: String) {
@@ -63,7 +63,8 @@ struct ContainerCheck {
         var checks = Checks()
         do {
             try scratch.make()
-            Self.say("scratch: \(scratch.root.path), \(scratch.sessions.path)")
+            Self.say("scratch: \(scratch.root.path), \(scratch.sessions.path)"
+                     + (scratch.cached ? "; the assets cached in \(scratch.layout.root.path)" : ""))
             try await boot(&checks)
         } catch {
             checks.fail("the run", "\(error)")

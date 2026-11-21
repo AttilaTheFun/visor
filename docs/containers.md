@@ -348,4 +348,8 @@ Start, Stop and Check Again.
   virtualization entitlement and runs that. `--linux` is a build's
   `Contents/Resources/Linux` with `relay-client run --forward` and
   agent-wrapper (0.64 or later), or `tools/linux_programs.sh <folder>`'s
-  output.
+  output. `--cache <folder>` keeps the assets (the kernel, the image store,
+  the unpacked template) in that folder between runs, so a rerun skips the
+  fetch and the template's unpacking (about 4 minutes); each run's root
+  filesystem clone, logs and staged programs there are deleted before and
+  after it. Without it, everything is in the run's /tmp folder.

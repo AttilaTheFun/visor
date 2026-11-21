@@ -18,7 +18,8 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # Bazel's can't be given (rules_apple's have none), so it signs a copy of
 # itself ad hoc with it, in /tmp, and runs that (SelfSigning).
 #
-#   bazel run //tools/e2e/container --config=apple_cross_mac -- --linux <Linux programs folder> --image <visor-agent@sha256:…>
+#   bazel run //tools/e2e/container --config=apple_cross_mac -- --linux <Linux programs folder> --image <visor-agent@sha256:…> \
+#       [--cache <folder kept between runs: the kernel, image store and unpacked template>]
 swift_binary(
     name = "container",
     srcs = glob(["Sources/*.swift"]),
