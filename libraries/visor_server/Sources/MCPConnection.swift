@@ -24,28 +24,30 @@ final class MCPConnection {
     /// A request's result, initializing first if need be; begun again once
     /// if the server has forgotten the session.
     func request(_ method: String, _ params: JSONValue, timeout: Double = 60) async throws -> JSONValue {
-        try await open()
+        try await open(timeout: min(timeout, 30))
         do {
             return try await exchange(method, params, timeout: timeout)
         } catch MCPProxyError.sessionGone {
             opening = nil
             sessionID = nil
-            try await open()
+            try await open(timeout: min(timeout, 30))
             return try await exchange(method, params, timeout: timeout)
         }
     }
 
     /// `initialize`, then `notifications/initialized`: once, whoever asks
-    /// first, the others waiting on it.
-    private func open() async throws {
+    /// first, the others waiting on it; within `timeout` (no longer than
+    /// the request it is for may take: a list's short limit is its own).
+    private func open(timeout: Double) async throws {
         if let opening { return try await opening.value }
         let task = Task {
             _ = try await self.exchange("initialize", .object([
                 "protocolVersion": .string(Self.protocolVersion),
                 "capabilities": .object([:]),
                 "clientInfo": .object(["name": .string("visor"), "version": .string("1")]),
-            ]), timeout: 30)
-            _ = try? await self.post(.object(["jsonrpc": .string("2.0"), "method": .string("notifications/initialized")]), timeout: 15)
+            ]), timeout: timeout)
+            _ = try? await self.post(.object(["jsonrpc": .string("2.0"), "method": .string("notifications/initialized")]),
+                                     timeout: min(timeout, 15))
         }
         opening = task
         do {
