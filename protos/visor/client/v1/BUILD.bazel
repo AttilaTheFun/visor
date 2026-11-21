@@ -1,0 +1,31 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The client's gRPC link to the server (visor.client.v1): the messages, and
+# the services apart, so the server's and the client's generated modules
+# (libraries/visor_client_proto) share one set of messages. Imported by
+# their path under protos/ (`import "visor/client/v1/rows.proto"`).
+proto_library(
+    name = "messages_proto",
+    srcs = [
+        "commands.proto",
+        "rows.proto",
+        "server.proto",
+        "state.proto",
+    ],
+    strip_import_prefix = "/protos",
+)
+
+proto_library(
+    name = "services_proto",
+    srcs = ["services.proto"],
+    strip_import_prefix = "/protos",
+    deps = [":messages_proto"],
+)
+
+# The sources, for tools/proto/generate (SwiftPM's copy of their Swift).
+filegroup(
+    name = "protos",
+    srcs = glob(["*.proto"]),
+)

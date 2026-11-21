@@ -7,6 +7,8 @@ import VisorProtocol
 
 extension VisorServer {
     func broadcast(_ envelope: Envelope, session: SessionRecord) {
+        // The words streamed before it go first (VisorServer+Streams).
+        if envelope.type != "delta" { flushStreams(session) }
         for key in session.subscribers {
             connections[key]?.send(envelope)
         }

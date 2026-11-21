@@ -12,6 +12,11 @@ Visor Disk Utility (applications/visor_disk_utility), the Mac app that
 makes the Sessions, Sources and Visor volumes, is a separate app with a window
 of its own, outside that tree: it isn't mapped here.
 
+Visor Client (applications/visor_macos, docs/visor-client.md) is the same
+tree, sandboxed: its Settings end with `settings-forget-everything`
+(Forget Everything…, asked first, then the app quits), which no other
+build shows, and an exported session there is shared, not saved.
+
 How to read it:
 
 - **Arrows** are driver commands: `tap <target>`, `type <target> <text>`,

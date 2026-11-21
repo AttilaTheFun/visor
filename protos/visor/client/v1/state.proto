@@ -1,0 +1,153 @@
+// A session's ephemeral state: everything about it that is not the record.
+// Sessions.Watch sends it whole, then its changes, for as long as the
+// client follows the session. The client joins it with the rows it has
+// synced (rows.proto): the reply being written ("responding") is drawn
+// until its row is synced, then the row in its place (docs/protocol.md,
+// The reply being written).
+syntax = "proto3";
+
+package visor.client.v1;
+
+// The session to watch.
+message WatchSessionRequest {
+  string session = 1;
+}
+
+// The state whole: on watching, and again when the client's words of a
+// reply don't meet an append.
+message SessionState {
+  // The replies being written that the record doesn't carry yet.
+  repeated Responding responding = 1;
+  // The turn's status lines so far: tool calls, subagents, shells, thinking.
+  repeated StatusItem status = 2;
+  // What the agent is doing ("Bash: ls"); empty for nothing.
+  string activity = 3;
+  // A turn is running.
+  bool busy = 4;
+  // A tool call waiting for Allow or Deny, or the agent's questions.
+  optional Approval approval = 5;
+  // What the user said during the turn, waiting for it to end.
+  repeated string queued = 6;
+  // What the user is told about the session until they acknowledge it.
+  string notice = 7;
+  // A sign-in waiting for its code (`/login`): the page to sign in at.
+  string sign_in = 8;
+  // The record's revision when the state was read: a reply the client's
+  // rows carry by then is settled.
+  int64 record_revision = 9;
+}
+
+// A reply being written: its message's id (which its first row on the
+// record has too) and its words so far.
+message Responding {
+  string id = 1;
+  string text = 2;
+}
+
+// More words of a reply being written: where they go (`from`, the length
+// in UTF-8 bytes of the words before them) and what they are. The server
+// sends one per message at most every 200 ms. Words that don't meet what
+// the client holds mean some were missed: it watches again, for the state
+// whole.
+message Append {
+  string id = 1;
+  int64 from = 2;
+  string text = 3;
+}
+
+// The record carries a reply: its row is on the record from
+// `record_revision` on. The client lets its words go once its own rows
+// have it.
+message Settled {
+  string id = 1;
+  int64 record_revision = 2;
+}
+
+// One thing the turn is doing or has done.
+message StatusItem {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_THINKING = 1;
+    KIND_SHELL = 2;
+    KIND_MONITOR = 3;
+    KIND_SUBAGENT = 4;
+    KIND_TOOL = 5;
+    KIND_TASKS = 6;
+  }
+  string id = 1;
+  Kind kind = 2;
+  string label = 3;
+  bool running = 4;
+  // For the task list: as last written.
+  repeated TaskItem tasks = 5;
+}
+
+message TaskItem {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_PENDING = 1;
+    STATE_ACTIVE = 2;
+    STATE_DONE = 3;
+  }
+  string title = 1;
+  State state = 2;
+}
+
+// A tool call waiting for the user's Allow or Deny, or what the agent asks
+// the user (AskUserQuestion: `questions`, answered rather than allowed).
+message Approval {
+  string id = 1;
+  // The tool ("Bash", "Edit", "AskUserQuestion"…).
+  string tool = 2;
+  // One line of what it wants to do.
+  string summary = 3;
+  repeated Question questions = 4;
+}
+
+message Question {
+  message Option {
+    string label = 1;
+    string description = 2;
+  }
+  string question = 1;
+  string header = 2;
+  repeated Option options = 3;
+  bool multi_select = 4;
+}
+
+// What changed in a session's state, one thing at a time, in the order
+// the server learned it.
+message SessionChange {
+  oneof change {
+    // The state whole, in place of what the client holds.
+    SessionState state = 1;
+    Append append = 2;
+    Settled settled = 3;
+    // The turn's status lines, whole, whenever they change.
+    StatusList status = 4;
+    // What the agent is doing; empty for nothing.
+    string activity = 5;
+    // The turn started (true) or ended.
+    bool busy = 6;
+    // A tool call or a question waiting; unset `approval` once answered.
+    ApprovalChange approval = 7;
+    // What the user is told until they acknowledge it; empty once they have.
+    string notice = 8;
+    // Something went wrong: shown under the thread until the next turn.
+    string failure = 9;
+    // What waits for the turn's end.
+    QueuedList queued = 10;
+  }
+}
+
+message StatusList {
+  repeated StatusItem items = 1;
+}
+
+message ApprovalChange {
+  optional Approval approval = 1;
+}
+
+message QueuedList {
+  repeated string messages = 1;
+}

@@ -4,28 +4,34 @@
 # the hardened runtime, accepted by Gatekeeper (`spctl`) and its
 # notarization stapled (`stapler validate`); then opened as a user opens
 # it (`open`), and still running a few seconds later. CI runs it on
-# Visor Disk Utility's signed .zip on an `xcode-27` Mac (ci.yml's
-# alpha-launch and release-launch, beside Visor.app's launch_check), before
-# its release asset is proposed or attached. It's then quit.
+# Visor Disk Utility's and Visor Client's signed .zips on an `xcode-27` Mac
+# (ci.yml's alpha-launch and release-launch, beside Visor.app's
+# launch_check), before their release assets are proposed or attached, and
+# on the proof's ad hoc Visor Client (proof-mac). It's then quit.
 #
-#   tools/ci/mac_app_opens.sh [--ad-hoc] [--hold <seconds>] <app .zip or .app>
+#   tools/ci/mac_app_opens.sh [--ad-hoc] [--sandboxed] [--hold <seconds>] <app .zip or .app>
 #
+# --sandboxed: its signature carries the App Sandbox
+# (com.apple.security.app-sandbox, Visor Client's), and once open its
+# container is there, ~/Library/Containers/<bundle id>.
 # --hold: how long it must stay up once running (10 seconds). --ad-hoc: a
 # local build's ad hoc signature (a leased VM's bazel build), with no
 # Developer ID, Gatekeeper or notarization to check: never in CI.
 #
 # Opening Visor Disk Utility only reads the disks (`diskutil apfs list` and
 # `info`) and writes volumes.json for Visor in the user's Application
-# Support; it changes no volume without an administrator's password. Run
-# it on a CI Mac or a leased VM. macOS alone.
+# Support; it changes no volume without an administrator's password.
+# Opening Visor Client asks to notify, and reaches no computer: it has none.
+# Run it on a CI Mac or a leased VM. macOS alone.
 set -euo pipefail
 fail() { echo "mac_app_opens: $*" >&2; exit 1; }
-usage="usage: tools/ci/mac_app_opens.sh [--ad-hoc] [--hold <seconds>] <app .zip or .app>"
+usage="usage: tools/ci/mac_app_opens.sh [--ad-hoc] [--sandboxed] [--hold <seconds>] <app .zip or .app>"
 
-ad_hoc="" hold=10 package=""
+ad_hoc="" sandboxed="" hold=10 package=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --ad-hoc) ad_hoc=1; shift ;;
+        --sandboxed) sandboxed=1; shift ;;
         --hold) hold="${2:?--hold takes seconds}"; shift 2 ;;
         -*) fail "unknown option $1; $usage" ;;
         *) [ -z "$package" ] || fail "one app at a time; $usage"; package="$1"; shift ;;
@@ -65,6 +71,13 @@ if [ -z "$ad_hoc" ]; then
     xcrun stapler validate "$app" || fail "$name has no notarization ticket stapled"
 fi
 echo "mac_app_opens: $name: signed$([ -n "$ad_hoc" ] && echo " ad hoc" || echo ", Developer ID, notarized, accepted by Gatekeeper")"
+identifier="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Contents/Info.plist")" || fail "$name has no bundle id"
+if [ -n "$sandboxed" ]; then
+    codesign --display --entitlements - --xml "$app" 2> /dev/null > "$work/entitlements.plist" || true
+    [ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$work/entitlements.plist" 2> /dev/null)" = true ] \
+        || fail "$name's signature doesn't carry the App Sandbox"
+    echo "mac_app_opens: $name is sandboxed"
+fi
 
 # Opened by Launch Services, as a double click would, in the background;
 # found by its executable's path, in this folder alone.
@@ -77,4 +90,8 @@ done
 [ -n "$pid" ] || fail "$name wasn't running 30 seconds after it was opened"
 sleep "$hold"
 kill -0 "$pid" 2> /dev/null || { pid=""; fail "$name quit within $hold seconds of opening (see ~/Library/Logs/DiagnosticReports)"; }
+if [ -n "$sandboxed" ]; then
+    [ -d "$HOME/Library/Containers/$identifier" ] || fail "$name is open with no container, ~/Library/Containers/$identifier"
+    echo "mac_app_opens: $name's container is ~/Library/Containers/$identifier"
+fi
 echo "mac_app_opens: $name opened, and was still running $hold seconds later (pid $pid); quitting it"

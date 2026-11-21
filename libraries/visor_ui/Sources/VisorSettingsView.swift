@@ -2,7 +2,8 @@
 // has one, from a Settings button in the navigation bar, and no tab bar):
 // the computers, each one's settings a page of its own; the accounts, the
 // fork's and each Runner's; this device's notifications and appearance
-// (VisorPreferences); and About. The window's one trailing pane
+// (VisorPreferences); About; and, where the host can (Visor Client on the
+// Mac), Forget Everything. The window's one trailing pane
 // (VisorRootView, TrailingPane) shows it beside the detail in two columns
 // and as a sheet in one; the Mac's server keeps its own settings in the
 // menu bar app.
@@ -21,6 +22,8 @@ struct VisorSettingsView: View {
     @Bindable private var preferences = VisorPreferences.shared
     /// The computer whose page is open, by its id (a sign-in link opens one).
     @Binding var computer: String?
+    /// Forget Everything is asked to be confirmed.
+    @State private var forgetting = false
 
     /// Whether Settings is in a sheet, its stack the sheet's (a phone's
     /// pane, the onboarding's): there a computer's page is pushed. Beside
@@ -120,7 +123,26 @@ struct VisorSettingsView: View {
             } header: {
                 Text("About")
             }
+            if let forget = VisorHost.forgetEverything { forgetEverything(forget) }
         }
         .navigationTitle("Settings")
+    }
+
+    /// Forgetting all this app keeps, where its host can (Visor Client on
+    /// the Mac): its computers, their passwords and keys, and its
+    /// settings, then it quits. Asked first.
+    private func forgetEverything(_ forget: @escaping @MainActor () -> Void) -> some View {
+        Section {
+            Button("Forget Everything…", role: .destructive) { forgetting = true }
+                .accessibilityIdentifier("settings-forget-everything")
+                .confirmationDialog("Forget everything?", isPresented: $forgetting, titleVisibility: .visible) {
+                    Button("Forget Everything and Quit", role: .destructive) { forget() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Every computer, its password and this device's key leave this app, with its settings and the messages it keeps, and it quits. The sessions stay on the computers.")
+                }
+        } footer: {
+            Text("To remove the app as well, move it to the Trash once it has quit.")
+        }
     }
 }

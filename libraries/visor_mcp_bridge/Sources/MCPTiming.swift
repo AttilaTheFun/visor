@@ -9,10 +9,22 @@ package struct MCPTiming: Sendable {
     var unanswered: Duration = .seconds(25 * 60)
     /// How often the MCP servers the computer passes on are looked at again.
     var watch: Duration = .seconds(30)
+    /// How long one look at the passed-on tools may take before it is given
+    /// up on (the last good list kept): the server answers from each
+    /// endpoint's last good list within its own limits (MCPProxy's
+    /// `listTimeout`, for `initialize` and for the list), so only a server
+    /// that has stopped answering takes this long.
+    var look: Duration = .seconds(15)
+    /// The wait after a look that failed (the server restarting, say),
+    /// doubled after each that fails again, up to `watch`.
+    var retry: Duration = .seconds(2)
 
-    package init(heartbeat: Duration = .seconds(20), unanswered: Duration = .seconds(25 * 60), watch: Duration = .seconds(30)) {
+    package init(heartbeat: Duration = .seconds(20), unanswered: Duration = .seconds(25 * 60), watch: Duration = .seconds(30),
+                 look: Duration = .seconds(15), retry: Duration = .seconds(2)) {
         self.heartbeat = heartbeat
         self.unanswered = unanswered
         self.watch = watch
+        self.look = look
+        self.retry = retry
     }
 }

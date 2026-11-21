@@ -51,7 +51,9 @@ progress.
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one
-  picked.
+  picked. On the Mac, applications/visor_macos is
+  Visor Client, sandboxed, for a Mac that runs no server
+  (docs/visor-client.md).
 - **libraries/visor_protocol** — the wire format (docs/protocol.md) and its
   own small JSON, with no Foundation, so the same code runs wherever the
   client is carried.

@@ -75,10 +75,13 @@ struct ServerMenu: View {
         }
         Text("\(controls.clientCount) client\(controls.clientCount == 1 ? "" : "s") connected")
         Divider()
-        if local.sessions.isEmpty {
-            Text("No sessions")
+        // The active sessions alone: an archived one is the Sessions list's
+        // Archived section's, not the menu's.
+        let active = local.sessions.filter { !$0.archived }
+        if active.isEmpty {
+            Text("No active sessions")
         } else {
-            ForEach(local.sessions, id: \.id) { session in
+            ForEach(active, id: \.id) { session in
                 Text("\(session.agent.title): \(session.title.isEmpty ? session.cwd : session.title)\(session.busy ? " …" : "")")
             }
         }
